@@ -1,0 +1,99 @@
+# ═══════════════════════════════════════════════════
+# Zileo-Chat-3 - Git Ignore Configuration
+# ═══════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────
+# Node.js / Frontend (SvelteKit)
+# ─────────────────────────────────────────────────────
+node_modules/
+.npm
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+.svelte-kit/
+build/
+dist/
+.output/
+.vercel/
+.netlify/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ─────────────────────────────────────────────────────
+# Rust / Backend (Tauri)
+# ─────────────────────────────────────────────────────
+src-tauri/target/
+src-tauri/Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Tauri build outputs
+src-tauri/gen/
+src-tauri/WixTools/
+
+# ─────────────────────────────────────────────────────
+# Database (SurrealDB)
+# ─────────────────────────────────────────────────────
+*.db
+*.surql
+data/
+db/
+surrealdb/
+rocksdb/
+
+# ─────────────────────────────────────────────────────
+# Security & Secrets
+# ─────────────────────────────────────────────────────
+*.key
+*.pem
+*.p12
+secrets/
+credentials.json
+api_keys.json
+
+# ─────────────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ─────────────────────────────────────────────────────
+# Temporary & Cache
+# ─────────────────────────────────────────────────────
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# ─────────────────────────────────────────────────────
+# Documentation Build Artifacts
+# ─────────────────────────────────────────────────────
+docs/.vitepress/cache/
+docs/.vitepress/dist/

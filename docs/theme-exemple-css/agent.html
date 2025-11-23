@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zileo Chat 3 - Agent</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Signika:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .workflow-sidebar {
+      width: 280px;
+      background: var(--color-bg-secondary);
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .workflow-item {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      padding: var(--spacing-md);
+      border-radius: var(--border-radius-md);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      border: 1px solid transparent;
+      position: relative;
+    }
+
+    .workflow-item:hover {
+      background: var(--color-bg-hover);
+    }
+
+    .workflow-item.active {
+      background: var(--color-accent-light);
+      border-color: var(--color-accent);
+    }
+
+    .workflow-name {
+      flex: 1;
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      outline: none;
+    }
+
+    .workflow-item.active .workflow-name {
+      color: var(--color-accent);
+    }
+
+    .workflow-delete {
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+
+    .workflow-item:hover .workflow-delete {
+      opacity: 1;
+    }
+
+    .agent-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg-primary);
+    }
+
+    .agent-header {
+      padding: var(--spacing-lg);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+    }
+
+    .input-section {
+      padding: var(--spacing-lg);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-bg-primary);
+    }
+
+    .prompt-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: var(--spacing-md);
+      font-size: var(--font-size-sm);
+      font-family: var(--font-family);
+      color: var(--color-text-primary);
+      background: var(--color-bg-primary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-md);
+      resize: vertical;
+      transition: all var(--transition-fast);
+    }
+
+    .prompt-textarea:focus {
+      outline: none;
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 3px var(--color-accent-light);
+    }
+
+    .output-section {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--spacing-lg);
+    }
+
+    .message {
+      margin-bottom: var(--spacing-lg);
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .message-content {
+      padding: var(--spacing-md);
+      background: var(--color-bg-secondary);
+      border-radius: var(--border-radius-md);
+      line-height: var(--line-height-relaxed);
+    }
+
+    .message.user .message-content {
+      background: var(--color-accent-light);
+      margin-left: var(--spacing-2xl);
+    }
+
+    .message.agent .message-content {
+      margin-right: var(--spacing-2xl);
+    }
+
+    .metrics-bar {
+      padding: var(--spacing-md) var(--spacing-lg);
+      background: var(--color-bg-secondary);
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-lg);
+      font-size: var(--font-size-sm);
+    }
+
+    .metric {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    .metrics-bar progress {
+      width: 150px;
+      height: 6px;
+    }
+
+    .tools-sidebar {
+      width: 320px;
+      background: var(--color-bg-secondary);
+      border-left: 1px solid var(--color-border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tool-item {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      padding: var(--spacing-sm) var(--spacing-md);
+      font-size: var(--font-size-sm);
+    }
+
+    .tool-item.executing {
+      background: var(--color-accent-light);
+    }
+
+    .queue-indicator {
+      position: fixed;
+      bottom: var(--spacing-lg);
+      right: calc(320px + var(--spacing-lg));
+      background: var(--color-warning);
+      color: white;
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-radius: var(--border-radius-lg);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(100px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .validation-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: var(--z-index-modal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--spacing-xl);
+    }
+
+    .validation-card {
+      background: var(--color-bg-primary);
+      border-radius: var(--border-radius-xl);
+      box-shadow: var(--shadow-xl);
+      max-width: 600px;
+      width: 100%;
+    }
+
+    .validation-card.high-risk {
+      border: 2px solid var(--color-error);
+    }
+
+    .sub-agent-card {
+      padding: var(--spacing-md);
+      background: var(--color-bg-primary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-md);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .sub-agent-progress {
+      width: 100%;
+      height: 4px;
+      background: var(--color-bg-tertiary);
+      border-radius: var(--border-radius-full);
+      overflow: hidden;
+      margin-top: var(--spacing-sm);
+    }
+
+    .sub-agent-progress-fill {
+      height: 100%;
+      background: var(--color-accent);
+      border-radius: var(--border-radius-full);
+      transition: width var(--transition-base);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Floating Menu -->
+    <nav class="floating-menu">
+      <div class="flex items-center gap-md">
+        <h1 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold);">Zileo Chat 3</h1>
+      </div>
+      <div class="flex items-center gap-md">
+        <a href="settings.html" class="btn btn-ghost">
+          <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
+          Configuration
+        </a>
+        <a href="agent.html" class="btn btn-secondary">
+          <i data-lucide="bot" style="width: 16px; height: 16px;"></i>
+          Agent
+        </a>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Workflows Sidebar -->
+      <aside class="workflow-sidebar">
+        <div class="sidebar-header">
+          <div class="flex justify-between items-center">
+            <h2 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">Workflows</h2>
+            <button class="btn btn-primary btn-sm btn-icon">
+              <i data-lucide="plus" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+          <div class="search-box" style="margin-top: var(--spacing-md);">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="search" class="search-input" placeholder="Filter workflows...">
+          </div>
+        </div>
+
+        <div class="sidebar-nav" style="padding: var(--spacing-md);">
+          <!-- Active Workflow -->
+          <div class="workflow-item active">
+            <span class="status-indicator status-running"></span>
+            <span class="workflow-name" contenteditable="true">Database Analysis</span>
+            <button class="workflow-delete btn-icon" style="padding: var(--spacing-xs);">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+
+          <!-- Idle Workflow -->
+          <div class="workflow-item">
+            <span class="status-indicator status-idle"></span>
+            <span class="workflow-name" contenteditable="true">Code Review Task</span>
+            <button class="workflow-delete btn-icon" style="padding: var(--spacing-xs);">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+
+          <!-- Completed Workflow -->
+          <div class="workflow-item">
+            <span class="status-indicator status-completed"></span>
+            <span class="workflow-name" contenteditable="true">Research Summary</span>
+            <button class="workflow-delete btn-icon" style="padding: var(--spacing-xs);">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+
+          <!-- Error Workflow -->
+          <div class="workflow-item">
+            <span class="status-indicator status-error"></span>
+            <span class="workflow-name" contenteditable="true">Failed Migration</span>
+            <button class="workflow-delete btn-icon" style="padding: var(--spacing-xs);">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="btn btn-ghost btn-sm" style="width: 100%;">
+            <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+            Collapse
+          </button>
+        </div>
+      </aside>
+
+      <!-- Agent Main Area -->
+      <main class="agent-main">
+        <!-- Agent Header -->
+        <div class="agent-header">
+          <div class="flex items-center gap-md">
+            <i data-lucide="bot" style="width: 24px; height: 24px; color: var(--color-accent);"></i>
+            <div>
+              <h2 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);">DB Agent</h2>
+              <p class="text-sm text-secondary">Database specialist • mistral-large-latest</p>
+            </div>
+            <div class="flex items-center gap-sm" style="margin-left: auto;">
+              <button class="btn btn-ghost btn-sm btn-icon">
+                <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
+              </button>
+              <select class="form-select" style="width: auto; font-size: var(--font-size-sm);">
+                <option value="auto">Auto Validation</option>
+                <option value="manual">Manual Validation</option>
+                <option value="selective">Selective</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="input-section">
+          <textarea class="prompt-textarea" placeholder="Enter your message...">Query all users from the database and analyze their activity patterns</textarea>
+          <div class="flex items-center gap-md" style="margin-top: var(--spacing-md);">
+            <button class="btn btn-ghost">
+              <i data-lucide="paperclip" style="width: 16px; height: 16px;"></i>
+              Prompt Template
+            </button>
+            <div style="flex: 1;"></div>
+            <span class="text-sm text-secondary">Ctrl+Enter to send</span>
+            <button class="btn btn-primary">
+              <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+              Send
+            </button>
+          </div>
+        </div>
+
+        <!-- Output Section -->
+        <div class="output-section">
+          <!-- User Message -->
+          <div class="message user">
+            <div class="message-header">
+              <i data-lucide="user" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+              <span class="text-sm font-medium">You</span>
+              <span class="text-xs text-tertiary">10:32 AM</span>
+            </div>
+            <div class="message-content">
+              Query all users from the database and analyze their activity patterns
+            </div>
+          </div>
+
+          <!-- Agent Message -->
+          <div class="message agent">
+            <div class="message-header">
+              <i data-lucide="bot" style="width: 16px; height: 16px; color: var(--color-accent);"></i>
+              <span class="text-sm font-medium">DB Agent</span>
+              <span class="text-xs text-tertiary">10:32 AM</span>
+              <span class="status-indicator status-running" style="margin-left: var(--spacing-xs);"></span>
+            </div>
+            <div class="message-content">
+              <p style="margin-bottom: var(--spacing-md);">I'll help you query and analyze user activity patterns. Let me start by retrieving all users from the database.</p>
+
+              <div class="card" style="margin-bottom: var(--spacing-md);">
+                <div class="card-header" style="padding: var(--spacing-sm) var(--spacing-md);">
+                  <div class="flex items-center gap-sm">
+                    <i data-lucide="database" style="width: 14px; height: 14px;"></i>
+                    <span class="text-sm font-medium">SurrealDB Query</span>
+                    <span class="badge badge-success" style="margin-left: auto;">Executed</span>
+                  </div>
+                </div>
+                <div class="card-body" style="padding: var(--spacing-md);">
+                  <pre style="font-family: var(--font-mono); font-size: var(--font-size-xs); background: var(--color-bg-tertiary); padding: var(--spacing-sm); border-radius: var(--border-radius-sm); overflow-x: auto;">SELECT * FROM users ORDER BY created_at DESC;</pre>
+                </div>
+              </div>
+
+              <p style="margin-bottom: var(--spacing-md);">Retrieved 1,247 users. Now analyzing activity patterns...</p>
+
+              <div class="card" style="background: var(--color-bg-secondary); border: none;">
+                <div class="card-body">
+                  <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-md);">Activity Analysis</h4>
+                  <div class="grid grid-cols-3 gap-md">
+                    <div>
+                      <span class="text-sm text-secondary">Active Users</span>
+                      <p class="font-semibold" style="font-size: var(--font-size-lg);">892</p>
+                      <span class="badge badge-success" style="margin-top: var(--spacing-xs);">71.5%</span>
+                    </div>
+                    <div>
+                      <span class="text-sm text-secondary">Inactive</span>
+                      <p class="font-semibold" style="font-size: var(--font-size-lg);">268</p>
+                      <span class="badge badge-warning" style="margin-top: var(--spacing-xs);">21.5%</span>
+                    </div>
+                    <div>
+                      <span class="text-sm text-secondary">New (30d)</span>
+                      <p class="font-semibold" style="font-size: var(--font-size-lg);">87</p>
+                      <span class="badge badge-primary" style="margin-top: var(--spacing-xs);">7.0%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Streaming Message (in progress) -->
+          <div class="message agent">
+            <div class="message-header">
+              <i data-lucide="bot" style="width: 16px; height: 16px; color: var(--color-accent);"></i>
+              <span class="text-sm font-medium">DB Agent</span>
+              <span class="text-xs text-tertiary">10:33 AM</span>
+              <div class="spinner" style="margin-left: var(--spacing-sm);"></div>
+            </div>
+            <div class="message-content">
+              <p>Based on the analysis, I can provide the following insights...</p>
+              <span class="text-secondary">▊</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metrics Bar -->
+        <div class="metrics-bar">
+          <div class="metric">
+            <i data-lucide="activity" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+            <span class="text-secondary">Tokens:</span>
+            <span class="font-semibold">1,234 / 128,000</span>
+          </div>
+          <progress value="1234" max="128000"></progress>
+          <div class="metric">
+            <i data-lucide="zap" style="width: 16px; height: 16px; color: var(--color-accent);"></i>
+            <span class="font-semibold">45 tk/s</span>
+          </div>
+          <div style="flex: 1;"></div>
+          <div class="metric">
+            <i data-lucide="tool" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+            <span class="font-semibold">3 tools active</span>
+          </div>
+          <div class="metric">
+            <i data-lucide="users" style="width: 16px; height: 16px; color: var(--color-text-secondary);"></i>
+            <span class="font-semibold">1 sub-agent</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Tools & Monitoring Sidebar -->
+      <aside class="tools-sidebar">
+        <div style="padding: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
+          <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-md);">
+            <i data-lucide="activity" style="width: 16px; height: 16px; vertical-align: middle;"></i>
+            Monitoring
+          </h3>
+        </div>
+
+        <!-- Active Tools -->
+        <div style="padding: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
+          <div class="flex items-center justify-between" style="margin-bottom: var(--spacing-md);">
+            <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);">Active Tools</h4>
+            <span class="badge badge-primary">3</span>
+          </div>
+
+          <div class="tool-item executing">
+            <span class="status-indicator status-running"></span>
+            <i data-lucide="database" style="width: 14px; height: 14px;"></i>
+            <span class="flex-1">SurrealDB</span>
+            <span class="text-xs text-secondary">1.2s</span>
+          </div>
+
+          <div class="tool-item">
+            <span class="status-indicator status-completed"></span>
+            <i data-lucide="file-search" style="width: 14px; height: 14px;"></i>
+            <span class="flex-1">Memory Search</span>
+            <span class="text-xs text-secondary">0.3s</span>
+          </div>
+
+          <div class="tool-item">
+            <span class="status-indicator status-completed"></span>
+            <i data-lucide="calculator" style="width: 14px; height: 14px;"></i>
+            <span class="flex-1">Data Analysis</span>
+            <span class="text-xs text-secondary">0.8s</span>
+          </div>
+        </div>
+
+        <!-- MCP Servers -->
+        <div style="padding: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
+          <div class="flex items-center justify-between" style="margin-bottom: var(--spacing-md);">
+            <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);">MCP Servers</h4>
+            <span class="badge badge-success">2 online</span>
+          </div>
+
+          <div class="tool-item">
+            <span class="status-indicator status-completed"></span>
+            <i data-lucide="plug" style="width: 14px; height: 14px;"></i>
+            <span class="flex-1">Filesystem</span>
+            <span class="text-xs text-secondary">12ms</span>
+          </div>
+
+          <div class="tool-item">
+            <span class="status-indicator status-completed"></span>
+            <i data-lucide="plug" style="width: 14px; height: 14px;"></i>
+            <span class="flex-1">Web Search</span>
+            <span class="text-xs text-secondary">45ms</span>
+          </div>
+        </div>
+
+        <!-- Sub-Agents -->
+        <div style="padding: var(--spacing-lg);">
+          <div class="flex items-center justify-between" style="margin-bottom: var(--spacing-md);">
+            <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);">Sub-Agents</h4>
+            <span class="badge badge-primary">1 running</span>
+          </div>
+
+          <div class="sub-agent-card">
+            <div class="flex items-center gap-sm" style="margin-bottom: var(--spacing-sm);">
+              <i data-lucide="bot" style="width: 16px; height: 16px; color: var(--color-accent);"></i>
+              <span class="font-medium text-sm">Analysis Agent</span>
+              <span class="badge badge-success" style="margin-left: auto;">Running</span>
+            </div>
+            <p class="text-xs text-secondary" style="margin-bottom: var(--spacing-sm);">
+              Analyzing user activity patterns across 1,247 records
+            </p>
+            <div class="flex items-center gap-sm">
+              <div class="sub-agent-progress" style="flex: 1;">
+                <div class="sub-agent-progress-fill" style="width: 67%;"></div>
+              </div>
+              <span class="text-xs font-semibold">67%</span>
+            </div>
+            <details style="margin-top: var(--spacing-sm);">
+              <summary style="cursor: pointer; font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                Tools (2)
+              </summary>
+              <div style="margin-top: var(--spacing-xs); padding-left: var(--spacing-md);">
+                <code class="text-xs" style="display: block;">• SurrealDB Query</code>
+                <code class="text-xs" style="display: block;">• Data Aggregation</code>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Reasoning Panel (collapsible) -->
+        <div style="padding: var(--spacing-lg); border-top: 1px solid var(--color-border);">
+          <details>
+            <summary style="cursor: pointer; display: flex; align-items: center; gap: var(--spacing-sm); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-md);">
+              <i data-lucide="brain" style="width: 16px; height: 16px;"></i>
+              Reasoning Steps
+            </summary>
+
+            <div style="margin-top: var(--spacing-md);">
+              <div style="padding: var(--spacing-sm); border-left: 2px solid var(--color-accent); margin-bottom: var(--spacing-sm);">
+                <div class="flex items-center gap-sm" style="margin-bottom: var(--spacing-xs);">
+                  <span class="badge badge-primary">1</span>
+                  <span class="text-xs text-tertiary">240ms • 45 tokens</span>
+                </div>
+                <p class="text-xs">Understanding user request: need to query all users and analyze patterns</p>
+              </div>
+
+              <div style="padding: var(--spacing-sm); border-left: 2px solid var(--color-accent); margin-bottom: var(--spacing-sm);">
+                <div class="flex items-center gap-sm" style="margin-bottom: var(--spacing-xs);">
+                  <span class="badge badge-primary">2</span>
+                  <span class="text-xs text-tertiary">180ms • 38 tokens</span>
+                </div>
+                <p class="text-xs">Planning query strategy: SELECT all users, then aggregate by activity</p>
+              </div>
+
+              <div style="padding: var(--spacing-sm); border-left: 2px solid var(--color-success);">
+                <div class="flex items-center gap-sm" style="margin-bottom: var(--spacing-xs);">
+                  <span class="badge badge-success">3</span>
+                  <span class="text-xs text-tertiary">1.2s • 892 tokens</span>
+                </div>
+                <p class="text-xs">Executing query and processing results...</p>
+              </div>
+            </div>
+          </details>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Message Queue Indicator (floating) -->
+  <div class="queue-indicator" style="display: none;">
+    <span class="badge" style="background: white; color: var(--color-warning); font-weight: var(--font-weight-bold);">3</span>
+    <span style="font-weight: var(--font-weight-medium);">messages in queue</span>
+    <button class="btn btn-sm" style="background: white; color: var(--color-warning); border: none;">
+      View Queue
+    </button>
+  </div>
+
+  <!-- Validation Modal (hidden by default) -->
+  <div class="validation-modal" style="display: none;">
+    <div class="validation-card high-risk">
+      <div class="card-header">
+        <div class="flex items-center gap-md flex-1">
+          <i data-lucide="alert-triangle" style="width: 24px; height: 24px; color: var(--color-error);"></i>
+          <div>
+            <h3 class="card-title">Validation Required</h3>
+            <p class="card-description">High risk operation detected</p>
+          </div>
+        </div>
+        <span class="badge badge-error">HIGH RISK</span>
+      </div>
+
+      <div class="card-body">
+        <div style="margin-bottom: var(--spacing-lg);">
+          <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-sm);">Operation</h4>
+          <div style="padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--border-radius-md);">
+            <div class="flex items-center gap-sm" style="margin-bottom: var(--spacing-sm);">
+              <i data-lucide="database" style="width: 16px; height: 16px; color: var(--color-error);"></i>
+              <span class="font-medium">DATABASE DELETE</span>
+            </div>
+            <code style="display: block; font-family: var(--font-mono); font-size: var(--font-size-xs);">
+              DELETE FROM users WHERE inactive = true;
+            </code>
+          </div>
+        </div>
+
+        <div style="margin-bottom: var(--spacing-lg);">
+          <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-sm);">Details</h4>
+          <div style="padding: var(--spacing-md); background: var(--color-error-light); border-radius: var(--border-radius-md); border: 1px solid var(--color-error);">
+            <ul style="list-style: disc; padding-left: var(--spacing-lg); font-size: var(--font-size-sm);">
+              <li>Will delete <strong>268 user records</strong></li>
+              <li>Operation is <strong>irreversible</strong></li>
+              <li>No backup detected</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="padding: var(--spacing-md); background: var(--color-warning-light); border-radius: var(--border-radius-md); border: 1px solid var(--color-warning);">
+          <div class="flex items-center gap-sm">
+            <i data-lucide="info" style="width: 16px; height: 16px; color: var(--color-warning);"></i>
+            <span class="text-sm">This operation requires your explicit approval to proceed</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer">
+        <div class="flex gap-md">
+          <button class="btn btn-danger flex-1">
+            <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+            Reject
+          </button>
+          <button class="btn btn-primary flex-1">
+            <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+            Approve
+          </button>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="width: 100%; margin-top: var(--spacing-sm);">
+          Approve All Pending (3)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Workflow selection
+    document.querySelectorAll('.workflow-item').forEach(item => {
+      item.addEventListener('click', function(e) {
+        if (e.target.closest('.workflow-delete')) return;
+        document.querySelectorAll('.workflow-item').forEach(w => w.classList.remove('active'));
+        this.classList.add('active');
+      });
+    });
+
+    // Auto-scroll to latest message
+    const outputSection = document.querySelector('.output-section');
+    if (outputSection) {
+      outputSection.scrollTop = outputSection.scrollHeight;
+    }
+
+    // Textarea auto-resize
+    const textarea = document.querySelector('.prompt-textarea');
+    if (textarea) {
+      textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 300) + 'px';
+      });
+    }
+
+    // Ctrl+Enter to send
+    textarea.addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'Enter') {
+        console.log('Send message');
+      }
+    });
+
+    // Show/hide queue indicator (demo)
+    // document.querySelector('.queue-indicator').style.display = 'flex';
+
+    // Show/hide validation modal (demo)
+    // document.querySelector('.validation-modal').style.display = 'flex';
+
+    // Close modal on backdrop click
+    document.querySelector('.validation-modal')?.addEventListener('click', function(e) {
+      if (e.target === this) {
+        this.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
