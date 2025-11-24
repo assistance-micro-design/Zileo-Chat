@@ -1,7 +1,7 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{models::AgentConfig, AppState};
+use crate::{models::AgentConfig, security::Validator, AppState};
 use tauri::State;
 use tracing::{info, instrument, warn};
 
@@ -24,10 +24,20 @@ pub async fn get_agent_config(
 ) -> Result<AgentConfig, String> {
     info!("Getting agent configuration");
 
-    let agent = state.registry.get(&agent_id).await.ok_or_else(|| {
-        warn!(agent_id = %agent_id, "Agent not found");
-        "Agent not found".to_string()
+    // Validate input
+    let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
+        warn!(error = %e, "Invalid agent ID");
+        format!("Invalid agent ID: {}", e)
     })?;
+
+    let agent = state
+        .registry
+        .get(&validated_agent_id)
+        .await
+        .ok_or_else(|| {
+            warn!(agent_id = %validated_agent_id, "Agent not found");
+            "Agent not found".to_string()
+        })?;
 
     let config = agent.config().clone();
     info!(

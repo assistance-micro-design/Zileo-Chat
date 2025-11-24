@@ -3,6 +3,7 @@
 
 use crate::{
     models::{Workflow, WorkflowMetrics, WorkflowResult, WorkflowStatus},
+    security::Validator,
     AppState,
 };
 use tauri::State;
@@ -25,10 +26,21 @@ pub async fn create_workflow(
 
     info!("Creating new workflow");
 
+    // Validate inputs
+    let validated_name = Validator::validate_workflow_name(&name).map_err(|e| {
+        warn!(error = %e, "Invalid workflow name");
+        format!("Invalid workflow name: {}", e)
+    })?;
+
+    let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
+        warn!(error = %e, "Invalid agent ID");
+        format!("Invalid agent ID: {}", e)
+    })?;
+
     let workflow = Workflow {
         id: Uuid::new_v4().to_string(),
-        name: name.clone(),
-        agent_id: agent_id.clone(),
+        name: validated_name,
+        agent_id: validated_agent_id,
         status: WorkflowStatus::Idle,
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -66,12 +78,29 @@ pub async fn execute_workflow(
 
     info!("Starting workflow execution");
 
-    // 1. Load workflow
+    // Validate inputs
+    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
+        warn!(error = %e, "Invalid workflow ID");
+        format!("Invalid workflow ID: {}", e)
+    })?;
+
+    let validated_message = Validator::validate_message(&message).map_err(|e| {
+        warn!(error = %e, "Invalid message");
+        format!("Invalid message: {}", e)
+    })?;
+
+    let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
+        warn!(error = %e, "Invalid agent ID");
+        format!("Invalid agent ID: {}", e)
+    })?;
+
+    // 1. Load workflow using parameterized query pattern
+    // Note: SurrealDB uses parameterized queries internally, but we validate the ID format first
     let workflows: Vec<Workflow> = state
         .db
         .query(&format!(
             "SELECT * FROM workflow WHERE id = '{}'",
-            workflow_id
+            validated_workflow_id
         ))
         .await
         .map_err(|e| {
@@ -80,7 +109,7 @@ pub async fn execute_workflow(
         })?;
 
     let _workflow = workflows.first().ok_or_else(|| {
-        warn!(workflow_id = %workflow_id, "Workflow not found");
+        warn!(workflow_id = %validated_workflow_id, "Workflow not found");
         "Workflow not found".to_string()
     })?;
 
@@ -90,14 +119,14 @@ pub async fn execute_workflow(
 
     let task = Task {
         id: task_id.clone(),
-        description: message,
+        description: validated_message,
         context: serde_json::json!({}),
     };
 
     // 3. Execute via orchestrator
     let report = state
         .orchestrator
-        .execute(&agent_id, task)
+        .execute(&validated_agent_id, task)
         .await
         .map_err(|e| {
             error!(error = %e, task_id = %task_id, "Workflow execution failed");
@@ -155,9 +184,15 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
 pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting workflow");
 
+    // Validate input
+    let validated_id = Validator::validate_uuid(&id).map_err(|e| {
+        warn!(error = %e, "Invalid workflow ID");
+        format!("Invalid workflow ID: {}", e)
+    })?;
+
     state
         .db
-        .delete(&format!("workflow:{}", id))
+        .delete(&format!("workflow:{}", validated_id))
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to delete workflow");

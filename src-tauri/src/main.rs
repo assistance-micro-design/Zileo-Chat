@@ -7,6 +7,7 @@ mod agents;
 mod commands;
 mod db;
 mod models;
+mod security;
 mod state;
 
 use state::AppState;
@@ -106,17 +107,30 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Simple agent registered");
 
+    // Initialize secure keystore
+    let keystore = commands::SecureKeyStore::default();
+    tracing::info!("Secure keystore initialized");
+
     // Run Tauri application
     tauri::Builder::default()
         .manage(app_state)
+        .manage(keystore)
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // Workflow commands
             commands::workflow::create_workflow,
             commands::workflow::execute_workflow,
             commands::workflow::load_workflows,
             commands::workflow::delete_workflow,
+            // Agent commands
             commands::agent::list_agents,
             commands::agent::get_agent_config,
+            // Security commands
+            commands::security::save_api_key,
+            commands::security::get_api_key,
+            commands::security::delete_api_key,
+            commands::security::has_api_key,
+            commands::security::list_api_key_providers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

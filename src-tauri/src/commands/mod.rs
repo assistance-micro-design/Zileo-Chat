@@ -2,4 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod security;
 pub mod workflow;
+
+pub use security::SecureKeyStore;
