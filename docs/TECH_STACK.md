@@ -1,7 +1,7 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions vérifiées le : 22 Novembre 2025**
-> Toutes les versions indiquées sont les dernières versions stables disponibles.
+> **Versions actuelles du projet : 24 Novembre 2025**
+> Versions de production utilisées dans le projet (compatibilité testée).
 
 ## Stack Overview
 
@@ -18,7 +18,7 @@ Desktop   : Tauri (cross-platform)
 - **SvelteKit**: 2.49.0 (Nov 2025)
 - **Svelte**: 5.43.14 (Nov 2025)
 - **TypeScript**: 5.9.3
-- **Vite**: 7.2.2
+- **Vite**: 5.4.0 (compatible with Node 20.19)
 - **@sveltejs/adapter-static**: 3.0.0+
 - **@sveltejs/vite-plugin-svelte**: 4.0.0+
 
@@ -31,9 +31,11 @@ Desktop   : Tauri (cross-platform)
 - **serde_json**: 1.0.145
 - **tokio**: 1.48.0 (features: full)
 - **tauri-build**: 2.9.4
+- **async-trait**: 0.1 (for agent trait)
+- **futures**: 0.3 (for parallel execution)
 
 ### Database
-- **SurrealDB**: 2.3.10 (server + crate)
+- **SurrealDB**: 2.3.10 (server + crate with kv-rocksdb)
 - **surrealdb.rs**: 2.3.10 (Rust client)
 - **surrealdb.js**: Latest (JS client, optional)
 
@@ -150,9 +152,10 @@ cargo --version   # >= 1.91.1
 
 ## Version Update Notes
 
-**Nov 2025**:
-- Vite 7.2.2 requires Node.js 20.19+ or 22.12+
+**Nov 2025 - Actual Project Versions**:
+- Vite 5.4.0 used for compatibility with Node.js 20.19
 - Svelte 5.43.14 includes latest runes improvements
-- SvelteKit 2.49.0 has Vite 7 support
-- Tauri 2.9.4 latest stable with mobile support
-- SurrealDB 2.3.10 with improved HNSW vector cache
+- SvelteKit 2.49.0 stable release
+- Tauri 2.9.4 latest stable with protocol-asset features
+- SurrealDB 2.3.10 with improved HNSW vector cache and kv-rocksdb
+- async-trait 0.1 and futures 0.3 added for multi-agent system

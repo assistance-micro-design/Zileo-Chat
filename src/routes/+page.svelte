@@ -1,14 +1,12 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
-
-  onMount(() => {
-    goto('/agent');
-  });
 </script>
 
+<svelte:head>
+  <meta http-equiv="refresh" content="0;url=/agent" />
+</svelte:head>
+
 <div class="loading">
-  <p>Loading...</p>
+  <p>Redirecting to Agent page...</p>
 </div>
 
 <style>
@@ -17,5 +15,6 @@
     align-items: center;
     justify-content: center;
     height: 100vh;
+    color: var(--color-text-secondary);
   }
 </style>

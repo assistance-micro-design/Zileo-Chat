@@ -5,13 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **Zileo-Chat-3** is a desktop multi-agent application with a conversational interface, built using a modern stack:
-- **Frontend**: SvelteKit 2.49.0 + Svelte 5.43.14
+- **Frontend**: SvelteKit 2.49.0 + Svelte 5.43.14 + Vite 5.4.0
 - **Backend**: Rust 1.91.1 + Tauri 2.9.4
 - **Database**: SurrealDB 2.3.10 (embedded RocksDB for desktop)
 - **LLM Framework**: Rig.rs 0.24.0 (multi-provider abstraction)
 - **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
+- **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
 
-**Current Status**: Architecture phase - documentation complete, implementation not yet started.
+**Current Status**: Base implementation in progress - Phase 0 structure created, core implementation ongoing.
 
 ## Essential Commands
 

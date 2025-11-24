@@ -1,12 +1,35 @@
-/// AppState - to be implemented in Phase 4
+// Copyright 2025 Zileo-Chat-3 Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+use std::sync::Arc;
+use crate::db::DBClient;
+use crate::agents::core::{AgentRegistry, AgentOrchestrator};
+
+/// Application state shared across Tauri commands
 pub struct AppState {
-    // Phase 1: Database client
-    // Phase 3: Agent registry and orchestrator
+    /// Database client
+    pub db: Arc<DBClient>,
+    /// Agent registry
+    pub registry: Arc<AgentRegistry>,
+    /// Agent orchestrator
+    pub orchestrator: Arc<AgentOrchestrator>,
 }
 
 impl AppState {
-    /// Creates new AppState - to be implemented
-    pub async fn new(_db_path: &str) -> anyhow::Result<Self> {
-        Ok(Self {})
+    /// Creates new application state
+    pub async fn new(db_path: &str) -> anyhow::Result<Self> {
+        // Initialize database
+        let db = Arc::new(DBClient::new(db_path).await?);
+        db.initialize_schema().await?;
+
+        // Initialize agent registry and orchestrator
+        let registry = Arc::new(AgentRegistry::new());
+        let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
+
+        Ok(Self {
+            db,
+            registry,
+            orchestrator,
+        })
     }
 }
