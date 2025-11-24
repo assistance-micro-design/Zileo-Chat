@@ -17,14 +17,18 @@ Créer un plan technique détaillé et actionnable pour `$ARGUMENTS` SANS implé
 ## Configuration Projet
 
 ```
-PROJECT_ROOT: /home/seb-hp/apps/Zileo-Chat-3
-SPEC_OUTPUT: /home/seb-hp/apps/Zileo-Chat-3/docs/specs
-DOCS_DIR: /home/seb-hp/apps/Zileo-Chat-3/docs
-SRC_FRONTEND: /home/seb-hp/apps/Zileo-Chat-3/src
-SRC_BACKEND: /home/seb-hp/apps/Zileo-Chat-3/src-tauri
-TYPES_DIR: /home/seb-hp/apps/Zileo-Chat-3/src/types
-TAURI_CONFIG: /home/seb-hp/apps/Zileo-Chat-3/src-tauri/tauri.conf.json
+PROJECT_ROOT: (working directory)
+SPEC_OUTPUT: docs/specs
+DOCS_DIR: docs
+SRC_FRONTEND: src
+SRC_BACKEND: src-tauri
+TYPES_DIR: src/types (alias: $types)
+TAURI_CONFIG: src-tauri/tauri.conf.json
 ```
+
+**IMPORTANT - TypeScript Imports**:
+- Always use `$types` alias: `import type { X } from '$types/module'`
+- Never use `$lib/types` (does not exist)
 
 ---
 
@@ -112,8 +116,11 @@ Basé sur discovery, proposer:
 
 4. **Types et Contrats**
    ```typescript
-   // Frontend: src/types/feature.ts
-   interface FeatureData { ... }
+   // Definition: src/types/feature.ts
+   export interface FeatureData { ... }
+
+   // Import (components/stores): use $types alias
+   import type { FeatureData } from '$types/feature';
 
    // Backend: src-tauri/src/models/feature.rs
    #[derive(Serialize, Deserialize)]
@@ -233,12 +240,17 @@ DEFINE FIELD name ON feature_table TYPE string;
 
 ### Types Synchronisés
 
-**Frontend** (`src/types/feature.ts`):
+**Definition** (`src/types/feature.ts`):
 ```typescript
-interface FeatureData {
+export interface FeatureData {
   id: string;
   name: string;
 }
+```
+
+**Import Pattern** (components/stores):
+```typescript
+import type { FeatureData } from '$types/feature';  // ALWAYS use $types alias
 ```
 
 **Backend** (`src-tauri/src/models/feature.rs`):

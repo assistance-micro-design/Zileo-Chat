@@ -17,12 +17,16 @@ Implémenter `$ARGUMENTS` avec les standards de qualité SuperClaude, validation
 ## Configuration
 
 ```
-PROJECT_ROOT: /home/seb-hp/apps/Zileo-Chat-3
-TASK_REPORTS: /home/seb-hp/apps/Zileo-Chat-3/docs/taches
-SRC_FRONTEND: /home/seb-hp/apps/Zileo-Chat-3/src
-SRC_BACKEND: /home/seb-hp/apps/Zileo-Chat-3/src-tauri
-TYPES_DIR: /home/seb-hp/apps/Zileo-Chat-3/src/types
+PROJECT_ROOT: (working directory)
+TASK_REPORTS: docs/taches
+SRC_FRONTEND: src
+SRC_BACKEND: src-tauri
+TYPES_DIR: src/types (alias: $types)
 ```
+
+**IMPORTANT - TypeScript Imports**:
+- Always use `$types` alias: `import type { X } from '$types/module'`
+- Never use `$lib/types` (does not exist)
 
 **Complexité**: [auto|simple|medium|complex|critical]
 - **simple**: <3 étapes, 1-2 fichiers
@@ -250,11 +254,11 @@ mod tests {
 </button>
 ```
 
-**Store Svelte** (si state global):
+**Store Svelte** (si state global, importer depuis `$types`):
 ```typescript
 // src/lib/stores/feature.ts
 import { writable } from 'svelte/store';
-import type { FeatureData } from '$types/feature';
+import type { FeatureData } from '$types/feature';  // ALWAYS use $types alias
 
 /**
  * Store pour gérer l'état de la feature

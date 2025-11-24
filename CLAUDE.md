@@ -82,8 +82,8 @@ zileo-chat-3/
 │  │  └─ agent/             # Agent interaction page
 │  ├─ lib/
 │  │  ├─ components/        # Reusable Svelte components
-│  │  └─ stores/            # Svelte state management
-│  └─ types/                # TypeScript interfaces
+│  │  └─ stores/            # Svelte state management (uses $types)
+│  └─ types/                # TypeScript interfaces (alias: $types)
 │
 ├─ src-tauri/               # Backend (Rust)
 │  ├─ src/
@@ -134,7 +134,26 @@ async fn execute_workflow(
 
 ## Type Synchronization
 
-TypeScript and Rust types **must be kept in sync** for IPC communication:
+TypeScript and Rust types **must be kept in sync** for IPC communication.
+
+### TypeScript Import Pattern
+
+**IMPORTANT**: Always use the `$types` alias for imports. Never use `$lib/types`.
+
+```typescript
+// CORRECT - use $types alias
+import type { Workflow, WorkflowResult } from '$types/workflow';
+import type { AgentConfig, Lifecycle } from '$types/agent';
+import type { LLMConfigResponse, ProviderStatus } from '$types/llm';
+
+// INCORRECT - do not use
+import type { Workflow } from '$lib/types/workflow';  // NO!
+import type { Workflow } from '../types/workflow';     // NO!
+```
+
+The `$types` alias is configured in `svelte.config.js` and points to `src/types/`.
+
+### Type Definition Examples
 
 **TypeScript** (`src/types/`):
 ```typescript
