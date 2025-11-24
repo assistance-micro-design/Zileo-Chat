@@ -11,7 +11,11 @@ const config = {
       fallback: 'index.html',
       precompress: false,
       strict: true
-    })
+    }),
+    alias: {
+      $types: './src/types',
+      '$types/*': './src/types/*'
+    }
   }
 };
 
