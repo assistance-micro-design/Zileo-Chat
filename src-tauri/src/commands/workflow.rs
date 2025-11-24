@@ -6,9 +6,15 @@ use crate::{
     AppState,
 };
 use tauri::State;
+use tracing::{error, info, instrument, warn};
 
 /// Creates a new workflow
 #[tauri::command]
+#[instrument(
+    name = "create_workflow",
+    skip(state),
+    fields(workflow_name = %name, agent_id = %agent_id)
+)]
 pub async fn create_workflow(
     name: String,
     agent_id: String,
@@ -17,27 +23,38 @@ pub async fn create_workflow(
     use chrono::Utc;
     use uuid::Uuid;
 
+    info!("Creating new workflow");
+
     let workflow = Workflow {
         id: Uuid::new_v4().to_string(),
-        name,
-        agent_id,
+        name: name.clone(),
+        agent_id: agent_id.clone(),
         status: WorkflowStatus::Idle,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         completed_at: None,
     };
 
-    let id = state
-        .db
-        .create("workflow", workflow)
-        .await
-        .map_err(|e| format!("Failed to create workflow: {}", e))?;
+    let id = state.db.create("workflow", workflow).await.map_err(|e| {
+        error!(error = %e, "Failed to create workflow");
+        format!("Failed to create workflow: {}", e)
+    })?;
 
+    info!(workflow_id = %id, "Workflow created successfully");
     Ok(id)
 }
 
 /// Executes a workflow with a message
 #[tauri::command]
+#[instrument(
+    name = "execute_workflow",
+    skip(state, message),
+    fields(
+        workflow_id = %workflow_id,
+        agent_id = %agent_id,
+        message_len = message.len()
+    )
+)]
 pub async fn execute_workflow(
     workflow_id: String,
     message: String,
@@ -47,6 +64,8 @@ pub async fn execute_workflow(
     use crate::agents::core::agent::Task;
     use uuid::Uuid;
 
+    info!("Starting workflow execution");
+
     // 1. Load workflow
     let workflows: Vec<Workflow> = state
         .db
@@ -55,13 +74,22 @@ pub async fn execute_workflow(
             workflow_id
         ))
         .await
-        .map_err(|e| format!("Failed to load workflow: {}", e))?;
+        .map_err(|e| {
+            error!(error = %e, "Failed to load workflow");
+            format!("Failed to load workflow: {}", e)
+        })?;
 
-    let _workflow = workflows.first().ok_or("Workflow not found")?;
+    let _workflow = workflows.first().ok_or_else(|| {
+        warn!(workflow_id = %workflow_id, "Workflow not found");
+        "Workflow not found".to_string()
+    })?;
 
     // 2. Create task
+    let task_id = Uuid::new_v4().to_string();
+    info!(task_id = %task_id, "Creating task for workflow");
+
     let task = Task {
-        id: Uuid::new_v4().to_string(),
+        id: task_id.clone(),
         description: message,
         context: serde_json::json!({}),
     };
@@ -71,7 +99,10 @@ pub async fn execute_workflow(
         .orchestrator
         .execute(&agent_id, task)
         .await
-        .map_err(|e| format!("Execution failed: {}", e))?;
+        .map_err(|e| {
+            error!(error = %e, task_id = %task_id, "Workflow execution failed");
+            format!("Execution failed: {}", e)
+        })?;
 
     // 4. Build result
     let result = WorkflowResult {
@@ -84,34 +115,56 @@ pub async fn execute_workflow(
             provider: "Demo".to_string(),
             model: "simple_agent".to_string(),
         },
-        tools_used: report.metrics.tools_used,
-        mcp_calls: report.metrics.mcp_calls,
+        tools_used: report.metrics.tools_used.clone(),
+        mcp_calls: report.metrics.mcp_calls.clone(),
     };
+
+    info!(
+        duration_ms = result.metrics.duration_ms,
+        tokens_input = result.metrics.tokens_input,
+        tokens_output = result.metrics.tokens_output,
+        tools_count = result.tools_used.len(),
+        "Workflow execution completed"
+    );
 
     Ok(result)
 }
 
 /// Loads all workflows
 #[tauri::command]
+#[instrument(name = "load_workflows", skip(state))]
 pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>, String> {
-    let workflows = state
+    info!("Loading workflows");
+
+    let workflows: Vec<Workflow> = state
         .db
         .query("SELECT * FROM workflow ORDER BY updated_at DESC")
         .await
-        .map_err(|e| format!("Failed to load workflows: {}", e))?;
+        .map_err(|e| {
+            error!(error = %e, "Failed to load workflows");
+            format!("Failed to load workflows: {}", e)
+        })?;
 
+    info!(count = workflows.len(), "Workflows loaded");
     Ok(workflows)
 }
 
 /// Deletes a workflow
 #[tauri::command]
+#[instrument(name = "delete_workflow", skip(state), fields(workflow_id = %id))]
 pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    info!("Deleting workflow");
+
     state
         .db
         .delete(&format!("workflow:{}", id))
         .await
-        .map_err(|e| format!("Failed to delete workflow: {}", e))?;
+        .map_err(|e| {
+            error!(error = %e, "Failed to delete workflow");
+            format!("Failed to delete workflow: {}", e)
+        })?;
 
+    info!("Workflow deleted successfully");
     Ok(())
 }
 

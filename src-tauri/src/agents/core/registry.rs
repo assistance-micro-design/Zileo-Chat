@@ -5,6 +5,7 @@ use super::agent::Agent;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, info, instrument, warn};
 
 /// Agent registry for discovering and managing agents
 pub struct AgentRegistry {
@@ -14,32 +15,55 @@ pub struct AgentRegistry {
 impl AgentRegistry {
     /// Creates a new agent registry
     pub fn new() -> Self {
+        debug!("Creating new agent registry");
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Registers an agent (permanent or temporary)
+    #[instrument(name = "registry_register", skip(self, agent), fields(agent_id = %id))]
     pub async fn register(&self, id: String, agent: Arc<dyn Agent>) {
         let mut agents = self.agents.write().await;
+
+        info!(
+            lifecycle = ?agent.lifecycle(),
+            capabilities = ?agent.capabilities(),
+            tools_count = agent.tools().len(),
+            "Registering agent"
+        );
+
         agents.insert(id.clone(), agent);
-        tracing::info!("Agent registered: {}", id);
+        info!(total_agents = agents.len(), "Agent registered");
     }
 
     /// Retrieves an agent by ID
+    #[instrument(name = "registry_get", skip(self), fields(agent_id = %id))]
     pub async fn get(&self, id: &str) -> Option<Arc<dyn Agent>> {
         let agents = self.agents.read().await;
-        agents.get(id).cloned()
+        let result = agents.get(id).cloned();
+
+        if result.is_some() {
+            debug!("Agent found");
+        } else {
+            debug!("Agent not found");
+        }
+
+        result
     }
 
     /// Lists all agent IDs
+    #[instrument(name = "registry_list", skip(self))]
     pub async fn list(&self) -> Vec<String> {
         let agents = self.agents.read().await;
-        agents.keys().cloned().collect()
+        let ids: Vec<String> = agents.keys().cloned().collect();
+        debug!(count = ids.len(), "Listed agents");
+        ids
     }
 
     /// Unregisters an agent (temporary only) - prepared for future phases
     #[allow(dead_code)]
+    #[instrument(name = "registry_unregister", skip(self), fields(agent_id = %id))]
     pub async fn unregister(&self, id: &str) -> anyhow::Result<()> {
         let mut agents = self.agents.write().await;
 
@@ -47,29 +71,41 @@ impl AgentRegistry {
             use crate::models::Lifecycle;
             if matches!(agent.lifecycle(), Lifecycle::Temporary) {
                 agents.remove(id);
-                tracing::info!("Agent unregistered: {}", id);
+                info!("Agent unregistered");
                 Ok(())
             } else {
+                warn!("Cannot unregister permanent agent");
                 anyhow::bail!("Cannot unregister permanent agent: {}", id)
             }
         } else {
+            warn!("Agent not found for unregistration");
             anyhow::bail!("Agent not found: {}", id)
         }
     }
 
     /// Cleans up temporary agents - prepared for future phases
     #[allow(dead_code)]
+    #[instrument(name = "registry_cleanup_temporary", skip(self))]
     pub async fn cleanup_temporary(&self) {
         let mut agents = self.agents.write().await;
         use crate::models::Lifecycle;
 
+        let initial_count = agents.len();
+
         agents.retain(|id, agent| {
             let is_permanent = matches!(agent.lifecycle(), Lifecycle::Permanent);
             if !is_permanent {
-                tracing::info!("Cleaning up temporary agent: {}", id);
+                info!(agent_id = %id, "Cleaning up temporary agent");
             }
             is_permanent
         });
+
+        let removed_count = initial_count - agents.len();
+        info!(
+            removed_count = removed_count,
+            remaining_count = agents.len(),
+            "Temporary agent cleanup completed"
+        );
     }
 }
 

@@ -3,27 +3,41 @@
 
 use crate::{models::AgentConfig, AppState};
 use tauri::State;
+use tracing::{info, instrument, warn};
 
 /// Lists all available agent IDs
 #[tauri::command]
+#[instrument(name = "list_agents", skip(state))]
 pub async fn list_agents(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    info!("Listing agents");
     let agent_ids = state.registry.list().await;
+    info!(count = agent_ids.len(), "Agents listed");
     Ok(agent_ids)
 }
 
 /// Gets agent configuration by ID
 #[tauri::command]
+#[instrument(name = "get_agent_config", skip(state), fields(agent_id = %agent_id))]
 pub async fn get_agent_config(
     agent_id: String,
     state: State<'_, AppState>,
 ) -> Result<AgentConfig, String> {
-    let agent = state
-        .registry
-        .get(&agent_id)
-        .await
-        .ok_or("Agent not found")?;
+    info!("Getting agent configuration");
 
-    Ok(agent.config().clone())
+    let agent = state.registry.get(&agent_id).await.ok_or_else(|| {
+        warn!(agent_id = %agent_id, "Agent not found");
+        "Agent not found".to_string()
+    })?;
+
+    let config = agent.config().clone();
+    info!(
+        agent_name = %config.name,
+        lifecycle = ?config.lifecycle,
+        tools_count = config.tools.len(),
+        "Agent configuration retrieved"
+    );
+
+    Ok(config)
 }
 
 #[cfg(test)]

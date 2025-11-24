@@ -11,15 +11,56 @@ mod state;
 
 use state::AppState;
 use std::sync::Arc;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    EnvFilter,
+};
+
+/// Initializes the tracing subscriber with structured logging.
+///
+/// In debug mode, uses pretty console output.
+/// In release mode, uses JSON format for machine parsing.
+/// Controlled via RUST_LOG environment variable (default: info).
+fn init_tracing() {
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("zileo_chat=info,warn"));
+
+    // Use JSON format in release, pretty format in debug
+    #[cfg(not(debug_assertions))]
+    {
+        let json_layer = fmt::layer()
+            .json()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(json_layer)
+            .init();
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        let fmt_layer = fmt::layer()
+            .with_target(true)
+            .with_thread_ids(false)
+            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+            .pretty();
+
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt_layer)
+            .init();
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    // Initialize structured logging
+    init_tracing();
 
     // Get database path
     let app_data_dir = std::env::var("HOME")

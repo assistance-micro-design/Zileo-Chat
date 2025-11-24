@@ -4,6 +4,7 @@
 use crate::agents::core::agent::{Agent, Report, ReportMetrics, ReportStatus, Task};
 use crate::models::{AgentConfig, Lifecycle};
 use async_trait::async_trait;
+use tracing::{debug, info, instrument};
 
 /// Simple agent implementation for demonstration (base implementation)
 pub struct SimpleAgent {
@@ -19,8 +20,25 @@ impl SimpleAgent {
 
 #[async_trait]
 impl Agent for SimpleAgent {
+    #[instrument(
+        name = "simple_agent_execute",
+        skip(self, task),
+        fields(
+            agent_id = %self.config.id,
+            task_id = %task.id,
+            task_description_len = task.description.len()
+        )
+    )]
     async fn execute(&self, task: Task) -> anyhow::Result<Report> {
         let start = std::time::Instant::now();
+
+        debug!(
+            agent_name = %self.config.name,
+            system_prompt_len = self.config.system_prompt.len(),
+            tools_count = self.config.tools.len(),
+            mcp_servers_count = self.config.mcp_servers.len(),
+            "Agent starting task execution"
+        );
 
         // Basic task processing simulation (no LLM call yet)
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -32,18 +50,26 @@ impl Agent for SimpleAgent {
             serde_json::to_string_pretty(&task.context)?
         );
 
+        let duration_ms = start.elapsed().as_millis() as u64;
+
         let report = Report {
-            task_id: task.id,
+            task_id: task.id.clone(),
             status: ReportStatus::Success,
             content,
             metrics: ReportMetrics {
-                duration_ms: start.elapsed().as_millis() as u64,
+                duration_ms,
                 tokens_input: 0,
                 tokens_output: 0,
                 tools_used: vec![],
                 mcp_calls: vec![],
             },
         };
+
+        info!(
+            duration_ms = duration_ms,
+            report_len = report.content.len(),
+            "Agent task execution completed"
+        );
 
         Ok(report)
     }

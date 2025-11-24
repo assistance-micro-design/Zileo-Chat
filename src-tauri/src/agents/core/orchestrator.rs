@@ -6,6 +6,7 @@ use super::{
     registry::AgentRegistry,
 };
 use std::sync::Arc;
+use tracing::{debug, error, info, instrument, warn};
 
 /// Agent orchestrator for coordinating agent execution
 pub struct AgentOrchestrator {
@@ -19,21 +20,42 @@ impl AgentOrchestrator {
     }
 
     /// Executes a task via a specific agent
+    #[instrument(
+        name = "orchestrator_execute",
+        skip(self, task),
+        fields(
+            task_id = %task.id,
+            agent_id = %agent_id,
+            task_description_len = task.description.len()
+        )
+    )]
     pub async fn execute(&self, agent_id: &str, task: Task) -> anyhow::Result<Report> {
-        let agent = self
-            .registry
-            .get(agent_id)
-            .await
-            .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
+        debug!("Looking up agent in registry");
 
-        tracing::info!("Executing task {} with agent {}", task.id, agent_id);
+        let agent = self.registry.get(agent_id).await.ok_or_else(|| {
+            warn!(agent_id = %agent_id, "Agent not found in registry");
+            anyhow::anyhow!("Agent not found: {}", agent_id)
+        })?;
 
-        let report = agent.execute(task).await?;
+        info!(
+            agent_lifecycle = ?agent.lifecycle(),
+            capabilities = ?agent.capabilities(),
+            "Starting agent execution"
+        );
 
-        tracing::info!(
-            "Task completed - Status: {:?}, Duration: {}ms",
-            report.status,
-            report.metrics.duration_ms
+        let report = agent.execute(task).await.map_err(|e| {
+            error!(error = %e, "Agent execution failed");
+            e
+        })?;
+
+        info!(
+            status = ?report.status,
+            duration_ms = report.metrics.duration_ms,
+            tokens_input = report.metrics.tokens_input,
+            tokens_output = report.metrics.tokens_output,
+            tools_used = ?report.metrics.tools_used,
+            mcp_calls = ?report.metrics.mcp_calls,
+            "Agent execution completed"
         );
 
         Ok(report)
@@ -41,25 +63,46 @@ impl AgentOrchestrator {
 
     /// Executes multiple tasks in parallel (if independent) - prepared for future phases
     #[allow(dead_code)]
+    #[instrument(
+        name = "orchestrator_execute_parallel",
+        skip(self, tasks),
+        fields(task_count = tasks.len())
+    )]
     pub async fn execute_parallel(
         &self,
         tasks: Vec<(String, Task)>, // Vec<(agent_id, task)>
     ) -> Vec<anyhow::Result<Report>> {
         use futures::future::join_all;
 
+        info!(task_count = tasks.len(), "Starting parallel execution");
+
         let futures = tasks.into_iter().map(|(agent_id, task)| {
             let registry = self.registry.clone();
+            let task_id = task.id.clone();
             async move {
-                let agent = registry
-                    .get(&agent_id)
-                    .await
-                    .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
+                debug!(task_id = %task_id, agent_id = %agent_id, "Executing parallel task");
+
+                let agent = registry.get(&agent_id).await.ok_or_else(|| {
+                    warn!(agent_id = %agent_id, "Agent not found for parallel task");
+                    anyhow::anyhow!("Agent not found: {}", agent_id)
+                })?;
 
                 agent.execute(task).await
             }
         });
 
-        join_all(futures).await
+        let results = join_all(futures).await;
+
+        let success_count = results.iter().filter(|r| r.is_ok()).count();
+        let failure_count = results.iter().filter(|r| r.is_err()).count();
+
+        info!(
+            success_count = success_count,
+            failure_count = failure_count,
+            "Parallel execution completed"
+        );
+
+        results
     }
 }
 
