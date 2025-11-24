@@ -1,9 +1,9 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
-use crate::agents::core::{AgentRegistry, AgentOrchestrator};
+use std::sync::Arc;
 
 /// Application state shared across Tauri commands
 pub struct AppState {

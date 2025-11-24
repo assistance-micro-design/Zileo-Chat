@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
-pub mod registry;
 pub mod orchestrator;
+pub mod registry;
 
-pub use registry::AgentRegistry;
 pub use orchestrator::AgentOrchestrator;
+pub use registry::AgentRegistry;

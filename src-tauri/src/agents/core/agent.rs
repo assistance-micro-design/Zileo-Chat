@@ -1,8 +1,8 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use async_trait::async_trait;
 use crate::models::{AgentConfig, Lifecycle};
+use async_trait::async_trait;
 
 /// Task represents a request to the agent
 #[derive(Debug, Clone)]

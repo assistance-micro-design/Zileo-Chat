@@ -1,14 +1,12 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::{models::AgentConfig, AppState};
 use tauri::State;
-use crate::{AppState, models::AgentConfig};
 
 /// Lists all available agent IDs
 #[tauri::command]
-pub async fn list_agents(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+pub async fn list_agents(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let agent_ids = state.registry.list().await;
     Ok(agent_ids)
 }

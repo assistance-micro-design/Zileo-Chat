@@ -1,8 +1,11 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use super::{
+    agent::{Report, Task},
+    registry::AgentRegistry,
+};
 use std::sync::Arc;
-use super::{agent::{Task, Report}, registry::AgentRegistry};
 
 /// Agent orchestrator for coordinating agent execution
 pub struct AgentOrchestrator {
@@ -44,20 +47,318 @@ impl AgentOrchestrator {
     ) -> Vec<anyhow::Result<Report>> {
         use futures::future::join_all;
 
-        let futures = tasks
-            .into_iter()
-            .map(|(agent_id, task)| {
-                let registry = self.registry.clone();
-                async move {
-                    let agent = registry
-                        .get(&agent_id)
-                        .await
-                        .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
+        let futures = tasks.into_iter().map(|(agent_id, task)| {
+            let registry = self.registry.clone();
+            async move {
+                let agent = registry
+                    .get(&agent_id)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", agent_id))?;
 
-                    agent.execute(task).await
-                }
-            });
+                agent.execute(task).await
+            }
+        });
 
         join_all(futures).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::core::agent::{Agent, Report, ReportMetrics, ReportStatus};
+    use crate::models::{AgentConfig, LLMConfig, Lifecycle};
+    use async_trait::async_trait;
+
+    /// Test agent for orchestrator tests
+    struct OrchestratorTestAgent {
+        config: AgentConfig,
+        delay_ms: u64,
+    }
+
+    impl OrchestratorTestAgent {
+        fn new(id: &str, delay_ms: u64) -> Self {
+            Self {
+                config: AgentConfig {
+                    id: id.to_string(),
+                    name: format!("Orchestrator Test Agent {}", id),
+                    lifecycle: Lifecycle::Permanent,
+                    llm: LLMConfig {
+                        provider: "Test".to_string(),
+                        model: "test-model".to_string(),
+                        temperature: 0.7,
+                        max_tokens: 100,
+                    },
+                    tools: vec![],
+                    mcp_servers: vec![],
+                    system_prompt: "Test prompt".to_string(),
+                },
+                delay_ms,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Agent for OrchestratorTestAgent {
+        async fn execute(&self, task: Task) -> anyhow::Result<Report> {
+            tokio::time::sleep(tokio::time::Duration::from_millis(self.delay_ms)).await;
+
+            Ok(Report {
+                task_id: task.id.clone(),
+                status: ReportStatus::Success,
+                content: format!("Report from agent {}: {}", self.config.id, task.description),
+                metrics: ReportMetrics {
+                    duration_ms: self.delay_ms,
+                    tokens_input: 0,
+                    tokens_output: 0,
+                    tools_used: vec![],
+                    mcp_calls: vec![],
+                },
+            })
+        }
+
+        fn capabilities(&self) -> Vec<String> {
+            vec!["test".to_string()]
+        }
+
+        fn lifecycle(&self) -> Lifecycle {
+            self.config.lifecycle.clone()
+        }
+
+        fn tools(&self) -> Vec<String> {
+            self.config.tools.clone()
+        }
+
+        fn mcp_servers(&self) -> Vec<String> {
+            self.config.mcp_servers.clone()
+        }
+
+        fn system_prompt(&self) -> String {
+            self.config.system_prompt.clone()
+        }
+
+        fn config(&self) -> &AgentConfig {
+            &self.config
+        }
+    }
+
+    /// Test agent that always fails
+    struct FailingTestAgent {
+        config: AgentConfig,
+    }
+
+    impl FailingTestAgent {
+        fn new(id: &str) -> Self {
+            Self {
+                config: AgentConfig {
+                    id: id.to_string(),
+                    name: format!("Failing Test Agent {}", id),
+                    lifecycle: Lifecycle::Permanent,
+                    llm: LLMConfig {
+                        provider: "Test".to_string(),
+                        model: "test-model".to_string(),
+                        temperature: 0.7,
+                        max_tokens: 100,
+                    },
+                    tools: vec![],
+                    mcp_servers: vec![],
+                    system_prompt: "Test prompt".to_string(),
+                },
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Agent for FailingTestAgent {
+        async fn execute(&self, _task: Task) -> anyhow::Result<Report> {
+            anyhow::bail!("Intentional test failure")
+        }
+
+        fn capabilities(&self) -> Vec<String> {
+            vec!["fail".to_string()]
+        }
+
+        fn lifecycle(&self) -> Lifecycle {
+            self.config.lifecycle.clone()
+        }
+
+        fn tools(&self) -> Vec<String> {
+            self.config.tools.clone()
+        }
+
+        fn mcp_servers(&self) -> Vec<String> {
+            self.config.mcp_servers.clone()
+        }
+
+        fn system_prompt(&self) -> String {
+            self.config.system_prompt.clone()
+        }
+
+        fn config(&self) -> &AgentConfig {
+            &self.config
+        }
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_single() {
+        let registry = Arc::new(AgentRegistry::new());
+        let agent = Arc::new(OrchestratorTestAgent::new("test_agent", 10));
+
+        registry.register("test_agent".to_string(), agent).await;
+
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let task = Task {
+            id: "task_1".to_string(),
+            description: "Test task".to_string(),
+            context: serde_json::json!({}),
+        };
+
+        let report = orchestrator.execute("test_agent", task).await;
+        assert!(report.is_ok());
+
+        let report = report.unwrap();
+        assert!(matches!(report.status, ReportStatus::Success));
+        assert!(report.content.contains("test_agent"));
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_nonexistent_agent() {
+        let registry = Arc::new(AgentRegistry::new());
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let task = Task {
+            id: "task_1".to_string(),
+            description: "Test task".to_string(),
+            context: serde_json::json!({}),
+        };
+
+        let result = orchestrator.execute("nonexistent", task).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Agent not found"));
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_failing_agent() {
+        let registry = Arc::new(AgentRegistry::new());
+        let agent = Arc::new(FailingTestAgent::new("failing_agent"));
+
+        registry.register("failing_agent".to_string(), agent).await;
+
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let task = Task {
+            id: "task_1".to_string(),
+            description: "This should fail".to_string(),
+            context: serde_json::json!({}),
+        };
+
+        let result = orchestrator.execute("failing_agent", task).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Intentional test failure"));
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_parallel() {
+        let registry = Arc::new(AgentRegistry::new());
+
+        let agent1 = Arc::new(OrchestratorTestAgent::new("agent_1", 50));
+        let agent2 = Arc::new(OrchestratorTestAgent::new("agent_2", 50));
+
+        registry.register("agent_1".to_string(), agent1).await;
+        registry.register("agent_2".to_string(), agent2).await;
+
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let tasks = vec![
+            (
+                "agent_1".to_string(),
+                Task {
+                    id: "task_1".to_string(),
+                    description: "Task for agent 1".to_string(),
+                    context: serde_json::json!({}),
+                },
+            ),
+            (
+                "agent_2".to_string(),
+                Task {
+                    id: "task_2".to_string(),
+                    description: "Task for agent 2".to_string(),
+                    context: serde_json::json!({}),
+                },
+            ),
+        ];
+
+        let start = std::time::Instant::now();
+        let results = orchestrator.execute_parallel(tasks).await;
+        let duration = start.elapsed().as_millis();
+
+        // Parallel execution should be faster than sequential (50+50=100ms)
+        // Allow some margin for test overhead
+        assert!(
+            duration < 150,
+            "Parallel execution took too long: {}ms",
+            duration
+        );
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].is_ok());
+        assert!(results[1].is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_parallel_with_failure() {
+        let registry = Arc::new(AgentRegistry::new());
+
+        let good_agent = Arc::new(OrchestratorTestAgent::new("good_agent", 10));
+        let bad_agent = Arc::new(FailingTestAgent::new("bad_agent"));
+
+        registry
+            .register("good_agent".to_string(), good_agent)
+            .await;
+        registry.register("bad_agent".to_string(), bad_agent).await;
+
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let tasks = vec![
+            (
+                "good_agent".to_string(),
+                Task {
+                    id: "task_1".to_string(),
+                    description: "Good task".to_string(),
+                    context: serde_json::json!({}),
+                },
+            ),
+            (
+                "bad_agent".to_string(),
+                Task {
+                    id: "task_2".to_string(),
+                    description: "Bad task".to_string(),
+                    context: serde_json::json!({}),
+                },
+            ),
+        ];
+
+        let results = orchestrator.execute_parallel(tasks).await;
+
+        assert_eq!(results.len(), 2);
+        // One should succeed, one should fail
+        let successes = results.iter().filter(|r| r.is_ok()).count();
+        let failures = results.iter().filter(|r| r.is_err()).count();
+
+        assert_eq!(successes, 1);
+        assert_eq!(failures, 1);
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_parallel_empty() {
+        let registry = Arc::new(AgentRegistry::new());
+        let orchestrator = AgentOrchestrator::new(registry);
+
+        let results = orchestrator.execute_parallel(vec![]).await;
+        assert!(results.is_empty());
     }
 }

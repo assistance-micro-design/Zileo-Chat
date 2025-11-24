@@ -3,15 +3,15 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
-mod models;
-mod db;
 mod agents;
+mod commands;
+mod db;
+mod models;
 mod state;
 
 use state::AppState;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use std::sync::Arc;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     // Register default simple agent
     {
         use agents::SimpleAgent;
-        use models::{AgentConfig, Lifecycle, LLMConfig};
+        use models::{AgentConfig, LLMConfig, Lifecycle};
 
         let config = AgentConfig {
             id: "simple_agent".to_string(),
@@ -57,7 +57,10 @@ async fn main() -> anyhow::Result<()> {
         };
 
         let agent = SimpleAgent::new(config);
-        app_state.registry.register("simple_agent".to_string(), Arc::new(agent)).await;
+        app_state
+            .registry
+            .register("simple_agent".to_string(), Arc::new(agent))
+            .await;
     }
 
     tracing::info!("Simple agent registered");

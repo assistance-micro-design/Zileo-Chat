@@ -1,8 +1,8 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Workflow status representing the current state of a workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
