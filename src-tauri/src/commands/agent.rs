@@ -77,6 +77,7 @@ mod tests {
 
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
+        let llm_manager = Arc::new(crate::llm::ProviderManager::new());
 
         // Leak temp_dir to keep it alive during test
         std::mem::forget(temp_dir);
@@ -85,6 +86,7 @@ mod tests {
             db,
             registry,
             orchestrator,
+            llm_manager,
         }
     }
 

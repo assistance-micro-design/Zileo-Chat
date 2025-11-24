@@ -3,6 +3,7 @@
 
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
+use crate::llm::ProviderManager;
 use std::sync::Arc;
 
 /// Application state shared across Tauri commands
@@ -13,6 +14,8 @@ pub struct AppState {
     pub registry: Arc<AgentRegistry>,
     /// Agent orchestrator
     pub orchestrator: Arc<AgentOrchestrator>,
+    /// LLM provider manager
+    pub llm_manager: Arc<ProviderManager>,
 }
 
 impl AppState {
@@ -26,10 +29,14 @@ impl AppState {
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
 
+        // Initialize LLM provider manager
+        let llm_manager = Arc::new(ProviderManager::new());
+
         Ok(Self {
             db,
             registry,
             orchestrator,
+            llm_manager,
         })
     }
 }

@@ -6,6 +6,7 @@
 mod agents;
 mod commands;
 mod db;
+mod llm;
 mod models;
 mod security;
 mod state;
@@ -78,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Application state initialized");
 
-    // Register default simple agent
+    // Register default simple agent (demo, no LLM)
     {
         use agents::SimpleAgent;
         use models::{AgentConfig, LLMConfig, Lifecycle};
@@ -107,6 +108,62 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Simple agent registered");
 
+    // Register LLM agent for Ollama (local)
+    {
+        use agents::LLMAgent;
+        use models::{AgentConfig, LLMConfig, Lifecycle};
+
+        let ollama_config = AgentConfig {
+            id: "ollama_agent".to_string(),
+            name: "Ollama Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Ollama".to_string(),
+                model: "llama3.2".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            system_prompt: "You are a helpful AI assistant powered by Ollama. Provide clear, accurate, and helpful responses.".to_string(),
+        };
+
+        let ollama_agent = LLMAgent::new(ollama_config, app_state.llm_manager.clone());
+        app_state
+            .registry
+            .register("ollama_agent".to_string(), Arc::new(ollama_agent))
+            .await;
+    }
+
+    // Register LLM agent for Mistral (cloud)
+    {
+        use agents::LLMAgent;
+        use models::{AgentConfig, LLMConfig, Lifecycle};
+
+        let mistral_config = AgentConfig {
+            id: "mistral_agent".to_string(),
+            name: "Mistral Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large-latest".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            system_prompt: "You are a helpful AI assistant powered by Mistral AI. Provide clear, accurate, and helpful responses.".to_string(),
+        };
+
+        let mistral_agent = LLMAgent::new(mistral_config, app_state.llm_manager.clone());
+        app_state
+            .registry
+            .register("mistral_agent".to_string(), Arc::new(mistral_agent))
+            .await;
+    }
+
+    tracing::info!("LLM agents registered (ollama_agent, mistral_agent)");
+
     // Initialize secure keystore
     let keystore = commands::SecureKeyStore::default();
     tracing::info!("Secure keystore initialized");
@@ -131,6 +188,15 @@ async fn main() -> anyhow::Result<()> {
             commands::security::delete_api_key,
             commands::security::has_api_key,
             commands::security::list_api_key_providers,
+            // LLM commands
+            commands::llm::get_llm_config,
+            commands::llm::configure_mistral,
+            commands::llm::configure_ollama,
+            commands::llm::set_active_provider,
+            commands::llm::set_default_model,
+            commands::llm::get_available_models,
+            commands::llm::test_ollama_connection,
+            commands::llm::test_llm_completion,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

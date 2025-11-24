@@ -24,12 +24,23 @@
 //! - `get_api_key` - Retrieve stored API key
 //! - `delete_api_key` - Remove stored API key
 //!
+//! ### LLM Commands ([`llm`])
+//! - `get_llm_config` - Get current LLM configuration
+//! - `configure_mistral` - Configure Mistral provider
+//! - `configure_ollama` - Configure Ollama provider
+//! - `set_active_provider` - Set active LLM provider
+//! - `set_default_model` - Set default model for provider
+//! - `get_available_models` - Get available models
+//! - `test_ollama_connection` - Test Ollama connectivity
+//! - `test_llm_completion` - Test LLM completion
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
 //! to prevent injection attacks and ensure data integrity.
 
 pub mod agent;
+pub mod llm;
 pub mod security;
 pub mod workflow;
 

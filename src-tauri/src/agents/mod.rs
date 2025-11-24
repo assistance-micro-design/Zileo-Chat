@@ -25,8 +25,15 @@
 //! - Human-readable output
 //! - Machine-parsable structure
 //! - Standardized metrics
+//!
+//! ## Agent Types
+//!
+//! - [`SimpleAgent`] - Base implementation for demonstration (no LLM calls)
+//! - [`LLMAgent`] - Agent that uses real LLM calls via ProviderManager
 
 pub mod core;
+pub mod llm_agent;
 pub mod simple_agent;
 
+pub use llm_agent::LLMAgent;
 pub use simple_agent::SimpleAgent;

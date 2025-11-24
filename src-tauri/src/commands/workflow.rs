@@ -249,6 +249,8 @@ mod tests {
             .register("test_agent".to_string(), Arc::new(agent))
             .await;
 
+        let llm_manager = Arc::new(crate::llm::ProviderManager::new());
+
         // Leak temp_dir to keep it alive during test
         std::mem::forget(temp_dir);
 
@@ -256,6 +258,7 @@ mod tests {
             db,
             registry,
             orchestrator,
+            llm_manager,
         }
     }
 

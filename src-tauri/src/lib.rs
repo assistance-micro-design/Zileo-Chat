@@ -37,9 +37,11 @@
 pub mod agents;
 pub mod commands;
 pub mod db;
+pub mod llm;
 pub mod models;
 pub mod security;
 pub mod state;
 
 pub use commands::SecureKeyStore;
+pub use llm::ProviderManager;
 pub use state::AppState;
