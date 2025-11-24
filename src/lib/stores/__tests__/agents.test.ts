@@ -20,7 +20,7 @@ import {
 	getAllAgentConfigs,
 	type AgentState
 } from '../agents';
-import type { AgentConfig } from '$lib/types/agent';
+import type { AgentConfig } from '$types/agent';
 
 describe('Agent Store', () => {
 	let initialState: AgentState;

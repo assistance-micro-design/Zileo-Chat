@@ -7,7 +7,7 @@
  * @module stores/workflows
  */
 
-import type { Workflow, WorkflowResult, WorkflowStatus } from '$lib/types/workflow';
+import type { Workflow, WorkflowResult, WorkflowStatus } from '$types/workflow';
 
 /**
  * State interface for the workflow store

@@ -19,7 +19,7 @@ import {
 	getWorkflowCount,
 	type WorkflowState
 } from '../workflows';
-import type { Workflow, WorkflowResult } from '$lib/types/workflow';
+import type { Workflow, WorkflowResult } from '$types/workflow';
 
 describe('Workflow Store', () => {
 	let initialState: WorkflowState;

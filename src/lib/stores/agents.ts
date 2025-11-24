@@ -7,7 +7,7 @@
  * @module stores/agents
  */
 
-import type { AgentConfig, Lifecycle } from '$lib/types/agent';
+import type { AgentConfig, Lifecycle } from '$types/agent';
 
 /**
  * State interface for the agent store
