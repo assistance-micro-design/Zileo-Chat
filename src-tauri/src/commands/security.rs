@@ -6,9 +6,9 @@
 //! Provides secure storage and retrieval of API keys for LLM providers
 //! using OS keychain + AES-256-GCM encryption.
 
-use crate::security::{KeyStore, KeyStoreError, Validator};
 #[cfg(test)]
 use crate::security::ValidationError;
+use crate::security::{KeyStore, KeyStoreError, Validator};
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
