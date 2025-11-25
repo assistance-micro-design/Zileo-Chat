@@ -107,6 +107,8 @@ pub enum CompletionStatus {
     Completed,
     /// Workflow encountered an error
     Error,
+    /// Workflow was cancelled by user
+    Cancelled,
 }
 
 /// Event emitted when workflow execution completes
@@ -137,6 +139,15 @@ impl WorkflowComplete {
             workflow_id,
             status: CompletionStatus::Error,
             error: Some(error),
+        }
+    }
+
+    /// Creates a cancelled completion event
+    pub fn cancelled(workflow_id: String) -> Self {
+        Self {
+            workflow_id,
+            status: CompletionStatus::Cancelled,
+            error: None,
         }
     }
 }
@@ -230,5 +241,20 @@ mod tests {
         let status = CompletionStatus::Error;
         let json = serde_json::to_string(&status).unwrap();
         assert_eq!(json, "\"error\"");
+
+        let status = CompletionStatus::Cancelled;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"cancelled\"");
+    }
+
+    #[test]
+    fn test_workflow_complete_cancelled() {
+        let complete = WorkflowComplete::cancelled("wf_001".to_string());
+        assert_eq!(complete.status, CompletionStatus::Cancelled);
+        assert!(complete.error.is_none());
+
+        let json = serde_json::to_string(&complete).unwrap();
+        assert!(json.contains("\"status\":\"cancelled\""));
+        assert!(!json.contains("\"error\""));
     }
 }

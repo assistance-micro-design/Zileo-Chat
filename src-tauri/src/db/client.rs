@@ -155,6 +155,54 @@ impl DBClient {
         debug!("Record deleted");
         Ok(())
     }
+
+    /// Executes a parameterized query and returns results.
+    ///
+    /// Uses SurrealDB's `.bind()` method to safely bind parameters to the query.
+    /// Parameters are passed as a vector of (name, value) tuples.
+    ///
+    /// # Arguments
+    /// * `query` - The SurrealQL query with $param placeholders
+    /// * `params` - Vector of (param_name, param_value) tuples
+    ///
+    /// # Example
+    /// ```ignore
+    /// let result = db.query_with_params(
+    ///     "CREATE user CONTENT $data",
+    ///     vec![("data".to_string(), json!({"name": "test"}))]
+    /// ).await?;
+    /// ```
+    #[allow(dead_code)] // Used by SurrealDBTool which is prepared for Phase 6+
+    #[instrument(name = "db_query_with_params", skip(self, params), fields(query_len = query.len()))]
+    pub async fn query_with_params<T>(
+        &self,
+        query: &str,
+        params: Vec<(String, serde_json::Value)>,
+    ) -> Result<Vec<T>>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing parameterized query");
+
+        let mut query_builder = self.db.query(query);
+
+        for (name, value) in params {
+            query_builder = query_builder.bind((name, value));
+        }
+
+        let mut result = query_builder.await.map_err(|e| {
+            error!(error = %e, "Parameterized query execution failed");
+            e
+        })?;
+
+        let data: Vec<T> = result.take(0).map_err(|e| {
+            error!(error = %e, "Failed to deserialize parameterized query results");
+            e
+        })?;
+
+        debug!(result_count = data.len(), "Parameterized query completed");
+        Ok(data)
+    }
 }
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	import { invoke } from '@tauri-apps/api/core';
 	import type { Workflow, WorkflowResult } from '$types/workflow';
 	import type { Message } from '$types/message';
-	import type { Agent } from '$types/agent';
+	import type { Agent, AgentConfig } from '$types/agent';
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input } from '$lib/components/ui';
 	import { WorkflowList, MetricsBar, AgentSelector } from '$lib/components/workflow';
@@ -21,19 +21,10 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	let workflows = $state<Workflow[]>([]);
 	let selectedWorkflowId = $state<string | null>(null);
 
-	/** Agent state */
-	let agents = $state<Agent[]>([
-		{
-			id: 'simple_agent',
-			name: 'Simple Agent',
-			lifecycle: 'permanent',
-			status: 'available',
-			capabilities: ['chat', 'analysis'],
-			tools: [],
-			mcp_servers: []
-		}
-	]);
-	let selectedAgentId = $state('simple_agent');
+	/** Agent state - dynamically loaded from backend */
+	let agents = $state<Agent[]>([]);
+	let selectedAgentId = $state<string | null>(null);
+	let agentsLoading = $state(true);
 
 	/** Messages state */
 	let messages = $state<Message[]>([]);
@@ -74,9 +65,61 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	}
 
 	/**
+	 * Loads all agents from backend
+	 * Fetches agent IDs then loads each agent's config
+	 */
+	async function loadAgents(): Promise<void> {
+		agentsLoading = true;
+		try {
+			const agentIds = await invoke<string[]>('list_agents');
+
+			if (agentIds.length === 0) {
+				agents = [];
+				selectedAgentId = null;
+				return;
+			}
+
+			const loadedAgents: Agent[] = [];
+			for (const id of agentIds) {
+				try {
+					const config = await invoke<AgentConfig>('get_agent_config', { agentId: id });
+					loadedAgents.push({
+						id: config.id,
+						name: config.name,
+						lifecycle: config.lifecycle,
+						status: 'available',
+						capabilities: config.tools.length > 0 ? ['chat', 'tools'] : ['chat'],
+						tools: config.tools,
+						mcp_servers: config.mcp_servers
+					});
+				} catch (err) {
+					console.error(`Failed to load agent config for ${id}:`, err);
+				}
+			}
+
+			agents = loadedAgents;
+
+			// Select first agent if none selected
+			if (!selectedAgentId && agents.length > 0) {
+				selectedAgentId = agents[0].id;
+			}
+		} catch (err) {
+			console.error('Failed to load agents:', err);
+			agents = [];
+		} finally {
+			agentsLoading = false;
+		}
+	}
+
+	/**
 	 * Creates a new workflow with user-provided name
 	 */
 	async function createWorkflow(): Promise<void> {
+		if (!selectedAgentId) {
+			alert('Please wait for agents to load or no agents available');
+			return;
+		}
+
 		const name = prompt('Workflow name:');
 		if (!name) return;
 
@@ -149,7 +192,7 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	 * Handles sending a message
 	 */
 	async function handleSend(message: string): Promise<void> {
-		if (!selectedWorkflowId || !message.trim()) return;
+		if (!selectedWorkflowId || !selectedAgentId || !message.trim()) return;
 
 		// Add user message
 		const userMessage: Message = {
@@ -198,6 +241,7 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 
 	$effect(() => {
 		loadWorkflows();
+		loadAgents();
 	});
 </script>
 
@@ -247,12 +291,18 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 					<Bot size={24} class="agent-icon" />
 					<div>
 						<h2 class="agent-title">{currentWorkflow()?.name || 'Agent'}</h2>
-						<AgentSelector
-							{agents}
-							selected={selectedAgentId}
-							onselect={handleAgentSelect}
-							label=""
-						/>
+						{#if agentsLoading}
+							<span class="agents-loading">Loading agents...</span>
+						{:else if agents.length === 0}
+							<span class="no-agents">No agents available</span>
+						{:else}
+							<AgentSelector
+								{agents}
+								selected={selectedAgentId ?? agents[0]?.id ?? ''}
+								onselect={handleAgentSelect}
+								label=""
+							/>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -393,6 +443,13 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 		color: var(--color-text-secondary);
 		margin-bottom: var(--spacing-lg);
 		max-width: 400px;
+	}
+
+	/* Agent Loading States */
+	.agents-loading,
+	.no-agents {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-tertiary);
 	}
 
 	/* Utility Classes */

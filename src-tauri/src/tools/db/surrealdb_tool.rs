@@ -63,7 +63,7 @@ impl SurrealDBTool {
         // Use parameterized query for safety
         let result: Result<Vec<Value>, _> = self
             .db
-            .query_with_params(&query, vec![("data", data.clone())])
+            .query_with_params(&query, vec![("data".to_string(), data.clone())])
             .await;
 
         match result {
@@ -85,7 +85,7 @@ impl SurrealDBTool {
 
         let result: Result<Vec<Value>, _> = self
             .db
-            .query_with_params(&query, vec![("data", data.clone())])
+            .query_with_params(&query, vec![("data".to_string(), data.clone())])
             .await;
 
         match result {

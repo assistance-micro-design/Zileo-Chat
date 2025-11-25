@@ -150,7 +150,20 @@ pub async fn execute_workflow(
             format!("Execution failed: {}", e)
         })?;
 
-    // 4. Build result
+    // 4. Get agent config for accurate provider/model info
+    let (provider, model) = match state.registry.get(&validated_agent_id).await {
+        Some(agent) => {
+            let config = agent.config();
+            (config.llm.provider.clone(), config.llm.model.clone())
+        }
+        None => {
+            // Fallback if agent not found (shouldn't happen after successful execution)
+            ("Unknown".to_string(), validated_agent_id.clone())
+        }
+    };
+
+    // 5. Build result
+    // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
     let result = WorkflowResult {
         report: report.content,
         metrics: WorkflowMetrics {
@@ -158,8 +171,8 @@ pub async fn execute_workflow(
             tokens_input: report.metrics.tokens_input,
             tokens_output: report.metrics.tokens_output,
             cost_usd: 0.0,
-            provider: "Demo".to_string(),
-            model: "simple_agent".to_string(),
+            provider,
+            model,
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
@@ -300,6 +313,9 @@ mod tests {
             registry,
             orchestrator,
             llm_manager,
+            streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
         }
     }
 

@@ -38,7 +38,7 @@ export interface WorkflowComplete {
   /** Associated workflow ID */
   workflow_id: string;
   /** Final workflow status */
-  status: 'completed' | 'error';
+  status: 'completed' | 'error' | 'cancelled';
   /** Error message if status is 'error' */
   error?: string;
 }

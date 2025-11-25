@@ -136,12 +136,34 @@ pub async fn execute_workflow_streaming(
             // Stream the response content in chunks
             let content = &report.content;
             let chunk_size = 50; // Characters per chunk for simulated streaming
+            let mut cancelled = false;
+
             for (i, chunk) in content
                 .chars()
                 .collect::<Vec<_>>()
                 .chunks(chunk_size)
                 .enumerate()
             {
+                // Check for cancellation before each chunk
+                if state.is_cancelled(&validated_workflow_id).await {
+                    warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user");
+                    cancelled = true;
+                    emit_chunk(
+                        &window,
+                        StreamChunk::error(
+                            validated_workflow_id.clone(),
+                            "Cancelled by user".to_string(),
+                        ),
+                    );
+                    emit_complete(
+                        &window,
+                        WorkflowComplete::cancelled(validated_workflow_id.clone()),
+                    );
+                    // Clear the cancellation flag
+                    state.clear_cancellation(&validated_workflow_id).await;
+                    break;
+                }
+
                 let chunk_text: String = chunk.iter().collect();
                 emit_chunk(
                     &window,
@@ -152,6 +174,10 @@ pub async fn execute_workflow_streaming(
                 if i < content.len() / chunk_size {
                     tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                 }
+            }
+
+            if cancelled {
+                return Err("Workflow cancelled by user".to_string());
             }
 
             report
@@ -170,7 +196,20 @@ pub async fn execute_workflow_streaming(
         }
     };
 
+    // Get agent config for accurate provider/model info
+    let (provider, model) = match state.registry.get(&validated_agent_id).await {
+        Some(agent) => {
+            let config = agent.config();
+            (config.llm.provider.clone(), config.llm.model.clone())
+        }
+        None => {
+            // Fallback if agent not found (shouldn't happen after successful execution)
+            ("Unknown".to_string(), validated_agent_id.clone())
+        }
+    };
+
     // Build result
+    // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
     let result = WorkflowResult {
         report: report.content,
         metrics: WorkflowMetrics {
@@ -178,8 +217,8 @@ pub async fn execute_workflow_streaming(
             tokens_input: report.metrics.tokens_input,
             tokens_output: report.metrics.tokens_output,
             cost_usd: 0.0,
-            provider: "Demo".to_string(),
-            model: validated_agent_id.clone(),
+            provider,
+            model,
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
@@ -229,25 +268,29 @@ fn emit_error(window: &Window, workflow_id: &str, error: &str) {
 
 /// Cancels a streaming workflow execution.
 ///
-/// Note: This is a stub implementation. Full cancellation support
-/// requires cooperative cancellation in the agent execution.
+/// Marks the workflow for cooperative cancellation. The streaming execution
+/// checks this flag between chunk emissions and will abort if set.
 ///
 /// # Arguments
 /// * `workflow_id` - The workflow ID to cancel
+/// * `state` - Application state containing the cancellation tracker
 #[tauri::command]
-#[instrument(name = "cancel_workflow_streaming", fields(workflow_id = %workflow_id))]
-pub async fn cancel_workflow_streaming(workflow_id: String) -> Result<(), String> {
+#[instrument(name = "cancel_workflow_streaming", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn cancel_workflow_streaming(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     info!("Cancelling streaming workflow");
 
     // Validate workflow ID
-    let _validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
+    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
         warn!(error = %e, "Invalid workflow ID");
         format!("Invalid workflow ID: {}", e)
     })?;
 
-    // TODO: Implement cooperative cancellation
-    // This would require a cancellation token passed to the agent execution
-    warn!("Workflow cancellation is not yet fully implemented");
+    // Request cancellation
+    state.request_cancellation(&validated_id).await;
+    info!(workflow_id = %validated_id, "Workflow cancellation requested");
 
     Ok(())
 }

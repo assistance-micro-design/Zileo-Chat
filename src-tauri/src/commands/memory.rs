@@ -335,6 +335,9 @@ mod tests {
             registry,
             orchestrator,
             llm_manager,
+            streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
         }
     }
 
