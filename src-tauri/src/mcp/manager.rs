@@ -228,11 +228,9 @@ impl MCPManager {
 
         let mut client = {
             let mut clients = self.clients.write().await;
-            clients
-                .remove(id)
-                .ok_or_else(|| MCPError::ServerNotFound {
-                    server: id.to_string(),
-                })?
+            clients.remove(id).ok_or_else(|| MCPError::ServerNotFound {
+                server: id.to_string(),
+            })?
         };
 
         client.disconnect().await?;
@@ -513,10 +511,7 @@ impl MCPManager {
 
         // Use CONTENT to replace the entire record, then add updated_at
         // SurrealDB doesn't support MERGE + SET together
-        let query = format!(
-            "UPDATE mcp_server:`{}` CONTENT $data",
-            config.id
-        );
+        let query = format!("UPDATE mcp_server:`{}` CONTENT $data", config.id);
 
         let _: Vec<serde_json::Value> = self
             .db
@@ -543,14 +538,14 @@ impl MCPManager {
         // Use raw query instead of SDK delete method (which has issues with record IDs)
         let query = format!("DELETE mcp_server:`{}`", id);
 
-        let _: Vec<serde_json::Value> = self
-            .db
-            .query_json(&query)
-            .await
-            .map_err(|e| MCPError::DatabaseError {
-                context: "delete server config".to_string(),
-                message: e.to_string(),
-            })?;
+        let _: Vec<serde_json::Value> =
+            self.db
+                .query_json(&query)
+                .await
+                .map_err(|e| MCPError::DatabaseError {
+                    context: "delete server config".to_string(),
+                    message: e.to_string(),
+                })?;
 
         debug!(server_id = %id, "Server configuration deleted from database");
 

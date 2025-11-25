@@ -92,7 +92,10 @@ impl LLMAgent {
             "Calling MCP tool"
         );
 
-        match mcp_manager.call_tool(server_name, tool_name, arguments).await {
+        match mcp_manager
+            .call_tool(server_name, tool_name, arguments)
+            .await
+        {
             Ok(result) => {
                 if result.success {
                     Ok(serde_json::to_string_pretty(&result.content)

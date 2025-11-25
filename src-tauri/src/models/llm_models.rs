@@ -635,7 +635,8 @@ mod tests {
         assert_eq!(success.latency_ms, Some(150));
         assert!(success.error_message.is_none());
 
-        let failure = ConnectionTestResult::failure(ProviderType::Ollama, "Connection refused".into());
+        let failure =
+            ConnectionTestResult::failure(ProviderType::Ollama, "Connection refused".into());
         assert!(!failure.success);
         assert!(failure.latency_ms.is_none());
         assert!(failure.error_message.is_some());
@@ -649,9 +650,6 @@ mod tests {
 
         let ollama = ProviderSettings::default_for(ProviderType::Ollama);
         assert!(ollama.enabled);
-        assert_eq!(
-            ollama.base_url,
-            Some("http://localhost:11434".into())
-        );
+        assert_eq!(ollama.base_url, Some("http://localhost:11434".into()));
     }
 }

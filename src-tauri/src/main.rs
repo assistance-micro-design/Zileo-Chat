@@ -173,6 +173,73 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!(count = count, "MCP servers loaded from database");
     }
 
+    // Seed builtin LLM models if needed
+    {
+        use models::llm_models::get_all_builtin_models;
+
+        let builtin_models = get_all_builtin_models();
+        let mut inserted = 0;
+
+        for model in &builtin_models {
+            let check_query = format!(
+                "SELECT count() FROM llm_model WHERE id = '{}' GROUP ALL",
+                model.id
+            );
+            let count_result: Vec<serde_json::Value> = app_state
+                .db
+                .db
+                .query(&check_query)
+                .await
+                .map(|mut r| r.take(0).unwrap_or_default())
+                .unwrap_or_default();
+
+            let exists = count_result
+                .first()
+                .and_then(|v| v.get("count").and_then(|c| c.as_i64()))
+                .unwrap_or(0)
+                > 0;
+
+            if !exists {
+                let insert_query = format!(
+                    "CREATE llm_model:`{}` CONTENT {{ \
+                        id: '{}', \
+                        provider: '{}', \
+                        name: '{}', \
+                        api_name: '{}', \
+                        context_window: {}, \
+                        max_output_tokens: {}, \
+                        temperature_default: {}, \
+                        is_builtin: true, \
+                        created_at: time::now(), \
+                        updated_at: time::now() \
+                    }}",
+                    model.id,
+                    model.id,
+                    model.provider,
+                    model.name.replace('\'', "''"),
+                    model.api_name.replace('\'', "''"),
+                    model.context_window,
+                    model.max_output_tokens,
+                    model.temperature_default
+                );
+
+                if app_state.db.db.query(&insert_query).await.is_ok() {
+                    inserted += 1;
+                }
+            }
+        }
+
+        if inserted > 0 {
+            tracing::info!(
+                total = builtin_models.len(),
+                inserted = inserted,
+                "Builtin LLM models seeded"
+            );
+        } else {
+            tracing::debug!("All builtin LLM models already exist");
+        }
+    }
+
     // Initialize secure keystore
     let keystore = commands::SecureKeyStore::default();
     tracing::info!("Secure keystore initialized");
@@ -205,7 +272,18 @@ async fn main() -> anyhow::Result<()> {
             commands::llm::set_default_model,
             commands::llm::get_available_models,
             commands::llm::test_ollama_connection,
+            commands::llm::test_mistral_connection,
             commands::llm::test_llm_completion,
+            // Model CRUD commands
+            commands::models::list_models,
+            commands::models::get_model,
+            commands::models::create_model,
+            commands::models::update_model,
+            commands::models::delete_model,
+            commands::models::get_provider_settings,
+            commands::models::update_provider_settings,
+            commands::models::test_provider_connection,
+            commands::models::seed_builtin_models,
             // Validation commands (Phase 5)
             commands::validation::create_validation_request,
             commands::validation::list_pending_validations,

@@ -32,7 +32,19 @@
 //! - `set_default_model` - Set default model for provider
 //! - `get_available_models` - Get available models
 //! - `test_ollama_connection` - Test Ollama connectivity
+//! - `test_mistral_connection` - Test Mistral connectivity
 //! - `test_llm_completion` - Test LLM completion
+//!
+//! ### Model Commands ([`models`])
+//! - `list_models` - List all LLM models (builtin + custom)
+//! - `get_model` - Get a single model by ID
+//! - `create_model` - Create a custom model
+//! - `update_model` - Update an existing model
+//! - `delete_model` - Delete a custom model
+//! - `get_provider_settings` - Get provider settings
+//! - `update_provider_settings` - Update provider settings
+//! - `test_provider_connection` - Test provider connection
+//! - `seed_builtin_models` - Seed database with builtin models
 //!
 //! ### Validation Commands ([`validation`])
 //! - `create_validation_request` - Create human-in-the-loop validation
@@ -75,6 +87,7 @@ pub mod agent;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod models;
 pub mod security;
 pub mod streaming;
 pub mod validation;

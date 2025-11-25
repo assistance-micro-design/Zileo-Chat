@@ -181,6 +181,39 @@ pub async fn test_ollama_connection(state: State<'_, AppState>) -> Result<bool, 
         .map_err(|e| format!("Connection test failed: {}", e))
 }
 
+/// Tests the Mistral connection by querying the models endpoint
+#[tauri::command]
+#[instrument(name = "test_mistral_connection", skip(state))]
+pub async fn test_mistral_connection(state: State<'_, AppState>) -> Result<bool, String> {
+    // Check if API key is configured
+    let api_key = state.llm_manager.mistral().get_api_key().await;
+    let Some(key) = api_key else {
+        return Err("Mistral API key not configured".into());
+    };
+
+    // Test by calling the models endpoint
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get("https://api.mistral.ai/v1/models")
+        .header("Authorization", format!("Bearer {}", key))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    if response.status().is_success() {
+        info!("Mistral connection test successful");
+        Ok(true)
+    } else {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        Err(format!("Mistral API error ({}): {}", status, body))
+    }
+}
+
 /// Executes a simple LLM completion (for testing)
 #[tauri::command]
 #[instrument(name = "test_llm_completion", skip(state, prompt))]
