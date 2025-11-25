@@ -6,6 +6,7 @@
 //! These types are synchronized with TypeScript frontend types (src/types/memory.ts)
 //! to ensure type safety for memory operations.
 
+use super::serde_utils::deserialize_thing_id;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +38,8 @@ impl std::fmt::Display for MemoryType {
 /// Memory entity for persistent context and RAG
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
-    /// Unique identifier
+    /// Unique identifier (deserialized from SurrealDB Thing type)
+    #[serde(deserialize_with = "deserialize_thing_id")]
     pub id: String,
     /// Type of memory content
     #[serde(rename = "type")]
@@ -87,7 +89,8 @@ impl MemoryCreate {
 /// Memory entity with embedding vector (for DB storage)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryWithEmbedding {
-    /// Unique identifier
+    /// Unique identifier (deserialized from SurrealDB Thing type)
+    #[serde(deserialize_with = "deserialize_thing_id")]
     pub id: String,
     /// Type of memory content
     #[serde(rename = "type")]

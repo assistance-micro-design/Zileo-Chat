@@ -4,6 +4,7 @@
 pub mod agent;
 pub mod memory;
 pub mod message;
+pub mod serde_utils;
 pub mod streaming;
 pub mod validation;
 pub mod workflow;

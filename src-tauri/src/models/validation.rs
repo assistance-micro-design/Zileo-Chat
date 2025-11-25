@@ -1,6 +1,7 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use super::serde_utils::deserialize_thing_id;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +52,8 @@ impl Default for ValidationStatus {
 /// Validation request entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationRequest {
-    /// Unique identifier
+    /// Unique identifier (deserialized from SurrealDB Thing type)
+    #[serde(deserialize_with = "deserialize_thing_id")]
     pub id: String,
     /// Associated workflow ID
     pub workflow_id: String,
