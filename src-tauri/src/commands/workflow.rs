@@ -36,19 +36,22 @@ pub async fn create_workflow(
         format!("Invalid agent ID: {}", e)
     })?;
 
+    // Generate unique ID
+    let workflow_id = Uuid::new_v4().to_string();
+
     // Use WorkflowCreate to avoid passing datetime fields
     // The database will set created_at and updated_at via DEFAULT time::now()
-    let workflow = WorkflowCreate::new(
-        Uuid::new_v4().to_string(),
-        validated_name,
-        validated_agent_id,
-        WorkflowStatus::Idle,
-    );
+    // ID is passed separately using table:id format
+    let workflow = WorkflowCreate::new(validated_name, validated_agent_id, WorkflowStatus::Idle);
 
-    let id = state.db.create("workflow", workflow).await.map_err(|e| {
-        error!(error = %e, "Failed to create workflow");
-        format!("Failed to create workflow: {}", e)
-    })?;
+    let id = state
+        .db
+        .create("workflow", &workflow_id, workflow)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to create workflow");
+            format!("Failed to create workflow: {}", e)
+        })?;
 
     info!(workflow_id = %id, "Workflow created successfully");
     Ok(id)

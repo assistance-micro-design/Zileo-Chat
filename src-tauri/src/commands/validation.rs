@@ -61,8 +61,8 @@ pub async fn create_validation_request(
 
     // Use ValidationRequestCreate to avoid passing datetime field
     // The database will set created_at via DEFAULT time::now()
+    // ID is passed separately using table:id format
     let request_create = ValidationRequestCreate::new(
-        request_id.clone(),
         validated_workflow_id.clone(),
         validation_type.clone(),
         validated_operation.clone(),
@@ -73,7 +73,7 @@ pub async fn create_validation_request(
 
     let id = state
         .db
-        .create("validation_request", request_create)
+        .create("validation_request", &request_id, request_create)
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to create validation request");

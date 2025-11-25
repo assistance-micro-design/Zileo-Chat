@@ -39,12 +39,11 @@ pub struct Workflow {
 }
 
 /// Workflow creation payload - only fields needed for creation
+/// ID is passed separately to db.create() using table:id format
 /// Datetime fields are handled by database defaults
 /// Enum fields are converted to strings for SurrealDB compatibility
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowCreate {
-    /// Unique identifier
-    pub id: String,
     /// Workflow name
     pub name: String,
     /// Associated agent ID
@@ -55,9 +54,8 @@ pub struct WorkflowCreate {
 
 impl WorkflowCreate {
     /// Creates a new WorkflowCreate with the given parameters
-    pub fn new(id: String, name: String, agent_id: String, status: WorkflowStatus) -> Self {
+    pub fn new(name: String, agent_id: String, status: WorkflowStatus) -> Self {
         Self {
-            id,
             name,
             agent_id,
             status: status.to_string(),

@@ -75,12 +75,11 @@ pub struct ValidationRequest {
 }
 
 /// Validation request creation payload - only fields needed for creation
+/// ID is passed separately to db.create() using table:id format
 /// Datetime field is handled by database default
 /// Enum fields are converted to strings for SurrealDB compatibility
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidationRequestCreate {
-    /// Unique identifier
-    pub id: String,
     /// Associated workflow ID
     pub workflow_id: String,
     /// Type of validation (as string for SurrealDB)
@@ -99,7 +98,6 @@ pub struct ValidationRequestCreate {
 impl ValidationRequestCreate {
     /// Creates a new ValidationRequestCreate with the given parameters
     pub fn new(
-        id: String,
         workflow_id: String,
         validation_type: ValidationType,
         operation: String,
@@ -108,7 +106,6 @@ impl ValidationRequestCreate {
         status: ValidationStatus,
     ) -> Self {
         Self {
-            id,
             workflow_id,
             validation_type: validation_type.to_string(),
             operation,

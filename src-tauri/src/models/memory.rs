@@ -54,12 +54,11 @@ pub struct Memory {
 }
 
 /// Memory creation payload - only fields needed for creation
+/// ID is passed separately to db.create() using table:id format
 /// Datetime field is handled by database default
 /// Enum fields are converted to strings for SurrealDB compatibility
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryCreate {
-    /// Unique identifier
-    pub id: String,
     /// Type of memory content (as string for SurrealDB)
     #[serde(rename = "type")]
     pub memory_type: String,
@@ -71,14 +70,8 @@ pub struct MemoryCreate {
 
 impl MemoryCreate {
     /// Creates a new MemoryCreate with the given parameters
-    pub fn new(
-        id: String,
-        memory_type: MemoryType,
-        content: String,
-        metadata: serde_json::Value,
-    ) -> Self {
+    pub fn new(memory_type: MemoryType, content: String, metadata: serde_json::Value) -> Self {
         Self {
-            id,
             memory_type: memory_type.to_string(),
             content,
             metadata,

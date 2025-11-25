@@ -60,17 +60,21 @@ pub async fn add_memory(
 
     // Use MemoryCreate to avoid passing datetime field
     // The database will set created_at via DEFAULT time::now()
+    // ID is passed separately using table:id format
     let memory = MemoryCreate::new(
-        memory_id.clone(),
         memory_type,
         trimmed_content.to_string(),
         metadata.unwrap_or(serde_json::json!({})),
     );
 
-    let id = state.db.create("memory", memory).await.map_err(|e| {
-        error!(error = %e, "Failed to create memory");
-        format!("Failed to create memory: {}", e)
-    })?;
+    let id = state
+        .db
+        .create("memory", &memory_id, memory)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to create memory");
+            format!("Failed to create memory: {}", e)
+        })?;
 
     info!(memory_id = %id, "Memory entry created successfully");
     Ok(memory_id)

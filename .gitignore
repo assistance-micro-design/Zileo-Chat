@@ -57,14 +57,16 @@ src-tauri/gen/
 src-tauri/WixTools/
 
 # ─────────────────────────────────────────────────────
-# Database (SurrealDB)
+# Database (SurrealDB) - Data directories only
 # ─────────────────────────────────────────────────────
 *.db
-*.surql
-data/
-db/
-surrealdb/
-rocksdb/
+# Note: NOT ignoring *.surql - schema files should be tracked
+/data/
+/db/
+/surrealdb/
+/rocksdb/
+# User-specific database data
+.zileo/
 
 # ─────────────────────────────────────────────────────
 # Security & Secrets
