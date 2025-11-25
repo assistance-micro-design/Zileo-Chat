@@ -65,7 +65,7 @@
 
 	<button
 		type="button"
-		class="sidebar-toggle"
+		class="sidebar-toggle sidebar-collapse-btn"
 		onclick={toggleCollapsed}
 		aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 		aria-expanded={!collapsed}

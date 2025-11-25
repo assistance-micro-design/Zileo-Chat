@@ -20,9 +20,10 @@
 	/>
 </svelte:head>
 
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <AppContainer>
 	<FloatingMenu />
-	<div class="main-content">
+	<div id="main-content" class="main-content" role="main">
 		{@render children()}
 	</div>
 </AppContainer>
