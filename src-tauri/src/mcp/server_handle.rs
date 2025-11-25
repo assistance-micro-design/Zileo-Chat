@@ -25,7 +25,9 @@ use crate::mcp::{
     MCPInitializeResult, MCPResourceDefinition, MCPResourcesListResult, MCPResult,
     MCPToolCallParams, MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
 };
-use crate::models::mcp::{MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
+use crate::models::mcp::{
+    MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool,
+};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -219,10 +221,12 @@ impl MCPServerHandle {
         );
 
         let response = self.send_request(request).await?;
-        let result = response.into_result().map_err(|e| MCPError::InitializationFailed {
-            server: self.config.name.clone(),
-            message: e.message,
-        })?;
+        let result = response
+            .into_result()
+            .map_err(|e| MCPError::InitializationFailed {
+                server: self.config.name.clone(),
+                message: e.message,
+            })?;
 
         let init_result: MCPInitializeResult =
             serde_json::from_value(result).map_err(|e| MCPError::InitializationFailed {
@@ -307,10 +311,12 @@ impl MCPServerHandle {
         let request = JsonRpcRequest::new("tools/list", None, self.next_request_id());
         let response = self.send_request(request).await?;
 
-        let result = response.into_result().map_err(|e| MCPError::ProtocolError {
-            code: e.code,
-            message: e.message,
-        })?;
+        let result = response
+            .into_result()
+            .map_err(|e| MCPError::ProtocolError {
+                code: e.code,
+                message: e.message,
+            })?;
 
         let tools_result: MCPToolsListResult = serde_json::from_value(result)?;
 
@@ -326,10 +332,12 @@ impl MCPServerHandle {
         let request = JsonRpcRequest::new("resources/list", None, self.next_request_id());
         let response = self.send_request(request).await?;
 
-        let result = response.into_result().map_err(|e| MCPError::ProtocolError {
-            code: e.code,
-            message: e.message,
-        })?;
+        let result = response
+            .into_result()
+            .map_err(|e| MCPError::ProtocolError {
+                code: e.code,
+                message: e.message,
+            })?;
 
         let resources_result: MCPResourcesListResult = serde_json::from_value(result)?;
 
@@ -406,10 +414,12 @@ impl MCPServerHandle {
 
         let response = self.send_request(request).await?;
 
-        let result = response.into_result().map_err(|e| MCPError::ProtocolError {
-            code: e.code,
-            message: e.message,
-        })?;
+        let result = response
+            .into_result()
+            .map_err(|e| MCPError::ProtocolError {
+                code: e.code,
+                message: e.message,
+            })?;
 
         let tool_response: MCPToolCallResponse = serde_json::from_value(result)?;
 
@@ -446,10 +456,13 @@ impl MCPServerHandle {
             message: "Process stdin not available".to_string(),
         })?;
 
-        let stdout_reader = self.stdout_reader.as_ref().ok_or(MCPError::ConnectionFailed {
-            server: self.config.name.clone(),
-            message: "Process stdout not available".to_string(),
-        })?;
+        let stdout_reader = self
+            .stdout_reader
+            .as_ref()
+            .ok_or(MCPError::ConnectionFailed {
+                server: self.config.name.clone(),
+                message: "Process stdout not available".to_string(),
+            })?;
 
         // Serialize request
         let mut request_json = serde_json::to_string(&request)?;
@@ -596,7 +609,9 @@ impl MCPServerHandle {
 
     /// Returns the server info (name, version) if initialized
     pub fn server_info(&self) -> Option<(&str, &str)> {
-        self.server_info.as_ref().map(|(n, v)| (n.as_str(), v.as_str()))
+        self.server_info
+            .as_ref()
+            .map(|(n, v)| (n.as_str(), v.as_str()))
     }
 
     /// Checks if the server process is still running

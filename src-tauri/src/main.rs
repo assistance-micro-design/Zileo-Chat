@@ -223,6 +223,17 @@ async fn main() -> anyhow::Result<()> {
             // Streaming commands (Phase 5)
             commands::streaming::execute_workflow_streaming,
             commands::streaming::cancel_workflow_streaming,
+            // MCP commands (Phase 3)
+            commands::mcp::list_mcp_servers,
+            commands::mcp::get_mcp_server,
+            commands::mcp::create_mcp_server,
+            commands::mcp::update_mcp_server,
+            commands::mcp::delete_mcp_server,
+            commands::mcp::test_mcp_server,
+            commands::mcp::start_mcp_server,
+            commands::mcp::stop_mcp_server,
+            commands::mcp::list_mcp_tools,
+            commands::mcp::call_mcp_tool,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

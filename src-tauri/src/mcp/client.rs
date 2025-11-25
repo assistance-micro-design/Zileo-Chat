@@ -35,8 +35,8 @@
 //! client.disconnect().await?;
 //! ```
 
-use crate::mcp::{MCPError, MCPResult, MCPToolCallResponse};
 use crate::mcp::server_handle::MCPServerHandle;
+use crate::mcp::{MCPError, MCPResult, MCPToolCallResponse};
 use crate::models::mcp::{
     MCPResource, MCPServerConfig, MCPServerStatus, MCPTestResult, MCPTool, MCPToolCallResult,
 };

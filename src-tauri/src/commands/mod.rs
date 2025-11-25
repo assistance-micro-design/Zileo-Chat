@@ -54,6 +54,18 @@
 //! - `execute_workflow_streaming` - Execute workflow with real-time events
 //! - `cancel_workflow_streaming` - Cancel streaming execution
 //!
+//! ### MCP Commands ([`mcp`])
+//! - `list_mcp_servers` - List all configured MCP servers
+//! - `get_mcp_server` - Get a single MCP server by ID
+//! - `create_mcp_server` - Create a new MCP server configuration
+//! - `update_mcp_server` - Update an existing MCP server
+//! - `delete_mcp_server` - Delete an MCP server configuration
+//! - `test_mcp_server` - Test MCP server connection
+//! - `start_mcp_server` - Start an MCP server
+//! - `stop_mcp_server` - Stop a running MCP server
+//! - `list_mcp_tools` - List available tools from a server
+//! - `call_mcp_tool` - Execute a tool on an MCP server
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
@@ -61,6 +73,7 @@
 
 pub mod agent;
 pub mod llm;
+pub mod mcp;
 pub mod memory;
 pub mod security;
 pub mod streaming;

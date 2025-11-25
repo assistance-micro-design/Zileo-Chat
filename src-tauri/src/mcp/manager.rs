@@ -35,8 +35,8 @@ use crate::db::DBClient;
 use crate::mcp::client::MCPClient;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{
-    MCPCallLog, MCPServer, MCPServerConfig, MCPServerCreate, MCPServerStatus,
-    MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
+    MCPCallLog, MCPServer, MCPServerConfig, MCPServerCreate, MCPServerStatus, MCPTestResult,
+    MCPTool, MCPToolCallRequest, MCPToolCallResult,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -330,9 +330,11 @@ impl MCPManager {
 
         let result = {
             let mut clients = self.clients.write().await;
-            let client = clients.get_mut(server_name).ok_or(MCPError::ServerNotFound {
-                server: server_name.to_string(),
-            })?;
+            let client = clients
+                .get_mut(server_name)
+                .ok_or(MCPError::ServerNotFound {
+                    server: server_name.to_string(),
+                })?;
 
             client.call_tool(tool_name, arguments.clone()).await
         };
@@ -342,11 +344,7 @@ impl MCPManager {
         // Log the call regardless of success/failure
         let (success, result_value, _error_msg) = match &result {
             Ok(r) => (r.success, r.content.clone(), r.error.clone()),
-            Err(e) => (
-                false,
-                serde_json::Value::Null,
-                Some(e.to_string()),
-            ),
+            Err(e) => (false, serde_json::Value::Null, Some(e.to_string())),
         };
 
         // Log to database (fire and forget)
@@ -531,14 +529,14 @@ impl MCPManager {
     async fn get_saved_configs(&self) -> MCPResult<Vec<MCPServerConfig>> {
         let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description FROM mcp_server";
 
-        let result: Vec<serde_json::Value> = self
-            .db
-            .query_json(query)
-            .await
-            .map_err(|e| MCPError::DatabaseError {
-                context: "get saved configs".to_string(),
-                message: e.to_string(),
-            })?;
+        let result: Vec<serde_json::Value> =
+            self.db
+                .query_json(query)
+                .await
+                .map_err(|e| MCPError::DatabaseError {
+                    context: "get saved configs".to_string(),
+                    message: e.to_string(),
+                })?;
 
         let configs: Vec<MCPServerConfig> = result
             .into_iter()
