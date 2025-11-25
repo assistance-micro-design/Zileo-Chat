@@ -38,10 +38,12 @@ pub mod agents;
 pub mod commands;
 pub mod db;
 pub mod llm;
+pub mod mcp;
 pub mod models;
 pub mod security;
 pub mod state;
 
 pub use commands::SecureKeyStore;
 pub use llm::ProviderManager;
+pub use mcp::{MCPError, MCPResult};
 pub use state::AppState;

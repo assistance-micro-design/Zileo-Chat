@@ -71,4 +71,32 @@ DEFINE TABLE workflow_agent SCHEMAFULL;
 DEFINE FIELD in ON workflow_agent TYPE record<workflow>;
 DEFINE FIELD out ON workflow_agent TYPE record<agent_state>;
 DEFINE FIELD created_by ON workflow_agent TYPE bool DEFAULT true;
+
+-- Table: mcp_server (MCP server configurations)
+DEFINE TABLE mcp_server SCHEMAFULL;
+DEFINE FIELD id ON mcp_server TYPE string;
+DEFINE FIELD name ON mcp_server TYPE string;
+DEFINE FIELD enabled ON mcp_server TYPE bool DEFAULT true;
+DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx'];
+DEFINE FIELD args ON mcp_server TYPE array<string>;
+DEFINE FIELD env ON mcp_server TYPE object;
+DEFINE FIELD description ON mcp_server TYPE option<string>;
+DEFINE FIELD created_at ON mcp_server TYPE datetime DEFAULT time::now();
+DEFINE FIELD updated_at ON mcp_server TYPE datetime DEFAULT time::now();
+DEFINE INDEX unique_mcp_id ON mcp_server FIELDS id UNIQUE;
+DEFINE INDEX unique_mcp_name ON mcp_server FIELDS name UNIQUE;
+
+-- Table: mcp_call_log (MCP tool call audit log)
+DEFINE TABLE mcp_call_log SCHEMAFULL;
+DEFINE FIELD id ON mcp_call_log TYPE string;
+DEFINE FIELD workflow_id ON mcp_call_log TYPE option<string>;
+DEFINE FIELD server_name ON mcp_call_log TYPE string;
+DEFINE FIELD tool_name ON mcp_call_log TYPE string;
+DEFINE FIELD params ON mcp_call_log TYPE object;
+DEFINE FIELD result ON mcp_call_log TYPE object;
+DEFINE FIELD success ON mcp_call_log TYPE bool;
+DEFINE FIELD duration_ms ON mcp_call_log TYPE int;
+DEFINE FIELD timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();
+DEFINE INDEX mcp_call_workflow ON mcp_call_log FIELDS workflow_id;
+DEFINE INDEX mcp_call_server ON mcp_call_log FIELDS server_name;
 "#;

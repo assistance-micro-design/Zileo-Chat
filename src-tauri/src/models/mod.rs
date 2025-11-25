@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod mcp;
 pub mod memory;
 pub mod message;
 pub mod serde_utils;
@@ -26,6 +27,13 @@ pub use memory::MemoryWithEmbedding;
 pub use streaming::{ChunkType, CompletionStatus};
 #[allow(unused_imports)]
 pub use validation::ValidationMode;
+
+// Re-export MCP types for future phases (Phase 2: MCP Client, Phase 3: Commands)
+#[allow(unused_imports)]
+pub use mcp::{
+    MCPCallLog, MCPDeploymentMethod, MCPResource, MCPServer, MCPServerConfig, MCPServerCreate,
+    MCPServerStatus, MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
+};
 
 // Re-export types for future phases
 #[allow(unused_imports)]
