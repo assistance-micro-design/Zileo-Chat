@@ -99,4 +99,45 @@ DEFINE FIELD duration_ms ON mcp_call_log TYPE int;
 DEFINE FIELD timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();
 DEFINE INDEX mcp_call_workflow ON mcp_call_log FIELDS workflow_id;
 DEFINE INDEX mcp_call_server ON mcp_call_log FIELDS server_name;
+
+-- =============================================
+-- Table: llm_model
+-- Stores LLM models (builtin + custom)
+-- =============================================
+DEFINE TABLE llm_model SCHEMAFULL;
+DEFINE FIELD id ON llm_model TYPE string;
+DEFINE FIELD provider ON llm_model TYPE string
+    ASSERT $value IN ['mistral', 'ollama'];
+DEFINE FIELD name ON llm_model TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 64;
+DEFINE FIELD api_name ON llm_model TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 128;
+DEFINE FIELD context_window ON llm_model TYPE int
+    ASSERT $value >= 1024 AND $value <= 2000000;
+DEFINE FIELD max_output_tokens ON llm_model TYPE int
+    ASSERT $value >= 256 AND $value <= 128000;
+DEFINE FIELD temperature_default ON llm_model TYPE float
+    ASSERT $value >= 0.0 AND $value <= 2.0
+    DEFAULT 0.7;
+DEFINE FIELD is_builtin ON llm_model TYPE bool DEFAULT false;
+DEFINE FIELD created_at ON llm_model TYPE datetime DEFAULT time::now();
+DEFINE FIELD updated_at ON llm_model TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX unique_model_id ON llm_model FIELDS id UNIQUE;
+DEFINE INDEX model_provider_idx ON llm_model FIELDS provider;
+DEFINE INDEX model_api_name_idx ON llm_model FIELDS provider, api_name UNIQUE;
+
+-- =============================================
+-- Table: provider_settings
+-- Configuration per provider
+-- =============================================
+DEFINE TABLE provider_settings SCHEMAFULL;
+DEFINE FIELD provider ON provider_settings TYPE string
+    ASSERT $value IN ['mistral', 'ollama'];
+DEFINE FIELD enabled ON provider_settings TYPE bool DEFAULT true;
+DEFINE FIELD default_model_id ON provider_settings TYPE option<string>;
+DEFINE FIELD base_url ON provider_settings TYPE option<string>;
+DEFINE FIELD updated_at ON provider_settings TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX unique_provider ON provider_settings FIELDS provider UNIQUE;
 "#;

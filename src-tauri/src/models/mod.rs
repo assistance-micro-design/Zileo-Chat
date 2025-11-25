@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod llm_models;
 pub mod mcp;
 pub mod memory;
 pub mod message;
@@ -40,3 +41,13 @@ pub use mcp::{
 pub use agent::{Agent, AgentStatus};
 #[allow(unused_imports)]
 pub use message::{Message, MessageRole};
+
+// Re-export LLM model types for CRUD operations (Phase 2 will use these)
+#[allow(unused_imports)]
+pub use llm_models::{
+    ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, ProviderType,
+    UpdateModelRequest,
+};
+// Re-export builtin model data (Phase 2 will use these for seeding)
+#[allow(unused_imports)]
+pub use llm_models::{get_all_builtin_models, MISTRAL_BUILTIN_MODELS, OLLAMA_BUILTIN_MODELS};
