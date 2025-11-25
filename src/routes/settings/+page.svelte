@@ -4,16 +4,48 @@ SPDX-License-Identifier: Apache-2.0
 
 Settings Page - Refactored with Design System Components
 Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
+Includes MCP server configuration section for managing external tool servers.
 -->
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import type { LLMProvider } from '$types/security';
+	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
 	import { Sidebar } from '$lib/components/layout';
-	import { Card, Button, Input, Select, Badge, StatusIndicator } from '$lib/components/ui';
+	import { Card, Button, Input, Select, Badge, StatusIndicator, Modal } from '$lib/components/ui';
+	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
-	import { Globe, Cpu, Palette, Sparkles, Server, Sun, Moon, ShieldCheck } from 'lucide-svelte';
+	import {
+		createInitialMCPState,
+		setServers,
+		addServer,
+		removeServer,
+		updateServer,
+		setMCPLoading,
+		setMCPError,
+		setTestingServer,
+		loadServers,
+		createServer,
+		updateServerConfig,
+		deleteServer,
+		testServer,
+		startServer,
+		stopServer,
+		type MCPState
+	} from '$lib/stores/mcp';
+	import {
+		Globe,
+		Cpu,
+		Palette,
+		Sparkles,
+		Server,
+		Sun,
+		Moon,
+		ShieldCheck,
+		Plus,
+		Plug
+	} from 'lucide-svelte';
 
 	/** Settings state */
 	let settings = $state({
@@ -29,6 +61,17 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 	let activeSection = $state('providers');
 	let sidebarCollapsed = $state(false);
 
+	/** MCP state */
+	let mcpState = $state<MCPState>(createInitialMCPState());
+	let showMCPModal = $state(false);
+	let mcpModalMode = $state<'create' | 'edit'>('create');
+	let editingServer = $state<MCPServerConfig | undefined>(undefined);
+	let mcpSaving = $state(false);
+	let testResult = $state<MCPTestResult | null>(null);
+	let testError = $state<string | null>(null);
+	let showTestModal = $state(false);
+	let testingServerConfig = $state<MCPServerConfig | null>(null);
+
 	/** Provider options */
 	const providerOptions: SelectOption[] = [
 		{ value: 'Mistral', label: 'Mistral' },
@@ -41,6 +84,7 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 	const sections = [
 		{ id: 'providers', label: 'Providers', icon: Globe },
 		{ id: 'models', label: 'Models', icon: Cpu },
+		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
 		{ id: 'theme', label: 'Theme', icon: Palette }
 	] as const;
 
@@ -137,11 +181,179 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 		theme.setTheme(newTheme);
 	}
 
+	// MCP Functions
+
+	/**
+	 * Loads MCP servers from backend
+	 */
+	async function loadMCPServers(): Promise<void> {
+		mcpState = setMCPLoading(mcpState, true);
+		try {
+			const servers = await loadServers();
+			mcpState = setServers(mcpState, servers);
+		} catch (err) {
+			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${err}`);
+		}
+	}
+
+	/**
+	 * Opens the create server modal
+	 */
+	function openCreateModal(): void {
+		mcpModalMode = 'create';
+		editingServer = undefined;
+		showMCPModal = true;
+	}
+
+	/**
+	 * Opens the edit server modal
+	 */
+	function openEditModal(server: MCPServer): void {
+		mcpModalMode = 'edit';
+		editingServer = {
+			id: server.id,
+			name: server.name,
+			enabled: server.enabled,
+			command: server.command,
+			args: server.args,
+			env: server.env,
+			description: server.description
+		};
+		showMCPModal = true;
+	}
+
+	/**
+	 * Closes the MCP modal
+	 */
+	function closeMCPModal(): void {
+		showMCPModal = false;
+		editingServer = undefined;
+	}
+
+	/**
+	 * Saves an MCP server (create or update)
+	 */
+	async function handleSaveMCPServer(config: MCPServerConfig): Promise<void> {
+		mcpSaving = true;
+		try {
+			if (mcpModalMode === 'create') {
+				const server = await createServer(config);
+				mcpState = addServer(mcpState, server);
+			} else {
+				const server = await updateServerConfig(config.id, config);
+				mcpState = updateServer(mcpState, config.id, server);
+			}
+			closeMCPModal();
+		} catch (err) {
+			mcpState = setMCPError(mcpState, `Failed to save server: ${err}`);
+		} finally {
+			mcpSaving = false;
+		}
+	}
+
+	/**
+	 * Deletes an MCP server
+	 */
+	async function handleDeleteServer(server: MCPServer): Promise<void> {
+		if (!confirm(`Are you sure you want to delete "${server.name}"?`)) {
+			return;
+		}
+
+		try {
+			await deleteServer(server.id);
+			mcpState = removeServer(mcpState, server.id);
+		} catch (err) {
+			mcpState = setMCPError(mcpState, `Failed to delete server: ${err}`);
+		}
+	}
+
+	/**
+	 * Tests an MCP server connection
+	 */
+	async function handleTestServer(server: MCPServer): Promise<void> {
+		mcpState = setTestingServer(mcpState, server.id);
+		testResult = null;
+		testError = null;
+		testingServerConfig = {
+			id: server.id,
+			name: server.name,
+			enabled: server.enabled,
+			command: server.command,
+			args: server.args,
+			env: server.env,
+			description: server.description
+		};
+		showTestModal = true;
+
+		try {
+			const result = await testServer(testingServerConfig);
+			testResult = result;
+		} catch (err) {
+			testError = `${err}`;
+		} finally {
+			mcpState = setTestingServer(mcpState, null);
+		}
+	}
+
+	/**
+	 * Retries the current test
+	 */
+	async function handleRetryTest(): Promise<void> {
+		if (!testingServerConfig) return;
+
+		mcpState = setTestingServer(mcpState, testingServerConfig.id);
+		testResult = null;
+		testError = null;
+
+		try {
+			const result = await testServer(testingServerConfig);
+			testResult = result;
+		} catch (err) {
+			testError = `${err}`;
+		} finally {
+			mcpState = setTestingServer(mcpState, null);
+		}
+	}
+
+	/**
+	 * Closes the test modal
+	 */
+	function closeTestModal(): void {
+		showTestModal = false;
+		testResult = null;
+		testError = null;
+		testingServerConfig = null;
+	}
+
+	/**
+	 * Toggles server start/stop
+	 */
+	async function handleToggleServer(server: MCPServer): Promise<void> {
+		try {
+			let updatedServer: MCPServer;
+			if (server.status === 'running') {
+				updatedServer = await stopServer(server.id);
+			} else {
+				updatedServer = await startServer(server.id);
+			}
+			mcpState = updateServer(mcpState, server.id, updatedServer);
+		} catch (err) {
+			mcpState = setMCPError(mcpState, `Failed to toggle server: ${err}`);
+		}
+	}
+
 	/**
 	 * Effect to check API key status when provider changes
 	 */
 	$effect(() => {
 		checkApiKeyStatus();
+	});
+
+	/**
+	 * Effect to load MCP servers on mount
+	 */
+	$effect(() => {
+		loadMCPServers();
 	});
 </script>
 
@@ -367,6 +579,64 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 			</Card>
 		</section>
 
+		<!-- MCP Servers Section -->
+		<section id="mcp" class="settings-section">
+			<div class="section-header-row">
+				<h2 class="section-title">MCP Servers</h2>
+				<Button variant="primary" size="sm" onclick={openCreateModal}>
+					<Plus size={16} />
+					<span>Add Server</span>
+				</Button>
+			</div>
+
+			{#if mcpState.error}
+				<div class="mcp-error">
+					{mcpState.error}
+				</div>
+			{/if}
+
+			{#if mcpState.loading}
+				<Card>
+					{#snippet body()}
+						<div class="mcp-loading">
+							<StatusIndicator status="running" />
+							<span>Loading MCP servers...</span>
+						</div>
+					{/snippet}
+				</Card>
+			{:else if mcpState.servers.length === 0}
+				<Card>
+					{#snippet body()}
+						<div class="mcp-empty">
+							<Plug size={48} class="empty-icon" />
+							<h3 class="empty-title">No MCP Servers Configured</h3>
+							<p class="empty-description">
+								MCP servers provide external tools and resources for your agents.
+								Add a server to get started.
+							</p>
+							<Button variant="primary" onclick={openCreateModal}>
+								<Plus size={16} />
+								<span>Add Your First Server</span>
+							</Button>
+						</div>
+					{/snippet}
+				</Card>
+			{:else}
+				<div class="mcp-server-grid">
+					{#each mcpState.servers as server (server.id)}
+						<MCPServerCard
+							{server}
+							testing={mcpState.testingServerId === server.id}
+							onEdit={() => openEditModal(server)}
+							onTest={() => handleTestServer(server)}
+							onToggle={() => handleToggleServer(server)}
+							onDelete={() => handleDeleteServer(server)}
+						/>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
 		<!-- Theme Section -->
 		<section id="theme" class="settings-section">
 			<h2 class="section-title">Theme</h2>
@@ -440,6 +710,44 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 		</section>
 	</main>
 </div>
+
+<!-- MCP Server Modal (Create/Edit) -->
+<Modal
+	open={showMCPModal}
+	title={mcpModalMode === 'create' ? 'Add MCP Server' : 'Edit MCP Server'}
+	onclose={closeMCPModal}
+>
+	{#snippet body()}
+		<MCPServerForm
+			mode={mcpModalMode}
+			server={editingServer}
+			onsave={handleSaveMCPServer}
+			oncancel={closeMCPModal}
+			saving={mcpSaving}
+		/>
+	{/snippet}
+</Modal>
+
+<!-- MCP Server Test Modal -->
+<Modal
+	open={showTestModal}
+	title={`Test: ${testingServerConfig?.name ?? 'Server'}`}
+	onclose={closeTestModal}
+>
+	{#snippet body()}
+		<MCPServerTester
+			result={testResult}
+			loading={mcpState.testingServerId !== null}
+			error={testError}
+			onRetry={handleRetryTest}
+		/>
+	{/snippet}
+	{#snippet footer()}
+		<Button variant="ghost" onclick={closeTestModal}>
+			Close
+		</Button>
+	{/snippet}
+</Modal>
 
 <style>
 	.settings-page {
@@ -545,6 +853,23 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 		font-size: var(--font-size-2xl);
 		font-weight: var(--font-weight-semibold);
 		margin-bottom: var(--spacing-lg);
+	}
+
+	.section-header-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: var(--spacing-lg);
+	}
+
+	.section-header-row .section-title {
+		margin-bottom: 0;
+	}
+
+	.section-header-row :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 
 	/* Provider Cards */
@@ -669,6 +994,60 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 		font-weight: var(--font-weight-semibold);
 	}
 
+	/* MCP Servers */
+	.mcp-server-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-lg);
+	}
+
+	.mcp-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-xl);
+	}
+
+	.mcp-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: var(--spacing-2xl);
+		gap: var(--spacing-md);
+	}
+
+	.mcp-empty :global(.empty-icon) {
+		color: var(--color-text-secondary);
+		opacity: 0.5;
+	}
+
+	.empty-title {
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+	}
+
+	.empty-description {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		max-width: 400px;
+	}
+
+	.mcp-empty :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.mcp-error {
+		padding: var(--spacing-md);
+		background: var(--color-error-light);
+		color: var(--color-error);
+		border-radius: var(--border-radius-md);
+		margin-bottom: var(--spacing-lg);
+	}
+
 	/* Theme Cards */
 	.theme-grid {
 		display: grid;
@@ -784,7 +1163,8 @@ Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
 	@media (max-width: 768px) {
 		.provider-grid,
 		.theme-grid,
-		.info-grid {
+		.info-grid,
+		.mcp-server-grid {
 			grid-template-columns: 1fr;
 		}
 	}
