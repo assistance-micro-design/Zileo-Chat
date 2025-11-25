@@ -46,9 +46,24 @@ pub struct Memory {
     pub content: String,
     /// Additional metadata
     pub metadata: serde_json::Value,
-    /// Creation timestamp
+    /// Creation timestamp (set by database)
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
+}
+
+/// Memory creation payload - only fields needed for creation
+/// Datetime field is handled by database default
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryCreate {
+    /// Unique identifier
+    pub id: String,
+    /// Type of memory content
+    #[serde(rename = "type")]
+    pub memory_type: MemoryType,
+    /// Text content of the memory
+    pub content: String,
+    /// Additional metadata
+    pub metadata: serde_json::Value,
 }
 
 /// Memory entity with embedding vector (for DB storage)

@@ -10,11 +10,10 @@
 //! Full RAG with embeddings will be implemented in a future phase.
 
 use crate::{
-    models::{Memory, MemorySearchResult, MemoryType},
+    models::{Memory, MemoryCreate, MemorySearchResult, MemoryType},
     security::Validator,
     AppState,
 };
-use chrono::Utc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
@@ -59,12 +58,13 @@ pub async fn add_memory(
 
     let memory_id = Uuid::new_v4().to_string();
 
-    let memory = Memory {
+    // Use MemoryCreate to avoid passing datetime field
+    // The database will set created_at via DEFAULT time::now()
+    let memory = MemoryCreate {
         id: memory_id.clone(),
         memory_type,
         content: trimmed_content.to_string(),
         metadata: metadata.unwrap_or(serde_json::json!({})),
-        created_at: Utc::now(),
     };
 
     let id = state.db.create("memory", memory).await.map_err(|e| {
@@ -304,6 +304,7 @@ mod tests {
     use crate::agents::core::{AgentOrchestrator, AgentRegistry};
     use crate::db::DBClient;
     use crate::llm::ProviderManager;
+    use chrono::Utc;
     use std::sync::Arc;
     use tempfile::tempdir;
 

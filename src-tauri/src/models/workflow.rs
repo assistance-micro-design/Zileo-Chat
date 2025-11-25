@@ -25,12 +25,29 @@ pub struct Workflow {
     pub agent_id: String,
     /// Current status
     pub status: WorkflowStatus,
-    /// Creation timestamp
+    /// Creation timestamp (set by database)
+    #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
-    /// Last update timestamp
+    /// Last update timestamp (set by database)
+    #[serde(default = "Utc::now")]
     pub updated_at: DateTime<Utc>,
     /// Completion timestamp (if completed)
+    #[serde(default)]
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+/// Workflow creation payload - only fields needed for creation
+/// Datetime fields are handled by database defaults
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkflowCreate {
+    /// Unique identifier
+    pub id: String,
+    /// Workflow name
+    pub name: String,
+    /// Associated agent ID
+    pub agent_id: String,
+    /// Current status
+    pub status: WorkflowStatus,
 }
 
 /// Result of a workflow execution

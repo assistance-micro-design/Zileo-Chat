@@ -67,9 +67,30 @@ pub struct ValidationRequest {
     /// Current validation status
     #[serde(default)]
     pub status: ValidationStatus,
-    /// Creation timestamp
+    /// Creation timestamp (set by database)
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
+}
+
+/// Validation request creation payload - only fields needed for creation
+/// Datetime field is handled by database default
+#[derive(Debug, Clone, Serialize)]
+pub struct ValidationRequestCreate {
+    /// Unique identifier
+    pub id: String,
+    /// Associated workflow ID
+    pub workflow_id: String,
+    /// Type of validation
+    #[serde(rename = "type")]
+    pub validation_type: ValidationType,
+    /// Operation description
+    pub operation: String,
+    /// Additional details about the operation
+    pub details: serde_json::Value,
+    /// Risk level assessment
+    pub risk_level: RiskLevel,
+    /// Current validation status
+    pub status: ValidationStatus,
 }
 
 #[cfg(test)]

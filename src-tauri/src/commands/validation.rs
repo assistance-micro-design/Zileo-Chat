@@ -7,7 +7,9 @@
 //! human approval before execution (tools, sub-agents, MCP calls, etc.).
 
 use crate::{
-    models::{RiskLevel, ValidationRequest, ValidationStatus, ValidationType},
+    models::{
+        RiskLevel, ValidationRequest, ValidationRequestCreate, ValidationStatus, ValidationType,
+    },
     security::Validator,
     AppState,
 };
@@ -55,8 +57,32 @@ pub async fn create_validation_request(
         format!("Invalid operation description: {}", e)
     })?;
 
+    let request_id = Uuid::new_v4().to_string();
+
+    // Use ValidationRequestCreate to avoid passing datetime field
+    // The database will set created_at via DEFAULT time::now()
+    let request_create = ValidationRequestCreate {
+        id: request_id.clone(),
+        workflow_id: validated_workflow_id.clone(),
+        validation_type: validation_type.clone(),
+        operation: validated_operation.clone(),
+        details: details.clone(),
+        risk_level: risk_level.clone(),
+        status: ValidationStatus::Pending,
+    };
+
+    let id = state
+        .db
+        .create("validation_request", request_create)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to create validation request");
+            format!("Failed to create validation request: {}", e)
+        })?;
+
+    // Build response object with current timestamp for immediate use
     let request = ValidationRequest {
-        id: Uuid::new_v4().to_string(),
+        id: request_id,
         workflow_id: validated_workflow_id,
         validation_type,
         operation: validated_operation,
@@ -65,15 +91,6 @@ pub async fn create_validation_request(
         status: ValidationStatus::Pending,
         created_at: Utc::now(),
     };
-
-    let id = state
-        .db
-        .create("validation_request", request.clone())
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to create validation request");
-            format!("Failed to create validation request: {}", e)
-        })?;
 
     info!(validation_id = %id, "Validation request created successfully");
     Ok(request)

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    models::{Workflow, WorkflowMetrics, WorkflowResult, WorkflowStatus},
+    models::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, WorkflowStatus},
     security::Validator,
     AppState,
 };
@@ -21,7 +21,6 @@ pub async fn create_workflow(
     agent_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    use chrono::Utc;
     use uuid::Uuid;
 
     info!("Creating new workflow");
@@ -37,14 +36,13 @@ pub async fn create_workflow(
         format!("Invalid agent ID: {}", e)
     })?;
 
-    let workflow = Workflow {
+    // Use WorkflowCreate to avoid passing datetime fields
+    // The database will set created_at and updated_at via DEFAULT time::now()
+    let workflow = WorkflowCreate {
         id: Uuid::new_v4().to_string(),
         name: validated_name,
         agent_id: validated_agent_id,
         status: WorkflowStatus::Idle,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        completed_at: None,
     };
 
     let id = state.db.create("workflow", workflow).await.map_err(|e| {
