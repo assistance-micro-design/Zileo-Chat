@@ -12,18 +12,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
 - **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
 
-**Current Status**: Phase 1 Design System Foundation complete. Phase 2 Layout Components pending.
+**Current Status**: Phase 5 Backend Features complete. Phase 6 Integration pending.
 
 ## Implementation Progress
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 0 | Complete | Base implementation (agents, LLM, DB, security, 19 Tauri commands) |
-| **Phase 1** | **Complete** | Design System Foundation (theme, 10 UI components) |
-| Phase 2 | Pending | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
-| Phase 3 | Pending | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
-| Phase 4 | Pending | Pages Refactoring (agent page, settings page with new components) |
-| Phase 5 | Pending | Missing Backend Features (validation, memory, streaming) |
+| Phase 1 | Complete | Design System Foundation (theme, 10 UI components) |
+| Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
+| Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
+| Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
+| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming - 34 Tauri commands) |
 | Phase 6 | Pending | Integration & Polish (E2E tests, accessibility audit) |
 
 ### Phase 1 Deliverables (Complete)
@@ -171,6 +171,49 @@ async fn execute_workflow(
 ```
 
 **Critical**: All Tauri commands must be registered in `src-tauri/src/main.rs` using `tauri::generate_handler![]`.
+
+### Phase 5 Commands (Validation, Memory, Streaming)
+
+**Validation** (`src-tauri/src/commands/validation.rs`):
+```typescript
+// Human-in-the-loop validation for critical operations
+await invoke('create_validation_request', { workflowId, validationType, operation, details, riskLevel });
+await invoke<ValidationRequest[]>('list_pending_validations');
+await invoke<ValidationRequest[]>('list_workflow_validations', { workflowId });
+await invoke('approve_validation', { validationId });
+await invoke('reject_validation', { validationId, reason });
+await invoke('delete_validation', { validationId });
+```
+
+**Memory** (`src-tauri/src/commands/memory.rs`):
+```typescript
+// RAG and context persistence (stub without vector embeddings)
+await invoke<string>('add_memory', { memoryType, content, metadata });
+await invoke<Memory[]>('list_memories', { typeFilter? });
+await invoke<Memory>('get_memory', { memoryId });
+await invoke('delete_memory', { memoryId });
+await invoke<MemorySearchResult[]>('search_memories', { query, limit?, typeFilter? });
+await invoke<number>('clear_memories_by_type', { memoryType });
+```
+
+**Streaming** (`src-tauri/src/commands/streaming.rs`):
+```typescript
+// Real-time workflow execution with Tauri events
+import { listen } from '@tauri-apps/api/event';
+import type { StreamChunk, WorkflowComplete } from '$types/streaming';
+
+// Listen to streaming events
+const unlistenChunk = await listen<StreamChunk>('workflow_stream', (event) => {
+  // Handle token, tool_start, tool_end, reasoning, error chunks
+});
+const unlistenComplete = await listen<WorkflowComplete>('workflow_complete', (event) => {
+  // Handle completion (status: completed | error)
+});
+
+// Start streaming execution
+await invoke<WorkflowResult>('execute_workflow_streaming', { workflowId, message, agentId });
+await invoke('cancel_workflow_streaming', { workflowId }); // Stub
+```
 
 ## Type Synchronization
 

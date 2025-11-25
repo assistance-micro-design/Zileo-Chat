@@ -34,6 +34,26 @@
 //! - `test_ollama_connection` - Test Ollama connectivity
 //! - `test_llm_completion` - Test LLM completion
 //!
+//! ### Validation Commands ([`validation`])
+//! - `create_validation_request` - Create human-in-the-loop validation
+//! - `list_pending_validations` - List pending validations
+//! - `list_workflow_validations` - List validations for workflow
+//! - `approve_validation` - Approve a validation request
+//! - `reject_validation` - Reject a validation request
+//! - `delete_validation` - Delete a validation request
+//!
+//! ### Memory Commands ([`memory`])
+//! - `add_memory` - Add memory entry
+//! - `list_memories` - List memories with optional filter
+//! - `get_memory` - Get single memory by ID
+//! - `delete_memory` - Delete memory entry
+//! - `search_memories` - Search memories by text
+//! - `clear_memories_by_type` - Clear all memories of a type
+//!
+//! ### Streaming Commands ([`streaming`])
+//! - `execute_workflow_streaming` - Execute workflow with real-time events
+//! - `cancel_workflow_streaming` - Cancel streaming execution
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
@@ -41,7 +61,10 @@
 
 pub mod agent;
 pub mod llm;
+pub mod memory;
 pub mod security;
+pub mod streaming;
+pub mod validation;
 pub mod workflow;
 
 pub use security::SecureKeyStore;

@@ -2,19 +2,30 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod memory;
 pub mod message;
+pub mod streaming;
 pub mod validation;
 pub mod workflow;
 
 pub use agent::{AgentConfig, LLMConfig, Lifecycle};
 pub use workflow::{Workflow, WorkflowMetrics, WorkflowResult, WorkflowStatus};
 
-// Re-export types for future phases (currently unused in base implementation)
+// Re-export types for Phase 5 implementation
+pub use memory::{Memory, MemorySearchResult, MemoryType};
+pub use streaming::{StreamChunk, WorkflowComplete};
+pub use validation::{RiskLevel, ValidationRequest, ValidationStatus, ValidationType};
+
+// Re-export types for future RAG/streaming phases (currently unused)
+#[allow(unused_imports)]
+pub use memory::MemoryWithEmbedding;
+#[allow(unused_imports)]
+pub use streaming::{ChunkType, CompletionStatus};
+#[allow(unused_imports)]
+pub use validation::ValidationMode;
+
+// Re-export types for future phases
 #[allow(unused_imports)]
 pub use agent::{Agent, AgentStatus};
 #[allow(unused_imports)]
 pub use message::{Message, MessageRole};
-#[allow(unused_imports)]
-pub use validation::{
-    RiskLevel, ValidationMode, ValidationRequest, ValidationStatus, ValidationType,
-};

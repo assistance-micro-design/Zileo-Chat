@@ -197,6 +197,23 @@ async fn main() -> anyhow::Result<()> {
             commands::llm::get_available_models,
             commands::llm::test_ollama_connection,
             commands::llm::test_llm_completion,
+            // Validation commands (Phase 5)
+            commands::validation::create_validation_request,
+            commands::validation::list_pending_validations,
+            commands::validation::list_workflow_validations,
+            commands::validation::approve_validation,
+            commands::validation::reject_validation,
+            commands::validation::delete_validation,
+            // Memory commands (Phase 5)
+            commands::memory::add_memory,
+            commands::memory::list_memories,
+            commands::memory::get_memory,
+            commands::memory::delete_memory,
+            commands::memory::search_memories,
+            commands::memory::clear_memories_by_type,
+            // Streaming commands (Phase 5)
+            commands::streaming::execute_workflow_streaming,
+            commands::streaming::cancel_workflow_streaming,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
