@@ -58,8 +58,7 @@
 <svelte:window onkeydown={open ? handleKeydown : undefined} />
 
 {#if open}
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="modal-backdrop" role="presentation" onclick={handleBackdropClick}>
+	<div class="modal-backdrop" role="presentation" onclick={handleBackdropClick} onkeydown={handleKeydown}>
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{title}</h3>

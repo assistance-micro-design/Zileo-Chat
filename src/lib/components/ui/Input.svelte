@@ -45,7 +45,7 @@
 
 	let {
 		type = 'text',
-		value = '',
+		value = $bindable(''),
 		placeholder = '',
 		label,
 		help,
@@ -76,7 +76,7 @@
 
 	<input
 		{type}
-		{value}
+		bind:value
 		{placeholder}
 		{disabled}
 		{required}

@@ -5,6 +5,10 @@
 
 ## Principes Fondamentaux
 
+### Dans setting -- section agents
+- CRUD Agents Permanents
+- Il n'y a que l'agent principal disponible à créer
+
 ### Hiérarchie d'Agents
 ```
 Agent Principal (Orchestrator)
@@ -16,6 +20,7 @@ Agent Principal (Orchestrator)
 **Agent Principal**
 - Orchestre les tâches complexes
 - Délègue aux agents spécialisés
+- Crée les agents temporaires
 - Agrège les rapports
 - Gère le cycle de vie des agents temporaires
 
@@ -656,52 +661,6 @@ Pour garantir la robustesse des workflows, notamment lors d'erreurs passagères 
 - **Politique de Reprise**: L'orchestrateur peut être configuré pour relancer automatiquement une tâche échouée, souvent avec un délai progressif (ex: exponential backoff) pour ne pas surcharger un service externe.
 
 - **Journal des Tâches**: Un suivi persistant des tâches et de leur statut (ex: dans SurrealDB) permet à l'orchestrateur de ne reprendre que les étapes qui n'ont pas encore été complétées avec succès.
-
-## Types d'Agents Recommandés
-
-### Agents Permanents
-
-**Database Agent**
-- Tools: `SurrealDBTool`, `QueryBuilderTool`, `AnalyticsTool`
-- MCP: `serena` (code search), `context7` (SurrealDB docs)
-- Tâches: CRUD, analytics, migrations
-
-**API Agent**
-- Tools: `HTTPClientTool`, `RateLimiterTool`, `CacheTool`, `AuthTool`
-- MCP: `playwright` (test endpoints), `context7` (API docs)
-- Tâches: REST/GraphQL calls, webhooks, integrations
-
-**RAG Agent**
-- Tools: `EmbeddingsTool`, `VectorSearchTool`, `RankingTool`
-- MCP: `serena` (semantic search), `context7` (library patterns)
-- Tâches: Semantic search, context retrieval, relevance scoring
-
-**UI Agent**
-- Tools: `ComponentGeneratorTool`, `A11yValidatorTool`, `StyleLintTool`
-- MCP: `playwright` (visual validation), `context7` (UI frameworks)
-- Tâches: Component generation, accessibility, responsive design
-
-**Code Agent**
-- Tools: `RefactorTool`, `LintTool`, `FormatterTool`
-- MCP: `serena` (symbol ops), `context7` (best practices)
-- Tâches: Refactoring, code quality, pattern enforcement
-
-### Agents Temporaires
-
-**Migration Agent**
-- Tools: `SchemaValidatorTool`, `DataTransformTool`
-- MCP: `serena` (find references)
-- Lifecycle: Auto-delete après success
-
-**Analysis Agent**
-- Tools: `ProfilerTool`, `SecurityScannerTool`
-- MCP: `serena` (codebase analysis), `sequential-thinking` (deep analysis)
-- Lifecycle: Rapport MD → cleanup
-
-**Test Agent**
-- Tools: `TestRunnerTool`, `CoverageTool`
-- MCP: `playwright` (E2E), `serena` (test discovery)
-- Lifecycle: Run tests → cleanup
 
 ## State Management
 
