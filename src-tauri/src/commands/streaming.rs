@@ -118,8 +118,12 @@ pub async fn execute_workflow_streaming(
 
     let start_time = std::time::Instant::now();
 
-    // Execute via orchestrator
-    let report = match state.orchestrator.execute(&validated_agent_id, task).await {
+    // Execute via orchestrator with MCP support
+    let report = match state
+        .orchestrator
+        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()))
+        .await
+    {
         Ok(report) => {
             let duration = start_time.elapsed().as_millis() as u64;
 

@@ -140,10 +140,10 @@ pub async fn execute_workflow(
         context: serde_json::json!({}),
     };
 
-    // 3. Execute via orchestrator
+    // 3. Execute via orchestrator with MCP support
     let report = state
         .orchestrator
-        .execute(&validated_agent_id, task)
+        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()))
         .await
         .map_err(|e| {
             error!(error = %e, task_id = %task_id, "Workflow execution failed");
