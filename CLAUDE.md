@@ -291,6 +291,51 @@ Key entities with graph relations:
 - **validation_request**: Human-in-the-loop validation tracking
 - **task**: Todo items with status tracking
 
+### SurrealDB SDK 2.x Patterns
+
+The SurrealDB Rust SDK 2.x has serialization issues with internal enum types. Use these patterns:
+
+**Record Creation** - Use raw SurrealQL queries instead of `.create().content()`:
+```rust
+// WRONG - SDK has internal enum serialization issues
+let _: Option<T> = db.create((table, id)).content(data).await?;
+
+// CORRECT - Use raw query with bind()
+let json_data = serde_json::to_value(&data)?;
+let query = format!("CREATE {}:`{}` CONTENT $data", table, id);
+db.query(&query).bind(("data", json_data)).await?;
+```
+
+**Record Queries** - Use `meta::id(id)` to extract clean UUIDs:
+```rust
+// WRONG - Returns ID with angle brackets: ⟨uuid⟩
+"SELECT * FROM workflow"
+"SELECT string::concat('', id) AS id FROM workflow"
+
+// CORRECT - Returns clean UUID string
+"SELECT meta::id(id) AS id, name, status FROM workflow"
+```
+
+**Custom Deserializers** - For enum fields stored as strings:
+```rust
+// In models/serde_utils.rs - handle SurrealDB's internal enum format
+pub fn deserialize_workflow_status<'de, D>(deserializer: D) -> Result<WorkflowStatus, D::Error>
+
+// Apply on struct field
+#[serde(deserialize_with = "deserialize_workflow_status")]
+pub status: WorkflowStatus,
+```
+
+**Query Results** - Extract as JSON first for custom deserializer support:
+```rust
+// Use query_json() then deserialize with serde_json
+let json_results: Vec<serde_json::Value> = db.query_json(query).await?;
+let data: Vec<T> = json_results
+    .into_iter()
+    .map(serde_json::from_value)
+    .collect::<Result<Vec<T>, _>>()?;
+```
+
 ## Security Considerations
 
 **Production-ready from v1**:
