@@ -160,6 +160,93 @@ fn extract_id_from_value(value: &serde_json::Value) -> String {
     }
 }
 
+/// Deserializes a workflow status from various SurrealDB formats.
+///
+/// SurrealDB might return the status as:
+/// - Plain string: `"idle"`
+/// - Enum wrapper: some internal format
+///
+/// This function handles these cases and returns a WorkflowStatus enum.
+pub fn deserialize_workflow_status<'de, D>(
+    deserializer: D,
+) -> Result<crate::models::WorkflowStatus, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StatusVisitor;
+
+    impl<'de> de::Visitor<'de> for StatusVisitor {
+        type Value = crate::models::WorkflowStatus;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a workflow status string (idle, running, completed, error)")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<crate::models::WorkflowStatus, E>
+        where
+            E: de::Error,
+        {
+            match value {
+                "idle" => Ok(crate::models::WorkflowStatus::Idle),
+                "running" => Ok(crate::models::WorkflowStatus::Running),
+                "completed" => Ok(crate::models::WorkflowStatus::Completed),
+                "error" => Ok(crate::models::WorkflowStatus::Error),
+                _ => Err(de::Error::custom(format!(
+                    "Unknown workflow status: {}",
+                    value
+                ))),
+            }
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<crate::models::WorkflowStatus, E>
+        where
+            E: de::Error,
+        {
+            self.visit_str(&value)
+        }
+
+        fn visit_enum<A>(self, data: A) -> Result<crate::models::WorkflowStatus, A::Error>
+        where
+            A: de::EnumAccess<'de>,
+        {
+            use serde::de::VariantAccess;
+
+            let (variant, accessor): (String, _) = data.variant()?;
+
+            // SurrealDB might wrap the string in an enum
+            match variant.as_str() {
+                "String" => {
+                    let value: String = accessor.newtype_variant()?;
+                    self.visit_str(&value)
+                }
+                // Handle direct enum variant names
+                "Idle" | "idle" => {
+                    accessor.unit_variant()?;
+                    Ok(crate::models::WorkflowStatus::Idle)
+                }
+                "Running" | "running" => {
+                    accessor.unit_variant()?;
+                    Ok(crate::models::WorkflowStatus::Running)
+                }
+                "Completed" | "completed" => {
+                    accessor.unit_variant()?;
+                    Ok(crate::models::WorkflowStatus::Completed)
+                }
+                "Error" | "error" => {
+                    accessor.unit_variant()?;
+                    Ok(crate::models::WorkflowStatus::Error)
+                }
+                _ => Err(de::Error::custom(format!(
+                    "Unknown workflow status variant: {}",
+                    variant
+                ))),
+            }
+        }
+    }
+
+    deserializer.deserialize_any(StatusVisitor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

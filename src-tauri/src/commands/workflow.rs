@@ -95,18 +95,34 @@ pub async fn execute_workflow(
         format!("Invalid agent ID: {}", e)
     })?;
 
-    // 1. Load workflow using parameterized query pattern
-    // Note: SurrealDB uses parameterized queries internally, but we validate the ID format first
-    let workflows: Vec<Workflow> = state
-        .db
-        .query(&format!(
-            "SELECT * FROM workflow WHERE id = '{}'",
-            validated_workflow_id
-        ))
-        .await
+    // 1. Load workflow with explicit ID conversion to avoid SurrealDB Thing enum issues
+    // Use meta::id() to extract the UUID without SurrealDB's angle brackets
+    let query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            name,
+            agent_id,
+            status,
+            created_at,
+            updated_at,
+            completed_at
+        FROM workflow
+        WHERE meta::id(id) = '{}'"#,
+        validated_workflow_id
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to load workflow");
+        format!("Failed to load workflow: {}", e)
+    })?;
+
+    let workflows: Vec<Workflow> = json_results
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<Workflow>, _>>()
         .map_err(|e| {
-            error!(error = %e, "Failed to load workflow");
-            format!("Failed to load workflow: {}", e)
+            error!(error = %e, "Failed to deserialize workflow");
+            format!("Failed to deserialize workflow: {}", e)
         })?;
 
     let _workflow = workflows.first().ok_or_else(|| {
@@ -161,18 +177,42 @@ pub async fn execute_workflow(
 }
 
 /// Loads all workflows
+///
+/// Uses a query that explicitly converts the record ID to string to avoid
+/// SurrealDB SDK serialization issues with the Thing type.
 #[tauri::command]
 #[instrument(name = "load_workflows", skip(state))]
 pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>, String> {
     info!("Loading workflows");
 
-    let workflows: Vec<Workflow> = state
-        .db
-        .query("SELECT * FROM workflow ORDER BY updated_at DESC")
-        .await
+    // Query with explicit ID conversion to avoid SurrealDB Thing enum serialization issues
+    // Use meta::id() to extract the UUID without SurrealDB's angle brackets
+    let query = r#"
+        SELECT
+            meta::id(id) AS id,
+            name,
+            agent_id,
+            status,
+            created_at,
+            updated_at,
+            completed_at
+        FROM workflow
+        ORDER BY updated_at DESC
+    "#;
+
+    let json_results = state.db.query_json(query).await.map_err(|e| {
+        error!(error = %e, "Failed to load workflows");
+        format!("Failed to load workflows: {}", e)
+    })?;
+
+    // Deserialize using serde_json which respects our custom deserializers
+    let workflows: Vec<Workflow> = json_results
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<Workflow>, _>>()
         .map_err(|e| {
-            error!(error = %e, "Failed to load workflows");
-            format!("Failed to load workflows: {}", e)
+            error!(error = %e, "Failed to deserialize workflows");
+            format!("Failed to deserialize workflows: {}", e)
         })?;
 
     info!(count = workflows.len(), "Workflows loaded");

@@ -1,7 +1,7 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::serde_utils::deserialize_thing_id;
+use super::serde_utils::{deserialize_thing_id, deserialize_workflow_status};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,8 @@ pub struct Workflow {
     pub name: String,
     /// Associated agent ID
     pub agent_id: String,
-    /// Current status
+    /// Current status (deserialized from SurrealDB string format)
+    #[serde(deserialize_with = "deserialize_workflow_status")]
     pub status: WorkflowStatus,
     /// Creation timestamp (set by database)
     #[serde(default = "Utc::now")]

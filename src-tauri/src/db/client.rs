@@ -49,7 +49,8 @@ impl DBClient {
         Ok(())
     }
 
-    /// Executes a query and returns the results
+    /// Executes a query and returns the results as JSON Value first,
+    /// then deserializes using serde_json for proper custom deserializer support.
     #[instrument(name = "db_query", skip(self), fields(query_len = query.len()))]
     pub async fn query<T>(&self, query: &str) -> Result<Vec<T>>
     where
@@ -71,10 +72,30 @@ impl DBClient {
         Ok(data)
     }
 
+    /// Executes a raw query and returns results as JSON Values.
+    /// Use this when the standard query method fails due to SurrealDB SDK serialization issues.
+    #[instrument(name = "db_query_json", skip(self), fields(query_len = query.len()))]
+    pub async fn query_json(&self, query: &str) -> Result<Vec<serde_json::Value>> {
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing JSON query");
+
+        let mut result = self.db.query(query).await.map_err(|e| {
+            error!(error = %e, "Query execution failed");
+            e
+        })?;
+
+        let data: Vec<serde_json::Value> = result.take(0).map_err(|e| {
+            error!(error = %e, "Failed to extract query results");
+            e
+        })?;
+
+        debug!(result_count = data.len(), "Query completed");
+        Ok(data)
+    }
+
     /// Creates a new record in the specified table with a specific ID
     ///
-    /// Uses SurrealDB's `table:id` format to specify the record ID directly.
-    /// The data should NOT contain an `id` field.
+    /// Uses a SurrealQL CREATE query with CONTENT to avoid SDK serialization issues.
+    /// The data should NOT contain an `id` field (it's set via the record ID).
     #[instrument(name = "db_create", skip(self, data), fields(table = %table, record_id = %id))]
     pub async fn create<T>(&self, table: &str, id: &str, data: T) -> Result<String>
     where
@@ -82,11 +103,19 @@ impl DBClient {
     {
         debug!("Creating record");
 
-        // Use table:id format to specify the record ID
-        let record_ref = format!("{}:{}", table, id);
+        // Convert data to JSON Value first to avoid SDK serialization issues
+        let json_data = serde_json::to_value(&data).map_err(|e| {
+            error!(error = %e, "Failed to serialize data to JSON");
+            anyhow::anyhow!("Serialization error: {}", e)
+        })?;
 
-        let _created: Option<serde_json::Value> =
-            self.db.create(&record_ref).content(data).await.map_err(|e| {
+        // Use CREATE query with backtick-escaped ID for safety
+        let query = format!("CREATE {}:`{}` CONTENT $data", table, id);
+        self.db
+            .query(&query)
+            .bind(("data", json_data))
+            .await
+            .map_err(|e| {
                 error!(error = %e, "Failed to create record");
                 e
             })?;
