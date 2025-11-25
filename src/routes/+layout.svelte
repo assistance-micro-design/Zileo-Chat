@@ -1,7 +1,34 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { Sun, Moon, Settings, Bot } from 'lucide-svelte';
   import '../styles/global.css';
+  import { theme } from '$lib/stores/theme';
 
   let { children } = $props();
+
+  /**
+   * Current theme value for reactive UI updates
+   */
+  let currentTheme = $state<'light' | 'dark'>('light');
+
+  /**
+   * Subscribe to theme changes
+   */
+  const unsubscribe = theme.subscribe((value) => {
+    currentTheme = value;
+  });
+
+  onMount(() => {
+    theme.init();
+    return unsubscribe;
+  });
+
+  /**
+   * Toggle theme between light and dark
+   */
+  function toggleTheme(): void {
+    theme.toggle();
+  }
 </script>
 
 <svelte:head>
@@ -19,44 +46,24 @@
       <h1 class="app-title">Zileo Chat 3</h1>
     </div>
     <div class="flex items-center gap-md">
+      <button
+        type="button"
+        class="btn btn-ghost btn-icon"
+        onclick={toggleTheme}
+        aria-label={currentTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+      >
+        {#if currentTheme === 'light'}
+          <Moon size={18} />
+        {:else}
+          <Sun size={18} />
+        {/if}
+      </button>
       <a href="/settings" class="btn btn-secondary">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path
-            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
-          />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
+        <Settings size={16} />
         Configuration
       </a>
       <a href="/agent" class="btn btn-primary">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M12 8V4H8" />
-          <rect width="16" height="12" x="4" y="8" rx="2" />
-          <path d="M2 14h2" />
-          <path d="M20 14h2" />
-          <path d="M15 13v2" />
-          <path d="M9 13v2" />
-        </svg>
+        <Bot size={16} />
         Agent
       </a>
     </div>
