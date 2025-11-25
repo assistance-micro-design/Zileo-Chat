@@ -45,5 +45,5 @@ pub mod state;
 
 pub use commands::SecureKeyStore;
 pub use llm::ProviderManager;
-pub use mcp::{MCPError, MCPResult};
+pub use mcp::{MCPClient, MCPError, MCPManager, MCPResult, MCPServerHandle};
 pub use state::AppState;

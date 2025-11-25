@@ -304,6 +304,11 @@ mod tests {
             .await;
 
         let llm_manager = Arc::new(crate::llm::ProviderManager::new());
+        let mcp_manager = Arc::new(
+            crate::mcp::MCPManager::new(db.clone())
+                .await
+                .expect("Failed to create MCP manager"),
+        );
 
         // Leak temp_dir to keep it alive during test
         std::mem::forget(temp_dir);
@@ -313,6 +318,7 @@ mod tests {
             registry,
             orchestrator,
             llm_manager,
+            mcp_manager,
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),

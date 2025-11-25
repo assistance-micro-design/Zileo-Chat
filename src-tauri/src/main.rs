@@ -7,6 +7,7 @@ mod agents;
 mod commands;
 mod db;
 mod llm;
+mod mcp;
 mod models;
 mod security;
 mod state;
@@ -163,6 +164,14 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tracing::info!("LLM agents registered (ollama_agent, mistral_agent)");
+
+    // Load MCP servers from database
+    if let Err(e) = app_state.mcp_manager.load_from_db().await {
+        tracing::warn!(error = %e, "Failed to load MCP servers from database");
+    } else {
+        let count = app_state.mcp_manager.connected_count().await;
+        tracing::info!(count = count, "MCP servers loaded from database");
+    }
 
     // Initialize secure keystore
     let keystore = commands::SecureKeyStore::default();
