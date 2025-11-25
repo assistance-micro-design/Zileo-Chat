@@ -38,6 +38,7 @@ pub struct Workflow {
 
 /// Workflow creation payload - only fields needed for creation
 /// Datetime fields are handled by database defaults
+/// Enum fields are converted to strings for SurrealDB compatibility
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowCreate {
     /// Unique identifier
@@ -46,8 +47,31 @@ pub struct WorkflowCreate {
     pub name: String,
     /// Associated agent ID
     pub agent_id: String,
-    /// Current status
-    pub status: WorkflowStatus,
+    /// Current status (as string for SurrealDB)
+    pub status: String,
+}
+
+impl WorkflowCreate {
+    /// Creates a new WorkflowCreate with the given parameters
+    pub fn new(id: String, name: String, agent_id: String, status: WorkflowStatus) -> Self {
+        Self {
+            id,
+            name,
+            agent_id,
+            status: status.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for WorkflowStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WorkflowStatus::Idle => write!(f, "idle"),
+            WorkflowStatus::Running => write!(f, "running"),
+            WorkflowStatus::Completed => write!(f, "completed"),
+            WorkflowStatus::Error => write!(f, "error"),
+        }
+    }
 }
 
 /// Result of a workflow execution

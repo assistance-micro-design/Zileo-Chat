@@ -38,12 +38,12 @@ pub async fn create_workflow(
 
     // Use WorkflowCreate to avoid passing datetime fields
     // The database will set created_at and updated_at via DEFAULT time::now()
-    let workflow = WorkflowCreate {
-        id: Uuid::new_v4().to_string(),
-        name: validated_name,
-        agent_id: validated_agent_id,
-        status: WorkflowStatus::Idle,
-    };
+    let workflow = WorkflowCreate::new(
+        Uuid::new_v4().to_string(),
+        validated_name,
+        validated_agent_id,
+        WorkflowStatus::Idle,
+    );
 
     let id = state.db.create("workflow", workflow).await.map_err(|e| {
         error!(error = %e, "Failed to create workflow");

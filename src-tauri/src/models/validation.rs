@@ -74,23 +74,79 @@ pub struct ValidationRequest {
 
 /// Validation request creation payload - only fields needed for creation
 /// Datetime field is handled by database default
+/// Enum fields are converted to strings for SurrealDB compatibility
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidationRequestCreate {
     /// Unique identifier
     pub id: String,
     /// Associated workflow ID
     pub workflow_id: String,
-    /// Type of validation
+    /// Type of validation (as string for SurrealDB)
     #[serde(rename = "type")]
-    pub validation_type: ValidationType,
+    pub validation_type: String,
     /// Operation description
     pub operation: String,
     /// Additional details about the operation
     pub details: serde_json::Value,
-    /// Risk level assessment
-    pub risk_level: RiskLevel,
-    /// Current validation status
-    pub status: ValidationStatus,
+    /// Risk level assessment (as string for SurrealDB)
+    pub risk_level: String,
+    /// Current validation status (as string for SurrealDB)
+    pub status: String,
+}
+
+impl ValidationRequestCreate {
+    /// Creates a new ValidationRequestCreate with the given parameters
+    pub fn new(
+        id: String,
+        workflow_id: String,
+        validation_type: ValidationType,
+        operation: String,
+        details: serde_json::Value,
+        risk_level: RiskLevel,
+        status: ValidationStatus,
+    ) -> Self {
+        Self {
+            id,
+            workflow_id,
+            validation_type: validation_type.to_string(),
+            operation,
+            details,
+            risk_level: risk_level.to_string(),
+            status: status.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationType::Tool => write!(f, "tool"),
+            ValidationType::SubAgent => write!(f, "sub_agent"),
+            ValidationType::Mcp => write!(f, "mcp"),
+            ValidationType::FileOp => write!(f, "file_op"),
+            ValidationType::DbOp => write!(f, "db_op"),
+        }
+    }
+}
+
+impl std::fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RiskLevel::Low => write!(f, "low"),
+            RiskLevel::Medium => write!(f, "medium"),
+            RiskLevel::High => write!(f, "high"),
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidationStatus::Pending => write!(f, "pending"),
+            ValidationStatus::Approved => write!(f, "approved"),
+            ValidationStatus::Rejected => write!(f, "rejected"),
+        }
+    }
 }
 
 #[cfg(test)]

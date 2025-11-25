@@ -61,15 +61,15 @@ pub async fn create_validation_request(
 
     // Use ValidationRequestCreate to avoid passing datetime field
     // The database will set created_at via DEFAULT time::now()
-    let request_create = ValidationRequestCreate {
-        id: request_id.clone(),
-        workflow_id: validated_workflow_id.clone(),
-        validation_type: validation_type.clone(),
-        operation: validated_operation.clone(),
-        details: details.clone(),
-        risk_level: risk_level.clone(),
-        status: ValidationStatus::Pending,
-    };
+    let request_create = ValidationRequestCreate::new(
+        request_id.clone(),
+        validated_workflow_id.clone(),
+        validation_type.clone(),
+        validated_operation.clone(),
+        details.clone(),
+        risk_level.clone(),
+        ValidationStatus::Pending,
+    );
 
     let id = state
         .db
