@@ -9,6 +9,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
+	import { onMount } from 'svelte';
 	import type { LLMProvider } from '$types/security';
 	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
 	import { Sidebar } from '$lib/components/layout';
@@ -89,12 +90,9 @@ Includes MCP server configuration section for managing external tool servers.
 	] as const;
 
 	/**
-	 * Get current theme value
+	 * Current theme value - synced with theme store
 	 */
 	let currentTheme = $state<Theme>('light');
-	theme.subscribe((value) => {
-		currentTheme = value;
-	});
 
 	/**
 	 * Checks if the current provider has a stored API key
@@ -343,17 +341,37 @@ Includes MCP server configuration section for managing external tool servers.
 	}
 
 	/**
-	 * Effect to check API key status when provider changes
+	 * Track provider changes and re-check API key status
+	 * Uses separate tracking variable to avoid infinite loops
 	 */
+	let lastCheckedProvider = $state<LLMProvider | null>(null);
+
 	$effect(() => {
-		checkApiKeyStatus();
+		// Only re-check when provider actually changes
+		if (settings.provider !== lastCheckedProvider) {
+			lastCheckedProvider = settings.provider;
+			checkApiKeyStatus();
+		}
 	});
 
 	/**
-	 * Effect to load MCP servers on mount
+	 * Initialize on mount:
+	 * - Subscribe to theme store
+	 * - Load MCP servers
 	 */
-	$effect(() => {
+	onMount(() => {
+		// Subscribe to theme store and sync value
+		const unsubscribeTheme = theme.subscribe((value) => {
+			currentTheme = value;
+		});
+
+		// Load MCP servers on mount
 		loadMCPServers();
+
+		// Cleanup on unmount
+		return () => {
+			unsubscribeTheme();
+		};
 	});
 </script>
 

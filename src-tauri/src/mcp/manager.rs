@@ -153,14 +153,14 @@ impl MCPManager {
     ///
     /// # Errors
     ///
-    /// Returns `MCPError::ServerAlreadyExists` if a server with the same name exists.
+    /// Returns `MCPError::ServerAlreadyExists` if a server with the same ID exists.
     pub async fn spawn_server(&self, config: MCPServerConfig) -> MCPResult<MCPServer> {
-        // Check if server already exists
+        // Check if server already exists (by ID)
         {
             let clients = self.clients.read().await;
-            if clients.contains_key(&config.name) {
+            if clients.contains_key(&config.id) {
                 return Err(MCPError::ServerAlreadyExists {
-                    server: config.name.clone(),
+                    server: config.id.clone(),
                 });
             }
         }
@@ -182,7 +182,7 @@ impl MCPManager {
             "Spawning MCP server"
         );
 
-        let name = config.name.clone();
+        let id = config.id.clone();
         let client = MCPClient::connect(config.clone()).await?;
 
         let server = MCPServer {
@@ -194,14 +194,15 @@ impl MCPManager {
             updated_at: Utc::now(),
         };
 
-        // Add to registry
+        // Add to registry (keyed by ID for consistent lookup)
         {
             let mut clients = self.clients.write().await;
-            clients.insert(name.clone(), client);
+            clients.insert(id.clone(), client);
         }
 
         info!(
-            server_name = %name,
+            server_id = %id,
+            server_name = %config.name,
             tools_count = server.tools.len(),
             resources_count = server.resources.len(),
             "MCP server spawned and registered"
@@ -217,45 +218,72 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `name` - Server name to stop
+    /// * `id` - Server ID to stop
     ///
     /// # Errors
     ///
     /// Returns `MCPError::ServerNotFound` if the server doesn't exist.
-    pub async fn stop_server(&self, name: &str) -> MCPResult<()> {
-        info!(server_name = %name, "Stopping MCP server");
+    pub async fn stop_server(&self, id: &str) -> MCPResult<()> {
+        info!(server_id = %id, "Stopping MCP server");
 
         let mut client = {
             let mut clients = self.clients.write().await;
             clients
-                .remove(name)
+                .remove(id)
                 .ok_or_else(|| MCPError::ServerNotFound {
-                    server: name.to_string(),
+                    server: id.to_string(),
                 })?
         };
 
         client.disconnect().await?;
 
-        info!(server_name = %name, "MCP server stopped");
+        info!(server_id = %id, "MCP server stopped");
 
         Ok(())
     }
 
-    /// Gets a server by name
+    /// Gets a server by ID
+    ///
+    /// Checks both running servers (in HashMap) and configured servers (in database).
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Server ID to look up
     ///
     /// # Returns
     ///
-    /// Returns the server state if found.
-    pub async fn get_server(&self, name: &str) -> Option<MCPServer> {
-        let clients = self.clients.read().await;
-        clients.get(name).map(|client| MCPServer {
-            config: client.config().clone(),
-            status: client.status(),
-            tools: client.tools().to_vec(),
-            resources: client.resources().to_vec(),
-            created_at: Utc::now(), // TODO: Store actual creation time
-            updated_at: Utc::now(),
-        })
+    /// Returns the server state if found (running or stopped).
+    pub async fn get_server(&self, id: &str) -> Option<MCPServer> {
+        // First check running servers
+        {
+            let clients = self.clients.read().await;
+            if let Some(client) = clients.get(id) {
+                return Some(MCPServer {
+                    config: client.config().clone(),
+                    status: client.status(),
+                    tools: client.tools().to_vec(),
+                    resources: client.resources().to_vec(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                });
+            }
+        }
+
+        // Then check database for stopped servers
+        if let Ok(configs) = self.get_saved_configs().await {
+            if let Some(config) = configs.into_iter().find(|c| c.id == id) {
+                return Some(MCPServer {
+                    config,
+                    status: MCPServerStatus::Stopped,
+                    tools: Vec::new(),
+                    resources: Vec::new(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                });
+            }
+        }
+
+        None
     }
 
     /// Lists all servers (both running and configured)
@@ -263,13 +291,13 @@ impl MCPManager {
     /// Returns servers from both the active registry and database configurations.
     pub async fn list_servers(&self) -> MCPResult<Vec<MCPServer>> {
         let mut servers = Vec::new();
-        let mut seen_names = std::collections::HashSet::new();
+        let mut seen_ids = std::collections::HashSet::new();
 
-        // First, add running servers
+        // First, add running servers (keyed by ID)
         {
             let clients = self.clients.read().await;
-            for (name, client) in clients.iter() {
-                seen_names.insert(name.clone());
+            for (id, client) in clients.iter() {
+                seen_ids.insert(id.clone());
                 servers.push(MCPServer {
                     config: client.config().clone(),
                     status: client.status(),
@@ -284,7 +312,7 @@ impl MCPManager {
         // Then add configured but not running servers from database
         let configs = self.get_saved_configs().await?;
         for config in configs {
-            if !seen_names.contains(&config.name) {
+            if !seen_ids.contains(&config.id) {
                 servers.push(MCPServer {
                     config,
                     status: MCPServerStatus::Stopped,
@@ -303,7 +331,7 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `server_name` - Name of the server to call
+    /// * `server_name` - Name of the server to call (display name, not ID)
     /// * `tool_name` - Name of the tool to invoke
     /// * `arguments` - Tool arguments as JSON value
     ///
@@ -330,8 +358,10 @@ impl MCPManager {
 
         let result = {
             let mut clients = self.clients.write().await;
+            // Find client by server name (config.name), not by ID
             let client = clients
-                .get_mut(server_name)
+                .values_mut()
+                .find(|c| c.config().name == server_name)
                 .ok_or(MCPError::ServerNotFound {
                     server: server_name.to_string(),
                 })?;
@@ -382,15 +412,17 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `server_name` - Name of the server
+    /// * `server_name` - Display name of the server (not ID)
     ///
     /// # Returns
     ///
     /// Returns the list of tools, or empty list if server not found.
     pub async fn list_server_tools(&self, server_name: &str) -> Vec<MCPTool> {
         let clients = self.clients.read().await;
+        // Find client by server name (config.name), not by ID
         clients
-            .get(server_name)
+            .values()
+            .find(|c| c.config().name == server_name)
             .map(|c| c.tools().to_vec())
             .unwrap_or_default()
     }
@@ -399,12 +431,12 @@ impl MCPManager {
     ///
     /// # Returns
     ///
-    /// Returns a map of server name to list of tools.
+    /// Returns a map of server name (display name) to list of tools.
     pub async fn list_all_tools(&self) -> HashMap<String, Vec<MCPTool>> {
         let clients = self.clients.read().await;
         clients
-            .iter()
-            .map(|(name, client)| (name.clone(), client.tools().to_vec()))
+            .values()
+            .map(|client| (client.config().name.clone(), client.tools().to_vec()))
             .collect()
     }
 
@@ -479,9 +511,10 @@ impl MCPManager {
         let create_data = MCPServerCreate::from_config(config);
         let json_data = serde_json::to_value(&create_data)?;
 
-        // Use query_with_params for update
+        // Use CONTENT to replace the entire record, then add updated_at
+        // SurrealDB doesn't support MERGE + SET together
         let query = format!(
-            "UPDATE mcp_server:`{}` MERGE $data SET updated_at = time::now()",
+            "UPDATE mcp_server:`{}` CONTENT $data",
             config.id
         );
 
@@ -504,16 +537,15 @@ impl MCPManager {
 
     /// Deletes a server configuration from the database
     pub async fn delete_server_config(&self, id: &str) -> MCPResult<()> {
-        // First stop the server if running
-        let configs = self.get_saved_configs().await?;
-        if let Some(config) = configs.iter().find(|c| c.id == id) {
-            let _ = self.stop_server(&config.name).await;
-        }
+        // First stop the server if running (by ID)
+        let _ = self.stop_server(id).await;
 
-        let record_id = format!("mcp_server:`{}`", id);
+        // Use raw query instead of SDK delete method (which has issues with record IDs)
+        let query = format!("DELETE mcp_server:`{}`", id);
 
-        self.db
-            .delete(&record_id)
+        let _: Vec<serde_json::Value> = self
+            .db
+            .query_json(&query)
             .await
             .map_err(|e| MCPError::DatabaseError {
                 context: "delete server config".to_string(),
@@ -606,30 +638,34 @@ impl MCPManager {
     /// Restarts a server
     ///
     /// Stops the server if running, then starts it again.
-    pub async fn restart_server(&self, name: &str) -> MCPResult<MCPServer> {
-        info!(server_name = %name, "Restarting MCP server");
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Server ID to restart
+    pub async fn restart_server(&self, id: &str) -> MCPResult<MCPServer> {
+        info!(server_id = %id, "Restarting MCP server");
 
-        // Get config
+        // Get config by ID
         let config = {
             let clients = self.clients.read().await;
-            clients.get(name).map(|c| c.config().clone())
+            clients.get(id).map(|c| c.config().clone())
         };
 
         let config = if let Some(c) = config {
             c
         } else {
-            // Try database
+            // Try database - find by ID
             let configs = self.get_saved_configs().await?;
             configs
                 .into_iter()
-                .find(|c| c.name == name)
+                .find(|c| c.id == id)
                 .ok_or_else(|| MCPError::ServerNotFound {
-                    server: name.to_string(),
+                    server: id.to_string(),
                 })?
         };
 
-        // Stop if running
-        let _ = self.stop_server(name).await;
+        // Stop if running (by ID)
+        let _ = self.stop_server(id).await;
 
         // Spawn again
         self.spawn_server_internal(config).await
