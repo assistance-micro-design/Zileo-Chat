@@ -23,6 +23,7 @@
 //! let response = manager.complete("Hello", "mistral-large").await?;
 //! ```
 
+pub mod embedding;
 mod manager;
 mod mistral;
 mod ollama;
@@ -38,3 +39,11 @@ pub use mistral::MistralProvider;
 pub use ollama::OllamaProvider;
 #[allow(unused_imports)]
 pub use provider::{LLMProvider, LLMResponse};
+
+// Embedding service exports (will be used by MemoryTool in Phase 3)
+#[allow(unused_imports)]
+pub use embedding::{
+    EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService,
+    MISTRAL_EMBED_DIMENSION, MISTRAL_EMBED_MODEL,
+    OLLAMA_MXBAI_DIMENSION, OLLAMA_NOMIC_DIMENSION,
+};
