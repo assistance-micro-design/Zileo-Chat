@@ -1,18 +1,207 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{models::AgentConfig, security::Validator, AppState};
-use tauri::State;
-use tracing::{info, instrument, warn};
+//! Agent CRUD Tauri commands
+//!
+//! Provides IPC commands for managing agent configurations with persistence.
+//!
+//! ## Commands
+//!
+//! - [`list_agents`] - List all agents (returns AgentSummary[])
+//! - [`get_agent_config`] - Get full agent configuration by ID
+//! - [`create_agent`] - Create a new agent
+//! - [`update_agent`] - Update an existing agent
+//! - [`delete_agent`] - Delete an agent
 
-/// Lists all available agent IDs
+use crate::agents::LLMAgent;
+use crate::models::{
+    AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
+    KNOWN_TOOLS,
+};
+use crate::security::Validator;
+use crate::state::AppState;
+use std::sync::Arc;
+use tauri::State;
+use tracing::{error, info, instrument, warn};
+
+/// Maximum length for agent names
+const MAX_AGENT_NAME_LEN: usize = 64;
+/// Maximum length for system prompts
+const MAX_SYSTEM_PROMPT_LEN: usize = 10000;
+/// Minimum temperature value
+const MIN_TEMPERATURE: f32 = 0.0;
+/// Maximum temperature value
+const MAX_TEMPERATURE: f32 = 2.0;
+/// Minimum max_tokens value
+const MIN_MAX_TOKENS: usize = 256;
+/// Maximum max_tokens value
+const MAX_MAX_TOKENS: usize = 128000;
+
+/// Valid LLM providers
+const VALID_PROVIDERS: [&str; 3] = ["Mistral", "Ollama", "Demo"];
+
+/// Validates agent name
+fn validate_agent_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+
+    if trimmed.is_empty() {
+        return Err("Agent name cannot be empty".to_string());
+    }
+
+    if trimmed.len() > MAX_AGENT_NAME_LEN {
+        return Err(format!(
+            "Agent name exceeds maximum length of {} characters",
+            MAX_AGENT_NAME_LEN
+        ));
+    }
+
+    if trimmed.chars().any(|c| c.is_control() && c != '\n') {
+        return Err("Agent name cannot contain control characters".to_string());
+    }
+
+    Ok(trimmed.to_string())
+}
+
+/// Validates system prompt
+fn validate_system_prompt(prompt: &str) -> Result<String, String> {
+    let trimmed = prompt.trim();
+
+    if trimmed.is_empty() {
+        return Err("System prompt cannot be empty".to_string());
+    }
+
+    if trimmed.len() > MAX_SYSTEM_PROMPT_LEN {
+        return Err(format!(
+            "System prompt exceeds maximum length of {} characters",
+            MAX_SYSTEM_PROMPT_LEN
+        ));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+/// Validates LLM configuration
+fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
+    // Validate provider
+    if !VALID_PROVIDERS.contains(&llm.provider.as_str()) {
+        return Err(format!(
+            "Invalid provider '{}'. Valid providers: {:?}",
+            llm.provider, VALID_PROVIDERS
+        ));
+    }
+
+    // Validate model name
+    let model = llm.model.trim();
+    if model.is_empty() {
+        return Err("Model name cannot be empty".to_string());
+    }
+    if model.len() > 128 {
+        return Err("Model name exceeds maximum length of 128 characters".to_string());
+    }
+
+    // Validate temperature
+    if llm.temperature < MIN_TEMPERATURE || llm.temperature > MAX_TEMPERATURE {
+        return Err(format!(
+            "Temperature must be between {} and {}",
+            MIN_TEMPERATURE, MAX_TEMPERATURE
+        ));
+    }
+
+    // Validate max_tokens
+    if llm.max_tokens < MIN_MAX_TOKENS || llm.max_tokens > MAX_MAX_TOKENS {
+        return Err(format!(
+            "max_tokens must be between {} and {}",
+            MIN_MAX_TOKENS, MAX_MAX_TOKENS
+        ));
+    }
+
+    Ok(LLMConfig {
+        provider: llm.provider.clone(),
+        model: model.to_string(),
+        temperature: llm.temperature,
+        max_tokens: llm.max_tokens,
+    })
+}
+
+/// Validates tools list
+fn validate_tools(tools: &[String]) -> Result<Vec<String>, String> {
+    let mut validated = Vec::new();
+
+    for tool in tools {
+        let trimmed = tool.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !KNOWN_TOOLS.contains(&trimmed) {
+            return Err(format!(
+                "Unknown tool '{}'. Known tools: {:?}",
+                trimmed, KNOWN_TOOLS
+            ));
+        }
+
+        validated.push(trimmed.to_string());
+    }
+
+    Ok(validated)
+}
+
+/// Validates MCP servers list
+fn validate_mcp_servers(servers: &[String]) -> Result<Vec<String>, String> {
+    let mut validated = Vec::new();
+
+    for server in servers {
+        let trimmed = server.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Basic validation - alphanumeric, underscore, hyphen
+        if !trimmed
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(format!(
+                "Invalid MCP server name '{}'. Only alphanumeric, underscore, and hyphen allowed",
+                trimmed
+            ));
+        }
+
+        validated.push(trimmed.to_string());
+    }
+
+    Ok(validated)
+}
+
+/// Validates full agent creation config
+fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate, String> {
+    Ok(AgentConfigCreate {
+        name: validate_agent_name(&config.name)?,
+        lifecycle: config.lifecycle.clone(),
+        llm: validate_llm_config(&config.llm)?,
+        tools: validate_tools(&config.tools)?,
+        mcp_servers: validate_mcp_servers(&config.mcp_servers)?,
+        system_prompt: validate_system_prompt(&config.system_prompt)?,
+    })
+}
+
+/// Lists all agents with summary information
 #[tauri::command]
 #[instrument(name = "list_agents", skip(state))]
-pub async fn list_agents(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub async fn list_agents(state: State<'_, AppState>) -> Result<Vec<AgentSummary>, String> {
     info!("Listing agents");
+
     let agent_ids = state.registry.list().await;
-    info!(count = agent_ids.len(), "Agents listed");
-    Ok(agent_ids)
+    let mut summaries = Vec::with_capacity(agent_ids.len());
+
+    for id in agent_ids {
+        if let Some(agent) = state.registry.get(&id).await {
+            summaries.push(AgentSummary::from(agent.config()));
+        }
+    }
+
+    info!(count = summaries.len(), "Agents listed");
+    Ok(summaries)
 }
 
 /// Gets agent configuration by ID
@@ -48,6 +237,353 @@ pub async fn get_agent_config(
     );
 
     Ok(config)
+}
+
+/// Creates a new agent
+///
+/// Validates the configuration, persists to database, and registers in memory.
+#[tauri::command]
+#[instrument(name = "create_agent", skip(state, config), fields(agent_name = %config.name))]
+pub async fn create_agent(
+    config: AgentConfigCreate,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    info!("Creating new agent");
+
+    // Validate input
+    let validated = validate_agent_create(&config).map_err(|e| {
+        warn!(error = %e, "Agent validation failed");
+        e
+    })?;
+
+    // Generate UUID for new agent
+    let agent_id = uuid::Uuid::new_v4().to_string();
+
+    // Build full AgentConfig
+    let agent_config = AgentConfig {
+        id: agent_id.clone(),
+        name: validated.name.clone(),
+        lifecycle: validated.lifecycle.clone(),
+        llm: validated.llm.clone(),
+        tools: validated.tools.clone(),
+        mcp_servers: validated.mcp_servers.clone(),
+        system_prompt: validated.system_prompt.clone(),
+    };
+
+    // Persist to database
+    let lifecycle_str = match validated.lifecycle {
+        Lifecycle::Permanent => "permanent",
+        Lifecycle::Temporary => "temporary",
+    };
+
+    let llm_json = serde_json::to_string(&validated.llm).map_err(|e| {
+        error!(error = %e, "Failed to serialize LLM config");
+        format!("Failed to serialize LLM config: {}", e)
+    })?;
+
+    let tools_json = serde_json::to_string(&validated.tools).map_err(|e| {
+        error!(error = %e, "Failed to serialize tools");
+        format!("Failed to serialize tools: {}", e)
+    })?;
+
+    let mcp_json = serde_json::to_string(&validated.mcp_servers).map_err(|e| {
+        error!(error = %e, "Failed to serialize MCP servers");
+        format!("Failed to serialize MCP servers: {}", e)
+    })?;
+
+    let system_prompt_json = serde_json::to_string(&validated.system_prompt).map_err(|e| {
+        error!(error = %e, "Failed to serialize system prompt");
+        format!("Failed to serialize system prompt: {}", e)
+    })?;
+
+    let name_json = serde_json::to_string(&validated.name).map_err(|e| {
+        error!(error = %e, "Failed to serialize name");
+        format!("Failed to serialize name: {}", e)
+    })?;
+
+    let query = format!(
+        "CREATE agent:`{}` CONTENT {{
+            id: '{}',
+            name: {},
+            lifecycle: '{}',
+            llm: {},
+            tools: {},
+            mcp_servers: {},
+            system_prompt: {},
+            created_at: time::now(),
+            updated_at: time::now()
+        }}",
+        agent_id, agent_id, name_json, lifecycle_str, llm_json, tools_json, mcp_json, system_prompt_json
+    );
+
+    state.db.execute(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to persist agent to database");
+        format!("Failed to persist agent: {}", e)
+    })?;
+
+    // Create LLMAgent and register in memory
+    let llm_agent = LLMAgent::new(agent_config, state.llm_manager.clone());
+    state
+        .registry
+        .register(agent_id.clone(), Arc::new(llm_agent))
+        .await;
+
+    info!(agent_id = %agent_id, "Agent created successfully");
+    Ok(agent_id)
+}
+
+/// Updates an existing agent
+///
+/// Validates the configuration, updates database, and re-registers in memory.
+#[tauri::command]
+#[instrument(name = "update_agent", skip(state, config), fields(agent_id = %agent_id))]
+pub async fn update_agent(
+    agent_id: String,
+    config: AgentConfigUpdate,
+    state: State<'_, AppState>,
+) -> Result<AgentConfig, String> {
+    info!("Updating agent");
+
+    // Validate agent ID
+    let validated_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
+        warn!(error = %e, "Invalid agent ID");
+        format!("Invalid agent ID: {}", e)
+    })?;
+
+    // Get existing agent
+    let existing = state
+        .registry
+        .get(&validated_id)
+        .await
+        .ok_or_else(|| {
+            warn!(agent_id = %validated_id, "Agent not found");
+            "Agent not found".to_string()
+        })?;
+
+    let existing_config = existing.config().clone();
+
+    // Build updated config (merge with existing)
+    let new_name = match &config.name {
+        Some(n) => validate_agent_name(n)?,
+        None => existing_config.name.clone(),
+    };
+
+    let new_llm = match &config.llm {
+        Some(l) => validate_llm_config(l)?,
+        None => existing_config.llm.clone(),
+    };
+
+    let new_tools = match &config.tools {
+        Some(t) => validate_tools(t)?,
+        None => existing_config.tools.clone(),
+    };
+
+    let new_mcp = match &config.mcp_servers {
+        Some(m) => validate_mcp_servers(m)?,
+        None => existing_config.mcp_servers.clone(),
+    };
+
+    let new_prompt = match &config.system_prompt {
+        Some(p) => validate_system_prompt(p)?,
+        None => existing_config.system_prompt.clone(),
+    };
+
+    let updated_config = AgentConfig {
+        id: validated_id.clone(),
+        name: new_name.clone(),
+        lifecycle: existing_config.lifecycle.clone(), // Cannot change lifecycle
+        llm: new_llm.clone(),
+        tools: new_tools.clone(),
+        mcp_servers: new_mcp.clone(),
+        system_prompt: new_prompt.clone(),
+    };
+
+    // Update database
+    let llm_json = serde_json::to_string(&new_llm).map_err(|e| {
+        error!(error = %e, "Failed to serialize LLM config");
+        format!("Failed to serialize LLM config: {}", e)
+    })?;
+
+    let tools_json = serde_json::to_string(&new_tools).map_err(|e| {
+        error!(error = %e, "Failed to serialize tools");
+        format!("Failed to serialize tools: {}", e)
+    })?;
+
+    let mcp_json = serde_json::to_string(&new_mcp).map_err(|e| {
+        error!(error = %e, "Failed to serialize MCP servers");
+        format!("Failed to serialize MCP servers: {}", e)
+    })?;
+
+    let prompt_json = serde_json::to_string(&new_prompt).map_err(|e| {
+        error!(error = %e, "Failed to serialize system prompt");
+        format!("Failed to serialize system prompt: {}", e)
+    })?;
+
+    let name_json = serde_json::to_string(&new_name).map_err(|e| {
+        error!(error = %e, "Failed to serialize name");
+        format!("Failed to serialize name: {}", e)
+    })?;
+
+    let query = format!(
+        "UPDATE agent:`{}` SET
+            name = {},
+            llm = {},
+            tools = {},
+            mcp_servers = {},
+            system_prompt = {},
+            updated_at = time::now()",
+        validated_id, name_json, llm_json, tools_json, mcp_json, prompt_json
+    );
+
+    state.db.execute(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to update agent in database");
+        format!("Failed to update agent: {}", e)
+    })?;
+
+    // Unregister old and register new agent
+    state.registry.unregister_any(&validated_id).await;
+
+    let llm_agent = LLMAgent::new(updated_config.clone(), state.llm_manager.clone());
+    state
+        .registry
+        .register(validated_id.clone(), Arc::new(llm_agent))
+        .await;
+
+    info!(agent_id = %validated_id, "Agent updated successfully");
+    Ok(updated_config)
+}
+
+/// Deletes an agent
+///
+/// Removes from database and unregisters from memory.
+#[tauri::command]
+#[instrument(name = "delete_agent", skip(state), fields(agent_id = %agent_id))]
+pub async fn delete_agent(agent_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    info!("Deleting agent");
+
+    // Validate agent ID
+    let validated_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
+        warn!(error = %e, "Invalid agent ID");
+        format!("Invalid agent ID: {}", e)
+    })?;
+
+    // Check agent exists
+    if state.registry.get(&validated_id).await.is_none() {
+        warn!(agent_id = %validated_id, "Agent not found");
+        return Err("Agent not found".to_string());
+    }
+
+    // Delete from database
+    let query = format!("DELETE agent:`{}`", validated_id);
+    state.db.execute(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to delete agent from database");
+        format!("Failed to delete agent: {}", e)
+    })?;
+
+    // Unregister from memory
+    state.registry.unregister_any(&validated_id).await;
+
+    info!(agent_id = %validated_id, "Agent deleted successfully");
+    Ok(())
+}
+
+/// Loads all agents from database and registers them in memory
+///
+/// This is called at application startup.
+pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
+    info!("Loading agents from database");
+
+    // Query all agents from database
+    let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt FROM agent";
+
+    let results: Vec<serde_json::Value> = state
+        .db
+        .db
+        .query(query)
+        .await
+        .map(|mut r| r.take(0).unwrap_or_default())
+        .map_err(|e| {
+            error!(error = %e, "Failed to query agents from database");
+            format!("Failed to query agents: {}", e)
+        })?;
+
+    let mut loaded = 0;
+
+    for row in results {
+        // Parse agent config from row
+        let id = row["id"].as_str().unwrap_or("").to_string();
+        if id.is_empty() {
+            warn!("Skipping agent with empty ID");
+            continue;
+        }
+
+        let name = row["name"].as_str().unwrap_or("Unknown").to_string();
+
+        let lifecycle_str = row["lifecycle"].as_str().unwrap_or("permanent");
+        let lifecycle = match lifecycle_str {
+            "temporary" => Lifecycle::Temporary,
+            _ => Lifecycle::Permanent,
+        };
+
+        // Parse LLM config
+        let llm_value = &row["llm"];
+        let llm = LLMConfig {
+            provider: llm_value["provider"]
+                .as_str()
+                .unwrap_or("Mistral")
+                .to_string(),
+            model: llm_value["model"]
+                .as_str()
+                .unwrap_or("mistral-large-latest")
+                .to_string(),
+            temperature: llm_value["temperature"].as_f64().unwrap_or(0.7) as f32,
+            max_tokens: llm_value["max_tokens"].as_u64().unwrap_or(4096) as usize,
+        };
+
+        // Parse tools
+        let tools: Vec<String> = row["tools"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Parse MCP servers
+        let mcp_servers: Vec<String> = row["mcp_servers"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let system_prompt = row["system_prompt"]
+            .as_str()
+            .unwrap_or("You are a helpful assistant.")
+            .to_string();
+
+        let config = AgentConfig {
+            id: id.clone(),
+            name,
+            lifecycle,
+            llm,
+            tools,
+            mcp_servers,
+            system_prompt,
+        };
+
+        // Create LLMAgent and register
+        let llm_agent = LLMAgent::new(config, state.llm_manager.clone());
+        state.registry.register(id, Arc::new(llm_agent)).await;
+
+        loaded += 1;
+    }
+
+    info!(count = loaded, "Agents loaded from database");
+    Ok(loaded)
 }
 
 #[cfg(test)]

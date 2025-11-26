@@ -13,7 +13,10 @@ pub mod task;
 pub mod validation;
 pub mod workflow;
 
-pub use agent::{AgentConfig, LLMConfig, Lifecycle};
+pub use agent::{
+    AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
+    KNOWN_TOOLS,
+};
 pub use workflow::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, WorkflowStatus};
 
 // Re-export types for Phase 5 implementation

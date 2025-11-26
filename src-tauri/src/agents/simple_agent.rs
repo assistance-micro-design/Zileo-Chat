@@ -7,10 +7,15 @@ use async_trait::async_trait;
 use tracing::{debug, info, instrument};
 
 /// Simple agent implementation for demonstration (base implementation)
+///
+/// Note: This agent is primarily used for testing purposes.
+/// In production, agents are created via Settings UI and stored in SurrealDB.
+#[allow(dead_code)]
 pub struct SimpleAgent {
     config: AgentConfig,
 }
 
+#[allow(dead_code)]
 impl SimpleAgent {
     /// Creates a new simple agent
     pub fn new(config: AgentConfig) -> Self {

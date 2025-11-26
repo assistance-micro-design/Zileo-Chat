@@ -83,6 +83,21 @@ impl AgentRegistry {
         }
     }
 
+    /// Unregisters any agent regardless of lifecycle (for CRUD operations)
+    ///
+    /// Unlike `unregister`, this method allows removing permanent agents,
+    /// which is necessary for update and delete operations.
+    #[instrument(name = "registry_unregister_any", skip(self), fields(agent_id = %id))]
+    pub async fn unregister_any(&self, id: &str) {
+        let mut agents = self.agents.write().await;
+
+        if agents.remove(id).is_some() {
+            info!("Agent unregistered (any lifecycle)");
+        } else {
+            debug!("Agent not found for unregistration");
+        }
+    }
+
     /// Cleans up temporary agents - prepared for future phases
     #[allow(dead_code)]
     #[instrument(name = "registry_cleanup_temporary", skip(self))]

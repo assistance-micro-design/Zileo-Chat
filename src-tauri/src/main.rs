@@ -14,7 +14,6 @@ mod state;
 mod tools;
 
 use state::AppState;
-use std::sync::Arc;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
@@ -81,90 +80,15 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Application state initialized");
 
-    // Register default simple agent (demo, no LLM)
-    {
-        use agents::SimpleAgent;
-        use models::{AgentConfig, LLMConfig, Lifecycle};
-
-        let config = AgentConfig {
-            id: "simple_agent".to_string(),
-            name: "Simple Agent".to_string(),
-            lifecycle: Lifecycle::Permanent,
-            llm: LLMConfig {
-                provider: "Demo".to_string(),
-                model: "simple".to_string(),
-                temperature: 0.7,
-                max_tokens: 2000,
-            },
-            tools: vec![],
-            mcp_servers: vec![],
-            system_prompt: "You are a simple demo agent for the base implementation.".to_string(),
-        };
-
-        let agent = SimpleAgent::new(config);
-        app_state
-            .registry
-            .register("simple_agent".to_string(), Arc::new(agent))
-            .await;
+    // Load agents from database (no hardcoded agents - users create them via Settings)
+    match commands::agent::load_agents_from_db(&app_state).await {
+        Ok(count) => {
+            tracing::info!(count = count, "Agents loaded from database");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to load agents from database");
+        }
     }
-
-    tracing::info!("Simple agent registered");
-
-    // Register LLM agent for Ollama (local)
-    {
-        use agents::LLMAgent;
-        use models::{AgentConfig, LLMConfig, Lifecycle};
-
-        let ollama_config = AgentConfig {
-            id: "ollama_agent".to_string(),
-            name: "Ollama Agent".to_string(),
-            lifecycle: Lifecycle::Permanent,
-            llm: LLMConfig {
-                provider: "Ollama".to_string(),
-                model: "llama3.2".to_string(),
-                temperature: 0.7,
-                max_tokens: 4096,
-            },
-            tools: vec![],
-            mcp_servers: vec![],
-            system_prompt: "You are a helpful AI assistant powered by Ollama. Provide clear, accurate, and helpful responses.".to_string(),
-        };
-
-        let ollama_agent = LLMAgent::new(ollama_config, app_state.llm_manager.clone());
-        app_state
-            .registry
-            .register("ollama_agent".to_string(), Arc::new(ollama_agent))
-            .await;
-    }
-
-    // Register LLM agent for Mistral (cloud)
-    {
-        use agents::LLMAgent;
-        use models::{AgentConfig, LLMConfig, Lifecycle};
-
-        let mistral_config = AgentConfig {
-            id: "mistral_agent".to_string(),
-            name: "Mistral Agent".to_string(),
-            lifecycle: Lifecycle::Permanent,
-            llm: LLMConfig {
-                provider: "Mistral".to_string(),
-                model: "mistral-large-latest".to_string(),
-                temperature: 0.7,
-                max_tokens: 4096,
-            },
-            tools: vec![],
-            mcp_servers: vec![],
-            system_prompt: "You are a helpful AI assistant powered by Mistral AI. Provide clear, accurate, and helpful responses.".to_string(),
-        };
-
-        let mistral_agent = LLMAgent::new(mistral_config, app_state.llm_manager.clone());
-        app_state
-            .registry
-            .register("mistral_agent".to_string(), Arc::new(mistral_agent))
-            .await;
-    }
-
-    tracing::info!("LLM agents registered (ollama_agent, mistral_agent)");
 
     // Load MCP servers from database
     if let Err(e) = app_state.mcp_manager.load_from_db().await {
@@ -259,9 +183,12 @@ async fn main() -> anyhow::Result<()> {
             commands::workflow::execute_workflow,
             commands::workflow::load_workflows,
             commands::workflow::delete_workflow,
-            // Agent commands
+            // Agent commands (CRUD)
             commands::agent::list_agents,
             commands::agent::get_agent_config,
+            commands::agent::create_agent,
+            commands::agent::update_agent,
+            commands::agent::delete_agent,
             // Security commands
             commands::security::save_api_key,
             commands::security::get_api_key,

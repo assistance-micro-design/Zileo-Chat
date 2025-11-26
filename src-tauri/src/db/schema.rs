@@ -157,4 +157,43 @@ DEFINE FIELD base_url ON provider_settings TYPE option<string>;
 DEFINE FIELD updated_at ON provider_settings TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX unique_provider ON provider_settings FIELDS provider UNIQUE;
+
+-- =============================================
+-- Table: agent
+-- Stores user-created agent configurations
+-- =============================================
+DEFINE TABLE agent SCHEMAFULL;
+DEFINE FIELD id ON agent TYPE string;
+DEFINE FIELD name ON agent TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 64;
+DEFINE FIELD lifecycle ON agent TYPE string
+    ASSERT $value IN ['permanent', 'temporary'];
+
+-- LLM configuration (embedded object)
+DEFINE FIELD llm ON agent TYPE object;
+DEFINE FIELD llm.provider ON agent TYPE string
+    ASSERT $value IN ['Mistral', 'Ollama', 'Demo'];
+DEFINE FIELD llm.model ON agent TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
+DEFINE FIELD llm.temperature ON agent TYPE float
+    ASSERT $value >= 0.0 AND $value <= 2.0;
+DEFINE FIELD llm.max_tokens ON agent TYPE int
+    ASSERT $value >= 256 AND $value <= 128000;
+
+-- Tools and MCP servers
+DEFINE FIELD tools ON agent TYPE array<string>;
+DEFINE FIELD mcp_servers ON agent TYPE array<string>;
+
+-- System prompt
+DEFINE FIELD system_prompt ON agent TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 10000;
+
+-- Timestamps
+DEFINE FIELD created_at ON agent TYPE datetime DEFAULT time::now();
+DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();
+
+-- Indexes
+DEFINE INDEX unique_agent_id ON agent FIELDS id UNIQUE;
+DEFINE INDEX agent_name_idx ON agent FIELDS name;
+DEFINE INDEX agent_provider_idx ON agent FIELDS llm.provider;
 "#;

@@ -54,9 +54,6 @@ pub struct AgentConfig {
     /// Valid tool names include:
     /// - `MemoryTool` - Contextual memory with semantic search
     /// - `TodoTool` - Task management for workflow decomposition
-    /// - `SurrealDBTool` - Direct database CRUD operations
-    /// - `QueryBuilderTool` - SurrealQL query generation
-    /// - `AnalyticsTool` - Aggregations and analytics
     pub tools: Vec<String>,
     /// List of MCP servers
     pub mcp_servers: Vec<String>,
@@ -74,17 +71,8 @@ impl AgentConfig {
     /// # Known Tools
     /// - `MemoryTool` - Contextual memory with semantic search
     /// - `TodoTool` - Task management for workflow decomposition
-    /// - `SurrealDBTool` - Direct database CRUD operations
-    /// - `QueryBuilderTool` - SurrealQL query generation
-    /// - `AnalyticsTool` - Aggregations and analytics
     pub fn validate_tools(&self) -> Vec<String> {
-        const KNOWN_TOOLS: [&str; 5] = [
-            "MemoryTool",
-            "TodoTool",
-            "SurrealDBTool",
-            "QueryBuilderTool",
-            "AnalyticsTool",
-        ];
+        const KNOWN_TOOLS: [&str; 2] = ["MemoryTool", "TodoTool"];
 
         self.tools
             .iter()
@@ -111,6 +99,79 @@ pub struct LLMConfig {
     /// Maximum tokens to generate
     pub max_tokens: usize,
 }
+
+/// Agent configuration for creation (without ID, timestamps)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentConfigCreate {
+    /// Agent name (1-64 chars)
+    pub name: String,
+    /// Lifecycle type
+    pub lifecycle: Lifecycle,
+    /// LLM configuration
+    pub llm: LLMConfig,
+    /// List of available tools
+    pub tools: Vec<String>,
+    /// List of MCP servers
+    pub mcp_servers: Vec<String>,
+    /// System prompt (1-10000 chars)
+    pub system_prompt: String,
+}
+
+/// Agent configuration for updates (all fields optional except lifecycle which cannot change)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentConfigUpdate {
+    /// Agent name (1-64 chars)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// LLM configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LLMConfig>,
+    /// List of available tools
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
+    /// List of MCP servers
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<String>>,
+    /// System prompt (1-10000 chars)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+}
+
+/// Agent summary for listing (lightweight representation)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSummary {
+    /// Unique identifier
+    pub id: String,
+    /// Agent name
+    pub name: String,
+    /// Lifecycle type
+    pub lifecycle: Lifecycle,
+    /// LLM provider name
+    pub provider: String,
+    /// LLM model name
+    pub model: String,
+    /// Number of enabled tools
+    pub tools_count: usize,
+    /// Number of configured MCP servers
+    pub mcp_servers_count: usize,
+}
+
+impl From<&AgentConfig> for AgentSummary {
+    fn from(config: &AgentConfig) -> Self {
+        Self {
+            id: config.id.clone(),
+            name: config.name.clone(),
+            lifecycle: config.lifecycle.clone(),
+            provider: config.llm.provider.clone(),
+            model: config.llm.model.clone(),
+            tools_count: config.tools.len(),
+            mcp_servers_count: config.mcp_servers.len(),
+        }
+    }
+}
+
+/// List of known tools that agents can use
+pub const KNOWN_TOOLS: [&str; 2] = ["MemoryTool", "TodoTool"];
 
 #[cfg(test)]
 mod tests {
@@ -275,13 +336,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
             },
-            tools: vec![
-                "MemoryTool".to_string(),
-                "TodoTool".to_string(),
-                "SurrealDBTool".to_string(),
-                "QueryBuilderTool".to_string(),
-                "AnalyticsTool".to_string(),
-            ],
+            tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
         };

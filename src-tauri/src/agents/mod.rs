@@ -36,4 +36,6 @@ pub mod llm_agent;
 pub mod simple_agent;
 
 pub use llm_agent::LLMAgent;
+// SimpleAgent is used in tests only
+#[allow(unused_imports)]
 pub use simple_agent::SimpleAgent;
