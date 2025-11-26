@@ -26,6 +26,7 @@
 //! | [`db`] | `SurrealDBTool` | Direct CRUD operations on SurrealDB |
 //! | [`db`] | `QueryBuilderTool` | SurrealQL query generation |
 //! | [`db`] | `AnalyticsTool` | Aggregations and analytics |
+//! | [`memory`] | `MemoryTool` | Contextual memory with semantic search |
 //! | [`todo`] | `TodoTool` | Task management for workflow decomposition |
 //!
 //! # Example
@@ -43,6 +44,7 @@
 //! ```
 
 pub mod db;
+pub mod memory;
 pub mod todo;
 
 use async_trait::async_trait;
@@ -53,6 +55,8 @@ use std::fmt;
 // Re-export tools (will be used in Phase 6: Agent Integration)
 #[allow(unused_imports)]
 pub use db::{AnalyticsTool, QueryBuilderTool, SurrealDBTool};
+#[allow(unused_imports)]
+pub use memory::MemoryTool;
 #[allow(unused_imports)]
 pub use todo::TodoTool;
 
