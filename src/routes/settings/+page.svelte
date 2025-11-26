@@ -12,9 +12,17 @@ Includes MCP server configuration section for managing external tool servers.
 	import { onMount } from 'svelte';
 	import type { LLMProvider } from '$types/security';
 	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
+	import type {
+		LLMModel,
+		ProviderType,
+		CreateModelRequest,
+		UpdateModelRequest,
+		LLMState
+	} from '$types/llm';
 	import { Sidebar } from '$lib/components/layout';
-	import { Card, Button, Input, Select, Badge, StatusIndicator, Modal } from '$lib/components/ui';
+	import { Card, Button, Input, Select, StatusIndicator, Modal } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
+	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -36,6 +44,25 @@ Includes MCP server configuration section for managing external tool servers.
 		type MCPState
 	} from '$lib/stores/mcp';
 	import {
+		createInitialLLMState,
+		setLLMLoading,
+		setLLMError,
+		setModels,
+		setProviderSettings,
+		setActiveProvider,
+		addModel as addModelToState,
+		updateModelInState,
+		removeModel,
+		getModelsByProvider,
+		getDefaultModel,
+		hasApiKey as hasApiKeyInState,
+		loadAllLLMData,
+		createModel,
+		updateModel,
+		deleteModel,
+		updateProviderSettings
+	} from '$lib/stores/llm';
+	import {
 		Globe,
 		Cpu,
 		Palette,
@@ -48,16 +75,14 @@ Includes MCP server configuration section for managing external tool servers.
 		Plug
 	} from 'lucide-svelte';
 
-	/** Settings state */
+	/** Settings state (for API key input) */
 	let settings = $state({
 		provider: 'Mistral' as LLMProvider,
-		model: 'mistral-large',
 		apiKey: ''
 	});
 
 	/** UI state */
 	let saving = $state(false);
-	let hasStoredKey = $state(false);
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let activeSection = $state('providers');
 	let sidebarCollapsed = $state(false);
@@ -73,13 +98,15 @@ Includes MCP server configuration section for managing external tool servers.
 	let showTestModal = $state(false);
 	let testingServerConfig = $state<MCPServerConfig | null>(null);
 
-	/** Provider options */
-	const providerOptions: SelectOption[] = [
-		{ value: 'Mistral', label: 'Mistral' },
-		{ value: 'Ollama', label: 'Ollama' },
-		{ value: 'OpenAI', label: 'OpenAI' },
-		{ value: 'Anthropic', label: 'Anthropic' }
-	];
+	/** LLM state */
+	let llmState = $state<LLMState>(createInitialLLMState());
+	let showModelModal = $state(false);
+	let modelModalMode = $state<'create' | 'edit'>('create');
+	let editingModel = $state<LLMModel | undefined>(undefined);
+	let modelSaving = $state(false);
+	let selectedModelsProvider = $state<ProviderType>('mistral');
+	let showApiKeyModal = $state(false);
+	let apiKeyProvider = $state<ProviderType>('mistral');
 
 	/** Navigation sections */
 	const sections = [
@@ -95,66 +122,6 @@ Includes MCP server configuration section for managing external tool servers.
 	let currentTheme = $state<Theme>('light');
 
 	/**
-	 * Checks if the current provider has a stored API key
-	 */
-	async function checkApiKeyStatus(): Promise<void> {
-		try {
-			hasStoredKey = await invoke<boolean>('has_api_key', {
-				provider: settings.provider
-			});
-		} catch {
-			hasStoredKey = false;
-		}
-	}
-
-	/**
-	 * Saves the API key securely using OS keychain + AES-256 encryption
-	 */
-	async function saveApiKey(): Promise<void> {
-		if (!settings.apiKey.trim()) {
-			message = { type: 'error', text: 'API key cannot be empty' };
-			return;
-		}
-
-		saving = true;
-		message = null;
-
-		try {
-			await invoke('save_api_key', {
-				provider: settings.provider,
-				apiKey: settings.apiKey
-			});
-			settings.apiKey = '';
-			hasStoredKey = true;
-			message = { type: 'success', text: 'API key saved securely' };
-		} catch (err) {
-			message = { type: 'error', text: `Failed to save: ${err}` };
-		} finally {
-			saving = false;
-		}
-	}
-
-	/**
-	 * Deletes the stored API key for the current provider
-	 */
-	async function deleteApiKey(): Promise<void> {
-		saving = true;
-		message = null;
-
-		try {
-			await invoke('delete_api_key', {
-				provider: settings.provider
-			});
-			hasStoredKey = false;
-			message = { type: 'success', text: 'API key deleted' };
-		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${err}` };
-		} finally {
-			saving = false;
-		}
-	}
-
-	/**
 	 * Scrolls to section and updates active section
 	 */
 	function scrollToSection(sectionId: string): void {
@@ -163,13 +130,6 @@ Includes MCP server configuration section for managing external tool servers.
 		if (element) {
 			element.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		}
-	}
-
-	/**
-	 * Handle provider change
-	 */
-	function handleProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		settings.provider = event.currentTarget.value as LLMProvider;
 	}
 
 	/**
@@ -340,24 +300,225 @@ Includes MCP server configuration section for managing external tool servers.
 		}
 	}
 
-	/**
-	 * Track provider changes and re-check API key status
-	 * Uses separate tracking variable to avoid infinite loops
-	 */
-	let lastCheckedProvider = $state<LLMProvider | null>(null);
+	// =========================================================================
+	// LLM Functions
+	// =========================================================================
 
-	$effect(() => {
-		// Only re-check when provider actually changes
-		if (settings.provider !== lastCheckedProvider) {
-			lastCheckedProvider = settings.provider;
-			checkApiKeyStatus();
+	/**
+	 * Loads all LLM data (providers and models) from the backend
+	 */
+	async function loadLLMData(): Promise<void> {
+		llmState = setLLMLoading(llmState, true);
+		try {
+			const data = await loadAllLLMData();
+			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
+			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
+			llmState = setModels(llmState, data.models);
+		} catch (err) {
+			llmState = setLLMError(llmState, `Failed to load LLM data: ${err}`);
 		}
-	});
+	}
+
+	/**
+	 * Opens the create model modal
+	 */
+	function openCreateModelModal(): void {
+		modelModalMode = 'create';
+		editingModel = undefined;
+		showModelModal = true;
+	}
+
+	/**
+	 * Opens the edit model modal
+	 */
+	function openEditModelModal(model: LLMModel): void {
+		modelModalMode = 'edit';
+		editingModel = model;
+		showModelModal = true;
+	}
+
+	/**
+	 * Closes the model modal
+	 */
+	function closeModelModal(): void {
+		showModelModal = false;
+		editingModel = undefined;
+	}
+
+	/**
+	 * Handles model form submission (create or update)
+	 */
+	async function handleSaveModel(data: CreateModelRequest | UpdateModelRequest): Promise<void> {
+		modelSaving = true;
+		try {
+			if (modelModalMode === 'create') {
+				const model = await createModel(data as CreateModelRequest);
+				llmState = addModelToState(llmState, model);
+				message = { type: 'success', text: `Model "${model.name}" created successfully` };
+			} else if (editingModel) {
+				const model = await updateModel(editingModel.id, data as UpdateModelRequest);
+				llmState = updateModelInState(llmState, editingModel.id, model);
+				message = { type: 'success', text: `Model "${model.name}" updated successfully` };
+			}
+			closeModelModal();
+		} catch (err) {
+			message = { type: 'error', text: `Failed to save model: ${err}` };
+		} finally {
+			modelSaving = false;
+		}
+	}
+
+	/**
+	 * Handles model deletion
+	 */
+	async function handleDeleteModel(model: LLMModel): Promise<void> {
+		if (!confirm(`Are you sure you want to delete "${model.name}"?`)) {
+			return;
+		}
+
+		try {
+			await deleteModel(model.id);
+			llmState = removeModel(llmState, model.id);
+			message = { type: 'success', text: `Model "${model.name}" deleted successfully` };
+		} catch (err) {
+			message = { type: 'error', text: `Failed to delete model: ${err}` };
+		}
+	}
+
+	/**
+	 * Handles setting a model as the default for its provider
+	 */
+	async function handleSetDefaultModel(model: LLMModel): Promise<void> {
+		try {
+			const updatedSettings = await updateProviderSettings(
+				model.provider,
+				undefined,
+				model.id,
+				undefined
+			);
+			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
+			message = { type: 'success', text: `"${model.name}" set as default` };
+		} catch (err) {
+			message = { type: 'error', text: `Failed to set default model: ${err}` };
+		}
+	}
+
+	/**
+	 * Handles provider selection (sets as active provider)
+	 */
+	function handleSelectProvider(provider: ProviderType): void {
+		llmState = setActiveProvider(llmState, provider);
+	}
+
+	/**
+	 * Opens the API key configuration modal for a provider
+	 */
+	function openApiKeyModal(provider: ProviderType): void {
+		apiKeyProvider = provider;
+		settings.apiKey = '';
+		showApiKeyModal = true;
+	}
+
+	/**
+	 * Closes the API key modal
+	 */
+	function closeApiKeyModal(): void {
+		showApiKeyModal = false;
+		settings.apiKey = '';
+	}
+
+	/**
+	 * Saves API key for the selected provider
+	 */
+	async function handleSaveApiKey(): Promise<void> {
+		if (!settings.apiKey.trim()) {
+			message = { type: 'error', text: 'API key cannot be empty' };
+			return;
+		}
+
+		saving = true;
+		message = null;
+
+		try {
+			// Map ProviderType to LLMProvider format (capitalize first letter)
+			const providerName = apiKeyProvider.charAt(0).toUpperCase() + apiKeyProvider.slice(1);
+			await invoke('save_api_key', {
+				provider: providerName,
+				apiKey: settings.apiKey
+			});
+			settings.apiKey = '';
+			// Reload provider settings to get updated api_key_configured status
+			await loadLLMData();
+			message = { type: 'success', text: 'API key saved securely' };
+			closeApiKeyModal();
+		} catch (err) {
+			message = { type: 'error', text: `Failed to save: ${err}` };
+		} finally {
+			saving = false;
+		}
+	}
+
+	/**
+	 * Deletes API key for a provider
+	 */
+	async function handleDeleteApiKey(provider: ProviderType): Promise<void> {
+		if (!confirm(`Are you sure you want to delete the API key for ${provider}?`)) {
+			return;
+		}
+
+		saving = true;
+		message = null;
+
+		try {
+			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+			await invoke('delete_api_key', { provider: providerName });
+			// Reload provider settings
+			await loadLLMData();
+			message = { type: 'success', text: 'API key deleted' };
+		} catch (err) {
+			message = { type: 'error', text: `Failed to delete: ${err}` };
+		} finally {
+			saving = false;
+		}
+	}
+
+	/**
+	 * Handles provider models filter change
+	 */
+	function handleModelsProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
+		selectedModelsProvider = event.currentTarget.value as ProviderType;
+	}
+
+	/**
+	 * Gets filtered models for the selected provider
+	 */
+	const filteredModels = $derived(getModelsByProvider(llmState, selectedModelsProvider));
+
+	/**
+	 * Gets the default model for a specific provider
+	 */
+	function getProviderDefaultModel(provider: ProviderType): LLMModel | undefined {
+		return getDefaultModel(llmState, provider);
+	}
+
+	/**
+	 * Checks if a provider has an API key configured
+	 */
+	function providerHasApiKey(provider: ProviderType): boolean {
+		return hasApiKeyInState(llmState, provider);
+	}
+
+	/** Provider filter options for models section */
+	const modelsProviderOptions: SelectOption[] = [
+		{ value: 'mistral', label: 'Mistral' },
+		{ value: 'ollama', label: 'Ollama' }
+	];
 
 	/**
 	 * Initialize on mount:
 	 * - Subscribe to theme store
 	 * - Load MCP servers
+	 * - Load LLM data
 	 */
 	onMount(() => {
 		// Subscribe to theme store and sync value
@@ -367,6 +528,9 @@ Includes MCP server configuration section for managing external tool servers.
 
 		// Load MCP servers on mount
 		loadMCPServers();
+
+		// Load LLM data on mount
+		loadLLMData();
 
 		// Cleanup on unmount
 		return () => {
@@ -432,169 +596,119 @@ Includes MCP server configuration section for managing external tool servers.
 		<section id="providers" class="settings-section">
 			<h2 class="section-title">Providers</h2>
 
-			<div class="provider-grid">
-				<!-- Mistral Provider Card -->
-				<Card>
-					{#snippet header()}
-						<div class="card-header-content">
-							<div class="provider-info">
-								<Sparkles size={24} class="icon-accent" />
-								<div>
-									<h3 class="provider-name">Mistral</h3>
-									<p class="provider-type">API Provider</p>
-								</div>
-							</div>
-							<Badge variant={settings.provider === 'Mistral' ? 'success' : 'primary'}>
-								{settings.provider === 'Mistral' ? 'Selected' : 'Available'}
-							</Badge>
-						</div>
-					{/snippet}
-					{#snippet body()}
-						<div class="provider-body">
-							<Input
-								type="password"
-								label="API Key"
-								placeholder={hasStoredKey && settings.provider === 'Mistral' ? '(key stored securely)' : 'sk-...'}
-								bind:value={settings.apiKey}
-								disabled={saving || settings.provider !== 'Mistral'}
-								help="Your Mistral API key"
-							/>
-							{#if settings.provider === 'Mistral' && hasStoredKey}
-								<div class="status-row">
-									<StatusIndicator status="completed" size="sm" />
-									<span class="status-text">Key stored securely</span>
-								</div>
-							{/if}
-						</div>
-					{/snippet}
-					{#snippet footer()}
-						<Button
-							variant={settings.provider === 'Mistral' ? 'ghost' : 'primary'}
-							size="sm"
-							onclick={() => { settings.provider = 'Mistral'; }}
-							disabled={settings.provider === 'Mistral'}
-						>
-							{settings.provider === 'Mistral' ? 'Selected' : 'Select'}
-						</Button>
-					{/snippet}
-				</Card>
+			{#if llmState.error}
+				<div class="llm-error">
+					{llmState.error}
+				</div>
+			{/if}
 
-				<!-- Ollama Provider Card -->
+			{#if llmState.loading}
 				<Card>
-					{#snippet header()}
-						<div class="card-header-content">
-							<div class="provider-info">
-								<Server size={24} class="icon-success" />
-								<div>
-									<h3 class="provider-name">Ollama</h3>
-									<p class="provider-type">Local Provider</p>
-								</div>
-							</div>
-							<Badge variant={settings.provider === 'Ollama' ? 'success' : 'primary'}>
-								{settings.provider === 'Ollama' ? 'Selected' : 'Available'}
-							</Badge>
-						</div>
-					{/snippet}
 					{#snippet body()}
-						<div class="provider-body">
-							<Input
-								type="url"
-								label="Endpoint URL"
-								value="http://localhost:11434"
-								disabled
-							/>
-							<div class="status-row">
-								<StatusIndicator status="completed" size="sm" />
-								<span class="status-text">No API key required</span>
-							</div>
+						<div class="llm-loading">
+							<StatusIndicator status="running" />
+							<span>Loading providers...</span>
 						</div>
-					{/snippet}
-					{#snippet footer()}
-						<Button
-							variant={settings.provider === 'Ollama' ? 'ghost' : 'primary'}
-							size="sm"
-							onclick={() => { settings.provider = 'Ollama'; }}
-							disabled={settings.provider === 'Ollama'}
-						>
-							{settings.provider === 'Ollama' ? 'Selected' : 'Select'}
-						</Button>
 					{/snippet}
 				</Card>
-			</div>
+			{:else}
+				<div class="provider-grid">
+					<!-- Mistral Provider Card -->
+					<ProviderCard
+						provider="mistral"
+						settings={llmState.providers.mistral}
+						isActive={llmState.activeProvider === 'mistral'}
+						hasApiKey={providerHasApiKey('mistral')}
+						defaultModel={getProviderDefaultModel('mistral')}
+						onSelect={() => handleSelectProvider('mistral')}
+						onConfigure={() => openApiKeyModal('mistral')}
+					>
+						{#snippet icon()}
+							<Sparkles size={24} class="icon-accent" />
+						{/snippet}
+					</ProviderCard>
 
-			<!-- API Key Actions -->
-			{#if settings.provider !== 'Ollama'}
-				<Card>
-					{#snippet header()}
-						<h3 class="card-title">API Key Management</h3>
-					{/snippet}
-					{#snippet body()}
-						<div class="api-key-actions">
-							<Button
-								variant="primary"
-								onclick={saveApiKey}
-								disabled={saving || !settings.apiKey.trim()}
-							>
-								{saving ? 'Saving...' : 'Save API Key'}
-							</Button>
-							{#if hasStoredKey}
-								<Button
-									variant="danger"
-									onclick={deleteApiKey}
-									disabled={saving}
-								>
-									Delete Stored Key
-								</Button>
-							{/if}
-						</div>
-						{#if message}
-							<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-								{message.text}
-							</div>
-						{/if}
-					{/snippet}
-				</Card>
+					<!-- Ollama Provider Card -->
+					<ProviderCard
+						provider="ollama"
+						settings={llmState.providers.ollama}
+						isActive={llmState.activeProvider === 'ollama'}
+						hasApiKey={true}
+						defaultModel={getProviderDefaultModel('ollama')}
+						onSelect={() => handleSelectProvider('ollama')}
+						onConfigure={() => openApiKeyModal('ollama')}
+					>
+						{#snippet icon()}
+							<Server size={24} class="icon-success" />
+						{/snippet}
+					</ProviderCard>
+				</div>
+			{/if}
+
+			{#if message}
+				<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'}>
+					{message.text}
+				</div>
 			{/if}
 		</section>
 
 		<!-- Models Section -->
 		<section id="models" class="settings-section">
-			<h2 class="section-title">Models</h2>
+			<div class="section-header-row">
+				<h2 class="section-title">Models</h2>
+				<div class="models-header-actions">
+					<Select
+						label=""
+						options={modelsProviderOptions}
+						value={selectedModelsProvider}
+						onchange={handleModelsProviderChange}
+					/>
+					<Button variant="primary" size="sm" onclick={openCreateModelModal}>
+						<Plus size={16} />
+						<span>Add Model</span>
+					</Button>
+				</div>
+			</div>
 
-			<Card>
-				{#snippet header()}
-					<h3 class="card-title">Model Configuration</h3>
-				{/snippet}
-				{#snippet body()}
-					<div class="model-form">
-						<Select
-							label="Provider"
-							options={providerOptions}
-							value={settings.provider}
-							onchange={handleProviderChange}
-						/>
-						<Input
-							label="Model"
-							value={settings.model}
-							oninput={(e) => settings.model = e.currentTarget.value}
-							help="Model identifier (e.g., mistral-large, llama3)"
-						/>
-						<div class="model-info">
-							<h4 class="info-title">Selected Model</h4>
-							<div class="info-grid">
-								<div class="info-item">
-									<span class="info-label">Provider</span>
-									<span class="info-value">{settings.provider}</span>
-								</div>
-								<div class="info-item">
-									<span class="info-label">Model</span>
-									<span class="info-value">{settings.model}</span>
-								</div>
-							</div>
+			{#if llmState.loading}
+				<Card>
+					{#snippet body()}
+						<div class="llm-loading">
+							<StatusIndicator status="running" />
+							<span>Loading models...</span>
 						</div>
-					</div>
-				{/snippet}
-			</Card>
+					{/snippet}
+				</Card>
+			{:else if filteredModels.length === 0}
+				<Card>
+					{#snippet body()}
+						<div class="models-empty">
+							<Cpu size={48} class="empty-icon" />
+							<h3 class="empty-title">No Models Found</h3>
+							<p class="empty-description">
+								No models configured for {selectedModelsProvider === 'mistral' ? 'Mistral' : 'Ollama'}.
+								Add a custom model to get started.
+							</p>
+							<Button variant="primary" onclick={openCreateModelModal}>
+								<Plus size={16} />
+								<span>Add Your First Model</span>
+							</Button>
+						</div>
+					{/snippet}
+				</Card>
+			{:else}
+				<div class="models-grid">
+					{#each filteredModels as model (model.id)}
+						<ModelCard
+							{model}
+							isDefault={llmState.providers[model.provider]?.default_model_id === model.id}
+							onEdit={() => openEditModelModal(model)}
+							onDelete={() => handleDeleteModel(model)}
+							onSetDefault={() => handleSetDefaultModel(model)}
+						/>
+					{/each}
+				</div>
+			{/if}
 		</section>
 
 		<!-- MCP Servers Section -->
@@ -767,6 +881,99 @@ Includes MCP server configuration section for managing external tool servers.
 	{/snippet}
 </Modal>
 
+<!-- Model Modal (Create/Edit) -->
+<Modal
+	open={showModelModal}
+	title={modelModalMode === 'create' ? 'Add Custom Model' : 'Edit Model'}
+	onclose={closeModelModal}
+>
+	{#snippet body()}
+		<ModelForm
+			mode={modelModalMode}
+			model={editingModel}
+			provider={selectedModelsProvider}
+			onsubmit={handleSaveModel}
+			oncancel={closeModelModal}
+			saving={modelSaving}
+		/>
+	{/snippet}
+</Modal>
+
+<!-- API Key Modal -->
+<Modal
+	open={showApiKeyModal}
+	title={`Configure ${apiKeyProvider === 'mistral' ? 'Mistral' : 'Ollama'}`}
+	onclose={closeApiKeyModal}
+>
+	{#snippet body()}
+		<div class="api-key-modal-content">
+			{#if apiKeyProvider === 'ollama'}
+				<p class="api-key-info">
+					Ollama runs locally and does not require an API key. You can configure the server URL below.
+				</p>
+				<Input
+					type="url"
+					label="Server URL"
+					value={llmState.providers.ollama?.base_url ?? 'http://localhost:11434'}
+					help="The URL of your local Ollama server"
+					disabled
+				/>
+				<div class="status-row">
+					<StatusIndicator status="completed" size="sm" />
+					<span class="status-text">No API key required</span>
+				</div>
+			{:else}
+				<p class="api-key-info">
+					Enter your Mistral API key. It will be stored securely using your operating system's keychain.
+				</p>
+				<Input
+					type="password"
+					label="API Key"
+					placeholder="sk-..."
+					bind:value={settings.apiKey}
+					disabled={saving}
+					help="Your Mistral API key"
+				/>
+				{#if providerHasApiKey('mistral')}
+					<div class="status-row">
+						<StatusIndicator status="completed" size="sm" />
+						<span class="status-text">API key already configured</span>
+					</div>
+				{/if}
+			{/if}
+		</div>
+	{/snippet}
+	{#snippet footer()}
+		<div class="api-key-modal-actions">
+			<Button variant="ghost" onclick={closeApiKeyModal} disabled={saving}>
+				Cancel
+			</Button>
+			{#if apiKeyProvider === 'mistral'}
+				{#if providerHasApiKey('mistral')}
+					<Button
+						variant="danger"
+						onclick={() => handleDeleteApiKey('mistral')}
+						disabled={saving}
+					>
+						Delete Key
+					</Button>
+				{/if}
+				<Button
+					variant="primary"
+					onclick={handleSaveApiKey}
+					disabled={saving || !settings.apiKey.trim()}
+				>
+					{saving ? 'Saving...' : 'Save API Key'}
+				</Button>
+			{:else}
+				<Button variant="primary" onclick={closeApiKeyModal}>
+					Done
+				</Button>
+			{/if}
+		</div>
+	{/snippet}
+</Modal>
+
 <style>
 	.settings-page {
 		display: flex;
@@ -898,43 +1105,6 @@ Includes MCP server configuration section for managing external tool servers.
 		margin-bottom: var(--spacing-lg);
 	}
 
-	.card-header-content {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-	}
-
-	.provider-info {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.provider-info :global(.icon-accent) {
-		color: var(--color-accent);
-	}
-
-	.provider-info :global(.icon-success) {
-		color: var(--color-success);
-	}
-
-	.provider-name {
-		font-size: var(--font-size-base);
-		font-weight: var(--font-weight-semibold);
-	}
-
-	.provider-type {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.provider-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
 	.status-row {
 		display: flex;
 		align-items: center;
@@ -947,12 +1117,6 @@ Includes MCP server configuration section for managing external tool servers.
 	.status-text {
 		font-size: var(--font-size-sm);
 		color: var(--color-success);
-	}
-
-	/* API Key Actions */
-	.api-key-actions {
-		display: flex;
-		gap: var(--spacing-md);
 	}
 
 	.message-toast {
@@ -970,46 +1134,6 @@ Includes MCP server configuration section for managing external tool servers.
 	.message-toast.error {
 		background: var(--color-error-light);
 		color: var(--color-error);
-	}
-
-	/* Model Form */
-	.model-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-lg);
-	}
-
-	.model-info {
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-	}
-
-	.info-title {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		margin-bottom: var(--spacing-sm);
-	}
-
-	.info-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-md);
-	}
-
-	.info-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.info-label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.info-value {
-		font-weight: var(--font-weight-semibold);
 	}
 
 	/* MCP Servers */
@@ -1064,6 +1188,82 @@ Includes MCP server configuration section for managing external tool servers.
 		color: var(--color-error);
 		border-radius: var(--border-radius-md);
 		margin-bottom: var(--spacing-lg);
+	}
+
+	/* LLM Section */
+	.llm-error {
+		padding: var(--spacing-md);
+		background: var(--color-error-light);
+		color: var(--color-error);
+		border-radius: var(--border-radius-md);
+		margin-bottom: var(--spacing-lg);
+	}
+
+	.llm-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-xl);
+	}
+
+	/* Models Section */
+	.models-header-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+	}
+
+	.models-header-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.models-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-lg);
+	}
+
+	.models-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: var(--spacing-2xl);
+		gap: var(--spacing-md);
+	}
+
+	.models-empty :global(.empty-icon) {
+		color: var(--color-text-secondary);
+		opacity: 0.5;
+	}
+
+	.models-empty :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	/* API Key Modal */
+	.api-key-modal-content {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.api-key-info {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		line-height: var(--line-height-relaxed);
+		margin: 0;
+	}
+
+	.api-key-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-sm);
 	}
 
 	/* Theme Cards */
@@ -1181,9 +1381,14 @@ Includes MCP server configuration section for managing external tool servers.
 	@media (max-width: 768px) {
 		.provider-grid,
 		.theme-grid,
-		.info-grid,
-		.mcp-server-grid {
+		.mcp-server-grid,
+		.models-grid {
 			grid-template-columns: 1fr;
+		}
+
+		.models-header-actions {
+			flex-direction: column;
+			align-items: stretch;
 		}
 	}
 </style>

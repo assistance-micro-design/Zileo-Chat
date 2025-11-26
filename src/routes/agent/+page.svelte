@@ -154,7 +154,7 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 		if (!confirm(`Delete workflow "${workflow.name}"?`)) return;
 
 		try {
-			await invoke('delete_workflow', { workflowId: workflow.id });
+			await invoke('delete_workflow', { id: workflow.id });
 			await loadWorkflows();
 			if (selectedWorkflowId === workflow.id) {
 				selectedWorkflowId = null;

@@ -172,6 +172,43 @@ async fn execute_workflow(
 
 **Critical**: All Tauri commands must be registered in `src-tauri/src/main.rs` using `tauri::generate_handler![]`.
 
+### Tauri Parameter Naming Convention
+
+**IMPORTANT**: Tauri automatically converts parameter names between Rust (`snake_case`) and JavaScript (`camelCase`).
+
+| Rust Parameter | JavaScript Parameter |
+|----------------|---------------------|
+| `workflow_id`  | `workflowId`        |
+| `agent_id`     | `agentId`           |
+| `api_key`      | `apiKey`            |
+| `default_model_id` | `defaultModelId` |
+| `base_url`     | `baseUrl`           |
+| `server_name`  | `serverName`        |
+| `type_filter`  | `typeFilter`        |
+| `memory_type`  | `memoryType`        |
+
+**Rules**:
+- Rust commands use `snake_case` for parameters
+- TypeScript `invoke()` calls use `camelCase` for parameters
+- Tauri handles the conversion automatically
+- Single-word parameters (e.g., `id`, `name`, `provider`) remain unchanged
+
+```typescript
+// CORRECT - camelCase in TypeScript
+await invoke('update_provider_settings', {
+  provider: 'mistral',
+  defaultModelId: 'mistral-small-latest',  // NOT default_model_id
+  baseUrl: null                             // NOT base_url
+});
+
+// INCORRECT - snake_case will NOT work
+await invoke('update_provider_settings', {
+  provider: 'mistral',
+  default_model_id: 'mistral-small-latest', // WRONG!
+  base_url: null                             // WRONG!
+});
+```
+
 ### Phase 5 Commands (Validation, Memory, Streaming)
 
 **Validation** (`src-tauri/src/commands/validation.rs`):

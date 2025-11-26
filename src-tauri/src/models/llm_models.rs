@@ -352,16 +352,24 @@ pub struct ProviderSettings {
     /// Provider type
     pub provider: ProviderType,
     /// Whether this provider is enabled
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// ID of the default model for this provider
+    #[serde(default)]
     pub default_model_id: Option<String>,
     /// Whether an API key is configured (for Mistral)
+    #[serde(default)]
     pub api_key_configured: bool,
     /// Custom base URL (primarily for Ollama, e.g., "http://localhost:11434")
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     /// Last update timestamp
     pub updated_at: DateTime<Utc>,
+}
+
+/// Default value for enabled field (true)
+fn default_enabled() -> bool {
+    true
 }
 
 impl ProviderSettings {
@@ -430,55 +438,16 @@ impl ConnectionTestResult {
 // Builtin Models Data
 // ============================================================================
 
-/// Mistral builtin models: (api_name, display_name, context_window, max_output_tokens)
-pub const MISTRAL_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[
-    ("mistral-large-latest", "Mistral Large", 128_000, 8192),
-    ("mistral-medium-latest", "Mistral Medium", 32_000, 8192),
-    ("mistral-small-latest", "Mistral Small", 32_000, 8192),
-    ("open-mistral-7b", "Open Mistral 7B", 32_000, 4096),
-    ("open-mixtral-8x7b", "Open Mixtral 8x7B", 32_000, 4096),
-    ("open-mixtral-8x22b", "Open Mixtral 8x22B", 64_000, 4096),
-    ("codestral-latest", "Codestral", 256_000, 8192),
-];
+/// Mistral builtin models: empty - users add their own models
+pub const MISTRAL_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[];
 
-/// Ollama builtin models: (api_name, display_name, context_window, max_output_tokens)
-pub const OLLAMA_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[
-    ("llama3.2", "Llama 3.2", 128_000, 4096),
-    ("llama3.1", "Llama 3.1", 128_000, 4096),
-    ("llama3", "Llama 3", 8_000, 4096),
-    ("mistral", "Mistral (Ollama)", 32_000, 4096),
-    ("mixtral", "Mixtral (Ollama)", 32_000, 4096),
-    ("codellama", "Code Llama", 16_000, 4096),
-    ("phi3", "Phi-3", 4_000, 2048),
-    ("gemma2", "Gemma 2", 8_000, 4096),
-    ("qwen2.5", "Qwen 2.5", 32_000, 4096),
-];
+/// Ollama builtin models: empty - users add their own models
+pub const OLLAMA_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[];
 
 /// Returns all builtin models for seeding the database.
+/// Currently returns empty - users add their own custom models.
 pub fn get_all_builtin_models() -> Vec<LLMModel> {
-    let mut models = Vec::with_capacity(MISTRAL_BUILTIN_MODELS.len() + OLLAMA_BUILTIN_MODELS.len());
-
-    for (api_name, name, ctx, max_out) in MISTRAL_BUILTIN_MODELS {
-        models.push(LLMModel::new_builtin(
-            ProviderType::Mistral,
-            (*name).to_string(),
-            (*api_name).to_string(),
-            *ctx,
-            *max_out,
-        ));
-    }
-
-    for (api_name, name, ctx, max_out) in OLLAMA_BUILTIN_MODELS {
-        models.push(LLMModel::new_builtin(
-            ProviderType::Ollama,
-            (*name).to_string(),
-            (*api_name).to_string(),
-            *ctx,
-            *max_out,
-        ));
-    }
-
-    models
+    Vec::new()
 }
 
 // ============================================================================
@@ -611,17 +580,8 @@ mod tests {
     #[test]
     fn test_get_all_builtin_models() {
         let models = get_all_builtin_models();
-        assert_eq!(
-            models.len(),
-            MISTRAL_BUILTIN_MODELS.len() + OLLAMA_BUILTIN_MODELS.len()
-        );
-
-        // Check all models are builtin
-        assert!(models.iter().all(|m| m.is_builtin));
-
-        // Check we have both providers
-        assert!(models.iter().any(|m| m.provider == ProviderType::Mistral));
-        assert!(models.iter().any(|m| m.provider == ProviderType::Ollama));
+        // No builtin models - users add their own
+        assert!(models.is_empty());
     }
 
     #[test]

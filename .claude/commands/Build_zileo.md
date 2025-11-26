@@ -28,6 +28,12 @@ TYPES_DIR: src/types (alias: $types)
 - Always use `$types` alias: `import type { X } from '$types/module'`
 - Never use `$lib/types` (does not exist)
 
+**IMPORTANT - Tauri IPC Parameter Naming**:
+- Rust commands use `snake_case` parameters (e.g., `workflow_id`, `default_model_id`)
+- TypeScript `invoke()` calls use `camelCase` parameters (e.g., `workflowId`, `defaultModelId`)
+- Tauri converts automatically between the two formats
+- Single-word params remain unchanged (e.g., `id`, `name`, `provider`)
+
 **Complexité**: [auto|simple|medium|complex|critical]
 - **simple**: <3 étapes, 1-2 fichiers
 - **medium**: 3-7 étapes, 3-10 fichiers

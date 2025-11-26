@@ -31,6 +31,16 @@ impl SecureKeyStore {
             inner: KeyStore::new_without_encryption(),
         }
     }
+
+    /// Checks if an API key exists for a provider.
+    pub fn has_key(&self, provider: &str) -> bool {
+        self.inner.get(provider).is_ok()
+    }
+
+    /// Gets the API key for a provider, if it exists.
+    pub fn get_key(&self, provider: &str) -> Option<String> {
+        self.inner.get(provider).ok()
+    }
 }
 
 impl Default for SecureKeyStore {

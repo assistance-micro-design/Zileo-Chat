@@ -28,6 +28,7 @@ use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::commands::security::SecureKeyStore;
 use crate::models::llm_models::{
     get_all_builtin_models, ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings,
     ProviderType, UpdateModelRequest,
@@ -167,10 +168,11 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
 
     info!("Getting model");
 
+    // Query by record ID directly (llm_model:uuid)
     let query = format!(
         "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
          max_output_tokens, temperature_default, is_builtin, created_at, updated_at \
-         FROM llm_model WHERE id = '{}'",
+         FROM llm_model:`{}`",
         id
     );
 
@@ -480,18 +482,20 @@ pub async fn delete_model(id: String, state: State<'_, AppState>) -> Result<bool
 /// - The provider is invalid
 /// - Database query fails
 #[tauri::command]
-#[instrument(name = "get_provider_settings", skip(state), fields(provider = %provider))]
+#[instrument(name = "get_provider_settings", skip(state, keystore), fields(provider = %provider))]
 pub async fn get_provider_settings(
     provider: String,
     state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
 ) -> Result<ProviderSettings, String> {
     let provider_type = validate_provider_string(&provider)?;
 
     info!("Getting provider settings");
 
+    // Query by record ID (provider_settings:mistral or provider_settings:ollama)
     let query = format!(
         "SELECT provider, enabled, default_model_id, base_url, updated_at \
-         FROM provider_settings WHERE provider = '{}'",
+         FROM provider_settings:`{}`",
         provider_type
     );
 
@@ -510,9 +514,12 @@ pub async fn get_provider_settings(
             format!("Failed to deserialize settings: {}", e)
         })?;
 
+    info!(found = result.is_some(), "Provider settings query result");
+
     // Check if API key is configured (using the secure keystore)
     let api_key_configured = if provider_type == ProviderType::Mistral {
-        state.llm_manager.mistral().get_api_key().await.is_some()
+        // Check OS keychain directly - this is the source of truth
+        keystore.has_key("Mistral")
     } else {
         false // Ollama doesn't need API key
     };
@@ -553,20 +560,22 @@ pub async fn get_provider_settings(
 /// - The default_model_id doesn't exist
 /// - Database operation fails
 #[tauri::command]
-#[instrument(name = "update_provider_settings", skip(state), fields(provider = %provider))]
+#[instrument(name = "update_provider_settings", skip(state, keystore), fields(provider = %provider))]
 pub async fn update_provider_settings(
     provider: String,
     enabled: Option<bool>,
     default_model_id: Option<String>,
     base_url: Option<String>,
     state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
 ) -> Result<ProviderSettings, String> {
     let provider_type = validate_provider_string(&provider)?;
 
     info!(
         enabled = ?enabled,
         default_model_id = ?default_model_id,
-        "Updating provider settings"
+        base_url = ?base_url,
+        "Updating provider settings - received params"
     );
 
     // Validate default_model_id exists if provided
@@ -580,20 +589,32 @@ pub async fn update_provider_settings(
         }
     }
 
-    // Build SET clause
+    // Build SET clause with null coalescing (??) to preserve existing values
+    // or use defaults for new records
     let mut set_parts: Vec<String> = vec![
         format!("provider = '{}'", provider_type),
         "updated_at = time::now()".to_string(),
     ];
 
+    // For enabled: use provided value, keep existing, or default to true
     if let Some(en) = enabled {
         set_parts.push(format!("enabled = {}", en));
+    } else {
+        set_parts.push("enabled = enabled ?? true".to_string());
     }
+
+    // For default_model_id: use provided value or keep existing
     if let Some(ref model_id) = default_model_id {
         set_parts.push(format!("default_model_id = '{}'", model_id));
+    } else {
+        set_parts.push("default_model_id = default_model_id".to_string());
     }
+
+    // For base_url: use provided value or keep existing
     if let Some(ref url) = base_url {
         set_parts.push(format!("base_url = '{}'", url.replace('\'', "''")));
+    } else {
+        set_parts.push("base_url = base_url".to_string());
     }
 
     // Upsert: create if not exists, update if exists
@@ -603,14 +624,16 @@ pub async fn update_provider_settings(
         set_parts.join(", ")
     );
 
+    info!(query = %upsert_query, "Executing UPSERT query");
+
     state.db.db.query(&upsert_query).await.map_err(|e| {
         error!(error = %e, "Failed to update provider settings");
         format!("Failed to update settings: {}", e)
     })?;
 
-    info!("Provider settings updated");
+    info!("Provider settings updated successfully");
 
-    get_provider_settings(provider, state).await
+    get_provider_settings(provider, state, keystore).await
 }
 
 // ============================================================================
@@ -635,10 +658,11 @@ pub async fn update_provider_settings(
 /// - Timeout is 10 seconds
 /// - Returns success=false with error message on failure
 #[tauri::command]
-#[instrument(name = "test_provider_connection", skip(state), fields(provider = %provider))]
+#[instrument(name = "test_provider_connection", skip(state, keystore), fields(provider = %provider))]
 pub async fn test_provider_connection(
     provider: String,
     state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
 ) -> Result<ConnectionTestResult, String> {
     let provider_type = validate_provider_string(&provider)?;
 
@@ -670,8 +694,8 @@ pub async fn test_provider_connection(
             }
         },
         ProviderType::Mistral => {
-            // Check if API key is configured
-            let api_key = state.llm_manager.mistral().get_api_key().await;
+            // Check if API key is configured (from OS keychain)
+            let api_key = keystore.get_key("Mistral");
             if api_key.is_none() {
                 return Ok(ConnectionTestResult::failure(
                     provider_type,

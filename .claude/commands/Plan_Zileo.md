@@ -30,6 +30,12 @@ TAURI_CONFIG: src-tauri/tauri.conf.json
 - Always use `$types` alias: `import type { X } from '$types/module'`
 - Never use `$lib/types` (does not exist)
 
+**IMPORTANT - Tauri IPC Parameter Naming**:
+- Rust commands use `snake_case` parameters (e.g., `workflow_id`, `default_model_id`)
+- TypeScript `invoke()` calls use `camelCase` parameters (e.g., `workflowId`, `defaultModelId`)
+- Tauri converts automatically between the two formats
+- Single-word params remain unchanged (e.g., `id`, `name`, `provider`)
+
 ---
 
 ## Principes

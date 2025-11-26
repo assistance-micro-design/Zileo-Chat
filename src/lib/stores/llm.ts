@@ -439,11 +439,12 @@ export async function updateProviderSettings(
 	defaultModelId?: string,
 	baseUrl?: string
 ): Promise<ProviderSettings> {
+	// Tauri converts snake_case Rust params to camelCase in JS
 	return invoke<ProviderSettings>('update_provider_settings', {
 		provider,
 		enabled: enabled ?? null,
-		default_model_id: defaultModelId ?? null,
-		base_url: baseUrl ?? null
+		defaultModelId: defaultModelId ?? null,
+		baseUrl: baseUrl ?? null
 	});
 }
 
