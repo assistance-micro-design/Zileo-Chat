@@ -487,9 +487,9 @@ impl EmbeddingService {
         self.validate_text(text)?;
 
         let provider_guard = self.provider.read().await;
-        let provider = provider_guard
-            .as_ref()
-            .ok_or_else(|| EmbeddingError::NotConfigured("No embedding provider configured".to_string()))?;
+        let provider = provider_guard.as_ref().ok_or_else(|| {
+            EmbeddingError::NotConfigured("No embedding provider configured".to_string())
+        })?;
 
         match provider {
             EmbeddingProvider::Mistral { api_key, model } => {
@@ -531,9 +531,9 @@ impl EmbeddingService {
         }
 
         let provider_guard = self.provider.read().await;
-        let provider = provider_guard
-            .as_ref()
-            .ok_or_else(|| EmbeddingError::NotConfigured("No embedding provider configured".to_string()))?;
+        let provider = provider_guard.as_ref().ok_or_else(|| {
+            EmbeddingError::NotConfigured("No embedding provider configured".to_string())
+        })?;
 
         match provider {
             EmbeddingProvider::Mistral { api_key, model } => {
@@ -589,7 +589,9 @@ impl EmbeddingService {
             .into_iter()
             .next()
             .map(|d| d.embedding)
-            .ok_or_else(|| EmbeddingError::InvalidResponse("No embedding in response".to_string()))?;
+            .ok_or_else(|| {
+                EmbeddingError::InvalidResponse("No embedding in response".to_string())
+            })?;
 
         // Validate dimension
         let expected_dim = *self.dimension.read().await;
@@ -747,10 +749,7 @@ impl EmbeddingService {
             embeddings.push(embedding);
         }
 
-        debug!(
-            count = embeddings.len(),
-            "Ollama batch embedding completed"
-        );
+        debug!(count = embeddings.len(), "Ollama batch embedding completed");
 
         Ok(embeddings)
     }
@@ -764,7 +763,10 @@ impl EmbeddingService {
     pub async fn test_connection(&self) -> Result<usize, EmbeddingError> {
         let test_text = "test";
         let embedding = self.embed(test_text).await?;
-        info!(dimension = embedding.len(), "Embedding service test successful");
+        info!(
+            dimension = embedding.len(),
+            "Embedding service test successful"
+        );
         Ok(embedding.len())
     }
 }
@@ -823,19 +825,15 @@ mod tests {
 
     #[test]
     fn test_embedding_provider_ollama_mxbai() {
-        let provider = EmbeddingProvider::ollama_with_config(
-            "http://localhost:11434",
-            "mxbai-embed-large",
-        );
+        let provider =
+            EmbeddingProvider::ollama_with_config("http://localhost:11434", "mxbai-embed-large");
         assert_eq!(provider.dimension(), OLLAMA_MXBAI_DIMENSION);
     }
 
     #[test]
     fn test_embedding_provider_ollama_nomic() {
-        let provider = EmbeddingProvider::ollama_with_config(
-            "http://localhost:11434",
-            "nomic-embed-text",
-        );
+        let provider =
+            EmbeddingProvider::ollama_with_config("http://localhost:11434", "nomic-embed-text");
         assert_eq!(provider.dimension(), OLLAMA_NOMIC_DIMENSION);
     }
 

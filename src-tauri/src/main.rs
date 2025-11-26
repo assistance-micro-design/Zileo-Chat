@@ -322,6 +322,9 @@ async fn main() -> anyhow::Result<()> {
             commands::mcp::stop_mcp_server,
             commands::mcp::list_mcp_tools,
             commands::mcp::call_mcp_tool,
+            // Migration commands (Memory Tool Phase 2)
+            commands::migration::migrate_memory_schema,
+            commands::migration::get_memory_schema_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

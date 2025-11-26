@@ -46,6 +46,9 @@ pub struct Memory {
     pub memory_type: MemoryType,
     /// Text content of the memory
     pub content: String,
+    /// Optional workflow ID for scoped memories (None = general)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
     /// Creation timestamp (set by database)
@@ -64,16 +67,91 @@ pub struct MemoryCreate {
     pub memory_type: String,
     /// Text content of the memory
     pub content: String,
+    /// Optional workflow ID for scoped memories
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
 }
 
 impl MemoryCreate {
-    /// Creates a new MemoryCreate with the given parameters
+    /// Creates a new MemoryCreate with the given parameters (general scope)
     pub fn new(memory_type: MemoryType, content: String, metadata: serde_json::Value) -> Self {
         Self {
             memory_type: memory_type.to_string(),
             content,
+            workflow_id: None,
+            metadata,
+        }
+    }
+
+    /// Creates a new MemoryCreate with workflow scope
+    #[allow(dead_code)] // Used by MemoryTool in Phase 3
+    pub fn with_workflow(
+        memory_type: MemoryType,
+        content: String,
+        metadata: serde_json::Value,
+        workflow_id: String,
+    ) -> Self {
+        Self {
+            memory_type: memory_type.to_string(),
+            content,
+            workflow_id: Some(workflow_id),
+            metadata,
+        }
+    }
+}
+
+/// Memory creation payload with embedding vector
+/// Used by MemoryTool for creating memories with vector embeddings
+#[allow(dead_code)] // Used by MemoryTool in Phase 3
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryCreateWithEmbedding {
+    /// Type of memory content (as string for SurrealDB)
+    #[serde(rename = "type")]
+    pub memory_type: String,
+    /// Text content of the memory
+    pub content: String,
+    /// Vector embedding for semantic search
+    pub embedding: Vec<f32>,
+    /// Optional workflow ID for scoped memories
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// Additional metadata
+    pub metadata: serde_json::Value,
+}
+
+#[allow(dead_code)] // Used by MemoryTool in Phase 3
+impl MemoryCreateWithEmbedding {
+    /// Creates a new MemoryCreateWithEmbedding with the given parameters
+    pub fn new(
+        memory_type: MemoryType,
+        content: String,
+        embedding: Vec<f32>,
+        metadata: serde_json::Value,
+    ) -> Self {
+        Self {
+            memory_type: memory_type.to_string(),
+            content,
+            embedding,
+            workflow_id: None,
+            metadata,
+        }
+    }
+
+    /// Creates a new MemoryCreateWithEmbedding with workflow scope
+    pub fn with_workflow(
+        memory_type: MemoryType,
+        content: String,
+        embedding: Vec<f32>,
+        metadata: serde_json::Value,
+        workflow_id: String,
+    ) -> Self {
+        Self {
+            memory_type: memory_type.to_string(),
+            content,
+            embedding,
+            workflow_id: Some(workflow_id),
             metadata,
         }
     }
@@ -90,8 +168,11 @@ pub struct MemoryWithEmbedding {
     pub memory_type: MemoryType,
     /// Text content of the memory
     pub content: String,
-    /// Vector embedding (1536D for OpenAI/Mistral compatibility)
+    /// Vector embedding (1024D for Mistral/Ollama)
     pub embedding: Vec<f32>,
+    /// Optional workflow ID for scoped memories
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
     /// Creation timestamp
@@ -146,6 +227,7 @@ mod tests {
             id: "mem_001".to_string(),
             memory_type: MemoryType::Context,
             content: "User prefers dark mode".to_string(),
+            workflow_id: None,
             metadata: serde_json::json!({"source": "settings"}),
             created_at: Utc::now(),
         };
@@ -154,11 +236,28 @@ mod tests {
         assert!(json.contains("\"type\":\"context\""));
         assert!(json.contains("\"content\":\"User prefers dark mode\""));
         assert!(json.contains("\"source\":\"settings\""));
+        // workflow_id should be omitted when None
+        assert!(!json.contains("workflow_id"));
 
         let deserialized: Memory = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, memory.id);
         assert_eq!(deserialized.memory_type, memory.memory_type);
         assert_eq!(deserialized.content, memory.content);
+    }
+
+    #[test]
+    fn test_memory_with_workflow() {
+        let memory = Memory {
+            id: "mem_001a".to_string(),
+            memory_type: MemoryType::Context,
+            content: "Workflow specific memory".to_string(),
+            workflow_id: Some("wf_123".to_string()),
+            metadata: serde_json::json!({}),
+            created_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&memory).unwrap();
+        assert!(json.contains("\"workflow_id\":\"wf_123\""));
     }
 
     #[test]
@@ -168,6 +267,7 @@ mod tests {
             memory_type: MemoryType::Knowledge,
             content: "Rust is a systems programming language".to_string(),
             embedding: vec![0.1, 0.2, 0.3],
+            workflow_id: None,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         };
@@ -177,11 +277,41 @@ mod tests {
     }
 
     #[test]
+    fn test_memory_create_with_embedding() {
+        let memory = MemoryCreateWithEmbedding::new(
+            MemoryType::Knowledge,
+            "Test content".to_string(),
+            vec![0.1, 0.2, 0.3],
+            serde_json::json!({"tags": ["test"]}),
+        );
+
+        let json = serde_json::to_string(&memory).unwrap();
+        assert!(json.contains("\"type\":\"knowledge\""));
+        assert!(json.contains("\"embedding\":[0.1,0.2,0.3]"));
+        assert!(!json.contains("workflow_id"));
+    }
+
+    #[test]
+    fn test_memory_create_with_workflow() {
+        let memory = MemoryCreateWithEmbedding::with_workflow(
+            MemoryType::Context,
+            "Workflow memory".to_string(),
+            vec![0.5, 0.6],
+            serde_json::json!({}),
+            "wf_abc".to_string(),
+        );
+
+        let json = serde_json::to_string(&memory).unwrap();
+        assert!(json.contains("\"workflow_id\":\"wf_abc\""));
+    }
+
+    #[test]
     fn test_memory_search_result() {
         let memory = Memory {
             id: "mem_003".to_string(),
             memory_type: MemoryType::Decision,
             content: "Chose SurrealDB for embedded database".to_string(),
+            workflow_id: None,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         };

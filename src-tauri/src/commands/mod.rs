@@ -88,6 +88,10 @@
 //! - `list_mcp_tools` - List available tools from a server
 //! - `call_mcp_tool` - Execute a tool on an MCP server
 //!
+//! ### Migration Commands ([`migration`])
+//! - `migrate_memory_schema` - Migrate memory table for vector search
+//! - `get_memory_schema_status` - Get memory schema status
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
@@ -97,6 +101,7 @@ pub mod agent;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod migration;
 pub mod models;
 pub mod security;
 pub mod streaming;

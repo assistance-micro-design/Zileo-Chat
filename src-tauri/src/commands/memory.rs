@@ -364,6 +364,7 @@ mod tests {
             id: "mem_001".to_string(),
             memory_type: MemoryType::Context,
             content: "User prefers dark mode".to_string(),
+            workflow_id: None,
             metadata: serde_json::json!({"source": "settings"}),
             created_at: Utc::now(),
         };
@@ -379,6 +380,7 @@ mod tests {
             id: "mem_002".to_string(),
             memory_type: MemoryType::Decision,
             content: "Chose Rust for backend".to_string(),
+            workflow_id: None,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         };

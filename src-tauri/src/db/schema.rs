@@ -38,12 +38,15 @@ DEFINE TABLE memory SCHEMAFULL;
 DEFINE FIELD id ON memory TYPE string;
 DEFINE FIELD type ON memory TYPE string ASSERT $value IN ['user_pref', 'context', 'knowledge', 'decision'];
 DEFINE FIELD content ON memory TYPE string;
-DEFINE FIELD embedding ON memory TYPE array<float>;
+DEFINE FIELD embedding ON memory TYPE option<array<float>>;
+DEFINE FIELD workflow_id ON memory TYPE option<string>;
 DEFINE FIELD metadata ON memory TYPE object;
 DEFINE FIELD created_at ON memory TYPE datetime DEFAULT time::now();
 
--- Index HNSW pour vector search (1536D OpenAI/Mistral embeddings)
-DEFINE INDEX memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1536 DIST COSINE;
+-- Index HNSW pour vector search (1024D Mistral/Ollama embeddings)
+DEFINE INDEX memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
+-- Index for workflow scoping
+DEFINE INDEX memory_workflow_idx ON memory FIELDS workflow_id;
 
 -- Table: validation_request
 DEFINE TABLE validation_request SCHEMAFULL;

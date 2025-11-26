@@ -43,7 +43,6 @@ pub use provider::{LLMProvider, LLMResponse};
 // Embedding service exports (will be used by MemoryTool in Phase 3)
 #[allow(unused_imports)]
 pub use embedding::{
-    EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService,
-    MISTRAL_EMBED_DIMENSION, MISTRAL_EMBED_MODEL,
-    OLLAMA_MXBAI_DIMENSION, OLLAMA_NOMIC_DIMENSION,
+    EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService, MISTRAL_EMBED_DIMENSION,
+    MISTRAL_EMBED_MODEL, OLLAMA_MXBAI_DIMENSION, OLLAMA_NOMIC_DIMENSION,
 };

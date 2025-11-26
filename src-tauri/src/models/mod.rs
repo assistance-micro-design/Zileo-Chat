@@ -17,6 +17,9 @@ pub use workflow::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, Wo
 
 // Re-export types for Phase 5 implementation
 pub use memory::{Memory, MemoryCreate, MemorySearchResult, MemoryType};
+// Re-export types for Memory Tool Phase 3 implementation (currently unused)
+#[allow(unused_imports)]
+pub use memory::MemoryCreateWithEmbedding;
 pub use streaming::{StreamChunk, WorkflowComplete};
 // Re-export task types for Phase 2 Commands implementation (currently unused)
 #[allow(unused_imports)]
