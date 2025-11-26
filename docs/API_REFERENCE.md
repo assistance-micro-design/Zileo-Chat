@@ -679,6 +679,246 @@ async fn seed_builtin_models() -> Result<usize, String>
 
 ---
 
+## Task Commands (Todo Tool)
+
+Task management for workflow decomposition. Enables agents to track progress on complex multi-step operations.
+
+### create_task
+
+Creates a new task for a workflow.
+
+**Frontend**
+```typescript
+const taskId = await invoke<string>('create_task', {
+  workflowId: string,           // Associated workflow ID
+  name: string,                 // Task name (max 128 chars)
+  description: string,          // Task description (max 1000 chars)
+  priority?: 1 | 2 | 3 | 4 | 5, // Priority (default: 3)
+  agentAssigned?: string,       // Agent ID to assign
+  dependencies?: string[]       // Task IDs this depends on
+});
+```
+
+**Backend Signature**
+```rust
+async fn create_task(
+    workflow_id: String,
+    name: String,
+    description: String,
+    priority: Option<u8>,
+    agent_assigned: Option<String>,
+    dependencies: Option<Vec<String>>
+) -> Result<String, String>
+```
+
+**Priority Levels**
+- 1: Critical - must be done immediately
+- 2: High - should be done soon
+- 3: Medium - normal priority (default)
+- 4: Low - can wait
+- 5: Minimal - do when time permits
+
+**Returns** : UUID of created task
+
+**Errors** : Invalid workflow_id, name too long, invalid priority
+
+---
+
+### get_task
+
+Gets a single task by ID.
+
+**Frontend**
+```typescript
+const task = await invoke<Task>('get_task', {
+  taskId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_task(
+    task_id: String
+) -> Result<Task, String>
+```
+
+**Task Type**
+```typescript
+interface Task {
+  id: string;
+  workflow_id: string;
+  name: string;
+  description: string;
+  agent_assigned?: string;
+  priority: 1 | 2 | 3 | 4 | 5;
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  dependencies: string[];
+  duration_ms?: number;
+  created_at: string;
+  completed_at?: string;
+}
+```
+
+**Errors** : Task not found, invalid ID
+
+---
+
+### list_workflow_tasks
+
+Lists all tasks for a workflow.
+
+**Frontend**
+```typescript
+const tasks = await invoke<Task[]>('list_workflow_tasks', {
+  workflowId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn list_workflow_tasks(
+    workflow_id: String
+) -> Result<Vec<Task>, String>
+```
+
+**Returns** : Tasks sorted by priority (asc), then created_at (asc)
+
+---
+
+### list_tasks_by_status
+
+Lists tasks filtered by status.
+
+**Frontend**
+```typescript
+const tasks = await invoke<Task[]>('list_tasks_by_status', {
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked',
+  workflowId?: string  // Optional filter
+});
+```
+
+**Backend Signature**
+```rust
+async fn list_tasks_by_status(
+    status: String,
+    workflow_id: Option<String>
+) -> Result<Vec<Task>, String>
+```
+
+**Returns** : Tasks matching status, sorted by priority and created_at
+
+**Errors** : Invalid status value
+
+---
+
+### update_task
+
+Updates task fields (partial update).
+
+**Frontend**
+```typescript
+const updated = await invoke<Task>('update_task', {
+  taskId: string,
+  updates: {
+    name?: string,
+    description?: string,
+    agentAssigned?: string,
+    priority?: 1 | 2 | 3 | 4 | 5,
+    status?: 'pending' | 'in_progress' | 'completed' | 'blocked',
+    dependencies?: string[],
+    durationMs?: number
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_task(
+    task_id: String,
+    updates: TaskUpdate
+) -> Result<Task, String>
+```
+
+**Returns** : Updated task
+
+**Errors** : No fields to update, validation failed, task not found
+
+---
+
+### update_task_status
+
+Updates task status specifically (convenience command).
+
+**Frontend**
+```typescript
+const updated = await invoke<Task>('update_task_status', {
+  taskId: string,
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked'
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_task_status(
+    task_id: String,
+    status: String
+) -> Result<Task, String>
+```
+
+**Returns** : Updated task
+
+**Errors** : Invalid status, task not found
+
+---
+
+### complete_task
+
+Marks task as completed with optional duration.
+
+**Frontend**
+```typescript
+const completed = await invoke<Task>('complete_task', {
+  taskId: string,
+  durationMs?: number  // Execution duration in milliseconds
+});
+```
+
+**Backend Signature**
+```rust
+async fn complete_task(
+    task_id: String,
+    duration_ms: Option<u64>
+) -> Result<Task, String>
+```
+
+**Effect** : Sets status to 'completed', records completed_at timestamp
+
+**Returns** : Completed task with metrics
+
+---
+
+### delete_task
+
+Deletes a task.
+
+**Frontend**
+```typescript
+await invoke('delete_task', {
+  taskId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn delete_task(
+    task_id: String
+) -> Result<(), String>
+```
+
+**Errors** : Task not found, database error
+
+---
+
 ## MCP Servers
 
 ### list_mcp_servers

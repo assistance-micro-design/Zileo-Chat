@@ -11,6 +11,7 @@ mod mcp;
 mod models;
 mod security;
 mod state;
+mod tools;
 
 use state::AppState;
 use std::sync::Arc;
@@ -301,6 +302,15 @@ async fn main() -> anyhow::Result<()> {
             // Streaming commands (Phase 5)
             commands::streaming::execute_workflow_streaming,
             commands::streaming::cancel_workflow_streaming,
+            // Task commands (Todo Tool)
+            commands::task::create_task,
+            commands::task::get_task,
+            commands::task::list_workflow_tasks,
+            commands::task::list_tasks_by_status,
+            commands::task::update_task,
+            commands::task::update_task_status,
+            commands::task::complete_task,
+            commands::task::delete_task,
             // MCP commands (Phase 3)
             commands::mcp::list_mcp_servers,
             commands::mcp::get_mcp_server,

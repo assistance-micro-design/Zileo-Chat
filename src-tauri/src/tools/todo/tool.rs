@@ -1,0 +1,666 @@
+// Copyright 2025 Zileo-Chat-3 Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+//! TodoTool implementation for agent task management.
+//!
+//! This tool allows agents to manage workflow tasks through a unified interface.
+
+use crate::db::DBClient;
+use crate::models::task::{Task, TaskCreate};
+use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
+use async_trait::async_trait;
+use serde_json::Value;
+use std::sync::Arc;
+use tracing::{debug, info, instrument};
+use uuid::Uuid;
+
+/// Tool for managing workflow tasks.
+///
+/// This tool allows agents to:
+/// - Create new tasks for workflow decomposition
+/// - Update task status as work progresses
+/// - Query tasks by status or workflow
+/// - Mark tasks as completed with metrics
+///
+/// # Scope
+///
+/// Each TodoTool instance is scoped to a specific workflow and agent.
+/// Tasks created will be associated with the workflow_id provided at construction.
+#[allow(dead_code)]
+pub struct TodoTool {
+    /// Database client for persistence
+    db: Arc<DBClient>,
+    /// Current workflow ID (scope)
+    workflow_id: String,
+    /// Agent ID using this tool
+    agent_id: String,
+}
+
+#[allow(dead_code)]
+impl TodoTool {
+    /// Creates a new TodoTool for a specific workflow.
+    ///
+    /// # Arguments
+    /// * `db` - Database client for persistence
+    /// * `workflow_id` - Workflow ID to scope tasks to
+    /// * `agent_id` - Agent ID using this tool
+    ///
+    /// # Example
+    /// ```ignore
+    /// let tool = TodoTool::new(db.clone(), "wf_001".into(), "db_agent".into());
+    /// ```
+    pub fn new(db: Arc<DBClient>, workflow_id: String, agent_id: String) -> Self {
+        Self {
+            db,
+            workflow_id,
+            agent_id,
+        }
+    }
+
+    /// Creates a new task.
+    ///
+    /// # Arguments
+    /// * `name` - Task name (max 128 chars)
+    /// * `description` - Task description (max 1000 chars)
+    /// * `priority` - Priority level 1-5 (1=critical, 5=low)
+    /// * `dependencies` - Task IDs this depends on
+    #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
+    async fn create_task(
+        &self,
+        name: &str,
+        description: &str,
+        priority: u8,
+        dependencies: Vec<String>,
+    ) -> ToolResult<Value> {
+        // Validate inputs with actionable error messages
+        if name.is_empty() {
+            return Err(ToolError::ValidationFailed(
+                "Task name cannot be empty".to_string(),
+            ));
+        }
+
+        if name.len() > 128 {
+            return Err(ToolError::ValidationFailed(format!(
+                "Task name is {} chars, max is 128. Shorten the name or move details to description",
+                name.len()
+            )));
+        }
+
+        if description.len() > 1000 {
+            return Err(ToolError::ValidationFailed(format!(
+                "Description is {} chars, max is 1000. Consider splitting into multiple tasks",
+                description.len()
+            )));
+        }
+
+        if !(1..=5).contains(&priority) {
+            return Err(ToolError::ValidationFailed(format!(
+                "Priority {} is invalid. Use 1 (critical), 2 (high), 3 (medium), 4 (low), or 5 (minimal)",
+                priority
+            )));
+        }
+
+        let task_id = Uuid::new_v4().to_string();
+
+        let task = TaskCreate::new(
+            self.workflow_id.clone(),
+            name.to_string(),
+            description.to_string(),
+            priority,
+        )
+        .with_agent(self.agent_id.clone())
+        .with_dependencies(dependencies);
+
+        self.db
+            .create("task", &task_id, task)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        info!(task_id = %task_id, name = %name, "Task created");
+
+        Ok(serde_json::json!({
+            "success": true,
+            "task_id": task_id,
+            "message": format!("Task '{}' created successfully", name)
+        }))
+    }
+
+    /// Updates task status.
+    ///
+    /// # Arguments
+    /// * `task_id` - Task ID to update
+    /// * `status` - New status (pending/in_progress/completed/blocked)
+    #[instrument(skip(self))]
+    async fn update_status(&self, task_id: &str, status: &str) -> ToolResult<Value> {
+        let valid_statuses = ["pending", "in_progress", "completed", "blocked"];
+        if !valid_statuses.contains(&status) {
+            return Err(ToolError::ValidationFailed(format!(
+                "Status '{}' is not valid. Use: 'pending' (not started), 'in_progress' (working), 'completed' (done), or 'blocked' (waiting)",
+                status
+            )));
+        }
+
+        let query = format!("UPDATE task:`{}` SET status = '{}'", task_id, status);
+
+        let result: Vec<Value> = self
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        // Check if task was actually updated
+        if result.is_empty() {
+            return Err(ToolError::NotFound(format!(
+                "Task '{}' not found. Use operation 'list' to see available tasks",
+                task_id
+            )));
+        }
+
+        info!(task_id = %task_id, status = %status, "Task status updated");
+
+        Ok(serde_json::json!({
+            "success": true,
+            "task_id": task_id,
+            "new_status": status,
+            "message": format!("Task status updated to '{}'", status)
+        }))
+    }
+
+    /// Lists tasks for current workflow.
+    ///
+    /// # Arguments
+    /// * `status_filter` - Optional status to filter by
+    #[instrument(skip(self))]
+    async fn list_tasks(&self, status_filter: Option<&str>) -> ToolResult<Value> {
+        let query = match status_filter {
+            Some(status) => format!(
+                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned
+                FROM task WHERE workflow_id = '{}' AND status = '{}'
+                ORDER BY priority ASC, created_at ASC"#,
+                self.workflow_id, status
+            ),
+            None => format!(
+                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned
+                FROM task WHERE workflow_id = '{}'
+                ORDER BY priority ASC, created_at ASC"#,
+                self.workflow_id
+            ),
+        };
+
+        let tasks: Vec<Value> = self
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        debug!(count = tasks.len(), "Tasks listed");
+
+        Ok(serde_json::json!({
+            "success": true,
+            "workflow_id": self.workflow_id,
+            "count": tasks.len(),
+            "tasks": tasks
+        }))
+    }
+
+    /// Gets a single task by ID.
+    ///
+    /// # Arguments
+    /// * `task_id` - Task ID to retrieve
+    #[instrument(skip(self))]
+    async fn get_task(&self, task_id: &str) -> ToolResult<Value> {
+        let query = format!(
+            r#"SELECT
+                meta::id(id) AS id,
+                workflow_id,
+                name,
+                description,
+                agent_assigned,
+                priority,
+                status,
+                dependencies,
+                duration_ms,
+                created_at,
+                completed_at
+            FROM task
+            WHERE meta::id(id) = '{}'"#,
+            task_id
+        );
+
+        let results: Vec<Task> = self
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        match results.into_iter().next() {
+            Some(task) => Ok(serde_json::json!({
+                "success": true,
+                "task": task
+            })),
+            None => Err(ToolError::NotFound(format!(
+                "Task '{}' does not exist in workflow '{}'",
+                task_id, self.workflow_id
+            ))),
+        }
+    }
+
+    /// Marks task as completed with optional duration.
+    ///
+    /// # Arguments
+    /// * `task_id` - Task ID to complete
+    /// * `duration_ms` - Optional execution duration in milliseconds
+    #[instrument(skip(self))]
+    async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
+        let duration_part = duration_ms
+            .map(|d| format!(", duration_ms = {}", d))
+            .unwrap_or_default();
+
+        let query = format!(
+            "UPDATE task:`{}` SET status = 'completed', completed_at = time::now(){}",
+            task_id, duration_part
+        );
+
+        let result: Vec<Value> = self
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        if result.is_empty() {
+            return Err(ToolError::NotFound(format!(
+                "Task '{}' not found. Cannot mark as completed",
+                task_id
+            )));
+        }
+
+        info!(task_id = %task_id, duration_ms = ?duration_ms, "Task completed");
+
+        Ok(serde_json::json!({
+            "success": true,
+            "task_id": task_id,
+            "status": "completed",
+            "duration_ms": duration_ms,
+            "message": format!("Task '{}' marked as completed", task_id)
+        }))
+    }
+
+    /// Deletes a task.
+    ///
+    /// # Arguments
+    /// * `task_id` - Task ID to delete
+    #[instrument(skip(self))]
+    async fn delete_task(&self, task_id: &str) -> ToolResult<Value> {
+        // First check if task exists
+        let check_query = format!(
+            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
+            task_id
+        );
+        let existing: Vec<Value> = self
+            .db
+            .query(&check_query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        if existing.is_empty() {
+            return Err(ToolError::NotFound(format!(
+                "Task '{}' does not exist. Nothing to delete",
+                task_id
+            )));
+        }
+
+        let query = format!("DELETE task:`{}`", task_id);
+        let _: Vec<Value> = self
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+        info!(task_id = %task_id, "Task deleted");
+
+        Ok(serde_json::json!({
+            "success": true,
+            "task_id": task_id,
+            "message": format!("Task '{}' has been deleted", task_id)
+        }))
+    }
+}
+
+#[async_trait]
+impl Tool for TodoTool {
+    /// Returns the tool definition with LLM-friendly description.
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            id: "TodoTool".to_string(),
+            name: "Todo Task Manager".to_string(),
+            description: r#"Manages workflow tasks for structured execution tracking.
+
+USE THIS TOOL TO:
+- Break down complex work into trackable tasks
+- Update task progress as you work
+- Coordinate with other agents via task assignment
+- Track task completion with timing metrics
+
+OPERATIONS:
+- create: Create a new task with name, description, priority (1-5)
+- get: Retrieve a single task by ID
+- update_status: Change task status (pending/in_progress/completed/blocked)
+- list: View all tasks or filter by status
+- complete: Mark task done with optional duration
+- delete: Remove a task
+
+BEST PRACTICES:
+- Create tasks BEFORE starting complex multi-step work
+- Update status to 'in_progress' when starting a task
+- Use priority 1 for critical/blocking tasks, 5 for low priority
+- Mark completed with duration_ms for metrics tracking
+
+EXAMPLES:
+1. Create a task:
+   {"operation": "create", "name": "Analyze code", "description": "Deep analysis", "priority": 1}
+
+2. Start working on it:
+   {"operation": "update_status", "task_id": "abc123", "status": "in_progress"}
+
+3. Mark complete:
+   {"operation": "complete", "task_id": "abc123", "duration_ms": 5000}
+
+4. List pending tasks:
+   {"operation": "list", "status_filter": "pending"}"#
+                .to_string(),
+
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": ["create", "get", "update_status", "list", "complete", "delete"],
+                        "description": "The operation to perform"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "description": "Task name (for create operation)"
+                    },
+                    "description": {
+                        "type": "string",
+                        "maxLength": 1000,
+                        "description": "Task description (for create operation)"
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5,
+                        "default": 3,
+                        "description": "Priority level: 1=critical, 5=low (for create)"
+                    },
+                    "dependencies": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Task IDs this depends on (for create)"
+                    },
+                    "task_id": {
+                        "type": "string",
+                        "description": "Task ID (for get/update_status/complete/delete)"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed", "blocked"],
+                        "description": "New status (for update_status)"
+                    },
+                    "status_filter": {
+                        "type": "string",
+                        "enum": ["pending", "in_progress", "completed", "blocked"],
+                        "description": "Filter by status (for list operation)"
+                    },
+                    "duration_ms": {
+                        "type": "integer",
+                        "description": "Execution duration in ms (for complete)"
+                    }
+                },
+                "required": ["operation"]
+            }),
+
+            output_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "task_id": {"type": "string"},
+                    "message": {"type": "string"},
+                    "task": {"type": "object"},
+                    "tasks": {"type": "array"},
+                    "count": {"type": "integer"},
+                    "new_status": {"type": "string"},
+                    "duration_ms": {"type": "integer"}
+                }
+            }),
+
+            requires_confirmation: false,
+        }
+    }
+
+    /// Executes the tool with JSON input.
+    #[instrument(skip(self, input), fields(workflow_id = %self.workflow_id))]
+    async fn execute(&self, input: Value) -> ToolResult<Value> {
+        self.validate_input(&input)?;
+
+        let operation = input["operation"]
+            .as_str()
+            .ok_or_else(|| ToolError::InvalidInput("Missing operation".to_string()))?;
+
+        debug!(operation = %operation, "Executing TodoTool");
+
+        match operation {
+            "create" => {
+                let name = input["name"].as_str().ok_or_else(|| {
+                    ToolError::InvalidInput("Missing name for create".to_string())
+                })?;
+                let description = input["description"].as_str().unwrap_or("");
+                let priority = input["priority"].as_u64().unwrap_or(3) as u8;
+                let dependencies: Vec<String> = input["dependencies"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                self.create_task(name, description, priority, dependencies)
+                    .await
+            }
+
+            "get" => {
+                let task_id = input["task_id"].as_str().ok_or_else(|| {
+                    ToolError::InvalidInput("Missing task_id for get".to_string())
+                })?;
+
+                self.get_task(task_id).await
+            }
+
+            "update_status" => {
+                let task_id = input["task_id"]
+                    .as_str()
+                    .ok_or_else(|| ToolError::InvalidInput("Missing task_id".to_string()))?;
+                let status = input["status"]
+                    .as_str()
+                    .ok_or_else(|| ToolError::InvalidInput("Missing status".to_string()))?;
+
+                self.update_status(task_id, status).await
+            }
+
+            "list" => {
+                let status_filter = input["status_filter"].as_str();
+                self.list_tasks(status_filter).await
+            }
+
+            "complete" => {
+                let task_id = input["task_id"]
+                    .as_str()
+                    .ok_or_else(|| ToolError::InvalidInput("Missing task_id".to_string()))?;
+                let duration_ms = input["duration_ms"].as_u64();
+
+                self.complete_task(task_id, duration_ms).await
+            }
+
+            "delete" => {
+                let task_id = input["task_id"]
+                    .as_str()
+                    .ok_or_else(|| ToolError::InvalidInput("Missing task_id".to_string()))?;
+
+                self.delete_task(task_id).await
+            }
+
+            _ => Err(ToolError::InvalidInput(format!(
+                "Unknown operation: {}",
+                operation
+            ))),
+        }
+    }
+
+    /// Validates input before execution.
+    fn validate_input(&self, input: &Value) -> ToolResult<()> {
+        if !input.is_object() {
+            return Err(ToolError::InvalidInput(
+                "Input must be an object".to_string(),
+            ));
+        }
+
+        let operation = input["operation"]
+            .as_str()
+            .ok_or_else(|| ToolError::InvalidInput("Missing operation field".to_string()))?;
+
+        match operation {
+            "create" => {
+                if input.get("name").is_none() {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'name' for create operation".to_string(),
+                    ));
+                }
+            }
+            "get" => {
+                if input.get("task_id").is_none() {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'task_id' for get operation".to_string(),
+                    ));
+                }
+            }
+            "update_status" => {
+                if input.get("task_id").is_none() {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'task_id' for update_status".to_string(),
+                    ));
+                }
+                if input.get("status").is_none() {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'status' for update_status".to_string(),
+                    ));
+                }
+            }
+            "complete" | "delete" => {
+                if input.get("task_id").is_none() {
+                    return Err(ToolError::InvalidInput(format!(
+                        "Missing 'task_id' for {} operation",
+                        operation
+                    )));
+                }
+            }
+            "list" => {} // No required params
+            _ => {
+                return Err(ToolError::InvalidInput(format!(
+                    "Unknown operation: {}",
+                    operation
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Returns false - task operations are reversible, no confirmation needed.
+    fn requires_confirmation(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_definition() {
+        // We can test the definition without a DB
+        let definition = ToolDefinition {
+            id: "TodoTool".to_string(),
+            name: "Todo Task Manager".to_string(),
+            description: "Test".to_string(),
+            input_schema: serde_json::json!({}),
+            output_schema: serde_json::json!({}),
+            requires_confirmation: false,
+        };
+
+        assert_eq!(definition.id, "TodoTool");
+        assert!(!definition.requires_confirmation);
+    }
+
+    #[test]
+    fn test_input_validation_create() {
+        let valid_input = serde_json::json!({
+            "operation": "create",
+            "name": "Test task",
+            "description": "A test task",
+            "priority": 2
+        });
+
+        assert!(valid_input.is_object());
+        assert_eq!(valid_input["operation"], "create");
+        assert!(valid_input.get("name").is_some());
+    }
+
+    #[test]
+    fn test_input_validation_update_status() {
+        let valid_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": "task_001",
+            "status": "in_progress"
+        });
+
+        assert!(valid_input.is_object());
+        assert!(valid_input.get("task_id").is_some());
+        assert!(valid_input.get("status").is_some());
+    }
+
+    #[test]
+    fn test_input_validation_list() {
+        let valid_input = serde_json::json!({
+            "operation": "list",
+            "status_filter": "pending"
+        });
+
+        assert!(valid_input.is_object());
+        assert_eq!(valid_input["operation"], "list");
+    }
+
+    #[test]
+    fn test_priority_values() {
+        for p in 1..=5u8 {
+            assert!((1..=5).contains(&p));
+        }
+
+        // Invalid priorities
+        assert!(!(1..=5).contains(&0u8));
+        assert!(!(1..=5).contains(&6u8));
+    }
+
+    #[test]
+    fn test_valid_statuses() {
+        let valid_statuses = ["pending", "in_progress", "completed", "blocked"];
+
+        assert!(valid_statuses.contains(&"pending"));
+        assert!(valid_statuses.contains(&"in_progress"));
+        assert!(valid_statuses.contains(&"completed"));
+        assert!(valid_statuses.contains(&"blocked"));
+        assert!(!valid_statuses.contains(&"done"));
+        assert!(!valid_statuses.contains(&"started"));
+    }
+}

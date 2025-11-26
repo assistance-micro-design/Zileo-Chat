@@ -6,29 +6,103 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 
 ## 1. Todo Tool
 
-**Objectif** : Gestion hiérarchique du workflow et orchestration des tâches agents
+**Objectif** : Gestion hierarchique du workflow et orchestration des taches agents
 
-### Opérations Disponibles
-- Création de tâches structurées
-- Mise à jour du statut en temps réel
-- Réorganisation dynamique des priorités
-- Suppression de tâches obsolètes
+**Implementation** : `src-tauri/src/tools/todo/tool.rs` (TodoTool)
 
-### Structure de Tâche
-```
+### Operations Disponibles (via JSON)
+
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `create` | Creation tache | `name` |
+| `get` | Lecture par ID | `task_id` |
+| `update_status` | Mise a jour statut | `task_id`, `status` |
+| `list` | Liste taches workflow | (aucun) |
+| `complete` | Marquer complete | `task_id` |
+| `delete` | Suppression | `task_id` |
+
+### Structure de Tache
+
+```json
 {
-  nom: string,              // Identificateur unique de la tâche
-  description: string,      // Détails opérationnels
-  agent_assigné: string?,   // Optionnel - Agent responsable
-  priorité: 1-5,           // 1=Critique, 5=Faible
-  status: enum             // pending | in_progress | completed | blocked
+  "id": "uuid",                    // Identifiant unique (genere)
+  "workflow_id": "uuid",           // Workflow associe
+  "name": "string",                // Nom court (max 128 chars)
+  "description": "string",         // Details (max 1000 chars)
+  "agent_assigned": "string?",     // Agent responsable (optionnel)
+  "priority": 1-5,                 // 1=Critique, 5=Faible
+  "status": "enum",                // pending | in_progress | completed | blocked
+  "dependencies": ["uuid"],        // Taches prerequises
+  "duration_ms": "number?",        // Duree execution (si complete)
+  "created_at": "datetime",        // Timestamp creation
+  "completed_at": "datetime?"      // Timestamp completion
 }
 ```
 
+### Exemples d'Utilisation
+
+**Creation de tache**:
+```json
+{
+  "operation": "create",
+  "name": "Analyze code structure",
+  "description": "Deep analysis of src/ directory",
+  "priority": 1
+}
+```
+
+**Mise a jour statut**:
+```json
+{
+  "operation": "update_status",
+  "task_id": "abc-123",
+  "status": "in_progress"
+}
+```
+
+**Completion avec metriques**:
+```json
+{
+  "operation": "complete",
+  "task_id": "abc-123",
+  "duration_ms": 5000
+}
+```
+
+**Liste filtree**:
+```json
+{
+  "operation": "list",
+  "status_filter": "pending"
+}
+```
+
+### Commandes Tauri IPC (Frontend)
+
+| Commande | TypeScript | Rust |
+|----------|------------|------|
+| `create_task` | workflowId, name, description, priority?, agentAssigned?, dependencies? | workflow_id, name, description, priority, agent_assigned, dependencies |
+| `get_task` | taskId | task_id |
+| `list_workflow_tasks` | workflowId | workflow_id |
+| `list_tasks_by_status` | status, workflowId? | status, workflow_id |
+| `update_task` | taskId, updates | task_id, updates |
+| `update_task_status` | taskId, status | task_id, status |
+| `complete_task` | taskId, durationMs? | task_id, duration_ms |
+| `delete_task` | taskId | task_id |
+
 ### Cas d'Usage
 - **Orchestration multi-agents** : Coordination de workflows complexes entre plusieurs agents
-- **Traçabilité** : Suivi de progression pour opérations longues (>3 étapes)
-- **Gestion de dépendances** : Organisation séquentielle ou parallèle des tâches
+- **Tracabilite** : Suivi de progression pour operations longues (>3 etapes)
+- **Gestion de dependances** : Organisation sequentielle ou parallele des taches
+- **Metriques** : Tracking duree execution pour optimisation
+
+### Configuration Agent
+
+Pour activer le TodoTool sur un agent:
+```toml
+[tools]
+enabled = ["TodoTool", "SurrealDBTool"]
+```
 
 ---
 
@@ -197,5 +271,5 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.0
-**Dernière mise à jour** : 2025-11-23
+**Version** : 1.1
+**Derniere mise a jour** : 2025-11-26

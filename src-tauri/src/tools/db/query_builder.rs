@@ -3,15 +3,16 @@
 
 //! Query Builder Tool - SQL/SurrealQL generation.
 
-use crate::models::ToolDefinition;
-use crate::tools::{Tool, ToolError, ToolResult};
+use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use tracing::{debug, instrument};
 
 /// Tool for building SurrealQL queries from natural language or structured input
+#[allow(dead_code)]
 pub struct QueryBuilderTool;
 
+#[allow(dead_code)]
 impl QueryBuilderTool {
     /// Creates a new QueryBuilder tool
     pub fn new() -> Self {
@@ -136,7 +137,11 @@ impl QueryBuilderTool {
                     })
                     .collect();
 
-                format!("DELETE FROM {} WHERE {}", table, where_clauses.join(" AND "))
+                format!(
+                    "DELETE FROM {} WHERE {}",
+                    table,
+                    where_clauses.join(" AND ")
+                )
             } else {
                 return Err(ToolError::InvalidInput(
                     "Delete requires id or where conditions".to_string(),
@@ -165,7 +170,7 @@ impl QueryBuilderTool {
             .ok_or_else(|| ToolError::InvalidInput("Missing to".to_string()))?;
 
         let query = if params.get("data").is_some() {
-            format!("RELATE {}->{}->{{}} CONTENT $data", from, relation, to)
+            format!("RELATE {}->{}-> {} CONTENT $data", from, relation, to)
         } else {
             format!("RELATE {}->{}->{}", from, relation, to)
         };
@@ -182,6 +187,7 @@ impl Default for QueryBuilderTool {
 }
 
 /// Formats a condition for WHERE clause
+#[allow(dead_code)]
 fn format_condition(field: &str, operator: &str, value: &Value) -> String {
     let formatted_value = match value {
         Value::String(s) => format!("'{}'", s.replace('\'', "''")),
@@ -303,7 +309,9 @@ impl Tool for QueryBuilderTool {
 
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
         if !input.is_object() {
-            return Err(ToolError::InvalidInput("Input must be an object".to_string()));
+            return Err(ToolError::InvalidInput(
+                "Input must be an object".to_string(),
+            ));
         }
 
         if input.get("query_type").is_none() {

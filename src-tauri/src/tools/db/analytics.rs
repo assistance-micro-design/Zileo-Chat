@@ -4,19 +4,20 @@
 //! Analytics Tool - Aggregations and graph traversal.
 
 use crate::db::DBClient;
-use crate::models::ToolDefinition;
-use crate::tools::{Tool, ToolError, ToolResult};
+use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
 /// Tool for analytics operations: aggregations and graph traversal
+#[allow(dead_code)]
 pub struct AnalyticsTool {
     /// Database client
     db: Arc<DBClient>,
 }
 
+#[allow(dead_code)]
 impl AnalyticsTool {
     /// Creates a new Analytics tool
     pub fn new(db: Arc<DBClient>) -> Self {
@@ -61,7 +62,10 @@ impl AnalyticsTool {
 
         // Add GROUP BY
         if let Some(gb) = group_by {
-            query = format!("SELECT {}, {} as result FROM {} GROUP BY {}", gb, agg_expr, table, gb);
+            query = format!(
+                "SELECT {}, {} as result FROM {} GROUP BY {}",
+                gb, agg_expr, table, gb
+            );
         }
 
         debug!(query = %query, "Executing aggregation query");
@@ -302,7 +306,9 @@ impl Tool for AnalyticsTool {
 
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
         if !input.is_object() {
-            return Err(ToolError::InvalidInput("Input must be an object".to_string()));
+            return Err(ToolError::InvalidInput(
+                "Input must be an object".to_string(),
+            ));
         }
 
         if input.get("operation").is_none() {

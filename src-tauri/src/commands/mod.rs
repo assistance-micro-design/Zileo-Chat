@@ -66,6 +66,16 @@
 //! - `execute_workflow_streaming` - Execute workflow with real-time events
 //! - `cancel_workflow_streaming` - Cancel streaming execution
 //!
+//! ### Task Commands ([`task`])
+//! - `create_task` - Create a new task for a workflow
+//! - `get_task` - Get a single task by ID
+//! - `list_workflow_tasks` - List all tasks for a workflow
+//! - `list_tasks_by_status` - List tasks filtered by status
+//! - `update_task` - Update task fields (partial)
+//! - `update_task_status` - Update task status specifically
+//! - `complete_task` - Mark task as completed with duration
+//! - `delete_task` - Delete a task
+//!
 //! ### MCP Commands ([`mcp`])
 //! - `list_mcp_servers` - List all configured MCP servers
 //! - `get_mcp_server` - Get a single MCP server by ID
@@ -90,6 +100,7 @@ pub mod memory;
 pub mod models;
 pub mod security;
 pub mod streaming;
+pub mod task;
 pub mod validation;
 pub mod workflow;
 

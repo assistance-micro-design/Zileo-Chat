@@ -4,14 +4,14 @@
 //! SurrealDB Tool - Direct database operations.
 
 use crate::db::DBClient;
-use crate::models::ToolDefinition;
-use crate::tools::{Tool, ToolError, ToolResult};
+use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
 /// Tool for direct SurrealDB operations
+#[allow(dead_code)]
 pub struct SurrealDBTool {
     /// Database client
     db: Arc<DBClient>,
@@ -21,6 +21,7 @@ pub struct SurrealDBTool {
     max_results: usize,
 }
 
+#[allow(dead_code)]
 impl SurrealDBTool {
     /// Creates a new SurrealDB tool
     pub fn new(db: Arc<DBClient>, timeout_ms: u64, max_results: usize) -> Self {
@@ -35,7 +36,10 @@ impl SurrealDBTool {
     #[instrument(skip(self), fields(operation = "select"))]
     async fn execute_select(&self, table: &str, filter: Option<&str>) -> ToolResult<Value> {
         let query = match filter {
-            Some(f) => format!("SELECT * FROM {} WHERE {} LIMIT {}", table, f, self.max_results),
+            Some(f) => format!(
+                "SELECT * FROM {} WHERE {} LIMIT {}",
+                table, f, self.max_results
+            ),
             None => format!("SELECT * FROM {} LIMIT {}", table, self.max_results),
         };
 
@@ -235,11 +239,15 @@ impl Tool for SurrealDBTool {
 
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
         if !input.is_object() {
-            return Err(ToolError::InvalidInput("Input must be an object".to_string()));
+            return Err(ToolError::InvalidInput(
+                "Input must be an object".to_string(),
+            ));
         }
 
         if input.get("operation").is_none() {
-            return Err(ToolError::InvalidInput("Missing operation field".to_string()));
+            return Err(ToolError::InvalidInput(
+                "Missing operation field".to_string(),
+            ));
         }
 
         if input.get("table").is_none() {
