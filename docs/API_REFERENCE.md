@@ -388,75 +388,294 @@ async fn delete_memory(
 
 ---
 
-## Providers
+## LLM Models CRUD
 
-### list_providers
+### list_models
 
-Liste providers LLM configurés.
+Liste tous les modeles LLM (builtin + custom), avec filtre optionnel par provider.
 
 **Frontend**
 ```typescript
-const providers = await invoke<Provider[]>('list_providers');
+const models = await invoke<LLMModel[]>('list_models', {
+  provider: 'mistral' | 'ollama' | null  // Optional filter
+});
 ```
 
-**Provider Type**
-```typescript
-type Provider = {
-  id: string;
-  name: 'Mistral' | 'Ollama' | 'Claude' | 'GPT-4' | 'Gemini'; // Phase 1: Mistral + Ollama
-  status: 'configured' | 'unconfigured' | 'error';
-  models: string[];
-};
+**Backend Signature**
+```rust
+async fn list_models(
+    provider: Option<String>
+) -> Result<Vec<LLMModel>, String>
 ```
+
+**LLMModel Type**
+```typescript
+interface LLMModel {
+  id: string;                    // UUID for custom, api_name for builtin
+  provider: 'mistral' | 'ollama';
+  name: string;                  // Human-readable display name
+  api_name: string;              // Model identifier for API calls
+  context_window: number;        // Max context length (1024 - 2,000,000)
+  max_output_tokens: number;     // Max generation length (256 - 128,000)
+  temperature_default: number;   // Default temperature (0.0 - 2.0)
+  is_builtin: boolean;           // True = system model, cannot delete
+  created_at: string;            // ISO 8601 timestamp
+  updated_at: string;            // ISO 8601 timestamp
+}
+```
+
+**Returns** : Array de modeles correspondant au filtre
+
+**Errors** : Invalid provider, database error
+
+---
+
+### get_model
+
+Recupere un modele par ID.
+
+**Frontend**
+```typescript
+const model = await invoke<LLMModel>('get_model', {
+  id: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_model(
+    id: String
+) -> Result<LLMModel, String>
+```
+
+**Returns** : LLMModel
+
+**Errors** : Model not found, invalid ID
+
+---
+
+### create_model
+
+Cree un nouveau modele custom.
+
+**Frontend**
+```typescript
+const model = await invoke<LLMModel>('create_model', {
+  data: {
+    provider: 'mistral' | 'ollama',
+    name: string,                  // 1-64 chars
+    api_name: string,              // Unique per provider
+    context_window: number,        // 1024 - 2,000,000
+    max_output_tokens: number,     // 256 - 128,000
+    temperature_default?: number   // 0.0 - 2.0, default 0.7
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn create_model(
+    data: CreateModelRequest
+) -> Result<LLMModel, String>
+```
+
+**Returns** : Created LLMModel with generated UUID
+
+**Errors** :
+- Validation failed (name, api_name, context_window, etc.)
+- Duplicate api_name for provider
+
+---
+
+### update_model
+
+Met a jour un modele existant.
+
+**Frontend**
+```typescript
+const model = await invoke<LLMModel>('update_model', {
+  id: string,
+  data: {
+    name?: string,
+    api_name?: string,
+    context_window?: number,
+    max_output_tokens?: number,
+    temperature_default?: number
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_model(
+    id: String,
+    data: UpdateModelRequest
+) -> Result<LLMModel, String>
+```
+
+**Restrictions** :
+- Builtin models: only `temperature_default` can be modified
+- Custom models: all fields modifiable
+
+**Returns** : Updated LLMModel
+
+**Errors** : Model not found, validation failed, builtin restriction
+
+---
+
+### delete_model
+
+Supprime un modele custom.
+
+**Frontend**
+```typescript
+const success = await invoke<boolean>('delete_model', {
+  id: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn delete_model(
+    id: String
+) -> Result<bool, String>
+```
+
+**Restrictions** : Builtin models cannot be deleted
+
+**Returns** : true if deleted
+
+**Errors** : Model not found, cannot delete builtin model
+
+---
+
+## Provider Settings
+
+### get_provider_settings
+
+Recupere la configuration d'un provider.
+
+**Frontend**
+```typescript
+const settings = await invoke<ProviderSettings>('get_provider_settings', {
+  provider: 'mistral' | 'ollama'
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_provider_settings(
+    provider: String
+) -> Result<ProviderSettings, String>
+```
+
+**ProviderSettings Type**
+```typescript
+interface ProviderSettings {
+  provider: 'mistral' | 'ollama';
+  enabled: boolean;
+  default_model_id: string | null;
+  api_key_configured: boolean;  // Never exposes actual key
+  base_url: string | null;      // Custom URL (primarily Ollama)
+  updated_at: string;           // ISO 8601 timestamp
+}
+```
+
+**Returns** : ProviderSettings (default values if not yet configured)
+
+---
+
+### update_provider_settings
+
+Met a jour la configuration d'un provider.
+
+**Frontend**
+```typescript
+// IMPORTANT: Use camelCase for parameter names
+const settings = await invoke<ProviderSettings>('update_provider_settings', {
+  provider: 'mistral' | 'ollama',
+  enabled: boolean | null,
+  defaultModelId: string | null,  // camelCase, not default_model_id
+  baseUrl: string | null          // camelCase, not base_url
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_provider_settings(
+    provider: String,
+    enabled: Option<bool>,
+    default_model_id: Option<String>,
+    base_url: Option<String>
+) -> Result<ProviderSettings, String>
+```
+
+**Upsert Behavior** : Creates settings if not exists, updates otherwise
+
+**Returns** : Updated ProviderSettings
+
+**Errors** : Invalid provider, default_model_id doesn't exist
 
 ---
 
 ### test_provider_connection
 
-Test connexion provider.
+Teste la connexion a un provider.
 
 **Frontend**
 ```typescript
-const result = await invoke<ConnectionTest>('test_provider_connection', {
-  providerId: string
+const result = await invoke<ConnectionTestResult>('test_provider_connection', {
+  provider: 'mistral' | 'ollama'
 });
 ```
 
-**ConnectionTest Type**
-```typescript
-type ConnectionTest = {
-  success: boolean;
-  latency_ms?: number;
-  error?: string;
-};
+**Backend Signature**
+```rust
+async fn test_provider_connection(
+    provider: String
+) -> Result<ConnectionTestResult, String>
 ```
+
+**ConnectionTestResult Type**
+```typescript
+interface ConnectionTestResult {
+  provider: 'mistral' | 'ollama';
+  success: boolean;
+  latency_ms: number | null;     // RTT in milliseconds if successful
+  error_message: string | null;  // Error details if failed
+  model_tested: string | null;   // Model used for test (if applicable)
+}
+```
+
+**Test Methods** :
+- Mistral: GET /v1/models with API key
+- Ollama: GET /api/version
+
+**Timeout** : 10 seconds
+
+**Returns** : ConnectionTestResult (success or failure with details)
 
 ---
 
-### update_provider_config
+### seed_builtin_models
 
-Met à jour configuration provider.
+Seed la database avec les modeles builtin.
 
 **Frontend**
 ```typescript
-await invoke('update_provider_config', {
-  providerId: string,
-  config: ProviderConfig
-});
+const insertedCount = await invoke<number>('seed_builtin_models');
 ```
 
-**ProviderConfig**
-```typescript
-type ProviderConfig = {
-  api_key?: string;
-  endpoint?: string;
-  model_default?: string;
-  rate_limit?: number;
-  timeout?: number;
-};
+**Backend Signature**
+```rust
+async fn seed_builtin_models() -> Result<usize, String>
 ```
 
-**Security** : API keys encryptées avant storage
+**Behavior** :
+- Called automatically at app startup if table is empty
+- Safe to call multiple times (skips existing models)
+
+**Returns** : Number of models inserted
 
 ---
 

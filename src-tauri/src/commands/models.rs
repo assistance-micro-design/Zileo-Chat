@@ -838,19 +838,93 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
 mod tests {
     use super::*;
 
+    // ========================================================================
+    // Validation Helper Tests
+    // ========================================================================
+
     #[test]
-    fn test_validate_model_id() {
+    fn test_validate_model_id_valid() {
+        // Standard UUIDs
+        assert!(validate_model_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
+        // Short IDs
         assert!(validate_model_id("valid-id").is_ok());
-        assert!(validate_model_id("").is_err());
-        assert!(validate_model_id("   ").is_err());
-        assert!(validate_model_id(&"a".repeat(129)).is_err());
+        // API names as IDs (for builtin models)
+        assert!(validate_model_id("mistral-large-latest").is_ok());
+        // Single character
+        assert!(validate_model_id("a").is_ok());
+        // Max length (128 chars)
+        assert!(validate_model_id(&"a".repeat(128)).is_ok());
     }
 
     #[test]
-    fn test_validate_provider_string() {
+    fn test_validate_model_id_invalid() {
+        // Empty string
+        assert!(validate_model_id("").is_err());
+        // Whitespace only
+        assert!(validate_model_id("   ").is_err());
+        assert!(validate_model_id("\t\n").is_err());
+        // Too long (>128 chars)
+        assert!(validate_model_id(&"a".repeat(129)).is_err());
+        assert!(validate_model_id(&"x".repeat(200)).is_err());
+    }
+
+    #[test]
+    fn test_validate_provider_string_valid() {
+        // Lowercase
         assert!(validate_provider_string("mistral").is_ok());
         assert!(validate_provider_string("ollama").is_ok());
+        // Uppercase
         assert!(validate_provider_string("MISTRAL").is_ok());
+        assert!(validate_provider_string("OLLAMA").is_ok());
+        // Mixed case
+        assert!(validate_provider_string("Mistral").is_ok());
+        assert!(validate_provider_string("Ollama").is_ok());
+        assert!(validate_provider_string("MiStRaL").is_ok());
+    }
+
+    #[test]
+    fn test_validate_provider_string_returns_correct_type() {
+        let mistral = validate_provider_string("mistral").unwrap();
+        assert_eq!(mistral, ProviderType::Mistral);
+
+        let ollama = validate_provider_string("OLLAMA").unwrap();
+        assert_eq!(ollama, ProviderType::Ollama);
+    }
+
+    #[test]
+    fn test_validate_provider_string_invalid() {
+        // Unknown providers
         assert!(validate_provider_string("invalid").is_err());
+        assert!(validate_provider_string("claude").is_err());
+        assert!(validate_provider_string("gpt-4").is_err());
+        assert!(validate_provider_string("openai").is_err());
+        // Empty
+        assert!(validate_provider_string("").is_err());
+        // Typos
+        assert!(validate_provider_string("mistrl").is_err());
+        assert!(validate_provider_string("olama").is_err());
+    }
+
+    #[test]
+    fn test_validate_provider_string_error_message() {
+        let err = validate_provider_string("invalid").unwrap_err();
+        assert!(err.contains("Invalid provider"));
+        assert!(err.contains("invalid"));
+    }
+
+    // ========================================================================
+    // Constants Tests
+    // ========================================================================
+
+    #[test]
+    fn test_max_model_id_len_constant() {
+        assert_eq!(MAX_MODEL_ID_LEN, 128);
+    }
+
+    #[test]
+    fn test_valid_providers_constant() {
+        assert_eq!(VALID_PROVIDERS.len(), 2);
+        assert!(VALID_PROVIDERS.contains(&"mistral"));
+        assert!(VALID_PROVIDERS.contains(&"ollama"));
     }
 }
