@@ -42,6 +42,7 @@ pub mod mcp;
 pub mod models;
 pub mod security;
 pub mod state;
+pub mod tools;
 
 pub use commands::SecureKeyStore;
 pub use llm::ProviderManager;

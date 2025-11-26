@@ -44,6 +44,7 @@
 //! ```
 
 pub mod db;
+pub mod factory;
 pub mod memory;
 pub mod todo;
 
@@ -52,9 +53,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
-// Re-export tools (will be used in Phase 6: Agent Integration)
+// Re-export tools for agent integration
 #[allow(unused_imports)]
 pub use db::{AnalyticsTool, QueryBuilderTool, SurrealDBTool};
+#[allow(unused_imports)]
+pub use factory::ToolFactory;
 #[allow(unused_imports)]
 pub use memory::MemoryTool;
 #[allow(unused_imports)]

@@ -50,11 +50,53 @@ pub struct AgentConfig {
     /// LLM configuration
     pub llm: LLMConfig,
     /// List of available tools
+    ///
+    /// Valid tool names include:
+    /// - `MemoryTool` - Contextual memory with semantic search
+    /// - `TodoTool` - Task management for workflow decomposition
+    /// - `SurrealDBTool` - Direct database CRUD operations
+    /// - `QueryBuilderTool` - SurrealQL query generation
+    /// - `AnalyticsTool` - Aggregations and analytics
     pub tools: Vec<String>,
     /// List of MCP servers
     pub mcp_servers: Vec<String>,
     /// System prompt
     pub system_prompt: String,
+}
+
+// Allow dead code until Phase 6: Full Agent Integration
+#[allow(dead_code)]
+impl AgentConfig {
+    /// Validates tool names against known tools.
+    ///
+    /// Returns a list of invalid tool names, or empty if all are valid.
+    ///
+    /// # Known Tools
+    /// - `MemoryTool` - Contextual memory with semantic search
+    /// - `TodoTool` - Task management for workflow decomposition
+    /// - `SurrealDBTool` - Direct database CRUD operations
+    /// - `QueryBuilderTool` - SurrealQL query generation
+    /// - `AnalyticsTool` - Aggregations and analytics
+    pub fn validate_tools(&self) -> Vec<String> {
+        const KNOWN_TOOLS: [&str; 5] = [
+            "MemoryTool",
+            "TodoTool",
+            "SurrealDBTool",
+            "QueryBuilderTool",
+            "AnalyticsTool",
+        ];
+
+        self.tools
+            .iter()
+            .filter(|t| !KNOWN_TOOLS.contains(&t.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    /// Returns true if all configured tools are known.
+    pub fn has_valid_tools(&self) -> bool {
+        self.validate_tools().is_empty()
+    }
 }
 
 /// LLM provider configuration
@@ -170,5 +212,80 @@ mod tests {
         assert_eq!(deserialized.model, llm_config.model);
         assert!((deserialized.temperature - llm_config.temperature).abs() < f32::EPSILON);
         assert_eq!(deserialized.max_tokens, llm_config.max_tokens);
+    }
+
+    #[test]
+    fn test_agent_config_validate_tools_valid() {
+        let config = AgentConfig {
+            id: "test_agent".to_string(),
+            name: "Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+            },
+            tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
+            mcp_servers: vec![],
+            system_prompt: "Test".to_string(),
+        };
+
+        assert!(config.has_valid_tools());
+        assert!(config.validate_tools().is_empty());
+    }
+
+    #[test]
+    fn test_agent_config_validate_tools_invalid() {
+        let config = AgentConfig {
+            id: "test_agent".to_string(),
+            name: "Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+            },
+            tools: vec![
+                "MemoryTool".to_string(),
+                "InvalidTool".to_string(),
+                "AnotherBadTool".to_string(),
+            ],
+            mcp_servers: vec![],
+            system_prompt: "Test".to_string(),
+        };
+
+        assert!(!config.has_valid_tools());
+        let invalid = config.validate_tools();
+        assert_eq!(invalid.len(), 2);
+        assert!(invalid.contains(&"InvalidTool".to_string()));
+        assert!(invalid.contains(&"AnotherBadTool".to_string()));
+    }
+
+    #[test]
+    fn test_agent_config_all_known_tools() {
+        let config = AgentConfig {
+            id: "test_agent".to_string(),
+            name: "Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+            },
+            tools: vec![
+                "MemoryTool".to_string(),
+                "TodoTool".to_string(),
+                "SurrealDBTool".to_string(),
+                "QueryBuilderTool".to_string(),
+                "AnalyticsTool".to_string(),
+            ],
+            mcp_servers: vec![],
+            system_prompt: "Test".to_string(),
+        };
+
+        assert!(config.has_valid_tools());
     }
 }

@@ -4,11 +4,36 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 
 ---
 
+## Statut d'Implementation
+
+| Outil | Statut | Fichier |
+|-------|--------|---------|
+| **TodoTool** | Implemented | `src-tauri/src/tools/todo/tool.rs` |
+| **MemoryTool** | Implemented | `src-tauri/src/tools/memory/tool.rs` |
+| **SurrealDBTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
+| **QueryBuilderTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
+| **AnalyticsTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
+
+### ToolFactory
+
+Les outils sont instancies dynamiquement via `ToolFactory`:
+
+```rust
+use crate::tools::ToolFactory;
+
+let factory = ToolFactory::new(db.clone(), embedding_service);
+let tool = factory.create_tool("MemoryTool", Some("wf_001".into()), "agent_id".into())?;
+```
+
+---
+
 ## 1. Todo Tool
 
 **Objectif** : Gestion hierarchique du workflow et orchestration des taches agents
 
 **Implementation** : `src-tauri/src/tools/todo/tool.rs` (TodoTool)
+
+**Statut** : Implemented
 
 ### Operations Disponibles (via JSON)
 
@@ -108,53 +133,92 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 ## 2. Memory Tool
 
-**Objectif** : Persistance vectorielle dans SurrealDB pour mémoire contextuelle agents
+**Objectif** : Persistance vectorielle dans SurrealDB pour memoire contextuelle agents
+
+**Implementation** : `src-tauri/src/tools/memory/tool.rs` (MemoryTool)
+
+**Statut** : Implemented
 
 ### Architecture
 
-**Base de données** : SurrealDB avec support embeddings vectoriels ([Doc officielle](https://surrealdb.com/docs/surrealdb/models/vector))
+**Base de donnees** : SurrealDB avec support embeddings vectoriels ([Doc officielle](https://surrealdb.com/docs/surrealdb/models/vector))
 
-**Indexation** : HNSW (Hierarchical Navigable Small World) pour recherche haute dimension
+**Indexation** : HNSW (Hierarchical Navigable Small World) avec dimension 1024 (Mistral/Ollama compatible)
 
-**Recherche** : KNN et similarité cosinus pour retrieval sémantique
+**Recherche** : Similarite cosinus pour retrieval semantique
 
-### Opérations Disponibles
+**Embedding Service** : Abstraction multi-provider (`src-tauri/src/llm/embedding.rs`)
+- Mistral: `mistral-embed` (1024D)
+- Ollama: `nomic-embed-text` (768D), `mxbai-embed-large` (1024D)
 
-#### Workflow
-- `activate_workflow` : Activation contexte workflow spécifique
-- `activate_general` : Mode général sans scope particulier
+### Operations Disponibles (via JSON)
 
-#### Mémoire
-- `add_memory` : Ajout nouvelle entrée vectorielle
-- `write_memory` : Écriture/remplacement mémoire existante
-- `read_memory` : Lecture par ID ou recherche sémantique
-- `list_memories` : Liste toutes entrées disponibles
-- `edit_memory` : Modification partielle d'une entrée
-- `delete_memory` : Suppression définitive
-- `replace_content` : Remplacement de contenu dans mémoire
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `activate_workflow` | Activation scope workflow | `workflow_id` |
+| `activate_general` | Mode general (cross-workflow) | (aucun) |
+| `add` | Ajout memoire avec embedding | `type`, `content` |
+| `get` | Lecture par ID | `memory_id` |
+| `list` | Liste avec filtres | (aucun) |
+| `search` | Recherche semantique | `query` |
+| `delete` | Suppression | `memory_id` |
+| `clear_by_type` | Suppression en masse par type | `type` |
 
-#### Recherche
-- `search_for_pattern` : Recherche pattern-matching dans mémoires
-- `think_about_collected_information` : Analyse métacognitive des données collectées
-- `think_about_task_adherence` : Validation conformité objectifs
-- `think_about_whether_you_are_done` : Évaluation complétude tâche
+### Exemples d'Utilisation
 
-### Structure de Mémoire Recommandée
-
-```
+**Activation scope workflow**:
+```json
 {
-  id: uuid,                    // Identifiant unique
-  type: enum,                  // user_pref | context | knowledge | decision
-  content: string,             // Contenu textuel
-  embedding: float[],          // Vecteur dense (dim: 768-1536)
-  metadata: {
-    agent_source: string,      // Agent créateur
-    timestamp: datetime,       // Horodatage création
-    workflow_id: string?,      // Association workflow si applicable
-    priority: number,          // Importance (0.0-1.0)
-    tags: string[]            // Classification sémantique
+  "operation": "activate_workflow",
+  "workflow_id": "wf_abc123"
+}
+```
+
+**Ajout memoire avec embedding**:
+```json
+{
+  "operation": "add",
+  "type": "knowledge",
+  "content": "SurrealDB supports HNSW vector indexing for semantic search",
+  "metadata": {"priority": 0.8},
+  "tags": ["database", "vector-search"]
+}
+```
+
+**Recherche semantique**:
+```json
+{
+  "operation": "search",
+  "query": "vector database indexing",
+  "limit": 5,
+  "threshold": 0.7
+}
+```
+
+**Liste filtree**:
+```json
+{
+  "operation": "list",
+  "type_filter": "knowledge",
+  "limit": 20
+}
+```
+
+### Structure de Memoire
+
+```json
+{
+  "id": "uuid",
+  "type": "user_pref | context | knowledge | decision",
+  "content": "string (max 50000 chars)",
+  "embedding": [0.1, 0.2, ...],
+  "workflow_id": "string?",
+  "metadata": {
+    "agent_source": "string",
+    "priority": 0.0-1.0,
+    "tags": ["string"]
   },
-  relations: uuid[]           // Liens vers autres mémoires
+  "created_at": "datetime"
 }
 ```
 
@@ -271,5 +335,6 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.1
+**Version** : 1.2
 **Derniere mise a jour** : 2025-11-26
+**Phase** : Memory Tool Phase 4 Integration Complete

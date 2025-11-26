@@ -300,11 +300,13 @@ mod tests {
         std::mem::forget(temp_dir);
 
         AppState {
-            db,
+            db: db.clone(),
             registry,
             orchestrator,
             llm_manager,
             mcp_manager,
+            tool_factory: Arc::new(crate::tools::ToolFactory::new(db, None)),
+            embedding_service: Arc::new(tokio::sync::RwLock::new(None)),
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),

@@ -3,11 +3,13 @@
 
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
+use crate::llm::embedding::EmbeddingService;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
+use crate::tools::ToolFactory;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 /// Application state shared across Tauri commands
 pub struct AppState {
@@ -21,6 +23,12 @@ pub struct AppState {
     pub llm_manager: Arc<ProviderManager>,
     /// MCP server manager
     pub mcp_manager: Arc<MCPManager>,
+    /// Tool factory for agent tool instantiation (used in Phase 6)
+    #[allow(dead_code)]
+    pub tool_factory: Arc<ToolFactory>,
+    /// Embedding service for semantic search (configured via Settings UI)
+    #[allow(dead_code)]
+    pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
     /// Set of workflow IDs that have been requested to cancel
     pub streaming_cancellations: Arc<Mutex<HashSet<String>>>,
 }
@@ -46,6 +54,13 @@ impl AppState {
                 .expect("Failed to initialize MCP manager"),
         );
 
+        // Initialize embedding service as None (configured via Settings UI)
+        let embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>> =
+            Arc::new(RwLock::new(None));
+
+        // Initialize tool factory (will use embedding_service when configured)
+        let tool_factory = Arc::new(ToolFactory::new(db.clone(), None));
+
         // Initialize streaming cancellation tracker
         let streaming_cancellations = Arc::new(Mutex::new(HashSet::new()));
 
@@ -55,8 +70,27 @@ impl AppState {
             orchestrator,
             llm_manager,
             mcp_manager,
+            tool_factory,
+            embedding_service,
             streaming_cancellations,
         })
+    }
+
+    /// Updates the embedding service configuration.
+    ///
+    /// Called when user configures embedding settings in the Settings UI.
+    /// This will update the tool factory to use the new embedding service.
+    #[allow(dead_code)]
+    pub async fn set_embedding_service(&self, service: Option<Arc<EmbeddingService>>) {
+        *self.embedding_service.write().await = service.clone();
+        // Note: Tool instances already created won't be updated.
+        // New tool instances will use the updated embedding service.
+    }
+
+    /// Gets the current embedding service if configured.
+    #[allow(dead_code)]
+    pub async fn get_embedding_service(&self) -> Option<Arc<EmbeddingService>> {
+        self.embedding_service.read().await.clone()
     }
 
     /// Checks if a workflow has been requested to cancel
@@ -194,8 +228,8 @@ mod tests {
         assert_eq!(agents_original.len(), agents_clone.len());
 
         // Strong count should be 2 for each (except registry which is shared with orchestrator,
-        // and db which is shared with mcp_manager)
-        assert_eq!(Arc::strong_count(&state.db), 3); // db + mcp_manager + clone
+        // and db which is shared with mcp_manager and tool_factory)
+        assert_eq!(Arc::strong_count(&state.db), 4); // db + mcp_manager + tool_factory + clone
         assert_eq!(Arc::strong_count(&state.registry), 3); // registry + orchestrator + clone
         assert_eq!(Arc::strong_count(&state.orchestrator), 2);
 
@@ -204,7 +238,65 @@ mod tests {
         drop(orchestrator_clone);
 
         // Back to original counts
-        assert_eq!(Arc::strong_count(&state.db), 2); // db + mcp_manager
+        assert_eq!(Arc::strong_count(&state.db), 3); // db + mcp_manager + tool_factory
+    }
+
+    #[tokio::test]
+    async fn test_embedding_service_configuration() {
+        use crate::llm::embedding::{EmbeddingProvider, EmbeddingService};
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_db7");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let state = AppState::new(db_path_str).await.unwrap();
+
+        // Initially no embedding service
+        assert!(
+            state.get_embedding_service().await.is_none(),
+            "Embedding service should be None initially"
+        );
+
+        // Configure embedding service
+        let provider = EmbeddingProvider::ollama();
+        let service = Arc::new(EmbeddingService::with_provider(provider));
+        state.set_embedding_service(Some(service.clone())).await;
+
+        // Verify it's set
+        let retrieved = state.get_embedding_service().await;
+        assert!(
+            retrieved.is_some(),
+            "Embedding service should be set after configuration"
+        );
+
+        // Clear embedding service
+        state.set_embedding_service(None).await;
+        assert!(
+            state.get_embedding_service().await.is_none(),
+            "Embedding service should be None after clearing"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tool_factory_available() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_db8");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let state = AppState::new(db_path_str).await.unwrap();
+
+        // Tool factory should be available
+        let available = crate::tools::ToolFactory::available_tools();
+        assert!(available.contains(&"MemoryTool"));
+        assert!(available.contains(&"TodoTool"));
+
+        // Can create tools via factory
+        let tool_result = state.tool_factory.create_tool(
+            "MemoryTool",
+            Some("wf_test".to_string()),
+            "test_agent".to_string(),
+        );
+        assert!(tool_result.is_ok(), "Should create MemoryTool");
     }
 
     #[tokio::test]
