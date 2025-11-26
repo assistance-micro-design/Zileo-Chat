@@ -56,15 +56,29 @@ DEFINE FIELD risk_level ON validation_request TYPE string ASSERT $value IN ['low
 DEFINE FIELD status ON validation_request TYPE string DEFAULT 'pending' ASSERT $value IN ['pending', 'approved', 'rejected'];
 DEFINE FIELD created_at ON validation_request TYPE datetime DEFAULT time::now();
 
--- Table: task (décomposition workflows)
+-- Table: task (decomposition workflows with Todo Tool support)
 DEFINE TABLE task SCHEMAFULL;
 DEFINE FIELD id ON task TYPE string;
 DEFINE FIELD workflow_id ON task TYPE string;
-DEFINE FIELD description ON task TYPE string;
-DEFINE FIELD status ON task TYPE string DEFAULT 'pending' ASSERT $value IN ['pending', 'in_progress', 'completed', 'blocked'];
+DEFINE FIELD name ON task TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 128;
+DEFINE FIELD description ON task TYPE string
+    ASSERT string::len($value) <= 1000;
+DEFINE FIELD agent_assigned ON task TYPE option<string>;
+DEFINE FIELD priority ON task TYPE int DEFAULT 3
+    ASSERT $value >= 1 AND $value <= 5;
+DEFINE FIELD status ON task TYPE string DEFAULT 'pending'
+    ASSERT $value IN ['pending', 'in_progress', 'completed', 'blocked'];
 DEFINE FIELD dependencies ON task TYPE array<string>;
+DEFINE FIELD duration_ms ON task TYPE option<int>;
 DEFINE FIELD created_at ON task TYPE datetime DEFAULT time::now();
 DEFINE FIELD completed_at ON task TYPE option<datetime>;
+
+-- Indexes for task queries
+DEFINE INDEX task_workflow_idx ON task FIELDS workflow_id;
+DEFINE INDEX task_status_idx ON task FIELDS status;
+DEFINE INDEX task_priority_idx ON task FIELDS priority;
+DEFINE INDEX task_agent_idx ON task FIELDS agent_assigned;
 
 -- Relations graph
 DEFINE TABLE workflow_agent SCHEMAFULL;

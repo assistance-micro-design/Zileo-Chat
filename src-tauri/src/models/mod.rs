@@ -8,6 +8,7 @@ pub mod memory;
 pub mod message;
 pub mod serde_utils;
 pub mod streaming;
+pub mod task;
 pub mod validation;
 pub mod workflow;
 
@@ -17,6 +18,9 @@ pub use workflow::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, Wo
 // Re-export types for Phase 5 implementation
 pub use memory::{Memory, MemoryCreate, MemorySearchResult, MemoryType};
 pub use streaming::{StreamChunk, WorkflowComplete};
+// Re-export task types for Phase 2 Commands implementation (currently unused)
+#[allow(unused_imports)]
+pub use task::{Task, TaskCreate, TaskPriority, TaskStatus, TaskUpdate};
 pub use validation::{
     RiskLevel, ValidationRequest, ValidationRequestCreate, ValidationStatus, ValidationType,
 };
