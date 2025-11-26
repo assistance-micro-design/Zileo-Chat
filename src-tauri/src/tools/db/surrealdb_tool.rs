@@ -110,9 +110,8 @@ impl SurrealDBTool {
         let query = format!("DELETE {}:{}", table, id);
         debug!(query = %query, "Executing DELETE query");
 
-        let result: Result<Vec<Value>, _> = self.db.query(&query).await;
-
-        match result {
+        // Use execute() for DELETE to avoid SurrealDB SDK serialization issues
+        match self.db.execute(&query).await {
             Ok(_) => Ok(serde_json::json!({
                 "operation": "delete",
                 "table": table,

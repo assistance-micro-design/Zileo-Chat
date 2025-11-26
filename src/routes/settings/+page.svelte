@@ -23,6 +23,7 @@ Includes MCP server configuration section for managing external tool servers.
 	import { Card, Button, Input, Select, StatusIndicator, Modal } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
+	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -72,7 +73,8 @@ Includes MCP server configuration section for managing external tool servers.
 		Moon,
 		ShieldCheck,
 		Plus,
-		Plug
+		Plug,
+		Brain
 	} from 'lucide-svelte';
 
 	/** Settings state (for API key input) */
@@ -113,6 +115,7 @@ Includes MCP server configuration section for managing external tool servers.
 		{ id: 'providers', label: 'Providers', icon: Globe },
 		{ id: 'models', label: 'Models', icon: Cpu },
 		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
+		{ id: 'memory', label: 'Memory', icon: Brain },
 		{ id: 'theme', label: 'Theme', icon: Palette }
 	] as const;
 
@@ -769,6 +772,25 @@ Includes MCP server configuration section for managing external tool servers.
 			{/if}
 		</section>
 
+		<!-- Memory Section -->
+		<section id="memory" class="settings-section">
+			<h2 class="section-title">Memory</h2>
+
+			<div class="memory-subsections">
+				<!-- Embedding Configuration -->
+				<div class="memory-subsection">
+					<h3 class="subsection-title">Embedding Configuration</h3>
+					<MemorySettings />
+				</div>
+
+				<!-- Memory Management -->
+				<div class="memory-subsection">
+					<h3 class="subsection-title">Memory Management</h3>
+					<MemoryList />
+				</div>
+			</div>
+		</section>
+
 		<!-- Theme Section -->
 		<section id="theme" class="settings-section">
 			<h2 class="section-title">Theme</h2>
@@ -1095,6 +1117,27 @@ Includes MCP server configuration section for managing external tool servers.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
+	}
+
+	/* Memory Section */
+	.memory-subsections {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xl);
+	}
+
+	.memory-subsection {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-lg);
+	}
+
+	.subsection-title {
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-secondary);
+		padding-bottom: var(--spacing-sm);
+		border-bottom: 1px solid var(--color-border);
 	}
 
 	/* Provider Cards */

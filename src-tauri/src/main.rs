@@ -224,7 +224,7 @@ async fn main() -> anyhow::Result<()> {
                     model.temperature_default
                 );
 
-                if app_state.db.db.query(&insert_query).await.is_ok() {
+                if app_state.db.execute(&insert_query).await.is_ok() {
                     inserted += 1;
                 }
             }
@@ -244,6 +244,9 @@ async fn main() -> anyhow::Result<()> {
     // Initialize secure keystore
     let keystore = commands::SecureKeyStore::default();
     tracing::info!("Secure keystore initialized");
+
+    // Initialize embedding service from saved configuration (if any)
+    app_state.initialize_embedding_from_config(&keystore).await;
 
     // Run Tauri application
     tauri::Builder::default()
@@ -325,6 +328,15 @@ async fn main() -> anyhow::Result<()> {
             // Migration commands (Memory Tool Phase 2)
             commands::migration::migrate_memory_schema,
             commands::migration::get_memory_schema_status,
+            // Embedding commands (Memory Tool Phase 5)
+            commands::embedding::get_embedding_config,
+            commands::embedding::save_embedding_config,
+            commands::embedding::test_embedding,
+            commands::embedding::get_memory_stats,
+            commands::embedding::update_memory,
+            commands::embedding::export_memories,
+            commands::embedding::import_memories,
+            commands::embedding::regenerate_embeddings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

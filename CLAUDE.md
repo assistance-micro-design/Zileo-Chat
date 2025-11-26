@@ -373,6 +373,47 @@ let data: Vec<T> = json_results
     .collect::<Result<Vec<T>, _>>()?;
 ```
 
+**Write Operations (UPSERT/UPDATE/DELETE)** - Use `execute()` to avoid result deserialization:
+```rust
+// WRONG - query() tries to deserialize the returned record (Thing type issues)
+let _: Vec<serde_json::Value> = db.query("UPSERT settings:`key` CONTENT {...}").await?;
+
+// CORRECT - execute() runs query without deserializing result
+db.execute("UPSERT settings:`key` CONTENT {...}").await?;
+db.execute("UPDATE memory:`uuid` SET content = \"value\"").await?;
+db.execute("DELETE memory:`uuid`").await?;
+```
+
+**String Values** - Use JSON encoding for proper escaping (apostrophes, quotes, etc.):
+```rust
+// WRONG - Single quote escaping doesn't work in SurrealDB
+format!("content = '{}'", text.replace('\'', "''"))  // l'eau -> l''eau (parse error)
+
+// CORRECT - JSON string encoding handles all special characters
+let json_str = serde_json::to_string(&text)?;  // l'eau -> "l'eau"
+format!("content = {}", json_str)
+```
+
+**Delete Records** - Use `execute()` with DELETE query, not `db.delete()`:
+```rust
+// WRONG - db.delete() has issues with table:id format
+db.delete("memory:uuid").await?;  // Error: table name contains colon
+
+// CORRECT - Use raw DELETE query with backtick-escaped ID
+db.execute(&format!("DELETE memory:`{}`", uuid)).await?;
+```
+
+**ORDER BY with Explicit Fields** - Include ORDER BY fields in SELECT:
+```rust
+// WRONG - ORDER BY field must be in SELECT when using explicit field selection
+"SELECT meta::id(id) AS id, content FROM memory ORDER BY created_at DESC"
+
+// CORRECT - Either include the field or remove ORDER BY
+"SELECT meta::id(id) AS id, content, created_at FROM memory ORDER BY created_at DESC"
+// OR if order doesn't matter:
+"SELECT meta::id(id) AS id, content FROM memory"
+```
+
 ## Security Considerations
 
 **Production-ready from v1**:

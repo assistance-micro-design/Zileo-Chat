@@ -1153,3 +1153,492 @@ mod tests {
         assert!(clamped.abs() < f64::EPSILON);
     }
 }
+
+/// Integration tests that require a real MemoryTool instance with database.
+///
+/// These tests validate the complete validate_input behavior with proper error handling.
+#[cfg(test)]
+mod validate_input_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// Creates a test MemoryTool with a temporary database.
+    async fn create_test_tool() -> (MemoryTool, tempfile::TempDir) {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_validate_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        let tool = MemoryTool::new(
+            db,
+            None,
+            Some("wf_test".to_string()),
+            "test_agent".to_string(),
+        );
+
+        (tool, temp_dir)
+    }
+
+    // =========================================================================
+    // validate_input: Invalid input structure tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_non_object() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!("not an object"));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Input must be an object"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_missing_operation() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({"type": "knowledge"}));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing operation field"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_unknown_operation() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "unknown_op"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Unknown operation"));
+                assert!(msg.contains("unknown_op"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    // =========================================================================
+    // validate_input: activate_workflow tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_activate_workflow_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "activate_workflow",
+            "workflow_id": "wf_123"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_activate_workflow_missing_id() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "activate_workflow"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'workflow_id'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    // =========================================================================
+    // validate_input: activate_general tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_activate_general_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "activate_general"
+        }));
+        assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // validate_input: add operation tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_add_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "add",
+            "type": "knowledge",
+            "content": "Test content"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_add_valid_with_metadata() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "add",
+            "type": "user_pref",
+            "content": "User prefers dark mode",
+            "metadata": {"priority": 0.8},
+            "tags": ["ui", "preference"]
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_add_missing_type() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "add",
+            "content": "Test content"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'type'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_add_missing_content() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "add",
+            "type": "knowledge"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'content'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_add_invalid_type() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "add",
+            "type": "invalid_type",
+            "content": "Test content"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Invalid type"));
+                assert!(msg.contains("invalid_type"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_add_all_valid_types() {
+        let (tool, _temp) = create_test_tool().await;
+
+        for memory_type in &["user_pref", "context", "knowledge", "decision"] {
+            let result = tool.validate_input(&serde_json::json!({
+                "operation": "add",
+                "type": memory_type,
+                "content": "Test content"
+            }));
+            assert!(result.is_ok(), "Type '{}' should be valid", memory_type);
+        }
+    }
+
+    // =========================================================================
+    // validate_input: get/delete operation tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_get_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "get",
+            "memory_id": "mem_abc123"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_get_missing_id() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "get"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'memory_id'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_delete_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "delete",
+            "memory_id": "mem_abc123"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_delete_missing_id() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "delete"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'memory_id'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    // =========================================================================
+    // validate_input: list operation tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_list_valid_no_params() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "list"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_list_valid_with_filter() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "list",
+            "type_filter": "knowledge",
+            "limit": 20
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_list_invalid_type_filter() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "list",
+            "type_filter": "invalid_filter"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Invalid type_filter"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    // =========================================================================
+    // validate_input: search operation tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_search_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "find relevant information"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_valid_with_options() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "vector database",
+            "limit": 5,
+            "type_filter": "knowledge",
+            "threshold": 0.8
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_missing_query() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'query'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_invalid_type_filter() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "test",
+            "type_filter": "bad_filter"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Invalid type_filter"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_threshold_too_high() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "test",
+            "threshold": 1.5
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Threshold"));
+                assert!(msg.contains("must be between 0 and 1"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_threshold_negative() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "test",
+            "threshold": -0.5
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Threshold"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_search_threshold_boundary_values() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Threshold = 0.0 should be valid
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "test",
+            "threshold": 0.0
+        }));
+        assert!(result.is_ok(), "Threshold 0.0 should be valid");
+
+        // Threshold = 1.0 should be valid
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "search",
+            "query": "test",
+            "threshold": 1.0
+        }));
+        assert!(result.is_ok(), "Threshold 1.0 should be valid");
+    }
+
+    // =========================================================================
+    // validate_input: clear_by_type operation tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_clear_by_type_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "clear_by_type",
+            "type": "context"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_clear_by_type_missing_type() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "clear_by_type"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Missing 'type'"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_clear_by_type_invalid_type() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "clear_by_type",
+            "type": "nonexistent"
+        }));
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                assert!(msg.contains("Invalid type"));
+            }
+            _ => panic!("Expected ValidationFailed error"),
+        }
+    }
+}

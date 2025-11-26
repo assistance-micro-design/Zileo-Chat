@@ -296,7 +296,7 @@ pub async fn create_model(
         model.temperature_default
     );
 
-    state.db.db.query(&insert_query).await.map_err(|e| {
+    state.db.execute(&insert_query).await.map_err(|e| {
         error!(error = %e, "Failed to create model");
         format!("Failed to create model: {}", e)
     })?;
@@ -405,7 +405,7 @@ pub async fn update_model(
 
     let update_query = format!("UPDATE llm_model:`{}` SET {}", id, set_parts.join(", "));
 
-    state.db.db.query(&update_query).await.map_err(|e| {
+    state.db.execute(&update_query).await.map_err(|e| {
         error!(error = %e, "Failed to update model");
         format!("Failed to update model: {}", e)
     })?;
@@ -451,7 +451,7 @@ pub async fn delete_model(id: String, state: State<'_, AppState>) -> Result<bool
 
     let delete_query = format!("DELETE llm_model:`{}`", id);
 
-    state.db.db.query(&delete_query).await.map_err(|e| {
+    state.db.execute(&delete_query).await.map_err(|e| {
         error!(error = %e, "Failed to delete model");
         format!("Failed to delete model: {}", e)
     })?;
@@ -626,7 +626,7 @@ pub async fn update_provider_settings(
 
     info!(query = %upsert_query, "Executing UPSERT query");
 
-    state.db.db.query(&upsert_query).await.map_err(|e| {
+    state.db.execute(&upsert_query).await.map_err(|e| {
         error!(error = %e, "Failed to update provider settings");
         format!("Failed to update settings: {}", e)
     })?;
@@ -813,7 +813,7 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
                 model.temperature_default
             );
 
-            state.db.db.query(&insert_query).await.map_err(|e| {
+            state.db.execute(&insert_query).await.map_err(|e| {
                 error!(error = %e, model_id = %model.id, "Failed to insert builtin model");
                 format!("Failed to insert model {}: {}", model.id, e)
             })?;

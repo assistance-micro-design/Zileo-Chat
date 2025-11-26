@@ -116,6 +116,77 @@ impl AppState {
             .await
             .remove(workflow_id);
     }
+
+    /// Initializes the embedding service from saved configuration.
+    ///
+    /// Called on app startup to restore embedding configuration from the database.
+    /// Requires the SecureKeyStore to retrieve API keys for cloud providers.
+    pub async fn initialize_embedding_from_config(
+        &self,
+        keystore: &crate::commands::SecureKeyStore,
+    ) {
+        use crate::llm::embedding::{EmbeddingProvider, EmbeddingService};
+        use crate::models::EmbeddingConfigSettings;
+
+        // Load config from database
+        let query = "SELECT * FROM settings WHERE id = 'settings:embedding_config'";
+        let results: Vec<serde_json::Value> = match self.db.query(query).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!(error = %e, "No embedding config found in database");
+                return;
+            }
+        };
+
+        // Parse config from result
+        let config: EmbeddingConfigSettings = match results
+            .first()
+            .and_then(|row| row.get("config"))
+            .and_then(|c| serde_json::from_value(c.clone()).ok())
+        {
+            Some(c) => c,
+            None => {
+                tracing::debug!("No embedding config stored, using defaults on first save");
+                return;
+            }
+        };
+
+        tracing::info!(
+            provider = %config.provider,
+            model = %config.model,
+            "Loading embedding configuration from database"
+        );
+
+        // Create embedding provider based on config
+        let provider = match config.provider.as_str() {
+            "ollama" => Some(EmbeddingProvider::ollama_with_config(
+                "http://localhost:11434",
+                &config.model,
+            )),
+            "mistral" => {
+                // Get API key from SecureKeyStore
+                if let Some(api_key) = keystore.get_key("Mistral") {
+                    Some(EmbeddingProvider::mistral_with_model(
+                        &api_key,
+                        &config.model,
+                    ))
+                } else {
+                    tracing::warn!("Mistral API key not found, embedding service not initialized");
+                    None
+                }
+            }
+            _ => {
+                tracing::warn!(provider = %config.provider, "Unknown embedding provider");
+                None
+            }
+        };
+
+        if let Some(provider) = provider {
+            let service = EmbeddingService::with_provider(provider);
+            *self.embedding_service.write().await = Some(Arc::new(service));
+            tracing::info!("Embedding service initialized from saved configuration");
+        }
+    }
 }
 
 #[cfg(test)]

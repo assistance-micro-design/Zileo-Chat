@@ -92,6 +92,23 @@ impl DBClient {
         Ok(data)
     }
 
+    /// Executes a query without deserializing the result.
+    ///
+    /// Use this for UPSERT, CREATE, UPDATE, DELETE operations where you don't need
+    /// the returned data and want to avoid SurrealDB SDK serialization issues.
+    #[instrument(name = "db_execute", skip(self), fields(query_len = query.len()))]
+    pub async fn execute(&self, query: &str) -> Result<()> {
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing query (no result)");
+
+        self.db.query(query).await.map_err(|e| {
+            error!(error = %e, "Query execution failed");
+            e
+        })?;
+
+        debug!("Query executed successfully");
+        Ok(())
+    }
+
     /// Creates a new record in the specified table with a specific ID
     ///
     /// Uses a SurrealQL CREATE query with CONTENT to avoid SDK serialization issues.

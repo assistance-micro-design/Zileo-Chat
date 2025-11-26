@@ -389,7 +389,8 @@ pub async fn update_task(
         set_parts.join(", ")
     );
 
-    let _: Vec<serde_json::Value> = state.db.query(&query).await.map_err(|e| {
+    // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
+    state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to update task");
         format!("Database error: {}", e)
     })?;
@@ -432,7 +433,8 @@ pub async fn update_task_status(
 
     let query = format!("UPDATE task:`{}` SET status = '{}'", validated_id, status);
 
-    let _: Vec<serde_json::Value> = state.db.query(&query).await.map_err(|e| {
+    // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
+    state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to update task status");
         format!("Database error: {}", e)
     })?;
@@ -475,7 +477,8 @@ pub async fn complete_task(
         validated_id, duration_part
     );
 
-    let _: Vec<serde_json::Value> = state.db.query(&query).await.map_err(|e| {
+    // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
+    state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to complete task");
         format!("Database error: {}", e)
     })?;

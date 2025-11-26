@@ -335,6 +335,15 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.2
+**Version** : 1.3
 **Derniere mise a jour** : 2025-11-26
-**Phase** : Memory Tool Phase 4 Integration Complete
+**Phase** : Memory Tool Phase 6 Testing & Documentation Complete
+
+### Test Coverage
+
+| Component | Tests | Coverage |
+|-----------|-------|----------|
+| **MemoryTool Unit** | 40+ tests | validate_input, operations |
+| **MemoryTool Integration** | 15+ tests | CRUD, workflow isolation, search |
+| **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
+| **Memory Types (TS)** | 15+ tests | Type structure, compatibility |

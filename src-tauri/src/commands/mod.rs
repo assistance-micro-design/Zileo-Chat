@@ -92,12 +92,23 @@
 //! - `migrate_memory_schema` - Migrate memory table for vector search
 //! - `get_memory_schema_status` - Get memory schema status
 //!
+//! ### Embedding Commands ([`embedding`])
+//! - `get_embedding_config` - Get current embedding configuration
+//! - `save_embedding_config` - Save embedding configuration
+//! - `test_embedding` - Test embedding generation
+//! - `get_memory_stats` - Get memory statistics for dashboard
+//! - `update_memory` - Update an existing memory entry
+//! - `export_memories` - Export memories to JSON/CSV
+//! - `import_memories` - Import memories from JSON
+//! - `regenerate_embeddings` - Regenerate embeddings for existing memories
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
 //! to prevent injection attacks and ensure data integrity.
 
 pub mod agent;
+pub mod embedding;
 pub mod llm;
 pub mod mcp;
 pub mod memory;

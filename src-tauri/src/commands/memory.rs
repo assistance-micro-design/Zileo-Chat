@@ -95,12 +95,17 @@ pub async fn list_memories(
 ) -> Result<Vec<Memory>, String> {
     info!("Loading memories");
 
+    // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
+    // serialization issues with internal Thing type (see CLAUDE.md)
     let query = match type_filter {
         Some(ref mtype) => format!(
-            "SELECT * FROM memory WHERE type = '{}' ORDER BY created_at DESC",
+            "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+             FROM memory WHERE type = '{}' ORDER BY created_at DESC",
             mtype
         ),
-        None => "SELECT * FROM memory ORDER BY created_at DESC".to_string(),
+        None => "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+                 FROM memory ORDER BY created_at DESC"
+            .to_string(),
     };
 
     let memories: Vec<Memory> = state.db.query(&query).await.map_err(|e| {
@@ -130,10 +135,13 @@ pub async fn get_memory(memory_id: String, state: State<'_, AppState>) -> Result
         format!("Invalid memory ID: {}", e)
     })?;
 
+    // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
+    // serialization issues with internal Thing type (see CLAUDE.md)
     let memories: Vec<Memory> = state
         .db
         .query(&format!(
-            "SELECT * FROM memory WHERE id = '{}'",
+            "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+             FROM memory WHERE meta::id(id) = '{}'",
             validated_id
         ))
         .await
@@ -163,14 +171,12 @@ pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Res
         format!("Invalid memory ID: {}", e)
     })?;
 
-    state
-        .db
-        .delete(&format!("memory:{}", validated_id))
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to delete memory");
-            format!("Failed to delete memory: {}", e)
-        })?;
+    // Use execute() with DELETE query to avoid SurrealDB SDK issues with delete() method
+    let delete_query = format!("DELETE memory:`{}`", validated_id);
+    state.db.execute(&delete_query).await.map_err(|e| {
+        error!(error = %e, "Failed to delete memory");
+        format!("Failed to delete memory: {}", e)
+    })?;
 
     info!("Memory entry deleted successfully");
     Ok(())
@@ -212,15 +218,20 @@ pub async fn search_memories(
 
     // Build search query with basic text matching
     // Note: This uses SurrealDB's string matching; vector search will be added later
+    // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
+    // serialization issues with internal Thing type (see CLAUDE.md)
     let search_query = match type_filter {
         Some(ref mtype) => format!(
-            "SELECT * FROM memory WHERE type = '{}' AND content CONTAINS '{}' ORDER BY created_at DESC LIMIT {}",
+            "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+             FROM memory WHERE type = '{}' AND content CONTAINS '{}' \
+             ORDER BY created_at DESC LIMIT {}",
             mtype,
             trimmed_query.replace('\'', "''"),
             result_limit
         ),
         None => format!(
-            "SELECT * FROM memory WHERE content CONTAINS '{}' ORDER BY created_at DESC LIMIT {}",
+            "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+             FROM memory WHERE content CONTAINS '{}' ORDER BY created_at DESC LIMIT {}",
             trimmed_query.replace('\'', "''"),
             result_limit
         ),
@@ -291,9 +302,10 @@ pub async fn clear_memories_by_type(
         .unwrap_or(0) as usize;
 
     // Delete all memories of the specified type
+    // Use execute() for DELETE to avoid SurrealDB SDK serialization issues
     let delete_query = format!("DELETE FROM memory WHERE type = '{}'", memory_type);
 
-    let _: Vec<serde_json::Value> = state.db.query(&delete_query).await.map_err(|e| {
+    state.db.execute(&delete_query).await.map_err(|e| {
         error!(error = %e, "Failed to clear memories");
         format!("Failed to clear memories: {}", e)
     })?;

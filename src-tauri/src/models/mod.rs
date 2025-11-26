@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod embedding;
 pub mod llm_models;
 pub mod mcp;
 pub mod memory;
@@ -58,3 +59,9 @@ pub use llm_models::{
 // Re-export builtin model data (Phase 2 will use these for seeding)
 #[allow(unused_imports)]
 pub use llm_models::{get_all_builtin_models, MISTRAL_BUILTIN_MODELS, OLLAMA_BUILTIN_MODELS};
+
+// Re-export embedding settings types for Phase 5 implementation
+pub use embedding::{
+    EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult, MemoryStats,
+    RegenerateResult,
+};
