@@ -1,310 +1,360 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { get } from 'svelte/store';
 import {
-	createInitialAgentState,
-	setAgentIds,
-	addAgentConfig,
-	removeAgent,
-	selectAgent,
-	setAgentLoading,
-	setAgentError,
-	getSelectedAgentConfig,
-	getAgentConfig,
-	getAgentsByLifecycle,
-	hasAgent,
-	getAgentCount,
-	getPermanentAgentCount,
-	getTemporaryAgentCount,
-	getAllAgentConfigs,
-	type AgentState
+	agentStore,
+	agents,
+	selectedAgent,
+	isLoading,
+	error,
+	formMode,
+	editingAgent,
+	agentCount,
+	hasAgents,
+	createInitialAgentState
 } from '../agents';
-import type { AgentConfig } from '$types/agent';
+import type { AgentConfig, AgentSummary, AgentConfigCreate } from '$types/agent';
+
+// Mock Tauri's invoke function
+vi.mock('@tauri-apps/api/core', () => ({
+	invoke: vi.fn()
+}));
+
+import { invoke } from '@tauri-apps/api/core';
+
+const mockInvoke = invoke as Mock;
 
 describe('Agent Store', () => {
-	let initialState: AgentState;
+	// Helper to create mock agent summary
+	const createMockAgentSummary = (
+		id: string,
+		lifecycle: 'permanent' | 'temporary' = 'permanent'
+	): AgentSummary => ({
+		id,
+		name: `Agent ${id}`,
+		lifecycle,
+		provider: 'Mistral',
+		model: 'mistral-large-latest',
+		tools_count: 2,
+		mcp_servers_count: 1
+	});
 
-	const createMockAgentConfig = (id: string, lifecycle: 'permanent' | 'temporary'): AgentConfig => ({
+	// Helper to create mock agent config
+	const createMockAgentConfig = (
+		id: string,
+		lifecycle: 'permanent' | 'temporary' = 'permanent'
+	): AgentConfig => ({
 		id,
 		name: `Agent ${id}`,
 		lifecycle,
 		llm: {
-			provider: 'Test',
-			model: 'test-model',
+			provider: 'Mistral',
+			model: 'mistral-large-latest',
 			temperature: 0.7,
-			max_tokens: 1000
+			max_tokens: 4096
 		},
-		tools: ['tool1'],
-		mcp_servers: [],
-		system_prompt: 'Test prompt'
+		tools: ['MemoryTool', 'TodoTool'],
+		mcp_servers: ['serena'],
+		system_prompt: 'You are a helpful assistant.'
 	});
 
 	beforeEach(() => {
-		initialState = createInitialAgentState();
+		// Reset store to initial state
+		agentStore.reset();
+		// Clear all mock calls
+		vi.clearAllMocks();
 	});
 
-	describe('createInitialAgentState', () => {
-		it('should create empty initial state', () => {
-			const state = createInitialAgentState();
+	describe('Initial State', () => {
+		it('should have empty initial state', () => {
+			const state = get(agentStore);
 
-			expect(state.agentIds).toEqual([]);
-			expect(state.configs.size).toBe(0);
+			expect(state.agents).toEqual([]);
 			expect(state.selectedId).toBeNull();
 			expect(state.loading).toBe(false);
 			expect(state.error).toBeNull();
+			expect(state.formMode).toBeNull();
+			expect(state.editingAgent).toBeNull();
 		});
 	});
 
-	describe('setAgentIds', () => {
-		it('should set agent IDs', () => {
-			const state = setAgentIds(initialState, ['agent1', 'agent2']);
+	describe('loadAgents', () => {
+		it('should load agents from backend', async () => {
+			const mockAgents = [
+				createMockAgentSummary('agent1'),
+				createMockAgentSummary('agent2', 'temporary')
+			];
+			mockInvoke.mockResolvedValueOnce(mockAgents);
 
-			expect(state.agentIds).toEqual(['agent1', 'agent2']);
-			expect(state.loading).toBe(false);
-			expect(state.error).toBeNull();
+			await agentStore.loadAgents();
+
+			expect(mockInvoke).toHaveBeenCalledWith('list_agents');
+			expect(get(agents)).toEqual(mockAgents);
+			expect(get(isLoading)).toBe(false);
+			expect(get(error)).toBeNull();
 		});
 
-		it('should replace existing IDs', () => {
-			let state = setAgentIds(initialState, ['agent1']);
-			state = setAgentIds(state, ['agent2', 'agent3']);
+		it('should set loading state while loading', async () => {
+			mockInvoke.mockImplementation(
+				() => new Promise((resolve) => setTimeout(() => resolve([]), 100))
+			);
 
-			expect(state.agentIds).toEqual(['agent2', 'agent3']);
-		});
-	});
+			const loadPromise = agentStore.loadAgents();
 
-	describe('addAgentConfig', () => {
-		it('should add agent config', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			const state = addAgentConfig(initialState, config);
+			// Check loading state immediately
+			expect(get(isLoading)).toBe(true);
 
-			expect(state.agentIds).toContain('agent1');
-			expect(state.configs.get('agent1')).toEqual(config);
+			await loadPromise;
+			expect(get(isLoading)).toBe(false);
 		});
 
-		it('should not duplicate agent ID', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = setAgentIds(initialState, ['agent1']);
-			state = addAgentConfig(state, config);
+		it('should handle errors', async () => {
+			mockInvoke.mockRejectedValueOnce(new Error('Network error'));
 
-			expect(state.agentIds.filter((id) => id === 'agent1')).toHaveLength(1);
-		});
+			await agentStore.loadAgents();
 
-		it('should update config for existing agent', () => {
-			const config1 = createMockAgentConfig('agent1', 'permanent');
-			const config2 = { ...config1, name: 'Updated Agent' };
-
-			let state = addAgentConfig(initialState, config1);
-			state = addAgentConfig(state, config2);
-
-			expect(state.configs.get('agent1')?.name).toBe('Updated Agent');
-			expect(state.agentIds).toHaveLength(1);
+			expect(get(error)).toBe('Error: Network error');
+			expect(get(isLoading)).toBe(false);
 		});
 	});
 
-	describe('removeAgent', () => {
-		it('should remove agent', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = addAgentConfig(initialState, config);
+	describe('createAgent', () => {
+		it('should create agent and refresh list', async () => {
+			const newAgentId = 'new-agent-uuid';
+			const config: AgentConfigCreate = {
+				name: 'New Agent',
+				lifecycle: 'permanent',
+				llm: {
+					provider: 'Mistral',
+					model: 'mistral-large-latest',
+					temperature: 0.7,
+					max_tokens: 4096
+				},
+				tools: ['MemoryTool'],
+				mcp_servers: [],
+				system_prompt: 'Test prompt'
+			};
 
-			state = removeAgent(state, 'agent1');
+			mockInvoke.mockResolvedValueOnce(newAgentId); // create_agent
+			mockInvoke.mockResolvedValueOnce([createMockAgentSummary(newAgentId)]); // list_agents
 
-			expect(state.agentIds).not.toContain('agent1');
-			expect(state.configs.has('agent1')).toBe(false);
+			const result = await agentStore.createAgent(config);
+
+			expect(result).toBe(newAgentId);
+			expect(mockInvoke).toHaveBeenCalledWith('create_agent', { config });
+			expect(get(formMode)).toBeNull(); // Form closed after creation
 		});
 
-		it('should clear selection if removed agent was selected', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = addAgentConfig(initialState, config);
-			state = selectAgent(state, 'agent1');
+		it('should handle creation errors', async () => {
+			const config: AgentConfigCreate = {
+				name: '',
+				lifecycle: 'permanent',
+				llm: {
+					provider: 'Mistral',
+					model: 'mistral-large-latest',
+					temperature: 0.7,
+					max_tokens: 4096
+				},
+				tools: [],
+				mcp_servers: [],
+				system_prompt: ''
+			};
 
-			state = removeAgent(state, 'agent1');
+			mockInvoke.mockRejectedValueOnce(new Error('Validation failed'));
 
-			expect(state.selectedId).toBeNull();
-		});
-
-		it('should keep selection if different agent removed', () => {
-			const config1 = createMockAgentConfig('agent1', 'permanent');
-			const config2 = createMockAgentConfig('agent2', 'permanent');
-
-			let state = addAgentConfig(initialState, config1);
-			state = addAgentConfig(state, config2);
-			state = selectAgent(state, 'agent1');
-
-			state = removeAgent(state, 'agent2');
-
-			expect(state.selectedId).toBe('agent1');
-		});
-	});
-
-	describe('selectAgent', () => {
-		it('should select an agent', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = addAgentConfig(initialState, config);
-
-			state = selectAgent(state, 'agent1');
-
-			expect(state.selectedId).toBe('agent1');
-		});
-
-		it('should deselect with null', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = addAgentConfig(initialState, config);
-			state = selectAgent(state, 'agent1');
-
-			state = selectAgent(state, null);
-
-			expect(state.selectedId).toBeNull();
+			await expect(agentStore.createAgent(config)).rejects.toThrow();
+			expect(get(error)).toBe('Error: Validation failed');
 		});
 	});
 
-	describe('setAgentLoading', () => {
-		it('should set loading state', () => {
-			const state = setAgentLoading(initialState, true);
-			expect(state.loading).toBe(true);
-		});
+	describe('updateAgent', () => {
+		it('should update agent and refresh list', async () => {
+			mockInvoke.mockResolvedValueOnce(undefined); // update_agent
+			mockInvoke.mockResolvedValueOnce([createMockAgentSummary('agent1')]); // list_agents
 
-		it('should clear error when loading', () => {
-			let state = setAgentError(initialState, 'Error');
-			state = setAgentLoading(state, true);
-			expect(state.error).toBeNull();
-		});
-	});
+			await agentStore.updateAgent('agent1', { name: 'Updated Name' });
 
-	describe('setAgentError', () => {
-		it('should set error message', () => {
-			const state = setAgentError(initialState, 'Test error');
-			expect(state.error).toBe('Test error');
-			expect(state.loading).toBe(false);
+			expect(mockInvoke).toHaveBeenCalledWith('update_agent', {
+				agentId: 'agent1',
+				config: { name: 'Updated Name' }
+			});
+			expect(get(formMode)).toBeNull();
+			expect(get(editingAgent)).toBeNull();
 		});
 	});
 
-	describe('getSelectedAgentConfig', () => {
-		it('should return selected agent config', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			let state = addAgentConfig(initialState, config);
-			state = selectAgent(state, 'agent1');
+	describe('deleteAgent', () => {
+		it('should delete agent and refresh list', async () => {
+			// Setup initial state with agents
+			mockInvoke.mockResolvedValueOnce([
+				createMockAgentSummary('agent1'),
+				createMockAgentSummary('agent2')
+			]);
+			await agentStore.loadAgents();
 
-			const selected = getSelectedAgentConfig(state);
+			// Select agent1
+			agentStore.select('agent1');
 
-			expect(selected?.id).toBe('agent1');
+			// Delete agent1
+			mockInvoke.mockResolvedValueOnce(undefined); // delete_agent
+			mockInvoke.mockResolvedValueOnce([createMockAgentSummary('agent2')]); // list_agents
+
+			await agentStore.deleteAgent('agent1');
+
+			expect(mockInvoke).toHaveBeenCalledWith('delete_agent', { agentId: 'agent1' });
+			expect(get(agentStore).selectedId).toBeNull(); // Selection cleared
 		});
 
-		it('should return undefined when nothing selected', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			const state = addAgentConfig(initialState, config);
+		it('should keep selection if different agent deleted', async () => {
+			// Setup initial state
+			mockInvoke.mockResolvedValueOnce([
+				createMockAgentSummary('agent1'),
+				createMockAgentSummary('agent2')
+			]);
+			await agentStore.loadAgents();
 
-			const selected = getSelectedAgentConfig(state);
+			// Select agent1
+			agentStore.select('agent1');
 
-			expect(selected).toBeUndefined();
+			// Delete agent2
+			mockInvoke.mockResolvedValueOnce(undefined);
+			mockInvoke.mockResolvedValueOnce([createMockAgentSummary('agent1')]);
+
+			await agentStore.deleteAgent('agent2');
+
+			expect(get(agentStore).selectedId).toBe('agent1');
 		});
 	});
 
 	describe('getAgentConfig', () => {
-		it('should return agent config by ID', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			const state = addAgentConfig(initialState, config);
+		it('should fetch full agent config', async () => {
+			const config = createMockAgentConfig('agent1');
+			mockInvoke.mockResolvedValueOnce(config);
 
-			const result = getAgentConfig(state, 'agent1');
+			const result = await agentStore.getAgentConfig('agent1');
 
-			expect(result?.id).toBe('agent1');
-		});
-
-		it('should return undefined for non-existent agent', () => {
-			const result = getAgentConfig(initialState, 'nonexistent');
-			expect(result).toBeUndefined();
+			expect(result).toEqual(config);
+			expect(mockInvoke).toHaveBeenCalledWith('get_agent_config', { agentId: 'agent1' });
 		});
 	});
 
-	describe('getAgentsByLifecycle', () => {
-		it('should filter agents by lifecycle', () => {
-			const perm1 = createMockAgentConfig('perm1', 'permanent');
-			const perm2 = createMockAgentConfig('perm2', 'permanent');
-			const temp1 = createMockAgentConfig('temp1', 'temporary');
+	describe('select', () => {
+		it('should select an agent', () => {
+			agentStore.select('agent1');
+			expect(get(agentStore).selectedId).toBe('agent1');
+		});
 
-			let state = addAgentConfig(initialState, perm1);
-			state = addAgentConfig(state, perm2);
-			state = addAgentConfig(state, temp1);
-
-			const permanent = getAgentsByLifecycle(state, 'permanent');
-			const temporary = getAgentsByLifecycle(state, 'temporary');
-
-			expect(permanent).toHaveLength(2);
-			expect(temporary).toHaveLength(1);
+		it('should deselect with null', () => {
+			agentStore.select('agent1');
+			agentStore.select(null);
+			expect(get(agentStore).selectedId).toBeNull();
 		});
 	});
 
-	describe('hasAgent', () => {
-		it('should return true for existing agent', () => {
-			const config = createMockAgentConfig('agent1', 'permanent');
-			const state = addAgentConfig(initialState, config);
+	describe('Form Management', () => {
+		it('should open create form', () => {
+			agentStore.openCreateForm();
 
-			expect(hasAgent(state, 'agent1')).toBe(true);
+			expect(get(formMode)).toBe('create');
+			expect(get(editingAgent)).toBeNull();
 		});
 
-		it('should return false for non-existing agent', () => {
-			expect(hasAgent(initialState, 'nonexistent')).toBe(false);
+		it('should open edit form with agent config', async () => {
+			const config = createMockAgentConfig('agent1');
+			mockInvoke.mockResolvedValueOnce(config);
+
+			await agentStore.openEditForm('agent1');
+
+			expect(get(formMode)).toBe('edit');
+			expect(get(editingAgent)).toEqual(config);
 		});
-	});
 
-	describe('getAgentCount', () => {
-		it('should return 0 for empty state', () => {
-			expect(getAgentCount(initialState)).toBe(0);
-		});
+		it('should close form', () => {
+			agentStore.openCreateForm();
+			agentStore.closeForm();
 
-		it('should return correct count', () => {
-			const config1 = createMockAgentConfig('agent1', 'permanent');
-			const config2 = createMockAgentConfig('agent2', 'temporary');
-
-			let state = addAgentConfig(initialState, config1);
-			state = addAgentConfig(state, config2);
-
-			expect(getAgentCount(state)).toBe(2);
+			expect(get(formMode)).toBeNull();
+			expect(get(editingAgent)).toBeNull();
 		});
 	});
 
-	describe('getPermanentAgentCount', () => {
-		it('should return count of permanent agents', () => {
-			const perm = createMockAgentConfig('perm', 'permanent');
-			const temp = createMockAgentConfig('temp', 'temporary');
+	describe('Error Handling', () => {
+		it('should clear error', async () => {
+			mockInvoke.mockRejectedValueOnce(new Error('Test error'));
+			await agentStore.loadAgents();
 
-			let state = addAgentConfig(initialState, perm);
-			state = addAgentConfig(state, temp);
+			expect(get(error)).toBe('Error: Test error');
 
-			expect(getPermanentAgentCount(state)).toBe(1);
+			agentStore.clearError();
+			expect(get(error)).toBeNull();
 		});
 	});
 
-	describe('getTemporaryAgentCount', () => {
-		it('should return count of temporary agents', () => {
-			const perm = createMockAgentConfig('perm', 'permanent');
-			const temp = createMockAgentConfig('temp', 'temporary');
+	describe('reset', () => {
+		it('should reset to initial state', async () => {
+			// Setup some state
+			mockInvoke.mockResolvedValueOnce([createMockAgentSummary('agent1')]);
+			await agentStore.loadAgents();
+			agentStore.select('agent1');
+			agentStore.openCreateForm();
 
-			let state = addAgentConfig(initialState, perm);
-			state = addAgentConfig(state, temp);
+			// Reset
+			agentStore.reset();
 
-			expect(getTemporaryAgentCount(state)).toBe(1);
+			const state = get(agentStore);
+			expect(state.agents).toEqual([]);
+			expect(state.selectedId).toBeNull();
+			expect(state.formMode).toBeNull();
 		});
 	});
 
-	describe('getAllAgentConfigs', () => {
-		it('should return all configs as array', () => {
-			const config1 = createMockAgentConfig('agent1', 'permanent');
-			const config2 = createMockAgentConfig('agent2', 'temporary');
-
-			let state = addAgentConfig(initialState, config1);
-			state = addAgentConfig(state, config2);
-
-			const configs = getAllAgentConfigs(state);
-
-			expect(configs).toHaveLength(2);
-			expect(configs.map((c) => c.id)).toContain('agent1');
-			expect(configs.map((c) => c.id)).toContain('agent2');
+	describe('Derived Stores', () => {
+		beforeEach(async () => {
+			mockInvoke.mockResolvedValueOnce([
+				createMockAgentSummary('agent1'),
+				createMockAgentSummary('agent2', 'temporary')
+			]);
+			await agentStore.loadAgents();
 		});
 
-		it('should return empty array for empty state', () => {
-			const configs = getAllAgentConfigs(initialState);
-			expect(configs).toEqual([]);
+		it('agents should return all agents', () => {
+			expect(get(agents)).toHaveLength(2);
+		});
+
+		it('selectedAgent should return selected agent', () => {
+			agentStore.select('agent1');
+			expect(get(selectedAgent)?.id).toBe('agent1');
+		});
+
+		it('selectedAgent should return null when nothing selected', () => {
+			expect(get(selectedAgent)).toBeNull();
+		});
+
+		it('agentCount should return correct count', () => {
+			expect(get(agentCount)).toBe(2);
+		});
+
+		it('hasAgents should return true when agents exist', () => {
+			expect(get(hasAgents)).toBe(true);
+		});
+
+		it('hasAgents should return false when no agents', () => {
+			agentStore.reset();
+			expect(get(hasAgents)).toBe(false);
+		});
+	});
+
+	describe('Legacy Functions', () => {
+		it('createInitialAgentState should return legacy state structure', () => {
+			const state = createInitialAgentState();
+
+			expect(state.agentIds).toEqual([]);
+			expect(state.configs).toBeInstanceOf(Map);
+			expect(state.selectedId).toBeNull();
+			expect(state.loading).toBe(false);
+			expect(state.error).toBeNull();
 		});
 	});
 });

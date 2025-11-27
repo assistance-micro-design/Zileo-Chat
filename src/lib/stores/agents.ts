@@ -3,31 +3,255 @@
 
 /**
  * Agent store for managing agent state in the frontend.
- * Provides reactive state management for agents using pure functions.
+ * Provides reactive state management with Svelte stores and Tauri IPC integration.
  * @module stores/agents
  */
 
-import type { AgentConfig, Lifecycle } from '$types/agent';
+import { writable, derived } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/core';
+import type {
+	AgentConfig,
+	AgentSummary,
+	AgentConfigCreate,
+	AgentConfigUpdate
+} from '$types/agent';
 
 /**
  * State interface for the agent store
  */
-export interface AgentState {
-	/** List of all agent IDs */
-	agentIds: string[];
-	/** Map of agent configurations by ID */
-	configs: Map<string, AgentConfig>;
+export interface AgentStoreState {
+	/** List of all agents (summary view) */
+	agents: AgentSummary[];
 	/** Currently selected agent ID */
 	selectedId: string | null;
 	/** Loading state indicator */
 	loading: boolean;
 	/** Error message if any */
 	error: string | null;
+	/** Current form mode (create, edit, or null when closed) */
+	formMode: 'create' | 'edit' | null;
+	/** Agent being edited (full config for edit mode) */
+	editingAgent: AgentConfig | null;
 }
 
 /**
+ * Initial state for the agent store
+ */
+const initialState: AgentStoreState = {
+	agents: [],
+	selectedId: null,
+	loading: false,
+	error: null,
+	formMode: null,
+	editingAgent: null
+};
+
+/**
+ * Internal writable store
+ */
+const store = writable<AgentStoreState>(initialState);
+
+/**
+ * Agent store with actions for CRUD operations and UI state management.
+ * Combines Svelte store subscription with async Tauri IPC calls.
+ */
+export const agentStore = {
+	/**
+	 * Subscribe to store changes
+	 */
+	subscribe: store.subscribe,
+
+	/**
+	 * Loads all agents from the backend.
+	 * Updates the store with agent summaries.
+	 */
+	async loadAgents(): Promise<void> {
+		store.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const agents = await invoke<AgentSummary[]>('list_agents');
+			store.update((s) => ({ ...s, agents, loading: false }));
+		} catch (e) {
+			store.update((s) => ({ ...s, error: String(e), loading: false }));
+		}
+	},
+
+	/**
+	 * Creates a new agent.
+	 * @param config - Agent configuration for creation
+	 * @returns The created agent's ID
+	 * @throws Error if creation fails
+	 */
+	async createAgent(config: AgentConfigCreate): Promise<string> {
+		store.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const id = await invoke<string>('create_agent', { config });
+			await this.loadAgents();
+			store.update((s) => ({ ...s, formMode: null }));
+			return id;
+		} catch (e) {
+			store.update((s) => ({ ...s, error: String(e), loading: false }));
+			throw e;
+		}
+	},
+
+	/**
+	 * Updates an existing agent.
+	 * @param agentId - ID of the agent to update
+	 * @param config - Partial configuration with fields to update
+	 * @throws Error if update fails
+	 */
+	async updateAgent(agentId: string, config: AgentConfigUpdate): Promise<void> {
+		store.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			await invoke('update_agent', { agentId, config });
+			await this.loadAgents();
+			store.update((s) => ({ ...s, formMode: null, editingAgent: null }));
+		} catch (e) {
+			store.update((s) => ({ ...s, error: String(e), loading: false }));
+			throw e;
+		}
+	},
+
+	/**
+	 * Deletes an agent.
+	 * @param agentId - ID of the agent to delete
+	 * @throws Error if deletion fails
+	 */
+	async deleteAgent(agentId: string): Promise<void> {
+		store.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			await invoke('delete_agent', { agentId });
+			await this.loadAgents();
+			store.update((s) => ({
+				...s,
+				selectedId: s.selectedId === agentId ? null : s.selectedId
+			}));
+		} catch (e) {
+			store.update((s) => ({ ...s, error: String(e), loading: false }));
+			throw e;
+		}
+	},
+
+	/**
+	 * Gets the full configuration of an agent.
+	 * @param agentId - ID of the agent
+	 * @returns Full agent configuration
+	 */
+	async getAgentConfig(agentId: string): Promise<AgentConfig> {
+		return await invoke<AgentConfig>('get_agent_config', { agentId });
+	},
+
+	/**
+	 * Selects an agent by ID.
+	 * @param agentId - ID to select (or null to deselect)
+	 */
+	select(agentId: string | null): void {
+		store.update((s) => ({ ...s, selectedId: agentId }));
+	},
+
+	/**
+	 * Opens the create agent form.
+	 */
+	openCreateForm(): void {
+		store.update((s) => ({ ...s, formMode: 'create', editingAgent: null }));
+	},
+
+	/**
+	 * Opens the edit form for a specific agent.
+	 * Loads the full agent configuration.
+	 * @param agentId - ID of the agent to edit
+	 */
+	async openEditForm(agentId: string): Promise<void> {
+		const config = await this.getAgentConfig(agentId);
+		store.update((s) => ({ ...s, formMode: 'edit', editingAgent: config }));
+	},
+
+	/**
+	 * Closes the form (create or edit).
+	 */
+	closeForm(): void {
+		store.update((s) => ({ ...s, formMode: null, editingAgent: null }));
+	},
+
+	/**
+	 * Clears the current error message.
+	 */
+	clearError(): void {
+		store.update((s) => ({ ...s, error: null }));
+	},
+
+	/**
+	 * Resets the store to initial state.
+	 */
+	reset(): void {
+		store.set(initialState);
+	}
+};
+
+// ============================================================================
+// Derived Stores
+// ============================================================================
+
+/**
+ * Derived store: list of all agents
+ */
+export const agents = derived(store, ($s) => $s.agents);
+
+/**
+ * Derived store: currently selected agent summary
+ */
+export const selectedAgent = derived(store, ($s) =>
+	$s.agents.find((a) => a.id === $s.selectedId) ?? null
+);
+
+/**
+ * Derived store: loading state
+ */
+export const isLoading = derived(store, ($s) => $s.loading);
+
+/**
+ * Derived store: error message
+ */
+export const error = derived(store, ($s) => $s.error);
+
+/**
+ * Derived store: current form mode
+ */
+export const formMode = derived(store, ($s) => $s.formMode);
+
+/**
+ * Derived store: agent being edited
+ */
+export const editingAgent = derived(store, ($s) => $s.editingAgent);
+
+/**
+ * Derived store: number of agents
+ */
+export const agentCount = derived(store, ($s) => $s.agents.length);
+
+/**
+ * Derived store: whether agents are available (non-empty list)
+ */
+export const hasAgents = derived(store, ($s) => $s.agents.length > 0);
+
+// ============================================================================
+// Legacy Pure Functions (for backward compatibility)
+// ============================================================================
+
+/**
+ * @deprecated Use agentStore instead
  * Creates the initial agent state
- * @returns Initial agent state with empty values
+ */
+export interface AgentState {
+	agentIds: string[];
+	configs: Map<string, AgentConfig>;
+	selectedId: string | null;
+	loading: boolean;
+	error: string | null;
+}
+
+/**
+ * @deprecated Use agentStore instead
  */
 export function createInitialAgentState(): AgentState {
 	return {
@@ -37,184 +261,4 @@ export function createInitialAgentState(): AgentState {
 		loading: false,
 		error: null
 	};
-}
-
-/**
- * Sets the agent IDs list
- * @param state - Current agent state
- * @param ids - Array of agent IDs
- * @returns Updated state with new agent IDs
- */
-export function setAgentIds(state: AgentState, ids: string[]): AgentState {
-	return {
-		...state,
-		agentIds: ids,
-		loading: false,
-		error: null
-	};
-}
-
-/**
- * Adds an agent configuration to the state
- * @param state - Current agent state
- * @param config - Agent configuration to add
- * @returns Updated state with new config
- */
-export function addAgentConfig(state: AgentState, config: AgentConfig): AgentState {
-	const newConfigs = new Map(state.configs);
-	newConfigs.set(config.id, config);
-
-	const newIds = state.agentIds.includes(config.id)
-		? state.agentIds
-		: [...state.agentIds, config.id];
-
-	return {
-		...state,
-		agentIds: newIds,
-		configs: newConfigs,
-		error: null
-	};
-}
-
-/**
- * Removes an agent from the state
- * @param state - Current agent state
- * @param id - Agent ID to remove
- * @returns Updated state without the agent
- */
-export function removeAgent(state: AgentState, id: string): AgentState {
-	const newConfigs = new Map(state.configs);
-	newConfigs.delete(id);
-
-	const newIds = state.agentIds.filter((agentId) => agentId !== id);
-	const newSelectedId = state.selectedId === id ? null : state.selectedId;
-
-	return {
-		...state,
-		agentIds: newIds,
-		configs: newConfigs,
-		selectedId: newSelectedId,
-		error: null
-	};
-}
-
-/**
- * Selects an agent by ID
- * @param state - Current agent state
- * @param id - Agent ID to select (or null to deselect)
- * @returns Updated state with new selection
- */
-export function selectAgent(state: AgentState, id: string | null): AgentState {
-	return {
-		...state,
-		selectedId: id,
-		error: null
-	};
-}
-
-/**
- * Sets the loading state
- * @param state - Current agent state
- * @param loading - Loading state value
- * @returns Updated state with new loading value
- */
-export function setAgentLoading(state: AgentState, loading: boolean): AgentState {
-	return {
-		...state,
-		loading,
-		error: loading ? null : state.error
-	};
-}
-
-/**
- * Sets an error message
- * @param state - Current agent state
- * @param error - Error message (or null to clear)
- * @returns Updated state with error
- */
-export function setAgentError(state: AgentState, error: string | null): AgentState {
-	return {
-		...state,
-		error,
-		loading: false
-	};
-}
-
-/**
- * Gets the currently selected agent config
- * @param state - Current agent state
- * @returns Selected agent config or undefined
- */
-export function getSelectedAgentConfig(state: AgentState): AgentConfig | undefined {
-	if (!state.selectedId) return undefined;
-	return state.configs.get(state.selectedId);
-}
-
-/**
- * Gets agent config by ID
- * @param state - Current agent state
- * @param id - Agent ID
- * @returns Agent config or undefined
- */
-export function getAgentConfig(state: AgentState, id: string): AgentConfig | undefined {
-	return state.configs.get(id);
-}
-
-/**
- * Gets agents filtered by lifecycle
- * @param state - Current agent state
- * @param lifecycle - Lifecycle to filter by
- * @returns Array of agent IDs with matching lifecycle
- */
-export function getAgentsByLifecycle(state: AgentState, lifecycle: Lifecycle): string[] {
-	return state.agentIds.filter((id) => {
-		const config = state.configs.get(id);
-		return config?.lifecycle === lifecycle;
-	});
-}
-
-/**
- * Checks if an agent exists
- * @param state - Current agent state
- * @param id - Agent ID to check
- * @returns True if agent exists
- */
-export function hasAgent(state: AgentState, id: string): boolean {
-	return state.agentIds.includes(id);
-}
-
-/**
- * Gets total agent count
- * @param state - Current agent state
- * @returns Number of agents
- */
-export function getAgentCount(state: AgentState): number {
-	return state.agentIds.length;
-}
-
-/**
- * Gets permanent agent count
- * @param state - Current agent state
- * @returns Number of permanent agents
- */
-export function getPermanentAgentCount(state: AgentState): number {
-	return getAgentsByLifecycle(state, 'permanent').length;
-}
-
-/**
- * Gets temporary agent count
- * @param state - Current agent state
- * @returns Number of temporary agents
- */
-export function getTemporaryAgentCount(state: AgentState): number {
-	return getAgentsByLifecycle(state, 'temporary').length;
-}
-
-/**
- * Gets all agent configs as an array
- * @param state - Current agent state
- * @returns Array of all agent configs
- */
-export function getAllAgentConfigs(state: AgentState): AgentConfig[] {
-	return Array.from(state.configs.values());
 }

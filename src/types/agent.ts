@@ -64,3 +64,68 @@ export interface LLMConfig {
   /** Maximum tokens to generate */
   max_tokens: number;
 }
+
+/**
+ * Agent configuration for creation (without ID, timestamps)
+ */
+export interface AgentConfigCreate {
+  /** Agent name (1-64 chars) */
+  name: string;
+  /** Lifecycle type */
+  lifecycle: Lifecycle;
+  /** LLM configuration */
+  llm: LLMConfig;
+  /** List of available tools */
+  tools: string[];
+  /** List of MCP servers */
+  mcp_servers: string[];
+  /** System prompt (1-10000 chars) */
+  system_prompt: string;
+}
+
+/**
+ * Agent configuration for updates (all fields optional except lifecycle which cannot change)
+ */
+export interface AgentConfigUpdate {
+  /** Agent name (1-64 chars) */
+  name?: string;
+  /** LLM configuration */
+  llm?: LLMConfig;
+  /** List of available tools */
+  tools?: string[];
+  /** List of MCP servers */
+  mcp_servers?: string[];
+  /** System prompt (1-10000 chars) */
+  system_prompt?: string;
+}
+
+/**
+ * Agent summary for listing (lightweight representation)
+ */
+export interface AgentSummary {
+  /** Unique identifier */
+  id: string;
+  /** Agent name */
+  name: string;
+  /** Lifecycle type */
+  lifecycle: Lifecycle;
+  /** LLM provider name */
+  provider: string;
+  /** LLM model name */
+  model: string;
+  /** Number of enabled tools */
+  tools_count: number;
+  /** Number of configured MCP servers */
+  mcp_servers_count: number;
+}
+
+/**
+ * Available tools that agents can use.
+ * These correspond to functional tools implemented in the Rust backend.
+ */
+export const AVAILABLE_TOOLS = ['MemoryTool', 'TodoTool'] as const;
+
+/**
+ * Type for available tool names
+ */
+export type AvailableTool = (typeof AVAILABLE_TOOLS)[number];
