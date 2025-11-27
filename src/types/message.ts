@@ -7,19 +7,122 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
- * Message entity representing a conversation message
+ * Message entity representing a conversation message with optional metrics.
+ *
+ * Extended in Phase 6 to include token counts, model info, cost, and duration
+ * for analytics and state recovery.
  */
 export interface Message {
-  /** Unique identifier */
+  /** Unique identifier (UUID) */
   id: string;
+  /** Associated workflow ID */
+  workflow_id: string;
+  /** Message role (user, assistant, system) */
+  role: MessageRole;
+  /** Message content (text) */
+  content: string;
+  /** Legacy token count (deprecated, use tokens_input/tokens_output) */
+  tokens: number;
+  /** Input tokens consumed (for assistant messages) */
+  tokens_input?: number;
+  /** Output tokens generated (for assistant messages) */
+  tokens_output?: number;
+  /** Model used for generation (e.g., "mistral-large-latest") */
+  model?: string;
+  /** Provider used (e.g., "Mistral", "Ollama") */
+  provider?: string;
+  /** Estimated cost in USD */
+  cost_usd?: number;
+  /** Generation duration in milliseconds */
+  duration_ms?: number;
+  /** Message timestamp */
+  timestamp: Date;
+}
+
+/**
+ * Payload for creating a new message (sent to backend).
+ * ID and timestamp are generated server-side.
+ */
+export interface MessageCreate {
   /** Associated workflow ID */
   workflow_id: string;
   /** Message role */
   role: MessageRole;
   /** Message content */
   content: string;
-  /** Token count */
-  tokens: number;
-  /** Message timestamp */
-  timestamp: Date;
+  /** Input tokens consumed */
+  tokens_input?: number;
+  /** Output tokens generated */
+  tokens_output?: number;
+  /** Model used */
+  model?: string;
+  /** Provider used */
+  provider?: string;
+  /** Cost in USD */
+  cost_usd?: number;
+  /** Duration in milliseconds */
+  duration_ms?: number;
+}
+
+/**
+ * Creates a user message payload.
+ *
+ * @param workflowId - The workflow ID
+ * @param content - Message content
+ * @returns MessageCreate payload for user message
+ */
+export function createUserMessage(workflowId: string, content: string): MessageCreate {
+  return {
+    workflow_id: workflowId,
+    role: 'user',
+    content,
+  };
+}
+
+/**
+ * Creates an assistant message payload with metrics.
+ *
+ * @param workflowId - The workflow ID
+ * @param content - Message content
+ * @param metrics - Optional metrics from WorkflowResult
+ * @returns MessageCreate payload for assistant message
+ */
+export function createAssistantMessage(
+  workflowId: string,
+  content: string,
+  metrics?: {
+    tokens_input?: number;
+    tokens_output?: number;
+    model?: string;
+    provider?: string;
+    duration_ms?: number;
+    cost_usd?: number;
+  }
+): MessageCreate {
+  return {
+    workflow_id: workflowId,
+    role: 'assistant',
+    content,
+    tokens_input: metrics?.tokens_input,
+    tokens_output: metrics?.tokens_output,
+    model: metrics?.model,
+    provider: metrics?.provider,
+    duration_ms: metrics?.duration_ms,
+    cost_usd: metrics?.cost_usd,
+  };
+}
+
+/**
+ * Creates a system message payload (for errors, notifications).
+ *
+ * @param workflowId - The workflow ID
+ * @param content - Message content
+ * @returns MessageCreate payload for system message
+ */
+export function createSystemMessage(workflowId: string, content: string): MessageCreate {
+  return {
+    workflow_id: workflowId,
+    role: 'system',
+    content,
+  };
 }

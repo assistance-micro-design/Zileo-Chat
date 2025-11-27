@@ -235,6 +235,11 @@ async fn main() -> anyhow::Result<()> {
             // Streaming commands (Phase 5)
             commands::streaming::execute_workflow_streaming,
             commands::streaming::cancel_workflow_streaming,
+            // Message commands (Phase 6 - Message Persistence)
+            commands::message::save_message,
+            commands::message::load_workflow_messages,
+            commands::message::delete_message,
+            commands::message::clear_workflow_messages,
             // Task commands (Todo Tool)
             commands::task::create_task,
             commands::task::get_task,

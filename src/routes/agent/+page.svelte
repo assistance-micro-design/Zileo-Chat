@@ -5,19 +5,29 @@ SPDX-License-Identifier: Apache-2.0
 Agent Page - Refactored with Design System Components
 Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 Agents are loaded from the centralized agentStore (Phase 4 integration).
+Messages are now persisted to SurrealDB (Phase 6 - Message Persistence).
+Streaming integration for real-time response display (Phase 2).
 -->
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
+	import { onDestroy } from 'svelte';
 	import type { Workflow, WorkflowResult } from '$types/workflow';
 	import type { Message } from '$types/message';
 	import type { AgentSummary } from '$types/agent';
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input } from '$lib/components/ui';
 	import { WorkflowList, MetricsBar, AgentSelector } from '$lib/components/workflow';
-	import { MessageList, ChatInput } from '$lib/components/chat';
-	import { Plus, Bot, Search, Settings } from 'lucide-svelte';
+	import { MessageList, ChatInput, StreamingMessage } from '$lib/components/chat';
+	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
+	import {
+		streamingStore,
+		isStreaming as isStreamingStore,
+		streamContent,
+		activeTools,
+		reasoningSteps
+	} from '$lib/stores/streaming';
 
 	/** Workflow state */
 	let workflows = $state<Workflow[]>([]);
@@ -29,8 +39,9 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 	 */
 	let selectedAgentId = $state<string | null>(null);
 
-	/** Messages state */
+	/** Messages state - persisted to backend */
 	let messages = $state<Message[]>([]);
+	let messagesLoading = $state(false);
 
 	/** Input/Output state */
 	let result = $state<WorkflowResult | null>(null);
@@ -91,6 +102,90 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 	}
 
 	/**
+	 * Loads messages for the current workflow from backend.
+	 * Messages are sorted by timestamp (chronological order).
+	 */
+	async function loadMessages(workflowId: string): Promise<void> {
+		messagesLoading = true;
+		try {
+			const loadedMessages = await invoke<Message[]>('load_workflow_messages', {
+				workflowId
+			});
+			// Convert timestamp strings to Date objects
+			messages = loadedMessages.map(msg => ({
+				...msg,
+				timestamp: new Date(msg.timestamp)
+			}));
+		} catch (err) {
+			console.error('Failed to load messages:', err);
+			messages = [];
+		} finally {
+			messagesLoading = false;
+		}
+	}
+
+	/**
+	 * Saves a user message to the backend.
+	 *
+	 * @param workflowId - The workflow ID
+	 * @param content - Message content
+	 * @returns The saved message ID
+	 */
+	async function saveUserMessage(workflowId: string, content: string): Promise<string> {
+		return await invoke<string>('save_message', {
+			workflowId,
+			role: 'user',
+			content
+		});
+	}
+
+	/**
+	 * Saves an assistant message with metrics to the backend.
+	 *
+	 * @param workflowId - The workflow ID
+	 * @param content - Message content
+	 * @param metrics - Optional metrics from WorkflowResult
+	 * @returns The saved message ID
+	 */
+	async function saveAssistantMessage(
+		workflowId: string,
+		content: string,
+		metrics?: {
+			tokens_input: number;
+			tokens_output: number;
+			model: string;
+			provider: string;
+			duration_ms: number;
+		}
+	): Promise<string> {
+		return await invoke<string>('save_message', {
+			workflowId,
+			role: 'assistant',
+			content,
+			tokensInput: metrics?.tokens_input,
+			tokensOutput: metrics?.tokens_output,
+			model: metrics?.model,
+			provider: metrics?.provider,
+			durationMs: metrics?.duration_ms
+		});
+	}
+
+	/**
+	 * Saves a system message (errors, notifications) to the backend.
+	 *
+	 * @param workflowId - The workflow ID
+	 * @param content - Message content
+	 * @returns The saved message ID
+	 */
+	async function saveSystemMessage(workflowId: string, content: string): Promise<string> {
+		return await invoke<string>('save_message', {
+			workflowId,
+			role: 'system',
+			content
+		});
+	}
+
+	/**
 	 * Creates a new workflow with user-provided name
 	 */
 	async function createWorkflow(): Promise<void> {
@@ -123,12 +218,13 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 	}
 
 	/**
-	 * Handles workflow selection
+	 * Handles workflow selection - loads persisted messages
 	 */
-	function handleWorkflowSelect(workflow: Workflow): void {
+	async function handleWorkflowSelect(workflow: Workflow): Promise<void> {
 		selectedWorkflowId = workflow.id;
-		messages = [];
 		result = null;
+		// Load persisted messages from backend
+		await loadMessages(workflow.id);
 	}
 
 	/**
@@ -138,6 +234,8 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 		if (!confirm(`Delete workflow "${workflow.name}"?`)) return;
 
 		try {
+			// Clear messages first (optional, cascade delete would be better)
+			await invoke('clear_workflow_messages', { workflowId: workflow.id });
 			await invoke('delete_workflow', { id: workflow.id });
 			await loadWorkflows();
 			if (selectedWorkflowId === workflow.id) {
@@ -173,55 +271,124 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 	}
 
 	/**
-	 * Handles sending a message
+	 * Handles sending a message with streaming - persists to backend
 	 */
 	async function handleSend(message: string): Promise<void> {
 		if (!selectedWorkflowId || !selectedAgentId || !message.trim()) return;
 
-		// Add user message
-		const userMessage: Message = {
-			id: crypto.randomUUID(),
-			workflow_id: selectedWorkflowId,
-			role: 'user',
-			content: message,
-			tokens: 0,
-			timestamp: new Date()
-		};
-		messages = [...messages, userMessage];
-
 		loading = true;
+
 		try {
-			result = await invoke<WorkflowResult>('execute_workflow', {
+			// 1. Save user message to backend
+			const userMsgId = await saveUserMessage(selectedWorkflowId, message);
+
+			// 2. Add user message to local state immediately for responsive UI
+			const userMessage: Message = {
+				id: userMsgId,
+				workflow_id: selectedWorkflowId,
+				role: 'user',
+				content: message,
+				tokens: 0,
+				timestamp: new Date()
+			};
+			messages = [...messages, userMessage];
+
+			// 3. Start streaming and setup event listeners
+			await streamingStore.start(selectedWorkflowId);
+
+			// 4. Execute workflow with streaming
+			result = await invoke<WorkflowResult>('execute_workflow_streaming', {
 				workflowId: selectedWorkflowId,
 				message: message,
 				agentId: selectedAgentId
 			});
 
-			// Add assistant message from result
+			// 5. Streaming complete - save assistant message with metrics to backend
+			const assistantMsgId = await saveAssistantMessage(
+				selectedWorkflowId,
+				result.report,
+				{
+					tokens_input: result.metrics.tokens_input,
+					tokens_output: result.metrics.tokens_output,
+					model: result.metrics.model,
+					provider: result.metrics.provider,
+					duration_ms: result.metrics.duration_ms
+				}
+			);
+
+			// 6. Add assistant message to local state
 			const assistantMessage: Message = {
-				id: crypto.randomUUID(),
+				id: assistantMsgId,
 				workflow_id: selectedWorkflowId,
 				role: 'assistant',
 				content: result.report,
 				tokens: result.metrics.tokens_output,
+				tokens_input: result.metrics.tokens_input,
+				tokens_output: result.metrics.tokens_output,
+				model: result.metrics.model,
+				provider: result.metrics.provider,
+				duration_ms: result.metrics.duration_ms,
 				timestamp: new Date()
 			};
 			messages = [...messages, assistantMessage];
+
+			// 7. Cleanup streaming state
+			await streamingStore.reset();
 		} catch (err) {
-			// Add error message
-			const errorMessage: Message = {
-				id: crypto.randomUUID(),
-				workflow_id: selectedWorkflowId,
-				role: 'system',
-				content: `Error: ${err}`,
-				tokens: 0,
-				timestamp: new Date()
-			};
-			messages = [...messages, errorMessage];
+			// Cleanup streaming on error
+			await streamingStore.reset();
+
+			// Save error as system message
+			const errorContent = `Error: ${err}`;
+			try {
+				const errorMsgId = await saveSystemMessage(selectedWorkflowId, errorContent);
+				const errorMessage: Message = {
+					id: errorMsgId,
+					workflow_id: selectedWorkflowId,
+					role: 'system',
+					content: errorContent,
+					tokens: 0,
+					timestamp: new Date()
+				};
+				messages = [...messages, errorMessage];
+			} catch (saveErr) {
+				// Fallback: show error locally if save fails
+				console.error('Failed to save error message:', saveErr);
+				const errorMessage: Message = {
+					id: crypto.randomUUID(),
+					workflow_id: selectedWorkflowId,
+					role: 'system',
+					content: errorContent,
+					tokens: 0,
+					timestamp: new Date()
+				};
+				messages = [...messages, errorMessage];
+			}
 		} finally {
 			loading = false;
 		}
 	}
+
+	/**
+	 * Cancels the current streaming workflow.
+	 */
+	async function handleCancel(): Promise<void> {
+		if (!selectedWorkflowId) return;
+
+		try {
+			await invoke('cancel_workflow_streaming', { workflowId: selectedWorkflowId });
+			streamingStore.cancel();
+		} catch (err) {
+			console.error('Failed to cancel workflow:', err);
+		}
+	}
+
+	/**
+	 * Cleanup streaming on component destroy
+	 */
+	onDestroy(async () => {
+		await streamingStore.cleanup();
+	});
 
 	$effect(() => {
 		loadWorkflows();
@@ -289,6 +456,12 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 						{/if}
 					</div>
 				</div>
+				{#if messagesLoading}
+					<div class="header-right">
+						<RefreshCw size={16} class="loading-icon" />
+						<span class="loading-text">Loading messages...</span>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Messages Area -->
@@ -296,12 +469,43 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 				<MessageList {messages} />
 			</div>
 
-			<!-- Chat Input -->
-			<ChatInput
-				disabled={loading}
-				{loading}
-				onsend={handleSend}
-			/>
+			<!-- Streaming Message (shown during generation, below MessageList) -->
+			{#if $isStreamingStore}
+				<div class="streaming-container">
+					<StreamingMessage
+						content={$streamContent}
+						tools={$activeTools}
+						reasoning={$reasoningSteps}
+						isStreaming={$isStreamingStore}
+					/>
+				</div>
+			{/if}
+
+			<!-- Chat Input with Cancel Button -->
+			{#if $isStreamingStore}
+				<div class="chat-input-wrapper">
+					<ChatInput
+						disabled={true}
+						loading={true}
+						onsend={handleSend}
+					/>
+					<Button
+						variant="danger"
+						size="sm"
+						onclick={handleCancel}
+						ariaLabel="Cancel generation"
+					>
+						<StopCircle size={16} />
+						Cancel
+					</Button>
+				</div>
+			{:else}
+				<ChatInput
+					disabled={loading}
+					{loading}
+					onsend={handleSend}
+				/>
+			{/if}
 
 			<!-- Metrics Bar -->
 			{#if result}
@@ -394,6 +598,9 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 		padding: var(--spacing-lg);
 		border-bottom: 1px solid var(--color-border);
 		background: var(--color-bg-secondary);
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
 	}
 
 	.header-left {
@@ -408,6 +615,23 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 		margin-top: var(--spacing-xs);
 	}
 
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		color: var(--color-text-tertiary);
+		font-size: var(--font-size-sm);
+	}
+
+	.header-right :global(.loading-icon) {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
 	.agent-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
@@ -417,9 +641,27 @@ Agents are loaded from the centralized agentStore (Phase 4 integration).
 	/* Messages Container */
 	.messages-container {
 		flex: 1;
-		overflow: hidden;
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
+	}
+
+	/* Streaming Container */
+	.streaming-container {
+		padding: 0 var(--spacing-lg) var(--spacing-md);
+		animation: fadeIn 0.3s ease-in;
+	}
+
+	/* Chat Input Wrapper (with cancel button) */
+	.chat-input-wrapper {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		padding: 0 var(--spacing-md) var(--spacing-md);
+	}
+
+	.chat-input-wrapper :global(.chat-input-container) {
+		flex: 1;
 	}
 
 	/* Empty State */

@@ -25,13 +25,24 @@ DEFINE FIELD last_active ON agent_state TYPE datetime DEFAULT time::now();
 DEFINE INDEX unique_agent_id ON agent_state FIELDS agent_id UNIQUE;
 
 -- Table: message
+-- Extended with metrics fields for Phase 6 persistence
 DEFINE TABLE message SCHEMAFULL;
 DEFINE FIELD id ON message TYPE string;
 DEFINE FIELD workflow_id ON message TYPE string;
 DEFINE FIELD role ON message TYPE string ASSERT $value IN ['user', 'assistant', 'system'];
 DEFINE FIELD content ON message TYPE string;
 DEFINE FIELD tokens ON message TYPE int;
+DEFINE FIELD tokens_input ON message TYPE option<int>;
+DEFINE FIELD tokens_output ON message TYPE option<int>;
+DEFINE FIELD model ON message TYPE option<string>;
+DEFINE FIELD provider ON message TYPE option<string>;
+DEFINE FIELD cost_usd ON message TYPE option<float>;
+DEFINE FIELD duration_ms ON message TYPE option<int>;
 DEFINE FIELD timestamp ON message TYPE datetime DEFAULT time::now();
+
+-- Index for workflow message queries
+DEFINE INDEX message_workflow_idx ON message FIELDS workflow_id;
+DEFINE INDEX message_timestamp_idx ON message FIELDS timestamp;
 
 -- Table: memory (vectoriel)
 DEFINE TABLE memory SCHEMAFULL;

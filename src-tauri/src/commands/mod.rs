@@ -66,6 +66,12 @@
 //! - `execute_workflow_streaming` - Execute workflow with real-time events
 //! - `cancel_workflow_streaming` - Cancel streaming execution
 //!
+//! ### Message Commands ([`message`]) - Phase 6
+//! - `save_message` - Persist a message to the database
+//! - `load_workflow_messages` - Load all messages for a workflow
+//! - `delete_message` - Delete a single message
+//! - `clear_workflow_messages` - Delete all messages for a workflow
+//!
 //! ### Task Commands ([`task`])
 //! - `create_task` - Create a new task for a workflow
 //! - `get_task` - Get a single task by ID
@@ -112,6 +118,7 @@ pub mod embedding;
 pub mod llm;
 pub mod mcp;
 pub mod memory;
+pub mod message;
 pub mod migration;
 pub mod models;
 pub mod security;

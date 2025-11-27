@@ -50,8 +50,12 @@ pub use mcp::{
 // Re-export types for future phases
 #[allow(unused_imports)]
 pub use agent::{Agent, AgentStatus};
+
+// Re-export message types for Phase 6 Message Persistence
+pub use message::{Message, MessageCreate};
+// Re-export MessageRole for future use (currently used in commands/message.rs validation)
 #[allow(unused_imports)]
-pub use message::{Message, MessageRole};
+pub use message::MessageRole;
 
 // Re-export LLM model types for CRUD operations (Phase 2 will use these)
 #[allow(unused_imports)]
