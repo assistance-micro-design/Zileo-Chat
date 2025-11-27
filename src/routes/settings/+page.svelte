@@ -24,6 +24,7 @@ Includes MCP server configuration section for managing external tool servers.
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
+	import { AgentSettings } from '$lib/components/settings/agents';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -74,7 +75,8 @@ Includes MCP server configuration section for managing external tool servers.
 		ShieldCheck,
 		Plus,
 		Plug,
-		Brain
+		Brain,
+		Bot
 	} from 'lucide-svelte';
 
 	/** Settings state (for API key input) */
@@ -114,6 +116,7 @@ Includes MCP server configuration section for managing external tool servers.
 	const sections = [
 		{ id: 'providers', label: 'Providers', icon: Globe },
 		{ id: 'models', label: 'Models', icon: Cpu },
+		{ id: 'agents', label: 'Agents', icon: Bot },
 		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
 		{ id: 'memory', label: 'Memory', icon: Brain },
 		{ id: 'theme', label: 'Theme', icon: Palette }
@@ -712,6 +715,11 @@ Includes MCP server configuration section for managing external tool servers.
 					{/each}
 				</div>
 			{/if}
+		</section>
+
+		<!-- Agents Section -->
+		<section id="agents" class="settings-section">
+			<AgentSettings />
 		</section>
 
 		<!-- MCP Servers Section -->
