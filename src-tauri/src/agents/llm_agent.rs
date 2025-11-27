@@ -76,6 +76,7 @@ impl LLMAgent {
     /// # Arguments
     /// * `config` - Agent configuration including LLM settings
     /// * `provider_manager` - Shared provider manager for LLM calls
+    #[allow(dead_code)]
     pub fn new(config: AgentConfig, provider_manager: Arc<ProviderManager>) -> Self {
         Self {
             config,
@@ -914,9 +915,26 @@ impl Agent for LLMAgent {
             let results_text = Self::format_tool_results(&execution_results);
             let clean_response = Self::strip_tool_calls(&response.content);
 
-            // Add assistant response and tool results to history
-            conversation_history.push(format!("Assistant: {}", clean_response));
-            conversation_history.push(format!("Tool Results:\n{}", results_text));
+            // Build continuation context for next iteration
+            // Mistral API requires the last message to be from "user" or "tool" role.
+            // We structure the prompt as a user request with embedded context to satisfy this constraint.
+            // Pattern from CrewAI/AutoGen: append a user continuation message after tool results.
+            let continuation = format!(
+                "---\n\
+                 Context from previous step:\n\
+                 {}\n\n\
+                 Tool execution results:\n\
+                 {}\n\
+                 ---\n\n\
+                 Based on the tool results above, please continue with the task.",
+                if clean_response.is_empty() {
+                    "(No additional text)".to_string()
+                } else {
+                    clean_response
+                },
+                results_text
+            );
+            conversation_history.push(continuation);
         }
 
         let duration_ms = start.elapsed().as_millis() as u64;

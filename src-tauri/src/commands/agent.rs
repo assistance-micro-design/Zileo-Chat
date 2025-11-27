@@ -20,6 +20,7 @@ use crate::models::{
 };
 use crate::security::Validator;
 use crate::state::AppState;
+use crate::tools::ToolFactory;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -328,8 +329,9 @@ pub async fn create_agent(
         format!("Failed to persist agent: {}", e)
     })?;
 
-    // Create LLMAgent and register in memory
-    let llm_agent = LLMAgent::new(agent_config, state.llm_manager.clone());
+    // Create LLMAgent with tool support and register in memory
+    let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
+    let llm_agent = LLMAgent::with_factory(agent_config, state.llm_manager.clone(), tool_factory);
     state
         .registry
         .register(agent_id.clone(), Arc::new(llm_agent))
@@ -446,7 +448,9 @@ pub async fn update_agent(
     // Unregister old and register new agent
     state.registry.unregister_any(&validated_id).await;
 
-    let llm_agent = LLMAgent::new(updated_config.clone(), state.llm_manager.clone());
+    let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
+    let llm_agent =
+        LLMAgent::with_factory(updated_config.clone(), state.llm_manager.clone(), tool_factory);
     state
         .registry
         .register(validated_id.clone(), Arc::new(llm_agent))
@@ -578,8 +582,9 @@ pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
             system_prompt,
         };
 
-        // Create LLMAgent and register
-        let llm_agent = LLMAgent::new(config, state.llm_manager.clone());
+        // Create LLMAgent with tool support and register
+        let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
+        let llm_agent = LLMAgent::with_factory(config, state.llm_manager.clone(), tool_factory);
         state.registry.register(id, Arc::new(llm_agent)).await;
 
         loaded += 1;

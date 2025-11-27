@@ -160,11 +160,23 @@ impl DBClient {
     }
 
     /// Deletes a record by ID
+    ///
+    /// Accepts ID in format `table:uuid` (e.g., "workflow:123e4567-...")
+    /// Uses raw DELETE query to avoid SurrealDB SDK 2.x serialization issues.
     #[instrument(name = "db_delete", skip(self), fields(record_id = %id))]
     pub async fn delete(&self, id: &str) -> Result<()> {
         debug!("Deleting record");
 
-        let _: Vec<serde_json::Value> = self.db.delete(id).await.map_err(|e| {
+        // Parse table:uuid format
+        let (table, uuid) = id.split_once(':').ok_or_else(|| {
+            let msg = format!("Invalid record ID format '{}', expected 'table:uuid'", id);
+            error!("{}", msg);
+            anyhow::anyhow!(msg)
+        })?;
+
+        // Use raw DELETE query with backtick-escaped ID to avoid SDK issues
+        let query = format!("DELETE {}:`{}`", table, uuid);
+        self.db.query(&query).await.map_err(|e| {
             error!(error = %e, "Failed to delete record");
             e
         })?;
