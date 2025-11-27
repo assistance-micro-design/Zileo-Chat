@@ -8,7 +8,7 @@
 //! # Overview
 //!
 //! Tools are the primary mechanism for agents to interact with external systems:
-//! - **Local Tools**: Rust-native tools (SurrealDBTool, TodoTool)
+//! - **Local Tools**: Rust-native tools (MemoryTool, TodoTool)
 //! - **MCP Tools**: Remote tools via MCP protocol
 //!
 //! # Tool Trait
@@ -23,9 +23,6 @@
 //!
 //! | Module | Tool | Description |
 //! |--------|------|-------------|
-//! | [`db`] | `SurrealDBTool` | Direct CRUD operations on SurrealDB |
-//! | [`db`] | `QueryBuilderTool` | SurrealQL query generation |
-//! | [`db`] | `AnalyticsTool` | Aggregations and analytics |
 //! | [`memory`] | `MemoryTool` | Contextual memory with semantic search |
 //! | [`todo`] | `TodoTool` | Task management for workflow decomposition |
 //!
@@ -43,7 +40,6 @@
 //! })).await?;
 //! ```
 
-pub mod db;
 pub mod factory;
 pub mod memory;
 pub mod todo;
@@ -54,8 +50,6 @@ use serde_json::Value;
 use std::fmt;
 
 // Re-export tools for agent integration
-#[allow(unused_imports)]
-pub use db::{AnalyticsTool, QueryBuilderTool, SurrealDBTool};
 #[allow(unused_imports)]
 pub use factory::ToolFactory;
 #[allow(unused_imports)]

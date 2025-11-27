@@ -10,9 +10,9 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 |-------|--------|---------|
 | **TodoTool** | Implemented | `src-tauri/src/tools/todo/tool.rs` |
 | **MemoryTool** | Implemented | `src-tauri/src/tools/memory/tool.rs` |
-| **SurrealDBTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
-| **QueryBuilderTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
-| **AnalyticsTool** | Stub | `src-tauri/src/tools/db/mod.rs` |
+| **Tool Execution** | Implemented | `src-tauri/src/agents/llm_agent.rs` |
+
+**Note**: Les DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) ont été retirés - l'accès DB se fait via les commands Tauri IPC.
 
 ### ToolFactory
 
@@ -247,8 +247,11 @@ enabled = ["TodoTool", "SurrealDBTool"]
 ### Opérations
 - `read` : Lecture rapports existants
 - `write` : Création nouveaux rapports
+- `write_diff` : modifier un document 
 - `glob` : Recherche pattern-based de rapports
 - `delete` : Suppression rapports obsolètes
+- Créer un dossier 
+- supprimer un dossier
 
 ### Localisation Tauri
 
@@ -294,6 +297,125 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 ---
 
+## 4. Tool Execution Integration (LLMAgent)
+
+**Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
+
+**Implementation** : `src-tauri/src/agents/llm_agent.rs`
+
+**Statut** : Implemented (Phase 5)
+
+### Architecture d'Exécution
+
+```
+LLM Provider (Mistral/Ollama)
+       ↓ Response with <tool_call>
+   LLMAgent
+       ↓ parse_tool_calls()
+   ┌───┴───┐
+   ↓       ↓
+Local    MCP
+Tools    Tools
+   ↓       ↓
+ToolFactory  MCPManager
+   ↓       ↓
+   └───┬───┘
+       ↓ <tool_result>
+   LLM Provider (continue)
+```
+
+### Format des Tool Calls (XML)
+
+**Appel d'un tool** (dans la réponse LLM):
+```xml
+<tool_call name="MemoryTool">
+{"operation": "add", "type": "knowledge", "content": "Important information to remember"}
+</tool_call>
+```
+
+**Résultat d'un tool** (retourné au LLM):
+```xml
+<tool_result name="MemoryTool" success="true">
+{"id": "mem_abc123", "message": "Memory added successfully"}
+</tool_result>
+```
+
+### Boucle d'Exécution
+
+```rust
+// Pseudo-code de la boucle d'exécution
+loop {
+    // 1. Build system prompt with tool definitions
+    let prompt = build_system_prompt_with_tools(&config, &tools, &mcp_tools);
+
+    // 2. Call LLM provider
+    let response = provider.complete(&prompt).await?;
+
+    // 3. Parse tool calls from response
+    let tool_calls = parse_tool_calls(&response);
+
+    if tool_calls.is_empty() {
+        break; // No more tool calls, done
+    }
+
+    // 4. Execute tools
+    for call in tool_calls {
+        let result = if is_local_tool(&call.name) {
+            execute_local_tool(&factory, &call).await?
+        } else {
+            execute_mcp_tool(&mcp_manager, &call).await?
+        };
+        results.push(result);
+    }
+
+    // 5. Format results and feed back to LLM
+    let formatted = format_tool_results(&results);
+    append_to_context(&formatted);
+
+    iteration += 1;
+    if iteration >= MAX_ITERATIONS {
+        break; // Safety limit (10 iterations)
+    }
+}
+```
+
+### Constructeurs LLMAgent
+
+```rust
+// Sans tools (comportement basique)
+let agent = LLMAgent::new(config, provider);
+
+// Avec tools (exécution complète)
+let agent = LLMAgent::with_tools(config, provider, tool_factory, mcp_manager);
+
+// Avec factory seulement (tools locaux uniquement)
+let agent = LLMAgent::with_factory(config, provider, tool_factory);
+```
+
+### Méthodes Clés
+
+| Méthode | Description |
+|---------|-------------|
+| `create_local_tools()` | Crée les instances de tools via ToolFactory |
+| `get_mcp_tool_definitions()` | Récupère les définitions des tools MCP |
+| `build_system_prompt_with_tools()` | Injecte les définitions dans le system prompt |
+| `parse_tool_calls()` | Parse les balises `<tool_call>` de la réponse |
+| `execute_local_tool()` | Exécute un tool via ToolFactory |
+| `execute_mcp_tool()` | Exécute un tool via MCPManager |
+| `format_tool_results()` | Formate les résultats en XML |
+| `strip_tool_calls()` | Supprime les balises tool de la réponse finale |
+
+### Tests
+
+```bash
+# Tests unitaires tool execution
+cargo test llm_agent::tests::test_parse_tool_calls
+cargo test llm_agent::tests::test_execute_local_tool
+cargo test llm_agent::tests::test_tool_execution_loop
+```
+
+---
+
 ## Intégration et Orchestration
 
 ### Workflow Type
@@ -335,9 +457,9 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.3
-**Derniere mise a jour** : 2025-11-26
-**Phase** : Memory Tool Phase 6 Testing & Documentation Complete
+**Version** : 1.4
+**Derniere mise a jour** : 2025-11-27
+**Phase** : Functional Agent System Phase 5 Complete (Tool Execution Integration)
 
 ### Test Coverage
 
@@ -345,5 +467,8 @@ activate_workflow("code_review")
 |-----------|-------|----------|
 | **MemoryTool Unit** | 40+ tests | validate_input, operations |
 | **MemoryTool Integration** | 15+ tests | CRUD, workflow isolation, search |
+| **TodoTool Unit** | 25+ tests | CRUD operations, status transitions |
+| **LLMAgent Tool Execution** | 10+ tests | parse_tool_calls, execute, format_results |
 | **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
 | **Memory Types (TS)** | 15+ tests | Type structure, compatibility |
+| **Agent Store (TS)** | 24 tests | CRUD, form management, error handling |

@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
 - **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
 
-**Current Status**: Phase 5 Backend Features complete. Phase 6 Integration pending.
+**Current Status**: Phase 5 Backend Features complete. Functional Agent System operational. Phase 6 Integration pending.
 
 ## Implementation Progress
 
@@ -23,8 +23,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
 | Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
 | Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
-| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming - 34 Tauri commands) |
+| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 37 Tauri commands) |
 | Phase 6 | Pending | Integration & Polish (E2E tests, accessibility audit) |
+
+### Functional Agent System (Complete)
+
+**Phases Implemented**:
+1. **Phase 1**: Backend Agent Persistence (SurrealDB table, CRUD commands)
+2. **Phase 2**: Frontend Store & Types (agentStore, AgentSummary, AgentConfigCreate)
+3. **Phase 3**: Agent Settings UI (AgentSettings, AgentList, AgentForm components)
+4. **Phase 4**: Agent Selector Integration (store-based loading, empty state handling)
+5. **Phase 5**: Tool Execution Integration (XML tool calls, ToolFactory, MCPManager loop)
+
+**Key Features**:
+- Zero agents at startup (user creates all agents via Settings)
+- Full CRUD via UI (create, read, update, delete)
+- Agents persist in SurrealDB (table `agent`)
+- Tool execution loop with MemoryTool and TodoTool
+- MCP server integration per agent
 
 ### Phase 1 Deliverables (Complete)
 
@@ -296,7 +312,53 @@ pub struct FeatureData {
 
 ## Multi-Agent Configuration
 
-Agents are configured via TOML files in `src-tauri/agents/config/`:
+**Agents are created dynamically via Settings UI** (no hardcoded agents).
+
+### Agent CRUD Commands
+
+```typescript
+// List all agents (returns lightweight summaries)
+const agents = await invoke<AgentSummary[]>('list_agents');
+
+// Get full agent configuration
+const config = await invoke<AgentConfig>('get_agent_config', { agentId });
+
+// Create new agent
+const agentId = await invoke<string>('create_agent', {
+  config: {
+    name: 'My Agent',
+    lifecycle: 'permanent',
+    llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
+    tools: ['MemoryTool', 'TodoTool'],
+    mcp_servers: ['serena'],
+    system_prompt: 'You are a helpful assistant...'
+  }
+});
+
+// Update agent (partial update)
+const updated = await invoke<AgentConfig>('update_agent', { agentId, config: { name: 'New Name' } });
+
+// Delete agent
+await invoke('delete_agent', { agentId });
+```
+
+### Frontend Store Pattern
+
+```typescript
+import { agentStore, agents, isLoading, hasAgents } from '$lib/stores/agents';
+
+// Load agents from backend
+await agentStore.loadAgents();
+
+// Access reactive derived stores
+$agents       // AgentSummary[]
+$isLoading    // boolean
+$hasAgents    // boolean
+```
+
+### TOML Configuration (Reference Only)
+
+TOML files in `src-tauri/agents/config/` are for reference documentation only:
 
 ```toml
 [agent]
@@ -311,7 +373,7 @@ temperature = 0.7
 max_tokens = 4096
 
 [tools]
-enabled = ["SurrealDBTool", "QueryBuilderTool", "AnalyticsTool"]
+enabled = ["MemoryTool", "TodoTool"]
 
 [mcp_servers]
 required = ["serena"]  # Optional MCP servers to use
@@ -321,12 +383,32 @@ required = ["serena"]  # Optional MCP servers to use
 
 Key entities with graph relations:
 
+- **agent**: Agent configurations (id, name, lifecycle, llm, tools, mcp_servers, system_prompt)
 - **workflow**: Manages agent workflows (relations: agent, messages, tasks, validations)
-- **agent_state**: Persistent agent state and configuration
+- **agent_state**: Persistent agent runtime state
 - **memory**: Vector embeddings for agent memory (user_pref, context, knowledge types)
 - **message**: Conversation messages with role (user/assistant/system)
 - **validation_request**: Human-in-the-loop validation tracking
 - **task**: Todo items with status tracking
+
+### Agent Table Schema
+
+```surql
+DEFINE TABLE agent SCHEMAFULL;
+DEFINE FIELD id ON agent TYPE string;
+DEFINE FIELD name ON agent TYPE string;
+DEFINE FIELD lifecycle ON agent TYPE string;  -- 'permanent' | 'temporary'
+DEFINE FIELD llm ON agent TYPE object;
+DEFINE FIELD llm.provider ON agent TYPE string;
+DEFINE FIELD llm.model ON agent TYPE string;
+DEFINE FIELD llm.temperature ON agent TYPE float;
+DEFINE FIELD llm.max_tokens ON agent TYPE int;
+DEFINE FIELD tools ON agent TYPE array<string>;
+DEFINE FIELD mcp_servers ON agent TYPE array<string>;
+DEFINE FIELD system_prompt ON agent TYPE string;
+DEFINE FIELD created_at ON agent TYPE datetime DEFAULT time::now();
+DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();
+```
 
 ### SurrealDB SDK 2.x Patterns
 

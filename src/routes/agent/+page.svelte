@@ -4,27 +4,30 @@ SPDX-License-Identifier: Apache-2.0
 
 Agent Page - Refactored with Design System Components
 Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
+Agents are loaded from the centralized agentStore (Phase 4 integration).
 -->
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import type { Workflow, WorkflowResult } from '$types/workflow';
 	import type { Message } from '$types/message';
-	import type { Agent, AgentConfig } from '$types/agent';
+	import type { AgentSummary } from '$types/agent';
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input } from '$lib/components/ui';
 	import { WorkflowList, MetricsBar, AgentSelector } from '$lib/components/workflow';
 	import { MessageList, ChatInput } from '$lib/components/chat';
-	import { Plus, Bot, Search } from 'lucide-svelte';
+	import { Plus, Bot, Search, Settings } from 'lucide-svelte';
+	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 
 	/** Workflow state */
 	let workflows = $state<Workflow[]>([]);
 	let selectedWorkflowId = $state<string | null>(null);
 
-	/** Agent state - dynamically loaded from backend */
-	let agents = $state<Agent[]>([]);
+	/**
+	 * Agent state - sourced from centralized agentStore.
+	 * The store is loaded on mount and provides reactive updates.
+	 */
 	let selectedAgentId = $state<string | null>(null);
-	let agentsLoading = $state(true);
 
 	/** Messages state */
 	let messages = $state<Message[]>([]);
@@ -36,6 +39,16 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	/** UI state */
 	let searchFilter = $state('');
 	let sidebarCollapsed = $state(false);
+
+	/**
+	 * Reactive agent list from store
+	 */
+	const agentList = $derived<AgentSummary[]>($agentsStore);
+
+	/**
+	 * Reactive loading state from store
+	 */
+	const agentLoadingState = $derived<boolean>($agentsLoading);
 
 	/**
 	 * Get filtered workflows based on search
@@ -65,49 +78,15 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	}
 
 	/**
-	 * Loads all agents from backend
-	 * Fetches agent IDs then loads each agent's config
+	 * Loads all agents from backend using the centralized store.
+	 * The store handles caching and state management.
 	 */
 	async function loadAgents(): Promise<void> {
-		agentsLoading = true;
-		try {
-			const agentIds = await invoke<string[]>('list_agents');
+		await agentStore.loadAgents();
 
-			if (agentIds.length === 0) {
-				agents = [];
-				selectedAgentId = null;
-				return;
-			}
-
-			const loadedAgents: Agent[] = [];
-			for (const id of agentIds) {
-				try {
-					const config = await invoke<AgentConfig>('get_agent_config', { agentId: id });
-					loadedAgents.push({
-						id: config.id,
-						name: config.name,
-						lifecycle: config.lifecycle,
-						status: 'available',
-						capabilities: config.tools.length > 0 ? ['chat', 'tools'] : ['chat'],
-						tools: config.tools,
-						mcp_servers: config.mcp_servers
-					});
-				} catch (err) {
-					console.error(`Failed to load agent config for ${id}:`, err);
-				}
-			}
-
-			agents = loadedAgents;
-
-			// Select first agent if none selected
-			if (!selectedAgentId && agents.length > 0) {
-				selectedAgentId = agents[0].id;
-			}
-		} catch (err) {
-			console.error('Failed to load agents:', err);
-			agents = [];
-		} finally {
-			agentsLoading = false;
+		// Auto-select first agent if none selected and agents are available
+		if (!selectedAgentId && agentList.length > 0) {
+			selectedAgentId = agentList[0].id;
 		}
 	}
 
@@ -115,8 +94,13 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	 * Creates a new workflow with user-provided name
 	 */
 	async function createWorkflow(): Promise<void> {
+		if (agentList.length === 0) {
+			alert('No agents configured. Please create an agent in Settings first.');
+			return;
+		}
+
 		if (!selectedAgentId) {
-			alert('Please wait for agents to load or no agents available');
+			alert('Please select an agent first.');
 			return;
 		}
 
@@ -291,14 +275,14 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 					<Bot size={24} class="agent-icon" />
 					<div>
 						<h2 class="agent-title">{currentWorkflow()?.name || 'Agent'}</h2>
-						{#if agentsLoading}
+						{#if agentLoadingState}
 							<span class="agents-loading">Loading agents...</span>
-						{:else if agents.length === 0}
-							<span class="no-agents">No agents available</span>
+						{:else if agentList.length === 0}
+							<span class="no-agents">No agents configured - <a href="/settings" class="settings-link">Create one in Settings</a></span>
 						{:else}
 							<AgentSelector
-								{agents}
-								selected={selectedAgentId ?? agents[0]?.id ?? ''}
+								agents={agentList}
+								selected={selectedAgentId ?? agentList[0]?.id ?? ''}
 								onselect={handleAgentSelect}
 								label=""
 							/>
@@ -326,13 +310,35 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 		{:else}
 			<!-- Empty State -->
 			<div class="empty-state">
-				<Bot size={64} class="empty-icon" />
-				<h3>Select or create a workflow</h3>
-				<p class="empty-description">Choose an existing workflow from the sidebar or create a new one to get started.</p>
-				<Button variant="primary" onclick={createWorkflow}>
-					<Plus size={16} />
-					New Workflow
-				</Button>
+				{#if agentLoadingState}
+					<!-- Loading agents -->
+					<Bot size={64} class="empty-icon" />
+					<h3>Loading agents...</h3>
+					<p class="empty-description">Please wait while we load your configured agents.</p>
+				{:else if agentList.length === 0}
+					<!-- No agents configured -->
+					<Settings size={64} class="empty-icon" />
+					<h3>No agents configured</h3>
+					<p class="empty-description">
+						You need to create at least one agent before starting a workflow.
+						Configure your first agent in the Settings page.
+					</p>
+					<a href="/settings" class="button-link">
+						<Button variant="primary">
+							<Settings size={16} />
+							Go to Settings
+						</Button>
+					</a>
+				{:else}
+					<!-- Ready to create workflow -->
+					<Bot size={64} class="empty-icon" />
+					<h3>Select or create a workflow</h3>
+					<p class="empty-description">Choose an existing workflow from the sidebar or create a new one to get started.</p>
+					<Button variant="primary" onclick={createWorkflow}>
+						<Plus size={16} />
+						New Workflow
+					</Button>
+				{/if}
 			</div>
 		{/if}
 	</main>
@@ -450,6 +456,19 @@ Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
 	.no-agents {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-tertiary);
+	}
+
+	.settings-link {
+		color: var(--color-accent);
+		text-decoration: underline;
+	}
+
+	.settings-link:hover {
+		color: var(--color-accent-hover);
+	}
+
+	.button-link {
+		text-decoration: none;
 	}
 
 	/* Utility Classes */

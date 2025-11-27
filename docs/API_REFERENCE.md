@@ -162,36 +162,40 @@ async fn delete_workflow(
 
 ### list_agents
 
-Liste agents disponibles (permanents + temporaires actifs).
+Liste tous les agents configurés avec résumé (permanent + temporary).
 
 **Frontend**
 ```typescript
-const agents = await invoke<Agent[]>('list_agents');
+const agents = await invoke<AgentSummary[]>('list_agents');
 ```
 
 **Backend Signature**
 ```rust
-async fn list_agents() -> Result<Vec<Agent>, String>
+async fn list_agents(
+    state: State<'_, AppState>
+) -> Result<Vec<AgentSummary>, String>
 ```
 
-**Agent Type**
+**AgentSummary Type**
 ```typescript
-type Agent = {
+interface AgentSummary {
   id: string;
   name: string;
   lifecycle: 'permanent' | 'temporary';
-  capabilities: string[];
-  tools: string[];
-  mcp_servers: string[];
-  status: 'available' | 'busy';
-};
+  provider: string;              // LLM provider (Mistral, Ollama)
+  model: string;                 // Model name
+  tools_count: number;           // Number of enabled tools
+  mcp_servers_count: number;     // Number of MCP servers
+}
 ```
+
+**Returns** : Array de résumés agents (léger, sans system_prompt)
 
 ---
 
 ### get_agent_config
 
-Récupère configuration agent.
+Récupère configuration complète d'un agent.
 
 **Frontend**
 ```typescript
@@ -203,35 +207,135 @@ const config = await invoke<AgentConfig>('get_agent_config', {
 **Backend Signature**
 ```rust
 async fn get_agent_config(
-    agent_id: String
+    agent_id: String,
+    state: State<'_, AppState>
 ) -> Result<AgentConfig, String>
 ```
 
-**AgentConfig** : Configuration TOML parsée
+**AgentConfig Type**
+```typescript
+interface AgentConfig {
+  id: string;
+  name: string;
+  lifecycle: 'permanent' | 'temporary';
+  llm: {
+    provider: string;
+    model: string;
+    temperature: number;      // 0.0-2.0
+    max_tokens: number;       // 256-128000
+  };
+  tools: string[];            // ["MemoryTool", "TodoTool"]
+  mcp_servers: string[];      // MCP server names
+  system_prompt: string;
+  created_at?: string;        // ISO 8601
+  updated_at?: string;        // ISO 8601
+}
+```
+
+**Errors** : Agent not found
 
 ---
 
-### update_agent_config
+### create_agent
 
-Met à jour configuration agent.
+Crée un nouvel agent avec configuration complète.
 
 **Frontend**
 ```typescript
-await invoke('update_agent_config', {
-  agentId: string,
-  config: AgentConfig
+const agentId = await invoke<string>('create_agent', {
+  config: {
+    name: string,                    // 1-64 chars
+    lifecycle: 'permanent' | 'temporary',
+    llm: {
+      provider: 'Mistral' | 'Ollama',
+      model: string,
+      temperature: number,           // 0.0-2.0
+      max_tokens: number             // 256-128000
+    },
+    tools: string[],                 // ["MemoryTool", "TodoTool"]
+    mcp_servers: string[],           // MCP server names
+    system_prompt: string            // 1-10000 chars
+  }
 });
 ```
 
 **Backend Signature**
 ```rust
-async fn update_agent_config(
+async fn create_agent(
+    config: AgentConfigCreate,
+    state: State<'_, AppState>
+) -> Result<String, String>
+```
+
+**Validation**
+- `name`: 1-64 caractères, non vide
+- `temperature`: 0.0-2.0
+- `max_tokens`: 256-128000
+- `tools`: Doit être dans KNOWN_TOOLS ("MemoryTool", "TodoTool")
+- `system_prompt`: Non vide
+
+**Returns** : UUID de l'agent créé
+
+**Errors** : Validation failed, database error
+
+---
+
+### update_agent
+
+Met à jour un agent existant (mise à jour partielle).
+
+**Frontend**
+```typescript
+const updated = await invoke<AgentConfig>('update_agent', {
+  agentId: string,
+  config: {
+    name?: string,
+    llm?: LLMConfig,
+    tools?: string[],
+    mcp_servers?: string[],
+    system_prompt?: string
+    // Note: lifecycle cannot be changed after creation
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_agent(
     agent_id: String,
-    config: AgentConfig
+    config: AgentConfigUpdate,
+    state: State<'_, AppState>
+) -> Result<AgentConfig, String>
+```
+
+**Returns** : Agent mis à jour avec configuration complète
+
+**Errors** : Agent not found, validation failed
+
+---
+
+### delete_agent
+
+Supprime un agent de la base de données et du registry.
+
+**Frontend**
+```typescript
+await invoke('delete_agent', {
+  agentId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn delete_agent(
+    agent_id: String,
+    state: State<'_, AppState>
 ) -> Result<(), String>
 ```
 
-**Errors** : Invalid config, agent not found
+**Effect** : Supprime de SurrealDB et désenregistre du AgentRegistry
+
+**Errors** : Agent not found, database error
 
 ---
 

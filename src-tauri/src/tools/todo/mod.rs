@@ -18,7 +18,7 @@
 //! Add "TodoTool" to an agent's tools configuration:
 //! ```toml
 //! [tools]
-//! enabled = ["TodoTool", "SurrealDBTool"]
+//! enabled = ["TodoTool", "MemoryTool"]
 //! ```
 //!
 //! # Example

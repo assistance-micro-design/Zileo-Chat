@@ -313,7 +313,14 @@ pub async fn create_agent(
             created_at: time::now(),
             updated_at: time::now()
         }}",
-        agent_id, agent_id, name_json, lifecycle_str, llm_json, tools_json, mcp_json, system_prompt_json
+        agent_id,
+        agent_id,
+        name_json,
+        lifecycle_str,
+        llm_json,
+        tools_json,
+        mcp_json,
+        system_prompt_json
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -351,14 +358,10 @@ pub async fn update_agent(
     })?;
 
     // Get existing agent
-    let existing = state
-        .registry
-        .get(&validated_id)
-        .await
-        .ok_or_else(|| {
-            warn!(agent_id = %validated_id, "Agent not found");
-            "Agent not found".to_string()
-        })?;
+    let existing = state.registry.get(&validated_id).await.ok_or_else(|| {
+        warn!(agent_id = %validated_id, "Agent not found");
+        "Agent not found".to_string()
+    })?;
 
     let existing_config = existing.config().clone();
 

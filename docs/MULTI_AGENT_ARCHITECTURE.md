@@ -5,9 +5,19 @@
 
 ## Principes Fondamentaux
 
-### Dans setting -- section agents
-- CRUD Agents Permanents
-- Il n'y a que l'agent principal disponible à créer
+### Gestion Dynamique des Agents (v1.0)
+
+**Aucun agent par défaut** - L'utilisateur crée tous ses agents via l'interface Settings.
+
+**CRUD Complet via UI**:
+- **Create**: Formulaire avec configuration LLM, tools, MCP servers, system prompt
+- **Read**: Liste des agents avec résumé (provider, model, tools count)
+- **Update**: Modification des paramètres (lifecycle non modifiable)
+- **Delete**: Suppression avec confirmation
+
+**Persistence**: Agents stockés dans SurrealDB (table `agent`)
+
+**Chargement**: Agents chargés automatiquement au démarrage via `load_agents_from_db()`
 
 ### Hiérarchie d'Agents
 ```
@@ -25,7 +35,6 @@ Agent Principal (Orchestrator)
 - Gère le cycle de vie des agents temporaires
 
 **Agents Spécialisés** (permanents)
-- Domain-specific: DB, API, Analytics, UI
 - Persistent state via SurrealDB
 - Réutilisables cross-sessions
 
@@ -71,7 +80,6 @@ Agent Principal (Orchestrator)
 
 **Avantages**
 - Human-readable & machine-parsable
-- Versionnable (git)
 - Chainable (output → input)
 - Auditable
 
@@ -82,14 +90,44 @@ Agent Principal (Orchestrator)
 - Performance optimale
 - Synchronisation via channels Rust
 
-**HTTP/SSE** (agents distribués)
-- Agents sur machines différentes
-- Streaming responses
-- Session-based (MCP 2025-03-26)
-
 ## Création d'Agents
 
-### Interface Unifiée
+### Via Settings UI (Méthode Principale)
+
+Les agents sont créés par l'utilisateur via l'interface Settings:
+
+1. **Aller dans Settings > Agents**
+2. **Cliquer "Create Agent"**
+3. **Remplir le formulaire**:
+   - Nom de l'agent (1-64 caractères)
+   - Lifecycle (Permanent/Temporary)
+   - Provider LLM (Mistral/Ollama)
+   - Modèle (ex: mistral-large-latest)
+   - Temperature (0.0-2.0)
+   - Max tokens (256-128000)
+   - Tools activés (MemoryTool, TodoTool)
+   - MCP Servers (depuis ceux configurés)
+   - System Prompt (instructions pour l'agent)
+
+**Frontend Store** (`src/lib/stores/agents.ts`):
+```typescript
+import { agentStore } from '$lib/stores/agents';
+
+// Créer un agent
+const agentId = await agentStore.createAgent({
+  name: 'My Agent',
+  lifecycle: 'permanent',
+  llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
+  tools: ['MemoryTool', 'TodoTool'],
+  mcp_servers: ['serena'],
+  system_prompt: 'You are a helpful assistant...'
+});
+
+// Lister les agents
+await agentStore.loadAgents();
+```
+
+### Interface Rust
 
 ```rust
 trait Agent {
@@ -103,21 +141,21 @@ trait Agent {
 }
 ```
 
-**Factory Pattern**
+**LLMAgent avec Tool Execution**
 ```rust
-AgentBuilder::new()
-    .id("db_agent")
-    .provider(Provider::Mistral)
-    .capabilities(vec![Capability::DatabaseQuery])
-    .lifecycle(Lifecycle::Permanent)
-    .tools(vec![DBTool, AnalyticsTool])
-    .mcp_servers(vec!["serena"])
-    .system_prompt(load_prompt("agents/prompts/db_agent.md"))
-    .task_templates(load_templates("agents/prompts/db_templates/"))
-    .build()
+// Création avec support tools
+let agent = LLMAgent::with_tools(
+    config,
+    provider.clone(),
+    tool_factory.clone(),
+    mcp_manager.clone()
+);
+
+// Exécution avec loop tool calls
+let report = agent.execute_with_mcp(&task, mcp_manager).await?;
 ```
 
-### Format Configuration TOML Unifié
+### Format Configuration TOML (Référence)
 
 ```toml
 # agents/config/db_agent.toml
@@ -128,7 +166,7 @@ description = "Gestion requêtes et analytics DB"
 lifecycle = "Permanent" # ou "Temporary"
 
 [llm]
-provider = "Mistral" # Phase 1: Mistral|Ollama | Future: Claude|GPT-4|Gemini
+provider = "Mistral" # Phase 1: Mistral|Ollama
 model = "mistral-large"
 temperature = 0.7
 max_tokens = 4096
@@ -744,7 +782,6 @@ provider = "Ollama"
 
 Agent interface reste identique grâce à abstraction Rig.rs.
 **Phase 1** : Mistral ↔ Ollama
-**Phase 2+** : Ajout Claude, GPT-4, Gemini
 
 ## Monitoring & Observability
 
@@ -788,19 +825,53 @@ AgentRegistry::health_check("db_agent") → AgentHealth {
 - Agent call chain tracking
 - Performance bottleneck identification
 
+## Exécution des Tools (v1.0)
+
+### Format Tool Calls
+
+Les agents utilisent un format XML pour appeler les tools:
+
+**Appel Tool**:
+```xml
+<tool_call name="MemoryTool">
+{"operation": "add", "type": "knowledge", "content": "Important info"}
+</tool_call>
+```
+
+**Résultat Tool**:
+```xml
+<tool_result name="MemoryTool" success="true">
+{"id": "mem_abc123", "message": "Memory added successfully"}
+</tool_result>
+```
+
+### Boucle d'Exécution
+
+L'agent LLM exécute une boucle jusqu'à ce qu'il n'y ait plus d'appels tools:
+
+1. **Build System Prompt**: Injection des définitions tools disponibles
+2. **Appel LLM**: Envoie le prompt au provider (Mistral/Ollama)
+3. **Parse Tool Calls**: Extraction des balises `<tool_call>` de la réponse
+4. **Exécution Tools**:
+   - Tools locaux via `ToolFactory` (MemoryTool, TodoTool)
+   - Tools MCP via `MCPManager`
+5. **Format Results**: Conversion en `<tool_result>` XML
+6. **Feedback Loop**: Retour des résultats au LLM pour continuation
+7. **Répéter** jusqu'à 10 itérations max ou pas de tool calls
+
+### Tools Disponibles
+
+| Tool | Description | Opérations |
+|------|-------------|------------|
+| **MemoryTool** | Persistence vectorielle | add, get, list, search, delete, clear_by_type |
+| **TodoTool** | Gestion tâches workflow | create, get, update_status, list, complete, delete |
+
 ## Sélection Intelligente Tools & MCP
 
 ### Decision Matrix
 
-| Besoin | Tool Custom | MCP Server | Quand Utiliser |
-|--------|-------------|------------|----------------|
-| Query DB | `SurrealDBTool` | - | Accès direct DB local |
-| Code search | - | `serena` | Semantic search codebase |
-| API docs | - | `context7` | Official library patterns |
-| Visual test | - | `playwright` | Browser automation |
-| Deep analysis | - | `sequential-thinking` | Multi-step reasoning |
-| HTTP call | `HTTPClientTool` | - | Custom logic/auth |
-| Refactoring | `RefactorTool` | `serena` | Tool pour transform, MCP pour find |
+Les tools disponibles : MemoryTool et TodoTool (via ToolFactory)
+Les MCP servers sont ajoutés par l'utilisateur via Settings.
 
 ### Agent Auto-Selection
 
@@ -839,6 +910,7 @@ Le processus est le suivant :
 4.  **Reprise ou Annulation**: L'agent reçoit la réponse et poursuit l'opération uniquement en cas d'approbation. Sinon, il l'annule.
 
 Ce mécanisme assure que l'utilisateur final conserve toujours le contrôle sur les opérations importantes.
+L'utilisateur peux rentrer un message dans le input et validé. le message se met à la suite de la tache suivante et est intégré dans le processus agentique.
 
 ## Sécurité
 

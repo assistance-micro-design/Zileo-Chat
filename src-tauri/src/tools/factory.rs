@@ -15,9 +15,6 @@
 //! |---------|--------|-------------|
 //! | `MemoryTool` | [`memory`] | Contextual memory with semantic search |
 //! | `TodoTool` | [`todo`] | Task management for workflows |
-//! | `SurrealDBTool` | [`db`] | Direct database CRUD operations |
-//! | `QueryBuilderTool` | [`db`] | SurrealQL query generation |
-//! | `AnalyticsTool` | [`db`] | Aggregations and analytics |
 //!
 //! # Usage
 //!
@@ -131,22 +128,10 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
-            // Database tools are stubs - will be fully implemented in future phases
-            "SurrealDBTool" | "QueryBuilderTool" | "AnalyticsTool" => {
-                warn!(
-                    tool_name = %tool_name,
-                    "Database tool requested but not yet fully implemented"
-                );
-                Err(format!(
-                    "Tool '{}' is defined but not yet fully implemented. Available tools: MemoryTool, TodoTool",
-                    tool_name
-                ))
-            }
-
             _ => {
                 warn!(tool_name = %tool_name, "Unknown tool requested");
                 Err(format!(
-                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, SurrealDBTool, QueryBuilderTool, AnalyticsTool",
+                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool",
                     tool_name
                 ))
             }
@@ -196,13 +181,7 @@ impl ToolFactory {
 
     /// Returns list of available tool names.
     pub fn available_tools() -> Vec<&'static str> {
-        vec![
-            "MemoryTool",
-            "TodoTool",
-            "SurrealDBTool",
-            "QueryBuilderTool",
-            "AnalyticsTool",
-        ]
+        vec!["MemoryTool", "TodoTool"]
     }
 
     /// Checks if a tool name is valid.
@@ -233,9 +212,7 @@ mod tests {
         let tools = ToolFactory::available_tools();
         assert!(tools.contains(&"MemoryTool"));
         assert!(tools.contains(&"TodoTool"));
-        assert!(tools.contains(&"SurrealDBTool"));
-        assert!(tools.contains(&"QueryBuilderTool"));
-        assert!(tools.contains(&"AnalyticsTool"));
+        assert_eq!(tools.len(), 2);
     }
 
     #[test]
@@ -308,20 +285,6 @@ mod tests {
 
         // Should create 2 valid tools, skip 1 invalid
         assert_eq!(tools.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_create_database_tool_stub() {
-        let factory = create_test_factory().await;
-
-        let result = factory.create_tool("SurrealDBTool", None, "test_agent".to_string());
-
-        // Database tools are stubs, should return error
-        assert!(result.is_err());
-        match result {
-            Err(msg) => assert!(msg.contains("not yet fully implemented")),
-            Ok(_) => panic!("Expected error for stub tool"),
-        }
     }
 
     #[tokio::test]
