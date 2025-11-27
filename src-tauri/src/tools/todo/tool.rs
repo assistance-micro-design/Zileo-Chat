@@ -140,21 +140,30 @@ impl TodoTool {
             )));
         }
 
-        let query = format!("UPDATE task:`{}` SET status = '{}'", task_id, status);
-
-        let result: Vec<Value> = self
+        // First check if task exists
+        let check_query = format!(
+            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
+            task_id
+        );
+        let existing: Vec<Value> = self
             .db
-            .query(&query)
+            .query(&check_query)
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
-        // Check if task was actually updated
-        if result.is_empty() {
+        if existing.is_empty() {
             return Err(ToolError::NotFound(format!(
                 "Task '{}' not found. Use operation 'list' to see available tasks",
                 task_id
             )));
         }
+
+        // Use execute() instead of query() to avoid serialization issues with enums
+        let update_query = format!("UPDATE task:`{}` SET status = '{}'", task_id, status);
+        self.db
+            .execute(&update_query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
         info!(task_id = %task_id, status = %status, "Task status updated");
 
@@ -172,15 +181,16 @@ impl TodoTool {
     /// * `status_filter` - Optional status to filter by
     #[instrument(skip(self))]
     async fn list_tasks(&self, status_filter: Option<&str>) -> ToolResult<Value> {
+        // Note: SurrealDB requires ORDER BY fields to be in SELECT
         let query = match status_filter {
             Some(status) => format!(
-                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned
+                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned, created_at
                 FROM task WHERE workflow_id = '{}' AND status = '{}'
                 ORDER BY priority ASC, created_at ASC"#,
                 self.workflow_id, status
             ),
             None => format!(
-                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned
+                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned, created_at
                 FROM task WHERE workflow_id = '{}'
                 ORDER BY priority ASC, created_at ASC"#,
                 self.workflow_id
@@ -252,27 +262,37 @@ impl TodoTool {
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
     async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
-        let duration_part = duration_ms
-            .map(|d| format!(", duration_ms = {}", d))
-            .unwrap_or_default();
-
-        let query = format!(
-            "UPDATE task:`{}` SET status = 'completed', completed_at = time::now(){}",
-            task_id, duration_part
+        // First check if task exists
+        let check_query = format!(
+            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
+            task_id
         );
-
-        let result: Vec<Value> = self
+        let existing: Vec<Value> = self
             .db
-            .query(&query)
+            .query(&check_query)
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
-        if result.is_empty() {
+        if existing.is_empty() {
             return Err(ToolError::NotFound(format!(
                 "Task '{}' not found. Cannot mark as completed",
                 task_id
             )));
         }
+
+        let duration_part = duration_ms
+            .map(|d| format!(", duration_ms = {}", d))
+            .unwrap_or_default();
+
+        // Use execute() instead of query() to avoid serialization issues with enums
+        let update_query = format!(
+            "UPDATE task:`{}` SET status = 'completed', completed_at = time::now(){}",
+            task_id, duration_part
+        );
+        self.db
+            .execute(&update_query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
         info!(task_id = %task_id, duration_ms = ?duration_ms, "Task completed");
 
@@ -309,10 +329,10 @@ impl TodoTool {
             )));
         }
 
-        let query = format!("DELETE task:`{}`", task_id);
-        let _: Vec<Value> = self
-            .db
-            .query(&query)
+        // Use execute() instead of query() to avoid serialization issues
+        let delete_query = format!("DELETE task:`{}`", task_id);
+        self.db
+            .execute(&delete_query)
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 

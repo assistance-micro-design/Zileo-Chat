@@ -449,8 +449,11 @@ pub async fn update_agent(
     state.registry.unregister_any(&validated_id).await;
 
     let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
-    let llm_agent =
-        LLMAgent::with_factory(updated_config.clone(), state.llm_manager.clone(), tool_factory);
+    let llm_agent = LLMAgent::with_factory(
+        updated_config.clone(),
+        state.llm_manager.clone(),
+        tool_factory,
+    );
     state
         .registry
         .register(validated_id.clone(), Arc::new(llm_agent))

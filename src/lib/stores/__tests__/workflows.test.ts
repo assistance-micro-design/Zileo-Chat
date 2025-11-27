@@ -44,7 +44,8 @@ describe('Workflow Store', () => {
 			model: 'test-model'
 		},
 		tools_used: ['tool1'],
-		mcp_calls: []
+		mcp_calls: [],
+		tool_executions: []
 	});
 
 	beforeEach(() => {

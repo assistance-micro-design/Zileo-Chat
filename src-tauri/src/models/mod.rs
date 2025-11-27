@@ -10,6 +10,8 @@ pub mod message;
 pub mod serde_utils;
 pub mod streaming;
 pub mod task;
+pub mod thinking_step;
+pub mod tool_execution;
 pub mod validation;
 pub mod workflow;
 
@@ -17,7 +19,10 @@ pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
     KNOWN_TOOLS,
 };
-pub use workflow::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, WorkflowStatus};
+pub use workflow::{
+    Workflow, WorkflowCreate, WorkflowFullState, WorkflowMetrics, WorkflowResult, WorkflowStatus,
+    WorkflowToolExecution,
+};
 
 // Re-export types for Phase 5 implementation
 pub use memory::{Memory, MemoryCreate, MemorySearchResult, MemoryType};
@@ -56,6 +61,15 @@ pub use message::{Message, MessageCreate};
 // Re-export MessageRole for future use (currently used in commands/message.rs validation)
 #[allow(unused_imports)]
 pub use message::MessageRole;
+
+// Re-export tool execution types for Phase 3 Tool Execution Persistence
+pub use tool_execution::{ToolExecution, ToolExecutionCreate};
+// Re-export ToolType for future use (currently unused in commands)
+#[allow(unused_imports)]
+pub use tool_execution::ToolType;
+
+// Re-export thinking step types for Phase 4 Thinking Steps Persistence
+pub use thinking_step::{ThinkingStep, ThinkingStepCreate};
 
 // Re-export LLM model types for CRUD operations (Phase 2 will use these)
 #[allow(unused_imports)]

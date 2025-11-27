@@ -11,13 +11,14 @@ Streaming integration for real-time response display (Phase 2).
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { onDestroy } from 'svelte';
-	import type { Workflow, WorkflowResult } from '$types/workflow';
+	import { onDestroy, onMount } from 'svelte';
+	import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
 	import type { Message } from '$types/message';
 	import type { AgentSummary } from '$types/agent';
+	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
 	import { Sidebar } from '$lib/components/layout';
-	import { Button, Input } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector } from '$lib/components/workflow';
+	import { Button, Input, Spinner } from '$lib/components/ui';
+	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel } from '$lib/components/workflow';
 	import { MessageList, ChatInput, StreamingMessage } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
@@ -28,6 +29,9 @@ Streaming integration for real-time response display (Phase 2).
 		activeTools,
 		reasoningSteps
 	} from '$lib/stores/streaming';
+
+	/** LocalStorage key for persisting selected workflow */
+	const LAST_WORKFLOW_KEY = 'zileo_last_workflow_id';
 
 	/** Workflow state */
 	let workflows = $state<Workflow[]>([]);
@@ -43,6 +47,14 @@ Streaming integration for real-time response display (Phase 2).
 	let messages = $state<Message[]>([]);
 	let messagesLoading = $state(false);
 
+	/** Tool executions state - persisted to backend */
+	let toolExecutions = $state<ToolExecution[]>([]);
+	let currentToolExecutions = $state<WorkflowToolExecution[]>([]);
+
+	/** Last completed streaming session - kept for display after streaming ends */
+	let lastReasoningSteps = $state<import('$lib/stores/streaming').ActiveReasoningStep[]>([]);
+	let lastActiveTools = $state<import('$lib/stores/streaming').ActiveTool[]>([]);
+
 	/** Input/Output state */
 	let result = $state<WorkflowResult | null>(null);
 	let loading = $state(false);
@@ -50,6 +62,10 @@ Streaming integration for real-time response display (Phase 2).
 	/** UI state */
 	let searchFilter = $state('');
 	let sidebarCollapsed = $state(false);
+
+	/** State recovery indicator (Phase 5: Complete State Recovery) */
+	let restoringState = $state(false);
+	let restorationError = $state<string | null>(null);
 
 	/**
 	 * Reactive agent list from store
@@ -121,6 +137,22 @@ Streaming integration for real-time response display (Phase 2).
 			messages = [];
 		} finally {
 			messagesLoading = false;
+		}
+	}
+
+	/**
+	 * Loads tool executions for the current workflow from backend.
+	 * Tool executions are sorted by creation time (chronological order).
+	 */
+	async function loadToolExecutions(workflowId: string): Promise<void> {
+		try {
+			const loadedExecutions = await invoke<ToolExecution[]>('load_workflow_tool_executions', {
+				workflowId
+			});
+			toolExecutions = loadedExecutions;
+		} catch (err) {
+			console.error('Failed to load tool executions:', err);
+			toolExecutions = [];
 		}
 	}
 
@@ -218,13 +250,17 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles workflow selection - loads persisted messages
+	 * Handles workflow selection - loads persisted messages and tool executions
 	 */
 	async function handleWorkflowSelect(workflow: Workflow): Promise<void> {
 		selectedWorkflowId = workflow.id;
 		result = null;
-		// Load persisted messages from backend
-		await loadMessages(workflow.id);
+		currentToolExecutions = [];
+		// Load persisted data from backend in parallel
+		await Promise.all([
+			loadMessages(workflow.id),
+			loadToolExecutions(workflow.id)
+		]);
 	}
 
 	/**
@@ -234,13 +270,18 @@ Streaming integration for real-time response display (Phase 2).
 		if (!confirm(`Delete workflow "${workflow.name}"?`)) return;
 
 		try {
-			// Clear messages first (optional, cascade delete would be better)
-			await invoke('clear_workflow_messages', { workflowId: workflow.id });
+			// Clear associated data first (optional, cascade delete would be better)
+			await Promise.all([
+				invoke('clear_workflow_messages', { workflowId: workflow.id }),
+				invoke('clear_workflow_tool_executions', { workflowId: workflow.id })
+			]);
 			await invoke('delete_workflow', { id: workflow.id });
 			await loadWorkflows();
 			if (selectedWorkflowId === workflow.id) {
 				selectedWorkflowId = null;
 				messages = [];
+				toolExecutions = [];
+				currentToolExecutions = [];
 				result = null;
 			}
 		} catch (err) {
@@ -293,17 +334,21 @@ Streaming integration for real-time response display (Phase 2).
 			};
 			messages = [...messages, userMessage];
 
-			// 3. Start streaming and setup event listeners
+			// 3. Clear previous streaming session data
+			lastReasoningSteps = [];
+			lastActiveTools = [];
+
+			// 4. Start streaming and setup event listeners
 			await streamingStore.start(selectedWorkflowId);
 
-			// 4. Execute workflow with streaming
+			// 5. Execute workflow with streaming
 			result = await invoke<WorkflowResult>('execute_workflow_streaming', {
 				workflowId: selectedWorkflowId,
 				message: message,
 				agentId: selectedAgentId
 			});
 
-			// 5. Streaming complete - save assistant message with metrics to backend
+			// 6. Streaming complete - save assistant message with metrics to backend
 			const assistantMsgId = await saveAssistantMessage(
 				selectedWorkflowId,
 				result.report,
@@ -316,7 +361,7 @@ Streaming integration for real-time response display (Phase 2).
 				}
 			);
 
-			// 6. Add assistant message to local state
+			// 7. Add assistant message to local state
 			const assistantMessage: Message = {
 				id: assistantMsgId,
 				workflow_id: selectedWorkflowId,
@@ -332,7 +377,15 @@ Streaming integration for real-time response display (Phase 2).
 			};
 			messages = [...messages, assistantMessage];
 
-			// 7. Cleanup streaming state
+			// 8. Capture tool executions from result for display
+			currentToolExecutions = result.tool_executions || [];
+
+			// 9. Capture streaming session data before reset (for persistent display)
+			const streamState = streamingStore.getState();
+			lastReasoningSteps = [...streamState.reasoning];
+			lastActiveTools = [...streamState.tools];
+
+			// 10. Cleanup streaming state
 			await streamingStore.reset();
 		} catch (err) {
 			// Cleanup streaming on error
@@ -390,9 +443,88 @@ Streaming integration for real-time response display (Phase 2).
 		await streamingStore.cleanup();
 	});
 
+	/**
+	 * Restores complete workflow state from backend using parallel queries.
+	 * Phase 5: Complete State Recovery
+	 *
+	 * @param workflowId - The workflow ID to restore
+	 * @returns true if successful, false otherwise
+	 */
+	async function restoreWorkflowState(workflowId: string): Promise<boolean> {
+		restoringState = true;
+		restorationError = null;
+
+		try {
+			const fullState = await invoke<WorkflowFullState>('load_workflow_full_state', {
+				workflowId
+			});
+
+			// Restore all state from the full state object
+			selectedWorkflowId = fullState.workflow.id;
+
+			// Convert timestamp strings to Date objects for messages
+			messages = fullState.messages.map(msg => ({
+				...msg,
+				timestamp: new Date(msg.timestamp)
+			}));
+
+			// Restore tool executions
+			toolExecutions = fullState.tool_executions;
+
+			// Auto-select the agent associated with this workflow
+			if (fullState.workflow.agent_id && agentList.length > 0) {
+				const agentExists = agentList.some(a => a.id === fullState.workflow.agent_id);
+				if (agentExists) {
+					selectedAgentId = fullState.workflow.agent_id;
+				}
+			}
+
+			// Log restoration success for debugging
+
+			return true;
+		} catch (err) {
+			console.warn('Failed to restore workflow state:', err);
+			restorationError = err instanceof Error ? err.message : String(err);
+
+			// Clear invalid localStorage entry
+			localStorage.removeItem(LAST_WORKFLOW_KEY);
+			return false;
+		} finally {
+			restoringState = false;
+		}
+	}
+
+	/**
+	 * Initialize component on mount.
+	 * Loads workflows, agents, and attempts to restore last selected workflow.
+	 * Phase 5: Complete State Recovery
+	 */
+	onMount(async () => {
+		// Load workflows and agents in parallel
+		await Promise.all([loadWorkflows(), loadAgents()]);
+
+		// Attempt to restore last selected workflow from localStorage
+		const lastWorkflowId = localStorage.getItem(LAST_WORKFLOW_KEY);
+		if (lastWorkflowId) {
+			// Verify the workflow still exists
+			const workflowExists = workflows.some(w => w.id === lastWorkflowId);
+			if (workflowExists) {
+				await restoreWorkflowState(lastWorkflowId);
+			} else {
+				// Workflow no longer exists, clear localStorage
+				localStorage.removeItem(LAST_WORKFLOW_KEY);
+			}
+		}
+	});
+
+	/**
+	 * Persist selected workflow ID to localStorage.
+	 * Phase 5: Complete State Recovery
+	 */
 	$effect(() => {
-		loadWorkflows();
-		loadAgents();
+		if (selectedWorkflowId) {
+			localStorage.setItem(LAST_WORKFLOW_KEY, selectedWorkflowId);
+		}
 	});
 </script>
 
@@ -469,14 +601,39 @@ Streaming integration for real-time response display (Phase 2).
 				<MessageList {messages} />
 			</div>
 
-			<!-- Streaming Message (shown during generation, below MessageList) -->
+			<!-- Streaming Message (shown during generation and after completion) -->
 			{#if $isStreamingStore}
 				<div class="streaming-container">
 					<StreamingMessage
 						content={$streamContent}
 						tools={$activeTools}
 						reasoning={$reasoningSteps}
+						isStreaming={true}
+					/>
+				</div>
+			{:else if lastReasoningSteps.length > 0 || lastActiveTools.length > 0}
+				<!-- Collapsed view of last completed streaming session -->
+				<div class="streaming-container completed">
+					<StreamingMessage
+						content=""
+						tools={lastActiveTools}
+						reasoning={lastReasoningSteps}
+						isStreaming={false}
+						showTools={true}
+						showReasoning={true}
+					/>
+				</div>
+			{/if}
+
+			<!-- Tool Execution Panel -->
+			{#if toolExecutions.length > 0 || currentToolExecutions.length > 0 || $isStreamingStore}
+				<div class="tool-execution-container">
+					<ToolExecutionPanel
+						executions={toolExecutions}
+						workflowExecutions={currentToolExecutions}
+						activeTools={$activeTools}
 						isStreaming={$isStreamingStore}
+						collapsed={true}
 					/>
 				</div>
 			{/if}
@@ -514,7 +671,22 @@ Streaming integration for real-time response display (Phase 2).
 		{:else}
 			<!-- Empty State -->
 			<div class="empty-state">
-				{#if agentLoadingState}
+				{#if restoringState}
+					<!-- Restoring workflow state (Phase 5) -->
+					<Spinner size="lg" />
+					<h3>Restoring workflow...</h3>
+					<p class="empty-description">
+						Loading messages, tool history, and reasoning steps...
+					</p>
+				{:else if restorationError}
+					<!-- Restoration failed -->
+					<Bot size={64} class="empty-icon error-icon" />
+					<h3>Failed to restore workflow</h3>
+					<p class="empty-description error-text">{restorationError}</p>
+					<Button variant="secondary" onclick={() => { restorationError = null; }}>
+						Dismiss
+					</Button>
+				{:else if agentLoadingState}
 					<!-- Loading agents -->
 					<Bot size={64} class="empty-icon" />
 					<h3>Loading agents...</h3>
@@ -652,6 +824,28 @@ Streaming integration for real-time response display (Phase 2).
 		animation: fadeIn 0.3s ease-in;
 	}
 
+	/* Completed streaming session - more compact */
+	.streaming-container.completed {
+		opacity: 0.85;
+	}
+
+	.streaming-container.completed :global(.streaming-content) {
+		display: none;
+	}
+
+	.streaming-container.completed :global(.streaming-header) {
+		padding: var(--spacing-xs) var(--spacing-md);
+	}
+
+	.streaming-container.completed :global(.streaming-indicator) {
+		display: none;
+	}
+
+	/* Tool Execution Panel Container */
+	.tool-execution-container {
+		padding: 0 var(--spacing-lg) var(--spacing-md);
+	}
+
 	/* Chat Input Wrapper (with cancel button) */
 	.chat-input-wrapper {
 		display: flex;
@@ -698,6 +892,15 @@ Streaming integration for real-time response display (Phase 2).
 	.no-agents {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-tertiary);
+	}
+
+	/* State Recovery Error Styles (Phase 5) */
+	.empty-state :global(.error-icon) {
+		color: var(--color-error);
+	}
+
+	.error-text {
+		color: var(--color-error);
 	}
 
 	.settings-link {

@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    models::{Workflow, WorkflowCreate, WorkflowMetrics, WorkflowResult, WorkflowStatus},
+    models::{
+        Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
+        WorkflowMetrics, WorkflowResult, WorkflowStatus, WorkflowToolExecution,
+    },
     security::Validator,
     AppState,
 };
+use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
@@ -164,6 +168,24 @@ pub async fn execute_workflow(
 
     // 5. Build result
     // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
+    // Convert tool executions to IPC-friendly format
+    let tool_executions: Vec<WorkflowToolExecution> = report
+        .metrics
+        .tool_executions
+        .iter()
+        .map(|te| WorkflowToolExecution {
+            tool_type: te.tool_type.clone(),
+            tool_name: te.tool_name.clone(),
+            server_name: te.server_name.clone(),
+            input_params: te.input_params.clone(),
+            output_result: te.output_result.clone(),
+            success: te.success,
+            error_message: te.error_message.clone(),
+            duration_ms: te.duration_ms,
+            iteration: te.iteration,
+        })
+        .collect();
+
     let result = WorkflowResult {
         report: report.content,
         metrics: WorkflowMetrics {
@@ -176,6 +198,7 @@ pub async fn execute_workflow(
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
+        tool_executions,
     };
 
     info!(
@@ -255,6 +278,215 @@ pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(
 
     info!("Workflow deleted successfully");
     Ok(())
+}
+
+/// Loads complete workflow state for recovery after restart.
+///
+/// Executes parallel queries using tokio::try_join! for optimal performance:
+/// - Workflow metadata
+/// - All messages
+/// - Tool execution history
+/// - Thinking steps
+///
+/// Phase 5: Complete State Recovery
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to load full state for
+///
+/// # Returns
+/// Complete WorkflowFullState with all related data
+#[tauri::command]
+#[instrument(name = "load_workflow_full_state", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn load_workflow_full_state(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<WorkflowFullState, String> {
+    info!("Loading complete workflow state for recovery");
+
+    // Validate workflow ID
+    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
+        warn!(error = %e, "Invalid workflow ID");
+        format!("Invalid workflow ID: {}", e)
+    })?;
+
+    // Clone db Arc for parallel queries
+    let db = Arc::clone(&state.db);
+    let db2 = Arc::clone(&state.db);
+    let db3 = Arc::clone(&state.db);
+    let db4 = Arc::clone(&state.db);
+
+    let id1 = validated_id.clone();
+    let id2 = validated_id.clone();
+    let id3 = validated_id.clone();
+    let id4 = validated_id.clone();
+
+    // Execute all queries in parallel using tokio::try_join!
+    let (workflow_result, messages_result, tools_result, thinking_result) = tokio::try_join!(
+        // Query 1: Load workflow
+        async move {
+            let query = format!(
+                r#"SELECT
+                    meta::id(id) AS id,
+                    name,
+                    agent_id,
+                    status,
+                    created_at,
+                    updated_at,
+                    completed_at
+                FROM workflow
+                WHERE meta::id(id) = '{}'"#,
+                id1
+            );
+
+            let json_results = db.query_json(&query).await.map_err(|e| {
+                error!(error = %e, "Failed to load workflow");
+                format!("Failed to load workflow: {}", e)
+            })?;
+
+            let workflows: Vec<Workflow> = json_results
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<Vec<Workflow>, _>>()
+                .map_err(|e| {
+                    error!(error = %e, "Failed to deserialize workflow");
+                    format!("Failed to deserialize workflow: {}", e)
+                })?;
+
+            workflows.into_iter().next().ok_or_else(|| {
+                warn!(workflow_id = %id1, "Workflow not found");
+                "Workflow not found".to_string()
+            })
+        },
+        // Query 2: Load messages
+        async move {
+            let query = format!(
+                r#"SELECT
+                    meta::id(id) AS id,
+                    workflow_id,
+                    role,
+                    content,
+                    tokens,
+                    tokens_input,
+                    tokens_output,
+                    model,
+                    provider,
+                    cost_usd,
+                    duration_ms,
+                    timestamp
+                FROM message
+                WHERE workflow_id = '{}'
+                ORDER BY timestamp ASC"#,
+                id2
+            );
+
+            let json_results = db2.query_json(&query).await.map_err(|e| {
+                error!(error = %e, "Failed to load messages");
+                format!("Failed to load messages: {}", e)
+            })?;
+
+            let messages: Vec<Message> = json_results
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<Vec<Message>, _>>()
+                .map_err(|e| {
+                    error!(error = %e, "Failed to deserialize messages");
+                    format!("Failed to deserialize messages: {}", e)
+                })?;
+
+            Ok::<Vec<Message>, String>(messages)
+        },
+        // Query 3: Load tool executions
+        async move {
+            let query = format!(
+                r#"SELECT
+                    meta::id(id) AS id,
+                    workflow_id,
+                    message_id,
+                    agent_id,
+                    tool_type,
+                    tool_name,
+                    server_name,
+                    input_params,
+                    output_result,
+                    success,
+                    error_message,
+                    duration_ms,
+                    iteration,
+                    created_at
+                FROM tool_execution
+                WHERE workflow_id = '{}'
+                ORDER BY created_at ASC"#,
+                id3
+            );
+
+            let json_results = db3.query_json(&query).await.map_err(|e| {
+                error!(error = %e, "Failed to load tool executions");
+                format!("Failed to load tool executions: {}", e)
+            })?;
+
+            let tools: Vec<ToolExecution> = json_results
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<Vec<ToolExecution>, _>>()
+                .map_err(|e| {
+                    error!(error = %e, "Failed to deserialize tool executions");
+                    format!("Failed to deserialize tool executions: {}", e)
+                })?;
+
+            Ok::<Vec<ToolExecution>, String>(tools)
+        },
+        // Query 4: Load thinking steps
+        async move {
+            let query = format!(
+                r#"SELECT
+                    meta::id(id) AS id,
+                    workflow_id,
+                    message_id,
+                    agent_id,
+                    step_number,
+                    content,
+                    duration_ms,
+                    tokens,
+                    created_at
+                FROM thinking_step
+                WHERE workflow_id = '{}'
+                ORDER BY created_at ASC, step_number ASC"#,
+                id4
+            );
+
+            let json_results = db4.query_json(&query).await.map_err(|e| {
+                error!(error = %e, "Failed to load thinking steps");
+                format!("Failed to load thinking steps: {}", e)
+            })?;
+
+            let steps: Vec<ThinkingStep> = json_results
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<Vec<ThinkingStep>, _>>()
+                .map_err(|e| {
+                    error!(error = %e, "Failed to deserialize thinking steps");
+                    format!("Failed to deserialize thinking steps: {}", e)
+                })?;
+
+            Ok::<Vec<ThinkingStep>, String>(steps)
+        }
+    )?;
+
+    let full_state = WorkflowFullState {
+        workflow: workflow_result,
+        messages: messages_result,
+        tool_executions: tools_result,
+        thinking_steps: thinking_result,
+    };
+
+    info!(
+        messages = full_state.messages.len(),
+        tools = full_state.tool_executions.len(),
+        thinking = full_state.thinking_steps.len(),
+        "Workflow full state loaded successfully"
+    );
+
+    Ok(full_state)
 }
 
 #[cfg(test)]
@@ -362,6 +594,7 @@ mod tests {
             },
             tools_used: vec!["tool1".to_string()],
             mcp_calls: vec![],
+            tool_executions: vec![],
         };
 
         // Verify serialization works

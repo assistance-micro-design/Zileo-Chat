@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::serde_utils::{deserialize_thing_id, deserialize_workflow_status};
+use super::{Message, ThinkingStep, ToolExecution};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +76,31 @@ impl std::fmt::Display for WorkflowStatus {
     }
 }
 
+/// Tool execution data for workflow result (IPC-friendly version)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowToolExecution {
+    /// Tool type ("local" or "mcp")
+    pub tool_type: String,
+    /// Tool name
+    pub tool_name: String,
+    /// MCP server name (only for MCP tools)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+    /// Input parameters as JSON
+    pub input_params: serde_json::Value,
+    /// Output result as JSON
+    pub output_result: serde_json::Value,
+    /// Whether execution was successful
+    pub success: bool,
+    /// Error message if failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+    /// Iteration number in the tool loop
+    pub iteration: u32,
+}
+
 /// Result of a workflow execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowResult {
@@ -86,6 +112,8 @@ pub struct WorkflowResult {
     pub tools_used: Vec<String>,
     /// List of MCP calls made during execution
     pub mcp_calls: Vec<String>,
+    /// Detailed tool execution data for persistence
+    pub tool_executions: Vec<WorkflowToolExecution>,
 }
 
 /// Metrics collected during workflow execution
@@ -103,6 +131,27 @@ pub struct WorkflowMetrics {
     pub provider: String,
     /// Model used
     pub model: String,
+}
+
+/// Complete workflow state for recovery after restart.
+///
+/// Contains all data needed to fully restore a workflow session:
+/// - The workflow metadata
+/// - All conversation messages
+/// - Tool execution history
+/// - Thinking/reasoning steps
+///
+/// Used by `load_workflow_full_state` command for Phase 5: Complete State Recovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowFullState {
+    /// The workflow entity with metadata
+    pub workflow: Workflow,
+    /// All messages in chronological order
+    pub messages: Vec<Message>,
+    /// Tool execution history
+    pub tool_executions: Vec<ToolExecution>,
+    /// Thinking/reasoning steps
+    pub thinking_steps: Vec<ThinkingStep>,
 }
 
 #[cfg(test)]
@@ -168,6 +217,7 @@ mod tests {
             },
             tools_used: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_calls: vec!["mcp_call1".to_string()],
+            tool_executions: vec![],
         };
 
         let json = serde_json::to_string(&result).unwrap();

@@ -40,6 +40,29 @@ pub enum ReportStatus {
     Partial,
 }
 
+/// Detailed tool execution data for persistence
+#[derive(Debug, Clone)]
+pub struct ToolExecutionData {
+    /// Tool type ("local" or "mcp")
+    pub tool_type: String,
+    /// Tool name (e.g., "MemoryTool", "find_symbol")
+    pub tool_name: String,
+    /// MCP server name (only for MCP tools)
+    pub server_name: Option<String>,
+    /// Input parameters as JSON
+    pub input_params: serde_json::Value,
+    /// Output result as JSON
+    pub output_result: serde_json::Value,
+    /// Whether execution was successful
+    pub success: bool,
+    /// Error message if failed
+    pub error_message: Option<String>,
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+    /// Iteration number in the tool loop
+    pub iteration: u32,
+}
+
 /// Metrics collected during task execution
 #[derive(Debug, Clone)]
 pub struct ReportMetrics {
@@ -49,10 +72,12 @@ pub struct ReportMetrics {
     pub tokens_input: usize,
     /// Output tokens generated
     pub tokens_output: usize,
-    /// Tools used
+    /// Tools used (names only, for backward compatibility)
     pub tools_used: Vec<String>,
-    /// MCP calls made
+    /// MCP calls made (names only, for backward compatibility)
     pub mcp_calls: Vec<String>,
+    /// Detailed tool execution data for persistence
+    pub tool_executions: Vec<ToolExecutionData>,
 }
 
 /// Agent trait - unified interface for all agents

@@ -70,7 +70,10 @@ pub async fn save_message(
         "user" | "assistant" | "system" => role.clone(),
         _ => {
             warn!(role = %role, "Invalid message role");
-            return Err(format!("Invalid message role: {}. Expected user, assistant, or system", role));
+            return Err(format!(
+                "Invalid message role: {}. Expected user, assistant, or system",
+                role
+            ));
         }
     };
 
@@ -237,11 +240,8 @@ pub async fn clear_workflow_messages(
         "SELECT count() FROM message WHERE workflow_id = '{}' GROUP ALL",
         validated_workflow_id
     );
-    let count_result: Vec<serde_json::Value> = state
-        .db
-        .query(&count_query)
-        .await
-        .unwrap_or_default();
+    let count_result: Vec<serde_json::Value> =
+        state.db.query(&count_query).await.unwrap_or_default();
 
     let count = count_result
         .first()

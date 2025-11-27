@@ -9,7 +9,8 @@
 use crate::{
     agents::core::agent::Task,
     models::{
-        streaming::events, StreamChunk, Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult,
+        streaming::events, StreamChunk, ThinkingStepCreate, ToolExecutionCreate, Workflow,
+        WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::Validator,
     AppState,
@@ -113,14 +114,48 @@ pub async fn execute_workflow_streaming(
         "Workflow not found".to_string()
     })?;
 
-    // Emit initial reasoning step
+    // Generate a message ID for this execution (the assistant response)
+    // This is generated early so thinking steps can reference it
+    let message_id = Uuid::new_v4().to_string();
+
+    // Counter for thinking steps
+    let mut thinking_step_number: u32 = 0;
+
+    // Emit and persist initial reasoning step
+    let initial_reasoning = "Analyzing request and preparing response...".to_string();
     emit_chunk(
         &window,
-        StreamChunk::reasoning(
+        StreamChunk::reasoning(validated_workflow_id.clone(), initial_reasoning.clone()),
+    );
+
+    // Emit initial content to show user something is happening
+    emit_chunk(
+        &window,
+        StreamChunk::token(
             validated_workflow_id.clone(),
-            "Analyzing request and preparing response...".to_string(),
+            "Processing your request...\n\n".to_string(),
         ),
     );
+
+    // Persist the initial thinking step
+    let initial_step = ThinkingStepCreate {
+        workflow_id: validated_workflow_id.clone(),
+        message_id: message_id.clone(),
+        agent_id: validated_agent_id.clone(),
+        step_number: thinking_step_number,
+        content: initial_reasoning,
+        duration_ms: None,
+        tokens: None,
+    };
+    let step_id = Uuid::new_v4().to_string();
+    if let Err(e) = state
+        .db
+        .create("thinking_step", &step_id, initial_step)
+        .await
+    {
+        warn!(error = %e, "Failed to persist initial thinking step");
+    }
+    thinking_step_number += 1;
 
     // Create task
     let task_id = Uuid::new_v4().to_string();
@@ -157,6 +192,47 @@ pub async fn execute_workflow_streaming(
                     validated_agent_id.clone(),
                     duration,
                 ),
+            );
+
+            // Emit and persist reasoning step about execution completion
+            let completion_reasoning = format!(
+                "Execution completed in {}ms. Processing {} tool call(s).",
+                duration,
+                report.metrics.tool_executions.len()
+            );
+            emit_chunk(
+                &window,
+                StreamChunk::reasoning(validated_workflow_id.clone(), completion_reasoning.clone()),
+            );
+
+            // Persist the completion thinking step
+            let completion_step = ThinkingStepCreate {
+                workflow_id: validated_workflow_id.clone(),
+                message_id: message_id.clone(),
+                agent_id: validated_agent_id.clone(),
+                step_number: thinking_step_number,
+                content: completion_reasoning,
+                duration_ms: Some(duration),
+                tokens: None,
+            };
+            let completion_step_id = Uuid::new_v4().to_string();
+            if let Err(e) = state
+                .db
+                .create("thinking_step", &completion_step_id, completion_step)
+                .await
+            {
+                warn!(error = %e, "Failed to persist completion thinking step");
+            }
+            #[allow(unused_assignments)]
+            {
+                thinking_step_number += 1;
+            }
+
+            // Clear the placeholder and stream the actual response content
+            // First, emit a newline to visually separate from placeholder
+            emit_chunk(
+                &window,
+                StreamChunk::token(validated_workflow_id.clone(), "\n".to_string()),
             );
 
             // Stream the response content in chunks
@@ -234,6 +310,62 @@ pub async fn execute_workflow_streaming(
         }
     };
 
+    // Convert tool executions to IPC-friendly format
+    let tool_executions: Vec<WorkflowToolExecution> = report
+        .metrics
+        .tool_executions
+        .iter()
+        .map(|te| WorkflowToolExecution {
+            tool_type: te.tool_type.clone(),
+            tool_name: te.tool_name.clone(),
+            server_name: te.server_name.clone(),
+            input_params: te.input_params.clone(),
+            output_result: te.output_result.clone(),
+            success: te.success,
+            error_message: te.error_message.clone(),
+            duration_ms: te.duration_ms,
+            iteration: te.iteration,
+        })
+        .collect();
+
+    // Persist tool executions to database (message_id was generated earlier)
+    for (idx, te) in tool_executions.iter().enumerate() {
+        let execution_id = Uuid::new_v4().to_string();
+        let execution = ToolExecutionCreate {
+            workflow_id: validated_workflow_id.clone(),
+            message_id: message_id.clone(),
+            agent_id: validated_agent_id.clone(),
+            tool_type: te.tool_type.clone(),
+            tool_name: te.tool_name.clone(),
+            server_name: te.server_name.clone(),
+            input_params: te.input_params.clone(),
+            output_result: te.output_result.clone(),
+            success: te.success,
+            error_message: te.error_message.clone(),
+            duration_ms: te.duration_ms,
+            iteration: te.iteration,
+        };
+
+        if let Err(e) = state
+            .db
+            .create("tool_execution", &execution_id, execution)
+            .await
+        {
+            warn!(
+                error = %e,
+                tool_name = %te.tool_name,
+                index = idx,
+                "Failed to persist tool execution"
+            );
+        }
+    }
+
+    info!(
+        tool_executions_count = tool_executions.len(),
+        thinking_steps_count = thinking_step_number,
+        "Persisted tool executions and thinking steps to database"
+    );
+
     // Build result
     // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
     let result = WorkflowResult {
@@ -248,6 +380,7 @@ pub async fn execute_workflow_streaming(
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
+        tool_executions,
     };
 
     // Emit completion
@@ -260,6 +393,7 @@ pub async fn execute_workflow_streaming(
         duration_ms = result.metrics.duration_ms,
         tokens_input = result.metrics.tokens_input,
         tokens_output = result.metrics.tokens_output,
+        tool_executions_count = result.tool_executions.len(),
         "Streaming workflow execution completed"
     );
 

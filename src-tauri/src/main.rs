@@ -186,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
             commands::workflow::execute_workflow,
             commands::workflow::load_workflows,
             commands::workflow::delete_workflow,
+            commands::workflow::load_workflow_full_state,
             // Agent commands (CRUD)
             commands::agent::list_agents,
             commands::agent::get_agent_config,
@@ -240,6 +241,18 @@ async fn main() -> anyhow::Result<()> {
             commands::message::load_workflow_messages,
             commands::message::delete_message,
             commands::message::clear_workflow_messages,
+            // Tool execution commands (Phase 3 - Tool Execution Persistence)
+            commands::tool_execution::save_tool_execution,
+            commands::tool_execution::load_workflow_tool_executions,
+            commands::tool_execution::load_message_tool_executions,
+            commands::tool_execution::delete_tool_execution,
+            commands::tool_execution::clear_workflow_tool_executions,
+            // Thinking step commands (Phase 4 - Thinking Steps Persistence)
+            commands::thinking::save_thinking_step,
+            commands::thinking::load_workflow_thinking_steps,
+            commands::thinking::load_message_thinking_steps,
+            commands::thinking::delete_thinking_step,
+            commands::thinking::clear_workflow_thinking_steps,
             // Task commands (Todo Tool)
             commands::task::create_task,
             commands::task::get_task,

@@ -207,4 +207,56 @@ DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();
 DEFINE INDEX unique_agent_id ON agent FIELDS id UNIQUE;
 DEFINE INDEX agent_name_idx ON agent FIELDS name;
 DEFINE INDEX agent_provider_idx ON agent FIELDS llm.provider;
+
+-- =============================================
+-- Table: tool_execution
+-- Logs all tool executions (local + MCP)
+-- Phase 3: Tool Execution Persistence
+-- =============================================
+DEFINE TABLE tool_execution SCHEMAFULL;
+DEFINE FIELD id ON tool_execution TYPE string;
+DEFINE FIELD workflow_id ON tool_execution TYPE string;
+DEFINE FIELD message_id ON tool_execution TYPE string;
+DEFINE FIELD agent_id ON tool_execution TYPE string;
+DEFINE FIELD tool_type ON tool_execution TYPE string
+    ASSERT $value IN ['local', 'mcp'];
+DEFINE FIELD tool_name ON tool_execution TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
+DEFINE FIELD server_name ON tool_execution TYPE option<string>;
+DEFINE FIELD input_params ON tool_execution TYPE object;
+DEFINE FIELD output_result ON tool_execution TYPE object;
+DEFINE FIELD success ON tool_execution TYPE bool;
+DEFINE FIELD error_message ON tool_execution TYPE option<string>;
+DEFINE FIELD duration_ms ON tool_execution TYPE int;
+DEFINE FIELD iteration ON tool_execution TYPE int;
+DEFINE FIELD created_at ON tool_execution TYPE datetime DEFAULT time::now();
+
+-- Indexes for efficient querying
+DEFINE INDEX tool_exec_workflow_idx ON tool_execution FIELDS workflow_id;
+DEFINE INDEX tool_exec_message_idx ON tool_execution FIELDS message_id;
+DEFINE INDEX tool_exec_agent_idx ON tool_execution FIELDS agent_id;
+DEFINE INDEX tool_exec_type_idx ON tool_execution FIELDS tool_type;
+
+-- =============================================
+-- Table: thinking_step
+-- Captures agent reasoning/thinking steps
+-- Phase 4: Thinking Steps Persistence
+-- =============================================
+DEFINE TABLE thinking_step SCHEMAFULL;
+DEFINE FIELD id ON thinking_step TYPE string;
+DEFINE FIELD workflow_id ON thinking_step TYPE string;
+DEFINE FIELD message_id ON thinking_step TYPE string;
+DEFINE FIELD agent_id ON thinking_step TYPE string;
+DEFINE FIELD step_number ON thinking_step TYPE int
+    ASSERT $value >= 0;
+DEFINE FIELD content ON thinking_step TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 50000;
+DEFINE FIELD duration_ms ON thinking_step TYPE option<int>;
+DEFINE FIELD tokens ON thinking_step TYPE option<int>;
+DEFINE FIELD created_at ON thinking_step TYPE datetime DEFAULT time::now();
+
+-- Indexes for efficient querying
+DEFINE INDEX thinking_workflow_idx ON thinking_step FIELDS workflow_id;
+DEFINE INDEX thinking_message_idx ON thinking_step FIELDS message_id;
+DEFINE INDEX thinking_agent_idx ON thinking_step FIELDS agent_id;
 "#;

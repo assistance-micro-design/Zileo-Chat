@@ -16,7 +16,9 @@
 //! 6. Results are fed back to LLM for continuation
 //! 7. Loop continues until no more tool calls or max iterations reached
 
-use crate::agents::core::agent::{Agent, Report, ReportMetrics, ReportStatus, Task};
+use crate::agents::core::agent::{
+    Agent, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
+};
 use crate::db::DBClient;
 use crate::llm::{LLMError, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
@@ -520,6 +522,7 @@ impl Agent for LLMAgent {
                         tokens_output: 0,
                         tools_used: vec![],
                         mcp_calls: vec![],
+                        tool_executions: vec![],
                     },
                 });
             }
@@ -544,6 +547,7 @@ impl Agent for LLMAgent {
                     tokens_output: 0,
                     tools_used: vec![],
                     mcp_calls: vec![],
+                    tool_executions: vec![],
                 },
             });
         }
@@ -596,6 +600,7 @@ impl Agent for LLMAgent {
                         tokens_output: response.tokens_output,
                         tools_used: vec![],
                         mcp_calls: vec![],
+                        tool_executions: vec![],
                     },
                 })
             }
@@ -636,6 +641,7 @@ impl Agent for LLMAgent {
                         tokens_output: 0,
                         tools_used: vec![],
                         mcp_calls: vec![],
+                        tool_executions: vec![],
                     },
                 })
             }
@@ -675,6 +681,7 @@ impl Agent for LLMAgent {
         let mut mcp_calls_made: Vec<String> = Vec::new();
         let mut total_tokens_input: usize = 0;
         let mut total_tokens_output: usize = 0;
+        let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
 
         // Get provider type early to fail fast
         let provider_type = match self.get_provider_type() {
@@ -694,6 +701,7 @@ impl Agent for LLMAgent {
                         tokens_output: 0,
                         tools_used: vec![],
                         mcp_calls: vec![],
+                        tool_executions: vec![],
                     },
                 });
             }
@@ -718,6 +726,7 @@ impl Agent for LLMAgent {
                     tokens_output: 0,
                     tools_used: vec![],
                     mcp_calls: vec![],
+                    tool_executions: vec![],
                 },
             });
         }
@@ -834,6 +843,7 @@ impl Agent for LLMAgent {
                             tokens_output: total_tokens_output,
                             tools_used,
                             mcp_calls: mcp_calls_made,
+                            tool_executions: tool_executions_data,
                         },
                     });
                 }
@@ -855,31 +865,83 @@ impl Agent for LLMAgent {
                 "Found tool calls, executing"
             );
 
-            // Execute each tool call
+            // Execute each tool call with detailed tracking
             let mut execution_results = Vec::new();
 
             for call in tool_calls {
+                let exec_start = std::time::Instant::now();
+                let input_params = call.arguments.clone();
+
                 let result = if call.is_mcp {
                     // MCP tool execution
                     if let (Some(server), Some(tool)) = (&call.mcp_server, &call.mcp_tool) {
                         if let Some(ref mcp) = mcp_manager {
                             mcp_calls_made.push(call.tool_name.clone());
-                            Self::execute_mcp_tool(mcp, server, tool, call.arguments).await
+                            let exec_result =
+                                Self::execute_mcp_tool(mcp, server, tool, call.arguments).await;
+
+                            // Capture detailed execution data for MCP tool
+                            let exec_duration = exec_start.elapsed().as_millis() as u64;
+                            tool_executions_data.push(ToolExecutionData {
+                                tool_type: "mcp".to_string(),
+                                tool_name: tool.clone(),
+                                server_name: Some(server.clone()),
+                                input_params: input_params.clone(),
+                                output_result: exec_result.result.clone(),
+                                success: exec_result.success,
+                                error_message: exec_result.error.clone(),
+                                duration_ms: exec_duration,
+                                iteration: iteration as u32,
+                            });
+
+                            exec_result
                         } else {
-                            ToolExecutionResult {
+                            let exec_result = ToolExecutionResult {
                                 tool_name: call.tool_name.clone(),
                                 success: false,
                                 result: serde_json::json!({}),
                                 error: Some("MCP manager not available".to_string()),
-                            }
+                            };
+
+                            // Capture failed execution data
+                            let exec_duration = exec_start.elapsed().as_millis() as u64;
+                            tool_executions_data.push(ToolExecutionData {
+                                tool_type: "mcp".to_string(),
+                                tool_name: call.tool_name.clone(),
+                                server_name: call.mcp_server.clone(),
+                                input_params: input_params.clone(),
+                                output_result: exec_result.result.clone(),
+                                success: false,
+                                error_message: exec_result.error.clone(),
+                                duration_ms: exec_duration,
+                                iteration: iteration as u32,
+                            });
+
+                            exec_result
                         }
                     } else {
-                        ToolExecutionResult {
+                        let exec_result = ToolExecutionResult {
                             tool_name: call.tool_name.clone(),
                             success: false,
                             result: serde_json::json!({}),
                             error: Some("Invalid MCP tool format".to_string()),
-                        }
+                        };
+
+                        // Capture failed execution data
+                        let exec_duration = exec_start.elapsed().as_millis() as u64;
+                        tool_executions_data.push(ToolExecutionData {
+                            tool_type: "mcp".to_string(),
+                            tool_name: call.tool_name.clone(),
+                            server_name: None,
+                            input_params: input_params.clone(),
+                            output_result: exec_result.result.clone(),
+                            success: false,
+                            error_message: exec_result.error.clone(),
+                            duration_ms: exec_duration,
+                            iteration: iteration as u32,
+                        });
+
+                        exec_result
                     }
                 } else {
                     // Local tool execution
@@ -889,9 +951,25 @@ impl Agent for LLMAgent {
 
                     if let Some(tool) = matching_tool {
                         tools_used.push(call.tool_name.clone());
-                        Self::execute_local_tool(tool, call.arguments).await
+                        let exec_result = Self::execute_local_tool(tool, call.arguments).await;
+
+                        // Capture detailed execution data for local tool
+                        let exec_duration = exec_start.elapsed().as_millis() as u64;
+                        tool_executions_data.push(ToolExecutionData {
+                            tool_type: "local".to_string(),
+                            tool_name: call.tool_name.clone(),
+                            server_name: None,
+                            input_params: input_params.clone(),
+                            output_result: exec_result.result.clone(),
+                            success: exec_result.success,
+                            error_message: exec_result.error.clone(),
+                            duration_ms: exec_duration,
+                            iteration: iteration as u32,
+                        });
+
+                        exec_result
                     } else {
-                        ToolExecutionResult {
+                        let exec_result = ToolExecutionResult {
                             tool_name: call.tool_name.clone(),
                             success: false,
                             result: serde_json::json!({}),
@@ -904,7 +982,23 @@ impl Agent for LLMAgent {
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             )),
-                        }
+                        };
+
+                        // Capture failed execution data
+                        let exec_duration = exec_start.elapsed().as_millis() as u64;
+                        tool_executions_data.push(ToolExecutionData {
+                            tool_type: "local".to_string(),
+                            tool_name: call.tool_name.clone(),
+                            server_name: None,
+                            input_params: input_params.clone(),
+                            output_result: exec_result.result.clone(),
+                            success: false,
+                            error_message: exec_result.error.clone(),
+                            duration_ms: exec_duration,
+                            iteration: iteration as u32,
+                        });
+
+                        exec_result
                     }
                 };
 
@@ -1006,6 +1100,7 @@ impl Agent for LLMAgent {
                 tokens_output: total_tokens_output,
                 tools_used,
                 mcp_calls: mcp_calls_made,
+                tool_executions: tool_executions_data,
             },
         })
     }

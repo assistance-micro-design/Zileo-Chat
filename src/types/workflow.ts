@@ -1,6 +1,10 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+import type { Message } from './message';
+import type { ThinkingStep } from './thinking';
+import type { ToolExecution, WorkflowToolExecution } from './tool';
+
 /**
  * Workflow status representing the current state of a workflow
  */
@@ -38,6 +42,8 @@ export interface WorkflowResult {
   tools_used: string[];
   /** List of MCP calls made during execution */
   mcp_calls: string[];
+  /** Detailed tool execution data for persistence and display */
+  tool_executions: WorkflowToolExecution[];
 }
 
 /**
@@ -56,4 +62,26 @@ export interface WorkflowMetrics {
   provider: string;
   /** Model used */
   model: string;
+}
+
+/**
+ * Complete workflow state for recovery after restart.
+ *
+ * Contains all data needed to fully restore a workflow session:
+ * - The workflow metadata
+ * - All conversation messages
+ * - Tool execution history
+ * - Thinking/reasoning steps
+ *
+ * Used by `load_workflow_full_state` command for Phase 5: Complete State Recovery.
+ */
+export interface WorkflowFullState {
+  /** The workflow entity with metadata */
+  workflow: Workflow;
+  /** All messages in chronological order */
+  messages: Message[];
+  /** Tool execution history */
+  tool_executions: ToolExecution[];
+  /** Thinking/reasoning steps */
+  thinking_steps: ThinkingStep[];
 }

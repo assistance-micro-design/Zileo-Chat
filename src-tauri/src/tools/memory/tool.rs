@@ -599,10 +599,10 @@ impl MemoryTool {
             )));
         }
 
-        let query = format!("DELETE memory:`{}`", memory_id);
-        let _: Vec<Value> = self
-            .db
-            .query(&query)
+        // Use execute() instead of query() to avoid serialization issues with enums
+        let delete_query = format!("DELETE memory:`{}`", memory_id);
+        self.db
+            .execute(&delete_query)
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
@@ -626,7 +626,8 @@ impl MemoryTool {
 
         let workflow_id = self.current_workflow_id().await;
 
-        let query = if let Some(ref wf_id) = workflow_id {
+        // Use execute() instead of query() to avoid serialization issues with enums
+        let delete_query = if let Some(ref wf_id) = workflow_id {
             format!(
                 "DELETE FROM memory WHERE type = '{}' AND workflow_id = '{}'",
                 memory_type, wf_id
@@ -635,9 +636,8 @@ impl MemoryTool {
             format!("DELETE FROM memory WHERE type = '{}'", memory_type)
         };
 
-        let _: Vec<Value> = self
-            .db
-            .query(&query)
+        self.db
+            .execute(&delete_query)
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 

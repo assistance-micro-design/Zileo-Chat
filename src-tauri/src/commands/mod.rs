@@ -72,6 +72,20 @@
 //! - `delete_message` - Delete a single message
 //! - `clear_workflow_messages` - Delete all messages for a workflow
 //!
+//! ### Tool Execution Commands ([`tool_execution`]) - Phase 3
+//! - `save_tool_execution` - Persist a tool execution log
+//! - `load_workflow_tool_executions` - Load all tool executions for a workflow
+//! - `load_message_tool_executions` - Load tool executions for a message
+//! - `delete_tool_execution` - Delete a single tool execution
+//! - `clear_workflow_tool_executions` - Delete all tool executions for a workflow
+//!
+//! ### Thinking Step Commands ([`thinking`]) - Phase 4
+//! - `save_thinking_step` - Persist a thinking/reasoning step
+//! - `load_workflow_thinking_steps` - Load all thinking steps for a workflow
+//! - `load_message_thinking_steps` - Load thinking steps for a message
+//! - `delete_thinking_step` - Delete a single thinking step
+//! - `clear_workflow_thinking_steps` - Delete all thinking steps for a workflow
+//!
 //! ### Task Commands ([`task`])
 //! - `create_task` - Create a new task for a workflow
 //! - `get_task` - Get a single task by ID
@@ -124,6 +138,8 @@ pub mod models;
 pub mod security;
 pub mod streaming;
 pub mod task;
+pub mod thinking;
+pub mod tool_execution;
 pub mod validation;
 pub mod workflow;
 

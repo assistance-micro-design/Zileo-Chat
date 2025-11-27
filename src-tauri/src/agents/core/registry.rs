@@ -176,6 +176,7 @@ mod tests {
                     tokens_output: 0,
                     tools_used: vec![],
                     mcp_calls: vec![],
+                    tool_executions: vec![],
                 },
             })
         }
