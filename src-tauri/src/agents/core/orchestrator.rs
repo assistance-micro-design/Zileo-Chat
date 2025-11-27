@@ -96,8 +96,17 @@ impl AgentOrchestrator {
         Ok(report)
     }
 
-    /// Executes multiple tasks in parallel (if independent) - prepared for future phases
-    #[allow(dead_code)]
+    /// Executes multiple tasks in parallel (if independent).
+    ///
+    /// Used by ParallelTasksTool to run multiple agent tasks concurrently.
+    /// All tasks execute using `futures::join_all`, making total time
+    /// approximately equal to the slowest individual task.
+    ///
+    /// # Arguments
+    /// * `tasks` - Vector of (agent_id, task) pairs to execute in parallel
+    ///
+    /// # Returns
+    /// Vector of results in the same order as input tasks
     #[instrument(
         name = "orchestrator_execute_parallel",
         skip(self, tasks),

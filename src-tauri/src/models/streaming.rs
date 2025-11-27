@@ -152,12 +152,68 @@ impl WorkflowComplete {
     }
 }
 
+/// Validation request details for human-in-the-loop approval
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationRequiredEvent {
+    /// Validation request ID (for approve/reject calls)
+    pub validation_id: String,
+    /// Associated workflow ID
+    pub workflow_id: String,
+    /// Type of sub-agent operation
+    pub operation_type: SubAgentOperationType,
+    /// Operation description
+    pub operation: String,
+    /// Risk level assessment
+    pub risk_level: String,
+    /// Additional details about the operation
+    pub details: serde_json::Value,
+}
+
+/// Type of sub-agent operation requiring validation
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubAgentOperationType {
+    /// Spawning a new temporary sub-agent
+    Spawn,
+    /// Delegating to an existing agent
+    Delegate,
+    /// Parallel batch execution
+    ParallelBatch,
+}
+
+impl std::fmt::Display for SubAgentOperationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SubAgentOperationType::Spawn => write!(f, "spawn"),
+            SubAgentOperationType::Delegate => write!(f, "delegate"),
+            SubAgentOperationType::ParallelBatch => write!(f, "parallel_batch"),
+        }
+    }
+}
+
+/// Validation response event (approval or rejection)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResponseEvent {
+    /// Validation request ID
+    pub validation_id: String,
+    /// Whether approved (true) or rejected (false)
+    pub approved: bool,
+    /// Rejection reason if not approved
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// Event names for Tauri event emitters
+#[allow(dead_code)]
 pub mod events {
     /// Streaming chunk event name
     pub const WORKFLOW_STREAM: &str = "workflow_stream";
     /// Workflow completion event name
     pub const WORKFLOW_COMPLETE: &str = "workflow_complete";
+    /// Validation required event name (sub-agent operations)
+    pub const VALIDATION_REQUIRED: &str = "validation_required";
+    /// Validation response event name (approved/rejected)
+    pub const VALIDATION_RESPONSE: &str = "validation_response";
 }
 
 #[cfg(test)]

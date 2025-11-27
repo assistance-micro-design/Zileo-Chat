@@ -40,9 +40,14 @@
 //! })).await?;
 //! ```
 
+pub mod context;
+pub mod delegate_task;
 pub mod factory;
 pub mod memory;
+pub mod parallel_tasks;
+pub mod spawn_agent;
 pub mod todo;
+pub mod validation_helper;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -51,9 +56,17 @@ use std::fmt;
 
 // Re-export tools for agent integration
 #[allow(unused_imports)]
+pub use context::AgentToolContext;
+#[allow(unused_imports)]
+pub use delegate_task::DelegateTaskTool;
+#[allow(unused_imports)]
 pub use factory::ToolFactory;
 #[allow(unused_imports)]
 pub use memory::MemoryTool;
+#[allow(unused_imports)]
+pub use parallel_tasks::ParallelTasksTool;
+#[allow(unused_imports)]
+pub use spawn_agent::SpawnAgentTool;
 #[allow(unused_imports)]
 pub use todo::TodoTool;
 

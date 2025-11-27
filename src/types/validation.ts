@@ -14,7 +14,7 @@ export type ValidationType = 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op';
 /**
  * Risk level of the operation
  */
-export type RiskLevel = 'low' | 'medium' | 'high';
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 /**
  * Validation status for human-in-the-loop requests

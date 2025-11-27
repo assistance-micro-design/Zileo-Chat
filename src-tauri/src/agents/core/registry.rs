@@ -61,8 +61,9 @@ impl AgentRegistry {
         ids
     }
 
-    /// Unregisters an agent (temporary only) - prepared for future phases
-    #[allow(dead_code)]
+    /// Unregisters an agent (temporary only).
+    ///
+    /// This method is used by SpawnAgentTool to cleanup sub-agents after execution.
     #[instrument(name = "registry_unregister", skip(self), fields(agent_id = %id))]
     pub async fn unregister(&self, id: &str) -> anyhow::Result<()> {
         let mut agents = self.agents.write().await;
@@ -98,8 +99,11 @@ impl AgentRegistry {
         }
     }
 
-    /// Cleans up temporary agents - prepared for future phases
-    #[allow(dead_code)]
+    /// Cleans up all temporary agents.
+    ///
+    /// This method removes all agents with Lifecycle::Temporary from the registry.
+    /// Used for workflow cleanup after completion.
+    #[allow(dead_code)] // Will be used in Phase D for workflow cleanup
     #[instrument(name = "registry_cleanup_temporary", skip(self))]
     pub async fn cleanup_temporary(&self) {
         let mut agents = self.agents.write().await;

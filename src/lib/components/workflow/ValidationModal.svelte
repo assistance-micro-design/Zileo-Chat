@@ -40,7 +40,8 @@
 		const variants = {
 			low: 'success',
 			medium: 'warning',
-			high: 'error'
+			high: 'error',
+			critical: 'error'
 		} as const;
 		return variants[level];
 	}
@@ -87,7 +88,9 @@
 		{#if request}
 			<div class="validation-content">
 				<div class="validation-header">
-					{#if request.risk_level === 'high'}
+					{#if request.risk_level === 'critical'}
+						<AlertTriangle size={24} class="risk-icon critical" />
+					{:else if request.risk_level === 'high'}
 						<AlertTriangle size={24} class="risk-icon high" />
 					{:else if request.risk_level === 'medium'}
 						<Info size={24} class="risk-icon medium" />
@@ -115,7 +118,10 @@
 				{/if}
 
 				<div class="validation-warning">
-					{#if request.risk_level === 'high'}
+					{#if request.risk_level === 'critical'}
+						<AlertTriangle size={16} />
+						<span>CRITICAL: This operation is flagged as critical risk. Review all details carefully.</span>
+					{:else if request.risk_level === 'high'}
 						<AlertTriangle size={16} />
 						<span>This operation has been flagged as high risk. Please review carefully before approving.</span>
 					{:else if request.risk_level === 'medium'}
@@ -157,8 +163,18 @@
 		gap: var(--spacing-md);
 	}
 
+	.validation-header :global(.risk-icon.critical) {
+		color: var(--color-error);
+		animation: pulse 1s infinite;
+	}
+
 	.validation-header :global(.risk-icon.high) {
 		color: var(--color-error);
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
 	}
 
 	.validation-header :global(.risk-icon.medium) {

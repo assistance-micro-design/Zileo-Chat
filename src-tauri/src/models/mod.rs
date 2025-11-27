@@ -9,6 +9,7 @@ pub mod memory;
 pub mod message;
 pub mod serde_utils;
 pub mod streaming;
+pub mod sub_agent;
 pub mod task;
 pub mod thinking_step;
 pub mod tool_execution;
@@ -70,6 +71,18 @@ pub use tool_execution::ToolType;
 
 // Re-export thinking step types for Phase 4 Thinking Steps Persistence
 pub use thinking_step::{ThinkingStep, ThinkingStepCreate};
+
+// Re-export sub-agent types for Phase 6A Sub-Agent System Infrastructure
+// These will be used in Phase B/C/D when tools are implemented
+#[allow(unused_imports)]
+pub use sub_agent::{
+    DelegateResult, ParallelBatchResult, ParallelTaskResult, SubAgentExecution,
+    SubAgentExecutionComplete, SubAgentExecutionCreate, SubAgentMetrics, SubAgentSpawnResult,
+    SubAgentStatus,
+};
+// Re-export sub-agent constants (for Phase B/C/D)
+#[allow(unused_imports)]
+pub use sub_agent::constants;
 
 // Re-export LLM model types for CRUD operations (Phase 2 will use these)
 #[allow(unused_imports)]

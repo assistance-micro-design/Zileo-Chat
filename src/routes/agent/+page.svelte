@@ -29,6 +29,13 @@ Streaming integration for real-time response display (Phase 2).
 		activeTools,
 		reasoningSteps
 	} from '$lib/stores/streaming';
+	import {
+		validationStore,
+		hasPendingValidation,
+		pendingValidation
+	} from '$lib/stores/validation';
+	import type { ValidationRequest } from '$types/validation';
+	import { ValidationModal } from '$lib/components/workflow';
 
 	/** LocalStorage key for persisting selected workflow */
 	const LAST_WORKFLOW_KEY = 'zileo_last_workflow_id';
@@ -437,11 +444,34 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Cleanup streaming on component destroy
+	 * Cleanup streaming and validation on component destroy
 	 */
 	onDestroy(async () => {
 		await streamingStore.cleanup();
+		await validationStore.cleanup();
 	});
+
+	/**
+	 * Handle validation approval
+	 */
+	async function handleValidationApprove(_request: ValidationRequest): Promise<void> {
+		await validationStore.approve();
+	}
+
+	/**
+	 * Handle validation rejection
+	 */
+	async function handleValidationReject(_request: ValidationRequest, reason?: string): Promise<void> {
+		await validationStore.reject(reason);
+	}
+
+	/**
+	 * Handle validation modal close
+	 */
+	function handleValidationClose(): void {
+		// Dismiss without action (will timeout)
+		validationStore.dismiss();
+	}
 
 	/**
 	 * Restores complete workflow state from backend using parallel queries.
@@ -498,8 +528,12 @@ Streaming integration for real-time response display (Phase 2).
 	 * Initialize component on mount.
 	 * Loads workflows, agents, and attempts to restore last selected workflow.
 	 * Phase 5: Complete State Recovery
+	 * Phase D: Initialize validation store for human-in-the-loop
 	 */
 	onMount(async () => {
+		// Initialize validation store listener
+		await validationStore.init();
+
 		// Load workflows and agents in parallel
 		await Promise.all([loadWorkflows(), loadAgents()]);
 
@@ -722,6 +756,15 @@ Streaming integration for real-time response display (Phase 2).
 			</div>
 		{/if}
 	</main>
+
+	<!-- Validation Modal for Sub-Agent Operations (Phase D) -->
+	<ValidationModal
+		request={$pendingValidation}
+		open={$hasPendingValidation}
+		onapprove={handleValidationApprove}
+		onreject={handleValidationReject}
+		onclose={handleValidationClose}
+	/>
 </div>
 
 <style>
