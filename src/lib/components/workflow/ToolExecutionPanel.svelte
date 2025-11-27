@@ -251,6 +251,11 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		overflow: hidden;
+		transition: all var(--transition-base, 200ms) ease-out;
+	}
+
+	.tool-execution-panel.expanded {
+		box-shadow: var(--shadow-sm);
 	}
 
 	.panel-header {
@@ -331,6 +336,18 @@
 		max-height: 200px;
 		overflow-y: auto;
 		border-top: 1px solid var(--color-border);
+		animation: slideDown 200ms ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			max-height: 0;
+		}
+		to {
+			opacity: 1;
+			max-height: 200px;
+		}
 	}
 
 	.execution-item {
@@ -339,6 +356,19 @@
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) var(--spacing-md);
 		border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
+		animation: fadeInItem 150ms ease-out;
+		transition: background-color var(--transition-fast, 150ms) ease;
+	}
+
+	@keyframes fadeInItem {
+		from {
+			opacity: 0;
+			transform: translateX(-8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
 	}
 
 	.execution-item:last-child {

@@ -19,7 +19,7 @@ Streaming integration for real-time response display (Phase 2).
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input, Spinner } from '$lib/components/ui';
 	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel } from '$lib/components/workflow';
-	import { MessageList, ChatInput, StreamingMessage } from '$lib/components/chat';
+	import { MessageList, ChatInput, StreamingMessage, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
@@ -598,7 +598,11 @@ Streaming integration for real-time response display (Phase 2).
 
 			<!-- Messages Area -->
 			<div class="messages-container">
-				<MessageList {messages} />
+				{#if messagesLoading}
+					<MessageListSkeleton count={3} />
+				{:else}
+					<MessageList {messages} />
+				{/if}
 			</div>
 
 			<!-- Streaming Message (shown during generation and after completion) -->

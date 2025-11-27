@@ -243,6 +243,11 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		overflow: hidden;
+		transition: all var(--transition-base, 200ms) ease-out;
+	}
+
+	.reasoning-panel.expanded {
+		box-shadow: var(--shadow-sm);
 	}
 
 	.panel-header {
@@ -326,11 +331,36 @@
 		max-height: 300px;
 		overflow-y: auto;
 		border-top: 1px solid var(--color-border);
+		animation: slideDown 200ms ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			max-height: 0;
+		}
+		to {
+			opacity: 1;
+			max-height: 300px;
+		}
 	}
 
 	.step-item {
 		padding: var(--spacing-sm) var(--spacing-md);
 		border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
+		animation: fadeInItem 150ms ease-out;
+		transition: background-color var(--transition-fast, 150ms) ease;
+	}
+
+	@keyframes fadeInItem {
+		from {
+			opacity: 0;
+			transform: translateX(-8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
 	}
 
 	.step-item:last-child {

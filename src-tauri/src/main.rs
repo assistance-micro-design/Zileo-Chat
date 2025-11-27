@@ -239,6 +239,7 @@ async fn main() -> anyhow::Result<()> {
             // Message commands (Phase 6 - Message Persistence)
             commands::message::save_message,
             commands::message::load_workflow_messages,
+            commands::message::load_workflow_messages_paginated,
             commands::message::delete_message,
             commands::message::clear_workflow_messages,
             // Tool execution commands (Phase 3 - Tool Execution Persistence)

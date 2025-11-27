@@ -1407,7 +1407,36 @@ async fn stream_workflow(app_handle: &AppHandle, workflow_id: String) {
 
 ### Optimization Strategies
 
-**Virtual Scrolling** (listes >100 items)
+**CSS Containment** (Phase 6 - built-in optimization)
+```svelte
+<!-- MessageList.svelte uses CSS containment for long lists -->
+<div
+  class="message-list"
+  class:performance-mode={messages.length > 50}
+>
+  {#each messages as message (message.id)}
+    <div class="message-wrapper" class:optimize={messages.length > 50}>
+      <MessageBubble {message} />
+    </div>
+  {/each}
+</div>
+
+<style>
+  /* Enable containment for long lists */
+  .message-list.performance-mode {
+    contain: strict;
+    will-change: scroll-position;
+  }
+
+  /* Use content-visibility for off-screen messages */
+  .message-wrapper.optimize {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 100px;
+  }
+</style>
+```
+
+**Virtual Scrolling** (listes >100 items - alternative approach)
 ```svelte
 <script lang="ts">
   import VirtualList from '@sveltejs/svelte-virtual-list';
@@ -1561,7 +1590,118 @@ test('create and execute workflow', async ({ page }) => {
 });
 ```
 
-## Références
+## 11. Phase 6 Additions
+
+### Skeleton Loading States
+
+**Skeleton Component** (`src/lib/components/ui/Skeleton.svelte`)
+```svelte
+<script lang="ts">
+  export type SkeletonVariant = 'text' | 'circular' | 'rectangular';
+
+  interface Props {
+    variant?: SkeletonVariant;
+    width?: string;
+    height?: string;
+    size?: string;
+    animate?: boolean;
+  }
+</script>
+
+<!-- Usage -->
+<Skeleton variant="text" width="200px" />
+<Skeleton variant="circular" size="48px" />
+<Skeleton variant="rectangular" width="100%" height="120px" />
+```
+
+**MessageListSkeleton** (`src/lib/components/chat/MessageListSkeleton.svelte`)
+```svelte
+<!-- Shows placeholder message bubbles during loading -->
+<MessageListSkeleton count={3} />
+```
+
+### Transition Animations
+
+**Panel Transitions** (ToolExecutionPanel, ReasoningPanel)
+```css
+.tool-execution-panel,
+.reasoning-panel {
+  transition: all var(--transition-base, 200ms) ease-out;
+}
+
+.panel.expanded {
+  box-shadow: var(--shadow-sm);
+}
+
+.execution-list,
+.step-list {
+  animation: slideDown 200ms ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 200px; }
+}
+
+.execution-item,
+.step-item {
+  animation: fadeInItem 150ms ease-out;
+}
+
+@keyframes fadeInItem {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+```
+
+### Backend Pagination
+
+**Paginated Message Loading** (for long conversation histories)
+```typescript
+// TypeScript
+interface PaginatedMessages {
+  messages: Message[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+}
+
+// Usage
+const result = await invoke<PaginatedMessages>('load_workflow_messages_paginated', {
+  workflowId: 'uuid',
+  limit: 50,
+  offset: 0
+});
+```
+
+```rust
+// Rust command
+#[tauri::command]
+pub async fn load_workflow_messages_paginated(
+    workflow_id: String,
+    limit: Option<u32>,  // Default: 50, max: 200
+    offset: Option<u32>, // Default: 0
+    state: State<'_, AppState>,
+) -> Result<PaginatedMessages, String>
+```
+
+### E2E Tests
+
+**Workflow Persistence Tests** (`tests/e2e/workflow-persistence.spec.ts`)
+- Skeleton loading display verification
+- Workflow selection persistence across reload
+- Tool execution panel expansion
+- Reasoning panel expansion
+- Message list accessibility attributes
+- Keyboard navigation in workflow list
+- Empty workflow state handling
+- Metrics bar display
+- Responsive sidebar toggle
+- Scroll position maintenance
+- Streaming indicator animation
+
+## References
 
 ### Documentation Officielle
 - **SvelteKit**: https://kit.svelte.dev/docs

@@ -69,6 +69,7 @@
 //! ### Message Commands ([`message`]) - Phase 6
 //! - `save_message` - Persist a message to the database
 //! - `load_workflow_messages` - Load all messages for a workflow
+//! - `load_workflow_messages_paginated` - Load messages with pagination
 //! - `delete_message` - Delete a single message
 //! - `clear_workflow_messages` - Delete all messages for a workflow
 //!

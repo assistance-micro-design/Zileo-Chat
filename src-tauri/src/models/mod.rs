@@ -57,7 +57,7 @@ pub use mcp::{
 pub use agent::{Agent, AgentStatus};
 
 // Re-export message types for Phase 6 Message Persistence
-pub use message::{Message, MessageCreate};
+pub use message::{Message, MessageCreate, PaginatedMessages};
 // Re-export MessageRole for future use (currently used in commands/message.rs validation)
 #[allow(unused_imports)]
 pub use message::MessageRole;

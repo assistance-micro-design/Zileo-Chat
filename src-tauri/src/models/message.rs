@@ -102,6 +102,23 @@ pub struct MessageCreate {
     pub duration_ms: Option<u64>,
 }
 
+/// Response for paginated message loading.
+///
+/// Includes pagination metadata for cursor-based navigation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginatedMessages {
+    /// Messages in the current page
+    pub messages: Vec<Message>,
+    /// Total number of messages available
+    pub total: u32,
+    /// Current offset (number of messages skipped)
+    pub offset: u32,
+    /// Page size limit
+    pub limit: u32,
+    /// Whether more messages are available after this page
+    pub has_more: bool,
+}
+
 impl MessageCreate {
     /// Creates a new user message (no metrics).
     #[allow(dead_code)]

@@ -10,7 +10,7 @@
 //! after application restart by persisting all messages to SurrealDB.
 
 use crate::{
-    models::{Message, MessageCreate},
+    models::{Message, MessageCreate, PaginatedMessages},
     security::Validator,
     AppState,
 };
@@ -179,6 +179,107 @@ pub async fn load_workflow_messages(
 
     info!(count = messages.len(), "Workflow messages loaded");
     Ok(messages)
+}
+
+/// Loads messages for a workflow with pagination support.
+/// Useful for long conversation histories to reduce initial load time.
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to load messages for
+/// * `limit` - Maximum number of messages to return (default: 50)
+/// * `offset` - Number of messages to skip (default: 0)
+///
+/// # Returns
+/// Paginated result with messages and metadata
+#[tauri::command]
+#[instrument(
+    name = "load_workflow_messages_paginated",
+    skip(state),
+    fields(workflow_id = %workflow_id, limit = ?limit, offset = ?offset)
+)]
+pub async fn load_workflow_messages_paginated(
+    workflow_id: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<PaginatedMessages, String> {
+    info!("Loading paginated workflow messages");
+
+    // Validate workflow ID
+    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
+        warn!(error = %e, "Invalid workflow ID");
+        format!("Invalid workflow ID: {}", e)
+    })?;
+
+    let limit = limit.unwrap_or(50).min(200); // Cap at 200 max
+    let offset = offset.unwrap_or(0);
+
+    // Get total count
+    let count_query = format!(
+        "SELECT count() FROM message WHERE workflow_id = '{}' GROUP ALL",
+        validated_workflow_id
+    );
+    let count_result: Vec<serde_json::Value> =
+        state.db.query(&count_query).await.unwrap_or_default();
+
+    let total = count_result
+        .first()
+        .and_then(|v| v.get("count"))
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0) as u32;
+
+    // Load paginated messages
+    let query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            workflow_id,
+            role,
+            content,
+            tokens,
+            tokens_input,
+            tokens_output,
+            model,
+            provider,
+            cost_usd,
+            duration_ms,
+            timestamp
+        FROM message
+        WHERE workflow_id = '{}'
+        ORDER BY timestamp ASC
+        LIMIT {} START {}"#,
+        validated_workflow_id, limit, offset
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to load paginated messages");
+        format!("Failed to load paginated messages: {}", e)
+    })?;
+
+    let messages: Vec<Message> = json_results
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<Message>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize messages");
+            format!("Failed to deserialize messages: {}", e)
+        })?;
+
+    let has_more = offset + (messages.len() as u32) < total;
+
+    info!(
+        count = messages.len(),
+        total = total,
+        has_more = has_more,
+        "Paginated messages loaded"
+    );
+
+    Ok(PaginatedMessages {
+        messages,
+        total,
+        offset,
+        limit,
+        has_more,
+    })
 }
 
 /// Deletes a single message by ID.

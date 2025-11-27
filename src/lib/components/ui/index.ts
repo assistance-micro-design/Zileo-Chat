@@ -18,3 +18,5 @@ export { default as Input } from './Input.svelte';
 export { default as Select } from './Select.svelte';
 export type { SelectOption } from './Select.svelte';
 export { default as Textarea } from './Textarea.svelte';
+export { default as Skeleton } from './Skeleton.svelte';
+export type { SkeletonVariant } from './Skeleton.svelte';

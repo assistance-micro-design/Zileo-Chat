@@ -126,3 +126,21 @@ export function createSystemMessage(workflowId: string, content: string): Messag
     content,
   };
 }
+
+/**
+ * Response for paginated message loading.
+ *
+ * Includes pagination metadata for cursor-based navigation.
+ */
+export interface PaginatedMessages {
+  /** Messages in the current page */
+  messages: Message[];
+  /** Total number of messages available */
+  total: number;
+  /** Current offset (number of messages skipped) */
+  offset: number;
+  /** Page size limit */
+  limit: number;
+  /** Whether more messages are available after this page */
+  has_more: boolean;
+}
