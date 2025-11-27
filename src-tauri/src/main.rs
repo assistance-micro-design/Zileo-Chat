@@ -169,6 +169,9 @@ async fn main() -> anyhow::Result<()> {
     let keystore = commands::SecureKeyStore::default();
     tracing::info!("Secure keystore initialized");
 
+    // Initialize LLM providers from saved configuration
+    app_state.initialize_providers_from_config(&keystore).await;
+
     // Initialize embedding service from saved configuration (if any)
     app_state.initialize_embedding_from_config(&keystore).await;
 

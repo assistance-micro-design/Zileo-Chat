@@ -117,6 +117,36 @@ impl AppState {
             .remove(workflow_id);
     }
 
+    /// Initializes LLM providers from saved configuration.
+    ///
+    /// Called on app startup to restore provider configuration from the keystore.
+    /// This ensures providers are ready to use without requiring the user to
+    /// re-enter their API keys after each app restart.
+    pub async fn initialize_providers_from_config(
+        &self,
+        keystore: &crate::commands::SecureKeyStore,
+    ) {
+        // Initialize Ollama (local provider, always available)
+        if let Err(e) = self.llm_manager.configure_ollama(None).await {
+            tracing::warn!(error = %e, "Failed to initialize Ollama provider");
+        } else {
+            tracing::info!("Ollama provider initialized");
+        }
+
+        // Initialize Mistral if API key is stored
+        if let Some(api_key) = keystore.get_key("Mistral") {
+            if !api_key.is_empty() {
+                if let Err(e) = self.llm_manager.configure_mistral(&api_key).await {
+                    tracing::warn!(error = %e, "Failed to initialize Mistral provider");
+                } else {
+                    tracing::info!("Mistral provider initialized from saved API key");
+                }
+            }
+        } else {
+            tracing::debug!("No Mistral API key found in keystore");
+        }
+    }
+
     /// Initializes the embedding service from saved configuration.
     ///
     /// Called on app startup to restore embedding configuration from the database.
