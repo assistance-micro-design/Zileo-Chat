@@ -14,6 +14,14 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		createInitialMCPState,
 		setServers
 	} from '$lib/stores/mcp';
+	import {
+		loadAllLLMData,
+		getModelsByProvider,
+		createInitialLLMState,
+		setModels,
+		setProviderSettings
+	} from '$lib/stores/llm';
+	import type { ProviderType, LLMState } from '$types/llm';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
 	import { Button, Input, Textarea, Select, Card } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
@@ -48,6 +56,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
 	let mcpState = $state<MCPState>(createInitialMCPState());
+	let llmState = $state<LLMState>(createInitialLLMState());
 
 	/** Available tools (from backend) */
 	const availableTools = [
@@ -67,25 +76,22 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		{ value: 'Ollama', label: 'Ollama (Local)' }
 	];
 
-	/** Models by provider */
-	const modelsByProvider: Record<string, SelectOption[]> = {
-		Mistral: [
-			{ value: 'mistral-large-latest', label: 'Mistral Large' },
-			{ value: 'mistral-medium-latest', label: 'Mistral Medium' },
-			{ value: 'mistral-small-latest', label: 'Mistral Small' },
-			{ value: 'codestral-latest', label: 'Codestral' }
-		],
-		Ollama: [
-			{ value: 'llama3.2', label: 'Llama 3.2' },
-			{ value: 'llama3.1', label: 'Llama 3.1' },
-			{ value: 'mistral', label: 'Mistral' },
-			{ value: 'codellama', label: 'Code Llama' },
-			{ value: 'phi3', label: 'Phi 3' }
-		]
-	};
+	/**
+	 * Converts provider name to ProviderType (lowercase)
+	 */
+	function toProviderType(providerName: string): ProviderType {
+		return providerName.toLowerCase() as ProviderType;
+	}
 
-	/** Reactive model options based on selected provider */
-	const modelOptions = $derived(modelsByProvider[provider] ?? []);
+	/** Reactive model options based on selected provider (from LLM store) */
+	const modelOptions = $derived.by(() => {
+		const providerType = toProviderType(provider);
+		const models = getModelsByProvider(llmState, providerType);
+		return models.map((m) => ({
+			value: m.api_name,
+			label: m.name
+		}));
+	});
 
 	/** Available MCP servers from store */
 	const availableMcpServers = $derived(
@@ -97,26 +103,36 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	);
 
 	/**
-	 * Loads MCP servers on mount
+	 * Loads MCP servers and LLM models on mount
 	 */
 	onMount(async () => {
+		// Load MCP servers
 		try {
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch {
 			// Silently fail - MCP servers are optional
 		}
+
+		// Load LLM models
+		try {
+			const data = await loadAllLLMData();
+			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
+			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
+			llmState = setModels(llmState, data.models);
+		} catch {
+			// Silently fail - will show empty model list
+		}
 	});
 
 	/**
-	 * Updates model when provider changes
+	 * Updates model when provider changes (reset to first available if current invalid)
 	 */
 	$effect(() => {
-		const options = modelsByProvider[provider];
-		if (options && options.length > 0) {
-			const currentModelValid = options.some((o) => o.value === model);
+		if (modelOptions.length > 0) {
+			const currentModelValid = modelOptions.some((o) => o.value === model);
 			if (!currentModelValid) {
-				model = options[0].value;
+				model = modelOptions[0].value;
 			}
 		}
 	});
@@ -131,7 +147,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			errors.name = 'Name must be 1-64 characters';
 		}
 
-		if (!model) {
+		if (modelOptions.length === 0) {
+			errors.model = 'No models available - add models in Models section first';
+		} else if (!model) {
 			errors.model = 'Model is required';
 		}
 
@@ -294,13 +312,20 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						onchange={handleProviderChange}
 					/>
 
-					<Select
-						label="Model"
-						value={model}
-						options={modelOptions}
-						onchange={handleModelChange}
-						help={errors.model || undefined}
-					/>
+					{#if modelOptions.length === 0}
+						<div class="no-models-message">
+							<p>No models configured for {provider}.</p>
+							<p>Add models in the Models section above.</p>
+						</div>
+					{:else}
+						<Select
+							label="Model"
+							value={model}
+							options={modelOptions}
+							onchange={handleModelChange}
+							help={errors.model || undefined}
+						/>
+					{/if}
 
 					<div class="number-inputs">
 						<Input
@@ -492,7 +517,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		color: var(--color-text-secondary);
 	}
 
-	.no-servers {
+	.no-servers,
+	.no-models-message {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		font-style: italic;
@@ -500,6 +526,14 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		padding: var(--spacing-md);
 		background: var(--color-bg-secondary);
 		border-radius: var(--border-radius-md);
+	}
+
+	.no-models-message p {
+		margin: 0;
+	}
+
+	.no-models-message p + p {
+		margin-top: var(--spacing-xs);
 	}
 
 	.form-actions {
