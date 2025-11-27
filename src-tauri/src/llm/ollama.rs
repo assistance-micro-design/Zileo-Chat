@@ -167,13 +167,21 @@ impl LLMProvider for OllamaProvider {
             "Starting Ollama completion"
         );
 
-        // Estimate input tokens
-        let tokens_input_estimate = prompt.len() / 4;
+        // Estimate tokens using word-based approximation
+        // French/English text averages ~1.3 tokens per word
+        let estimate_tokens = |text: &str| -> usize {
+            let word_count = text.split_whitespace().count();
+            let estimate = ((word_count as f64) * 1.5).ceil() as usize;
+            estimate.max(1)
+        };
+
+        let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
+        let tokens_input_estimate = estimate_tokens(prompt) + estimate_tokens(system_text);
 
         // Build agent and execute prompt
         let agent = client
             .agent(model_name)
-            .preamble(system_prompt.unwrap_or("You are a helpful assistant."))
+            .preamble(system_text)
             .build();
 
         let response = agent.prompt(prompt).await.map_err(|e| {
@@ -193,7 +201,7 @@ impl LLMProvider for OllamaProvider {
             }
         })?;
 
-        let tokens_output_estimate = response.len() / 4;
+        let tokens_output_estimate = estimate_tokens(&response);
 
         info!(
             tokens_input = tokens_input_estimate,

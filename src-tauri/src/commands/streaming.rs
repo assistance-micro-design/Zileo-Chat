@@ -9,7 +9,7 @@
 use crate::{
     agents::core::agent::Task,
     models::{
-        streaming::events, StreamChunk, ThinkingStepCreate, ToolExecutionCreate, Workflow,
+        streaming::events, Message, StreamChunk, ThinkingStepCreate, ToolExecutionCreate, Workflow,
         WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::Validator,
@@ -157,14 +157,66 @@ pub async fn execute_workflow_streaming(
     }
     thinking_step_number += 1;
 
-    // Create task
+    // Load conversation history for context
+    let history_query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            workflow_id,
+            role,
+            content,
+            tokens,
+            tokens_input,
+            tokens_output,
+            model,
+            provider,
+            cost_usd,
+            duration_ms,
+            timestamp
+        FROM message
+        WHERE workflow_id = '{}'
+        ORDER BY timestamp ASC
+        LIMIT 50"#, // Limit to last 50 messages for context window
+        validated_workflow_id
+    );
+
+    let history_json = state.db.query_json(&history_query).await.unwrap_or_default();
+    let conversation_history: Vec<Message> = history_json
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect();
+
+    // Build conversation context for the LLM
+    let history_context = if conversation_history.is_empty() {
+        serde_json::json!({})
+    } else {
+        // Format conversation history as context
+        let formatted_history: Vec<serde_json::Value> = conversation_history
+            .iter()
+            .map(|msg| {
+                serde_json::json!({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "conversation_history": formatted_history
+        })
+    };
+
+    info!(
+        history_count = conversation_history.len(),
+        "Loaded conversation history for context"
+    );
+
+    // Create task with conversation history
     let task_id = Uuid::new_v4().to_string();
     info!(task_id = %task_id, "Creating task for streaming workflow");
 
     let task = Task {
         id: task_id.clone(),
         description: validated_message,
-        context: serde_json::json!({}),
+        context: history_context,
     };
 
     // Emit tool start (agent execution)

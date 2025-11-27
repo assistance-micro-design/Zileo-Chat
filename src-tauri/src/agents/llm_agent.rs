@@ -133,18 +133,60 @@ impl LLMAgent {
         self.config.llm.provider.parse()
     }
 
-    /// Builds the full prompt with system context
+    /// Builds the full prompt with conversation history and context
     fn build_prompt(&self, task: &Task) -> String {
-        let context_str = if task.context.is_null() || task.context == serde_json::json!({}) {
+        // Check for conversation history in context
+        let history_str = if let Some(history) = task.context.get("conversation_history") {
+            if let Some(messages) = history.as_array() {
+                if messages.is_empty() {
+                    String::new()
+                } else {
+                    let formatted: Vec<String> = messages
+                        .iter()
+                        .filter_map(|msg| {
+                            let role = msg.get("role")?.as_str()?;
+                            let content = msg.get("content")?.as_str()?;
+                            Some(format!("[{}]: {}", role, content))
+                        })
+                        .collect();
+                    format!(
+                        "\n\n--- Conversation History ---\n{}\n--- End History ---\n",
+                        formatted.join("\n\n")
+                    )
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        // Build context string (excluding conversation_history which was handled above)
+        let other_context: serde_json::Value = if let Some(obj) = task.context.as_object() {
+            let filtered: serde_json::Map<String, serde_json::Value> = obj
+                .iter()
+                .filter(|(k, _)| *k != "conversation_history")
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            if filtered.is_empty() {
+                serde_json::json!({})
+            } else {
+                serde_json::Value::Object(filtered)
+            }
+        } else {
+            serde_json::json!({})
+        };
+
+        let context_str = if other_context.is_null() || other_context == serde_json::json!({}) {
             String::new()
         } else {
             format!(
                 "\n\nContext:\n```json\n{}\n```",
-                serde_json::to_string_pretty(&task.context).unwrap_or_default()
+                serde_json::to_string_pretty(&other_context).unwrap_or_default()
             )
         };
 
-        format!("{}{}", task.description, context_str)
+        format!("{}{}{}", history_str, task.description, context_str)
     }
 
     /// Builds prompt with available MCP tools information
@@ -1233,6 +1275,23 @@ mod tests {
         assert!(prompt_with_context.contains("Analyze this"));
         assert!(prompt_with_context.contains("Context:"));
         assert!(prompt_with_context.contains("key"));
+
+        // Test with conversation history
+        let task_with_history = Task {
+            id: "task3".to_string(),
+            description: "What did we discuss?".to_string(),
+            context: serde_json::json!({
+                "conversation_history": [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there!"}
+                ]
+            }),
+        };
+        let prompt_with_history = agent.build_prompt(&task_with_history);
+        assert!(prompt_with_history.contains("Conversation History"));
+        assert!(prompt_with_history.contains("[user]: Hello"));
+        assert!(prompt_with_history.contains("[assistant]: Hi there!"));
+        assert!(prompt_with_history.contains("What did we discuss?"));
     }
 
     #[tokio::test]
