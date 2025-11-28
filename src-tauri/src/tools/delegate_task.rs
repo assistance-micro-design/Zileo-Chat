@@ -556,7 +556,8 @@ EXAMPLE - Delegate database analysis:
 {"operation": "delegate", "agent_id": "db_agent", "prompt": "Analyze the users table..."}
 
 EXAMPLE - List available agents:
-{"operation": "list_agents"}"#.to_string(),
+{"operation": "list_agents"}"#
+                .to_string(),
 
             input_schema: serde_json::json!({
                 "type": "object",

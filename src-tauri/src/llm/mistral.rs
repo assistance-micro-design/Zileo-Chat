@@ -152,10 +152,7 @@ impl LLMProvider for MistralProvider {
         let tokens_input_estimate = estimate_tokens(prompt) + estimate_tokens(system_text);
 
         // Build agent and execute prompt
-        let agent = client
-            .agent(model_name)
-            .preamble(system_text)
-            .build();
+        let agent = client.agent(model_name).preamble(system_text).build();
 
         let response = agent
             .prompt(prompt)

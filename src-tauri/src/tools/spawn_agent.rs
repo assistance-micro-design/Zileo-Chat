@@ -668,7 +668,8 @@ impl Tool for SpawnAgentTool {
         ToolDefinition {
             id: "SpawnAgentTool".to_string(),
             name: "Spawn Sub-Agent".to_string(),
-            description: format!(r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
+            description: format!(
+                r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
 
 USE THIS TOOL WHEN:
 - You need to parallelize work across multiple specialized tasks
@@ -710,7 +711,9 @@ PROMPT BEST PRACTICES:
 4. Set clear constraints if any
 
 EXAMPLE - Spawn for analysis:
-{{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes.", "tools": ["MemoryTool"]}}"#, available_tools_str = available_tools_str),
+{{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes.", "tools": ["MemoryTool"]}}"#,
+                available_tools_str = available_tools_str
+            ),
 
             input_schema: serde_json::json!({
                 "type": "object",

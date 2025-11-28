@@ -220,13 +220,13 @@ pub async fn reject_validation(
 
     // Update status to rejected and store reason in details using SurrealDB record ID format
     // Use JSON encoding for the reason to handle special characters
-    let reason_json = serde_json::to_string(&validated_reason).unwrap_or_else(|_| "\"Unknown reason\"".to_string());
+    let reason_json = serde_json::to_string(&validated_reason)
+        .unwrap_or_else(|_| "\"Unknown reason\"".to_string());
     state
         .db
         .execute(&format!(
             "UPDATE validation_request:`{}` SET status = 'rejected', details.rejection_reason = {}",
-            validated_id,
-            reason_json
+            validated_id, reason_json
         ))
         .await
         .map_err(|e| {

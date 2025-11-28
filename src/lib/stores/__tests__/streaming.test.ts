@@ -24,7 +24,14 @@ import {
 	isCancelled,
 	tokensReceived,
 	runningTools,
-	completedTools
+	completedTools,
+	activeSubAgents,
+	runningSubAgents,
+	completedSubAgents,
+	erroredSubAgents,
+	hasRunningSubAgents,
+	subAgentCount,
+	hasActiveSubAgents
 } from '../streaming';
 
 describe('streamingStore', () => {
@@ -186,6 +193,34 @@ describe('streamingStore', () => {
 			expect(get(reasoningSteps)).toEqual([]);
 			expect(get(streamError)).toBe(null);
 			expect(get(tokensReceived)).toBe(0);
+		});
+	});
+
+	describe('sub-agent initial state', () => {
+		it('should have empty sub-agents initially', () => {
+			expect(get(activeSubAgents)).toEqual([]);
+			expect(get(runningSubAgents)).toEqual([]);
+			expect(get(completedSubAgents)).toEqual([]);
+			expect(get(erroredSubAgents)).toEqual([]);
+			expect(get(hasRunningSubAgents)).toBe(false);
+			expect(get(subAgentCount)).toBe(0);
+			expect(get(hasActiveSubAgents)).toBe(false);
+		});
+	});
+
+	describe('sub-agent state includes subAgents in state', () => {
+		it('should include subAgents in getState()', () => {
+			const state = streamingStore.getState();
+			expect(state.subAgents).toBeDefined();
+			expect(Array.isArray(state.subAgents)).toBe(true);
+		});
+	});
+
+	describe('reset should clear sub-agents', () => {
+		it('should reset sub-agents to empty array', async () => {
+			await streamingStore.reset();
+			expect(get(activeSubAgents)).toEqual([]);
+			expect(get(hasActiveSubAgents)).toBe(false);
 		});
 	});
 });

@@ -1159,6 +1159,237 @@ async fn import_workflow(
 
 ---
 
+## Sub-Agent Tools
+
+The sub-agent system allows the primary workflow agent to spawn, delegate to, and execute tasks in parallel across specialized agents.
+
+### SpawnAgentTool
+
+Internal tool used by agents to spawn temporary sub-agents for specialized tasks.
+
+**Tool Definition**
+```json
+{
+  "id": "SpawnAgentTool",
+  "name": "Spawn Agent",
+  "operations": ["spawn", "list", "terminate"]
+}
+```
+
+**Operations**
+
+**spawn**: Create and execute a temporary sub-agent
+```json
+{
+  "operation": "spawn",
+  "name": "CodeAnalyzer",
+  "prompt": "Analyze the codebase for security vulnerabilities...",
+  "tools": ["MemoryTool", "TodoTool"],
+  "mcp_servers": ["serena"]
+}
+```
+
+**list**: List active sub-agents for current workflow
+```json
+{
+  "operation": "list"
+}
+```
+
+**terminate**: Terminate a running sub-agent
+```json
+{
+  "operation": "terminate",
+  "child_id": "sub_agent_uuid"
+}
+```
+
+**Result Type**
+```typescript
+interface SubAgentSpawnResult {
+  success: boolean;
+  child_id: string;
+  report: string;  // Markdown report from sub-agent
+  metrics: {
+    duration_ms: number;
+    tokens_input: number;
+    tokens_output: number;
+  };
+}
+```
+
+**Constraints**
+- Maximum 3 sub-agents per workflow
+- Only primary agent can spawn sub-agents
+- Sub-agents cannot spawn their own sub-agents (single level hierarchy)
+
+---
+
+### DelegateTaskTool
+
+Internal tool for delegating tasks to existing permanent agents.
+
+**Tool Definition**
+```json
+{
+  "id": "DelegateTaskTool",
+  "name": "Delegate Task",
+  "operations": ["delegate", "list_agents"]
+}
+```
+
+**Operations**
+
+**delegate**: Delegate a task to a permanent agent
+```json
+{
+  "operation": "delegate",
+  "agent_id": "db_agent",
+  "prompt": "Analyze the database schema for performance issues..."
+}
+```
+
+**list_agents**: List available permanent agents
+```json
+{
+  "operation": "list_agents"
+}
+```
+
+**Result Type**
+```typescript
+interface DelegateResult {
+  success: boolean;
+  agent_id: string;
+  report: string;
+  metrics: {
+    duration_ms: number;
+    tokens_input: number;
+    tokens_output: number;
+  };
+}
+```
+
+**Constraints**
+- Only primary agent can delegate tasks
+- Cannot delegate to self
+- Target agent must exist in registry
+
+---
+
+### ParallelTasksTool
+
+Internal tool for executing multiple tasks in parallel across different agents.
+
+**Tool Definition**
+```json
+{
+  "id": "ParallelTasksTool",
+  "name": "Parallel Tasks",
+  "operations": ["execute_batch"]
+}
+```
+
+**Operations**
+
+**execute_batch**: Execute multiple tasks in parallel
+```json
+{
+  "operation": "execute_batch",
+  "tasks": [
+    {"agent_id": "db_agent", "prompt": "Analyze database schema..."},
+    {"agent_id": "api_agent", "prompt": "Review API security..."},
+    {"agent_id": "ui_agent", "prompt": "Check accessibility..."}
+  ]
+}
+```
+
+**Result Type**
+```typescript
+interface ParallelBatchResult {
+  success: boolean;
+  completed: number;
+  failed: number;
+  results: Array<{
+    agent_id: string;
+    success: boolean;
+    report?: string;
+    error?: string;
+    metrics?: {
+      duration_ms: number;
+      tokens_input: number;
+      tokens_output: number;
+    };
+  }>;
+  aggregated_report: string;  // Combined markdown report
+}
+```
+
+**Constraints**
+- Maximum 3 tasks per batch
+- Only primary agent can execute parallel tasks
+- All tasks execute concurrently (total time ~= slowest task)
+- Each agent only receives its prompt (no shared context)
+
+---
+
+### Sub-Agent Validation Events
+
+Human-in-the-loop validation for sub-agent operations.
+
+**validation_required Event**
+```typescript
+listen<ValidationRequiredEvent>('validation_required', (event) => {
+  const {
+    validation_id,
+    workflow_id,
+    operation_type,  // 'spawn' | 'delegate' | 'parallel_batch'
+    operation,
+    risk_level,      // 'low' | 'medium' | 'high'
+    details
+  } = event.payload;
+});
+```
+
+**Approve/Reject Commands**
+```typescript
+await invoke('approve_validation', { validationId: string });
+await invoke('reject_validation', { validationId: string, reason?: string });
+```
+
+---
+
+### Sub-Agent Streaming Events
+
+Real-time events for sub-agent execution monitoring.
+
+**Stream Chunk Types**
+```typescript
+type SubAgentChunkType =
+  | 'sub_agent_start'     // Sub-agent execution started
+  | 'sub_agent_progress'  // Progress update (0-100%)
+  | 'sub_agent_complete'  // Sub-agent finished successfully
+  | 'sub_agent_error';    // Sub-agent encountered error
+```
+
+**Listen for Sub-Agent Events**
+```typescript
+listen<StreamChunk>('workflow_stream', (event) => {
+  const chunk = event.payload;
+  if (chunk.chunk_type.startsWith('sub_agent_')) {
+    console.log('Sub-agent event:', {
+      subAgentId: chunk.sub_agent_id,
+      subAgentName: chunk.sub_agent_name,
+      parentAgentId: chunk.parent_agent_id,
+      content: chunk.content,
+      metrics: chunk.metrics
+    });
+  }
+});
+```
+
+---
+
 ## Events (Backend → Frontend)
 
 ### workflow_stream
