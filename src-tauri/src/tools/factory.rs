@@ -351,6 +351,13 @@ impl ToolFactory {
     ///
     /// # Returns
     /// Vector of successfully created tools. Failed tools are logged but skipped.
+    ///
+    /// # Primary Agent Behavior
+    ///
+    /// When `is_primary_agent` is true and `context` is provided, this method
+    /// AUTOMATICALLY adds sub-agent tools (SpawnAgentTool, DelegateTaskTool,
+    /// ParallelTasksTool) even if they are not in `tool_names`. This ensures
+    /// the primary workflow agent always has access to orchestration capabilities.
     pub fn create_tools_with_context(
         &self,
         tool_names: &[String],
@@ -361,6 +368,7 @@ impl ToolFactory {
     ) -> Vec<Arc<dyn Tool>> {
         let mut tools = Vec::new();
 
+        // First, create tools from the provided tool_names list
         for name in tool_names {
             let result = if Self::requires_context(name) {
                 if let Some(ctx) = &context {
@@ -396,9 +404,48 @@ impl ToolFactory {
             }
         }
 
+        // For primary agents with context, automatically add sub-agent tools
+        // if they weren't already included in tool_names
+        if is_primary_agent {
+            if let Some(ctx) = &context {
+                let sub_agent_tool_names = Self::sub_agent_tools();
+                for sub_tool_name in sub_agent_tool_names {
+                    // Skip if already in the list
+                    if tool_names.iter().any(|t| t == sub_tool_name) {
+                        continue;
+                    }
+
+                    match self.create_tool_with_context(
+                        sub_tool_name,
+                        workflow_id.clone(),
+                        agent_id.clone(),
+                        ctx.clone(),
+                        true, // is_primary_agent
+                    ) {
+                        Ok(tool) => {
+                            info!(
+                                tool_name = %sub_tool_name,
+                                agent_id = %agent_id,
+                                "Auto-added sub-agent tool for primary agent"
+                            );
+                            tools.push(tool);
+                        }
+                        Err(e) => {
+                            warn!(
+                                tool_name = %sub_tool_name,
+                                error = %e,
+                                "Failed to auto-add sub-agent tool"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         debug!(
             requested = tool_names.len(),
             created = tools.len(),
+            is_primary_agent = is_primary_agent,
             "Tool batch creation with context completed"
         );
 
