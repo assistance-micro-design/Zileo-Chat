@@ -661,7 +661,7 @@ impl SpawnAgentTool {
 #[async_trait]
 impl Tool for SpawnAgentTool {
     fn definition(&self) -> ToolDefinition {
-        // Get the list of available tools and MCP servers for documentation
+        // Get the list of available tools for documentation
         let available_tools: Vec<&str> = ToolFactory::basic_tools();
         let available_tools_str = available_tools.join(", ");
 
@@ -687,7 +687,8 @@ AVAILABLE TOOLS FOR SUB-AGENTS: {available_tools_str}
 Note: Sub-agents can only use basic tools listed above, NOT sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
 Do NOT invent or specify tools that are not in this list.
 
-AVAILABLE MCP SERVERS: Check the parent agent's configuration for available MCP servers.
+AVAILABLE MCP SERVERS: See the "Available MCP Servers" section in your configuration above.
+You can assign any of these running MCP servers to sub-agents using the `mcp_servers` parameter with the server ID.
 
 COMMUNICATION PATTERN:
 - You send: A complete prompt with task, data, and expected report format
@@ -696,7 +697,7 @@ COMMUNICATION PATTERN:
 OPERATIONS:
 - spawn: Create and execute a temporary sub-agent
   Required: name, prompt
-  Optional: system_prompt, tools (from available list above), mcp_servers, provider, model
+  Optional: system_prompt, tools (from available list above), mcp_servers (from list above), provider, model
 
 - list_children: See your spawned sub-agents and remaining slots
 

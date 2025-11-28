@@ -74,6 +74,9 @@ impl JsonRpcRequest {
 }
 
 /// JSON-RPC 2.0 Response
+///
+/// Note: In JSON-RPC 2.0, notifications (server-to-client messages) may not have an `id` field.
+/// We make it optional with a default value to handle such cases gracefully.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonRpcResponse {
     /// JSON-RPC version (always "2.0")
@@ -84,8 +87,9 @@ pub struct JsonRpcResponse {
     /// Error on failure
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<JsonRpcError>,
-    /// Request ID for correlation
-    pub id: JsonRpcId,
+    /// Request ID for correlation (optional for notifications)
+    #[serde(default)]
+    pub id: Option<JsonRpcId>,
 }
 
 impl JsonRpcResponse {
@@ -332,10 +336,14 @@ pub struct MCPToolCallParams {
 }
 
 /// MCP tools/call response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Note: Some MCP servers may return empty or null responses. We handle this by
+/// making content optional with a default empty vector.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MCPToolCallResponse {
-    /// Response content
+    /// Response content (defaults to empty if not provided)
+    #[serde(default)]
     pub content: Vec<MCPContent>,
     /// Whether the response indicates an error
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -356,10 +356,10 @@ impl MCPManager {
 
         let result = {
             let mut clients = self.clients.write().await;
-            // Find client by server name (config.name), not by ID
+            // Find client by server ID (clients are keyed by ID in the HashMap)
+            // Note: server_name parameter is actually the server ID (e.g., "mcp-1764345441545-7tj9p")
             let client = clients
-                .values_mut()
-                .find(|c| c.config().name == server_name)
+                .get_mut(server_name)
                 .ok_or(MCPError::ServerNotFound {
                     server: server_name.to_string(),
                 })?;
@@ -410,17 +410,17 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `server_name` - Display name of the server (not ID)
+    /// * `server_id` - Server ID (e.g., "mcp-1764345441545-7tj9p")
     ///
     /// # Returns
     ///
     /// Returns the list of tools, or empty list if server not found.
-    pub async fn list_server_tools(&self, server_name: &str) -> Vec<MCPTool> {
+    pub async fn list_server_tools(&self, server_id: &str) -> Vec<MCPTool> {
         let clients = self.clients.read().await;
-        // Find client by server name (config.name), not by ID
+        // Find client by server ID (config.id)
+        // Note: Clients are keyed by ID in the HashMap
         clients
-            .values()
-            .find(|c| c.config().name == server_name)
+            .get(server_id)
             .map(|c| c.tools().to_vec())
             .unwrap_or_default()
     }

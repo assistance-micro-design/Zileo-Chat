@@ -514,12 +514,17 @@ impl Tool for DelegateTaskTool {
         ToolDefinition {
             id: "DelegateTaskTool".to_string(),
             name: "Delegate Task".to_string(),
-            description: r#"Delegates tasks to existing permanent agents.
+            description: r#"Delegates tasks to existing permanent LLM agents.
+
+IMPORTANT: This tool is for LLM AGENTS, NOT for MCP servers!
+- agent_id must be an LLM agent ID (e.g., "db_agent", "analytics_agent")
+- DO NOT use MCP server IDs here (e.g., "mcp-1764345441545-7tj9p")
+- To use MCP tools, call them DIRECTLY with format: server_id:tool_name (see MCP Tools section)
 
 USE THIS TOOL WHEN:
-- You need a specialized agent to handle a specific task
-- The task requires tools or capabilities you don't have
-- You want to leverage an existing agent's configuration and expertise
+- You need a specialized LLM agent to handle a specific task
+- The task requires an agent's configuration and expertise
+- Use list_agents first to see available agents
 
 IMPORTANT CONSTRAINTS:
 - Maximum 3 sub-agent operations per workflow (shared with spawn)
@@ -539,7 +544,7 @@ OPERATIONS:
 - delegate: Execute a task via an existing permanent agent
   Required: agent_id, prompt
 
-- list_agents: List available agents for delegation (excludes self and temporary agents)
+- list_agents: List available LLM agents for delegation (excludes self and temporary agents)
 
 PROMPT BEST PRACTICES:
 1. Be explicit about the task objective
@@ -548,7 +553,7 @@ PROMPT BEST PRACTICES:
 4. Set clear constraints if any
 
 EXAMPLE - Delegate database analysis:
-{"operation": "delegate", "agent_id": "db_agent", "prompt": "Analyze the users table for optimization opportunities. Return a markdown report with: 1) Current schema analysis, 2) Performance issues found, 3) Recommended indexes."}
+{"operation": "delegate", "agent_id": "db_agent", "prompt": "Analyze the users table..."}
 
 EXAMPLE - List available agents:
 {"operation": "list_agents"}"#.to_string(),

@@ -26,6 +26,7 @@ use crate::models::mcp::MCPTool;
 use crate::models::{AgentConfig, Lifecycle};
 use crate::tools::{context::AgentToolContext, Tool, ToolFactory};
 use async_trait::async_trait;
+use chrono::Local;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -60,6 +61,24 @@ pub struct ToolExecutionResult {
     pub result: serde_json::Value,
     /// Error message on failure
     pub error: Option<String>,
+}
+
+/// Summary of an MCP server for documentation in system prompt
+///
+/// Used to provide high-level information about available MCP servers
+/// so the agent can make informed decisions when spawning sub-agents.
+#[derive(Debug, Clone)]
+struct MCPServerSummary {
+    /// Server ID (used in mcp_servers parameter)
+    id: String,
+    /// Human-readable server name
+    name: String,
+    /// Description of what the server does
+    description: Option<String>,
+    /// Current status (running, stopped, etc.)
+    status: String,
+    /// Number of tools available from this server
+    tools_count: usize,
 }
 
 /// Agent that uses real LLM calls via the ProviderManager
@@ -336,6 +355,42 @@ impl LLMAgent {
         all_tools
     }
 
+    /// Collects summaries of ALL available MCP servers (enabled and running only)
+    ///
+    /// This provides high-level information about each MCP server so the agent
+    /// can make informed decisions when spawning sub-agents with specific MCP servers.
+    /// Unlike `self.config.mcp_servers` which only lists servers assigned to this agent,
+    /// this method returns ALL available servers that the agent can assign to sub-agents.
+    async fn get_mcp_server_summaries(&self, mcp_manager: &MCPManager) -> Vec<MCPServerSummary> {
+        let mut summaries = Vec::new();
+
+        // Get ALL servers from the manager, not just those assigned to this agent
+        let all_servers = match mcp_manager.list_servers().await {
+            Ok(servers) => servers,
+            Err(e) => {
+                warn!(error = %e, "Failed to list MCP servers for documentation");
+                return summaries;
+            }
+        };
+
+        for server in all_servers {
+            // Only include enabled servers that are running
+            if server.config.enabled
+                && server.status == crate::models::mcp::MCPServerStatus::Running
+            {
+                summaries.push(MCPServerSummary {
+                    id: server.config.id.clone(),
+                    name: server.config.name.clone(),
+                    description: server.config.description.clone(),
+                    status: server.status.to_string(),
+                    tools_count: server.tools.len(),
+                });
+            }
+        }
+
+        summaries
+    }
+
     /// Creates local tool instances for configured tools
     ///
     /// When `is_primary_agent` is true and `agent_context` is available,
@@ -389,10 +444,12 @@ impl LLMAgent {
     /// - Instructions on how to call tools
     /// - Definitions of all available local tools
     /// - Definitions of all available MCP tools
+    /// - Available MCP servers with descriptions (for sub-agent spawning)
     fn build_system_prompt_with_tools(
         &self,
         local_tools: &[Arc<dyn Tool>],
         mcp_tools: &[(String, MCPTool)],
+        mcp_server_summaries: &[MCPServerSummary],
     ) -> String {
         let mut sections = vec![self.config.system_prompt.clone()];
 
@@ -438,16 +495,16 @@ You can call multiple tools in sequence. Always analyze tool results before proc
             sections.push(local_section);
         }
 
-        // MCP tools section
+        // MCP tools section - these are tools the agent can use DIRECTLY
         if !mcp_tools.is_empty() {
             let mut mcp_section = String::from(
-                "## MCP Tools\n\nTo call MCP tools, use the format: `server_name:tool_name`\n",
+                "## MCP Tools (Direct Access)\n\n**IMPORTANT**: These are YOUR tools. Use them directly - do NOT delegate to a sub-agent.\nTo call MCP tools, use the format: `server_id:tool_name`\n",
             );
 
-            for (server_name, tool) in mcp_tools {
+            for (server_id, tool) in mcp_tools {
                 mcp_section.push_str(&format!(
                     "\n### {}:{}\n**Description**: {}\n\n**Input Schema**:\n```json\n{}\n```\n",
-                    server_name,
+                    server_id,
                     tool.name,
                     tool.description,
                     serde_json::to_string_pretty(&tool.input_schema).unwrap_or_default()
@@ -459,22 +516,56 @@ You can call multiple tools in sequence. Always analyze tool results before proc
 
         // Add agent configuration context (provider, model, available resources)
         // This helps the LLM make informed decisions when spawning sub-agents
-        let config_section = format!(
+        let now = Local::now();
+        let mut config_section = format!(
             r#"## Your Configuration
+
+**Current Date and Time**: {} (local timezone)
 
 You are currently running with the following configuration:
 - **Provider**: {}
-- **Model**: {}
-- **Available MCP Servers**: {}
-
-When spawning sub-agents, you can use these values or let them inherit from your configuration by omitting the provider/model parameters."#,
+- **Model**: {}"#,
+            now.format("%A %d %B %Y, %H:%M:%S"),
             self.config.llm.provider,
             self.config.llm.model,
-            if self.config.mcp_servers.is_empty() {
-                "None configured".to_string()
-            } else {
-                self.config.mcp_servers.join(", ")
+        );
+
+        // Add detailed MCP server information with descriptions
+        // Determine which MCP servers this agent has direct access to
+        let direct_mcp_ids: std::collections::HashSet<&String> =
+            self.config.mcp_servers.iter().collect();
+
+        if mcp_server_summaries.is_empty() {
+            config_section.push_str("\n- **Available MCP Servers**: None configured or running");
+        } else {
+            config_section.push_str("\n\n### Available MCP Servers for Delegation\n");
+            config_section.push_str(
+                "These servers can be assigned to sub-agents using the `mcp_servers` parameter.\n",
+            );
+            config_section.push_str(
+                "**Note**: If you already have direct access to an MCP (listed in 'MCP Tools' above), use it directly instead of delegating.\n",
+            );
+
+            for server in mcp_server_summaries {
+                let access_note = if direct_mcp_ids.contains(&server.id) {
+                    " [YOU HAVE DIRECT ACCESS - use it directly!]"
+                } else {
+                    " [Delegate only]"
+                };
+                config_section.push_str(&format!(
+                    "\n- **{}** (ID: `{}`){}\n  - Description: {}\n  - Status: {} | Tools: {}\n",
+                    server.name,
+                    server.id,
+                    access_note,
+                    server.description.as_deref().unwrap_or("No description"),
+                    server.status,
+                    server.tools_count
+                ));
             }
+        }
+
+        config_section.push_str(
+            "\n\nWhen spawning sub-agents, you can specify provider/model/mcp_servers or let them inherit from your configuration.",
         );
         sections.push(config_section);
 
@@ -912,15 +1003,21 @@ impl Agent for LLMAgent {
 
         let local_tools = self.create_local_tools(workflow_id, is_primary_agent);
 
-        // Discover MCP tools if manager is available
-        let mcp_tools = if let Some(ref mcp) = mcp_manager {
-            if !self.config.mcp_servers.is_empty() {
+        // Discover MCP tools and server summaries if manager is available
+        // Note: get_mcp_tool_definitions uses self.config.mcp_servers (tools assigned to this agent)
+        // but get_mcp_server_summaries returns ALL available servers (for sub-agent spawning)
+        let (mcp_tools, mcp_server_summaries) = if let Some(ref mcp) = mcp_manager {
+            // Get tools only from servers assigned to this agent
+            let tools = if !self.config.mcp_servers.is_empty() {
                 self.get_mcp_tool_definitions(mcp).await
             } else {
                 Vec::new()
-            }
+            };
+            // Get ALL available servers (for documentation when spawning sub-agents)
+            let summaries = self.get_mcp_server_summaries(mcp).await;
+            (tools, summaries)
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
 
         // If no tools available at all, fall back to basic execute
@@ -933,11 +1030,13 @@ impl Agent for LLMAgent {
             agent_name = %self.config.name,
             local_tools_count = local_tools.len(),
             mcp_tools_count = mcp_tools.len(),
+            mcp_servers_count = mcp_server_summaries.len(),
             "LLM Agent starting task execution with tool support"
         );
 
-        // Build enhanced system prompt with tool definitions
-        let system_prompt = self.build_system_prompt_with_tools(&local_tools, &mcp_tools);
+        // Build enhanced system prompt with tool definitions and MCP server info
+        let system_prompt =
+            self.build_system_prompt_with_tools(&local_tools, &mcp_tools, &mcp_server_summaries);
 
         // Build initial user prompt
         let base_prompt = self.build_prompt(&task);

@@ -421,7 +421,12 @@ impl MCPServerHandle {
                 message: e.message,
             })?;
 
-        let tool_response: MCPToolCallResponse = serde_json::from_value(result)?;
+        // Handle null or empty responses from MCP servers
+        let tool_response: MCPToolCallResponse = if result.is_null() {
+            MCPToolCallResponse::default()
+        } else {
+            serde_json::from_value(result)?
+        };
 
         debug!(
             server_id = %self.config.id,
