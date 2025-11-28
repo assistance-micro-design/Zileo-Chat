@@ -337,25 +337,19 @@ impl SpawnAgentTool {
         );
 
         // 10. Create execution record in database (status: running)
-        let execution_create = SubAgentExecutionCreate::new(
+        let mut execution_create = SubAgentExecutionCreate::new(
             self.workflow_id.clone(),
             self.parent_agent_id.clone(),
             sub_agent_id.clone(),
             name.to_string(),
             prompt.to_string(),
         );
+        // Set status to running (new() defaults to pending)
+        execution_create.status = "running".to_string();
 
-        // Update status to running
-        let execution_json = serde_json::to_value(&execution_create).map_err(|e| {
-            ToolError::ExecutionFailed(format!("Failed to serialize execution: {}", e))
-        })?;
-
-        let create_query = format!(
-            "CREATE sub_agent_execution:`{}` CONTENT $data SET status = 'running'",
-            execution_id
-        );
+        // Use db.create() which handles serialization correctly (avoids SDK enum issues)
         self.db
-            .query_with_params::<Value>(&create_query, vec![("data".to_string(), execution_json)])
+            .create("sub_agent_execution", &execution_id, execution_create)
             .await
             .map_err(|e| {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
@@ -982,7 +976,8 @@ mod tests {
 
     #[test]
     fn test_default_system_prompt() {
-        assert!(!DEFAULT_SUB_AGENT_SYSTEM_PROMPT.is_empty());
+        // Verify the default system prompt has meaningful content
+        assert!(DEFAULT_SUB_AGENT_SYSTEM_PROMPT.len() > 50);
         assert!(DEFAULT_SUB_AGENT_SYSTEM_PROMPT.contains("sub-agent"));
     }
 }

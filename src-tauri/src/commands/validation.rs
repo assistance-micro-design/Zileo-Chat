@@ -175,11 +175,11 @@ pub async fn approve_validation(
         format!("Invalid validation ID: {}", e)
     })?;
 
-    // Update status to approved
-    let _: Vec<serde_json::Value> = state
+    // Update status to approved using SurrealDB record ID format
+    state
         .db
-        .query(&format!(
-            "UPDATE validation_request SET status = 'approved' WHERE id = '{}'",
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'approved'",
             validated_id
         ))
         .await
@@ -218,13 +218,15 @@ pub async fn reject_validation(
         format!("Invalid rejection reason: {}", e)
     })?;
 
-    // Update status to rejected and store reason in details
-    let _: Vec<serde_json::Value> = state
+    // Update status to rejected and store reason in details using SurrealDB record ID format
+    // Use JSON encoding for the reason to handle special characters
+    let reason_json = serde_json::to_string(&validated_reason).unwrap_or_else(|_| "\"Unknown reason\"".to_string());
+    state
         .db
-        .query(&format!(
-            "UPDATE validation_request SET status = 'rejected', details.rejection_reason = '{}' WHERE id = '{}'",
-            validated_reason.replace('\'', "''"),
-            validated_id
+        .execute(&format!(
+            "UPDATE validation_request:`{}` SET status = 'rejected', details.rejection_reason = {}",
+            validated_id,
+            reason_json
         ))
         .await
         .map_err(|e| {
@@ -276,6 +278,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::tempdir;
 
+    #[allow(dead_code)]
     async fn setup_test_state() -> AppState {
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let db_path = temp_dir.path().join("test_validation_db");
@@ -310,6 +313,7 @@ mod tests {
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),
+            app_handle: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 

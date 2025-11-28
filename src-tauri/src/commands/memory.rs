@@ -324,6 +324,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::tempdir;
 
+    #[allow(dead_code)]
     async fn setup_test_state() -> AppState {
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let db_path = temp_dir.path().join("test_memory_db");
@@ -358,6 +359,7 @@ mod tests {
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),
+            app_handle: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 

@@ -145,7 +145,7 @@ impl AgentToolContext {
     /// Creates an AgentToolContext with all dependencies from AppState.
     ///
     /// Convenience method that always includes the MCP manager from AppState.
-    /// Does not include app_handle (use from_app_state for that).
+    /// Includes app_handle if available in AppState.
     ///
     /// # Arguments
     /// * `app_state` - The application state containing all managers
@@ -155,7 +155,14 @@ impl AgentToolContext {
     /// let context = AgentToolContext::from_app_state_full(&state);
     /// ```
     pub fn from_app_state_full(app_state: &AppState) -> Self {
-        Self::from_app_state(app_state, Some(app_state.mcp_manager.clone()), None)
+        // Get app_handle from AppState (uses std::sync::RwLock)
+        let app_handle = app_state
+            .app_handle
+            .read()
+            .ok()
+            .and_then(|guard| guard.clone());
+
+        Self::from_app_state(app_state, Some(app_state.mcp_manager.clone()), app_handle)
     }
 
     /// Creates an AgentToolContext with all dependencies from AppState including AppHandle.

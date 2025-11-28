@@ -13,3 +13,4 @@ export { default as ValidationModal } from './ValidationModal.svelte';
 export { default as AgentSelector } from './AgentSelector.svelte';
 export { default as ToolExecutionPanel } from './ToolExecutionPanel.svelte';
 export { default as ReasoningPanel } from './ReasoningPanel.svelte';
+export { default as SubAgentActivity } from './SubAgentActivity.svelte';

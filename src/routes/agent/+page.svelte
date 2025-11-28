@@ -18,7 +18,7 @@ Streaming integration for real-time response display (Phase 2).
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input, Spinner } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel } from '$lib/components/workflow';
+	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel, SubAgentActivity } from '$lib/components/workflow';
 	import { MessageList, ChatInput, StreamingMessage, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
@@ -27,7 +27,8 @@ Streaming integration for real-time response display (Phase 2).
 		isStreaming as isStreamingStore,
 		streamContent,
 		activeTools,
-		reasoningSteps
+		reasoningSteps,
+		activeSubAgents
 	} from '$lib/stores/streaming';
 	import {
 		validationStore,
@@ -663,6 +664,17 @@ Streaming integration for real-time response display (Phase 2).
 				</div>
 			{/if}
 
+			<!-- Sub-Agent Activity Panel (Phase E: Streaming Events) -->
+			{#if $activeSubAgents.length > 0 || $isStreamingStore}
+				<div class="sub-agent-container">
+					<SubAgentActivity
+						subAgents={$activeSubAgents}
+						isStreaming={$isStreamingStore}
+						collapsed={false}
+					/>
+				</div>
+			{/if}
+
 			<!-- Tool Execution Panel -->
 			{#if toolExecutions.length > 0 || currentToolExecutions.length > 0 || $isStreamingStore}
 				<div class="tool-execution-container">
@@ -886,6 +898,11 @@ Streaming integration for real-time response display (Phase 2).
 
 	.streaming-container.completed :global(.streaming-indicator) {
 		display: none;
+	}
+
+	/* Sub-Agent Activity Panel Container (Phase E) */
+	.sub-agent-container {
+		padding: 0 var(--spacing-lg) var(--spacing-md);
 	}
 
 	/* Tool Execution Panel Container */

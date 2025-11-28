@@ -34,7 +34,7 @@ use crate::agents::core::agent::Task;
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
-use crate::models::streaming::SubAgentOperationType;
+use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionComplete, SubAgentExecutionCreate,
     SubAgentMetrics, SubAgentStatus,
@@ -47,7 +47,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
@@ -141,6 +141,22 @@ impl DelegateTaskTool {
             workflow_id,
             is_primary_agent,
             active_delegations: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    /// Emits a streaming event to the frontend via Tauri.
+    ///
+    /// This is a helper method to emit sub-agent lifecycle events.
+    /// If no app_handle is available, the event is silently skipped.
+    fn emit_event(&self, event_name: &str, chunk: &StreamChunk) {
+        if let Some(ref handle) = self.app_handle {
+            if let Err(e) = handle.emit(event_name, chunk) {
+                warn!(
+                    event = %event_name,
+                    error = %e,
+                    "Failed to emit delegation event"
+                );
+            }
         }
     }
 
@@ -241,24 +257,19 @@ impl DelegateTaskTool {
         let execution_id = Uuid::new_v4().to_string();
 
         // 8. Create execution record in database (status: running)
-        let execution_create = SubAgentExecutionCreate::new(
+        let mut execution_create = SubAgentExecutionCreate::new(
             self.workflow_id.clone(),
             self.current_agent_id.clone(),
             agent_id.to_string(),
             agent_name.clone(),
             prompt.to_string(),
         );
+        // Set status to running (new() defaults to pending)
+        execution_create.status = "running".to_string();
 
-        let execution_json = serde_json::to_value(&execution_create).map_err(|e| {
-            ToolError::ExecutionFailed(format!("Failed to serialize execution: {}", e))
-        })?;
-
-        let create_query = format!(
-            "CREATE sub_agent_execution:`{}` CONTENT $data SET status = 'running'",
-            execution_id
-        );
+        // Use db.create() which handles serialization correctly (avoids SDK enum issues)
         self.db
-            .query_with_params::<Value>(&create_query, vec![("data".to_string(), execution_json)])
+            .create("sub_agent_execution", &execution_id, execution_create)
             .await
             .map_err(|e| {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
@@ -273,6 +284,16 @@ impl DelegateTaskTool {
             execution_id: execution_id.clone(),
         };
         self.active_delegations.write().await.push(delegation);
+
+        // 9b. Emit sub_agent_start event
+        let start_chunk = StreamChunk::sub_agent_start(
+            self.workflow_id.clone(),
+            agent_id.to_string(),
+            agent_name.clone(),
+            self.current_agent_id.clone(),
+            prompt.to_string(),
+        );
+        self.emit_event(events::WORKFLOW_STREAM, &start_chunk);
 
         // 10. Create task for agent
         let task = Task {
@@ -324,6 +345,35 @@ impl DelegateTaskTool {
                 )
             }
         };
+
+        // 12b. Emit sub_agent_complete or sub_agent_error event
+        if success {
+            let complete_chunk = StreamChunk::sub_agent_complete(
+                self.workflow_id.clone(),
+                agent_id.to_string(),
+                agent_name.clone(),
+                self.current_agent_id.clone(),
+                report.clone(),
+                SubAgentStreamMetrics {
+                    duration_ms,
+                    tokens_input: metrics.tokens_input,
+                    tokens_output: metrics.tokens_output,
+                },
+            );
+            self.emit_event(events::WORKFLOW_STREAM, &complete_chunk);
+        } else {
+            let error_chunk = StreamChunk::sub_agent_error(
+                self.workflow_id.clone(),
+                agent_id.to_string(),
+                agent_name.clone(),
+                self.current_agent_id.clone(),
+                error_message
+                    .clone()
+                    .unwrap_or_else(|| "Unknown error".to_string()),
+                duration_ms,
+            );
+            self.emit_event(events::WORKFLOW_STREAM, &error_chunk);
+        }
 
         // 13. Update execution record
         let completion = if success {

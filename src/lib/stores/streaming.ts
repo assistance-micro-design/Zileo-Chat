@@ -58,6 +58,45 @@ export interface ActiveReasoningStep {
 }
 
 /**
+ * Sub-agent status during streaming
+ */
+export type SubAgentStatus = 'starting' | 'running' | 'completed' | 'error';
+
+/**
+ * Active sub-agent being executed
+ */
+export interface ActiveSubAgent {
+	/** Sub-agent ID */
+	id: string;
+	/** Sub-agent name */
+	name: string;
+	/** Parent agent ID */
+	parentAgentId: string;
+	/** Task description */
+	taskDescription: string;
+	/** Current execution status */
+	status: SubAgentStatus;
+	/** Timestamp when execution started */
+	startedAt: number;
+	/** Progress percentage (0-100) */
+	progress: number;
+	/** Status message (optional) */
+	statusMessage?: string;
+	/** Execution duration in milliseconds (when completed) */
+	duration?: number;
+	/** Report content (when completed) */
+	report?: string;
+	/** Error message (if failed) */
+	error?: string;
+	/** Execution metrics (when completed) */
+	metrics?: {
+		duration_ms: number;
+		tokens_input: number;
+		tokens_output: number;
+	};
+}
+
+/**
  * Streaming state interface
  */
 export interface StreamingState {
@@ -69,6 +108,8 @@ export interface StreamingState {
 	tools: ActiveTool[];
 	/** Reasoning steps captured */
 	reasoning: ActiveReasoningStep[];
+	/** Active sub-agents being executed */
+	subAgents: ActiveSubAgent[];
 	/** Whether streaming is currently active */
 	isStreaming: boolean;
 	/** Total tokens received */
@@ -91,6 +132,7 @@ const initialState: StreamingState = {
 	content: '',
 	tools: [],
 	reasoning: [],
+	subAgents: [],
 	isStreaming: false,
 	tokensReceived: 0,
 	error: null,
@@ -172,6 +214,69 @@ function processChunk(chunk: StreamChunk): void {
 					...s,
 					error: chunk.content ?? 'Unknown error',
 					isStreaming: false
+				};
+
+			case 'sub_agent_start':
+				return {
+					...s,
+					subAgents: [
+						...s.subAgents,
+						{
+							id: chunk.sub_agent_id ?? 'unknown',
+							name: chunk.sub_agent_name ?? 'Unknown Agent',
+							parentAgentId: chunk.parent_agent_id ?? '',
+							taskDescription: chunk.content ?? '',
+							status: 'running' as SubAgentStatus,
+							startedAt: Date.now(),
+							progress: 0
+						}
+					]
+				};
+
+			case 'sub_agent_progress':
+				return {
+					...s,
+					subAgents: s.subAgents.map((a) =>
+						a.id === chunk.sub_agent_id
+							? {
+									...a,
+									progress: chunk.progress ?? a.progress,
+									statusMessage: chunk.content ?? a.statusMessage
+								}
+							: a
+					)
+				};
+
+			case 'sub_agent_complete':
+				return {
+					...s,
+					subAgents: s.subAgents.map((a) =>
+						a.id === chunk.sub_agent_id
+							? {
+									...a,
+									status: 'completed' as SubAgentStatus,
+									progress: 100,
+									duration: chunk.duration,
+									report: chunk.content,
+									metrics: chunk.metrics
+								}
+							: a
+					)
+				};
+
+			case 'sub_agent_error':
+				return {
+					...s,
+					subAgents: s.subAgents.map((a) =>
+						a.id === chunk.sub_agent_id
+							? {
+									...a,
+									status: 'error' as SubAgentStatus,
+									error: chunk.content ?? 'Unknown error',
+									duration: chunk.duration
+								}
+							: a
+					)
 				};
 
 			default:
@@ -463,3 +568,50 @@ export const currentWorkflowId = derived(store, (s) => s.workflowId);
  * Derived store: whether there are any running tools
  */
 export const hasRunningTools = derived(store, (s) => s.tools.some((t) => t.status === 'running'));
+
+// ============================================================================
+// Sub-Agent Derived Stores
+// ============================================================================
+
+/**
+ * Derived store: all active sub-agents
+ */
+export const activeSubAgents = derived(store, (s) => s.subAgents);
+
+/**
+ * Derived store: sub-agents currently running
+ */
+export const runningSubAgents = derived(store, (s) =>
+	s.subAgents.filter((a) => a.status === 'running')
+);
+
+/**
+ * Derived store: sub-agents that have completed
+ */
+export const completedSubAgents = derived(store, (s) =>
+	s.subAgents.filter((a) => a.status === 'completed')
+);
+
+/**
+ * Derived store: sub-agents that have errored
+ */
+export const erroredSubAgents = derived(store, (s) =>
+	s.subAgents.filter((a) => a.status === 'error')
+);
+
+/**
+ * Derived store: whether there are any running sub-agents
+ */
+export const hasRunningSubAgents = derived(store, (s) =>
+	s.subAgents.some((a) => a.status === 'running')
+);
+
+/**
+ * Derived store: total count of sub-agents
+ */
+export const subAgentCount = derived(store, (s) => s.subAgents.length);
+
+/**
+ * Derived store: whether there are any active sub-agents
+ */
+export const hasActiveSubAgents = derived(store, (s) => s.subAgents.length > 0);

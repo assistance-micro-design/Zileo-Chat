@@ -389,7 +389,8 @@ mod tests {
 
     #[test]
     fn test_max_tool_name_len() {
-        assert!(MAX_TOOL_NAME_LEN >= 64);
+        // Verify the constant is set to a reasonable value
+        assert_eq!(MAX_TOOL_NAME_LEN, 128);
     }
 
     #[test]
@@ -411,6 +412,6 @@ mod tests {
     #[test]
     fn test_max_params_size() {
         // 50KB should be enough for most tool params
-        assert!(MAX_PARAMS_SIZE >= 50 * 1024);
+        assert_eq!(MAX_PARAMS_SIZE, 50 * 1024);
     }
 }

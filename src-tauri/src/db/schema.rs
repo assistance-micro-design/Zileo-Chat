@@ -259,4 +259,33 @@ DEFINE FIELD created_at ON thinking_step TYPE datetime DEFAULT time::now();
 DEFINE INDEX thinking_workflow_idx ON thinking_step FIELDS workflow_id;
 DEFINE INDEX thinking_message_idx ON thinking_step FIELDS message_id;
 DEFINE INDEX thinking_agent_idx ON thinking_step FIELDS agent_id;
+
+-- =============================================
+-- Table: sub_agent_execution
+-- Tracks sub-agent spawn/delegate operations
+-- Phase 6A: Sub-Agent System Infrastructure
+-- =============================================
+DEFINE TABLE sub_agent_execution SCHEMAFULL;
+DEFINE FIELD id ON sub_agent_execution TYPE string;
+DEFINE FIELD workflow_id ON sub_agent_execution TYPE string;
+DEFINE FIELD parent_agent_id ON sub_agent_execution TYPE string;
+DEFINE FIELD sub_agent_id ON sub_agent_execution TYPE string;
+DEFINE FIELD sub_agent_name ON sub_agent_execution TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
+DEFINE FIELD task_description ON sub_agent_execution TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 10000;
+DEFINE FIELD status ON sub_agent_execution TYPE string
+    ASSERT $value IN ['pending', 'running', 'completed', 'error', 'cancelled'];
+DEFINE FIELD duration_ms ON sub_agent_execution TYPE option<int>;
+DEFINE FIELD tokens_input ON sub_agent_execution TYPE option<int>;
+DEFINE FIELD tokens_output ON sub_agent_execution TYPE option<int>;
+DEFINE FIELD result_summary ON sub_agent_execution TYPE option<string>;
+DEFINE FIELD error_message ON sub_agent_execution TYPE option<string>;
+DEFINE FIELD created_at ON sub_agent_execution TYPE datetime DEFAULT time::now();
+DEFINE FIELD completed_at ON sub_agent_execution TYPE option<datetime>;
+
+-- Indexes for sub_agent_execution queries
+DEFINE INDEX sub_agent_workflow_idx ON sub_agent_execution FIELDS workflow_id;
+DEFINE INDEX sub_agent_parent_idx ON sub_agent_execution FIELDS parent_agent_id;
+DEFINE INDEX sub_agent_status_idx ON sub_agent_execution FIELDS status;
 "#;

@@ -556,6 +556,7 @@ mod tests {
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),
+            app_handle: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 

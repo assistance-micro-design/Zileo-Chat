@@ -11,24 +11,61 @@
  */
 
 /**
- * Type of streaming chunk content
+ * Type of streaming chunk content.
+ *
+ * Synchronized with Rust `ChunkType` enum in `src-tauri/src/models/streaming.rs`.
  */
-export type ChunkType = 'token' | 'tool_start' | 'tool_end' | 'reasoning' | 'error';
+export type ChunkType =
+  | 'token'
+  | 'tool_start'
+  | 'tool_end'
+  | 'reasoning'
+  | 'error'
+  | 'sub_agent_start'
+  | 'sub_agent_progress'
+  | 'sub_agent_complete'
+  | 'sub_agent_error';
 
 /**
- * Streaming chunk emitted during workflow execution
+ * Metrics included in sub-agent complete events.
+ *
+ * Synchronized with Rust `SubAgentStreamMetrics` in streaming.rs.
+ */
+export interface SubAgentStreamMetrics {
+  /** Execution duration in milliseconds */
+  duration_ms: number;
+  /** Input tokens consumed */
+  tokens_input: number;
+  /** Output tokens generated */
+  tokens_output: number;
+}
+
+/**
+ * Streaming chunk emitted during workflow execution.
+ *
+ * Synchronized with Rust `StreamChunk` in `src-tauri/src/models/streaming.rs`.
  */
 export interface StreamChunk {
   /** Associated workflow ID */
   workflow_id: string;
   /** Type of chunk content */
   chunk_type: ChunkType;
-  /** Text content (for token/reasoning/error chunks) */
+  /** Text content (for token/reasoning/error/sub_agent chunks) */
   content?: string;
   /** Tool name (for tool_start/tool_end chunks) */
   tool?: string;
-  /** Duration in milliseconds (for tool_end chunks) */
+  /** Duration in milliseconds (for tool_end/sub_agent_complete/sub_agent_error chunks) */
   duration?: number;
+  /** Sub-agent ID (for sub_agent_* chunks) */
+  sub_agent_id?: string;
+  /** Sub-agent name (for sub_agent_* chunks) */
+  sub_agent_name?: string;
+  /** Parent agent ID (for sub_agent_* chunks) */
+  parent_agent_id?: string;
+  /** Sub-agent metrics (for sub_agent_complete chunks) */
+  metrics?: SubAgentStreamMetrics;
+  /** Progress percentage 0-100 (for sub_agent_progress chunks) */
+  progress?: number;
 }
 
 /**

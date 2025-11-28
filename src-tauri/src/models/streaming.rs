@@ -22,6 +22,14 @@ pub enum ChunkType {
     Reasoning,
     /// Error occurred
     Error,
+    /// Sub-agent execution started
+    SubAgentStart,
+    /// Sub-agent execution progress update
+    SubAgentProgress,
+    /// Sub-agent execution completed
+    SubAgentComplete,
+    /// Sub-agent execution error
+    SubAgentError,
 }
 
 /// Streaming chunk emitted during workflow execution
@@ -40,6 +48,32 @@ pub struct StreamChunk {
     /// Duration in milliseconds (for tool_end chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
+    /// Sub-agent ID (for sub_agent_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_agent_id: Option<String>,
+    /// Sub-agent name (for sub_agent_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_agent_name: Option<String>,
+    /// Parent agent ID (for sub_agent_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_agent_id: Option<String>,
+    /// Sub-agent metrics (for sub_agent_complete chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<SubAgentStreamMetrics>,
+    /// Progress percentage 0-100 (for sub_agent_progress chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+}
+
+/// Metrics included in sub-agent complete events
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentStreamMetrics {
+    /// Execution duration in milliseconds
+    pub duration_ms: u64,
+    /// Input tokens consumed
+    pub tokens_input: u64,
+    /// Output tokens generated
+    pub tokens_output: u64,
 }
 
 impl StreamChunk {
@@ -51,6 +85,11 @@ impl StreamChunk {
             content: Some(content),
             tool: None,
             duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
         }
     }
 
@@ -62,6 +101,11 @@ impl StreamChunk {
             content: None,
             tool: Some(tool),
             duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
         }
     }
 
@@ -73,6 +117,11 @@ impl StreamChunk {
             content: None,
             tool: Some(tool),
             duration: Some(duration),
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
         }
     }
 
@@ -84,6 +133,11 @@ impl StreamChunk {
             content: Some(content),
             tool: None,
             duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
         }
     }
 
@@ -95,6 +149,112 @@ impl StreamChunk {
             content: Some(error),
             tool: None,
             duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+        }
+    }
+
+    /// Creates a sub-agent start event chunk.
+    ///
+    /// Emitted when a sub-agent begins execution after validation approval.
+    pub fn sub_agent_start(
+        workflow_id: String,
+        sub_agent_id: String,
+        sub_agent_name: String,
+        parent_agent_id: String,
+        task_description: String,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::SubAgentStart,
+            content: Some(task_description),
+            tool: None,
+            duration: None,
+            sub_agent_id: Some(sub_agent_id),
+            sub_agent_name: Some(sub_agent_name),
+            parent_agent_id: Some(parent_agent_id),
+            metrics: None,
+            progress: None,
+        }
+    }
+
+    /// Creates a sub-agent progress event chunk.
+    ///
+    /// Emitted periodically during sub-agent execution to report progress.
+    /// Currently not used but defined for future implementation.
+    #[allow(dead_code)]
+    pub fn sub_agent_progress(
+        workflow_id: String,
+        sub_agent_id: String,
+        sub_agent_name: String,
+        parent_agent_id: String,
+        progress: u8,
+        status_message: Option<String>,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::SubAgentProgress,
+            content: status_message,
+            tool: None,
+            duration: None,
+            sub_agent_id: Some(sub_agent_id),
+            sub_agent_name: Some(sub_agent_name),
+            parent_agent_id: Some(parent_agent_id),
+            metrics: None,
+            progress: Some(progress.min(100)),
+        }
+    }
+
+    /// Creates a sub-agent complete event chunk.
+    ///
+    /// Emitted when a sub-agent successfully completes execution with its report.
+    pub fn sub_agent_complete(
+        workflow_id: String,
+        sub_agent_id: String,
+        sub_agent_name: String,
+        parent_agent_id: String,
+        report: String,
+        metrics: SubAgentStreamMetrics,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::SubAgentComplete,
+            content: Some(report),
+            tool: None,
+            duration: Some(metrics.duration_ms),
+            sub_agent_id: Some(sub_agent_id),
+            sub_agent_name: Some(sub_agent_name),
+            parent_agent_id: Some(parent_agent_id),
+            metrics: Some(metrics),
+            progress: Some(100),
+        }
+    }
+
+    /// Creates a sub-agent error event chunk.
+    ///
+    /// Emitted when a sub-agent execution fails.
+    pub fn sub_agent_error(
+        workflow_id: String,
+        sub_agent_id: String,
+        sub_agent_name: String,
+        parent_agent_id: String,
+        error_message: String,
+        duration_ms: u64,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::SubAgentError,
+            content: Some(error_message),
+            tool: None,
+            duration: Some(duration_ms),
+            sub_agent_id: Some(sub_agent_id),
+            sub_agent_name: Some(sub_agent_name),
+            parent_agent_id: Some(parent_agent_id),
+            metrics: None,
+            progress: None,
         }
     }
 }
@@ -214,6 +374,14 @@ pub mod events {
     pub const VALIDATION_REQUIRED: &str = "validation_required";
     /// Validation response event name (approved/rejected)
     pub const VALIDATION_RESPONSE: &str = "validation_response";
+    /// Sub-agent start event name
+    pub const SUB_AGENT_START: &str = "sub_agent_start";
+    /// Sub-agent progress event name
+    pub const SUB_AGENT_PROGRESS: &str = "sub_agent_progress";
+    /// Sub-agent complete event name
+    pub const SUB_AGENT_COMPLETE: &str = "sub_agent_complete";
+    /// Sub-agent error event name
+    pub const SUB_AGENT_ERROR: &str = "sub_agent_error";
 }
 
 #[cfg(test)]
@@ -312,5 +480,134 @@ mod tests {
         let json = serde_json::to_string(&complete).unwrap();
         assert!(json.contains("\"status\":\"cancelled\""));
         assert!(!json.contains("\"error\""));
+    }
+
+    #[test]
+    fn test_sub_agent_chunk_type_serialization() {
+        let chunk_type = ChunkType::SubAgentStart;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"sub_agent_start\"");
+
+        let chunk_type = ChunkType::SubAgentProgress;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"sub_agent_progress\"");
+
+        let chunk_type = ChunkType::SubAgentComplete;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"sub_agent_complete\"");
+
+        let chunk_type = ChunkType::SubAgentError;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"sub_agent_error\"");
+    }
+
+    #[test]
+    fn test_stream_chunk_sub_agent_start() {
+        let chunk = StreamChunk::sub_agent_start(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            "Analyze the codebase".to_string(),
+        );
+        assert_eq!(chunk.chunk_type, ChunkType::SubAgentStart);
+        assert_eq!(chunk.sub_agent_id, Some("sub_123".to_string()));
+        assert_eq!(chunk.sub_agent_name, Some("Analyzer".to_string()));
+        assert_eq!(chunk.parent_agent_id, Some("parent_456".to_string()));
+        assert_eq!(chunk.content, Some("Analyze the codebase".to_string()));
+        assert!(chunk.metrics.is_none());
+        assert!(chunk.progress.is_none());
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"sub_agent_start\""));
+        assert!(json.contains("\"sub_agent_id\":\"sub_123\""));
+    }
+
+    #[test]
+    fn test_stream_chunk_sub_agent_progress() {
+        let chunk = StreamChunk::sub_agent_progress(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            50,
+            Some("Processing files...".to_string()),
+        );
+        assert_eq!(chunk.chunk_type, ChunkType::SubAgentProgress);
+        assert_eq!(chunk.progress, Some(50));
+        assert_eq!(chunk.content, Some("Processing files...".to_string()));
+
+        // Test clamping to 100
+        let chunk_over = StreamChunk::sub_agent_progress(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            150,
+            None,
+        );
+        assert_eq!(chunk_over.progress, Some(100));
+    }
+
+    #[test]
+    fn test_stream_chunk_sub_agent_complete() {
+        let metrics = SubAgentStreamMetrics {
+            duration_ms: 2500,
+            tokens_input: 500,
+            tokens_output: 1000,
+        };
+        let chunk = StreamChunk::sub_agent_complete(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            "# Analysis Report\n\nFindings here...".to_string(),
+            metrics,
+        );
+        assert_eq!(chunk.chunk_type, ChunkType::SubAgentComplete);
+        assert_eq!(chunk.progress, Some(100));
+        assert!(chunk.metrics.is_some());
+        let m = chunk.metrics.as_ref().unwrap();
+        assert_eq!(m.duration_ms, 2500);
+        assert_eq!(m.tokens_input, 500);
+        assert_eq!(m.tokens_output, 1000);
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"sub_agent_complete\""));
+        assert!(json.contains("\"duration_ms\":2500"));
+    }
+
+    #[test]
+    fn test_stream_chunk_sub_agent_error() {
+        let chunk = StreamChunk::sub_agent_error(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            "Connection timeout".to_string(),
+            1500,
+        );
+        assert_eq!(chunk.chunk_type, ChunkType::SubAgentError);
+        assert_eq!(chunk.content, Some("Connection timeout".to_string()));
+        assert_eq!(chunk.duration, Some(1500));
+        assert!(chunk.metrics.is_none());
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"sub_agent_error\""));
+        assert!(json.contains("Connection timeout"));
+    }
+
+    #[test]
+    fn test_sub_agent_stream_metrics_serialization() {
+        let metrics = SubAgentStreamMetrics {
+            duration_ms: 3000,
+            tokens_input: 250,
+            tokens_output: 800,
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("\"duration_ms\":3000"));
+        assert!(json.contains("\"tokens_input\":250"));
+        assert!(json.contains("\"tokens_output\":800"));
     }
 }

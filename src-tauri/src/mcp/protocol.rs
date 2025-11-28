@@ -486,8 +486,8 @@ mod tests {
         let params = MCPInitializeParams::default();
         let json = serde_json::to_string(&params).unwrap();
 
-        assert!(json.contains(&MCP_PROTOCOL_VERSION));
-        assert!(json.contains(&MCP_CLIENT_NAME));
+        assert!(json.contains(MCP_PROTOCOL_VERSION));
+        assert!(json.contains(MCP_CLIENT_NAME));
     }
 
     #[test]

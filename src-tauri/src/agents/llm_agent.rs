@@ -202,20 +202,13 @@ impl LLMAgent {
                         .filter_map(|msg| {
                             let role = msg.get("role")?.as_str()?;
                             let content = msg.get("content")?.as_str()?;
-                            // Use different format based on role to avoid API confusion
-                            // "User said:" and "Assistant responded:" are less likely
-                            // to be parsed as role markers than "[user]:" or "[assistant]:"
+                            // Use format that won't be confused with API role markers
+                            // Mistral interprets "USER:", "ASSISTANT:" etc. as actual roles
                             match role {
-                                "user" => Some(format!("User said: {}", content)),
-                                "assistant" => {
-                                    // Quote assistant responses to make them clearly context
-                                    Some(format!(
-                                        "Previous assistant response:\n> {}",
-                                        content.lines().collect::<Vec<_>>().join("\n> ")
-                                    ))
-                                }
-                                "system" => Some(format!("System note: {}", content)),
-                                _ => Some(format!("{}: {}", role, content)),
+                                "user" => Some(format!("[Human]\n{}\n", content)),
+                                "assistant" => Some(format!("[AI Response]\n{}\n", content)),
+                                "system" => Some(format!("[System Note]\n{}\n", content)),
+                                _ => Some(format!("[{}]\n{}\n", role, content)),
                             }
                         })
                         .collect();
@@ -463,6 +456,27 @@ You can call multiple tools in sequence. Always analyze tool results before proc
 
             sections.push(mcp_section);
         }
+
+        // Add agent configuration context (provider, model, available resources)
+        // This helps the LLM make informed decisions when spawning sub-agents
+        let config_section = format!(
+            r#"## Your Configuration
+
+You are currently running with the following configuration:
+- **Provider**: {}
+- **Model**: {}
+- **Available MCP Servers**: {}
+
+When spawning sub-agents, you can use these values or let them inherit from your configuration by omitting the provider/model parameters."#,
+            self.config.llm.provider,
+            self.config.llm.model,
+            if self.config.mcp_servers.is_empty() {
+                "None configured".to_string()
+            } else {
+                self.config.mcp_servers.join(", ")
+            }
+        );
+        sections.push(config_section);
 
         sections.join("\n\n")
     }
@@ -1406,9 +1420,10 @@ mod tests {
         };
         let prompt_with_history = agent.build_prompt(&task_with_history);
         assert!(prompt_with_history.contains("Conversation Context"));
-        assert!(prompt_with_history.contains("User said: Hello"));
-        assert!(prompt_with_history.contains("Previous assistant response:"));
-        assert!(prompt_with_history.contains("> Hi there!"));
+        assert!(prompt_with_history.contains("[Human]"));
+        assert!(prompt_with_history.contains("Hello"));
+        assert!(prompt_with_history.contains("[AI Response]"));
+        assert!(prompt_with_history.contains("Hi there!"));
         assert!(prompt_with_history.contains("What did we discuss?"));
     }
 

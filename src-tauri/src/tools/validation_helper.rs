@@ -23,9 +23,7 @@
 
 use crate::db::DBClient;
 use crate::models::streaming::{events, SubAgentOperationType, ValidationRequiredEvent};
-use crate::models::{
-    RiskLevel, ValidationRequestCreate, ValidationStatus, ValidationType,
-};
+use crate::models::{RiskLevel, ValidationRequestCreate, ValidationStatus, ValidationType};
 use crate::tools::ToolError;
 use serde_json::Value;
 use std::sync::Arc;
@@ -108,17 +106,9 @@ impl ValidationHelper {
             ValidationStatus::Pending,
         );
 
-        let validation_json = serde_json::to_value(&validation_create).map_err(|e| {
-            ToolError::ExecutionFailed(format!("Failed to serialize validation request: {}", e))
-        })?;
-
-        let create_query = format!(
-            "CREATE validation_request:`{}` CONTENT $data",
-            validation_id
-        );
-
+        // Use db.create() which properly handles serialization for SurrealDB
         self.db
-            .query_with_params::<Value>(&create_query, vec![("data".to_string(), validation_json)])
+            .create("validation_request", &validation_id, validation_create)
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to create validation request in database");
@@ -205,10 +195,7 @@ impl ValidationHelper {
             }
 
             // Query validation status
-            let query = format!(
-                "SELECT status FROM validation_request:`{}`",
-                validation_id
-            );
+            let query = format!("SELECT status FROM validation_request:`{}`", validation_id);
 
             let result: Vec<Value> = self.db.query(&query).await.map_err(|e| {
                 ToolError::DatabaseError(format!("Failed to query validation status: {}", e))
@@ -278,11 +265,7 @@ impl ValidationHelper {
     }
 
     /// Creates operation details JSON for delegate operation.
-    pub fn delegate_details(
-        target_agent_id: &str,
-        target_agent_name: &str,
-        prompt: &str,
-    ) -> Value {
+    pub fn delegate_details(target_agent_id: &str, target_agent_name: &str, prompt: &str) -> Value {
         serde_json::json!({
             "target_agent_id": target_agent_id,
             "target_agent_name": target_agent_name,
@@ -367,11 +350,8 @@ mod tests {
 
     #[test]
     fn test_delegate_details() {
-        let details = ValidationHelper::delegate_details(
-            "db_agent",
-            "Database Agent",
-            "Analyze the schema",
-        );
+        let details =
+            ValidationHelper::delegate_details("db_agent", "Database Agent", "Analyze the schema");
 
         assert_eq!(details["target_agent_id"], "db_agent");
         assert_eq!(details["target_agent_name"], "Database Agent");

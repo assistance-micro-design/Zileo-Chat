@@ -8,7 +8,8 @@ use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::tools::ToolFactory;
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
+use tauri::AppHandle;
 use tokio::sync::{Mutex, RwLock};
 
 /// Application state shared across Tauri commands
@@ -31,6 +32,9 @@ pub struct AppState {
     pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
     /// Set of workflow IDs that have been requested to cancel
     pub streaming_cancellations: Arc<Mutex<HashSet<String>>>,
+    /// Tauri app handle for event emission (set after app initialization)
+    /// Uses std::sync::RwLock for synchronous access in setup hook
+    pub app_handle: Arc<StdRwLock<Option<AppHandle>>>,
 }
 
 impl AppState {
@@ -64,6 +68,9 @@ impl AppState {
         // Initialize streaming cancellation tracker
         let streaming_cancellations = Arc::new(Mutex::new(HashSet::new()));
 
+        // Initialize app handle as None (set later in setup hook)
+        let app_handle = Arc::new(StdRwLock::new(None));
+
         Ok(Self {
             db,
             registry,
@@ -73,7 +80,25 @@ impl AppState {
             tool_factory,
             embedding_service,
             streaming_cancellations,
+            app_handle,
         })
+    }
+
+    /// Sets the Tauri app handle for event emission.
+    ///
+    /// This should be called in the Tauri setup hook after the app is built.
+    /// Uses std::sync::RwLock for synchronous access.
+    #[allow(dead_code)]
+    pub fn set_app_handle(&self, handle: AppHandle) {
+        if let Ok(mut guard) = self.app_handle.write() {
+            *guard = Some(handle);
+        }
+    }
+
+    /// Gets the app handle if available.
+    #[allow(dead_code)]
+    pub fn get_app_handle(&self) -> Option<AppHandle> {
+        self.app_handle.read().ok().and_then(|guard| guard.clone())
     }
 
     /// Updates the embedding service configuration.

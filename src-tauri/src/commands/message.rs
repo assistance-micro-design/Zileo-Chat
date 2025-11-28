@@ -373,7 +373,8 @@ mod tests {
 
     #[test]
     fn test_max_message_content_len() {
-        assert!(MAX_MESSAGE_CONTENT_LEN >= 50_000);
+        // 100KB should be enough for most message content
+        assert_eq!(MAX_MESSAGE_CONTENT_LEN, 100_000);
     }
 
     #[test]

@@ -179,15 +179,23 @@ pub async fn execute_workflow_streaming(
         validated_workflow_id
     );
 
-    let history_json = state.db.query_json(&history_query).await.unwrap_or_default();
+    let history_json = state
+        .db
+        .query_json(&history_query)
+        .await
+        .unwrap_or_default();
     let conversation_history: Vec<Message> = history_json
         .into_iter()
         .filter_map(|v| serde_json::from_value(v).ok())
         .collect();
 
     // Build conversation context for the LLM
+    // Include is_primary_agent: true to enable sub-agent tools for the workflow starter
     let history_context = if conversation_history.is_empty() {
-        serde_json::json!({})
+        serde_json::json!({
+            "is_primary_agent": true,
+            "workflow_id": validated_workflow_id.clone()
+        })
     } else {
         // Format conversation history as context
         let formatted_history: Vec<serde_json::Value> = conversation_history
@@ -200,7 +208,9 @@ pub async fn execute_workflow_streaming(
             })
             .collect();
         serde_json::json!({
-            "conversation_history": formatted_history
+            "conversation_history": formatted_history,
+            "is_primary_agent": true,
+            "workflow_id": validated_workflow_id.clone()
         })
     };
 

@@ -20,7 +20,7 @@ use crate::models::{
 };
 use crate::security::Validator;
 use crate::state::AppState;
-use crate::tools::ToolFactory;
+use crate::tools::context::AgentToolContext;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -329,9 +329,16 @@ pub async fn create_agent(
         format!("Failed to persist agent: {}", e)
     })?;
 
-    // Create LLMAgent with tool support and register in memory
-    let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
-    let llm_agent = LLMAgent::with_factory(agent_config, state.llm_manager.clone(), tool_factory);
+    // Create LLMAgent with AgentToolContext for sub-agent operations
+    // This allows the agent to use SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+    // when used as the primary workflow agent
+    let agent_context = AgentToolContext::from_app_state_full(state.inner());
+    let llm_agent = LLMAgent::with_context(
+        agent_config,
+        state.llm_manager.clone(),
+        state.tool_factory.clone(),
+        agent_context,
+    );
     state
         .registry
         .register(agent_id.clone(), Arc::new(llm_agent))
@@ -448,11 +455,13 @@ pub async fn update_agent(
     // Unregister old and register new agent
     state.registry.unregister_any(&validated_id).await;
 
-    let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
-    let llm_agent = LLMAgent::with_factory(
+    // Create LLMAgent with AgentToolContext for sub-agent operations
+    let agent_context = AgentToolContext::from_app_state_full(state.inner());
+    let llm_agent = LLMAgent::with_context(
         updated_config.clone(),
         state.llm_manager.clone(),
-        tool_factory,
+        state.tool_factory.clone(),
+        agent_context,
     );
     state
         .registry
@@ -499,7 +508,9 @@ pub async fn delete_agent(agent_id: String, state: State<'_, AppState>) -> Resul
 
 /// Loads all agents from database and registers them in memory
 ///
-/// This is called at application startup.
+/// Note: This function is no longer called directly. Agent loading is now
+/// done inline in the setup hook in main.rs to ensure app_handle is available.
+#[allow(dead_code)]
 pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
     info!("Loading agents from database");
 
@@ -585,9 +596,14 @@ pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
             system_prompt,
         };
 
-        // Create LLMAgent with tool support and register
-        let tool_factory = Arc::new(ToolFactory::new(state.db.clone(), None));
-        let llm_agent = LLMAgent::with_factory(config, state.llm_manager.clone(), tool_factory);
+        // Create LLMAgent with AgentToolContext for sub-agent operations
+        let agent_context = AgentToolContext::from_app_state_full(state);
+        let llm_agent = LLMAgent::with_context(
+            config,
+            state.llm_manager.clone(),
+            state.tool_factory.clone(),
+            agent_context,
+        );
         state.registry.register(id, Arc::new(llm_agent)).await;
 
         loaded += 1;
@@ -645,6 +661,7 @@ mod tests {
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashSet::new(),
             )),
+            app_handle: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 

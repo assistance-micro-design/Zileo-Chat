@@ -1144,7 +1144,7 @@ mod tests {
     fn test_threshold_bounds() {
         // Threshold should be clamped to 0-1
         let threshold: f64 = 0.7;
-        assert!(threshold >= 0.0 && threshold <= 1.0);
+        assert!((0.0..=1.0).contains(&threshold));
 
         let clamped = 1.5f64.clamp(0.0, 1.0);
         assert!((clamped - 1.0).abs() < f64::EPSILON);

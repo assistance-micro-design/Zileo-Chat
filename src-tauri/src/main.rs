@@ -14,6 +14,7 @@ mod state;
 mod tools;
 
 use state::AppState;
+use tauri::Manager;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
@@ -80,15 +81,8 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Application state initialized");
 
-    // Load agents from database (no hardcoded agents - users create them via Settings)
-    match commands::agent::load_agents_from_db(&app_state).await {
-        Ok(count) => {
-            tracing::info!(count = count, "Agents loaded from database");
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "Failed to load agents from database");
-        }
-    }
+    // Note: Agents are loaded in setup hook after app_handle is set
+    // This ensures AgentToolContext has access to app_handle for validation events
 
     // Load MCP servers from database
     if let Err(e) = app_state.mcp_manager.load_from_db().await {
@@ -287,6 +281,112 @@ async fn main() -> anyhow::Result<()> {
             commands::embedding::import_memories,
             commands::embedding::regenerate_embeddings,
         ])
+        .setup(|app| {
+            // Set the app handle in AppState for event emission (validation, etc.)
+            // Uses std::sync::RwLock for synchronous access
+            let state = app.state::<AppState>();
+            let handle = app.handle().clone();
+            if let Ok(mut guard) = state.inner().app_handle.write() {
+                *guard = Some(handle);
+                tracing::info!("App handle set in AppState for event emission");
+            }
+
+            // Load agents from database AFTER app_handle is set
+            // This ensures AgentToolContext has access to app_handle for validation events
+            // Clone the necessary data for the async task
+            let db = state.inner().db.clone();
+            let registry = state.inner().registry.clone();
+            let orchestrator = state.inner().orchestrator.clone();
+            let llm_manager = state.inner().llm_manager.clone();
+            let tool_factory = state.inner().tool_factory.clone();
+            let app_handle_clone = state.inner().app_handle.clone();
+            let mcp_manager = state.inner().mcp_manager.clone();
+
+            tauri::async_runtime::spawn(async move {
+                // Suppress unused warning for orchestrator (used in context)
+                let _ = &orchestrator;
+
+                // Load agents from database
+                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt FROM agent";
+                let results: Vec<serde_json::Value> = match db.db.query(query).await {
+                    Ok(mut r) => r.take(0).unwrap_or_default(),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to query agents from database");
+                        return;
+                    }
+                };
+
+                let mut loaded = 0;
+                for row in results {
+                    let id = row["id"].as_str().unwrap_or("").to_string();
+                    if id.is_empty() {
+                        continue;
+                    }
+
+                    let name = row["name"].as_str().unwrap_or("Unknown").to_string();
+                    let lifecycle_str = row["lifecycle"].as_str().unwrap_or("permanent");
+                    let lifecycle = if lifecycle_str == "temporary" {
+                        crate::models::Lifecycle::Temporary
+                    } else {
+                        crate::models::Lifecycle::Permanent
+                    };
+
+                    let llm_value = &row["llm"];
+                    let llm = crate::models::LLMConfig {
+                        provider: llm_value["provider"].as_str().unwrap_or("Mistral").to_string(),
+                        model: llm_value["model"].as_str().unwrap_or("mistral-large-latest").to_string(),
+                        temperature: llm_value["temperature"].as_f64().unwrap_or(0.7) as f32,
+                        max_tokens: llm_value["max_tokens"].as_u64().unwrap_or(4096) as usize,
+                    };
+
+                    let tools: Vec<String> = row["tools"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+
+                    let mcp_servers_list: Vec<String> = row["mcp_servers"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+
+                    let system_prompt = row["system_prompt"].as_str().unwrap_or("You are a helpful assistant.").to_string();
+
+                    let config = crate::models::AgentConfig {
+                        id: id.clone(),
+                        name,
+                        lifecycle,
+                        llm,
+                        tools,
+                        mcp_servers: mcp_servers_list,
+                        system_prompt,
+                    };
+
+                    // Create agent context with app_handle
+                    let app_handle = app_handle_clone.read().ok().and_then(|guard| guard.clone());
+                    let context = crate::tools::AgentToolContext::new(
+                        registry.clone(),
+                        orchestrator.clone(),
+                        llm_manager.clone(),
+                        Some(mcp_manager.clone()),
+                        tool_factory.clone(),
+                        app_handle,
+                    );
+
+                    let llm_agent = crate::agents::LLMAgent::with_context(
+                        config,
+                        llm_manager.clone(),
+                        tool_factory.clone(),
+                        context,
+                    );
+                    registry.register(id, std::sync::Arc::new(llm_agent)).await;
+                    loaded += 1;
+                }
+
+                tracing::info!(count = loaded, "Agents loaded from database");
+            });
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 

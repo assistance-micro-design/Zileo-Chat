@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn test_max_content_len() {
         // 50KB should be enough for most reasoning content
-        assert!(MAX_CONTENT_LEN >= 50 * 1024);
+        assert_eq!(MAX_CONTENT_LEN, 50 * 1024);
     }
 
     #[test]

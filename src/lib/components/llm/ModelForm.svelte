@@ -87,8 +87,9 @@
 			newErrors.api_name = 'API name is required';
 		} else if (trimmedApiName.length > 128) {
 			newErrors.api_name = 'API name must be 128 characters or less';
-		} else if (!/^[a-zA-Z0-9._-]+$/.test(trimmedApiName)) {
-			newErrors.api_name = 'API name can only contain letters, numbers, dots, hyphens, and underscores';
+		} else if (!/^[a-zA-Z0-9._\-/:]+$/.test(trimmedApiName)) {
+			newErrors.api_name =
+				'API name can only contain letters, numbers, dots, hyphens, underscores, slashes, and colons';
 		}
 
 		// Context window validation

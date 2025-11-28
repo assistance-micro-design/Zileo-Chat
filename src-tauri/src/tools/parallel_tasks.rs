@@ -31,7 +31,7 @@ use crate::agents::core::agent::Task;
 use crate::agents::core::AgentOrchestrator;
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
-use crate::models::streaming::SubAgentOperationType;
+use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, ParallelBatchResult, ParallelTaskResult, SubAgentExecutionComplete,
     SubAgentExecutionCreate, SubAgentMetrics,
@@ -43,7 +43,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -128,6 +128,22 @@ impl ParallelTasksTool {
         }
     }
 
+    /// Emits a streaming event to the frontend via Tauri.
+    ///
+    /// This is a helper method to emit sub-agent lifecycle events.
+    /// If no app_handle is available, the event is silently skipped.
+    fn emit_event(&self, event_name: &str, chunk: &StreamChunk) {
+        if let Some(ref handle) = self.app_handle {
+            if let Err(e) = handle.emit(event_name, chunk) {
+                warn!(
+                    event = %event_name,
+                    error = %e,
+                    "Failed to emit parallel task event"
+                );
+            }
+        }
+    }
+
     /// Executes multiple tasks in parallel.
     ///
     /// # Arguments
@@ -196,7 +212,8 @@ impl ParallelTasksTool {
             .map(|t| (t.agent_id.clone(), t.prompt.clone()))
             .collect();
         let details = ValidationHelper::parallel_details(&task_pairs);
-        let risk_level = ValidationHelper::determine_risk_level(&SubAgentOperationType::ParallelBatch);
+        let risk_level =
+            ValidationHelper::determine_risk_level(&SubAgentOperationType::ParallelBatch);
 
         validation_helper
             .request_validation(
@@ -224,33 +241,20 @@ impl ParallelTasksTool {
             execution_ids.push(execution_id.clone());
 
             // Create execution record
-            let execution_create = SubAgentExecutionCreate::new(
+            let mut execution_create = SubAgentExecutionCreate::new(
                 self.workflow_id.clone(),
                 self.current_agent_id.clone(),
                 task_spec.agent_id.clone(),
                 format!("Parallel task for {}", task_spec.agent_id),
                 task_spec.prompt.clone(),
             );
+            // Set status to running (new() defaults to pending)
+            execution_create.status = "running".to_string();
 
-            let execution_json = match serde_json::to_value(&execution_create) {
-                Ok(json) => json,
-                Err(e) => {
-                    error!(error = %e, "Failed to serialize execution record");
-                    continue;
-                }
-            };
-
-            let create_query = format!(
-                "CREATE sub_agent_execution:`{}` CONTENT $data SET status = 'running'",
-                execution_id
-            );
-
+            // Use db.create() which handles serialization correctly (avoids SDK enum issues)
             if let Err(e) = self
                 .db
-                .query_with_params::<Value>(
-                    &create_query,
-                    vec![("data".to_string(), execution_json)],
-                )
+                .create("sub_agent_execution", &execution_id, execution_create)
                 .await
             {
                 warn!(
@@ -273,6 +277,16 @@ impl ParallelTasksTool {
             };
 
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
+
+            // Emit sub_agent_start event for this parallel task
+            let start_chunk = StreamChunk::sub_agent_start(
+                self.workflow_id.clone(),
+                task_spec.agent_id.clone(),
+                format!("Parallel task for {}", task_spec.agent_id),
+                self.current_agent_id.clone(),
+                task_spec.prompt.clone(),
+            );
+            self.emit_event(events::WORKFLOW_STREAM, &start_chunk);
         }
 
         // 5. Execute all tasks in parallel using orchestrator
@@ -309,6 +323,21 @@ impl ParallelTasksTool {
                     self.update_execution_record(&execution_id, &completion)
                         .await;
 
+                    // Emit sub_agent_complete event
+                    let complete_chunk = StreamChunk::sub_agent_complete(
+                        self.workflow_id.clone(),
+                        task_spec.agent_id.clone(),
+                        format!("Parallel task for {}", task_spec.agent_id),
+                        self.current_agent_id.clone(),
+                        report.content.clone(),
+                        SubAgentStreamMetrics {
+                            duration_ms: metrics.duration_ms,
+                            tokens_input: metrics.tokens_input,
+                            tokens_output: metrics.tokens_output,
+                        },
+                    );
+                    self.emit_event(events::WORKFLOW_STREAM, &complete_chunk);
+
                     aggregated_reports.push(format!(
                         "## Agent: {}\n\n{}\n",
                         task_spec.agent_id, report.content
@@ -336,6 +365,17 @@ impl ParallelTasksTool {
                     let completion = SubAgentExecutionComplete::error(0, error_msg.clone());
                     self.update_execution_record(&execution_id, &completion)
                         .await;
+
+                    // Emit sub_agent_error event
+                    let error_chunk = StreamChunk::sub_agent_error(
+                        self.workflow_id.clone(),
+                        task_spec.agent_id.clone(),
+                        format!("Parallel task for {}", task_spec.agent_id),
+                        self.current_agent_id.clone(),
+                        error_msg.clone(),
+                        0,
+                    );
+                    self.emit_event(events::WORKFLOW_STREAM, &error_chunk);
 
                     aggregated_reports.push(format!(
                         "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
