@@ -27,7 +27,7 @@ use crate::agents::LLMAgent;
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
-use crate::models::streaming::SubAgentOperationType;
+use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, SubAgentExecutionComplete, SubAgentExecutionCreate, SubAgentMetrics,
     SubAgentSpawnResult, SubAgentStatus,
@@ -42,6 +42,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
+use tauri::Emitter;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
@@ -157,6 +158,22 @@ impl SpawnAgentTool {
         }
     }
 
+    /// Emits a streaming event to the frontend via Tauri.
+    ///
+    /// This is a helper method to emit sub-agent lifecycle events.
+    /// If no app_handle is available, the event is silently skipped.
+    fn emit_event(&self, event_name: &str, chunk: &StreamChunk) {
+        if let Some(ref handle) = self.app_handle {
+            if let Err(e) = handle.emit(event_name, chunk) {
+                warn!(
+                    event = %event_name,
+                    error = %e,
+                    "Failed to emit sub-agent event"
+                );
+            }
+        }
+    }
+
     /// Spawns a temporary sub-agent and executes a task.
     ///
     /// # Arguments
@@ -216,7 +233,38 @@ impl SpawnAgentTool {
             ));
         }
 
-        // 4. Request human-in-the-loop validation
+        // 4. Validate tool names if provided
+        if let Some(ref tool_list) = tools {
+            let invalid_tools: Vec<&String> = tool_list
+                .iter()
+                .filter(|t| !ToolFactory::is_valid_tool(t))
+                .collect();
+
+            if !invalid_tools.is_empty() {
+                let available = ToolFactory::basic_tools().join(", ");
+                return Err(ToolError::ValidationFailed(format!(
+                    "Invalid tool(s) specified: {:?}. Available tools for sub-agents: {}. \
+                     Note: Sub-agents cannot use SpawnAgentTool, DelegateTaskTool, or ParallelTasksTool.",
+                    invalid_tools, available
+                )));
+            }
+
+            // Also reject sub-agent tools even if they pass is_valid_tool()
+            let sub_agent_tools = ToolFactory::sub_agent_tools();
+            let forbidden_tools: Vec<&String> = tool_list
+                .iter()
+                .filter(|t| sub_agent_tools.contains(&t.as_str()))
+                .collect();
+
+            if !forbidden_tools.is_empty() {
+                return Err(ToolError::ValidationFailed(format!(
+                    "Sub-agents cannot use sub-agent tools: {:?}. These tools are only available to the primary workflow agent.",
+                    forbidden_tools
+                )));
+            }
+        }
+
+        // 5. Request human-in-the-loop validation
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
         let details = ValidationHelper::spawn_details(
             name,
@@ -236,7 +284,7 @@ impl SpawnAgentTool {
             )
             .await?;
 
-        // 5. Get parent agent config for defaults
+        // 6. Get parent agent config for defaults
         let parent_config = self
             .registry
             .get(&self.parent_agent_id)
@@ -249,13 +297,13 @@ impl SpawnAgentTool {
                 ))
             })?;
 
-        // 5. Generate sub-agent ID
+        // 7. Generate sub-agent ID
         let sub_agent_id = format!("sub_{}", Uuid::new_v4());
 
-        // 6. Create execution record ID
+        // 8. Create execution record ID
         let execution_id = Uuid::new_v4().to_string();
 
-        // 7. Build sub-agent configuration
+        // 9. Build sub-agent configuration
         // Filter out sub-agent tools from available tools (sub-agents cannot spawn others)
         let parent_tools = tools.unwrap_or_else(|| parent_config.tools.clone());
         let sub_agent_tools: Vec<String> = parent_tools
@@ -288,7 +336,7 @@ impl SpawnAgentTool {
             "Creating sub-agent"
         );
 
-        // 8. Create execution record in database (status: running)
+        // 10. Create execution record in database (status: running)
         let execution_create = SubAgentExecutionCreate::new(
             self.workflow_id.clone(),
             self.parent_agent_id.clone(),
@@ -313,19 +361,19 @@ impl SpawnAgentTool {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
             })?;
 
-        // 9. Create LLMAgent instance for sub-agent
+        // 11. Create LLMAgent instance for sub-agent
         let sub_agent = LLMAgent::with_factory(
             sub_agent_config.clone(),
             self.llm_manager.clone(),
             self.tool_factory.clone(),
         );
 
-        // 10. Register in registry
+        // 12. Register in registry
         self.registry
             .register(sub_agent_id.clone(), Arc::new(sub_agent))
             .await;
 
-        // 11. Track spawned child
+        // 13. Track spawned child
         let spawned_child = SpawnedChild {
             id: sub_agent_id.clone(),
             name: name.to_string(),
@@ -335,7 +383,17 @@ impl SpawnAgentTool {
         };
         self.spawned_children.write().await.push(spawned_child);
 
-        // 12. Create task for sub-agent
+        // 13b. Emit sub_agent_start event
+        let start_chunk = StreamChunk::sub_agent_start(
+            self.workflow_id.clone(),
+            sub_agent_id.clone(),
+            name.to_string(),
+            self.parent_agent_id.clone(),
+            prompt.to_string(),
+        );
+        self.emit_event(events::WORKFLOW_STREAM, &start_chunk);
+
+        // 14. Create task for sub-agent
         let task = Task {
             id: format!("task_{}", Uuid::new_v4()),
             description: prompt.to_string(),
@@ -346,7 +404,7 @@ impl SpawnAgentTool {
             }),
         };
 
-        // 13. Execute sub-agent
+        // 15. Execute sub-agent
         let start_time = std::time::Instant::now();
         let execution_result = self
             .orchestrator
@@ -355,7 +413,7 @@ impl SpawnAgentTool {
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // 14. Process result
+        // 16. Process result
         let (report, metrics, success, error_message) = match execution_result {
             Ok(report) => {
                 let metrics = SubAgentMetrics {
@@ -386,7 +444,36 @@ impl SpawnAgentTool {
             }
         };
 
-        // 15. Update execution record
+        // 16b. Emit sub_agent_complete or sub_agent_error event
+        if success {
+            let complete_chunk = StreamChunk::sub_agent_complete(
+                self.workflow_id.clone(),
+                sub_agent_id.clone(),
+                name.to_string(),
+                self.parent_agent_id.clone(),
+                report.clone(),
+                SubAgentStreamMetrics {
+                    duration_ms,
+                    tokens_input: metrics.tokens_input,
+                    tokens_output: metrics.tokens_output,
+                },
+            );
+            self.emit_event(events::WORKFLOW_STREAM, &complete_chunk);
+        } else {
+            let error_chunk = StreamChunk::sub_agent_error(
+                self.workflow_id.clone(),
+                sub_agent_id.clone(),
+                name.to_string(),
+                self.parent_agent_id.clone(),
+                error_message
+                    .clone()
+                    .unwrap_or_else(|| "Unknown error".to_string()),
+                duration_ms,
+            );
+            self.emit_event(events::WORKFLOW_STREAM, &error_chunk);
+        }
+
+        // 17. Update execution record
         let completion = if success {
             SubAgentExecutionComplete::success(
                 duration_ms,
@@ -437,7 +524,7 @@ impl SpawnAgentTool {
             );
         }
 
-        // 16. Update spawned children status
+        // 18. Update spawned children status
         {
             let mut children = self.spawned_children.write().await;
             if let Some(child) = children.iter_mut().find(|c| c.id == sub_agent_id) {
@@ -449,7 +536,7 @@ impl SpawnAgentTool {
             }
         }
 
-        // 17. Cleanup: unregister sub-agent from registry
+        // 19. Cleanup: unregister sub-agent from registry
         if let Err(e) = self.registry.unregister(&sub_agent_id).await {
             warn!(
                 sub_agent_id = %sub_agent_id,
@@ -465,7 +552,7 @@ impl SpawnAgentTool {
             "Sub-agent execution completed"
         );
 
-        // 18. Return result
+        // 20. Return result
         let result = SubAgentSpawnResult {
             success,
             child_id: sub_agent_id,
@@ -580,10 +667,14 @@ impl SpawnAgentTool {
 #[async_trait]
 impl Tool for SpawnAgentTool {
     fn definition(&self) -> ToolDefinition {
+        // Get the list of available tools and MCP servers for documentation
+        let available_tools: Vec<&str> = ToolFactory::basic_tools();
+        let available_tools_str = available_tools.join(", ");
+
         ToolDefinition {
             id: "SpawnAgentTool".to_string(),
             name: "Spawn Sub-Agent".to_string(),
-            description: r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
+            description: format!(r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
 
 USE THIS TOOL WHEN:
 - You need to parallelize work across multiple specialized tasks
@@ -595,6 +686,14 @@ IMPORTANT CONSTRAINTS:
 - Sub-agents CANNOT spawn other sub-agents (single level only)
 - Sub-agents only receive the prompt string - NO shared context/memory/state
 - You must include ALL necessary information in the prompt
+- Sub-agents are TEMPORARY and are automatically cleaned up after execution
+- Sub-agents do NOT appear in the Settings agent list (they are workflow-scoped)
+
+AVAILABLE TOOLS FOR SUB-AGENTS: {available_tools_str}
+Note: Sub-agents can only use basic tools listed above, NOT sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
+Do NOT invent or specify tools that are not in this list.
+
+AVAILABLE MCP SERVERS: Check the parent agent's configuration for available MCP servers.
 
 COMMUNICATION PATTERN:
 - You send: A complete prompt with task, data, and expected report format
@@ -603,7 +702,7 @@ COMMUNICATION PATTERN:
 OPERATIONS:
 - spawn: Create and execute a temporary sub-agent
   Required: name, prompt
-  Optional: system_prompt, tools, mcp_servers, provider, model
+  Optional: system_prompt, tools (from available list above), mcp_servers, provider, model
 
 - list_children: See your spawned sub-agents and remaining slots
 
@@ -616,7 +715,7 @@ PROMPT BEST PRACTICES:
 4. Set clear constraints if any
 
 EXAMPLE - Spawn for analysis:
-{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes."}"#.to_string(),
+{{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes.", "tools": ["MemoryTool"]}}"#, available_tools_str = available_tools_str),
 
             input_schema: serde_json::json!({
                 "type": "object",
