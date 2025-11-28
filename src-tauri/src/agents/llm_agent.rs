@@ -24,7 +24,7 @@ use crate::llm::{LLMError, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
 use crate::models::mcp::MCPTool;
 use crate::models::{AgentConfig, Lifecycle};
-use crate::tools::{Tool, ToolFactory};
+use crate::tools::{context::AgentToolContext, Tool, ToolFactory};
 use async_trait::async_trait;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -70,6 +70,8 @@ pub struct LLMAgent {
     provider_manager: Arc<ProviderManager>,
     /// Tool factory for creating local tool instances
     tool_factory: Option<Arc<ToolFactory>>,
+    /// Agent tool context for sub-agent operations (only for primary agents)
+    agent_context: Option<AgentToolContext>,
 }
 
 impl LLMAgent {
@@ -84,6 +86,7 @@ impl LLMAgent {
             config,
             provider_manager,
             tool_factory: None,
+            agent_context: None,
         }
     }
 
@@ -109,12 +112,15 @@ impl LLMAgent {
             config,
             provider_manager,
             tool_factory: Some(tool_factory),
+            agent_context: None,
         }
     }
 
     /// Creates a new LLM agent with a custom tool factory
     ///
     /// Use this when you need to provide embedding service for MemoryTool.
+    /// This constructor does NOT provide AgentToolContext, so sub-agent tools
+    /// will not be available.
     #[allow(dead_code)]
     pub fn with_factory(
         config: AgentConfig,
@@ -125,6 +131,47 @@ impl LLMAgent {
             config,
             provider_manager,
             tool_factory: Some(tool_factory),
+            agent_context: None,
+        }
+    }
+
+    /// Creates a new LLM agent with AgentToolContext for sub-agent operations.
+    ///
+    /// This constructor provides the agent with access to sub-agent tools
+    /// (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool) when used as
+    /// the primary workflow agent.
+    ///
+    /// # Arguments
+    /// * `config` - Agent configuration including LLM settings
+    /// * `provider_manager` - Shared provider manager for LLM calls
+    /// * `tool_factory` - Factory for creating tool instances
+    /// * `agent_context` - Context providing access to agent system dependencies
+    ///
+    /// # Sub-Agent Tools Availability
+    ///
+    /// Sub-agent tools are only available when:
+    /// 1. The agent has an AgentToolContext (this constructor provides one)
+    /// 2. The task context includes `"is_primary_agent": true`
+    ///
+    /// Sub-agents created via SpawnAgentTool use `with_factory()` instead,
+    /// ensuring they cannot spawn other sub-agents (single level constraint).
+    ///
+    /// # Example
+    /// ```ignore
+    /// let context = AgentToolContext::from_app_state_full(&state);
+    /// let agent = LLMAgent::with_context(config, provider_manager, tool_factory, context);
+    /// ```
+    pub fn with_context(
+        config: AgentConfig,
+        provider_manager: Arc<ProviderManager>,
+        tool_factory: Arc<ToolFactory>,
+        agent_context: AgentToolContext,
+    ) -> Self {
+        Self {
+            config,
+            provider_manager,
+            tool_factory: Some(tool_factory),
+            agent_context: Some(agent_context),
         }
     }
 
@@ -134,6 +181,13 @@ impl LLMAgent {
     }
 
     /// Builds the full prompt with conversation history and context
+    ///
+    /// # Mistral API Compatibility
+    ///
+    /// Mistral's API requires the last message to be a "user" or "tool" role.
+    /// To avoid role confusion, we format conversation history as quoted context
+    /// rather than using role markers like `[assistant]:` which might be
+    /// misinterpreted by the API.
     fn build_prompt(&self, task: &Task) -> String {
         // Check for conversation history in context
         let history_str = if let Some(history) = task.context.get("conversation_history") {
@@ -141,16 +195,32 @@ impl LLMAgent {
                 if messages.is_empty() {
                     String::new()
                 } else {
+                    // Format messages in a way that won't confuse Mistral's API
+                    // Avoid role markers that might be interpreted as actual roles
                     let formatted: Vec<String> = messages
                         .iter()
                         .filter_map(|msg| {
                             let role = msg.get("role")?.as_str()?;
                             let content = msg.get("content")?.as_str()?;
-                            Some(format!("[{}]: {}", role, content))
+                            // Use different format based on role to avoid API confusion
+                            // "User said:" and "Assistant responded:" are less likely
+                            // to be parsed as role markers than "[user]:" or "[assistant]:"
+                            match role {
+                                "user" => Some(format!("User said: {}", content)),
+                                "assistant" => {
+                                    // Quote assistant responses to make them clearly context
+                                    Some(format!(
+                                        "Previous assistant response:\n> {}",
+                                        content.lines().collect::<Vec<_>>().join("\n> ")
+                                    ))
+                                }
+                                "system" => Some(format!("System note: {}", content)),
+                                _ => Some(format!("{}: {}", role, content)),
+                            }
                         })
                         .collect();
                     format!(
-                        "\n\n--- Conversation History ---\n{}\n--- End History ---\n",
+                        "\n\n--- Conversation Context ---\n{}\n--- End Context ---\n\nPlease respond to the current request:\n",
                         formatted.join("\n\n")
                     )
                 }
@@ -274,11 +344,48 @@ impl LLMAgent {
     }
 
     /// Creates local tool instances for configured tools
-    fn create_local_tools(&self, workflow_id: Option<String>) -> Vec<Arc<dyn Tool>> {
+    ///
+    /// When `is_primary_agent` is true and `agent_context` is available,
+    /// this method will also create sub-agent tools (SpawnAgentTool,
+    /// DelegateTaskTool, ParallelTasksTool) in addition to basic tools.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - Optional workflow ID for scoping tool operations
+    /// * `is_primary_agent` - Whether this is the primary workflow agent
+    fn create_local_tools(
+        &self,
+        workflow_id: Option<String>,
+        is_primary_agent: bool,
+    ) -> Vec<Arc<dyn Tool>> {
         let Some(ref factory) = self.tool_factory else {
             return Vec::new();
         };
 
+        // If this is the primary agent and we have context, use create_tools_with_context
+        // to include sub-agent tools
+        if is_primary_agent {
+            if let Some(ref context) = self.agent_context {
+                debug!(
+                    agent_id = %self.config.id,
+                    "Creating tools with context for primary agent (sub-agent tools available)"
+                );
+                return factory.create_tools_with_context(
+                    &self.config.tools,
+                    workflow_id,
+                    self.config.id.clone(),
+                    Some(context.clone()),
+                    true, // is_primary_agent
+                );
+            }
+        }
+
+        // For sub-agents or agents without context, use basic tool creation
+        debug!(
+            agent_id = %self.config.id,
+            is_primary_agent = is_primary_agent,
+            has_context = self.agent_context.is_some(),
+            "Creating basic tools (sub-agent tools NOT available)"
+        );
         factory.create_tools(&self.config.tools, workflow_id, self.config.id.clone())
     }
 
@@ -779,7 +886,17 @@ impl Agent for LLMAgent {
             .get("workflow_id")
             .and_then(|v| v.as_str())
             .map(String::from);
-        let local_tools = self.create_local_tools(workflow_id);
+
+        // Check if this is the primary workflow agent
+        // Sub-agents have "is_sub_agent": true in their context
+        // Primary agents have "is_primary_agent": true in their context
+        let is_primary_agent = task
+            .context
+            .get("is_primary_agent")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let local_tools = self.create_local_tools(workflow_id, is_primary_agent);
 
         // Discover MCP tools if manager is available
         let mcp_tools = if let Some(ref mcp) = mcp_manager {
@@ -1288,9 +1405,10 @@ mod tests {
             }),
         };
         let prompt_with_history = agent.build_prompt(&task_with_history);
-        assert!(prompt_with_history.contains("Conversation History"));
-        assert!(prompt_with_history.contains("[user]: Hello"));
-        assert!(prompt_with_history.contains("[assistant]: Hi there!"));
+        assert!(prompt_with_history.contains("Conversation Context"));
+        assert!(prompt_with_history.contains("User said: Hello"));
+        assert!(prompt_with_history.contains("Previous assistant response:"));
+        assert!(prompt_with_history.contains("> Hi there!"));
         assert!(prompt_with_history.contains("What did we discuss?"));
     }
 
