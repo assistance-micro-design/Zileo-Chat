@@ -17,14 +17,14 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import {
 		loadAllLLMData,
 		getModelsByProvider,
+		getModelByApiName,
 		createInitialLLMState,
 		setModels,
 		setProviderSettings
 	} from '$lib/stores/llm';
 	import type { ProviderType, LLMState } from '$types/llm';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
-	import { Button, Input, Textarea, Select, Card } from '$lib/components/ui';
-	import type { SelectOption } from '$lib/components/ui/Select.svelte';
+	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';
 
 	/**
@@ -46,8 +46,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let lifecycle = $state<Lifecycle>(agent?.lifecycle ?? 'permanent');
 	let provider = $state(agent?.llm.provider ?? 'Mistral');
 	let model = $state(agent?.llm.model ?? 'mistral-large-latest');
-	let temperature = $state(agent?.llm.temperature ?? 0.7);
-	let maxTokens = $state(agent?.llm.max_tokens ?? 4096);
 	let maxToolIterations = $state(agent?.max_tool_iterations ?? 50);
 	let selectedTools = $state<string[]>(agent?.tools ?? []);
 	let selectedMcpServers = $state<string[]>(agent?.mcp_servers ?? []);
@@ -65,16 +63,16 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		{ value: 'TodoTool', label: 'Todo Tool', description: 'Manage task lists and track progress' }
 	];
 
-	/** Lifecycle options */
-	const lifecycleOptions: SelectOption[] = [
-		{ value: 'permanent', label: 'Permanent' },
-		{ value: 'temporary', label: 'Temporary' }
+	/** Lifecycle options with descriptions */
+	const lifecycleOptions = [
+		{ value: 'permanent' as Lifecycle, label: 'Permanent', description: 'Persists across sessions' },
+		{ value: 'temporary' as Lifecycle, label: 'Temporary', description: 'Deleted after session ends' }
 	];
 
-	/** Provider options */
-	const providerOptions: SelectOption[] = [
-		{ value: 'Mistral', label: 'Mistral AI' },
-		{ value: 'Ollama', label: 'Ollama (Local)' }
+	/** Provider options with details */
+	const providerOptions = [
+		{ value: 'Mistral', label: 'Mistral', type: 'Cloud API' },
+		{ value: 'Ollama', label: 'Ollama', type: 'Local Server' }
 	];
 
 	/**
@@ -84,14 +82,16 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		return providerName.toLowerCase() as ProviderType;
 	}
 
-	/** Reactive model options based on selected provider (from LLM store) */
-	const modelOptions = $derived.by(() => {
+	/** Reactive model list based on selected provider (full model objects) */
+	const availableModels = $derived.by(() => {
 		const providerType = toProviderType(provider);
-		const models = getModelsByProvider(llmState, providerType);
-		return models.map((m) => ({
-			value: m.api_name,
-			label: m.name
-		}));
+		return getModelsByProvider(llmState, providerType);
+	});
+
+	/** Selected model object (for auto-populating temperature/maxTokens) */
+	const selectedModel = $derived.by(() => {
+		const providerType = toProviderType(provider);
+		return getModelByApiName(llmState, model, providerType);
 	});
 
 	/** Available MCP servers from store */
@@ -130,10 +130,10 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	 * Updates model when provider changes (reset to first available if current invalid)
 	 */
 	$effect(() => {
-		if (modelOptions.length > 0) {
-			const currentModelValid = modelOptions.some((o) => o.value === model);
+		if (availableModels.length > 0) {
+			const currentModelValid = availableModels.some((m) => m.api_name === model);
 			if (!currentModelValid) {
-				model = modelOptions[0].value;
+				model = availableModels[0].api_name;
 			}
 		}
 	});
@@ -148,18 +148,12 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			errors.name = 'Name must be 1-64 characters';
 		}
 
-		if (modelOptions.length === 0) {
+		if (availableModels.length === 0) {
 			errors.model = 'No models available - add models in Models section first';
 		} else if (!model) {
 			errors.model = 'Model is required';
-		}
-
-		if (temperature < 0 || temperature > 2) {
-			errors.temperature = 'Temperature must be between 0 and 2';
-		}
-
-		if (maxTokens < 256 || maxTokens > 128000) {
-			errors.maxTokens = 'Max tokens must be between 256 and 128000';
+		} else if (!selectedModel) {
+			errors.model = 'Selected model not found';
 		}
 
 		if (maxToolIterations < 1 || maxToolIterations > 200) {
@@ -180,6 +174,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	 */
 	async function handleSubmit(): Promise<void> {
 		if (!validate()) return;
+		if (!selectedModel) return;
 
 		saving = true;
 
@@ -189,8 +184,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			llm: {
 				provider,
 				model,
-				temperature,
-				max_tokens: maxTokens
+				temperature: selectedModel.temperature_default,
+				max_tokens: selectedModel.max_output_tokens
 			},
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
@@ -234,38 +229,16 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	}
 
 	/**
-	 * Handles provider change
+	 * Formats context window for display (e.g., "128K" for 128000)
 	 */
-	function handleProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		provider = event.currentTarget.value;
-	}
-
-	/**
-	 * Handles model change
-	 */
-	function handleModelChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		model = event.currentTarget.value;
-	}
-
-	/**
-	 * Handles lifecycle change
-	 */
-	function handleLifecycleChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		lifecycle = event.currentTarget.value as Lifecycle;
-	}
-
-	/**
-	 * Handles temperature input
-	 */
-	function handleTemperatureInput(event: Event & { currentTarget: HTMLInputElement }): void {
-		temperature = parseFloat(event.currentTarget.value) || 0;
-	}
-
-	/**
-	 * Handles max tokens input
-	 */
-	function handleMaxTokensInput(event: Event & { currentTarget: HTMLInputElement }): void {
-		maxTokens = parseInt(event.currentTarget.value, 10) || 256;
+	function formatContextWindow(tokens: number): string {
+		if (tokens >= 1_000_000) {
+			return `${(tokens / 1_000_000).toFixed(1)}M`;
+		}
+		if (tokens >= 1_000) {
+			return `${Math.round(tokens / 1_000)}K`;
+		}
+		return tokens.toLocaleString();
 	}
 
 	/**
@@ -304,61 +277,90 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						help={errors.name || 'A unique name for this agent (1-64 characters)'}
 					/>
 
-					<Select
-						label="Lifecycle"
-						value={lifecycle}
-						options={lifecycleOptions}
-						onchange={handleLifecycleChange}
-						disabled={mode === 'edit'}
-						help={mode === 'edit' ? 'Lifecycle cannot be changed after creation' : 'Permanent agents persist across sessions'}
-					/>
+					<div class="field-group" role="group" aria-label="Lifecycle">
+						<span class="field-label">Lifecycle</span>
+						<div class="card-selector">
+							{#each lifecycleOptions as option}
+								<button
+									type="button"
+									class="selector-card"
+									class:selected={lifecycle === option.value}
+									class:disabled={mode === 'edit'}
+									disabled={mode === 'edit'}
+									onclick={() => { if (mode !== 'edit') lifecycle = option.value; }}
+								>
+									<span class="selector-card-title">{option.label}</span>
+									<span class="selector-card-description">{option.description}</span>
+								</button>
+							{/each}
+						</div>
+						{#if mode === 'edit'}
+							<span class="field-help">Lifecycle cannot be changed after creation</span>
+						{/if}
+					</div>
 				</div>
 
 				<!-- LLM Configuration -->
 				<div class="form-section">
 					<h4 class="section-title">LLM Configuration</h4>
 
-					<Select
-						label="Provider"
-						value={provider}
-						options={providerOptions}
-						onchange={handleProviderChange}
-					/>
-
-					{#if modelOptions.length === 0}
-						<div class="no-models-message">
-							<p>No models configured for {provider}.</p>
-							<p>Add models in the Models section above.</p>
+					<div class="field-group" role="group" aria-label="Provider">
+						<span class="field-label">Provider</span>
+						<div class="card-selector">
+							{#each providerOptions as option}
+								<button
+									type="button"
+									class="selector-card provider-card"
+									class:selected={provider === option.value}
+									onclick={() => { provider = option.value; }}
+								>
+									<span class="selector-card-title">{option.label}</span>
+									<span class="selector-card-type">{option.type}</span>
+								</button>
+							{/each}
 						</div>
-					{:else}
-						<Select
-							label="Model"
-							value={model}
-							options={modelOptions}
-							onchange={handleModelChange}
-							help={errors.model || undefined}
-						/>
-					{/if}
+					</div>
 
-					<div class="number-inputs">
-						<Input
-							type="number"
-							label="Temperature"
-							value={String(temperature)}
-							oninput={handleTemperatureInput}
-							step="0.1"
-							min="0"
-							max="2"
-							help={errors.temperature || '0 = deterministic, 2 = creative'}
-						/>
-
-						<Input
-							type="number"
-							label="Max Tokens"
-							value={String(maxTokens)}
-							oninput={handleMaxTokensInput}
-							help={errors.maxTokens || 'Maximum response length'}
-						/>
+					<div class="field-group" role="group" aria-label="Model">
+						<span class="field-label">Model</span>
+						{#if availableModels.length === 0}
+							<div class="no-models-message">
+								<p>No models configured for {provider}.</p>
+								<p>Add models in the Models section above.</p>
+							</div>
+						{:else}
+							<div class="model-selector">
+								{#each availableModels as m}
+									<button
+										type="button"
+										class="model-card"
+										class:selected={model === m.api_name}
+										onclick={() => { model = m.api_name; }}
+									>
+										<div class="model-card-header">
+											<span class="model-card-name">{m.name}</span>
+											<div class="model-card-badges">
+												{#if m.is_builtin}
+													<Badge variant="primary">Builtin</Badge>
+												{/if}
+												{#if m.is_reasoning}
+													<Badge variant="warning">Reasoning</Badge>
+												{/if}
+											</div>
+										</div>
+										<code class="model-card-api">{m.api_name}</code>
+										<div class="model-card-specs">
+											<span class="model-card-spec">{formatContextWindow(m.context_window)} ctx</span>
+											<span class="model-card-spec">{formatContextWindow(m.max_output_tokens)} out</span>
+											<span class="model-card-spec">T: {m.temperature_default}</span>
+										</div>
+									</button>
+								{/each}
+							</div>
+							{#if errors.model}
+								<span class="field-error">{errors.model}</span>
+							{/if}
+						{/if}
 					</div>
 
 					<Input
@@ -492,12 +494,148 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		margin: 0;
 	}
 
-	.number-inputs {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-md);
+	/* Field Group */
+	.field-group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
 	}
 
+	.field-label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.field-help {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+	}
+
+	.field-error {
+		font-size: var(--font-size-xs);
+		color: var(--color-error);
+	}
+
+	/* Card Selector (Provider, Lifecycle) */
+	.card-selector {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: var(--spacing-sm);
+	}
+
+	.selector-card {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border: 2px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		text-align: left;
+	}
+
+	.selector-card:hover:not(.disabled) {
+		border-color: var(--color-primary);
+		background: var(--color-bg-hover);
+	}
+
+	.selector-card.selected {
+		border-color: var(--color-primary);
+		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	}
+
+	.selector-card.disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.selector-card-title {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.selector-card-description,
+	.selector-card-type {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+	}
+
+	/* Model Selector */
+	.model-selector {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		max-height: 300px;
+		overflow-y: auto;
+	}
+
+	.model-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border: 2px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		text-align: left;
+	}
+
+	.model-card:hover {
+		border-color: var(--color-primary);
+		background: var(--color-bg-hover);
+	}
+
+	.model-card.selected {
+		border-color: var(--color-primary);
+		background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+	}
+
+	.model-card-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+	}
+
+	.model-card-name {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.model-card-badges {
+		display: flex;
+		gap: var(--spacing-xs);
+	}
+
+	.model-card-api {
+		font-size: var(--font-size-xs);
+		font-family: var(--font-mono);
+		color: var(--color-text-tertiary);
+		background: var(--color-bg-tertiary);
+		padding: 2px var(--spacing-xs);
+		border-radius: var(--border-radius-sm);
+	}
+
+	.model-card-specs {
+		display: flex;
+		gap: var(--spacing-md);
+		margin-top: var(--spacing-xs);
+	}
+
+	.model-card-spec {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+	}
+
+	/* Checkbox Group (Tools, MCP Servers) */
 	.checkbox-group {
 		display: flex;
 		flex-direction: column;
@@ -541,6 +679,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		color: var(--color-text-secondary);
 	}
 
+	/* Empty States */
 	.no-servers,
 	.no-models-message {
 		font-size: var(--font-size-sm);
@@ -560,6 +699,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		margin-top: var(--spacing-xs);
 	}
 
+	/* Form Actions */
 	.form-actions {
 		display: flex;
 		gap: var(--spacing-md);
@@ -568,12 +708,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		border-top: 1px solid var(--color-border);
 	}
 
+	/* Responsive */
 	@media (max-width: 768px) {
 		.form-grid {
 			grid-template-columns: 1fr;
 		}
 
-		.number-inputs {
+		.card-selector {
 			grid-template-columns: 1fr;
 		}
 	}
