@@ -456,7 +456,13 @@ impl LLMProvider for MistralProvider {
         let tokens_input_estimate = estimate_tokens(prompt) + estimate_tokens(system_text);
 
         // Build agent and execute prompt
-        let agent = client.agent(model_name).preamble(system_text).build();
+        // Use temperature and max_tokens from agent config
+        let agent = client
+            .agent(model_name)
+            .preamble(system_text)
+            .temperature(temperature as f64)
+            .max_tokens(max_tokens as u64)
+            .build();
 
         let response = agent
             .prompt(prompt)
