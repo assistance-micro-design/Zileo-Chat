@@ -179,6 +179,7 @@ mod tests {
                     tools: vec![],
                     mcp_servers: vec![],
                     system_prompt: "Test prompt".to_string(),
+                    max_tool_iterations: 50,
                 },
                 delay_ms,
             }
@@ -251,6 +252,7 @@ mod tests {
                     tools: vec![],
                     mcp_servers: vec![],
                     system_prompt: "Test prompt".to_string(),
+                    max_tool_iterations: 50,
                 },
             }
         }

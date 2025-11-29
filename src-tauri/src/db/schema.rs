@@ -199,6 +199,11 @@ DEFINE FIELD mcp_servers ON agent TYPE array<string>;
 DEFINE FIELD system_prompt ON agent TYPE string
     ASSERT string::len($value) >= 1 AND string::len($value) <= 10000;
 
+-- Max tool iterations (1-200, default: 50)
+DEFINE FIELD max_tool_iterations ON agent TYPE int
+    ASSERT $value >= 1 AND $value <= 200
+    DEFAULT 50;
+
 -- Timestamps
 DEFINE FIELD created_at ON agent TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();

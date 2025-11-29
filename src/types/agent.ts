@@ -49,6 +49,8 @@ export interface AgentConfig {
   mcp_servers: string[];
   /** System prompt */
   system_prompt: string;
+  /** Maximum number of tool execution iterations (1-200, default: 50) */
+  max_tool_iterations: number;
 }
 
 /**
@@ -81,6 +83,8 @@ export interface AgentConfigCreate {
   mcp_servers: string[];
   /** System prompt (1-10000 chars) */
   system_prompt: string;
+  /** Maximum number of tool execution iterations (1-200, default: 50) */
+  max_tool_iterations?: number;
 }
 
 /**
@@ -97,6 +101,8 @@ export interface AgentConfigUpdate {
   mcp_servers?: string[];
   /** System prompt (1-10000 chars) */
   system_prompt?: string;
+  /** Maximum number of tool execution iterations (1-200) */
+  max_tool_iterations?: number;
 }
 
 /**

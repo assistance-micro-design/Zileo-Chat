@@ -48,6 +48,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let model = $state(agent?.llm.model ?? 'mistral-large-latest');
 	let temperature = $state(agent?.llm.temperature ?? 0.7);
 	let maxTokens = $state(agent?.llm.max_tokens ?? 4096);
+	let maxToolIterations = $state(agent?.max_tool_iterations ?? 50);
 	let selectedTools = $state<string[]>(agent?.tools ?? []);
 	let selectedMcpServers = $state<string[]>(agent?.mcp_servers ?? []);
 	let systemPrompt = $state(agent?.system_prompt ?? '');
@@ -161,6 +162,10 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			errors.maxTokens = 'Max tokens must be between 256 and 128000';
 		}
 
+		if (maxToolIterations < 1 || maxToolIterations > 200) {
+			errors.maxToolIterations = 'Max iterations must be between 1 and 200';
+		}
+
 		if (!systemPrompt.trim()) {
 			errors.systemPrompt = 'System prompt is required';
 		} else if (systemPrompt.length > 10000) {
@@ -189,7 +194,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			},
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
-			system_prompt: systemPrompt.trim()
+			system_prompt: systemPrompt.trim(),
+			max_tool_iterations: maxToolIterations
 		};
 
 		try {
@@ -260,6 +266,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	 */
 	function handleMaxTokensInput(event: Event & { currentTarget: HTMLInputElement }): void {
 		maxTokens = parseInt(event.currentTarget.value, 10) || 256;
+	}
+
+	/**
+	 * Handles max tool iterations input
+	 */
+	function handleMaxToolIterationsInput(event: Event & { currentTarget: HTMLInputElement }): void {
+		maxToolIterations = parseInt(event.currentTarget.value, 10) || 50;
 	}
 
 	/**
@@ -344,6 +357,14 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							help={errors.maxTokens || 'Maximum response length'}
 						/>
 					</div>
+
+					<Input
+						type="number"
+						label="Max Tool Iterations"
+						value={String(maxToolIterations)}
+						oninput={handleMaxToolIterationsInput}
+						help={errors.maxToolIterations || 'Maximum tool execution loops (1-200)'}
+					/>
 				</div>
 
 				<!-- Tools -->

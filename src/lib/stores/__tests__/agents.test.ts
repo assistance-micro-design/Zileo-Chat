@@ -57,7 +57,8 @@ describe('Agent Store', () => {
 		},
 		tools: ['MemoryTool', 'TodoTool'],
 		mcp_servers: ['serena'],
-		system_prompt: 'You are a helpful assistant.'
+		system_prompt: 'You are a helpful assistant.',
+		max_tool_iterations: 50
 	});
 
 	beforeEach(() => {

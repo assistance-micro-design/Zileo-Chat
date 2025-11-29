@@ -32,8 +32,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error, info, instrument, warn};
 
-/// Maximum number of tool execution iterations to prevent infinite loops
-const MAX_TOOL_ITERATIONS: usize = 10;
+/// Default maximum number of tool execution iterations to prevent infinite loops
+/// Can be overridden per-agent via AgentConfig.max_tool_iterations
+#[allow(dead_code)]
+const DEFAULT_MAX_TOOL_ITERATIONS: usize = 50;
 
 /// Parsed tool call extracted from LLM response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1046,11 +1048,14 @@ impl Agent for LLMAgent {
         let mut final_response_content = String::new();
         let mut iteration = 0;
 
+        // Use agent config max_tool_iterations, clamped to valid range [1, 200]
+        let max_iterations = self.config.max_tool_iterations.clamp(1, 200);
+
         loop {
             iteration += 1;
-            if iteration > MAX_TOOL_ITERATIONS {
+            if iteration > max_iterations {
                 warn!(
-                    iterations = MAX_TOOL_ITERATIONS,
+                    iterations = max_iterations,
                     "Max tool iterations reached, stopping execution"
                 );
                 break;
@@ -1425,6 +1430,7 @@ mod tests {
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
+            max_tool_iterations: 50,
         }
     }
 

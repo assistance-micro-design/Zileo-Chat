@@ -529,6 +529,7 @@ mod tests {
             tools: vec![],
             mcp_servers: vec![],
             system_prompt: "Test agent".to_string(),
+            max_tool_iterations: 50,
         };
         let agent = SimpleAgent::new(config);
         registry

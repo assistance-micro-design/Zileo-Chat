@@ -14,7 +14,7 @@ Streaming integration for real-time response display (Phase 2).
 	import { onDestroy, onMount } from 'svelte';
 	import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
 	import type { Message } from '$types/message';
-	import type { AgentSummary } from '$types/agent';
+	import type { AgentSummary, AgentConfig } from '$types/agent';
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
 	import { Sidebar } from '$lib/components/layout';
 	import { Button, Input, Spinner } from '$lib/components/ui';
@@ -50,6 +50,9 @@ Streaming integration for real-time response display (Phase 2).
 	 * The store is loaded on mount and provides reactive updates.
 	 */
 	let selectedAgentId = $state<string | null>(null);
+
+	/** Current agent's max tool iterations limit (1-200, default: 50) */
+	let currentMaxIterations = $state<number>(50);
 
 	/** Messages state - persisted to backend */
 	let messages = $state<Message[]>([]);
@@ -313,10 +316,37 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles agent selection
+	 * Handles agent selection - loads agent config to get max_tool_iterations
 	 */
-	function handleAgentSelect(agentId: string): void {
+	async function handleAgentSelect(agentId: string): Promise<void> {
 		selectedAgentId = agentId;
+		try {
+			const config = await invoke<AgentConfig>('get_agent_config', { agentId });
+			currentMaxIterations = config.max_tool_iterations;
+		} catch (err) {
+			console.error('Failed to load agent config:', err);
+			currentMaxIterations = 50; // Default fallback
+		}
+	}
+
+	/**
+	 * Handles max tool iterations change
+	 */
+	async function handleMaxIterationsChange(event: Event): Promise<void> {
+		const target = event.target as HTMLInputElement;
+		const value = Math.max(1, Math.min(200, parseInt(target.value) || 50));
+		currentMaxIterations = value;
+
+		if (!selectedAgentId) return;
+
+		try {
+			await invoke('update_agent', {
+				agentId: selectedAgentId,
+				config: { max_tool_iterations: value }
+			});
+		} catch (err) {
+			console.error('Failed to update max iterations:', err);
+		}
 	}
 
 	/**
@@ -623,12 +653,25 @@ Streaming integration for real-time response display (Phase 2).
 						{/if}
 					</div>
 				</div>
-				{#if messagesLoading}
-					<div class="header-right">
+				<div class="header-right">
+					{#if messagesLoading}
 						<RefreshCw size={16} class="loading-icon" />
 						<span class="loading-text">Loading messages...</span>
-					</div>
-				{/if}
+					{:else if selectedAgentId && agentList.length > 0}
+						<div class="iterations-control">
+							<label for="max-iterations" class="iterations-label">Max iterations:</label>
+							<input
+								type="number"
+								id="max-iterations"
+								class="iterations-input"
+								min="1"
+								max="200"
+								value={currentMaxIterations}
+								onchange={handleMaxIterationsChange}
+							/>
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Messages Area -->
@@ -861,6 +904,40 @@ Streaming integration for real-time response display (Phase 2).
 	@keyframes spin {
 		from { transform: rotate(0deg); }
 		to { transform: rotate(360deg); }
+	}
+
+	/* Iterations Control */
+	.iterations-control {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.iterations-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		white-space: nowrap;
+	}
+
+	.iterations-input {
+		width: 60px;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-primary);
+		color: var(--color-text-primary);
+		text-align: center;
+	}
+
+	.iterations-input:focus {
+		outline: none;
+		border-color: var(--color-accent);
+	}
+
+	.iterations-input::-webkit-inner-spin-button,
+	.iterations-input::-webkit-outer-spin-button {
+		opacity: 1;
 	}
 
 	.agent-title {

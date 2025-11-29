@@ -326,6 +326,8 @@ impl SpawnAgentTool {
             system_prompt: system_prompt
                 .unwrap_or(DEFAULT_SUB_AGENT_SYSTEM_PROMPT)
                 .to_string(),
+            // Sub-agents inherit parent's max_tool_iterations
+            max_tool_iterations: parent_config.max_tool_iterations,
         };
 
         info!(

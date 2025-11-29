@@ -59,6 +59,14 @@ pub struct AgentConfig {
     pub mcp_servers: Vec<String>,
     /// System prompt
     pub system_prompt: String,
+    /// Maximum number of tool execution iterations (1-200, default: 50)
+    #[serde(default = "default_max_tool_iterations")]
+    pub max_tool_iterations: usize,
+}
+
+/// Default value for max_tool_iterations
+fn default_max_tool_iterations() -> usize {
+    50
 }
 
 // Allow dead code until Phase 6: Full Agent Integration
@@ -115,6 +123,9 @@ pub struct AgentConfigCreate {
     pub mcp_servers: Vec<String>,
     /// System prompt (1-10000 chars)
     pub system_prompt: String,
+    /// Maximum number of tool execution iterations (1-200, default: 50)
+    #[serde(default = "default_max_tool_iterations")]
+    pub max_tool_iterations: usize,
 }
 
 /// Agent configuration for updates (all fields optional except lifecycle which cannot change)
@@ -135,6 +146,9 @@ pub struct AgentConfigUpdate {
     /// System prompt (1-10000 chars)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
+    /// Maximum number of tool execution iterations (1-200)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tool_iterations: Option<usize>,
 }
 
 /// Agent summary for listing (lightweight representation)
@@ -245,6 +259,7 @@ mod tests {
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
+            max_tool_iterations: 50,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -290,6 +305,7 @@ mod tests {
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
         };
 
         assert!(config.has_valid_tools());
@@ -315,6 +331,7 @@ mod tests {
             ],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
         };
 
         assert!(!config.has_valid_tools());
@@ -339,6 +356,7 @@ mod tests {
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
         };
 
         assert!(config.has_valid_tools());

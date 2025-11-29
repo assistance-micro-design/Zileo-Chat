@@ -125,6 +125,7 @@ mod tests {
             tools: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_servers: vec!["mcp_server1".to_string()],
             system_prompt: "You are a test agent.".to_string(),
+            max_tool_iterations: 50,
         }
     }
 

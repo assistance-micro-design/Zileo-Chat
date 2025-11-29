@@ -351,6 +351,12 @@ async fn main() -> anyhow::Result<()> {
 
                     let system_prompt = row["system_prompt"].as_str().unwrap_or("You are a helpful assistant.").to_string();
 
+                    let max_tool_iterations = row["max_tool_iterations"]
+                        .as_u64()
+                        .map(|v| v as usize)
+                        .unwrap_or(50)
+                        .clamp(1, 200);
+
                     let config = crate::models::AgentConfig {
                         id: id.clone(),
                         name,
@@ -359,6 +365,7 @@ async fn main() -> anyhow::Result<()> {
                         tools,
                         mcp_servers: mcp_servers_list,
                         system_prompt,
+                        max_tool_iterations,
                     };
 
                     // Create agent context with app_handle
