@@ -17,8 +17,8 @@ Streaming integration for real-time response display (Phase 2).
 	import type { AgentSummary, AgentConfig } from '$types/agent';
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
 	import { Sidebar } from '$lib/components/layout';
-	import { Button, Input, Spinner } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel, SubAgentActivity } from '$lib/components/workflow';
+	import { Button, Spinner } from '$lib/components/ui';
+	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel, SubAgentActivity, NewWorkflowModal } from '$lib/components/workflow';
 	import { MessageList, ChatInput, StreamingMessage, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
@@ -73,6 +73,7 @@ Streaming integration for real-time response display (Phase 2).
 	/** UI state */
 	let searchFilter = $state('');
 	let sidebarCollapsed = $state(false);
+	let showNewWorkflowModal = $state(false);
 
 	/** State recovery indicator (Phase 5: Complete State Recovery) */
 	let restoringState = $state(false);
@@ -229,34 +230,36 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Creates a new workflow with user-provided name
+	 * Opens the new workflow modal
 	 */
-	async function createWorkflow(): Promise<void> {
-		if (agentList.length === 0) {
-			alert('No agents configured. Please create an agent in Settings first.');
-			return;
-		}
+	function openNewWorkflowModal(): void {
+		showNewWorkflowModal = true;
+	}
 
-		if (!selectedAgentId) {
-			alert('Please select an agent first.');
-			return;
-		}
-
-		const name = prompt('Workflow name:');
-		if (!name) return;
-
+	/**
+	 * Creates a new workflow with user-provided name and agent
+	 */
+	async function handleCreateWorkflow(name: string, agentId: string): Promise<void> {
 		try {
 			const id = await invoke<string>('create_workflow', {
 				name,
-				agentId: selectedAgentId
+				agentId
 			});
+
+			// Update selected agent to match the workflow
+			selectedAgentId = agentId;
 
 			await loadWorkflows();
 			selectedWorkflowId = id;
 			messages = [];
 			result = null;
+
+			// Close modal on success
+			showNewWorkflowModal = false;
 		} catch (err) {
-			alert('Failed to create workflow: ' + err);
+			console.error('Failed to create workflow:', err);
+			// Modal stays open on error - error will be shown in modal
+			throw err;
 		}
 	}
 
@@ -596,19 +599,26 @@ Streaming integration for real-time response display (Phase 2).
 <div class="agent-page">
 	<!-- Workflow Sidebar -->
 	<Sidebar bind:collapsed={sidebarCollapsed}>
-		{#snippet header()}
-			<div class="sidebar-header-content">
-				<div class="flex justify-between items-center">
-					<h2 class="sidebar-title">Workflows</h2>
-					<Button variant="primary" size="icon" onclick={createWorkflow} ariaLabel="New workflow">
-						<Plus size={14} />
+		{#snippet header(isCollapsed)}
+			<div class="sidebar-header-content" class:collapsed={isCollapsed}>
+				{#if isCollapsed}
+					<Button variant="primary" size="icon" onclick={openNewWorkflowModal} ariaLabel="New workflow" title="New workflow">
+						<Plus size={16} />
 					</Button>
-				</div>
-				{#if !sidebarCollapsed}
-					<div class="search-wrapper">
-						<Search size={16} class="search-icon" />
-						<Input
+				{:else}
+					<div class="flex justify-between items-center">
+						<h2 class="sidebar-title">Workflows</h2>
+						<Button variant="primary" size="icon" onclick={openNewWorkflowModal} ariaLabel="New workflow">
+							<Plus size={14} />
+						</Button>
+					</div>
+					<div class="search-input-wrapper">
+						<span class="search-icon-container">
+							<Search size={16} />
+						</span>
+						<input
 							type="search"
+							class="search-input"
 							placeholder="Filter workflows..."
 							bind:value={searchFilter}
 						/>
@@ -617,16 +627,15 @@ Streaming integration for real-time response display (Phase 2).
 			</div>
 		{/snippet}
 
-		{#snippet nav()}
-			{#if !sidebarCollapsed}
-				<WorkflowList
-					workflows={filteredWorkflows()}
-					selectedId={selectedWorkflowId ?? undefined}
-					onselect={handleWorkflowSelect}
-					ondelete={handleWorkflowDelete}
-					onrename={handleWorkflowRename}
-				/>
-			{/if}
+		{#snippet nav(isCollapsed)}
+			<WorkflowList
+				workflows={filteredWorkflows()}
+				selectedId={selectedWorkflowId ?? undefined}
+				collapsed={isCollapsed}
+				onselect={handleWorkflowSelect}
+				ondelete={handleWorkflowDelete}
+				onrename={handleWorkflowRename}
+			/>
 		{/snippet}
 	</Sidebar>
 
@@ -803,7 +812,7 @@ Streaming integration for real-time response display (Phase 2).
 					<Bot size={64} class="empty-icon" />
 					<h3>Select or create a workflow</h3>
 					<p class="empty-description">Choose an existing workflow from the sidebar or create a new one to get started.</p>
-					<Button variant="primary" onclick={createWorkflow}>
+					<Button variant="primary" onclick={openNewWorkflowModal}>
 						<Plus size={16} />
 						New Workflow
 					</Button>
@@ -820,12 +829,24 @@ Streaming integration for real-time response display (Phase 2).
 		onreject={handleValidationReject}
 		onclose={handleValidationClose}
 	/>
+
+	<!-- New Workflow Modal -->
+	<NewWorkflowModal
+		open={showNewWorkflowModal}
+		agents={agentList}
+		selectedAgentId={selectedAgentId}
+		oncreate={handleCreateWorkflow}
+		onclose={() => showNewWorkflowModal = false}
+	/>
 </div>
 
 <style>
 	.agent-page {
 		display: flex;
 		height: 100%;
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
 	}
 
 	/* Sidebar Header Content */
@@ -833,29 +854,72 @@ Streaming integration for real-time response display (Phase 2).
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+		transition: all var(--transition-fast);
+	}
+
+	.sidebar-header-content.collapsed {
+		align-items: center;
+		justify-content: center;
+		gap: 0;
 	}
 
 	.sidebar-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
 	}
 
-	.search-wrapper {
+	/* Search Input with Icon */
+	.search-input-wrapper {
 		position: relative;
+		display: flex;
+		align-items: center;
 	}
 
-	.search-wrapper :global(.search-icon) {
+	.search-icon-container {
 		position: absolute;
-		left: var(--spacing-md);
+		left: var(--spacing-sm);
 		top: 50%;
 		transform: translateY(-50%);
 		color: var(--color-text-tertiary);
 		pointer-events: none;
 		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
-	.search-wrapper :global(input) {
-		padding-left: calc(var(--spacing-md) * 2 + 16px);
+	.search-input {
+		width: 100%;
+		padding: var(--spacing-sm) var(--spacing-md);
+		padding-left: calc(var(--spacing-sm) + 16px + var(--spacing-sm));
+		font-size: var(--font-size-sm);
+		font-family: var(--font-family);
+		color: var(--color-text-primary);
+		background: var(--color-bg-primary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+	}
+
+	.search-input:focus {
+		outline: none;
+		border-color: var(--color-accent);
+		box-shadow: 0 0 0 3px var(--color-accent-light);
+	}
+
+	.search-input::placeholder {
+		color: var(--color-text-tertiary);
+	}
+
+	/* Remove default search input styling */
+	.search-input::-webkit-search-cancel-button {
+		-webkit-appearance: none;
+		appearance: none;
+		height: 14px;
+		width: 14px;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'%3E%3C/line%3E%3Cline x1='6' y1='6' x2='18' y2='18'%3E%3C/line%3E%3C/svg%3E") center/contain no-repeat;
+		cursor: pointer;
 	}
 
 	/* Agent Main Area */
@@ -866,6 +930,7 @@ Streaming integration for real-time response display (Phase 2).
 		background: var(--color-bg-primary);
 		overflow: hidden;
 		min-width: 0;
+		min-height: 0;
 	}
 
 	.agent-header {
@@ -952,6 +1017,7 @@ Streaming integration for real-time response display (Phase 2).
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
+		min-height: 0;
 	}
 
 	/* Streaming Container */

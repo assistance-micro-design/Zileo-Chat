@@ -2,14 +2,19 @@
   Sidebar Component
   A collapsible sidebar with header, navigation, and footer slots.
   Supports expand/collapse toggle with smooth transition.
+  Passes collapsed state to snippets via context.
 
   @example
   <Sidebar bind:collapsed>
-    {#snippet header()}
-      <h2>Workflows</h2>
+    {#snippet header(isCollapsed)}
+      {#if isCollapsed}
+        <IconButton />
+      {:else}
+        <h2>Workflows</h2>
+      {/if}
     {/snippet}
-    {#snippet nav()}
-      <NavItem href="/agent" icon={Bot}>Agent</NavItem>
+    {#snippet nav(isCollapsed)}
+      <WorkflowList collapsed={isCollapsed} />
     {/snippet}
     {#snippet footer()}
       <p>Footer content</p>
@@ -26,10 +31,10 @@
 	interface Props {
 		/** Whether the sidebar is collapsed */
 		collapsed?: boolean;
-		/** Header slot content */
-		header?: Snippet;
-		/** Navigation slot content */
-		nav?: Snippet;
+		/** Header slot content - receives collapsed state */
+		header?: Snippet<[boolean]>;
+		/** Navigation slot content - receives collapsed state */
+		nav?: Snippet<[boolean]>;
 		/** Footer slot content */
 		footer?: Snippet;
 	}
@@ -47,13 +52,13 @@
 <aside class="sidebar" class:collapsed aria-label="Sidebar navigation">
 	{#if header}
 		<div class="sidebar-header">
-			{@render header()}
+			{@render header(collapsed)}
 		</div>
 	{/if}
 
 	{#if nav}
 		<nav class="sidebar-nav">
-			{@render nav()}
+			{@render nav(collapsed)}
 		</nav>
 	{/if}
 

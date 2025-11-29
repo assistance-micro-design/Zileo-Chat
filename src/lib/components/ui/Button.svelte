@@ -26,6 +26,8 @@
 		onclick?: () => void;
 		/** Accessible label for icon-only buttons */
 		ariaLabel?: string;
+		/** Tooltip text shown on hover */
+		title?: string;
 		/** Button content */
 		children: Snippet;
 	}
@@ -37,6 +39,7 @@
 		type = 'button',
 		onclick,
 		ariaLabel,
+		title,
 		children
 	}: Props = $props();
 
@@ -48,6 +51,6 @@
 	);
 </script>
 
-<button {type} {disabled} class={classes} {onclick} aria-label={ariaLabel} aria-disabled={disabled}>
+<button {type} {disabled} class={classes} {onclick} aria-label={ariaLabel} aria-disabled={disabled} {title}>
 	{@render children()}
 </button>
