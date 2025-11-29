@@ -339,7 +339,8 @@ Streaming integration for real-time response display (Phase 2).
 			// Clear associated data first (optional, cascade delete would be better)
 			await Promise.all([
 				invoke('clear_workflow_messages', { workflowId: workflow.id }),
-				invoke('clear_workflow_tool_executions', { workflowId: workflow.id })
+				invoke('clear_workflow_tool_executions', { workflowId: workflow.id }),
+				invoke('clear_workflow_thinking_steps', { workflowId: workflow.id })
 			]);
 			await invoke('delete_workflow', { id: workflow.id });
 			await loadWorkflows();
