@@ -18,7 +18,7 @@ Streaming integration for real-time response display (Phase 2).
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
 	import { Sidebar, RightSidebar } from '$lib/components/layout';
 	import { Button, Spinner } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector, NewWorkflowModal, ActivityFeed } from '$lib/components/workflow';
+	import { WorkflowList, MetricsBar, AgentSelector, NewWorkflowModal, ConfirmDeleteModal, ActivityFeed } from '$lib/components/workflow';
 	import { MessageList, ChatInput, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
@@ -80,6 +80,8 @@ Streaming integration for real-time response display (Phase 2).
 	let searchFilter = $state('');
 	let sidebarCollapsed = $state(false);
 	let showNewWorkflowModal = $state(false);
+	let showDeleteModal = $state(false);
+	let workflowToDelete = $state<Workflow | null>(null);
 
 	/** Right sidebar state */
 	let rightSidebarCollapsed = $state(false);
@@ -330,10 +332,20 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles workflow deletion
+	 * Opens the delete confirmation modal for a workflow
 	 */
-	async function handleWorkflowDelete(workflow: Workflow): Promise<void> {
-		if (!confirm(`Delete workflow "${workflow.name}"?`)) return;
+	function handleWorkflowDelete(workflow: Workflow): void {
+		workflowToDelete = workflow;
+		showDeleteModal = true;
+	}
+
+	/**
+	 * Confirms and executes workflow deletion
+	 */
+	async function confirmWorkflowDelete(): Promise<void> {
+		if (!workflowToDelete) return;
+
+		const workflow = workflowToDelete;
 
 		try {
 			// Clear associated data first (optional, cascade delete would be better)
@@ -354,8 +366,19 @@ Streaming integration for real-time response display (Phase 2).
 				result = null;
 			}
 		} catch (err) {
-			alert('Failed to delete workflow: ' + err);
+			console.error('Failed to delete workflow:', err);
+		} finally {
+			showDeleteModal = false;
+			workflowToDelete = null;
 		}
+	}
+
+	/**
+	 * Cancels workflow deletion
+	 */
+	function cancelWorkflowDelete(): void {
+		showDeleteModal = false;
+		workflowToDelete = null;
 	}
 
 	/**
@@ -907,6 +930,14 @@ Streaming integration for real-time response display (Phase 2).
 		selectedAgentId={selectedAgentId}
 		oncreate={handleCreateWorkflow}
 		onclose={() => showNewWorkflowModal = false}
+	/>
+
+	<!-- Delete Workflow Confirmation Modal -->
+	<ConfirmDeleteModal
+		open={showDeleteModal}
+		workflowName={workflowToDelete?.name ?? ''}
+		onconfirm={confirmWorkflowDelete}
+		oncancel={cancelWorkflowDelete}
 	/>
 </div>
 

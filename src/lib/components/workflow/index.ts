@@ -11,6 +11,7 @@ export { default as WorkflowItemCompact } from './WorkflowItemCompact.svelte';
 export { default as WorkflowList } from './WorkflowList.svelte';
 export { default as MetricsBar } from './MetricsBar.svelte';
 export { default as NewWorkflowModal } from './NewWorkflowModal.svelte';
+export { default as ConfirmDeleteModal } from './ConfirmDeleteModal.svelte';
 export { default as ValidationModal } from './ValidationModal.svelte';
 export { default as AgentSelector } from './AgentSelector.svelte';
 export { default as ToolExecutionPanel } from './ToolExecutionPanel.svelte';
