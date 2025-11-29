@@ -105,6 +105,8 @@
   /* Layout */
   --sidebar-width: 280px;
   --sidebar-collapsed-width: 60px;
+  --right-sidebar-width: 320px;
+  --right-sidebar-collapsed-width: 48px;
   --floating-menu-height: 60px;
 }
 

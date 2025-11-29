@@ -16,11 +16,13 @@ Streaming integration for real-time response display (Phase 2).
 	import type { Message } from '$types/message';
 	import type { AgentSummary, AgentConfig } from '$types/agent';
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
-	import { Sidebar } from '$lib/components/layout';
+	import { Sidebar, RightSidebar } from '$lib/components/layout';
 	import { Button, Spinner } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector, ToolExecutionPanel, SubAgentActivity, NewWorkflowModal } from '$lib/components/workflow';
-	import { MessageList, ChatInput, StreamingMessage, MessageListSkeleton } from '$lib/components/chat';
-	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle } from 'lucide-svelte';
+	import { WorkflowList, MetricsBar, AgentSelector, NewWorkflowModal, ActivityFeed } from '$lib/components/workflow';
+	import { MessageList, ChatInput, MessageListSkeleton } from '$lib/components/chat';
+	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
+	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
+	import { combineActivities } from '$lib/utils/activity';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
 		streamingStore,
@@ -40,6 +42,8 @@ Streaming integration for real-time response display (Phase 2).
 
 	/** LocalStorage key for persisting selected workflow */
 	const LAST_WORKFLOW_KEY = 'zileo_last_workflow_id';
+	/** LocalStorage key for persisting right sidebar collapsed state */
+	const RIGHT_SIDEBAR_COLLAPSED_KEY = 'zileo_right_sidebar_collapsed';
 
 	/** Workflow state */
 	let workflows = $state<Workflow[]>([]);
@@ -58,13 +62,12 @@ Streaming integration for real-time response display (Phase 2).
 	let messages = $state<Message[]>([]);
 	let messagesLoading = $state(false);
 
-	/** Tool executions state - persisted to backend */
+	/** Tool executions state - persisted to backend (not displayed, used for data persistence) */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	let toolExecutions = $state<ToolExecution[]>([]);
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	let currentToolExecutions = $state<WorkflowToolExecution[]>([]);
 
-	/** Last completed streaming session - kept for display after streaming ends */
-	let lastReasoningSteps = $state<import('$lib/stores/streaming').ActiveReasoningStep[]>([]);
-	let lastActiveTools = $state<import('$lib/stores/streaming').ActiveTool[]>([]);
 
 	/** Input/Output state */
 	let result = $state<WorkflowResult | null>(null);
@@ -74,6 +77,10 @@ Streaming integration for real-time response display (Phase 2).
 	let searchFilter = $state('');
 	let sidebarCollapsed = $state(false);
 	let showNewWorkflowModal = $state(false);
+
+	/** Right sidebar state */
+	let rightSidebarCollapsed = $state(false);
+	let activityFilter = $state<ActivityFilter>('all');
 
 	/** State recovery indicator (Phase 5: Complete State Recovery) */
 	let restoringState = $state(false);
@@ -88,6 +95,13 @@ Streaming integration for real-time response display (Phase 2).
 	 * Reactive loading state from store
 	 */
 	const agentLoadingState = $derived<boolean>($agentsLoading);
+
+	/**
+	 * Combined activities from all sources
+	 */
+	const activities = $derived<WorkflowActivityEvent[]>(
+		combineActivities($activeTools, $activeSubAgents, $reasoningSteps)
+	);
 
 	/**
 	 * Get filtered workflows based on search
@@ -375,11 +389,7 @@ Streaming integration for real-time response display (Phase 2).
 			};
 			messages = [...messages, userMessage];
 
-			// 3. Clear previous streaming session data
-			lastReasoningSteps = [];
-			lastActiveTools = [];
-
-			// 4. Start streaming and setup event listeners
+			// 3. Start streaming and setup event listeners
 			await streamingStore.start(selectedWorkflowId);
 
 			// 5. Execute workflow with streaming
@@ -418,15 +428,10 @@ Streaming integration for real-time response display (Phase 2).
 			};
 			messages = [...messages, assistantMessage];
 
-			// 8. Capture tool executions from result for display
+			// 8. Capture tool executions from result for data persistence
 			currentToolExecutions = result.tool_executions || [];
 
-			// 9. Capture streaming session data before reset (for persistent display)
-			const streamState = streamingStore.getState();
-			lastReasoningSteps = [...streamState.reasoning];
-			lastActiveTools = [...streamState.tools];
-
-			// 10. Cleanup streaming state
+			// 9. Cleanup streaming state
 			await streamingStore.reset();
 		} catch (err) {
 			// Cleanup streaming on error
@@ -571,6 +576,12 @@ Streaming integration for real-time response display (Phase 2).
 		// Load workflows and agents in parallel
 		await Promise.all([loadWorkflows(), loadAgents()]);
 
+		// Load right sidebar collapsed state
+		const savedRightCollapsed = localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_KEY);
+		if (savedRightCollapsed !== null) {
+			rightSidebarCollapsed = savedRightCollapsed === 'true';
+		}
+
 		// Attempt to restore last selected workflow from localStorage
 		const lastWorkflowId = localStorage.getItem(LAST_WORKFLOW_KEY);
 		if (lastWorkflowId) {
@@ -593,6 +604,13 @@ Streaming integration for real-time response display (Phase 2).
 		if (selectedWorkflowId) {
 			localStorage.setItem(LAST_WORKFLOW_KEY, selectedWorkflowId);
 		}
+	});
+
+	/**
+	 * Persist right sidebar collapsed state to localStorage.
+	 */
+	$effect(() => {
+		localStorage.setItem(RIGHT_SIDEBAR_COLLAPSED_KEY, String(rightSidebarCollapsed));
 	});
 </script>
 
@@ -692,51 +710,20 @@ Streaming integration for real-time response display (Phase 2).
 				{/if}
 			</div>
 
-			<!-- Streaming Message (shown during generation and after completion) -->
-			{#if $isStreamingStore}
-				<div class="streaming-container">
-					<StreamingMessage
-						content={$streamContent}
-						tools={$activeTools}
-						reasoning={$reasoningSteps}
-						isStreaming={true}
-					/>
-				</div>
-			{:else if lastReasoningSteps.length > 0 || lastActiveTools.length > 0}
-				<!-- Collapsed view of last completed streaming session -->
-				<div class="streaming-container completed">
-					<StreamingMessage
-						content=""
-						tools={lastActiveTools}
-						reasoning={lastReasoningSteps}
-						isStreaming={false}
-						showTools={true}
-						showReasoning={true}
-					/>
-				</div>
-			{/if}
-
-			<!-- Sub-Agent Activity Panel (Phase E: Streaming Events) -->
-			{#if $activeSubAgents.length > 0 || $isStreamingStore}
-				<div class="sub-agent-container">
-					<SubAgentActivity
-						subAgents={$activeSubAgents}
-						isStreaming={$isStreamingStore}
-						collapsed={false}
-					/>
-				</div>
-			{/if}
-
-			<!-- Tool Execution Panel -->
-			{#if toolExecutions.length > 0 || currentToolExecutions.length > 0 || $isStreamingStore}
-				<div class="tool-execution-container">
-					<ToolExecutionPanel
-						executions={toolExecutions}
-						workflowExecutions={currentToolExecutions}
-						activeTools={$activeTools}
-						isStreaming={$isStreamingStore}
-						collapsed={true}
-					/>
+			<!-- Streaming Text (shown during generation) -->
+			{#if $isStreamingStore && $streamContent}
+				<div class="streaming-text-container">
+					<div class="streaming-text-bubble">
+						<div class="streaming-header">
+							<Bot size={16} class="bot-icon" />
+							<span>Assistant</span>
+							<Spinner size="sm" />
+						</div>
+						<div class="streaming-content">
+							{$streamContent}
+							<span class="cursor"></span>
+						</div>
+					</div>
 				</div>
 			{/if}
 
@@ -820,6 +807,29 @@ Streaming integration for real-time response display (Phase 2).
 			</div>
 		{/if}
 	</main>
+
+	<!-- Right Sidebar - Activity Feed -->
+	<RightSidebar bind:collapsed={rightSidebarCollapsed}>
+		{#snippet header(isCollapsed)}
+			<div class="right-sidebar-header-content" class:collapsed={isCollapsed}>
+				{#if isCollapsed}
+					<Activity size={20} class="header-icon" />
+				{:else}
+					<h3 class="right-sidebar-title">Activity</h3>
+				{/if}
+			</div>
+		{/snippet}
+
+		{#snippet content(isCollapsed)}
+			<ActivityFeed
+				{activities}
+				isStreaming={$isStreamingStore}
+				filter={activityFilter}
+				onFilterChange={(f) => activityFilter = f}
+				collapsed={isCollapsed}
+			/>
+		{/snippet}
+	</RightSidebar>
 
 	<!-- Validation Modal for Sub-Agent Operations (Phase D) -->
 	<ValidationModal
@@ -1020,37 +1030,82 @@ Streaming integration for real-time response display (Phase 2).
 		min-height: 0;
 	}
 
-	/* Streaming Container */
-	.streaming-container {
-		padding: 0 var(--spacing-lg) var(--spacing-md);
+	/* Streaming Text Display */
+	.streaming-text-container {
+		padding: var(--spacing-md) var(--spacing-lg);
+	}
+
+	.streaming-text-bubble {
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		padding: var(--spacing-md);
+		max-width: 80%;
 		animation: fadeIn 0.3s ease-in;
 	}
 
-	/* Completed streaming session - more compact */
-	.streaming-container.completed {
-		opacity: 0.85;
+	.streaming-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-secondary);
 	}
 
-	.streaming-container.completed :global(.streaming-content) {
-		display: none;
+	.streaming-header :global(.bot-icon) {
+		color: var(--color-accent);
 	}
 
-	.streaming-container.completed :global(.streaming-header) {
-		padding: var(--spacing-xs) var(--spacing-md);
+	.streaming-content {
+		font-size: var(--font-size-md);
+		line-height: 1.6;
+		color: var(--color-text-primary);
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
-	.streaming-container.completed :global(.streaming-indicator) {
-		display: none;
+	.streaming-content .cursor {
+		display: inline-block;
+		width: 2px;
+		height: 1.2em;
+		background: var(--color-accent);
+		margin-left: 2px;
+		vertical-align: text-bottom;
+		animation: blink 1s step-end infinite;
 	}
 
-	/* Sub-Agent Activity Panel Container (Phase E) */
-	.sub-agent-container {
-		padding: 0 var(--spacing-lg) var(--spacing-md);
+	@keyframes fadeIn {
+		from { opacity: 0; transform: translateY(8px); }
+		to { opacity: 1; transform: translateY(0); }
 	}
 
-	/* Tool Execution Panel Container */
-	.tool-execution-container {
-		padding: 0 var(--spacing-lg) var(--spacing-md);
+	@keyframes blink {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0; }
+	}
+
+	/* Right Sidebar Header */
+	.right-sidebar-header-content {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.right-sidebar-header-content.collapsed {
+		justify-content: center;
+	}
+
+	.right-sidebar-header-content :global(.header-icon) {
+		color: var(--color-accent);
+	}
+
+	.right-sidebar-title {
+		font-size: var(--font-size-md);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+		margin: 0;
 	}
 
 	/* Chat Input Wrapper (with cancel button) */
@@ -1134,5 +1189,19 @@ Streaming integration for real-time response display (Phase 2).
 
 	.items-center {
 		align-items: center;
+	}
+
+	/* Responsive: Hide right sidebar on small screens */
+	@media (max-width: 1200px) {
+		.agent-page :global(.right-sidebar) {
+			display: none;
+		}
+	}
+
+	/* Medium screens: auto-collapse right sidebar */
+	@media (max-width: 1400px) and (min-width: 1201px) {
+		.agent-page :global(.right-sidebar:not(.collapsed)) {
+			width: 260px;
+		}
 	}
 </style>

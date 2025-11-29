@@ -3,9 +3,10 @@
  * Re-exports all layout components for easy importing
  *
  * @example
- * import { AppContainer, FloatingMenu, Sidebar } from '$lib/components/layout';
+ * import { AppContainer, FloatingMenu, Sidebar, RightSidebar } from '$lib/components/layout';
  */
 
 export { default as AppContainer } from './AppContainer.svelte';
 export { default as FloatingMenu } from './FloatingMenu.svelte';
 export { default as Sidebar } from './Sidebar.svelte';
+export { default as RightSidebar } from './RightSidebar.svelte';

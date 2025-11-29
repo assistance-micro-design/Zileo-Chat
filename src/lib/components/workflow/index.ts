@@ -16,3 +16,5 @@ export { default as AgentSelector } from './AgentSelector.svelte';
 export { default as ToolExecutionPanel } from './ToolExecutionPanel.svelte';
 export { default as ReasoningPanel } from './ReasoningPanel.svelte';
 export { default as SubAgentActivity } from './SubAgentActivity.svelte';
+export { default as ActivityItem } from './ActivityItem.svelte';
+export { default as ActivityFeed } from './ActivityFeed.svelte';
