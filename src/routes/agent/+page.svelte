@@ -22,7 +22,7 @@ Streaming integration for real-time response display (Phase 2).
 	import { MessageList, ChatInput, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
-	import { combineActivities } from '$lib/utils/activity';
+	import { combineActivities, convertToolExecutions } from '$lib/utils/activity';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
 		streamingStore,
@@ -63,7 +63,7 @@ Streaming integration for real-time response display (Phase 2).
 	let messagesLoading = $state(false);
 
 	/** Tool executions state - persisted to backend (not displayed, used for data persistence) */
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	let toolExecutions = $state<ToolExecution[]>([]);
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	let currentToolExecutions = $state<WorkflowToolExecution[]>([]);
@@ -82,6 +82,9 @@ Streaming integration for real-time response display (Phase 2).
 	let rightSidebarCollapsed = $state(false);
 	let activityFilter = $state<ActivityFilter>('all');
 
+	/** Historical activities (persisted tool executions converted to activities) */
+	let historicalActivities = $state<WorkflowActivityEvent[]>([]);
+
 	/** State recovery indicator (Phase 5: Complete State Recovery) */
 	let restoringState = $state(false);
 	let restorationError = $state<string | null>(null);
@@ -97,11 +100,18 @@ Streaming integration for real-time response display (Phase 2).
 	const agentLoadingState = $derived<boolean>($agentsLoading);
 
 	/**
-	 * Combined activities from all sources
+	 * Combined activities from all sources.
+	 * During streaming: shows live activities from streaming store.
+	 * After streaming: shows historical activities from persisted tool executions.
 	 */
-	const activities = $derived<WorkflowActivityEvent[]>(
-		combineActivities($activeTools, $activeSubAgents, $reasoningSteps)
-	);
+	const activities = $derived.by<WorkflowActivityEvent[]>(() => {
+		if ($isStreamingStore) {
+			// During streaming, show live activities
+			return combineActivities($activeTools, $activeSubAgents, $reasoningSteps);
+		}
+		// Not streaming, show historical activities
+		return historicalActivities;
+	});
 
 	/**
 	 * Get filtered workflows based on search
@@ -267,6 +277,7 @@ Streaming integration for real-time response display (Phase 2).
 			selectedWorkflowId = id;
 			messages = [];
 			result = null;
+			historicalActivities = []; // Clear activities for new workflow
 
 			// Close modal on success
 			showNewWorkflowModal = false;
@@ -284,11 +295,14 @@ Streaming integration for real-time response display (Phase 2).
 		selectedWorkflowId = workflow.id;
 		result = null;
 		currentToolExecutions = [];
+		historicalActivities = []; // Clear before loading
 		// Load persisted data from backend in parallel
 		await Promise.all([
 			loadMessages(workflow.id),
 			loadToolExecutions(workflow.id)
 		]);
+		// Convert loaded tool executions to activities for display
+		historicalActivities = convertToolExecutions(toolExecutions);
 	}
 
 	/**
@@ -310,6 +324,7 @@ Streaming integration for real-time response display (Phase 2).
 				messages = [];
 				toolExecutions = [];
 				currentToolExecutions = [];
+				historicalActivities = [];
 				result = null;
 			}
 		} catch (err) {
@@ -431,7 +446,15 @@ Streaming integration for real-time response display (Phase 2).
 			// 8. Capture tool executions from result for data persistence
 			currentToolExecutions = result.tool_executions || [];
 
-			// 9. Cleanup streaming state
+			// 9. Capture activities from streaming store before reset (for persistence)
+			const streamingState = streamingStore.getState();
+			historicalActivities = combineActivities(
+				streamingState.tools,
+				streamingState.subAgents,
+				streamingState.reasoning
+			);
+
+			// 10. Cleanup streaming state
 			await streamingStore.reset();
 		} catch (err) {
 			// Cleanup streaming on error
@@ -539,6 +562,9 @@ Streaming integration for real-time response display (Phase 2).
 
 			// Restore tool executions
 			toolExecutions = fullState.tool_executions;
+
+			// Convert loaded tool executions to activities for display
+			historicalActivities = convertToolExecutions(fullState.tool_executions);
 
 			// Auto-select the agent associated with this workflow
 			if (fullState.workflow.agent_id && agentList.length > 0) {

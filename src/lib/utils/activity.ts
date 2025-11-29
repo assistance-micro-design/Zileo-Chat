@@ -13,6 +13,7 @@ import type {
 	ActivityMetadata
 } from '$types/activity';
 import type { ActiveTool, ActiveSubAgent, ActiveReasoningStep } from '$lib/stores/streaming';
+import type { ToolExecution } from '$types/tool';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
@@ -229,4 +230,46 @@ export function countActivitiesByType(activities: WorkflowActivityEvent[]): Reco
 		agents: activities.filter((a) => a.type.startsWith('sub_agent_')).length,
 		reasoning: activities.filter((a) => a.type === 'reasoning').length
 	};
+}
+
+/**
+ * Convert a persisted ToolExecution to WorkflowActivityEvent.
+ * Used for restoring historical activities from database.
+ */
+export function toolExecutionToActivity(exec: ToolExecution, index: number): WorkflowActivityEvent {
+	const type: ActivityType = exec.success ? 'tool_complete' : 'tool_error';
+	const status: ActivityStatus = exec.success ? 'completed' : 'error';
+
+	const metadata: ActivityMetadata = {
+		toolName: exec.tool_name,
+		iteration: exec.iteration
+	};
+
+	if (exec.server_name) {
+		metadata.serverName = exec.server_name;
+	}
+
+	if (exec.error_message) {
+		metadata.error = exec.error_message;
+	}
+
+	return {
+		id: `tool-hist-${exec.id}-${index}`,
+		timestamp: new Date(exec.created_at).getTime(),
+		type,
+		title: exec.tool_name,
+		status,
+		duration: exec.duration_ms,
+		metadata
+	};
+}
+
+/**
+ * Convert an array of persisted ToolExecutions to WorkflowActivityEvents.
+ * Used for restoring historical activities when loading a workflow.
+ */
+export function convertToolExecutions(executions: ToolExecution[]): WorkflowActivityEvent[] {
+	return executions
+		.map((e, i) => toolExecutionToActivity(e, i))
+		.sort((a, b) => a.timestamp - b.timestamp);
 }
