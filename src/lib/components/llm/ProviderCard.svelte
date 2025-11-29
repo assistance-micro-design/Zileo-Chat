@@ -1,14 +1,13 @@
 <!--
   ProviderCard Component
   Displays a LLM provider with status, configuration options, and connection testing.
+  All providers are always available - agents can use models from multiple providers.
 
   @example
   <ProviderCard
     provider="mistral"
     settings={mistralSettings}
-    isActive={activeProvider === 'mistral'}
     hasApiKey={true}
-    onSelect={() => selectProvider('mistral')}
     onConfigure={() => openConfig('mistral')}
   >
     {#snippet icon()}
@@ -30,16 +29,12 @@
 		provider: ProviderType;
 		/** Provider settings (null if not loaded) */
 		settings: ProviderSettings | null;
-		/** Whether this provider is the active one */
-		isActive: boolean;
 		/** Whether the provider has an API key configured */
 		hasApiKey: boolean;
 		/** Default model for this provider (if set) */
 		defaultModel?: LLMModel | null;
 		/** Icon snippet to render */
 		icon?: Snippet;
-		/** Callback when provider is selected */
-		onSelect: () => void;
 		/** Callback when configure button is clicked */
 		onConfigure: () => void;
 	}
@@ -47,11 +42,9 @@
 	let {
 		provider,
 		settings,
-		isActive,
 		hasApiKey,
 		defaultModel = null,
 		icon,
-		onSelect,
 		onConfigure
 	}: Props = $props();
 
@@ -84,32 +77,23 @@
 	}
 
 	/**
-	 * Gets the badge variant based on status
+	 * Gets the badge variant based on configuration status
 	 */
-	function getBadgeVariant(): 'success' | 'primary' | 'warning' {
-		if (isActive) return 'success';
-		if (settings?.enabled) return 'primary';
-		return 'warning';
+	function getBadgeVariant(): 'success' | 'warning' {
+		return isConfigured ? 'success' : 'warning';
 	}
 
 	/**
 	 * Gets the status text for the badge
 	 */
 	function getStatusText(): string {
-		if (isActive) return 'Active';
-		if (settings?.enabled) return 'Available';
-		return 'Disabled';
+		return isConfigured ? 'Ready' : 'Not Configured';
 	}
 
 	/**
 	 * Determines if the provider is configured
 	 */
 	const isConfigured = $derived(hasApiKey || provider === 'ollama');
-
-	/**
-	 * Determines if the select button should be disabled
-	 */
-	const selectDisabled = $derived(!settings?.enabled || !isConfigured);
 </script>
 
 <Card>
@@ -170,16 +154,8 @@
 
 	{#snippet footer()}
 		<div class="provider-actions">
-			<Button variant="ghost" size="sm" onclick={onConfigure}>
+			<Button variant="primary" size="sm" onclick={onConfigure}>
 				Configure
-			</Button>
-			<Button
-				variant={isActive ? 'secondary' : 'primary'}
-				size="sm"
-				onclick={onSelect}
-				disabled={selectDisabled}
-			>
-				{isActive ? 'Selected' : 'Select'}
 			</Button>
 		</div>
 	{/snippet}

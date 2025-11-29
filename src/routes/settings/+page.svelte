@@ -51,7 +51,6 @@ Includes MCP server configuration section for managing external tool servers.
 		setLLMError,
 		setModels,
 		setProviderSettings,
-		setActiveProvider,
 		addModel as addModelToState,
 		updateModelInState,
 		removeModel,
@@ -410,13 +409,6 @@ Includes MCP server configuration section for managing external tool servers.
 	}
 
 	/**
-	 * Handles provider selection (sets as active provider)
-	 */
-	function handleSelectProvider(provider: ProviderType): void {
-		llmState = setActiveProvider(llmState, provider);
-	}
-
-	/**
 	 * Opens the API key configuration modal for a provider
 	 */
 	function openApiKeyModal(provider: ProviderType): void {
@@ -623,10 +615,8 @@ Includes MCP server configuration section for managing external tool servers.
 					<ProviderCard
 						provider="mistral"
 						settings={llmState.providers.mistral}
-						isActive={llmState.activeProvider === 'mistral'}
 						hasApiKey={providerHasApiKey('mistral')}
 						defaultModel={getProviderDefaultModel('mistral')}
-						onSelect={() => handleSelectProvider('mistral')}
 						onConfigure={() => openApiKeyModal('mistral')}
 					>
 						{#snippet icon()}
@@ -638,10 +628,8 @@ Includes MCP server configuration section for managing external tool servers.
 					<ProviderCard
 						provider="ollama"
 						settings={llmState.providers.ollama}
-						isActive={llmState.activeProvider === 'ollama'}
 						hasApiKey={true}
 						defaultModel={getProviderDefaultModel('ollama')}
-						onSelect={() => handleSelectProvider('ollama')}
 						onConfigure={() => openApiKeyModal('ollama')}
 					>
 						{#snippet icon()}

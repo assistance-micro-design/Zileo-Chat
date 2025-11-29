@@ -214,6 +214,8 @@ body {
    =================================== */
 
 .card {
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
@@ -242,6 +244,7 @@ body {
 }
 
 .card-body {
+  flex-grow: 1;
   padding: var(--spacing-lg);
 }
 
