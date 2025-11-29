@@ -520,10 +520,16 @@ Includes MCP server configuration section for managing external tool servers.
 	];
 
 	/**
+	 * Reference to content area for IntersectionObserver
+	 */
+	let contentAreaRef: HTMLElement | null = $state(null);
+
+	/**
 	 * Initialize on mount:
 	 * - Subscribe to theme store
 	 * - Load MCP servers
 	 * - Load LLM data
+	 * - Setup IntersectionObserver for section detection
 	 */
 	onMount(() => {
 		// Subscribe to theme store and sync value
@@ -537,9 +543,44 @@ Includes MCP server configuration section for managing external tool servers.
 		// Load LLM data on mount
 		loadLLMData();
 
+		// Setup IntersectionObserver for automatic section detection
+		let observer: IntersectionObserver | null = null;
+
+		if (contentAreaRef) {
+			observer = new IntersectionObserver(
+				(entries) => {
+					// Find the entry with the highest intersection ratio
+					const visibleEntry = entries.reduce((best, entry) => {
+						if (entry.isIntersecting && entry.intersectionRatio > (best?.intersectionRatio || 0)) {
+							return entry;
+						}
+						return best;
+					}, null as IntersectionObserverEntry | null);
+
+					if (visibleEntry?.target?.id) {
+						activeSection = visibleEntry.target.id;
+					}
+				},
+				{
+					root: contentAreaRef,
+					threshold: [0.3, 0.5, 0.7],
+					rootMargin: '-10% 0px -10% 0px'
+				}
+			);
+
+			// Observe all sections
+			sections.forEach((section) => {
+				const element = document.getElementById(section.id);
+				if (element) {
+					observer?.observe(element);
+				}
+			});
+		}
+
 		// Cleanup on unmount
 		return () => {
 			unsubscribeTheme();
+			observer?.disconnect();
 		};
 	});
 </script>
@@ -606,7 +647,7 @@ Includes MCP server configuration section for managing external tool servers.
 	</Sidebar>
 
 	<!-- Settings Content -->
-	<main class="content-area">
+	<main class="content-area" bind:this={contentAreaRef}>
 		<!-- Providers Section -->
 		<section id="providers" class="settings-section">
 			<h2 class="section-title">Providers</h2>
@@ -1058,7 +1099,7 @@ Includes MCP server configuration section for managing external tool servers.
 		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: background-color var(--transition-fast), color var(--transition-fast);
 		width: 100%;
 		text-align: left;
 	}
@@ -1084,7 +1125,7 @@ Includes MCP server configuration section for managing external tool servers.
 		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: background-color var(--transition-fast), color var(--transition-fast);
 	}
 
 	.nav-button-icon:hover {
@@ -1128,10 +1169,14 @@ Includes MCP server configuration section for managing external tool servers.
 		min-width: 0;
 		overflow-y: auto;
 		padding: var(--spacing-xl);
+		/* Performance optimizations */
+		contain: content;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.settings-section {
 		margin-bottom: var(--spacing-2xl);
+		padding-bottom: var(--spacing-xl);
 	}
 
 	.section-title {

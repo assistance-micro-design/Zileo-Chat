@@ -534,7 +534,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: border-color var(--transition-fast), background-color var(--transition-fast);
 		text-align: left;
 	}
 
@@ -583,7 +583,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: all var(--transition-fast);
+		transition: border-color var(--transition-fast), background-color var(--transition-fast);
 		text-align: left;
 	}
 
