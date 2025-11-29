@@ -55,6 +55,7 @@ Includes MCP server configuration section for managing external tool servers.
 		updateModelInState,
 		removeModel,
 		getModelsByProvider,
+		getAllModels,
 		getDefaultModel,
 		hasApiKey as hasApiKeyInState,
 		loadAllLLMData,
@@ -107,7 +108,7 @@ Includes MCP server configuration section for managing external tool servers.
 	let modelModalMode = $state<'create' | 'edit'>('create');
 	let editingModel = $state<LLMModel | undefined>(undefined);
 	let modelSaving = $state(false);
-	let selectedModelsProvider = $state<ProviderType>('mistral');
+	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
 	let showApiKeyModal = $state(false);
 	let apiKeyProvider = $state<ProviderType>('mistral');
 
@@ -484,13 +485,17 @@ Includes MCP server configuration section for managing external tool servers.
 	 * Handles provider models filter change
 	 */
 	function handleModelsProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		selectedModelsProvider = event.currentTarget.value as ProviderType;
+		selectedModelsProvider = event.currentTarget.value as ProviderType | 'all';
 	}
 
 	/**
-	 * Gets filtered models for the selected provider
+	 * Gets filtered models for the selected provider (or all if 'all' selected)
 	 */
-	const filteredModels = $derived(getModelsByProvider(llmState, selectedModelsProvider));
+	const filteredModels = $derived(
+		selectedModelsProvider === 'all'
+			? getAllModels(llmState)
+			: getModelsByProvider(llmState, selectedModelsProvider)
+	);
 
 	/**
 	 * Gets the default model for a specific provider
@@ -508,6 +513,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 	/** Provider filter options for models section */
 	const modelsProviderOptions: SelectOption[] = [
+		{ value: 'all', label: 'All Providers' },
 		{ value: 'mistral', label: 'Mistral' },
 		{ value: 'ollama', label: 'Ollama' }
 	];
@@ -652,7 +658,6 @@ Includes MCP server configuration section for managing external tool servers.
 				<h2 class="section-title">Models</h2>
 				<div class="models-header-actions">
 					<Select
-						label=""
 						options={modelsProviderOptions}
 						value={selectedModelsProvider}
 						onchange={handleModelsProviderChange}
@@ -680,7 +685,11 @@ Includes MCP server configuration section for managing external tool servers.
 							<Cpu size={48} class="empty-icon" />
 							<h3 class="empty-title">No Models Found</h3>
 							<p class="empty-description">
-								No models configured for {selectedModelsProvider === 'mistral' ? 'Mistral' : 'Ollama'}.
+								{#if selectedModelsProvider === 'all'}
+									No models configured yet.
+								{:else}
+									No models configured for {selectedModelsProvider === 'mistral' ? 'Mistral' : 'Ollama'}.
+								{/if}
 								Add a custom model to get started.
 							</p>
 							<Button variant="primary" onclick={openCreateModelModal}>
@@ -909,7 +918,7 @@ Includes MCP server configuration section for managing external tool servers.
 		<ModelForm
 			mode={modelModalMode}
 			model={editingModel}
-			provider={selectedModelsProvider}
+			provider={selectedModelsProvider === 'all' ? 'mistral' : selectedModelsProvider}
 			onsubmit={handleSaveModel}
 			oncancel={closeModelModal}
 			saving={modelSaving}
@@ -1251,6 +1260,16 @@ Includes MCP server configuration section for managing external tool servers.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-md);
+	}
+
+	.models-header-actions :global(.form-group) {
+		margin-bottom: 0;
+	}
+
+	.models-header-actions :global(.form-select) {
+		width: auto;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-xs);
 	}
 
 	.models-header-actions :global(button) {

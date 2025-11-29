@@ -52,6 +52,13 @@
 		}
 		return formatNumber(tokens);
 	}
+
+	/**
+	 * Formats provider name for display (capitalize first letter)
+	 */
+	function formatProvider(provider: string): string {
+		return provider.charAt(0).toUpperCase() + provider.slice(1);
+	}
 </script>
 
 <Card>
@@ -64,12 +71,11 @@
 			<div class="model-badges">
 				{#if model.is_builtin}
 					<Badge variant="primary">Builtin</Badge>
-				{:else}
-					<Badge variant="success">Custom</Badge>
 				{/if}
 				{#if isDefault}
 					<Badge variant="warning">Default</Badge>
 				{/if}
+				<span class="provider-name">{formatProvider(model.provider)}</span>
 			</div>
 		</div>
 	{/snippet}
@@ -120,6 +126,7 @@
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: var(--spacing-md);
+		width: 100%;
 	}
 
 	.model-info {
@@ -154,8 +161,15 @@
 	.model-badges {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--spacing-xs);
 		flex-shrink: 0;
+	}
+
+	.provider-name {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-secondary);
 	}
 
 	.model-specs {

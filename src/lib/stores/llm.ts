@@ -200,6 +200,15 @@ export function getModelsByProvider(state: LLMState, provider: ProviderType): LL
 }
 
 /**
+ * Gets all models regardless of provider.
+ * @param state - Current LLM state
+ * @returns Array of all models
+ */
+export function getAllModels(state: LLMState): LLMModel[] {
+	return state.models;
+}
+
+/**
  * Gets all builtin models.
  * @param state - Current LLM state
  * @returns Array of builtin models
