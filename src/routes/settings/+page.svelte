@@ -76,7 +76,8 @@ Includes MCP server configuration section for managing external tool servers.
 		Plus,
 		Plug,
 		Brain,
-		Bot
+		Bot,
+		Settings
 	} from 'lucide-svelte';
 
 	/** Settings state (for API key input) */
@@ -547,7 +548,13 @@ Includes MCP server configuration section for managing external tool servers.
 	<!-- Settings Sidebar -->
 	<Sidebar bind:collapsed={sidebarCollapsed}>
 		{#snippet header()}
-			<h2 class="sidebar-title">Settings</h2>
+			{#if sidebarCollapsed}
+				<div class="sidebar-icon-collapsed" title="Settings">
+					<Settings size={24} />
+				</div>
+			{:else}
+				<h2 class="sidebar-title">Settings</h2>
+			{/if}
 		{/snippet}
 
 		{#snippet nav()}
@@ -585,7 +592,11 @@ Includes MCP server configuration section for managing external tool servers.
 		{/snippet}
 
 		{#snippet footer()}
-			{#if !sidebarCollapsed}
+			{#if sidebarCollapsed}
+				<div class="security-badge-collapsed" title="AES-256 Encrypted">
+					<ShieldCheck size={20} />
+				</div>
+			{:else}
 				<div class="security-badge">
 					<ShieldCheck size={16} />
 					<span class="security-text">AES-256 Encrypted</span>
@@ -1005,12 +1016,22 @@ Includes MCP server configuration section for managing external tool servers.
 	.settings-page {
 		display: flex;
 		height: 100%;
+		flex: 1;
+		min-width: 0;
 	}
 
 	/* Sidebar */
 	.sidebar-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
+	}
+
+	.sidebar-icon-collapsed {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-accent);
+		padding: var(--spacing-xs);
 	}
 
 	.nav-items {
@@ -1086,6 +1107,16 @@ Includes MCP server configuration section for managing external tool servers.
 		color: var(--color-success);
 	}
 
+	.security-badge-collapsed {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-sm);
+		background: var(--color-success-light);
+		border-radius: var(--border-radius-md);
+		color: var(--color-success);
+	}
+
 	.security-text {
 		font-size: var(--font-size-xs);
 	}
@@ -1093,6 +1124,8 @@ Includes MCP server configuration section for managing external tool servers.
 	/* Content Area */
 	.content-area {
 		flex: 1;
+		min-height: 0;
+		min-width: 0;
 		overflow-y: auto;
 		padding: var(--spacing-xl);
 	}

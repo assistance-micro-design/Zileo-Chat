@@ -18,7 +18,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { PanelLeftClose, PanelLeftOpen } from 'lucide-svelte';
 
 	/**
 	 * Sidebar props
@@ -65,15 +65,16 @@
 
 	<button
 		type="button"
-		class="sidebar-toggle sidebar-collapse-btn"
+		class="sidebar-toggle"
 		onclick={toggleCollapsed}
 		aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 		aria-expanded={!collapsed}
+		title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 	>
 		{#if collapsed}
-			<ChevronRight size={16} />
+			<PanelLeftOpen size={18} />
 		{:else}
-			<ChevronLeft size={16} />
+			<PanelLeftClose size={18} />
 		{/if}
 	</button>
 </aside>
@@ -81,25 +82,33 @@
 <style>
 	.sidebar-toggle {
 		position: absolute;
-		bottom: var(--spacing-md);
-		right: calc(-1 * var(--spacing-md));
-		width: 24px;
-		height: 24px;
-		background: var(--color-bg-primary);
+		bottom: var(--spacing-lg);
+		right: calc(-1 * var(--spacing-md) - 2px);
+		width: 28px;
+		height: 28px;
+		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-full);
+		border-radius: var(--border-radius-md);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
 		transition: all var(--transition-fast);
-		color: var(--color-text-secondary);
-		z-index: 1;
+		color: var(--color-text-tertiary);
+		z-index: 10;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.sidebar-toggle:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+		color: var(--color-accent-text);
+		transform: scale(1.05);
+		box-shadow: var(--shadow-md);
+	}
+
+	.sidebar-toggle:active {
+		transform: scale(0.95);
 	}
 
 	.sidebar {
