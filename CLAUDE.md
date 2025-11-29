@@ -496,6 +496,26 @@ db.execute(&format!("DELETE memory:`{}`", uuid)).await?;
 "SELECT meta::id(id) AS id, content FROM memory"
 ```
 
+**Settings/Config Queries** - Use `SELECT field` instead of `SELECT *` to avoid Thing enum:
+```rust
+// WRONG - SELECT * returns id field which is Thing type (enum), causes serialization error
+let query = "SELECT * FROM settings:`settings:embedding_config`";
+let results: Vec<Value> = db.query_json(query).await?;  // Error: invalid type: enum
+
+// CORRECT - Select only the fields you need, avoiding the id field
+let query = "SELECT config FROM settings:`settings:embedding_config`";
+let results: Vec<Value> = db.query_json(query).await?;  // Works!
+```
+
+**Direct Record Access** - Use backtick-escaped ID instead of WHERE clause:
+```rust
+// WRONG - WHERE id comparison may not match correctly
+let query = "SELECT config FROM settings WHERE id = 'settings:embedding_config'";
+
+// CORRECT - Direct record access with backtick-escaped ID
+let query = "SELECT config FROM settings:`settings:embedding_config`";
+```
+
 ## Security Considerations
 
 **Production-ready from v1**:
