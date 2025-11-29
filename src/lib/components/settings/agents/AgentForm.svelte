@@ -346,6 +346,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							label="Temperature"
 							value={String(temperature)}
 							oninput={handleTemperatureInput}
+							step="0.1"
+							min="0"
+							max="2"
 							help={errors.temperature || '0 = deterministic, 2 = creative'}
 						/>
 

@@ -274,6 +274,9 @@
 		type="number"
 		value={formData.temperature_default.toString()}
 		oninput={(e) => handleNumberInput('temperature_default', e)}
+		step="0.1"
+		min="0"
+		max="2"
 		help="Sampling temperature (0.0 - 2.0)"
 		disabled={saving}
 	/>

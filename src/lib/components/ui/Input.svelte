@@ -33,6 +33,12 @@
 		required?: boolean;
 		/** Unique identifier */
 		id?: string;
+		/** Step increment for number inputs (use "any" for decimals) */
+		step?: string | number;
+		/** Minimum value for number inputs */
+		min?: string | number;
+		/** Maximum value for number inputs */
+		max?: string | number;
 		/** Input handler */
 		oninput?: (event: Event & { currentTarget: HTMLInputElement }) => void;
 		/** Change handler */
@@ -52,6 +58,9 @@
 		disabled = false,
 		required = false,
 		id,
+		step,
+		min,
+		max,
 		oninput,
 		onchange,
 		onfocus,
@@ -80,6 +89,9 @@
 		{placeholder}
 		{disabled}
 		{required}
+		{step}
+		{min}
+		{max}
 		id={inputId}
 		class="form-input"
 		{oninput}
