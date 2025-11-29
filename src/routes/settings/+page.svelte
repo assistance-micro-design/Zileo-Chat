@@ -1169,8 +1169,7 @@ Includes MCP server configuration section for managing external tool servers.
 		min-width: 0;
 		overflow-y: auto;
 		padding: var(--spacing-xl);
-		/* Performance optimizations */
-		contain: content;
+		/* NOTE: Removed contain: content - it breaks position:fixed modals inside */
 		-webkit-overflow-scrolling: touch;
 	}
 
