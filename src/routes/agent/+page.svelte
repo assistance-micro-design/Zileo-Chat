@@ -22,7 +22,8 @@ Streaming integration for real-time response display (Phase 2).
 	import { MessageList, ChatInput, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
-	import { combineActivities, convertToolExecutions } from '$lib/utils/activity';
+	import type { ThinkingStep } from '$types/thinking';
+	import { combineActivities, convertToolExecutions, convertThinkingSteps, mergeActivities } from '$lib/utils/activity';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
 		streamingStore,
@@ -63,10 +64,12 @@ Streaming integration for real-time response display (Phase 2).
 	let messagesLoading = $state(false);
 
 	/** Tool executions state - persisted to backend (not displayed, used for data persistence) */
-	 
 	let toolExecutions = $state<ToolExecution[]>([]);
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	let currentToolExecutions = $state<WorkflowToolExecution[]>([]);
+
+	/** Thinking steps state - persisted to backend */
+	let thinkingSteps = $state<ThinkingStep[]>([]);
 
 
 	/** Input/Output state */
@@ -193,6 +196,22 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
+	 * Loads thinking steps for the current workflow from backend.
+	 * Thinking steps are sorted by creation time and step number.
+	 */
+	async function loadThinkingSteps(workflowId: string): Promise<void> {
+		try {
+			const loadedSteps = await invoke<ThinkingStep[]>('load_workflow_thinking_steps', {
+				workflowId
+			});
+			thinkingSteps = loadedSteps;
+		} catch (err) {
+			console.error('Failed to load thinking steps:', err);
+			thinkingSteps = [];
+		}
+	}
+
+	/**
 	 * Saves a user message to the backend.
 	 *
 	 * @param workflowId - The workflow ID
@@ -278,6 +297,7 @@ Streaming integration for real-time response display (Phase 2).
 			messages = [];
 			result = null;
 			historicalActivities = []; // Clear activities for new workflow
+			thinkingSteps = [];
 
 			// Close modal on success
 			showNewWorkflowModal = false;
@@ -289,7 +309,7 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles workflow selection - loads persisted messages and tool executions
+	 * Handles workflow selection - loads persisted messages, tool executions and thinking steps
 	 */
 	async function handleWorkflowSelect(workflow: Workflow): Promise<void> {
 		selectedWorkflowId = workflow.id;
@@ -299,10 +319,14 @@ Streaming integration for real-time response display (Phase 2).
 		// Load persisted data from backend in parallel
 		await Promise.all([
 			loadMessages(workflow.id),
-			loadToolExecutions(workflow.id)
+			loadToolExecutions(workflow.id),
+			loadThinkingSteps(workflow.id)
 		]);
-		// Convert loaded tool executions to activities for display
-		historicalActivities = convertToolExecutions(toolExecutions);
+		// Convert loaded tool executions and thinking steps to activities for display
+		historicalActivities = mergeActivities(
+			convertToolExecutions(toolExecutions),
+			convertThinkingSteps(thinkingSteps)
+		);
 	}
 
 	/**
@@ -324,6 +348,7 @@ Streaming integration for real-time response display (Phase 2).
 				messages = [];
 				toolExecutions = [];
 				currentToolExecutions = [];
+				thinkingSteps = [];
 				historicalActivities = [];
 				result = null;
 			}
@@ -446,13 +471,15 @@ Streaming integration for real-time response display (Phase 2).
 			// 8. Capture tool executions from result for data persistence
 			currentToolExecutions = result.tool_executions || [];
 
-			// 9. Capture activities from streaming store before reset (for persistence)
+			// 9. Capture activities from streaming store before reset and APPEND to existing
 			const streamingState = streamingStore.getState();
-			historicalActivities = combineActivities(
+			const newActivities = combineActivities(
 				streamingState.tools,
 				streamingState.subAgents,
 				streamingState.reasoning
 			);
+			// Append new activities to existing historical activities
+			historicalActivities = mergeActivities(historicalActivities, newActivities);
 
 			// 10. Cleanup streaming state
 			await streamingStore.reset();
@@ -563,8 +590,14 @@ Streaming integration for real-time response display (Phase 2).
 			// Restore tool executions
 			toolExecutions = fullState.tool_executions;
 
-			// Convert loaded tool executions to activities for display
-			historicalActivities = convertToolExecutions(fullState.tool_executions);
+			// Restore thinking steps
+			thinkingSteps = fullState.thinking_steps;
+
+			// Convert loaded tool executions and thinking steps to activities for display
+			historicalActivities = mergeActivities(
+				convertToolExecutions(fullState.tool_executions),
+				convertThinkingSteps(fullState.thinking_steps)
+			);
 
 			// Auto-select the agent associated with this workflow
 			if (fullState.workflow.agent_id && agentList.length > 0) {

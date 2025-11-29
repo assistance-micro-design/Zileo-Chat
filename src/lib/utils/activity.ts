@@ -14,6 +14,7 @@ import type {
 } from '$types/activity';
 import type { ActiveTool, ActiveSubAgent, ActiveReasoningStep } from '$lib/stores/streaming';
 import type { ToolExecution } from '$types/tool';
+import type { ThinkingStep } from '$types/thinking';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
@@ -271,5 +272,44 @@ export function toolExecutionToActivity(exec: ToolExecution, index: number): Wor
 export function convertToolExecutions(executions: ToolExecution[]): WorkflowActivityEvent[] {
 	return executions
 		.map((e, i) => toolExecutionToActivity(e, i))
+		.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Convert a persisted ThinkingStep to WorkflowActivityEvent.
+ * Used for restoring historical reasoning activities from database.
+ */
+export function thinkingStepToActivity(step: ThinkingStep, index: number): WorkflowActivityEvent {
+	return {
+		id: `reasoning-hist-${step.id}-${index}`,
+		timestamp: new Date(step.created_at).getTime(),
+		type: 'reasoning',
+		title: `Reasoning Step ${step.step_number + 1}`,
+		description: step.content.slice(0, 200) + (step.content.length > 200 ? '...' : ''),
+		status: 'completed',
+		duration: step.duration_ms,
+		metadata: {
+			stepNumber: step.step_number + 1
+		}
+	};
+}
+
+/**
+ * Convert an array of persisted ThinkingSteps to WorkflowActivityEvents.
+ * Used for restoring historical reasoning activities when loading a workflow.
+ */
+export function convertThinkingSteps(steps: ThinkingStep[]): WorkflowActivityEvent[] {
+	return steps
+		.map((s, i) => thinkingStepToActivity(s, i))
+		.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Combine multiple activity arrays into a sorted timeline.
+ * Used for merging different types of historical activities.
+ */
+export function mergeActivities(...activityArrays: WorkflowActivityEvent[][]): WorkflowActivityEvent[] {
+	return activityArrays
+		.flat()
 		.sort((a, b) => a.timestamp - b.timestamp);
 }
