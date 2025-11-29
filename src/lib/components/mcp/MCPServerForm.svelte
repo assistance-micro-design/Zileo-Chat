@@ -4,7 +4,7 @@ SPDX-License-Identifier: Apache-2.0
 
 MCPServerForm Component
 Form for creating and editing MCP server configurations.
-Includes validation, environment variable editor, and template selector.
+Includes validation and environment variable editor.
 
 @example
 <MCPServerForm
@@ -22,7 +22,6 @@ Includes validation, environment variable editor, and template selector.
 -->
 <script lang="ts">
 	import type { MCPServerConfig, MCPDeploymentMethod } from '$types/mcp';
-	import { MCP_TEMPLATES } from '$types/mcp';
 	import { Button, Input, Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { Plus, X } from 'lucide-svelte';
@@ -97,14 +96,6 @@ Includes validation, environment variable editor, and template selector.
 		{ value: 'uvx', label: 'UVX (Python)' }
 	];
 
-	/** Template options for quick setup */
-	const templateOptions: SelectOption[] = [
-		{ value: '', label: 'Select a template...' },
-		{ value: 'serena', label: 'Serena (Code Analysis)' },
-		{ value: 'context7', label: 'Context7 (Documentation)' },
-		{ value: 'playwright', label: 'Playwright (Browser Testing)' }
-	];
-
 	/**
 	 * Validates form data
 	 * @returns True if valid
@@ -175,27 +166,6 @@ Includes validation, environment variable editor, and template selector.
 	}
 
 	/**
-	 * Applies a template to the form
-	 */
-	function applyTemplate(templateName: string): void {
-		if (!templateName || !(templateName in MCP_TEMPLATES)) {
-			return;
-		}
-
-		const template = MCP_TEMPLATES[templateName as keyof typeof MCP_TEMPLATES];
-
-		formData.name = template.name;
-		formData.enabled = template.enabled;
-		formData.command = template.command;
-		formData.args = template.args.join('\n');
-		formData.env = Object.entries(template.env).map(([key, value]) => ({ key, value }));
-		formData.description = template.description ?? '';
-
-		// Clear validation errors
-		errors = {};
-	}
-
-	/**
 	 * Adds a new environment variable row
 	 */
 	function addEnvVar(): void {
@@ -215,28 +185,9 @@ Includes validation, environment variable editor, and template selector.
 	function handleCommandChange(event: Event & { currentTarget: HTMLSelectElement }): void {
 		formData.command = event.currentTarget.value as MCPDeploymentMethod;
 	}
-
-	/**
-	 * Handle template change
-	 */
-	function handleTemplateChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		applyTemplate(event.currentTarget.value);
-	}
 </script>
 
 <form class="mcp-form" onsubmit={handleSubmit}>
-	{#if mode === 'create'}
-		<div class="template-section">
-			<Select
-				label="Quick Setup Template"
-				options={templateOptions}
-				value=""
-				onchange={handleTemplateChange}
-				help="Select a template to pre-fill the form"
-			/>
-		</div>
-	{/if}
-
 	<div class="form-section">
 		<Input
 			label="Server Name"
@@ -384,13 +335,6 @@ Includes validation, environment variable editor, and template selector.
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-lg);
-	}
-
-	.template-section {
-		padding: var(--spacing-md);
-		background: var(--color-accent-light);
-		border-radius: var(--border-radius-md);
-		border: 1px dashed var(--color-accent);
 	}
 
 	.form-section {

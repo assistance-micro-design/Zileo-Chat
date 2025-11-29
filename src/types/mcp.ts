@@ -164,33 +164,3 @@ export const MCP_DEFAULTS = {
 	/** Default deployment method */
 	DEPLOYMENT_METHOD: 'docker' as MCPDeploymentMethod
 } as const;
-
-/**
- * Common MCP server templates for quick configuration.
- */
-export const MCP_TEMPLATES: Record<string, Omit<MCPServerConfig, 'id'>> = {
-	serena: {
-		name: 'serena',
-		enabled: true,
-		command: 'docker',
-		args: ['run', '-i', '--rm', 'serena:latest'],
-		env: {},
-		description: 'Semantic code analysis with project memory'
-	},
-	context7: {
-		name: 'context7',
-		enabled: true,
-		command: 'npx',
-		args: ['-y', '@context7/mcp'],
-		env: {},
-		description: 'Official library documentation lookup'
-	},
-	playwright: {
-		name: 'playwright',
-		enabled: true,
-		command: 'npx',
-		args: ['-y', '@playwright/mcp'],
-		env: {},
-		description: 'Browser automation and E2E testing'
-	}
-} as const;

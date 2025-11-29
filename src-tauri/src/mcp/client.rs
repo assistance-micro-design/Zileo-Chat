@@ -204,6 +204,14 @@ impl MCPClient {
         &self.config
     }
 
+    /// Updates the server configuration in memory
+    ///
+    /// This does NOT persist to database - use MCPManager::update_server_config for that.
+    /// Used to sync in-memory state after database update.
+    pub fn update_config(&mut self, config: MCPServerConfig) {
+        self.config = config;
+    }
+
     /// Returns the list of available tools
     ///
     /// Returns an empty slice if not connected.

@@ -506,21 +506,51 @@ impl MCPManager {
 
     /// Updates a server configuration in the database
     pub async fn update_server_config(&self, config: &MCPServerConfig) -> MCPResult<()> {
-        let create_data = MCPServerCreate::from_config(config);
-        let json_data = serde_json::to_value(&create_data)?;
+        // Serialize each field to JSON for the query
+        // Using explicit SET like other working update functions (agent, task, etc.)
+        let name_json = serde_json::to_string(&config.name)?;
+        let command_json = serde_json::to_string(&config.command)?;
+        let args_json = serde_json::to_string(&config.args)?;
+        let env_json = serde_json::to_string(&config.env)?;
+        let description_json = match &config.description {
+            Some(desc) => serde_json::to_string(desc)?,
+            None => "NONE".to_string(),
+        };
 
-        // Use CONTENT to replace the entire record, then add updated_at
-        // SurrealDB doesn't support MERGE + SET together
-        let query = format!("UPDATE mcp_server:`{}` CONTENT $data", config.id);
+        let query = format!(
+            "UPDATE mcp_server:`{}` SET \
+                name = {}, \
+                enabled = {}, \
+                command = {}, \
+                args = {}, \
+                env = {}, \
+                description = {}, \
+                updated_at = time::now()",
+            config.id,
+            name_json,
+            config.enabled,
+            command_json,
+            args_json,
+            env_json,
+            description_json
+        );
 
-        let _: Vec<serde_json::Value> = self
-            .db
-            .query_with_params(&query, vec![("data".to_string(), json_data)])
-            .await
-            .map_err(|e| MCPError::DatabaseError {
-                context: "update server config".to_string(),
-                message: e.to_string(),
-            })?;
+        self.db.execute(&query).await.map_err(|e| MCPError::DatabaseError {
+            context: "update server config".to_string(),
+            message: e.to_string(),
+        })?;
+
+        // Also update in-memory client if it exists
+        {
+            let mut clients = self.clients.write().await;
+            if let Some(client) = clients.get_mut(&config.id) {
+                client.update_config(config.clone());
+                debug!(
+                    server_id = %config.id,
+                    "Server configuration updated in memory"
+                );
+            }
+        }
 
         debug!(
             server_id = %config.id,
