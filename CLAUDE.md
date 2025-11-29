@@ -516,6 +516,26 @@ let query = "SELECT config FROM settings WHERE id = 'settings:embedding_config'"
 let query = "SELECT config FROM settings:`settings:embedding_config`";
 ```
 
+**Dynamic Keys in SCHEMAFULL** - Store as JSON string for fields with user-defined keys:
+```rust
+// PROBLEM - SCHEMAFULL tables filter nested object keys not explicitly defined in schema
+// If you define `DEFINE FIELD env ON table TYPE object`, SurrealDB will silently
+// drop any nested keys that aren't pre-defined (e.g., env.API_KEY, env.SECRET)
+
+// WRONG - Dynamic keys are lost after save/reload
+DEFINE FIELD env ON mcp_server TYPE object;  // User adds {"API_KEY": "xxx"} -> returns {}
+
+// CORRECT - Store as JSON string, parse on read
+DEFINE FIELD env ON mcp_server TYPE string DEFAULT '{}';
+
+// Rust: Serialize HashMap to JSON string on save
+let env_str = serde_json::to_string(&config.env)?;  // {"API_KEY":"xxx"}
+
+// Rust: Parse JSON string back to HashMap on load
+let env: HashMap<String, String> = serde_json::from_str(env_str)?;
+```
+This pattern applies to any field with dynamic/user-defined keys: `env`, `metadata`, `custom_fields`, etc.
+
 ## Security Considerations
 
 **Production-ready from v1**:
