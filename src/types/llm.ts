@@ -84,6 +84,8 @@ export interface LLMModel {
   temperature_default: number;
   /** Whether this is a builtin model (cannot be deleted) */
   is_builtin: boolean;
+  /** Whether this is a reasoning/thinking model (Magistral, DeepSeek-R1, etc.) */
+  is_reasoning: boolean;
   /** ISO 8601 creation timestamp */
   created_at: string;
   /** ISO 8601 last update timestamp */
@@ -93,7 +95,7 @@ export interface LLMModel {
 /**
  * Request payload for creating a new custom model.
  *
- * All fields except temperature_default are required.
+ * All fields except temperature_default and is_reasoning are required.
  */
 export interface CreateModelRequest {
   /** Provider this model belongs to */
@@ -108,13 +110,15 @@ export interface CreateModelRequest {
   max_output_tokens: number;
   /** Default sampling temperature (0.0 - 2.0, defaults to 0.7) */
   temperature_default?: number;
+  /** Whether this is a reasoning/thinking model (defaults to false) */
+  is_reasoning?: boolean;
 }
 
 /**
  * Request payload for updating an existing model.
  *
  * All fields are optional. Only provided fields will be updated.
- * For builtin models, only temperature_default can be modified.
+ * For builtin models, only temperature_default and is_reasoning can be modified.
  */
 export interface UpdateModelRequest {
   /** New display name (1-64 characters) */
@@ -127,6 +131,8 @@ export interface UpdateModelRequest {
   max_output_tokens?: number;
   /** New default temperature (0.0 - 2.0) */
   temperature_default?: number;
+  /** Whether this is a reasoning/thinking model */
+  is_reasoning?: boolean;
 }
 
 /**

@@ -68,6 +68,7 @@ impl std::str::FromStr for ProviderType {
 /// - `max_output_tokens`: Maximum generation length (256 - 128,000)
 /// - `temperature_default`: Default sampling temperature (0.0 - 2.0)
 /// - `is_builtin`: Whether this is a system-provided model (cannot be deleted)
+/// - `is_reasoning`: Whether this is a reasoning/thinking model (Magistral, DeepSeek-R1, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMModel {
     /// Unique identifier
@@ -86,42 +87,50 @@ pub struct LLMModel {
     pub temperature_default: f32,
     /// Whether this is a builtin model (cannot be deleted)
     pub is_builtin: bool,
+    /// Whether this is a reasoning/thinking model (enables thinking output)
+    #[serde(default)]
+    pub is_reasoning: bool,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Last update timestamp
     pub updated_at: DateTime<Utc>,
 }
 
+/// Parameters for creating a new builtin model.
+#[derive(Debug, Clone)]
+pub struct BuiltinModelParams {
+    /// Provider type (Mistral or Ollama)
+    pub provider: ProviderType,
+    /// Human-readable display name
+    pub name: String,
+    /// Model identifier used in API calls
+    pub api_name: String,
+    /// Maximum context length in tokens
+    pub context_window: usize,
+    /// Maximum generation length in tokens
+    pub max_output_tokens: usize,
+    /// Whether this is a reasoning/thinking model
+    pub is_reasoning: bool,
+}
+
 impl LLMModel {
-    /// Creates a new custom LLM model with the given parameters.
+    /// Creates a new custom LLM model from a create request.
     ///
     /// # Arguments
     /// * `id` - Unique identifier (typically a UUID)
-    /// * `provider` - Provider type (Mistral or Ollama)
-    /// * `name` - Human-readable display name
-    /// * `api_name` - Model identifier for API calls
-    /// * `context_window` - Maximum context length in tokens
-    /// * `max_output_tokens` - Maximum generation length
-    /// * `temperature_default` - Default sampling temperature
-    pub fn new_custom(
-        id: String,
-        provider: ProviderType,
-        name: String,
-        api_name: String,
-        context_window: usize,
-        max_output_tokens: usize,
-        temperature_default: f32,
-    ) -> Self {
+    /// * `request` - The creation request with model parameters
+    pub fn from_create_request(id: String, request: &CreateModelRequest) -> Self {
         let now = Utc::now();
         Self {
             id,
-            provider,
-            name,
-            api_name,
-            context_window,
-            max_output_tokens,
-            temperature_default,
+            provider: request.provider,
+            name: request.name.clone(),
+            api_name: request.api_name.clone(),
+            context_window: request.context_window,
+            max_output_tokens: request.max_output_tokens,
+            temperature_default: request.temperature_default,
             is_builtin: false,
+            is_reasoning: request.is_reasoning,
             created_at: now,
             updated_at: now,
         }
@@ -130,23 +139,18 @@ impl LLMModel {
     /// Creates a new builtin LLM model.
     ///
     /// Builtin models use their api_name as the id and cannot be deleted.
-    pub fn new_builtin(
-        provider: ProviderType,
-        name: String,
-        api_name: String,
-        context_window: usize,
-        max_output_tokens: usize,
-    ) -> Self {
+    pub fn new_builtin(params: BuiltinModelParams) -> Self {
         let now = Utc::now();
         Self {
-            id: api_name.clone(),
-            provider,
-            name,
-            api_name,
-            context_window,
-            max_output_tokens,
+            id: params.api_name.clone(),
+            provider: params.provider,
+            name: params.name,
+            api_name: params.api_name,
+            context_window: params.context_window,
+            max_output_tokens: params.max_output_tokens,
             temperature_default: 0.7,
             is_builtin: true,
+            is_reasoning: params.is_reasoning,
             created_at: now,
             updated_at: now,
         }
@@ -159,8 +163,9 @@ impl LLMModel {
 
 /// Request payload for creating a new custom model.
 ///
-/// All fields except `temperature_default` are required.
+/// All fields except `temperature_default` and `is_reasoning` are required.
 /// The `temperature_default` will default to 0.7 if not provided.
+/// The `is_reasoning` will default to false if not provided.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateModelRequest {
     /// Provider this model belongs to
@@ -176,6 +181,9 @@ pub struct CreateModelRequest {
     /// Default sampling temperature (0.0 - 2.0, defaults to 0.7)
     #[serde(default = "default_temperature")]
     pub temperature_default: f32,
+    /// Whether this is a reasoning/thinking model (defaults to false)
+    #[serde(default)]
+    pub is_reasoning: bool,
 }
 
 /// Default temperature value for new models.
@@ -238,7 +246,7 @@ impl CreateModelRequest {
 /// Request payload for updating an existing model.
 ///
 /// All fields are optional. Only provided fields will be updated.
-/// For builtin models, only `temperature_default` can be modified.
+/// For builtin models, only `temperature_default` and `is_reasoning` can be modified.
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateModelRequest {
     /// New display name (1-64 characters)
@@ -251,6 +259,8 @@ pub struct UpdateModelRequest {
     pub max_output_tokens: Option<usize>,
     /// New default temperature (0.0 - 2.0)
     pub temperature_default: Option<f32>,
+    /// Whether this is a reasoning/thinking model
+    pub is_reasoning: Option<bool>,
 }
 
 impl UpdateModelRequest {
@@ -336,6 +346,7 @@ impl UpdateModelRequest {
             && self.context_window.is_none()
             && self.max_output_tokens.is_none()
             && self.temperature_default.is_none()
+            && self.is_reasoning.is_none()
     }
 }
 
@@ -486,6 +497,7 @@ mod tests {
             context_window: 32000,
             max_output_tokens: 4096,
             temperature_default: 0.7,
+            is_reasoning: false,
         };
         assert!(valid.validate().is_ok());
 
@@ -526,6 +538,7 @@ mod tests {
             context_window: None,
             max_output_tokens: None,
             temperature_default: None,
+            is_reasoning: None,
         };
 
         // Should fail for builtin models
@@ -541,39 +554,44 @@ mod tests {
             context_window: None,
             max_output_tokens: None,
             temperature_default: Some(0.5),
+            is_reasoning: None,
         };
         assert!(temp_update.validate(true).is_ok());
     }
 
     #[test]
-    fn test_llm_model_new_custom() {
-        let model = LLMModel::new_custom(
-            "test-id".into(),
-            ProviderType::Ollama,
-            "Test Model".into(),
-            "test-model".into(),
-            32000,
-            4096,
-            0.7,
-        );
+    fn test_llm_model_from_create_request() {
+        let request = CreateModelRequest {
+            provider: ProviderType::Ollama,
+            name: "Test Model".into(),
+            api_name: "test-model".into(),
+            context_window: 32000,
+            max_output_tokens: 4096,
+            temperature_default: 0.7,
+            is_reasoning: false,
+        };
+        let model = LLMModel::from_create_request("test-id".into(), &request);
 
         assert_eq!(model.id, "test-id");
         assert!(!model.is_builtin);
+        assert!(!model.is_reasoning);
         assert_eq!(model.provider, ProviderType::Ollama);
     }
 
     #[test]
     fn test_llm_model_new_builtin() {
-        let model = LLMModel::new_builtin(
-            ProviderType::Mistral,
-            "Mistral Large".into(),
-            "mistral-large-latest".into(),
-            128000,
-            8192,
-        );
+        let model = LLMModel::new_builtin(BuiltinModelParams {
+            provider: ProviderType::Mistral,
+            name: "Mistral Large".into(),
+            api_name: "mistral-large-latest".into(),
+            context_window: 128000,
+            max_output_tokens: 8192,
+            is_reasoning: false,
+        });
 
         assert_eq!(model.id, "mistral-large-latest");
         assert!(model.is_builtin);
+        assert!(!model.is_reasoning);
         assert_eq!(model.temperature_default, 0.7);
     }
 

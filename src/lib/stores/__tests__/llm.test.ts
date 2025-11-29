@@ -53,6 +53,7 @@ describe('LLM Store', () => {
 		max_output_tokens: 4096,
 		temperature_default: 0.7,
 		is_builtin: isBuiltin,
+		is_reasoning: false,
 		created_at: new Date().toISOString(),
 		updated_at: new Date().toISOString()
 	});

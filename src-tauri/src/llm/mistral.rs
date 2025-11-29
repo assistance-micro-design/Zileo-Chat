@@ -20,6 +20,8 @@ pub const MISTRAL_MODELS: &[&str] = &[
     "mistral-large-latest",
     "mistral-medium-latest",
     "mistral-small-latest",
+    "magistral-small-latest",
+    "magistral-medium-latest",
     "open-mistral-7b",
     "open-mixtral-8x7b",
     "open-mixtral-8x22b",

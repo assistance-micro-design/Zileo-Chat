@@ -148,6 +148,7 @@ DEFINE FIELD temperature_default ON llm_model TYPE float
     ASSERT $value >= 0.0 AND $value <= 2.0
     DEFAULT 0.7;
 DEFINE FIELD is_builtin ON llm_model TYPE bool DEFAULT false;
+DEFINE FIELD is_reasoning ON llm_model TYPE bool DEFAULT false;
 DEFINE FIELD created_at ON llm_model TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON llm_model TYPE datetime DEFAULT time::now();
 

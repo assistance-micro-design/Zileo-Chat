@@ -57,7 +57,8 @@
 		api_name: model?.api_name ?? '',
 		context_window: model?.context_window ?? 32000,
 		max_output_tokens: model?.max_output_tokens ?? 4096,
-		temperature_default: model?.temperature_default ?? 0.7
+		temperature_default: model?.temperature_default ?? 0.7,
+		is_reasoning: model?.is_reasoning ?? false
 	});
 
 	/** Validation errors state */
@@ -135,7 +136,8 @@
 				api_name: formData.api_name.trim(),
 				context_window: formData.context_window,
 				max_output_tokens: formData.max_output_tokens,
-				temperature_default: formData.temperature_default
+				temperature_default: formData.temperature_default,
+				is_reasoning: formData.is_reasoning
 			};
 			onsubmit(createData);
 		} else {
@@ -156,6 +158,9 @@
 			}
 			if (model && formData.temperature_default !== model.temperature_default) {
 				updateData.temperature_default = formData.temperature_default;
+			}
+			if (model && formData.is_reasoning !== model.is_reasoning) {
+				updateData.is_reasoning = formData.is_reasoning;
 			}
 
 			onsubmit(updateData);
@@ -284,6 +289,18 @@
 		<span class="error-text">{errors.temperature_default}</span>
 	{/if}
 
+	<div class="checkbox-field">
+		<label class="checkbox-label">
+			<input
+				type="checkbox"
+				bind:checked={formData.is_reasoning}
+				disabled={saving}
+			/>
+			<span class="checkbox-text">Reasoning Model</span>
+		</label>
+		<p class="checkbox-help">Enable for thinking/reasoning models (Magistral, DeepSeek-R1, Qwen3, etc.)</p>
+	</div>
+
 	<div class="form-actions">
 		<Button variant="ghost" onclick={oncancel} disabled={saving}>
 			Cancel
@@ -346,6 +363,39 @@
 		margin-top: var(--spacing-md);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
+	}
+
+	.checkbox-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		cursor: pointer;
+	}
+
+	.checkbox-label input[type="checkbox"] {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--color-primary);
+		cursor: pointer;
+	}
+
+	.checkbox-text {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.checkbox-help {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+		padding-left: calc(18px + var(--spacing-sm));
 	}
 
 	/* Responsive: stack form row on small screens */

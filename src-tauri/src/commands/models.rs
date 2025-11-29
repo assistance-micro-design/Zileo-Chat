@@ -115,13 +115,13 @@ pub async fn list_models(
     let query = if let Some(ref pt) = provider_filter {
         format!(
             "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, created_at, updated_at \
+             max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
              FROM llm_model WHERE provider = '{}'",
             pt
         )
     } else {
         "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, created_at, updated_at \
+         max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
          FROM llm_model"
             .to_string()
     };
@@ -171,7 +171,7 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
     // Query by record ID directly (llm_model:uuid)
     let query = format!(
         "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, created_at, updated_at \
+         max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
          FROM llm_model:`{}`",
         id
     );
@@ -261,16 +261,8 @@ pub async fn create_model(
     let model_id = Uuid::new_v4().to_string();
     let now = Utc::now();
 
-    // Create the model
-    let model = LLMModel::new_custom(
-        model_id.clone(),
-        data.provider,
-        data.name,
-        data.api_name,
-        data.context_window,
-        data.max_output_tokens,
-        data.temperature_default,
-    );
+    // Create the model from request
+    let model = LLMModel::from_create_request(model_id.clone(), &data);
 
     // Insert into database using raw query (SurrealDB SDK 2.x workaround)
     let insert_query = format!(
@@ -283,6 +275,7 @@ pub async fn create_model(
             max_output_tokens: {}, \
             temperature_default: {}, \
             is_builtin: false, \
+            is_reasoning: {}, \
             created_at: time::now(), \
             updated_at: time::now() \
         }}",
@@ -293,7 +286,8 @@ pub async fn create_model(
         model.api_name.replace('\'', "''"),
         model.context_window,
         model.max_output_tokens,
-        model.temperature_default
+        model.temperature_default,
+        model.is_reasoning
     );
 
     state.db.execute(&insert_query).await.map_err(|e| {
@@ -313,6 +307,7 @@ pub async fn create_model(
         max_output_tokens: model.max_output_tokens,
         temperature_default: model.temperature_default,
         is_builtin: false,
+        is_reasoning: model.is_reasoning,
         created_at: now,
         updated_at: now,
     })
@@ -401,6 +396,9 @@ pub async fn update_model(
     }
     if let Some(temp) = data.temperature_default {
         set_parts.push(format!("temperature_default = {}", temp));
+    }
+    if let Some(is_reasoning) = data.is_reasoning {
+        set_parts.push(format!("is_reasoning = {}", is_reasoning));
     }
 
     let update_query = format!("UPDATE llm_model:`{}` SET {}", id, set_parts.join(", "));

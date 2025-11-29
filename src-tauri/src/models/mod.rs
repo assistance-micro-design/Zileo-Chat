@@ -87,8 +87,8 @@ pub use sub_agent::constants;
 // Re-export LLM model types for CRUD operations (Phase 2 will use these)
 #[allow(unused_imports)]
 pub use llm_models::{
-    ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, ProviderType,
-    UpdateModelRequest,
+    BuiltinModelParams, ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings,
+    ProviderType, UpdateModelRequest,
 };
 // Re-export builtin model data (Phase 2 will use these for seeding)
 #[allow(unused_imports)]
