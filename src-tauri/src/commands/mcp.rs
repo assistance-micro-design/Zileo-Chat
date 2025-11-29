@@ -359,12 +359,21 @@ pub async fn create_mcp_server(
     config: MCPServerConfig,
     state: State<'_, AppState>,
 ) -> Result<MCPServer, String> {
+    // Log what we received from frontend BEFORE validation
+    info!(
+        name = %config.name,
+        env_count_received = config.env.len(),
+        env_keys_received = ?config.env.keys().collect::<Vec<_>>(),
+        "Received MCP server config from frontend"
+    );
+
     let validated_config = validate_mcp_server_config(&config)?;
     tracing::Span::current().record("server_id", &validated_config.id);
     info!(
         name = %validated_config.name,
         command = %validated_config.command,
         enabled = validated_config.enabled,
+        env_count_validated = validated_config.env.len(),
         "Creating MCP server"
     );
 

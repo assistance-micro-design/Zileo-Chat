@@ -227,6 +227,10 @@ pub struct MCPCallLog {
 ///
 /// Used for database persistence. Converts command enum to string
 /// for SurrealDB compatibility.
+///
+/// IMPORTANT: `env` is stored as a JSON string (not an object) to work around
+/// SurrealDB SCHEMAFULL filtering of nested object fields. The string is
+/// deserialized back to HashMap when reading from the database.
 #[allow(dead_code)] // Will be used in Phase 2/3 for database operations
 #[derive(Debug, Clone, Serialize)]
 pub struct MCPServerCreate {
@@ -238,8 +242,8 @@ pub struct MCPServerCreate {
     pub command: String,
     /// Command arguments
     pub args: Vec<String>,
-    /// Environment variables
-    pub env: serde_json::Value,
+    /// Environment variables as JSON string (to bypass SurrealDB SCHEMAFULL filtering)
+    pub env: String,
     /// Optional description
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -254,7 +258,8 @@ impl MCPServerCreate {
             enabled: config.enabled,
             command: config.command.to_string(),
             args: config.args.clone(),
-            env: serde_json::to_value(&config.env).unwrap_or(serde_json::json!({})),
+            // Serialize env HashMap to JSON string to bypass SurrealDB SCHEMAFULL filtering
+            env: serde_json::to_string(&config.env).unwrap_or_else(|_| "{}".to_string()),
             description: config.description.clone(),
         }
     }

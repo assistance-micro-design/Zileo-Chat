@@ -179,6 +179,8 @@ impl MCPManager {
         info!(
             server_id = %config.id,
             server_name = %config.name,
+            env_count = config.env.len(),
+            env_keys = ?config.env.keys().collect::<Vec<_>>(),
             "Spawning MCP server"
         );
 
@@ -488,6 +490,13 @@ impl MCPManager {
     async fn save_server_config(&self, config: &MCPServerConfig) -> MCPResult<()> {
         let create_data = MCPServerCreate::from_config(config);
 
+        debug!(
+            server_id = %config.id,
+            env_count = config.env.len(),
+            env_keys = ?config.env.keys().collect::<Vec<_>>(),
+            "Saving MCP server config to database"
+        );
+
         self.db
             .create("mcp_server", &config.id, create_data)
             .await
@@ -496,8 +505,9 @@ impl MCPManager {
                 message: e.to_string(),
             })?;
 
-        debug!(
+        info!(
             server_id = %config.id,
+            env_count = config.env.len(),
             "Server configuration saved to database"
         );
 
@@ -511,7 +521,10 @@ impl MCPManager {
         let name_json = serde_json::to_string(&config.name)?;
         let command_json = serde_json::to_string(&config.command)?;
         let args_json = serde_json::to_string(&config.args)?;
-        let env_json = serde_json::to_string(&config.env)?;
+        // env is stored as a JSON string (to bypass SurrealDB SCHEMAFULL filtering)
+        // First serialize HashMap to JSON string, then encode that string for SQL
+        let env_str = serde_json::to_string(&config.env)?; // {"KEY":"value"}
+        let env_json = serde_json::to_string(&env_str)?; // "{\"KEY\":\"value\"}"
         let description_json = match &config.description {
             Some(desc) => serde_json::to_string(desc)?,
             None => "NONE".to_string(),
@@ -595,9 +608,24 @@ impl MCPManager {
                     message: e.to_string(),
                 })?;
 
+        info!(
+            result_count = result.len(),
+            "Retrieved MCP server configs from database"
+        );
+
         let configs: Vec<MCPServerConfig> = result
             .into_iter()
             .filter_map(|v| {
+                let server_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
+
+                // Log raw env value for debugging
+                let env_raw = v.get("env");
+                info!(
+                    server_id = %server_id,
+                    env_raw = ?env_raw,
+                    "Raw env field from database"
+                );
+
                 // Convert command string back to enum
                 let command_str = v.get("command")?.as_str()?;
                 let command = match command_str {
@@ -607,11 +635,39 @@ impl MCPManager {
                     _ => return None,
                 };
 
-                // Extract env as HashMap
-                let env: HashMap<String, String> = v
-                    .get("env")
-                    .and_then(|e| serde_json::from_value(e.clone()).ok())
-                    .unwrap_or_default();
+                // Extract env from JSON string (stored as string to bypass SurrealDB SCHEMAFULL filtering)
+                let env_value = v.get("env");
+                let env: HashMap<String, String> = match env_value {
+                    Some(e) => {
+                        // env is stored as a JSON string, so first get the string value
+                        let env_str = e.as_str().unwrap_or("{}");
+                        match serde_json::from_str::<HashMap<String, String>>(env_str) {
+                            Ok(map) => {
+                                debug!(
+                                    server_id = %server_id,
+                                    env_count = map.len(),
+                                    "Loaded env variables from database"
+                                );
+                                map
+                            }
+                            Err(parse_err) => {
+                                warn!(
+                                    server_id = %server_id,
+                                    error = %parse_err,
+                                    "Failed to parse env JSON string, using empty map"
+                                );
+                                HashMap::new()
+                            }
+                        }
+                    }
+                    None => {
+                        debug!(
+                            server_id = %server_id,
+                            "Env field not present, using empty map"
+                        );
+                        HashMap::new()
+                    }
+                };
 
                 Some(MCPServerConfig {
                     id: v.get("id")?.as_str()?.to_string(),

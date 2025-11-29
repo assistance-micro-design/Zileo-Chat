@@ -107,7 +107,8 @@ DEFINE FIELD name ON mcp_server TYPE string;
 DEFINE FIELD enabled ON mcp_server TYPE bool DEFAULT true;
 DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx'];
 DEFINE FIELD args ON mcp_server TYPE array<string>;
-DEFINE FIELD env ON mcp_server TYPE object;
+-- Store env as JSON string to bypass SurrealDB SCHEMAFULL nested object filtering
+DEFINE FIELD env ON mcp_server TYPE string DEFAULT '{}';
 DEFINE FIELD description ON mcp_server TYPE option<string>;
 DEFINE FIELD created_at ON mcp_server TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON mcp_server TYPE datetime DEFAULT time::now();
