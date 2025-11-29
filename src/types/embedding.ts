@@ -57,22 +57,6 @@ export interface MemoryStats {
 }
 
 /**
- * Result of testing embedding generation
- */
-export interface EmbeddingTestResult {
-  /** Whether the test was successful */
-  success: boolean;
-  /** Status message */
-  message: string;
-  /** Generated embedding dimension (if successful) */
-  dimension?: number;
-  /** First 5 values of the embedding (preview) */
-  preview?: number[];
-  /** Time taken in milliseconds */
-  latency_ms?: number;
-}
-
-/**
  * Parameters for updating a memory
  */
 export interface UpdateMemoryParams {

@@ -18,7 +18,6 @@ import {
 	type EmbeddingProviderType,
 	type ChunkingStrategy,
 	type MemoryStats,
-	type EmbeddingTestResult,
 	type ImportResult,
 	type RegenerateResult,
 	type ExportFormat
@@ -168,28 +167,6 @@ describe('Embedding Types', () => {
 			expect(stats.total).toBe(100);
 			expect(stats.with_embeddings + stats.without_embeddings).toBe(stats.total);
 			expect(Object.values(stats.by_type).reduce((a, b) => a + b, 0)).toBe(stats.total);
-		});
-
-		it('should create valid EmbeddingTestResult structure', () => {
-			const successResult: EmbeddingTestResult = {
-				success: true,
-				message: 'Embedding generated successfully',
-				dimension: 1024,
-				preview: [0.1, 0.2, 0.3, 0.4, 0.5],
-				latency_ms: 150
-			};
-
-			expect(successResult.success).toBe(true);
-			expect(successResult.dimension).toBe(1024);
-			expect(successResult.preview?.length).toBe(5);
-
-			const failureResult: EmbeddingTestResult = {
-				success: false,
-				message: 'API key not configured'
-			};
-
-			expect(failureResult.success).toBe(false);
-			expect(failureResult.dimension).toBeUndefined();
 		});
 
 		it('should create valid ImportResult structure', () => {

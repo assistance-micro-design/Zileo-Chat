@@ -8,11 +8,10 @@ Allows users to configure embedding provider, model, and chunking settings.
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { Button, Input, Select, Textarea, Card, StatusIndicator } from '$lib/components/ui';
+	import { Button, Input, Select, Card, StatusIndicator } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
-		EmbeddingTestResult,
 		EmbeddingProviderType,
 		MemoryStats
 	} from '$types/embedding';
@@ -42,9 +41,6 @@ Allows users to configure embedding provider, model, and chunking settings.
 	/** UI state */
 	let loading = $state(true);
 	let saving = $state(false);
-	let testing = $state(false);
-	let testResult = $state<EmbeddingTestResult | null>(null);
-	let testText = $state('');
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
 	/** Provider options */
@@ -107,32 +103,6 @@ Allows users to configure embedding provider, model, and chunking settings.
 			message = { type: 'error', text: `Failed to save: ${err}` };
 		} finally {
 			saving = false;
-		}
-	}
-
-	/**
-	 * Tests embedding generation
-	 */
-	async function handleTestEmbedding(): Promise<void> {
-		if (!testText.trim()) {
-			message = { type: 'error', text: 'Please enter text to test' };
-			return;
-		}
-
-		testing = true;
-		testResult = null;
-		message = null;
-
-		try {
-			const result = await invoke<EmbeddingTestResult>('test_embedding', { text: testText });
-			testResult = result;
-			if (!result.success) {
-				message = { type: 'error', text: result.message };
-			}
-		} catch (err) {
-			message = { type: 'error', text: `Test failed: ${err}` };
-		} finally {
-			testing = false;
 		}
 	}
 
@@ -283,47 +253,6 @@ Allows users to configure embedding provider, model, and chunking settings.
 			{/snippet}
 		</Card>
 
-		<!-- Test Embedding -->
-		<Card>
-			{#snippet header()}
-				<h3 class="card-title">Test Embedding</h3>
-			{/snippet}
-			{#snippet body()}
-				<div class="test-section">
-					<Textarea
-						label="Test Text"
-						placeholder="Enter text to test embedding generation..."
-						value={testText}
-						oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => testText = e.currentTarget.value}
-						rows={3}
-					/>
-
-					<Button
-						variant="secondary"
-						onclick={handleTestEmbedding}
-						disabled={testing || !testText.trim()}
-					>
-						{testing ? 'Testing...' : 'Test Embedding'}
-					</Button>
-
-					{#if testResult}
-						<div class="test-result" class:success={testResult.success} class:error={!testResult.success}>
-							<div class="test-message">{testResult.message}</div>
-							{#if testResult.success && testResult.preview}
-								<div class="embedding-preview">
-									<code>Dimension: {testResult.dimension}</code>
-									<code>First 5 values: [{testResult.preview.slice(0, 5).join(', ')}...]</code>
-									{#if testResult.latency_ms}
-										<code>Latency: {testResult.latency_ms}ms</code>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			{/snippet}
-		</Card>
-
 		<!-- Statistics -->
 		{#if stats}
 			<Card>
@@ -458,45 +387,6 @@ Allows users to configure embedding provider, model, and chunking settings.
 	.slider-help {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
-	}
-
-	.test-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.test-result {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-	}
-
-	.test-result.success {
-		background: var(--color-success-light);
-		border: 1px solid var(--color-success);
-	}
-
-	.test-result.error {
-		background: var(--color-error-light);
-		border: 1px solid var(--color-error);
-	}
-
-	.test-message {
-		font-size: var(--font-size-sm);
-		margin-bottom: var(--spacing-sm);
-	}
-
-	.embedding-preview {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.embedding-preview code {
-		font-size: var(--font-size-xs);
-		background: var(--color-bg-tertiary);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--border-radius-sm);
 	}
 
 	.stats-grid {

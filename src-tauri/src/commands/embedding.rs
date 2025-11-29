@@ -10,15 +10,13 @@ use crate::{
     commands::SecureKeyStore,
     llm::embedding::{EmbeddingProvider, EmbeddingService},
     models::{
-        EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult, Memory,
-        MemoryStats, RegenerateResult,
+        EmbeddingConfigSettings, ExportFormat, ImportResult, Memory, MemoryStats, RegenerateResult,
     },
     AppState,
 };
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
@@ -35,13 +33,14 @@ pub async fn get_embedding_config(
 ) -> Result<EmbeddingConfigSettings, String> {
     info!("Getting embedding configuration");
 
-    // Try to load from database
-    let query = format!(
-        "SELECT * FROM settings WHERE id = '{}'",
-        EMBEDDING_CONFIG_KEY
-    );
+    // Try to load from database using direct record access
+    // Note: Using backtick-escaped ID for direct access instead of WHERE clause
+    // to ensure correct record ID matching in SurrealDB
+    // Note: Using query_json and SELECT config (not SELECT *) to avoid
+    // SurrealDB SDK 2.x serialization issues with Thing enum type in id field
+    let query = format!("SELECT config FROM settings:`{}`", EMBEDDING_CONFIG_KEY);
 
-    let results: Vec<serde_json::Value> = state.db.query(&query).await.map_err(|e| {
+    let results: Vec<serde_json::Value> = state.db.query_json(&query).await.map_err(|e| {
         error!(error = %e, "Failed to query embedding config");
         format!("Failed to load embedding config: {}", e)
     })?;
@@ -161,62 +160,6 @@ async fn update_embedding_service(
         let mut guard = state.embedding_service.write().await;
         *guard = Some(Arc::new(service));
         info!("Embedding service updated successfully");
-    }
-}
-
-/// Tests embedding generation with the current configuration.
-///
-/// # Arguments
-/// * `text` - The text to generate an embedding for
-#[tauri::command]
-#[instrument(name = "test_embedding", skip(state, text), fields(text_len = text.len()))]
-pub async fn test_embedding(
-    text: String,
-    state: State<'_, AppState>,
-) -> Result<EmbeddingTestResult, String> {
-    info!("Testing embedding generation");
-
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Ok(EmbeddingTestResult::failure("Text cannot be empty"));
-    }
-
-    if trimmed.len() > 50_000 {
-        return Ok(EmbeddingTestResult::failure(
-            "Text exceeds maximum length of 50,000 characters",
-        ));
-    }
-
-    // Get embedding service
-    let service_guard = state.embedding_service.read().await;
-    let service = match service_guard.as_ref() {
-        Some(s) => s.clone(),
-        None => {
-            return Ok(EmbeddingTestResult::failure(
-                "Embedding service not configured. Please save embedding settings first.",
-            ));
-        }
-    };
-    drop(service_guard);
-
-    // Generate embedding and measure time
-    let start = Instant::now();
-    match service.embed(trimmed).await {
-        Ok(embedding) => {
-            let latency_ms = start.elapsed().as_millis() as u64;
-            let dimension = embedding.len();
-            let preview: Vec<f32> = embedding.into_iter().take(5).collect();
-
-            info!(dimension, latency_ms, "Embedding generated successfully");
-            Ok(EmbeddingTestResult::success(dimension, preview, latency_ms))
-        }
-        Err(e) => {
-            warn!(error = %e, "Embedding generation failed");
-            Ok(EmbeddingTestResult::failure(format!(
-                "Embedding failed: {}",
-                e
-            )))
-        }
     }
 }
 
@@ -609,17 +552,6 @@ mod tests {
         assert_eq!(config.provider, "mistral");
         assert_eq!(config.model, "mistral-embed");
         assert_eq!(config.dimension, 1024);
-    }
-
-    #[test]
-    fn test_embedding_test_result() {
-        let success = EmbeddingTestResult::success(1024, vec![0.1, 0.2], 100);
-        assert!(success.success);
-        assert_eq!(success.dimension, Some(1024));
-
-        let failure = EmbeddingTestResult::failure("Error");
-        assert!(!failure.success);
-        assert_eq!(failure.message, "Error");
     }
 
     #[test]

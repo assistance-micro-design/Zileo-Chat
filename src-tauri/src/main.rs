@@ -274,7 +274,6 @@ async fn main() -> anyhow::Result<()> {
             // Embedding commands (Memory Tool Phase 5)
             commands::embedding::get_embedding_config,
             commands::embedding::save_embedding_config,
-            commands::embedding::test_embedding,
             commands::embedding::get_memory_stats,
             commands::embedding::update_memory,
             commands::embedding::export_memories,

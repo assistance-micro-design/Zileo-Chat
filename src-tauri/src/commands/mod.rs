@@ -116,7 +116,6 @@
 //! ### Embedding Commands ([`embedding`])
 //! - `get_embedding_config` - Get current embedding configuration
 //! - `save_embedding_config` - Save embedding configuration
-//! - `test_embedding` - Test embedding generation
 //! - `get_memory_stats` - Get memory statistics for dashboard
 //! - `update_memory` - Update an existing memory entry
 //! - `export_memories` - Export memories to JSON/CSV

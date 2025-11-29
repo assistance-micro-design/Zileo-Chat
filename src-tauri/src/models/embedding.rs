@@ -60,51 +60,6 @@ pub struct MemoryStats {
     pub by_agent: HashMap<String, usize>,
 }
 
-/// Result of testing embedding generation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmbeddingTestResult {
-    /// Whether the test was successful
-    pub success: bool,
-    /// Status message
-    pub message: String,
-    /// Generated embedding dimension (if successful)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dimension: Option<usize>,
-    /// First 5 values of the embedding (preview)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preview: Option<Vec<f32>>,
-    /// Time taken in milliseconds
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latency_ms: Option<u64>,
-}
-
-impl EmbeddingTestResult {
-    /// Creates a successful test result
-    pub fn success(dimension: usize, preview: Vec<f32>, latency_ms: u64) -> Self {
-        Self {
-            success: true,
-            message: format!(
-                "Embedding generated successfully: {}D vector in {}ms",
-                dimension, latency_ms
-            ),
-            dimension: Some(dimension),
-            preview: Some(preview),
-            latency_ms: Some(latency_ms),
-        }
-    }
-
-    /// Creates a failed test result
-    pub fn failure(message: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            message: message.into(),
-            dimension: None,
-            preview: None,
-            latency_ms: None,
-        }
-    }
-}
-
 /// Result of memory import operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportResult {
@@ -174,23 +129,6 @@ mod tests {
         assert_eq!(stats.without_embeddings, 0);
         assert!(stats.by_type.is_empty());
         assert!(stats.by_agent.is_empty());
-    }
-
-    #[test]
-    fn test_embedding_test_result_success() {
-        let result = EmbeddingTestResult::success(1024, vec![0.1, 0.2, 0.3, 0.4, 0.5], 150);
-        assert!(result.success);
-        assert_eq!(result.dimension, Some(1024));
-        assert_eq!(result.latency_ms, Some(150));
-        assert!(result.message.contains("1024D"));
-    }
-
-    #[test]
-    fn test_embedding_test_result_failure() {
-        let result = EmbeddingTestResult::failure("Connection failed");
-        assert!(!result.success);
-        assert_eq!(result.message, "Connection failed");
-        assert!(result.dimension.is_none());
     }
 
     #[test]

@@ -183,12 +183,18 @@ impl AppState {
         use crate::llm::embedding::{EmbeddingProvider, EmbeddingService};
         use crate::models::EmbeddingConfigSettings;
 
-        // Load config from database
-        let query = "SELECT * FROM settings WHERE id = 'settings:embedding_config'";
-        let results: Vec<serde_json::Value> = match self.db.query(query).await {
+        tracing::info!("Initializing embedding service from saved configuration...");
+
+        // Load config from database using direct record access
+        // Note: Using backtick-escaped ID for direct access instead of WHERE clause
+        // to ensure correct record ID matching in SurrealDB
+        // Note: Using query_json and SELECT config (not SELECT *) to avoid
+        // SurrealDB SDK 2.x serialization issues with Thing enum type in id field
+        let query = "SELECT config FROM settings:`settings:embedding_config`";
+        let results: Vec<serde_json::Value> = match self.db.query_json(query).await {
             Ok(r) => r,
             Err(e) => {
-                tracing::debug!(error = %e, "No embedding config found in database");
+                tracing::debug!(error = %e, "No embedding config found in database (this is normal on first run)");
                 return;
             }
         };
