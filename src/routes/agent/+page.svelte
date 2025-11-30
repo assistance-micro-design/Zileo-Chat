@@ -154,7 +154,7 @@ Streaming integration for real-time response display (Phase 2).
 
 		// Auto-select first agent if none selected and agents are available
 		if (!selectedAgentId && agentList.length > 0) {
-			selectedAgentId = agentList[0].id;
+			await handleAgentSelect(agentList[0].id);
 		}
 	}
 
@@ -623,11 +623,11 @@ Streaming integration for real-time response display (Phase 2).
 				convertThinkingSteps(fullState.thinking_steps)
 			);
 
-			// Auto-select the agent associated with this workflow
+			// Auto-select the agent associated with this workflow and load its config
 			if (fullState.workflow.agent_id && agentList.length > 0) {
 				const agentExists = agentList.some(a => a.id === fullState.workflow.agent_id);
 				if (agentExists) {
-					selectedAgentId = fullState.workflow.agent_id;
+					await handleAgentSelect(fullState.workflow.agent_id);
 				}
 			}
 
@@ -743,42 +743,42 @@ Streaming integration for real-time response display (Phase 2).
 	<!-- Agent Main Area -->
 	<main class="agent-main">
 		{#if selectedWorkflowId && currentWorkflow()}
-			<!-- Agent Header -->
+			<!-- Agent Header (centered, responsive) -->
 			<div class="agent-header">
-				<div class="header-left">
+				<div class="header-content">
 					<Bot size={24} class="agent-icon" />
-					<div>
-						<h2 class="agent-title">{currentWorkflow()?.name || 'Agent'}</h2>
-						{#if agentLoadingState}
-							<span class="agents-loading">Loading agents...</span>
-						{:else if agentList.length === 0}
-							<span class="no-agents">No agents configured - <a href="/settings" class="settings-link">Create one in Settings</a></span>
-						{:else}
+					<h2 class="agent-title">{currentWorkflow()?.name || 'Agent'}</h2>
+					<span class="header-separator"></span>
+					{#if agentLoadingState}
+						<span class="agents-loading">Loading...</span>
+					{:else if agentList.length === 0}
+						<span class="no-agents"><a href="/settings" class="settings-link">Add agent</a></span>
+					{:else}
+						<div class="agent-controls">
 							<AgentSelector
 								agents={agentList}
 								selected={selectedAgentId ?? agentList[0]?.id ?? ''}
 								onselect={handleAgentSelect}
 								label=""
 							/>
-						{/if}
-					</div>
-				</div>
-				<div class="header-right">
+							<div class="iterations-control">
+								<label for="max-iterations" class="iterations-label">Iterations:</label>
+								<input
+									type="number"
+									id="max-iterations"
+									class="iterations-input"
+									min="1"
+									max="200"
+									value={currentMaxIterations}
+									onchange={handleMaxIterationsChange}
+									title="Max tool iterations (1-200)"
+								/>
+							</div>
+						</div>
+					{/if}
 					{#if messagesLoading}
-						<RefreshCw size={16} class="loading-icon" />
-						<span class="loading-text">Loading messages...</span>
-					{:else if selectedAgentId && agentList.length > 0}
-						<div class="iterations-control">
-							<label for="max-iterations" class="iterations-label">Max iterations:</label>
-							<input
-								type="number"
-								id="max-iterations"
-								class="iterations-input"
-								min="1"
-								max="200"
-								value={currentMaxIterations}
-								onchange={handleMaxIterationsChange}
-							/>
+						<div class="loading-indicator">
+							<RefreshCw size={14} class="loading-icon" />
 						</div>
 					{/if}
 				</div>
@@ -1034,42 +1034,54 @@ Streaming integration for real-time response display (Phase 2).
 		min-height: 0;
 	}
 
+	/* Agent Header - Centered, responsive design */
 	.agent-header {
-		padding: var(--spacing-lg);
+		padding: var(--spacing-md) var(--spacing-lg);
 		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-secondary);
+		background: linear-gradient(180deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
 		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
+		justify-content: center;
+		align-items: center;
+		min-height: 56px;
 	}
 
-	.header-left {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--spacing-md);
-	}
-
-	.header-left :global(.agent-icon) {
-		color: var(--color-accent);
-		flex-shrink: 0;
-		margin-top: var(--spacing-xs);
-	}
-
-	.header-right {
+	.header-content {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: var(--spacing-sm);
-		color: var(--color-text-tertiary);
-		font-size: var(--font-size-sm);
+		flex-wrap: wrap;
+		max-width: 100%;
 	}
 
-	.header-right :global(.loading-icon) {
-		animation: spin 1s linear infinite;
+	.header-content :global(.agent-icon) {
+		color: var(--color-accent);
+		flex-shrink: 0;
 	}
 
-	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
+	.agent-title {
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+		margin: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: clamp(80px, 18vw, 200px);
+	}
+
+	.header-separator {
+		width: 1px;
+		height: 20px;
+		background: var(--color-border);
+		flex-shrink: 0;
+	}
+
+	/* Agent controls: selector + iterations grouped */
+	.agent-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		flex-shrink: 0;
 	}
 
 	/* Iterations Control */
@@ -1077,20 +1089,22 @@ Streaming integration for real-time response display (Phase 2).
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
+		padding-left: var(--spacing-sm);
+		border-left: 1px solid var(--color-border);
 	}
 
 	.iterations-label {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 		white-space: nowrap;
 	}
 
 	.iterations-input {
-		width: 60px;
-		padding: var(--spacing-xs) var(--spacing-sm);
+		width: 52px;
+		padding: var(--spacing-xs);
 		font-size: var(--font-size-sm);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-md);
 		background: var(--color-bg-primary);
 		color: var(--color-text-primary);
 		text-align: center;
@@ -1099,6 +1113,7 @@ Streaming integration for real-time response display (Phase 2).
 	.iterations-input:focus {
 		outline: none;
 		border-color: var(--color-accent);
+		box-shadow: 0 0 0 2px var(--color-accent-light);
 	}
 
 	.iterations-input::-webkit-inner-spin-button,
@@ -1106,10 +1121,76 @@ Streaming integration for real-time response display (Phase 2).
 		opacity: 1;
 	}
 
-	.agent-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin-bottom: var(--spacing-sm);
+	/* Loading indicator */
+	.loading-indicator {
+		display: flex;
+		align-items: center;
+		margin-left: var(--spacing-sm);
+	}
+
+	.loading-indicator :global(.loading-icon) {
+		color: var(--color-text-tertiary);
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
+	}
+
+	/* Responsive: Medium screens - tighter spacing */
+	@media (max-width: 900px) {
+		.agent-header {
+			padding: var(--spacing-sm) var(--spacing-md);
+		}
+
+		.header-content {
+			gap: var(--spacing-xs);
+		}
+
+		.agent-title {
+			max-width: clamp(60px, 12vw, 120px);
+			font-size: var(--font-size-base);
+		}
+
+		.header-separator {
+			display: none;
+		}
+
+		.iterations-label {
+			display: none;
+		}
+
+		.iterations-control {
+			border-left: none;
+			padding-left: 0;
+		}
+
+		.agent-controls {
+			gap: var(--spacing-sm);
+		}
+	}
+
+	/* Responsive: Small screens - stack vertically */
+	@media (max-width: 550px) {
+		.agent-header {
+			padding: var(--spacing-sm);
+			min-height: auto;
+		}
+
+		.header-content {
+			flex-direction: column;
+			gap: var(--spacing-xs);
+		}
+
+		.agent-title {
+			max-width: 180px;
+		}
+
+		.agent-controls {
+			flex-wrap: wrap;
+			justify-content: center;
+		}
 	}
 
 	/* Messages Container */
