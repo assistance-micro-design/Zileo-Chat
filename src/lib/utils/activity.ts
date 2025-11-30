@@ -15,6 +15,7 @@ import type {
 import type { ActiveTool, ActiveSubAgent, ActiveReasoningStep } from '$lib/stores/streaming';
 import type { ToolExecution } from '$types/tool';
 import type { ThinkingStep } from '$types/thinking';
+import type { SubAgentExecution } from '$types/sub-agent';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
@@ -311,5 +312,75 @@ export function convertThinkingSteps(steps: ThinkingStep[]): WorkflowActivityEve
 export function mergeActivities(...activityArrays: WorkflowActivityEvent[][]): WorkflowActivityEvent[] {
 	return activityArrays
 		.flat()
+		.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Convert a persisted SubAgentExecution to WorkflowActivityEvent.
+ * Used for restoring historical sub-agent activities from database.
+ */
+export function subAgentExecutionToActivity(exec: SubAgentExecution, index: number): WorkflowActivityEvent {
+	// Map SubAgentExecution status to ActivityType
+	let type: ActivityType;
+	let status: ActivityStatus;
+
+	switch (exec.status) {
+		case 'pending':
+			type = 'sub_agent_start';
+			status = 'pending';
+			break;
+		case 'running':
+			type = 'sub_agent_progress';
+			status = 'running';
+			break;
+		case 'completed':
+			type = 'sub_agent_complete';
+			status = 'completed';
+			break;
+		case 'error':
+		case 'cancelled':
+			type = 'sub_agent_error';
+			status = 'error';
+			break;
+		default:
+			type = 'sub_agent_start';
+			status = 'pending';
+	}
+
+	const metadata: ActivityMetadata = {
+		agentName: exec.sub_agent_name,
+		agentId: exec.sub_agent_id
+	};
+
+	if (exec.tokens_input !== undefined && exec.tokens_output !== undefined) {
+		metadata.tokens = {
+			input: exec.tokens_input,
+			output: exec.tokens_output
+		};
+	}
+
+	if (exec.error_message) {
+		metadata.error = exec.error_message;
+	}
+
+	return {
+		id: `agent-hist-${exec.id}-${index}`,
+		timestamp: new Date(exec.created_at).getTime(),
+		type,
+		title: exec.sub_agent_name,
+		description: exec.task_description?.slice(0, 200) + (exec.task_description?.length > 200 ? '...' : ''),
+		status,
+		duration: exec.duration_ms,
+		metadata
+	};
+}
+
+/**
+ * Convert an array of persisted SubAgentExecutions to WorkflowActivityEvents.
+ * Used for restoring historical sub-agent activities when loading a workflow.
+ */
+export function convertSubAgentExecutions(executions: SubAgentExecution[]): WorkflowActivityEvent[] {
+	return executions
+		.map((e, i) => subAgentExecutionToActivity(e, i))
 		.sort((a, b) => a.timestamp - b.timestamp);
 }

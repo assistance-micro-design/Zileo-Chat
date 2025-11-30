@@ -97,6 +97,10 @@
 //! - `complete_task` - Mark task as completed with duration
 //! - `delete_task` - Delete a task
 //!
+//! ### Sub-Agent Execution Commands ([`sub_agent_execution`])
+//! - `load_workflow_sub_agent_executions` - Load all sub-agent executions for a workflow
+//! - `clear_workflow_sub_agent_executions` - Delete all sub-agent executions for a workflow
+//!
 //! ### MCP Commands ([`mcp`])
 //! - `list_mcp_servers` - List all configured MCP servers
 //! - `get_mcp_server` - Get a single MCP server by ID
@@ -137,6 +141,7 @@ pub mod migration;
 pub mod models;
 pub mod security;
 pub mod streaming;
+pub mod sub_agent_execution;
 pub mod task;
 pub mod thinking;
 pub mod tool_execution;

@@ -248,6 +248,9 @@ async fn main() -> anyhow::Result<()> {
             commands::thinking::load_message_thinking_steps,
             commands::thinking::delete_thinking_step,
             commands::thinking::clear_workflow_thinking_steps,
+            // Sub-agent execution commands (Activity persistence)
+            commands::sub_agent_execution::load_workflow_sub_agent_executions,
+            commands::sub_agent_execution::clear_workflow_sub_agent_executions,
             // Task commands (Todo Tool)
             commands::task::create_task,
             commands::task::get_task,

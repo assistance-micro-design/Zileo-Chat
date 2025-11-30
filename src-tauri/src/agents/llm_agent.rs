@@ -23,6 +23,7 @@ use crate::db::DBClient;
 use crate::llm::{LLMError, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
 use crate::models::mcp::MCPTool;
+use crate::models::streaming::{events, StreamChunk};
 use crate::models::{AgentConfig, Lifecycle};
 use crate::tools::{context::AgentToolContext, Tool, ToolFactory};
 use async_trait::async_trait;
@@ -30,6 +31,7 @@ use chrono::Local;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::Emitter;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Default maximum number of tool execution iterations to prevent infinite loops
@@ -731,6 +733,27 @@ You are currently running with the following configuration:
 
         pattern.replace_all(response, "").trim().to_string()
     }
+
+    /// Emits a streaming event to the frontend via Tauri.
+    ///
+    /// This is used to provide real-time progress updates during tool execution.
+    /// If no app_handle is available in the agent context, the event is silently skipped.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - The workflow ID to associate with the event
+    /// * `chunk` - The StreamChunk to emit
+    fn emit_progress(&self, chunk: StreamChunk) {
+        if let Some(ref context) = self.agent_context {
+            if let Some(ref handle) = context.app_handle {
+                if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
+                    warn!(
+                        error = %e,
+                        "Failed to emit LLM agent progress event"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -987,12 +1010,15 @@ impl Agent for LLMAgent {
             });
         }
 
-        // Create local tool instances
+        // Extract workflow_id early for event emission
         let workflow_id = task
             .context
             .get("workflow_id")
             .and_then(|v| v.as_str())
             .map(String::from);
+
+        // Clone workflow_id for use in progress events (use task_id as fallback)
+        let event_workflow_id = workflow_id.clone().unwrap_or_else(|| task.id.clone());
 
         // Check if this is the primary workflow agent
         // Sub-agents have "is_sub_agent": true in their context
@@ -1058,7 +1084,20 @@ impl Agent for LLMAgent {
                     iterations = max_iterations,
                     "Max tool iterations reached, stopping execution"
                 );
+                // Emit progress event about max iterations
+                self.emit_progress(StreamChunk::reasoning(
+                    event_workflow_id.clone(),
+                    format!("Max tool iterations ({}) reached, stopping execution", max_iterations),
+                ));
                 break;
+            }
+
+            // Emit progress event for iteration start
+            if iteration > 1 {
+                self.emit_progress(StreamChunk::reasoning(
+                    event_workflow_id.clone(),
+                    format!("Tool iteration {} - Processing tool results...", iteration),
+                ));
             }
 
             // Build the full prompt from conversation history
@@ -1142,12 +1181,29 @@ impl Agent for LLMAgent {
                 "Found tool calls, executing"
             );
 
+            // Emit progress event about found tool calls
+            let tool_names: Vec<String> = tool_calls.iter().map(|c| c.tool_name.clone()).collect();
+            self.emit_progress(StreamChunk::reasoning(
+                event_workflow_id.clone(),
+                format!(
+                    "Executing {} tool(s): {}",
+                    tool_calls.len(),
+                    tool_names.join(", ")
+                ),
+            ));
+
             // Execute each tool call with detailed tracking
             let mut execution_results = Vec::new();
 
             for call in tool_calls {
                 let exec_start = std::time::Instant::now();
                 let input_params = call.arguments.clone();
+
+                // Emit tool_start event
+                self.emit_progress(StreamChunk::tool_start(
+                    event_workflow_id.clone(),
+                    call.tool_name.clone(),
+                ));
 
                 let result = if call.is_mcp {
                     // MCP tool execution
@@ -1278,6 +1334,14 @@ impl Agent for LLMAgent {
                         exec_result
                     }
                 };
+
+                // Calculate duration and emit tool_end event
+                let tool_duration = exec_start.elapsed().as_millis() as u64;
+                self.emit_progress(StreamChunk::tool_end(
+                    event_workflow_id.clone(),
+                    call.tool_name.clone(),
+                    tool_duration,
+                ));
 
                 execution_results.push(result);
             }

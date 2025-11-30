@@ -22,6 +22,8 @@ import {
 	reasoningSteps,
 	streamError,
 	isCancelled,
+	isCompleted,
+	hasStreamingActivities,
 	tokensReceived,
 	runningTools,
 	completedTools,
@@ -140,11 +142,30 @@ describe('streamingStore', () => {
 	});
 
 	describe('completion', () => {
-		it('should complete streaming', () => {
+		it('should mark as completed while keeping streaming activities visible', () => {
 			streamingStore.appendToken('Test');
+			streamingStore.addToolStart('MemoryTool');
 			streamingStore.complete();
 
-			expect(get(isStreaming)).toBe(false);
+			// isStreaming stays true until reset, but completed is set
+			expect(get(isCompleted)).toBe(true);
+			// hasStreamingActivities should be true because we have activities
+			expect(get(hasStreamingActivities)).toBe(true);
+		});
+
+		it('should keep activities visible until explicitly reset', async () => {
+			streamingStore.appendToken('Test');
+			streamingStore.addReasoning('Step 1');
+			streamingStore.complete();
+
+			// Activities should still be accessible
+			expect(get(reasoningSteps)).toHaveLength(1);
+			expect(get(hasStreamingActivities)).toBe(true);
+
+			// After reset, activities are cleared
+			await streamingStore.reset();
+			expect(get(reasoningSteps)).toHaveLength(0);
+			expect(get(hasStreamingActivities)).toBe(false);
 		});
 	});
 

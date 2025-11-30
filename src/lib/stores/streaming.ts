@@ -112,6 +112,8 @@ export interface StreamingState {
 	subAgents: ActiveSubAgent[];
 	/** Whether streaming is currently active */
 	isStreaming: boolean;
+	/** Whether streaming completed but activities not yet captured */
+	completed: boolean;
 	/** Total tokens received */
 	tokensReceived: number;
 	/** Error message if streaming failed */
@@ -134,6 +136,7 @@ const initialState: StreamingState = {
 	reasoning: [],
 	subAgents: [],
 	isStreaming: false,
+	completed: false,
 	tokensReceived: 0,
 	error: null,
 	cancelled: false
@@ -297,14 +300,18 @@ function processComplete(complete: WorkflowComplete): void {
 			return s;
 		}
 
+		// Mark as completed but keep isStreaming true until activities are captured
+		// This prevents the UI from switching to empty historicalActivities prematurely
 		const updates: Partial<StreamingState> = {
-			isStreaming: false
+			completed: true
 		};
 
 		if (complete.status === 'error') {
 			updates.error = complete.error ?? 'Unknown error';
+			updates.isStreaming = false; // Stop streaming on error
 		} else if (complete.status === 'cancelled') {
 			updates.cancelled = true;
+			updates.isStreaming = false; // Stop streaming on cancel
 		}
 
 		return { ...s, ...updates };
@@ -452,9 +459,10 @@ export const streamingStore = {
 
 	/**
 	 * Marks streaming as complete.
+	 * Sets completed flag but keeps isStreaming true until reset.
 	 */
 	complete(): void {
-		store.update((s) => ({ ...s, isStreaming: false }));
+		store.update((s) => ({ ...s, completed: true }));
 	},
 
 	/**
@@ -553,6 +561,20 @@ export const streamError = derived(store, (s) => s.error);
  * Derived store: whether workflow was cancelled
  */
 export const isCancelled = derived(store, (s) => s.cancelled);
+
+/**
+ * Derived store: whether streaming has completed (but activities may not yet be captured)
+ */
+export const isCompleted = derived(store, (s) => s.completed);
+
+/**
+ * Derived store: whether activities should be shown from streaming store
+ * True when streaming is active OR when completed but not yet reset
+ */
+export const hasStreamingActivities = derived(
+	store,
+	(s) => s.isStreaming || (s.completed && (s.tools.length > 0 || s.reasoning.length > 0 || s.subAgents.length > 0))
+);
 
 /**
  * Derived store: total tokens received
