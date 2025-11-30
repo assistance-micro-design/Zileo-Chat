@@ -148,6 +148,206 @@ impl std::fmt::Display for ValidationStatus {
     }
 }
 
+// =====================================================
+// Validation Settings Types (Global Configuration)
+// =====================================================
+
+/// Timeout behavior when validation request expires
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeoutBehavior {
+    #[default]
+    Reject,
+    Approve,
+    AskAgain,
+}
+
+impl std::fmt::Display for TimeoutBehavior {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeoutBehavior::Reject => write!(f, "reject"),
+            TimeoutBehavior::Approve => write!(f, "approve"),
+            TimeoutBehavior::AskAgain => write!(f, "ask_again"),
+        }
+    }
+}
+
+/// Selective validation configuration - which operations require validation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectiveValidationConfig {
+    /// Validate internal tool execution
+    pub tools: bool,
+    /// Validate sub-agent spawn
+    pub sub_agents: bool,
+    /// Validate MCP server calls
+    pub mcp: bool,
+    /// Validate file write/delete operations
+    pub file_ops: bool,
+    /// Validate database write/delete operations
+    pub db_ops: bool,
+}
+
+impl Default for SelectiveValidationConfig {
+    fn default() -> Self {
+        Self {
+            tools: false,
+            sub_agents: true,
+            mcp: true,
+            file_ops: true,
+            db_ops: true,
+        }
+    }
+}
+
+/// Risk threshold configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RiskThresholdConfig {
+    /// Skip validation for low-risk operations
+    pub auto_approve_low: bool,
+    /// Always require validation for high-risk (even in Auto mode)
+    pub always_confirm_high: bool,
+}
+
+impl Default for RiskThresholdConfig {
+    fn default() -> Self {
+        Self {
+            auto_approve_low: true,
+            always_confirm_high: false,
+        }
+    }
+}
+
+/// Audit configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditConfig {
+    /// Enable validation decision logging
+    pub enable_logging: bool,
+    /// Log retention in days (7-90)
+    pub retention_days: i32,
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            enable_logging: true,
+            retention_days: 30,
+        }
+    }
+}
+
+/// Main validation settings configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationSettingsConfig {
+    /// Validation mode
+    pub mode: ValidationMode,
+    /// Selective config (used when mode = 'selective')
+    pub selective_config: SelectiveValidationConfig,
+    /// Risk threshold settings
+    pub risk_thresholds: RiskThresholdConfig,
+    /// Timeout in seconds (30-300)
+    pub timeout_seconds: i32,
+    /// Behavior when timeout expires
+    pub timeout_behavior: TimeoutBehavior,
+    /// Audit settings
+    pub audit: AuditConfig,
+}
+
+impl Default for ValidationSettingsConfig {
+    fn default() -> Self {
+        Self {
+            mode: ValidationMode::Selective,
+            selective_config: SelectiveValidationConfig::default(),
+            risk_thresholds: RiskThresholdConfig::default(),
+            timeout_seconds: 60,
+            timeout_behavior: TimeoutBehavior::default(),
+            audit: AuditConfig::default(),
+        }
+    }
+}
+
+/// Validation settings with metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationSettings {
+    /// Validation mode
+    pub mode: ValidationMode,
+    /// Selective config (used when mode = 'selective')
+    pub selective_config: SelectiveValidationConfig,
+    /// Risk threshold settings
+    pub risk_thresholds: RiskThresholdConfig,
+    /// Timeout in seconds (30-300)
+    pub timeout_seconds: i32,
+    /// Behavior when timeout expires
+    pub timeout_behavior: TimeoutBehavior,
+    /// Audit settings
+    pub audit: AuditConfig,
+    /// Last update timestamp
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Default for ValidationSettings {
+    fn default() -> Self {
+        Self {
+            mode: ValidationMode::Selective,
+            selective_config: SelectiveValidationConfig::default(),
+            risk_thresholds: RiskThresholdConfig::default(),
+            timeout_seconds: 60,
+            timeout_behavior: TimeoutBehavior::default(),
+            audit: AuditConfig::default(),
+            updated_at: Utc::now(),
+        }
+    }
+}
+
+/// Update request for partial updates (all fields optional)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateValidationSettingsRequest {
+    /// New validation mode
+    pub mode: Option<ValidationMode>,
+    /// Update selective config
+    pub selective_config: Option<PartialSelectiveConfig>,
+    /// Update risk thresholds
+    pub risk_thresholds: Option<PartialRiskThresholds>,
+    /// New timeout in seconds
+    pub timeout_seconds: Option<i32>,
+    /// New timeout behavior
+    pub timeout_behavior: Option<TimeoutBehavior>,
+    /// Update audit settings
+    pub audit: Option<PartialAuditConfig>,
+}
+
+/// Partial selective config for updates
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialSelectiveConfig {
+    pub tools: Option<bool>,
+    pub sub_agents: Option<bool>,
+    pub mcp: Option<bool>,
+    pub file_ops: Option<bool>,
+    pub db_ops: Option<bool>,
+}
+
+/// Partial risk thresholds for updates
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialRiskThresholds {
+    pub auto_approve_low: Option<bool>,
+    pub always_confirm_high: Option<bool>,
+}
+
+/// Partial audit config for updates
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialAuditConfig {
+    pub enable_logging: Option<bool>,
+    pub retention_days: Option<i32>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

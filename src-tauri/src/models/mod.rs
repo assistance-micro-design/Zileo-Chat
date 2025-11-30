@@ -34,8 +34,13 @@ pub use streaming::{StreamChunk, WorkflowComplete};
 // Re-export task types for Phase 2 Commands implementation (currently unused)
 #[allow(unused_imports)]
 pub use task::{Task, TaskCreate, TaskPriority, TaskStatus, TaskUpdate};
+// ValidationMode and TimeoutBehavior are used by frontend via UpdateValidationSettingsRequest
+#[allow(unused_imports)]
 pub use validation::{
-    RiskLevel, ValidationRequest, ValidationRequestCreate, ValidationStatus, ValidationType,
+    AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
+    RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior, UpdateValidationSettingsRequest,
+    ValidationMode, ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
+    ValidationType,
 };
 
 // Re-export types for future RAG/streaming phases (currently unused)
@@ -43,8 +48,6 @@ pub use validation::{
 pub use memory::MemoryWithEmbedding;
 #[allow(unused_imports)]
 pub use streaming::{ChunkType, CompletionStatus};
-#[allow(unused_imports)]
-pub use validation::ValidationMode;
 
 // Re-export MCP types for future phases (Phase 2: MCP Client, Phase 3: Commands)
 #[allow(unused_imports)]

@@ -23,7 +23,10 @@
 
 use crate::db::DBClient;
 use crate::models::streaming::{events, SubAgentOperationType, ValidationRequiredEvent};
-use crate::models::{RiskLevel, ValidationRequestCreate, ValidationStatus, ValidationType};
+use crate::models::{
+    RiskLevel, ValidationMode, ValidationRequestCreate, ValidationSettings, ValidationStatus,
+    ValidationType,
+};
 use crate::tools::ToolError;
 use serde_json::Value;
 use std::sync::Arc;
@@ -33,7 +36,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Default timeout for validation responses (60 seconds)
-const VALIDATION_TIMEOUT_SECS: u64 = 60;
+const DEFAULT_VALIDATION_TIMEOUT_SECS: u64 = 60;
 
 /// Polling interval for checking validation status (500ms)
 const VALIDATION_POLL_INTERVAL_MS: u64 = 500;
@@ -62,8 +65,90 @@ impl ValidationHelper {
         Self { db, app_handle }
     }
 
+    /// Loads validation settings from database.
+    /// Returns default settings if not configured.
+    async fn load_validation_settings(&self) -> ValidationSettings {
+        let query = "SELECT config FROM settings:`settings:validation`";
+        let results: Vec<Value> = match self.db.query(query).await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(error = %e, "No validation settings found, using defaults");
+                return ValidationSettings::default();
+            }
+        };
+
+        if let Some(first) = results.first() {
+            if let Some(config) = first.get("config") {
+                if !config.is_null() {
+                    if let Ok(settings) = serde_json::from_value::<ValidationSettings>(config.clone())
+                    {
+                        return settings;
+                    }
+                }
+            }
+        }
+
+        ValidationSettings::default()
+    }
+
+    /// Checks if validation is required based on settings.
+    fn needs_validation(
+        &self,
+        settings: &ValidationSettings,
+        operation_type: &SubAgentOperationType,
+        risk_level: &RiskLevel,
+    ) -> bool {
+        // Check mode first
+        match settings.mode {
+            ValidationMode::Auto => {
+                // In auto mode, only validate if always_confirm_high is set AND risk is high
+                if settings.risk_thresholds.always_confirm_high && *risk_level == RiskLevel::High {
+                    info!("Auto mode but high risk requires confirmation");
+                    return true;
+                }
+                info!("Auto mode: skipping validation");
+                return false;
+            }
+            ValidationMode::Manual => {
+                // Manual mode: always validate unless auto_approve_low is set AND risk is low
+                if settings.risk_thresholds.auto_approve_low && *risk_level == RiskLevel::Low {
+                    info!("Manual mode but auto-approving low risk operation");
+                    return false;
+                }
+                return true;
+            }
+            ValidationMode::Selective => {
+                // Selective mode: check operation type
+            }
+        }
+
+        // Selective mode: check if operation type requires validation
+        let type_requires_validation = match operation_type {
+            SubAgentOperationType::Spawn => settings.selective_config.sub_agents,
+            SubAgentOperationType::Delegate => settings.selective_config.sub_agents,
+            SubAgentOperationType::ParallelBatch => settings.selective_config.sub_agents,
+        };
+
+        if !type_requires_validation {
+            info!(
+                operation_type = %operation_type,
+                "Selective mode: operation type does not require validation"
+            );
+            return false;
+        }
+
+        // Check risk thresholds
+        if settings.risk_thresholds.auto_approve_low && *risk_level == RiskLevel::Low {
+            info!("Auto-approving low risk operation");
+            return false;
+        }
+
+        true
+    }
+
     /// Requests validation for a sub-agent operation.
     ///
+    /// First checks ValidationSettings to determine if validation is needed.
     /// Creates a validation request, emits event to frontend, and waits for response.
     ///
     /// # Arguments
@@ -74,7 +159,7 @@ impl ValidationHelper {
     /// * `risk_level` - Risk assessment for the operation
     ///
     /// # Returns
-    /// * `Ok(())` - If operation was approved
+    /// * `Ok(())` - If operation was approved (or validation was skipped)
     /// * `Err(ToolError::PermissionDenied)` - If operation was rejected
     /// * `Err(ToolError::Timeout)` - If validation timed out
     #[allow(clippy::too_many_arguments)]
@@ -86,6 +171,19 @@ impl ValidationHelper {
         details: Value,
         risk_level: RiskLevel,
     ) -> Result<(), ToolError> {
+        // 0. Load validation settings and check if validation is needed
+        let settings = self.load_validation_settings().await;
+
+        if !self.needs_validation(&settings, &operation_type, &risk_level) {
+            info!(
+                workflow_id = %workflow_id,
+                operation_type = %operation_type,
+                "Skipping validation based on settings (mode: {:?})",
+                settings.mode
+            );
+            return Ok(());
+        }
+
         // 1. Generate validation request ID
         let validation_id = Uuid::new_v4().to_string();
 
@@ -137,7 +235,7 @@ impl ValidationHelper {
 
         // 4. Wait for validation response (polling with timeout)
         let result = self
-            .wait_for_validation(&validation_id, Duration::from_secs(VALIDATION_TIMEOUT_SECS))
+            .wait_for_validation(&validation_id, Duration::from_secs(DEFAULT_VALIDATION_TIMEOUT_SECS))
             .await;
 
         // 5. Return result
@@ -372,6 +470,6 @@ mod tests {
 
     #[test]
     fn test_validation_timeout_default() {
-        assert_eq!(VALIDATION_TIMEOUT_SECS, 60);
+        assert_eq!(DEFAULT_VALIDATION_TIMEOUT_SECS, 60);
     }
 }

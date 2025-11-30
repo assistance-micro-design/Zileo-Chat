@@ -220,6 +220,10 @@ async fn main() -> anyhow::Result<()> {
             commands::validation::approve_validation,
             commands::validation::reject_validation,
             commands::validation::delete_validation,
+            // Validation settings commands (Phase 7A)
+            commands::validation::get_validation_settings,
+            commands::validation::update_validation_settings,
+            commands::validation::reset_validation_settings,
             // Memory commands (Phase 5)
             commands::memory::add_memory,
             commands::memory::list_memories,

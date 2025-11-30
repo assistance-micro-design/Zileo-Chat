@@ -8,7 +8,10 @@
 
 use crate::{
     models::{
-        RiskLevel, ValidationRequest, ValidationRequestCreate, ValidationStatus, ValidationType,
+        AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
+        RiskThresholdConfig, SelectiveValidationConfig, UpdateValidationSettingsRequest,
+        ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
+        ValidationType,
     },
     security::Validator,
     AppState,
@@ -266,6 +269,241 @@ pub async fn delete_validation(
         })?;
 
     info!("Validation request deleted successfully");
+    Ok(())
+}
+
+// =====================================================
+// Validation Settings Commands (Global Configuration)
+// =====================================================
+
+/// Gets the current validation settings.
+/// Returns default settings if none are configured.
+///
+/// # Returns
+/// The current validation settings with defaults applied if not configured
+#[tauri::command]
+#[instrument(name = "get_validation_settings", skip(state))]
+pub async fn get_validation_settings(
+    state: State<'_, AppState>,
+) -> Result<ValidationSettings, String> {
+    info!("Loading validation settings");
+
+    // Try to load existing settings from settings:validation record
+    let query = "SELECT config FROM settings:`settings:validation`";
+    let results: Vec<serde_json::Value> = state
+        .db
+        .query_json(query)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to query validation settings");
+            format!("Failed to query validation settings: {}", e)
+        })?;
+
+    // If we have a result with a config field, parse it
+    if let Some(first) = results.first() {
+        if let Some(config) = first.get("config") {
+            if !config.is_null() {
+                match serde_json::from_value::<ValidationSettings>(config.clone()) {
+                    Ok(settings) => {
+                        info!("Validation settings loaded successfully");
+                        return Ok(settings);
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to parse stored settings, using defaults");
+                    }
+                }
+            }
+        }
+    }
+
+    // Return defaults if not found or parsing failed
+    info!("No validation settings found, returning defaults");
+    Ok(ValidationSettings::default())
+}
+
+/// Updates validation settings with partial update support.
+/// Only provided fields will be updated.
+///
+/// # Arguments
+/// * `config` - The partial update request with fields to update
+///
+/// # Returns
+/// The updated validation settings
+#[tauri::command]
+#[instrument(name = "update_validation_settings", skip(state, config))]
+pub async fn update_validation_settings(
+    config: UpdateValidationSettingsRequest,
+    state: State<'_, AppState>,
+) -> Result<ValidationSettings, String> {
+    info!("Updating validation settings");
+
+    // Load current settings (or defaults)
+    let mut current = get_validation_settings_internal(&state).await?;
+
+    // Apply partial updates
+    if let Some(mode) = config.mode {
+        current.mode = mode;
+    }
+
+    if let Some(selective) = config.selective_config {
+        apply_selective_config(&mut current.selective_config, selective);
+    }
+
+    if let Some(risk) = config.risk_thresholds {
+        apply_risk_thresholds(&mut current.risk_thresholds, risk);
+    }
+
+    if let Some(timeout) = config.timeout_seconds {
+        // Validate range 30-300
+        if !(30..=300).contains(&timeout) {
+            warn!(timeout, "Invalid timeout value");
+            return Err("Timeout must be between 30 and 300 seconds".to_string());
+        }
+        current.timeout_seconds = timeout;
+    }
+
+    if let Some(behavior) = config.timeout_behavior {
+        current.timeout_behavior = behavior;
+    }
+
+    if let Some(audit) = config.audit {
+        apply_audit_config(&mut current.audit, audit)?;
+    }
+
+    // Update timestamp
+    current.updated_at = Utc::now();
+
+    // Save to database using UPSERT
+    // Follow the same pattern as embedding config (CONTENT with id field)
+    let json_config = serde_json::to_string(&current).map_err(|e| {
+        error!(error = %e, "Failed to serialize settings");
+        format!("Failed to serialize settings: {}", e)
+    })?;
+
+    let upsert_query = format!(
+        "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",
+        json_config
+    );
+
+    state
+        .db
+        .execute(&upsert_query)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to save validation settings");
+            format!("Failed to save validation settings: {}", e)
+        })?;
+
+    info!("Validation settings updated successfully");
+    Ok(current)
+}
+
+/// Resets validation settings to defaults.
+///
+/// # Returns
+/// The default validation settings
+#[tauri::command]
+#[instrument(name = "reset_validation_settings", skip(state))]
+pub async fn reset_validation_settings(
+    state: State<'_, AppState>,
+) -> Result<ValidationSettings, String> {
+    info!("Resetting validation settings to defaults");
+
+    let settings = ValidationSettings::default();
+
+    // Save defaults to database (follow embedding config pattern)
+    let json_config = serde_json::to_string(&settings).map_err(|e| {
+        error!(error = %e, "Failed to serialize default settings");
+        format!("Failed to serialize default settings: {}", e)
+    })?;
+
+    let upsert_query = format!(
+        "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",
+        json_config
+    );
+
+    state
+        .db
+        .execute(&upsert_query)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to save default settings");
+            format!("Failed to save default settings: {}", e)
+        })?;
+
+    info!("Validation settings reset to defaults successfully");
+    Ok(settings)
+}
+
+// =====================================================
+// Helper Functions
+// =====================================================
+
+/// Internal helper to get validation settings without State wrapper
+async fn get_validation_settings_internal(
+    state: &State<'_, AppState>,
+) -> Result<ValidationSettings, String> {
+    let query = "SELECT config FROM settings:`settings:validation`";
+    let results: Vec<serde_json::Value> = state
+        .db
+        .query_json(query)
+        .await
+        .map_err(|e| format!("Failed to query validation settings: {}", e))?;
+
+    if let Some(first) = results.first() {
+        if let Some(config) = first.get("config") {
+            if !config.is_null() {
+                if let Ok(settings) = serde_json::from_value::<ValidationSettings>(config.clone()) {
+                    return Ok(settings);
+                }
+            }
+        }
+    }
+
+    Ok(ValidationSettings::default())
+}
+
+/// Apply partial selective config updates
+fn apply_selective_config(current: &mut SelectiveValidationConfig, partial: PartialSelectiveConfig) {
+    if let Some(v) = partial.tools {
+        current.tools = v;
+    }
+    if let Some(v) = partial.sub_agents {
+        current.sub_agents = v;
+    }
+    if let Some(v) = partial.mcp {
+        current.mcp = v;
+    }
+    if let Some(v) = partial.file_ops {
+        current.file_ops = v;
+    }
+    if let Some(v) = partial.db_ops {
+        current.db_ops = v;
+    }
+}
+
+/// Apply partial risk thresholds updates
+fn apply_risk_thresholds(current: &mut RiskThresholdConfig, partial: PartialRiskThresholds) {
+    if let Some(v) = partial.auto_approve_low {
+        current.auto_approve_low = v;
+    }
+    if let Some(v) = partial.always_confirm_high {
+        current.always_confirm_high = v;
+    }
+}
+
+/// Apply partial audit config updates with validation
+fn apply_audit_config(current: &mut AuditConfig, partial: PartialAuditConfig) -> Result<(), String> {
+    if let Some(v) = partial.enable_logging {
+        current.enable_logging = v;
+    }
+    if let Some(v) = partial.retention_days {
+        // Validate range 7-90
+        if !(7..=90).contains(&v) {
+            return Err("Retention must be between 7 and 90 days".to_string());
+        }
+        current.retention_days = v;
+    }
     Ok(())
 }
 

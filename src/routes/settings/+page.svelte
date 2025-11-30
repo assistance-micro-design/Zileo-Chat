@@ -25,6 +25,7 @@ Includes MCP server configuration section for managing external tool servers.
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
 	import { AgentSettings } from '$lib/components/settings/agents';
+	import { ValidationSettings } from '$lib/components/settings/validation';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -120,6 +121,7 @@ Includes MCP server configuration section for managing external tool servers.
 		{ id: 'agents', label: 'Agents', icon: Bot },
 		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
 		{ id: 'memory', label: 'Memory', icon: Brain },
+		{ id: 'validation', label: 'Validation', icon: ShieldCheck },
 		{ id: 'theme', label: 'Theme', icon: Palette }
 	] as const;
 
@@ -846,6 +848,15 @@ Includes MCP server configuration section for managing external tool servers.
 					<MemoryList />
 				</div>
 			</div>
+		</section>
+
+		<!-- Validation Section -->
+		<section id="validation" class="settings-section">
+			<h2 class="section-title">Validation</h2>
+			<p class="section-description">
+				Configure when and how human-in-the-loop validation is triggered during workflow execution.
+			</p>
+			<ValidationSettings />
 		</section>
 
 		<!-- Theme Section -->
