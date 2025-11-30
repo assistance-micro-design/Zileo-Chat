@@ -618,14 +618,6 @@ impl MCPManager {
             .filter_map(|v| {
                 let server_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
 
-                // Log raw env value for debugging
-                let env_raw = v.get("env");
-                info!(
-                    server_id = %server_id,
-                    env_raw = ?env_raw,
-                    "Raw env field from database"
-                );
-
                 // Convert command string back to enum
                 let command_str = v.get("command")?.as_str()?;
                 let command = match command_str {
