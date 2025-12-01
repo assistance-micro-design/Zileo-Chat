@@ -19,13 +19,9 @@
 <script lang="ts">
 	import type { TokenDisplayData } from '$types/workflow';
 	import {
-		Hash,
-		DollarSign,
-		Zap,
 		AlertTriangle,
 		Gauge,
 		ArrowDownToLine,
-		ArrowUpFromLine,
 		TrendingUp,
 		CircleDollarSign,
 		Activity
