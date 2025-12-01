@@ -58,7 +58,9 @@
 		context_window: model?.context_window ?? 32000,
 		max_output_tokens: model?.max_output_tokens ?? 4096,
 		temperature_default: model?.temperature_default ?? 0.7,
-		is_reasoning: model?.is_reasoning ?? false
+		is_reasoning: model?.is_reasoning ?? false,
+		input_price_per_mtok: model?.input_price_per_mtok ?? 0,
+		output_price_per_mtok: model?.output_price_per_mtok ?? 0
 	});
 
 	/** Validation errors state */
@@ -114,6 +116,19 @@
 			newErrors.temperature_default = 'Maximum is 2';
 		}
 
+		// Pricing validation
+		if (formData.input_price_per_mtok < 0) {
+			newErrors.input_price_per_mtok = 'Price cannot be negative';
+		} else if (formData.input_price_per_mtok > 1000) {
+			newErrors.input_price_per_mtok = 'Maximum is $1000/M tokens';
+		}
+
+		if (formData.output_price_per_mtok < 0) {
+			newErrors.output_price_per_mtok = 'Price cannot be negative';
+		} else if (formData.output_price_per_mtok > 1000) {
+			newErrors.output_price_per_mtok = 'Maximum is $1000/M tokens';
+		}
+
 		errors = newErrors;
 		return Object.keys(newErrors).length === 0;
 	}
@@ -137,7 +152,9 @@
 				context_window: formData.context_window,
 				max_output_tokens: formData.max_output_tokens,
 				temperature_default: formData.temperature_default,
-				is_reasoning: formData.is_reasoning
+				is_reasoning: formData.is_reasoning,
+				input_price_per_mtok: formData.input_price_per_mtok,
+				output_price_per_mtok: formData.output_price_per_mtok
 			};
 			onsubmit(createData);
 		} else {
@@ -162,6 +179,12 @@
 			if (model && formData.is_reasoning !== model.is_reasoning) {
 				updateData.is_reasoning = formData.is_reasoning;
 			}
+			if (model && formData.input_price_per_mtok !== model.input_price_per_mtok) {
+				updateData.input_price_per_mtok = formData.input_price_per_mtok;
+			}
+			if (model && formData.output_price_per_mtok !== model.output_price_per_mtok) {
+				updateData.output_price_per_mtok = formData.output_price_per_mtok;
+			}
 
 			onsubmit(updateData);
 		}
@@ -178,12 +201,12 @@
 	 * Handles number input change with proper conversion
 	 */
 	function handleNumberInput(
-		field: 'context_window' | 'max_output_tokens' | 'temperature_default',
+		field: 'context_window' | 'max_output_tokens' | 'temperature_default' | 'input_price_per_mtok' | 'output_price_per_mtok',
 		event: Event & { currentTarget: HTMLInputElement }
 	): void {
 		const value = parseFloat(event.currentTarget.value);
 		if (!isNaN(value)) {
-			if (field === 'temperature_default') {
+			if (field === 'temperature_default' || field === 'input_price_per_mtok' || field === 'output_price_per_mtok') {
 				formData[field] = value;
 			} else {
 				formData[field] = Math.floor(value);
@@ -288,6 +311,55 @@
 	{#if touched && errors.temperature_default}
 		<span class="error-text">{errors.temperature_default}</span>
 	{/if}
+
+	<!-- Pricing Section -->
+	<div class="pricing-section">
+		<div class="pricing-header">
+			<h4 class="pricing-title">Pricing (USD per million tokens)</h4>
+			<p class="pricing-help">
+				Enter your provider's pricing for cost tracking.
+				<a href="https://mistral.ai/technology/#pricing" target="_blank" rel="noopener noreferrer">
+					View Mistral pricing
+				</a>
+			</p>
+		</div>
+
+		<div class="form-row">
+			<div class="form-field">
+				<Input
+					label="Input Price"
+					type="number"
+					value={formData.input_price_per_mtok.toString()}
+					oninput={(e) => handleNumberInput('input_price_per_mtok', e)}
+					step="0.01"
+					min="0"
+					max="1000"
+					help="$/M input tokens"
+					disabled={saving}
+				/>
+				{#if touched && errors.input_price_per_mtok}
+					<span class="error-text">{errors.input_price_per_mtok}</span>
+				{/if}
+			</div>
+
+			<div class="form-field">
+				<Input
+					label="Output Price"
+					type="number"
+					value={formData.output_price_per_mtok.toString()}
+					oninput={(e) => handleNumberInput('output_price_per_mtok', e)}
+					step="0.01"
+					min="0"
+					max="1000"
+					help="$/M output tokens"
+					disabled={saving}
+				/>
+				{#if touched && errors.output_price_per_mtok}
+					<span class="error-text">{errors.output_price_per_mtok}</span>
+				{/if}
+			</div>
+		</div>
+	</div>
 
 	<div class="checkbox-field">
 		<label class="checkbox-label">
@@ -396,6 +468,45 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 		padding-left: calc(18px + var(--spacing-sm));
+	}
+
+	/* Pricing Section */
+	.pricing-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border-radius: var(--border-radius-md);
+		border: 1px solid var(--color-border-light);
+	}
+
+	.pricing-header {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.pricing-title {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.pricing-help {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+	}
+
+	.pricing-help a {
+		color: var(--color-accent);
+		text-decoration: none;
+	}
+
+	.pricing-help a:hover {
+		text-decoration: underline;
 	}
 
 	/* Responsive: stack form row on small screens */

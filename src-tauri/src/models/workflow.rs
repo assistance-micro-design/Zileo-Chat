@@ -38,6 +38,18 @@ pub struct Workflow {
     /// Completion timestamp (if completed)
     #[serde(default)]
     pub completed_at: Option<DateTime<Utc>>,
+    /// Cumulative input tokens for this workflow
+    #[serde(default)]
+    pub total_tokens_input: u64,
+    /// Cumulative output tokens for this workflow
+    #[serde(default)]
+    pub total_tokens_output: u64,
+    /// Cumulative cost for this workflow (USD)
+    #[serde(default)]
+    pub total_cost_usd: f64,
+    /// Model ID used (for context_window lookup)
+    #[serde(default)]
+    pub model_id: Option<String>,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -193,6 +205,10 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             completed_at: None,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_cost_usd: 0.0,
+            model_id: None,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
@@ -201,6 +217,8 @@ mod tests {
         assert_eq!(deserialized.id, workflow.id);
         assert_eq!(deserialized.name, workflow.name);
         assert_eq!(deserialized.agent_id, workflow.agent_id);
+        assert_eq!(deserialized.total_tokens_input, 0);
+        assert_eq!(deserialized.total_tokens_output, 0);
     }
 
     #[test]

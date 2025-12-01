@@ -30,7 +30,10 @@ describe('Workflow Store', () => {
 		agent_id: 'test_agent',
 		status: 'idle',
 		created_at: new Date(),
-		updated_at: new Date()
+		updated_at: new Date(),
+		total_tokens_input: 0,
+		total_tokens_output: 0,
+		total_cost_usd: 0
 	});
 
 	const createMockResult = (): WorkflowResult => ({

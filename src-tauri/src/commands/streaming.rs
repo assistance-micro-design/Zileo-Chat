@@ -8,7 +8,9 @@
 
 use crate::{
     agents::core::agent::Task,
+    llm::pricing::calculate_cost,
     models::{
+        llm_models::LLMModel,
         streaming::events, Message, StreamChunk, ThinkingStepCreate, ToolExecutionCreate, Workflow,
         WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
@@ -372,6 +374,107 @@ pub async fn execute_workflow_streaming(
         }
     };
 
+    // Load model to get pricing info for cost calculation
+    // Note: model is the api_name (e.g. "mistral-large-latest"), not the UUID
+    // We need to search by api_name + provider to find the correct model
+    let (input_price, output_price, model_id) = {
+        // Convert provider string to lowercase for matching (DB stores lowercase)
+        let provider_lower = provider.to_lowercase();
+        let model_query = format!(
+            "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             created_at, updated_at \
+             FROM llm_model WHERE api_name = '{}' AND provider = '{}'",
+            model, provider_lower
+        );
+
+        match state.db.db.query(&model_query).await {
+            Ok(mut response) => {
+                let models: Result<Vec<LLMModel>, _> = response.take(0);
+                match models {
+                    Ok(mut m) if !m.is_empty() => {
+                        let loaded_model = m.remove(0);
+                        info!(
+                            model_api_name = %model,
+                            model_id = %loaded_model.id,
+                            input_price = loaded_model.input_price_per_mtok,
+                            output_price = loaded_model.output_price_per_mtok,
+                            "Loaded model for pricing"
+                        );
+                        (
+                            loaded_model.input_price_per_mtok,
+                            loaded_model.output_price_per_mtok,
+                            loaded_model.id,
+                        )
+                    }
+                    _ => {
+                        warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
+                        (0.0, 0.0, model.clone())
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to load model for pricing, using defaults");
+                (0.0, 0.0, model.clone())
+            }
+        }
+    };
+
+    // Calculate cost using model pricing
+    let cost_usd = calculate_cost(
+        report.metrics.tokens_input,
+        report.metrics.tokens_output,
+        input_price,
+        output_price,
+    );
+
+    info!(
+        tokens_input = report.metrics.tokens_input,
+        tokens_output = report.metrics.tokens_output,
+        input_price = input_price,
+        output_price = output_price,
+        cost_usd = cost_usd,
+        "Calculated token cost"
+    );
+
+    // Update workflow with cumulative tokens, cost, and model_id (real UUID)
+    // Use IF/THEN/ELSE for robust null handling in SurrealDB
+    // Use explicit float formatting to avoid scientific notation (e.g., 1.6e-5)
+    let update_query = format!(
+        "UPDATE workflow:`{}` SET \
+            total_tokens_input = IF total_tokens_input IS NOT NONE THEN total_tokens_input + {} ELSE {} END, \
+            total_tokens_output = IF total_tokens_output IS NOT NONE THEN total_tokens_output + {} ELSE {} END, \
+            total_cost_usd = IF total_cost_usd IS NOT NONE THEN total_cost_usd + {:.10} ELSE {:.10} END, \
+            model_id = '{}', \
+            updated_at = time::now()",
+        validated_workflow_id,
+        report.metrics.tokens_input,
+        report.metrics.tokens_input,
+        report.metrics.tokens_output,
+        report.metrics.tokens_output,
+        cost_usd,
+        cost_usd,
+        model_id  // Use real model UUID, not api_name
+    );
+
+    // Log the query for debugging
+    info!(query = %update_query, "Executing workflow token update");
+
+    if let Err(e) = state.db.db.query(&update_query).await {
+        error!(error = %e, query = %update_query, "Failed to update workflow cumulative tokens");
+    } else {
+        info!(
+            workflow_id = %validated_workflow_id,
+            tokens_input = report.metrics.tokens_input,
+            tokens_output = report.metrics.tokens_output,
+            cost_usd = cost_usd,
+            model_id = %model_id,
+            "Updated workflow cumulative tokens"
+        );
+    }
+
     // Convert tool executions to IPC-friendly format
     let tool_executions: Vec<WorkflowToolExecution> = report
         .metrics
@@ -428,15 +531,14 @@ pub async fn execute_workflow_streaming(
         "Persisted tool executions and thinking steps to database"
     );
 
-    // Build result
-    // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
+    // Build result with calculated cost
     let result = WorkflowResult {
         report: report.content,
         metrics: WorkflowMetrics {
             duration_ms: report.metrics.duration_ms,
             tokens_input: report.metrics.tokens_input,
             tokens_output: report.metrics.tokens_output,
-            cost_usd: 0.0,
+            cost_usd,
             provider,
             model,
         },

@@ -28,6 +28,14 @@ export interface Workflow {
   updated_at: Date;
   /** Completion timestamp (if completed) */
   completed_at?: Date;
+  /** Cumulative input tokens for this workflow */
+  total_tokens_input: number;
+  /** Cumulative output tokens for this workflow */
+  total_tokens_output: number;
+  /** Cumulative cost for this workflow (USD) */
+  total_cost_usd: number;
+  /** Model ID used (for context_window lookup) */
+  model_id?: string;
 }
 
 /**
@@ -84,4 +92,31 @@ export interface WorkflowFullState {
   tool_executions: ToolExecution[];
   /** Thinking/reasoning steps */
   thinking_steps: ThinkingStep[];
+}
+
+/**
+ * Token display data for real-time monitoring.
+ *
+ * Used by the TokenDisplay component to show context usage,
+ * token counts, cost estimation, and generation speed.
+ */
+export interface TokenDisplayData {
+  /** Input tokens for current message/streaming */
+  tokens_input: number;
+  /** Output tokens for current message/streaming */
+  tokens_output: number;
+  /** Cumulative input tokens for workflow */
+  cumulative_input: number;
+  /** Cumulative output tokens for workflow */
+  cumulative_output: number;
+  /** Context window maximum from model */
+  context_max: number;
+  /** Estimated cost for current message (USD) */
+  cost_usd: number;
+  /** Cumulative cost for workflow (USD) */
+  cumulative_cost_usd: number;
+  /** Token generation speed (tokens/second) - only during streaming */
+  speed_tks?: number;
+  /** Whether currently streaming */
+  is_streaming: boolean;
 }

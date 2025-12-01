@@ -112,16 +112,23 @@ pub async fn list_models(
     );
 
     // Build query based on filter
+    // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
     let query = if let Some(ref pt) = provider_filter {
         format!(
             "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
+             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             created_at, updated_at \
              FROM llm_model WHERE provider = '{}'",
             pt
         )
     } else {
         "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
+         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+         created_at, updated_at \
          FROM llm_model"
             .to_string()
     };
@@ -169,9 +176,13 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
     info!("Getting model");
 
     // Query by record ID directly (llm_model:uuid)
+    // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
     let query = format!(
         "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, is_reasoning, created_at, updated_at \
+         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+         created_at, updated_at \
          FROM llm_model:`{}`",
         id
     );
@@ -194,6 +205,68 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
     result.pop().ok_or_else(|| {
         warn!(model_id = %id, "Model not found");
         format!("Model not found: {}", id)
+    })
+}
+
+/// Gets a single model by api_name and provider.
+///
+/// This is used when the model ID is not known, but the api_name
+/// (e.g., "mistral-large-latest") and provider are available.
+///
+/// # Arguments
+///
+/// * `api_name` - The model API name (e.g., "mistral-large-latest")
+/// * `provider` - The provider name (e.g., "mistral", "ollama")
+///
+/// # Returns
+///
+/// The [`LLMModel`] matching the api_name and provider.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The model is not found
+/// - Database query fails
+#[tauri::command]
+#[instrument(name = "get_model_by_api_name", skip(state), fields(api_name = %api_name, provider = %provider))]
+pub async fn get_model_by_api_name(
+    api_name: String,
+    provider: String,
+    state: State<'_, AppState>,
+) -> Result<LLMModel, String> {
+    info!("Getting model by api_name");
+
+    // Convert provider to lowercase for matching (DB stores lowercase)
+    let provider_lower = provider.to_lowercase();
+
+    let query = format!(
+        "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+         created_at, updated_at \
+         FROM llm_model WHERE api_name = '{}' AND provider = '{}'",
+        api_name, provider_lower
+    );
+
+    let mut result: Vec<LLMModel> = state
+        .db
+        .db
+        .query(&query)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to query model by api_name");
+            format!("Database error: {}", e)
+        })?
+        .take(0)
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize model");
+            format!("Failed to deserialize model: {}", e)
+        })?;
+
+    result.pop().ok_or_else(|| {
+        warn!(api_name = %api_name, provider = %provider, "Model not found");
+        format!("Model not found: {} (provider: {})", api_name, provider)
     })
 }
 
@@ -276,6 +349,8 @@ pub async fn create_model(
             temperature_default: {}, \
             is_builtin: false, \
             is_reasoning: {}, \
+            input_price_per_mtok: {}, \
+            output_price_per_mtok: {}, \
             created_at: time::now(), \
             updated_at: time::now() \
         }}",
@@ -287,7 +362,9 @@ pub async fn create_model(
         model.context_window,
         model.max_output_tokens,
         model.temperature_default,
-        model.is_reasoning
+        model.is_reasoning,
+        model.input_price_per_mtok,
+        model.output_price_per_mtok
     );
 
     state.db.execute(&insert_query).await.map_err(|e| {
@@ -308,6 +385,8 @@ pub async fn create_model(
         temperature_default: model.temperature_default,
         is_builtin: false,
         is_reasoning: model.is_reasoning,
+        input_price_per_mtok: model.input_price_per_mtok,
+        output_price_per_mtok: model.output_price_per_mtok,
         created_at: now,
         updated_at: now,
     })
@@ -399,6 +478,12 @@ pub async fn update_model(
     }
     if let Some(is_reasoning) = data.is_reasoning {
         set_parts.push(format!("is_reasoning = {}", is_reasoning));
+    }
+    if let Some(input_price) = data.input_price_per_mtok {
+        set_parts.push(format!("input_price_per_mtok = {}", input_price));
+    }
+    if let Some(output_price) = data.output_price_per_mtok {
+        set_parts.push(format!("output_price_per_mtok = {}", output_price));
     }
 
     let update_query = format!("UPDATE llm_model:`{}` SET {}", id, set_parts.join(", "));
@@ -798,6 +883,9 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
                     max_output_tokens: {}, \
                     temperature_default: {}, \
                     is_builtin: true, \
+                    is_reasoning: {}, \
+                    input_price_per_mtok: {}, \
+                    output_price_per_mtok: {}, \
                     created_at: time::now(), \
                     updated_at: time::now() \
                 }}",
@@ -808,7 +896,10 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
                 model.api_name.replace('\'', "''"),
                 model.context_window,
                 model.max_output_tokens,
-                model.temperature_default
+                model.temperature_default,
+                model.is_reasoning,
+                model.input_price_per_mtok,
+                model.output_price_per_mtok
             );
 
             state.db.execute(&insert_query).await.map_err(|e| {

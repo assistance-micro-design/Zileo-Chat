@@ -6,6 +6,7 @@ DEFINE DATABASE chat;
 USE DB chat;
 
 -- Table: workflow
+-- Extended with cumulative token tracking for Token Display Complet
 DEFINE TABLE workflow SCHEMAFULL;
 DEFINE FIELD id ON workflow TYPE string;
 DEFINE FIELD name ON workflow TYPE string;
@@ -14,6 +15,11 @@ DEFINE FIELD status ON workflow TYPE string ASSERT $value IN ['idle', 'running',
 DEFINE FIELD created_at ON workflow TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON workflow TYPE datetime DEFAULT time::now();
 DEFINE FIELD completed_at ON workflow TYPE option<datetime>;
+-- Cumulative token tracking (Token Display Complet feature)
+DEFINE FIELD total_tokens_input ON workflow TYPE int DEFAULT 0;
+DEFINE FIELD total_tokens_output ON workflow TYPE int DEFAULT 0;
+DEFINE FIELD total_cost_usd ON workflow TYPE float DEFAULT 0.0;
+DEFINE FIELD model_id ON workflow TYPE option<string>;
 
 -- Table: agent_state
 DEFINE TABLE agent_state SCHEMAFULL;
@@ -150,6 +156,13 @@ DEFINE FIELD temperature_default ON llm_model TYPE float
     DEFAULT 0.7;
 DEFINE FIELD is_builtin ON llm_model TYPE bool DEFAULT false;
 DEFINE FIELD is_reasoning ON llm_model TYPE bool DEFAULT false;
+-- Pricing per million tokens (USD) - user configurable
+DEFINE FIELD input_price_per_mtok ON llm_model TYPE float
+    ASSERT $value >= 0.0 AND $value <= 1000.0
+    DEFAULT 0.0;
+DEFINE FIELD output_price_per_mtok ON llm_model TYPE float
+    ASSERT $value >= 0.0 AND $value <= 1000.0
+    DEFAULT 0.0;
 DEFINE FIELD created_at ON llm_model TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON llm_model TYPE datetime DEFAULT time::now();
 

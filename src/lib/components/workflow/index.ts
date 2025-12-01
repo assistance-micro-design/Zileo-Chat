@@ -19,3 +19,4 @@ export { default as ReasoningPanel } from './ReasoningPanel.svelte';
 export { default as SubAgentActivity } from './SubAgentActivity.svelte';
 export { default as ActivityItem } from './ActivityItem.svelte';
 export { default as ActivityFeed } from './ActivityFeed.svelte';
+export { default as TokenDisplay } from './TokenDisplay.svelte';

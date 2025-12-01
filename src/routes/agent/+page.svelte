@@ -3,7 +3,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 Agent Page - Refactored with Design System Components
-Uses: Sidebar, WorkflowList, ChatInput, MessageList, MetricsBar, AgentSelector
+Uses: Sidebar, WorkflowList, ChatInput, MessageList, TokenDisplay, AgentSelector
 Agents are loaded from the centralized agentStore (Phase 4 integration).
 Messages are now persisted to SurrealDB (Phase 6 - Message Persistence).
 Streaming integration for real-time response display (Phase 2).
@@ -12,13 +12,14 @@ Streaming integration for real-time response display (Phase 2).
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import { onDestroy, onMount } from 'svelte';
-	import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
+	import type { Workflow, WorkflowResult, WorkflowFullState, TokenDisplayData } from '$types/workflow';
 	import type { Message } from '$types/message';
 	import type { AgentSummary, AgentConfig } from '$types/agent';
 	import type { ToolExecution, WorkflowToolExecution } from '$types/tool';
+	import type { LLMModel } from '$types/llm';
 	import { Sidebar, RightSidebar } from '$lib/components/layout';
 	import { Button, Spinner } from '$lib/components/ui';
-	import { WorkflowList, MetricsBar, AgentSelector, NewWorkflowModal, ConfirmDeleteModal, ActivityFeed } from '$lib/components/workflow';
+	import { WorkflowList, AgentSelector, NewWorkflowModal, ConfirmDeleteModal, ActivityFeed, TokenDisplay } from '$lib/components/workflow';
 	import { MessageList, ChatInput, MessageListSkeleton } from '$lib/components/chat';
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
@@ -33,7 +34,8 @@ Streaming integration for real-time response display (Phase 2).
 		activeTools,
 		reasoningSteps,
 		activeSubAgents,
-		hasStreamingActivities
+		hasStreamingActivities,
+		tokensReceived
 	} from '$lib/stores/streaming';
 	import {
 		validationStore,
@@ -60,6 +62,17 @@ Streaming integration for real-time response display (Phase 2).
 
 	/** Current agent's max tool iterations limit (1-200, default: 50) */
 	let currentMaxIterations = $state<number>(50);
+
+	/** Current model's context window (for TokenDisplay) */
+	let currentContextWindow = $state<number>(128000);
+
+	/** Current model's pricing (USD per million tokens) */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Stored for future input cost estimation
+	let currentInputPrice = $state<number>(0);
+	let currentOutputPrice = $state<number>(0);
+
+	/** Streaming start time for speed calculation */
+	let streamingStartTime = $state<number>(0);
 
 	/** Messages state - persisted to backend */
 	let messages = $state<Message[]>([]);
@@ -138,6 +151,48 @@ Streaming integration for real-time response display (Phase 2).
 	 */
 	const currentWorkflow = $derived(() => {
 		return workflows.find((w) => w.id === selectedWorkflowId);
+	});
+
+	/**
+	 * Calculate cumulative tokens from messages and current workflow
+	 */
+	const cumulativeTokens = $derived(() => {
+		const workflow = currentWorkflow();
+		if (workflow) {
+			return {
+				input: workflow.total_tokens_input ?? 0,
+				output: workflow.total_tokens_output ?? 0,
+				cost: workflow.total_cost_usd ?? 0
+			};
+		}
+		return { input: 0, output: 0, cost: 0 };
+	});
+
+	/**
+	 * Token display data for TokenDisplay component
+	 */
+	const tokenDisplayData = $derived.by<TokenDisplayData>(() => {
+		const elapsed = streamingStartTime > 0 ? (Date.now() - streamingStartTime) / 1000 : 0;
+		const speed = elapsed > 0 ? $tokensReceived / elapsed : undefined;
+		const cumulative = cumulativeTokens();
+
+		// Estimate cost during streaming using model pricing
+		// Formula: (output_tokens * output_price) / 1_000_000
+		const estimatedCost = $isStreamingStore
+			? ($tokensReceived * currentOutputPrice) / 1_000_000
+			: 0;
+
+		return {
+			tokens_input: result?.metrics.tokens_input ?? 0,
+			tokens_output: result?.metrics.tokens_output ?? $tokensReceived,
+			cumulative_input: cumulative.input,
+			cumulative_output: cumulative.output,
+			context_max: currentContextWindow,
+			cost_usd: result?.metrics.cost_usd ?? estimatedCost,
+			cumulative_cost_usd: cumulative.cost,
+			speed_tks: $isStreamingStore ? speed : undefined,
+			is_streaming: $isStreamingStore
+		};
 	});
 
 	/**
@@ -333,13 +388,15 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles workflow selection - loads persisted messages, tool executions and thinking steps
+	 * Handles workflow selection - loads persisted messages, tool executions and thinking steps.
+	 * Also loads the model's context_window if the workflow has a model_id.
 	 */
 	async function handleWorkflowSelect(workflow: Workflow): Promise<void> {
 		selectedWorkflowId = workflow.id;
 		result = null;
 		currentToolExecutions = [];
 		historicalActivities = []; // Clear before loading
+
 		// Load persisted data from backend in parallel
 		await Promise.all([
 			loadMessages(workflow.id),
@@ -347,12 +404,34 @@ Streaming integration for real-time response display (Phase 2).
 			loadThinkingSteps(workflow.id),
 			loadSubAgentExecutions(workflow.id)
 		]);
+
 		// Convert loaded tool executions, thinking steps, and sub-agent executions to activities for display
 		historicalActivities = mergeActivities(
 			convertToolExecutions(toolExecutions),
 			convertThinkingSteps(thinkingSteps),
 			convertSubAgentExecutions(subAgentExecutions)
 		);
+
+		// Load context_window from workflow's model_id (if available)
+		if (workflow.model_id) {
+			try {
+				const model = await invoke<LLMModel>('get_model', { id: workflow.model_id });
+				currentContextWindow = model.context_window;
+				currentInputPrice = model.input_price_per_mtok;
+				currentOutputPrice = model.output_price_per_mtok;
+			} catch {
+				// Model not found, keep existing context_window
+				console.warn(`Model ${workflow.model_id} not found, using current context_window`);
+			}
+		}
+
+		// Auto-select the agent associated with this workflow
+		if (workflow.agent_id && workflow.agent_id !== selectedAgentId) {
+			const agentExists = agentList.some(a => a.id === workflow.agent_id);
+			if (agentExists) {
+				await handleAgentSelect(workflow.agent_id);
+			}
+		}
 	}
 
 	/**
@@ -421,16 +500,37 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
-	 * Handles agent selection - loads agent config to get max_tool_iterations
+	 * Handles agent selection - loads agent config to get max_tool_iterations and model config
+	 * Model config includes context_window and pricing for TokenDisplay
 	 */
 	async function handleAgentSelect(agentId: string): Promise<void> {
 		selectedAgentId = agentId;
 		try {
 			const config = await invoke<AgentConfig>('get_agent_config', { agentId });
 			currentMaxIterations = config.max_tool_iterations;
+
+			// Load full model to get context_window and pricing for TokenDisplay
+			// Note: config.llm.model is the api_name (e.g. "mistral-large-latest"), not the UUID
+			try {
+				const model = await invoke<LLMModel>('get_model_by_api_name', {
+					apiName: config.llm.model,
+					provider: config.llm.provider
+				});
+				currentContextWindow = model.context_window;
+				currentInputPrice = model.input_price_per_mtok;
+				currentOutputPrice = model.output_price_per_mtok;
+			} catch {
+				// Fallback to defaults if model not found
+				currentContextWindow = 128000;
+				currentInputPrice = 0;
+				currentOutputPrice = 0;
+			}
 		} catch (err) {
 			console.error('Failed to load agent config:', err);
 			currentMaxIterations = 50; // Default fallback
+			currentContextWindow = 128000;
+			currentInputPrice = 0;
+			currentOutputPrice = 0;
 		}
 	}
 
@@ -479,6 +579,7 @@ Streaming integration for real-time response display (Phase 2).
 
 			// 3. Start streaming and setup event listeners
 			await streamingStore.start(selectedWorkflowId);
+			streamingStartTime = Date.now();
 
 			// 5. Execute workflow with streaming
 			result = await invoke<WorkflowResult>('execute_workflow_streaming', {
@@ -531,9 +632,14 @@ Streaming integration for real-time response display (Phase 2).
 
 			// 10. Cleanup streaming state
 			await streamingStore.reset();
+			streamingStartTime = 0;
+
+			// 11. Refresh workflows to get updated cumulative token metrics
+			await loadWorkflows();
 		} catch (err) {
 			// Cleanup streaming on error
 			await streamingStore.reset();
+			streamingStartTime = 0;
 
 			// Save error as system message
 			const errorContent = `Error: ${err}`;
@@ -864,10 +970,10 @@ Streaming integration for real-time response display (Phase 2).
 				/>
 			{/if}
 
-			<!-- Metrics Bar -->
-			{#if result}
-				<MetricsBar metrics={result.metrics} />
-			{/if}
+			<!-- Token Display (always visible when workflow selected) -->
+			<div class="token-display-container">
+				<TokenDisplay data={tokenDisplayData} compact={false} />
+			</div>
 		{:else}
 			<!-- Empty State -->
 			<div class="empty-state">
@@ -1306,6 +1412,12 @@ Streaming integration for real-time response display (Phase 2).
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
 		margin: 0;
+	}
+
+	/* Token Display Container */
+	.token-display-container {
+		padding: 0 var(--spacing-md);
+		margin-bottom: var(--spacing-sm);
 	}
 
 	/* Chat Input Wrapper (with cancel button) */

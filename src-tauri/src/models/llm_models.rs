@@ -90,6 +90,12 @@ pub struct LLMModel {
     /// Whether this is a reasoning/thinking model (enables thinking output)
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Price per million input tokens (USD) - user configurable
+    #[serde(default)]
+    pub input_price_per_mtok: f64,
+    /// Price per million output tokens (USD) - user configurable
+    #[serde(default)]
+    pub output_price_per_mtok: f64,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Last update timestamp
@@ -131,6 +137,8 @@ impl LLMModel {
             temperature_default: request.temperature_default,
             is_builtin: false,
             is_reasoning: request.is_reasoning,
+            input_price_per_mtok: request.input_price_per_mtok,
+            output_price_per_mtok: request.output_price_per_mtok,
             created_at: now,
             updated_at: now,
         }
@@ -151,6 +159,8 @@ impl LLMModel {
             temperature_default: 0.7,
             is_builtin: true,
             is_reasoning: params.is_reasoning,
+            input_price_per_mtok: 0.0,
+            output_price_per_mtok: 0.0,
             created_at: now,
             updated_at: now,
         }
@@ -184,6 +194,12 @@ pub struct CreateModelRequest {
     /// Whether this is a reasoning/thinking model (defaults to false)
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Price per million input tokens (USD, defaults to 0.0)
+    #[serde(default)]
+    pub input_price_per_mtok: f64,
+    /// Price per million output tokens (USD, defaults to 0.0)
+    #[serde(default)]
+    pub output_price_per_mtok: f64,
 }
 
 /// Default temperature value for new models.
@@ -235,6 +251,14 @@ impl CreateModelRequest {
             return Err("Temperature must be between 0.0 and 2.0".into());
         }
 
+        // Pricing validation
+        if self.input_price_per_mtok < 0.0 || self.input_price_per_mtok > 1000.0 {
+            return Err("Input price must be between 0 and 1000 USD per million tokens".into());
+        }
+        if self.output_price_per_mtok < 0.0 || self.output_price_per_mtok > 1000.0 {
+            return Err("Output price must be between 0 and 1000 USD per million tokens".into());
+        }
+
         Ok(())
     }
 }
@@ -261,6 +285,10 @@ pub struct UpdateModelRequest {
     pub temperature_default: Option<f32>,
     /// Whether this is a reasoning/thinking model
     pub is_reasoning: Option<bool>,
+    /// New price per million input tokens (USD)
+    pub input_price_per_mtok: Option<f64>,
+    /// New price per million output tokens (USD)
+    pub output_price_per_mtok: Option<f64>,
 }
 
 impl UpdateModelRequest {
@@ -336,6 +364,18 @@ impl UpdateModelRequest {
             }
         }
 
+        // Pricing validation
+        if let Some(price_in) = self.input_price_per_mtok {
+            if !(0.0..=1000.0).contains(&price_in) {
+                return Err("Input price must be between 0 and 1000 USD per million tokens".into());
+            }
+        }
+        if let Some(price_out) = self.output_price_per_mtok {
+            if !(0.0..=1000.0).contains(&price_out) {
+                return Err("Output price must be between 0 and 1000 USD per million tokens".into());
+            }
+        }
+
         Ok(())
     }
 
@@ -347,6 +387,8 @@ impl UpdateModelRequest {
             && self.max_output_tokens.is_none()
             && self.temperature_default.is_none()
             && self.is_reasoning.is_none()
+            && self.input_price_per_mtok.is_none()
+            && self.output_price_per_mtok.is_none()
     }
 }
 
@@ -498,6 +540,8 @@ mod tests {
             max_output_tokens: 4096,
             temperature_default: 0.7,
             is_reasoning: false,
+            input_price_per_mtok: 2.0,
+            output_price_per_mtok: 6.0,
         };
         assert!(valid.validate().is_ok());
 
@@ -539,6 +583,8 @@ mod tests {
             max_output_tokens: None,
             temperature_default: None,
             is_reasoning: None,
+            input_price_per_mtok: None,
+            output_price_per_mtok: None,
         };
 
         // Should fail for builtin models
@@ -555,6 +601,8 @@ mod tests {
             max_output_tokens: None,
             temperature_default: Some(0.5),
             is_reasoning: None,
+            input_price_per_mtok: Some(2.0),
+            output_price_per_mtok: Some(6.0),
         };
         assert!(temp_update.validate(true).is_ok());
     }
@@ -569,6 +617,8 @@ mod tests {
             max_output_tokens: 4096,
             temperature_default: 0.7,
             is_reasoning: false,
+            input_price_per_mtok: 0.0,
+            output_price_per_mtok: 0.0,
         };
         let model = LLMModel::from_create_request("test-id".into(), &request);
 
@@ -576,6 +626,8 @@ mod tests {
         assert!(!model.is_builtin);
         assert!(!model.is_reasoning);
         assert_eq!(model.provider, ProviderType::Ollama);
+        assert_eq!(model.input_price_per_mtok, 0.0);
+        assert_eq!(model.output_price_per_mtok, 0.0);
     }
 
     #[test]

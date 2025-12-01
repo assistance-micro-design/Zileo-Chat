@@ -206,6 +206,7 @@ async fn main() -> anyhow::Result<()> {
             // Model CRUD commands
             commands::models::list_models,
             commands::models::get_model,
+            commands::models::get_model_by_api_name,
             commands::models::create_model,
             commands::models::update_model,
             commands::models::delete_model,

@@ -86,6 +86,10 @@ export interface LLMModel {
   is_builtin: boolean;
   /** Whether this is a reasoning/thinking model (Magistral, DeepSeek-R1, etc.) */
   is_reasoning: boolean;
+  /** Price per million input tokens (USD) - user configurable */
+  input_price_per_mtok: number;
+  /** Price per million output tokens (USD) - user configurable */
+  output_price_per_mtok: number;
   /** ISO 8601 creation timestamp */
   created_at: string;
   /** ISO 8601 last update timestamp */
@@ -112,6 +116,10 @@ export interface CreateModelRequest {
   temperature_default?: number;
   /** Whether this is a reasoning/thinking model (defaults to false) */
   is_reasoning?: boolean;
+  /** Price per million input tokens (USD, default 0.0) */
+  input_price_per_mtok?: number;
+  /** Price per million output tokens (USD, default 0.0) */
+  output_price_per_mtok?: number;
 }
 
 /**
@@ -133,6 +141,10 @@ export interface UpdateModelRequest {
   temperature_default?: number;
   /** Whether this is a reasoning/thinking model */
   is_reasoning?: boolean;
+  /** New price per million input tokens (USD) */
+  input_price_per_mtok?: number;
+  /** New price per million output tokens (USD) */
+  output_price_per_mtok?: number;
 }
 
 /**

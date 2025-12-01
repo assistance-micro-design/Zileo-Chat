@@ -54,6 +54,8 @@ describe('LLM Store', () => {
 		temperature_default: 0.7,
 		is_builtin: isBuiltin,
 		is_reasoning: false,
+		input_price_per_mtok: 0,
+		output_price_per_mtok: 0,
 		created_at: new Date().toISOString(),
 		updated_at: new Date().toISOString()
 	});

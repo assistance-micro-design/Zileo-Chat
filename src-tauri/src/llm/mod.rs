@@ -27,6 +27,7 @@ pub mod embedding;
 mod manager;
 mod mistral;
 mod ollama;
+pub mod pricing;
 mod provider;
 
 pub use manager::ProviderManager;

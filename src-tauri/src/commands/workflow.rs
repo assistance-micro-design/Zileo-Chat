@@ -231,7 +231,11 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
             status,
             created_at,
             updated_at,
-            completed_at
+            completed_at,
+            (total_tokens_input ?? 0) AS total_tokens_input,
+            (total_tokens_output ?? 0) AS total_tokens_output,
+            (total_cost_usd ?? 0.0) AS total_cost_usd,
+            model_id
         FROM workflow
         ORDER BY updated_at DESC
     "#;
@@ -332,7 +336,11 @@ pub async fn load_workflow_full_state(
                     status,
                     created_at,
                     updated_at,
-                    completed_at
+                    completed_at,
+                    (total_tokens_input ?? 0) AS total_tokens_input,
+                    (total_tokens_output ?? 0) AS total_tokens_output,
+                    (total_cost_usd ?? 0.0) AS total_cost_usd,
+                    model_id
                 FROM workflow
                 WHERE meta::id(id) = '{}'"#,
                 id1
