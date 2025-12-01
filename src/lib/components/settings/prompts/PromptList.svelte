@@ -1,255 +1,337 @@
+<!--
+Copyright 2025 Zileo-Chat-3 Contributors
+SPDX-License-Identifier: Apache-2.0
+
+PromptList - Displays prompts in a grid of cards.
+Shows prompt summary with actions for edit and delete.
+-->
+
 <script lang="ts">
-  import { Button, Card, Badge, Input, Select, Spinner } from '$lib/components/ui';
-  import type { PromptSummary, PromptCategory } from '$types/prompt';
-  import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
+	import type { PromptSummary, PromptCategory } from '$types/prompt';
+	import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
+	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
+	import { FileText, Edit, Trash2, Variable } from 'lucide-svelte';
 
-  interface Props {
-    prompts: PromptSummary[];
-    loading?: boolean;
-    oncreate?: () => void;
-    onedit?: (id: string) => void;
-    ondelete?: (id: string) => void;
-  }
+	/**
+	 * Component props
+	 */
+	interface Props {
+		/** List of prompts to display */
+		prompts: PromptSummary[];
+		/** Loading state */
+		loading: boolean;
+		/** Edit callback */
+		onedit: (promptId: string) => void;
+		/** Delete callback */
+		ondelete: (promptId: string) => void;
+	}
 
-  let { prompts, loading = false, oncreate, onedit, ondelete }: Props = $props();
+	let { prompts, loading, onedit, ondelete }: Props = $props();
 
-  // Filter state
-  let searchQuery = $state('');
-  let categoryFilter = $state<PromptCategory | ''>('');
+	// Filter state
+	let searchQuery = $state('');
+	let categoryFilter = $state<PromptCategory | ''>('');
 
-  // Category options with "All" option
-  const categoryOptions = [
-    { value: '', label: 'All Categories' },
-    ...Object.entries(PROMPT_CATEGORY_LABELS).map(([value, label]) => ({
-      value: value as PromptCategory,
-      label
-    }))
-  ];
+	// Category options with "All" option
+	const categoryOptions = [
+		{ value: '', label: 'All Categories' },
+		...Object.entries(PROMPT_CATEGORY_LABELS).map(([value, label]) => ({
+			value: value as PromptCategory,
+			label
+		}))
+	];
 
-  // Filtered prompts
-  let filteredPrompts = $derived.by(() => {
-    let result = prompts;
+	// Filtered prompts
+	let filteredPrompts = $derived.by(() => {
+		let result = prompts;
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.description.toLowerCase().includes(query)
-      );
-    }
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase();
+			result = result.filter(
+				(p) =>
+					p.name.toLowerCase().includes(query) ||
+					p.description.toLowerCase().includes(query)
+			);
+		}
 
-    if (categoryFilter) {
-      result = result.filter((p) => p.category === categoryFilter);
-    }
+		if (categoryFilter) {
+			result = result.filter((p) => p.category === categoryFilter);
+		}
 
-    return result;
-  });
+		return result;
+	});
 
-  function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  }
+	/**
+	 * Formats a date string for display
+	 */
+	function formatDate(dateStr: string): string {
+		return new Date(dateStr).toLocaleDateString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
 
-  function handleEdit(id: string) {
-    onedit?.(id);
-  }
-
-  function handleDelete(id: string) {
-    if (confirm('Are you sure you want to delete this prompt?')) {
-      ondelete?.(id);
-    }
-  }
+	/**
+	 * Gets badge variant for category type
+	 */
+	function getCategoryVariant(category: PromptCategory): 'primary' | 'warning' {
+		return category === 'system' ? 'warning' : 'primary';
+	}
 </script>
 
 <div class="prompt-list">
-  <div class="list-header">
-    <div class="filters">
-      <Input
-        placeholder="Search prompts..."
-        value={searchQuery}
-        oninput={(e) => searchQuery = e.currentTarget.value}
-      />
-      <Select
-        value={categoryFilter}
-        onchange={(e) => categoryFilter = e.currentTarget.value as PromptCategory | ''}
-        options={categoryOptions}
-      />
-    </div>
-    <Button variant="primary" onclick={oncreate} disabled={loading}>
-      Create Prompt
-    </Button>
-  </div>
+	<!-- Filters -->
+	<div class="list-filters">
+		<Input
+			placeholder="Search prompts..."
+			value={searchQuery}
+			oninput={(e) => (searchQuery = e.currentTarget.value)}
+		/>
+		<Select
+			value={categoryFilter}
+			onchange={(e) => (categoryFilter = e.currentTarget.value as PromptCategory | '')}
+			options={categoryOptions}
+		/>
+	</div>
 
-  {#if loading}
-    <div class="loading-state">
-      <Spinner size="lg" />
-      <span>Loading prompts...</span>
-    </div>
-  {:else if filteredPrompts.length === 0}
-    <div class="empty-state">
-      {#if prompts.length === 0}
-        <p class="empty-title">No prompts yet</p>
-        <p class="empty-description">Create your first prompt template to get started.</p>
-        <Button variant="primary" onclick={oncreate}>Create Prompt</Button>
-      {:else}
-        <p class="empty-title">No matching prompts</p>
-        <p class="empty-description">Try adjusting your search or filter criteria.</p>
-      {/if}
-    </div>
-  {:else}
-    <div class="prompts-grid">
-      {#each filteredPrompts as prompt (prompt.id)}
-        <Card>
-          {#snippet header()}
-            <div class="card-header">
-              <h4 class="prompt-name">{prompt.name}</h4>
-              <Badge variant="primary">{PROMPT_CATEGORY_LABELS[prompt.category]}</Badge>
-            </div>
-          {/snippet}
+	{#if loading}
+		<Card>
+			{#snippet body()}
+				<div class="loading-state">
+					<StatusIndicator status="running" />
+					<span>Loading prompts...</span>
+				</div>
+			{/snippet}
+		</Card>
+	{:else if filteredPrompts.length === 0}
+		<Card>
+			{#snippet body()}
+				<div class="empty-state">
+					<FileText size={48} class="empty-icon" />
+					{#if prompts.length === 0}
+						<h3 class="empty-title">No Prompts Yet</h3>
+						<p class="empty-description">
+							Create your first prompt template to start building reusable prompts
+							with variable placeholders.
+						</p>
+					{:else}
+						<h3 class="empty-title">No Matching Prompts</h3>
+						<p class="empty-description">
+							Try adjusting your search query or category filter.
+						</p>
+					{/if}
+				</div>
+			{/snippet}
+		</Card>
+	{:else}
+		<div class="prompt-grid">
+			{#each filteredPrompts as prompt (prompt.id)}
+				<Card>
+					{#snippet body()}
+						<div class="prompt-card">
+							<div class="prompt-header">
+								<div class="prompt-name-row">
+									<FileText size={20} class="prompt-icon" />
+									<h4 class="prompt-name">{prompt.name}</h4>
+								</div>
+								<Badge variant={getCategoryVariant(prompt.category)}>
+									{PROMPT_CATEGORY_LABELS[prompt.category]}
+								</Badge>
+							</div>
 
-          {#snippet body()}
-            <p class="prompt-description">{prompt.description || 'No description'}</p>
-            <div class="prompt-meta">
-              <span class="meta-item">
-                {prompt.variables_count} variable{prompt.variables_count !== 1 ? 's' : ''}
-              </span>
-              <span class="meta-separator">|</span>
-              <span class="meta-item">Updated {formatDate(prompt.updated_at)}</span>
-            </div>
-          {/snippet}
+							<p class="prompt-description">
+								{prompt.description || 'No description provided'}
+							</p>
 
-          {#snippet footer()}
-            <div class="card-actions">
-              <Button
-                variant="ghost"
-                size="sm"
-                onclick={() => handleEdit(prompt.id)}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onclick={() => handleDelete(prompt.id)}
-              >
-                Delete
-              </Button>
-            </div>
-          {/snippet}
-        </Card>
-      {/each}
-    </div>
-  {/if}
+							<div class="prompt-details">
+								<div class="detail-row">
+									<span class="detail-label">
+										<Variable size={14} />
+										Variables
+									</span>
+									<span class="detail-value">
+										{prompt.variables_count} placeholder{prompt.variables_count !== 1 ? 's' : ''}
+									</span>
+								</div>
+								<div class="detail-row">
+									<span class="detail-label">Updated</span>
+									<span class="detail-value">{formatDate(prompt.updated_at)}</span>
+								</div>
+							</div>
+
+							<div class="prompt-actions">
+								<Button variant="ghost" size="sm" onclick={() => onedit(prompt.id)}>
+									<Edit size={16} />
+									<span>Edit</span>
+								</Button>
+								<Button variant="danger" size="sm" onclick={() => ondelete(prompt.id)}>
+									<Trash2 size={16} />
+									<span>Delete</span>
+								</Button>
+							</div>
+						</div>
+					{/snippet}
+				</Card>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>
-  .prompt-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
+	.prompt-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-lg);
+	}
 
-  .list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-  }
+	.list-filters {
+		display: flex;
+		gap: var(--spacing-md);
+		max-width: 500px;
+	}
 
-  .filters {
-    display: flex;
-    gap: var(--space-3);
-    flex: 1;
-    min-width: 200px;
-    max-width: 500px;
-  }
+	.list-filters :global(> *:first-child) {
+		flex: 2;
+	}
 
-  .filters :global(.search-input) {
-    flex: 2;
-  }
+	.list-filters :global(> *:last-child) {
+		flex: 1;
+		min-width: 150px;
+	}
 
-  .filters :global(.category-filter) {
-    flex: 1;
-    min-width: 150px;
-  }
+	.loading-state {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-xl);
+	}
 
-  .loading-state,
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-8);
-    text-align: center;
-    color: var(--text-secondary);
-  }
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: var(--spacing-2xl);
+		gap: var(--spacing-md);
+	}
 
-  .empty-title {
-    font-size: var(--font-lg);
-    font-weight: var(--font-medium);
-    color: var(--text-primary);
-    margin: 0;
-  }
+	.empty-state :global(.empty-icon) {
+		color: var(--color-text-secondary);
+		opacity: 0.5;
+	}
 
-  .empty-description {
-    font-size: var(--font-sm);
-    margin: 0;
-  }
+	.empty-title {
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+		margin: 0;
+	}
 
-  .prompts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--space-4);
-  }
+	.empty-description {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		max-width: 400px;
+		margin: 0;
+		line-height: var(--line-height-relaxed);
+	}
 
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-2);
-  }
+	.prompt-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		gap: var(--spacing-lg);
+	}
 
-  .prompt-name {
-    font-size: var(--font-md);
-    font-weight: var(--font-semibold);
-    color: var(--text-primary);
-    margin: 0;
-    word-break: break-word;
-  }
+	.prompt-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
 
-  .prompt-description {
-    font-size: var(--font-sm);
-    color: var(--text-secondary);
-    margin: 0;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+	.prompt-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+	}
 
-  .prompt-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-xs);
-    color: var(--text-tertiary);
-    margin-top: var(--space-2);
-  }
+	.prompt-name-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
 
-  .meta-separator {
-    color: var(--border-primary);
-  }
+	.prompt-name-row :global(.prompt-icon) {
+		color: var(--color-accent);
+	}
 
-  .card-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
+	.prompt-name {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-semibold);
+		margin: 0;
+	}
+
+	.prompt-description {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		margin: 0;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		line-height: var(--line-height-relaxed);
+	}
+
+	.prompt-details {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.detail-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: var(--font-size-sm);
+	}
+
+	.detail-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		color: var(--color-text-secondary);
+	}
+
+	.detail-value {
+		font-weight: var(--font-weight-medium);
+	}
+
+	.prompt-actions {
+		display: flex;
+		gap: var(--spacing-sm);
+		justify-content: flex-end;
+		padding-top: var(--spacing-md);
+		border-top: 1px solid var(--color-border);
+	}
+
+	.prompt-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	@media (max-width: 768px) {
+		.prompt-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.list-filters {
+			flex-direction: column;
+			max-width: none;
+		}
+
+		.list-filters :global(> *) {
+			flex: 1 !important;
+		}
+	}
 </style>

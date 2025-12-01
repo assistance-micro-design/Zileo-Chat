@@ -864,10 +864,6 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Prompts Section -->
 		<section id="prompts" class="settings-section">
-			<h2 class="section-title">Prompt Library</h2>
-			<p class="section-description">
-				Create and manage reusable prompt templates with variable placeholders.
-			</p>
 			<PromptSettings />
 		</section>
 
