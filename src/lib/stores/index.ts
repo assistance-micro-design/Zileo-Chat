@@ -12,3 +12,4 @@ export * from './theme';
 export * from './mcp';
 export * from './llm';
 export * from './streaming';
+export * from './prompts';

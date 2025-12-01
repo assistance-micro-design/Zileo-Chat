@@ -35,3 +35,4 @@ export * from './memory';
 export * from './mcp';
 export * from './task';
 export * from './embedding';
+export * from './prompt';

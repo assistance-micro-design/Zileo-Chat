@@ -7,8 +7,9 @@
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
 <script lang="ts">
-	import { Send } from 'lucide-svelte';
+	import { Send, BookOpen } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
+	import PromptSelectorModal from './PromptSelectorModal.svelte';
 
 	/**
 	 * ChatInput props
@@ -35,6 +36,7 @@
 	}: Props = $props();
 
 	let textareaRef: HTMLTextAreaElement;
+	let showPromptSelector = $state(false);
 
 	/**
 	 * Handle send action
@@ -56,6 +58,11 @@
 			event.preventDefault();
 			handleSend();
 		}
+		// Open prompt selector with Ctrl+P
+		if (event.key === 'p' && (event.ctrlKey || event.metaKey)) {
+			event.preventDefault();
+			showPromptSelector = true;
+		}
 	}
 
 	/**
@@ -74,6 +81,15 @@
 	function handleInput(): void {
 		adjustHeight();
 	}
+
+	/**
+	 * Handle prompt selection from modal
+	 */
+	function handlePromptSelect(content: string): void {
+		value = content;
+		showPromptSelector = false;
+		adjustHeight();
+	}
 </script>
 
 <div class="chat-input-container">
@@ -90,6 +106,16 @@
 	></textarea>
 	<button
 		type="button"
+		class="prompt-button"
+		title="Select from prompt library (Ctrl+P)"
+		disabled={loading || disabled}
+		onclick={() => (showPromptSelector = true)}
+		aria-label="Open prompt library"
+	>
+		<BookOpen size={18} />
+	</button>
+	<button
+		type="button"
 		class="send-button"
 		onclick={handleSend}
 		disabled={disabled || loading || !value.trim()}
@@ -101,8 +127,14 @@
 			<Send size={20} />
 		{/if}
 	</button>
-	<span class="keyboard-hint">Ctrl+Enter to send</span>
+	<span class="keyboard-hint">Ctrl+Enter to send | Ctrl+P for prompts</span>
 </div>
+
+<PromptSelectorModal
+	open={showPromptSelector}
+	onclose={() => (showPromptSelector = false)}
+	onselect={handlePromptSelect}
+/>
 
 <style>
 	.chat-input-container {
@@ -138,6 +170,31 @@
 	}
 
 	.chat-input:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.prompt-button {
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-bg-primary);
+		color: var(--color-accent);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		flex-shrink: 0;
+	}
+
+	.prompt-button:hover:not(:disabled) {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-accent);
+	}
+
+	.prompt-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}

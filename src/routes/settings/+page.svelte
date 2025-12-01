@@ -26,6 +26,7 @@ Includes MCP server configuration section for managing external tool servers.
 	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
 	import { AgentSettings } from '$lib/components/settings/agents';
 	import { ValidationSettings } from '$lib/components/settings/validation';
+	import { PromptSettings } from '$lib/components/settings/prompts';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -78,7 +79,8 @@ Includes MCP server configuration section for managing external tool servers.
 		Plug,
 		Brain,
 		Bot,
-		Settings
+		Settings,
+		BookOpen
 	} from 'lucide-svelte';
 
 	/** Settings state (for API key input) */
@@ -122,6 +124,7 @@ Includes MCP server configuration section for managing external tool servers.
 		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
 		{ id: 'memory', label: 'Memory', icon: Brain },
 		{ id: 'validation', label: 'Validation', icon: ShieldCheck },
+		{ id: 'prompts', label: 'Prompts', icon: BookOpen },
 		{ id: 'theme', label: 'Theme', icon: Palette }
 	] as const;
 
@@ -859,6 +862,15 @@ Includes MCP server configuration section for managing external tool servers.
 			<ValidationSettings />
 		</section>
 
+		<!-- Prompts Section -->
+		<section id="prompts" class="settings-section">
+			<h2 class="section-title">Prompt Library</h2>
+			<p class="section-description">
+				Create and manage reusable prompt templates with variable placeholders.
+			</p>
+			<PromptSettings />
+		</section>
+
 		<!-- Theme Section -->
 		<section id="theme" class="settings-section">
 			<h2 class="section-title">Theme</h2>
@@ -1193,6 +1205,13 @@ Includes MCP server configuration section for managing external tool servers.
 		font-size: var(--font-size-2xl);
 		font-weight: var(--font-weight-semibold);
 		margin-bottom: var(--spacing-lg);
+	}
+
+	.section-description {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		margin-bottom: var(--spacing-lg);
+		line-height: var(--line-height-relaxed);
 	}
 
 	.section-header-row {

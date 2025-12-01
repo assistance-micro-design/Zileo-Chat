@@ -287,6 +287,13 @@ async fn main() -> anyhow::Result<()> {
             commands::embedding::export_memories,
             commands::embedding::import_memories,
             commands::embedding::regenerate_embeddings,
+            // Prompt commands (Prompt Library)
+            commands::prompt::list_prompts,
+            commands::prompt::get_prompt,
+            commands::prompt::create_prompt,
+            commands::prompt::update_prompt,
+            commands::prompt::delete_prompt,
+            commands::prompt::search_prompts,
         ])
         .setup(|app| {
             // Set the app handle in AppState for event emission (validation, etc.)

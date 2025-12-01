@@ -126,6 +126,14 @@
 //! - `import_memories` - Import memories from JSON
 //! - `regenerate_embeddings` - Regenerate embeddings for existing memories
 //!
+//! ### Prompt Commands ([`prompt`])
+//! - `list_prompts` - List all prompt templates
+//! - `get_prompt` - Get a single prompt by ID
+//! - `create_prompt` - Create a new prompt template
+//! - `update_prompt` - Update an existing prompt
+//! - `delete_prompt` - Delete a prompt template
+//! - `search_prompts` - Search prompts by query and/or category
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
@@ -139,6 +147,7 @@ pub mod memory;
 pub mod message;
 pub mod migration;
 pub mod models;
+pub mod prompt;
 pub mod security;
 pub mod streaming;
 pub mod sub_agent_execution;

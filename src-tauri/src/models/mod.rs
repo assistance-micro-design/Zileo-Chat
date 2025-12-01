@@ -7,6 +7,7 @@ pub mod llm_models;
 pub mod mcp;
 pub mod memory;
 pub mod message;
+pub mod prompt;
 pub mod serde_utils;
 pub mod streaming;
 pub mod sub_agent;
@@ -100,4 +101,11 @@ pub use llm_models::{get_all_builtin_models, MISTRAL_BUILTIN_MODELS, OLLAMA_BUIL
 // Re-export embedding settings types for Phase 5 implementation
 pub use embedding::{
     EmbeddingConfigSettings, ExportFormat, ImportResult, MemoryStats, RegenerateResult,
+};
+
+// Re-export prompt library types for Prompt Library feature
+#[allow(unused_imports)] // Used in commands/prompt.rs and frontend integration
+pub use prompt::{
+    Prompt, PromptCategory, PromptCreate, PromptSummary, PromptUpdate, PromptVariable,
+    MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
