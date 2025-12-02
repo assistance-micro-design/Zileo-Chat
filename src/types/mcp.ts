@@ -29,8 +29,9 @@
  * - docker: Run server in a Docker container (recommended for production)
  * - npx: Run via NPX (Node.js package runner)
  * - uvx: Run via UVX (Python package runner)
+ * - http: Connect to remote HTTP/SSE endpoint (SaaS, remote servers)
  */
-export type MCPDeploymentMethod = 'docker' | 'npx' | 'uvx';
+export type MCPDeploymentMethod = 'docker' | 'npx' | 'uvx' | 'http';
 
 /**
  * MCP server status values.

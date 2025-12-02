@@ -6,7 +6,7 @@ use surrealdb::{
     engine::local::{Db, RocksDb},
     Surreal,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Database client for SurrealDB embedded operations
 pub struct DBClient {
@@ -42,6 +42,18 @@ impl DBClient {
 
         self.db.query(SCHEMA_SQL).await.map_err(|e| {
             error!(error = %e, "Failed to initialize schema");
+            e
+        })?;
+
+        // Run MCP HTTP migration to ensure command field supports 'http' value
+        // Must use REMOVE FIELD + DEFINE FIELD to force ASSERT constraint update
+        // (SurrealDB does not update ASSERT constraints on existing fields with just DEFINE)
+        let mcp_http_migration = r#"
+            REMOVE FIELD IF EXISTS command ON TABLE mcp_server;
+            DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
+        "#;
+        self.db.query(mcp_http_migration).await.map_err(|e| {
+            warn!(error = %e, "MCP HTTP migration query failed (may be expected if table doesn't exist yet)");
             e
         })?;
 
@@ -113,6 +125,9 @@ impl DBClient {
     ///
     /// Uses a SurrealQL CREATE query with CONTENT to avoid SDK serialization issues.
     /// The data should NOT contain an `id` field (it's set via the record ID).
+    ///
+    /// NOTE: SurrealDB ASSERT constraints may silently reject records without error.
+    /// This method verifies the record was actually created by checking the result.
     #[instrument(name = "db_create", skip(self, data), fields(table = %table, record_id = %id))]
     pub async fn create<T>(&self, table: &str, id: &str, data: T) -> Result<String>
     where
@@ -126,19 +141,56 @@ impl DBClient {
             anyhow::anyhow!("Serialization error: {}", e)
         })?;
 
+        // Log the data being saved for debugging ASSERT constraint issues
+        debug!(
+            table = %table,
+            record_id = %id,
+            data = %json_data,
+            "Attempting to create record"
+        );
+
         // Use CREATE query with backtick-escaped ID for safety
-        let query = format!("CREATE {}:`{}` CONTENT $data", table, id);
-        self.db
+        // Use RETURN meta::id(id) to get a string ID instead of Thing enum (SDK 2.x serialization issue)
+        let query = format!(
+            "CREATE {}:`{}` CONTENT $data RETURN meta::id(id) AS created_id",
+            table, id
+        );
+        let mut result = self
+            .db
             .query(&query)
-            .bind(("data", json_data))
+            .bind(("data", json_data.clone()))
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to create record");
                 e
             })?;
 
-        debug!(record_id = %id, "Record created");
-        Ok(id.to_string())
+        // Check if the record was actually created by examining the result
+        // Using meta::id(id) returns a clean string instead of Thing enum
+        let created: Option<serde_json::Value> = result.take(0).map_err(|e| {
+            error!(error = %e, "Failed to get create result");
+            anyhow::anyhow!("Failed to get create result: {}", e)
+        })?;
+
+        match created {
+            Some(_) => {
+                debug!(record_id = %id, "Record created successfully");
+                Ok(id.to_string())
+            }
+            None => {
+                // Record was not created - likely ASSERT constraint violation
+                error!(
+                    table = %table,
+                    record_id = %id,
+                    data = %json_data,
+                    "Record was NOT created - possible ASSERT constraint violation"
+                );
+                Err(anyhow::anyhow!(
+                    "Failed to create record in {}: record was silently rejected (check ASSERT constraints)",
+                    table
+                ))
+            }
+        }
     }
 
     /// Updates a record by ID (prepared for future phases)

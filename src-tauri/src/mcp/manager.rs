@@ -619,12 +619,47 @@ impl MCPManager {
                 let server_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
 
                 // Convert command string back to enum
-                let command_str = v.get("command")?.as_str()?;
+                let command_value = v.get("command");
+                debug!(
+                    server_id = %server_id,
+                    command_value = ?command_value,
+                    "Parsing MCP server config from database"
+                );
+
+                let command_str = match command_value {
+                    Some(val) => match val.as_str() {
+                        Some(s) => s,
+                        None => {
+                            warn!(
+                                server_id = %server_id,
+                                command_value = ?val,
+                                "Command field is not a string"
+                            );
+                            return None;
+                        }
+                    },
+                    None => {
+                        warn!(
+                            server_id = %server_id,
+                            "Command field is missing"
+                        );
+                        return None;
+                    }
+                };
+
                 let command = match command_str {
                     "docker" => crate::models::mcp::MCPDeploymentMethod::Docker,
                     "npx" => crate::models::mcp::MCPDeploymentMethod::Npx,
                     "uvx" => crate::models::mcp::MCPDeploymentMethod::Uvx,
-                    _ => return None,
+                    "http" => crate::models::mcp::MCPDeploymentMethod::Http,
+                    unknown => {
+                        warn!(
+                            server_id = %server_id,
+                            command = %unknown,
+                            "Unknown deployment method, skipping server"
+                        );
+                        return None;
+                    }
                 };
 
                 // Extract env from JSON string (stored as string to bypass SurrealDB SCHEMAFULL filtering)

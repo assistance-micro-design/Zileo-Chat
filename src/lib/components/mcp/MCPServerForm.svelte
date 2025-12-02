@@ -93,7 +93,8 @@ Includes validation and environment variable editor.
 	const commandOptions: SelectOption[] = [
 		{ value: 'docker', label: 'Docker' },
 		{ value: 'npx', label: 'NPX (Node.js)' },
-		{ value: 'uvx', label: 'UVX (Python)' }
+		{ value: 'uvx', label: 'UVX (Python)' },
+		{ value: 'http', label: 'HTTP (Remote)' }
 	];
 
 	/**
@@ -113,8 +114,19 @@ Includes validation and environment variable editor.
 		}
 
 		// Args validation (must have at least one argument for most commands)
-		if (!formData.args.trim() && formData.command !== 'docker') {
-			newErrors.args = 'At least one argument is required';
+		// HTTP and Docker have different requirements
+		if (!formData.args.trim()) {
+			if (formData.command === 'http') {
+				newErrors.args = 'HTTP endpoint URL is required';
+			} else if (formData.command !== 'docker') {
+				newErrors.args = 'At least one argument is required';
+			}
+		} else if (formData.command === 'http') {
+			// Validate HTTP URL format
+			const url = formData.args.trim().split('\n')[0];
+			if (!/^https?:\/\/.+/.test(url)) {
+				newErrors.args = 'Must be a valid HTTP or HTTPS URL';
+			}
 		}
 
 		// Environment variables validation

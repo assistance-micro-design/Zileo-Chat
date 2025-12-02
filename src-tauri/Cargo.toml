@@ -27,8 +27,11 @@ regex = "1.10"
 # LLM Integration (Rig.rs)
 rig-core = { version = "0.24.0", features = ["all"] }
 
-# HTTP client for provider connectivity tests
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# HTTP client for provider connectivity tests and MCP HTTP transport
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+
+# Async stream utilities for SSE
+futures-util = "0.3"
 
 # Tauri Secure Storage
 keyring = "2.0"

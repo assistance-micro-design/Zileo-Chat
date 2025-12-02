@@ -9,31 +9,32 @@
 //! ## Architecture
 //!
 //! ```text
-//! ┌─────────────────────────────────────────┐
-//! │            MCPManager                   │
-//! │  - Server registry                      │
-//! │  - Lifecycle management                 │
-//! │  - Tool routing                         │
-//! └─────────────────┬───────────────────────┘
-//!                   │
-//!     ┌─────────────┼─────────────┐
-//!     ↓             ↓             ↓
-//! ┌───────────┐ ┌───────────┐ ┌───────────┐
-//! │MCPClient  │ │MCPClient  │ │MCPClient  │
-//! │ (stdio)   │ │ (stdio)   │ │ (stdio)   │
-//! └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
-//!       │             │             │
-//! ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
-//! │MCP Server │ │MCP Server │ │MCP Server │
-//! │ (Docker)  │ │  (NPX)    │ │  (UVX)    │
-//! └───────────┘ └───────────┘ └───────────┘
+//! ┌─────────────────────────────────────────────────┐
+//! │               MCPManager                        │
+//! │  - Server registry                              │
+//! │  - Lifecycle management                         │
+//! │  - Tool routing                                 │
+//! └───────────────────┬─────────────────────────────┘
+//!                     │
+//!     ┌───────────────┼───────────────┬─────────────┐
+//!     ↓               ↓               ↓             ↓
+//! ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐
+//! │MCPClient  │ │MCPClient  │ │MCPClient  │ │MCPClient  │
+//! │ (stdio)   │ │ (stdio)   │ │ (stdio)   │ │ (http)    │
+//! └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
+//!       │             │             │             │
+//! ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
+//! │MCP Server │ │MCP Server │ │MCP Server │ │MCP Server │
+//! │ (Docker)  │ │  (NPX)    │ │  (UVX)    │ │  (HTTP)   │
+//! └───────────┘ └───────────┘ └───────────┘ └───────────┘
 //! ```
 //!
 //! ## Modules
 //!
 //! - [`error`]: MCP-specific error types
 //! - [`protocol`]: JSON-RPC 2.0 and MCP protocol types
-//! - [`server_handle`]: Process spawning and lifecycle management
+//! - [`server_handle`]: Process spawning and lifecycle management (stdio transport)
+//! - [`http_handle`]: HTTP/SSE transport for remote MCP servers
 //! - [`client`]: High-level MCP client interface
 //! - [`manager`]: MCPManager for server registry and coordination
 //!
@@ -63,6 +64,8 @@
 pub mod client;
 pub mod error;
 #[allow(dead_code)]
+pub mod http_handle;
+#[allow(dead_code)]
 pub mod manager;
 #[allow(dead_code)]
 pub mod protocol;
@@ -83,6 +86,8 @@ pub use protocol::{
 // Re-export high-level types for convenience (will be used in Phase 3)
 #[allow(unused_imports)]
 pub use client::MCPClient;
+#[allow(unused_imports)]
+pub use http_handle::MCPHttpHandle;
 pub use manager::MCPManager;
 #[allow(unused_imports)]
 pub use server_handle::MCPServerHandle;

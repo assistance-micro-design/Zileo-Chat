@@ -9,18 +9,26 @@
 //!
 //! ## Architecture
 //!
-//! The `MCPClient` wraps an `MCPServerHandle` and provides:
+//! The `MCPClient` wraps either an `MCPServerHandle` (for stdio-based servers)
+//! or `MCPHttpHandle` (for HTTP-based servers) and provides:
 //! - Connection state tracking
 //! - Automatic reconnection (optional)
 //! - High-level tool invocation API
 //! - Resource access methods
+//! - Transport-agnostic interface
+//!
+//! ## Transport Selection
+//!
+//! Transport is automatically selected based on `MCPDeploymentMethod`:
+//! - `Docker`, `Npx`, `Uvx` -> stdio transport (`MCPServerHandle`)
+//! - `Http` -> HTTP/SSE transport (`MCPHttpHandle`)
 //!
 //! ## Usage
 //!
 //! ```rust,ignore
 //! use crate::mcp::{MCPClient, MCPServerConfig};
 //!
-//! // Create and connect client
+//! // Create and connect client (transport auto-selected)
 //! let mut client = MCPClient::connect(config).await?;
 //!
 //! // Check available tools
@@ -35,22 +43,34 @@
 //! client.disconnect().await?;
 //! ```
 
+use crate::mcp::http_handle::MCPHttpHandle;
 use crate::mcp::server_handle::MCPServerHandle;
 use crate::mcp::{MCPError, MCPResult, MCPToolCallResponse};
 use crate::models::mcp::{
-    MCPResource, MCPServerConfig, MCPServerStatus, MCPTestResult, MCPTool, MCPToolCallResult,
+    MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTestResult, MCPTool,
+    MCPToolCallResult,
 };
 use std::time::Instant;
 use tracing::info;
+
+/// Transport handle types
+///
+/// Represents the underlying transport mechanism for MCP communication.
+enum TransportHandle {
+    /// Stdio-based transport (Docker, NPX, UVX)
+    Stdio(MCPServerHandle),
+    /// HTTP-based transport (remote servers)
+    Http(MCPHttpHandle),
+}
 
 /// MCP Client
 ///
 /// High-level interface for interacting with an MCP server.
 /// Manages the connection lifecycle and provides convenient methods
-/// for tool invocation.
+/// for tool invocation. Supports both stdio and HTTP transports.
 pub struct MCPClient {
-    /// Underlying server handle
-    handle: Option<MCPServerHandle>,
+    /// Underlying transport handle
+    handle: Option<TransportHandle>,
     /// Server configuration
     config: MCPServerConfig,
     /// Whether auto-reconnect is enabled
@@ -93,7 +113,9 @@ impl MCPClient {
 
     /// Establishes a connection to the MCP server
     ///
-    /// Spawns the server process and performs the MCP initialization handshake.
+    /// Automatically selects the transport based on deployment method:
+    /// - `Docker`, `Npx`, `Uvx` -> stdio transport
+    /// - `Http` -> HTTP/SSE transport
     ///
     /// # Errors
     ///
@@ -108,12 +130,27 @@ impl MCPClient {
 
         info!(
             server_id = %self.config.id,
+            transport = ?self.config.command,
             "Connecting MCP client"
         );
 
-        // Spawn and initialize the server
-        let mut handle = MCPServerHandle::spawn(self.config.clone()).await?;
-        handle.initialize().await?;
+        // Select transport based on deployment method
+        let handle = match self.config.command {
+            MCPDeploymentMethod::Http => {
+                // HTTP transport
+                let mut http_handle = MCPHttpHandle::connect(self.config.clone()).await?;
+                http_handle.initialize().await?;
+                TransportHandle::Http(http_handle)
+            }
+            MCPDeploymentMethod::Docker
+            | MCPDeploymentMethod::Npx
+            | MCPDeploymentMethod::Uvx => {
+                // Stdio transport (process-based)
+                let mut stdio_handle = MCPServerHandle::spawn(self.config.clone()).await?;
+                stdio_handle.initialize().await?;
+                TransportHandle::Stdio(stdio_handle)
+            }
+        };
 
         self.handle = Some(handle);
 
@@ -127,10 +164,13 @@ impl MCPClient {
 
     /// Disconnects from the MCP server
     ///
-    /// Terminates the server process and cleans up resources.
+    /// Terminates the server process (stdio) or closes the HTTP connection.
     pub async fn disconnect(&mut self) -> MCPResult<()> {
-        if let Some(mut handle) = self.handle.take() {
-            handle.kill().await?;
+        if let Some(handle) = self.handle.take() {
+            match handle {
+                TransportHandle::Stdio(mut h) => h.kill().await?,
+                TransportHandle::Http(mut h) => h.disconnect().await?,
+            }
         }
         Ok(())
     }
@@ -194,7 +234,8 @@ impl MCPClient {
     /// Returns the current server status
     pub fn status(&self) -> MCPServerStatus {
         match &self.handle {
-            Some(handle) => handle.status().clone(),
+            Some(TransportHandle::Stdio(h)) => h.status().clone(),
+            Some(TransportHandle::Http(h)) => h.status().clone(),
             None => MCPServerStatus::Stopped,
         }
     }
@@ -217,7 +258,8 @@ impl MCPClient {
     /// Returns an empty slice if not connected.
     pub fn tools(&self) -> &[MCPTool] {
         match &self.handle {
-            Some(handle) => handle.list_tools(),
+            Some(TransportHandle::Stdio(h)) => h.list_tools(),
+            Some(TransportHandle::Http(h)) => h.list_tools(),
             None => &[],
         }
     }
@@ -227,7 +269,8 @@ impl MCPClient {
     /// Returns an empty slice if not connected.
     pub fn resources(&self) -> &[MCPResource] {
         match &self.handle {
-            Some(handle) => handle.list_resources(),
+            Some(TransportHandle::Stdio(h)) => h.list_resources(),
+            Some(TransportHandle::Http(h)) => h.list_resources(),
             None => &[],
         }
     }
@@ -251,14 +294,19 @@ impl MCPClient {
         tool_name: &str,
         arguments: serde_json::Value,
     ) -> MCPResult<MCPToolCallResult> {
-        let handle = self.handle.as_mut().ok_or(MCPError::ServerNotRunning {
-            server: self.config.name.clone(),
-            status: "disconnected".to_string(),
-        })?;
-
         let start = Instant::now();
 
-        let response = handle.call_tool(tool_name, arguments).await?;
+        let response = match self.handle.as_mut() {
+            Some(TransportHandle::Stdio(h)) => h.call_tool(tool_name, arguments).await?,
+            Some(TransportHandle::Http(h)) => h.call_tool(tool_name, arguments).await?,
+            None => {
+                return Err(MCPError::ServerNotRunning {
+                    server: self.config.name.clone(),
+                    status: "disconnected".to_string(),
+                })
+            }
+        };
+
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // Convert to result type
@@ -291,12 +339,14 @@ impl MCPClient {
         tool_name: &str,
         arguments: serde_json::Value,
     ) -> MCPResult<MCPToolCallResponse> {
-        let handle = self.handle.as_mut().ok_or(MCPError::ServerNotRunning {
-            server: self.config.name.clone(),
-            status: "disconnected".to_string(),
-        })?;
-
-        handle.call_tool(tool_name, arguments).await
+        match self.handle.as_mut() {
+            Some(TransportHandle::Stdio(h)) => h.call_tool(tool_name, arguments).await,
+            Some(TransportHandle::Http(h)) => h.call_tool(tool_name, arguments).await,
+            None => Err(MCPError::ServerNotRunning {
+                server: self.config.name.clone(),
+                status: "disconnected".to_string(),
+            }),
+        }
     }
 
     /// Calls a tool and extracts text content
@@ -309,6 +359,7 @@ impl MCPClient {
         arguments: serde_json::Value,
     ) -> MCPResult<String> {
         let response = self.call_tool_raw(tool_name, arguments).await?;
+        // Use the appropriate extract method based on transport
         Ok(MCPServerHandle::extract_text_content(&response))
     }
 
@@ -325,25 +376,35 @@ impl MCPClient {
     /// Use this to update the tools list if the server's capabilities
     /// may have changed.
     pub async fn refresh_tools(&mut self) -> MCPResult<Vec<MCPTool>> {
-        let handle = self.handle.as_mut().ok_or(MCPError::ServerNotRunning {
-            server: self.config.name.clone(),
-            status: "disconnected".to_string(),
-        })?;
-
-        handle.refresh_tools().await
+        match self.handle.as_mut() {
+            Some(TransportHandle::Stdio(h)) => h.refresh_tools().await,
+            Some(TransportHandle::Http(h)) => h.refresh_tools().await,
+            None => Err(MCPError::ServerNotRunning {
+                server: self.config.name.clone(),
+                status: "disconnected".to_string(),
+            }),
+        }
     }
 
-    /// Checks if the underlying process is still alive
+    /// Checks if the underlying process/connection is still alive
+    ///
+    /// For stdio transport, checks if the process is running.
+    /// For HTTP transport, checks if the connection is active.
     pub fn is_process_alive(&mut self) -> bool {
         match self.handle.as_mut() {
-            Some(handle) => handle.is_process_alive(),
+            Some(TransportHandle::Stdio(h)) => h.is_process_alive(),
+            Some(TransportHandle::Http(h)) => h.is_connected(),
             None => false,
         }
     }
 
     /// Returns the server info (name, version) if available
     pub fn server_info(&self) -> Option<(&str, &str)> {
-        self.handle.as_ref().and_then(|h| h.server_info())
+        match &self.handle {
+            Some(TransportHandle::Stdio(h)) => h.server_info(),
+            Some(TransportHandle::Http(h)) => h.server_info(),
+            None => None,
+        }
     }
 }
 

@@ -111,7 +111,7 @@ DEFINE TABLE mcp_server SCHEMAFULL;
 DEFINE FIELD id ON mcp_server TYPE string;
 DEFINE FIELD name ON mcp_server TYPE string;
 DEFINE FIELD enabled ON mcp_server TYPE bool DEFAULT true;
-DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx'];
+DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
 DEFINE FIELD args ON mcp_server TYPE array<string>;
 -- Store env as JSON string to bypass SurrealDB SCHEMAFULL nested object filtering
 DEFINE FIELD env ON mcp_server TYPE string DEFAULT '{}';

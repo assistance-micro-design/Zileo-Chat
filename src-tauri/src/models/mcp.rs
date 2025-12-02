@@ -17,6 +17,7 @@ use std::collections::HashMap;
 /// - `Docker`: Runs in a Docker container (recommended for production)
 /// - `Npx`: Runs via npx (Node.js package executor)
 /// - `Uvx`: Runs via uvx (Python package executor with isolated environments)
+/// - `Http`: Connects to a remote HTTP/SSE endpoint (SaaS, remote servers)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MCPDeploymentMethod {
@@ -26,6 +27,8 @@ pub enum MCPDeploymentMethod {
     Npx,
     /// Python uvx (e.g., `uvx package-name`)
     Uvx,
+    /// Remote HTTP/SSE endpoint (e.g., `https://api.example.com/mcp`)
+    Http,
 }
 
 impl std::fmt::Display for MCPDeploymentMethod {
@@ -34,6 +37,7 @@ impl std::fmt::Display for MCPDeploymentMethod {
             MCPDeploymentMethod::Docker => write!(f, "docker"),
             MCPDeploymentMethod::Npx => write!(f, "npx"),
             MCPDeploymentMethod::Uvx => write!(f, "uvx"),
+            MCPDeploymentMethod::Http => write!(f, "http"),
         }
     }
 }

@@ -189,6 +189,15 @@ impl MCPServerHandle {
                 // UVX: args should be ["package-name", ...]
                 ("uvx".to_string(), config.args.clone())
             }
+            MCPDeploymentMethod::Http => {
+                // HTTP servers use HTTP/SSE transport, not stdio
+                // This handler only supports process-based servers
+                return Err(MCPError::InvalidConfig {
+                    field: "command".to_string(),
+                    reason: "HTTP deployment requires HTTP transport handler (not implemented yet)"
+                        .to_string(),
+                });
+            }
         };
 
         Ok((cmd, args))

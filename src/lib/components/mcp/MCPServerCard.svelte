@@ -18,7 +18,7 @@ Displays an MCP server with status, command info, and action buttons.
 <script lang="ts">
 	import type { MCPServer, MCPServerStatus } from '$types/mcp';
 	import { Card, Button, Badge } from '$lib/components/ui';
-	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal } from 'lucide-svelte';
+	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal, Globe } from 'lucide-svelte';
 
 	/**
 	 * MCPServerCard props
@@ -111,6 +111,8 @@ Displays an MCP server with status, command info, and action buttons.
 			<div class="server-info">
 				{#if server.command === 'docker'}
 					<Box size={20} class="server-icon" />
+				{:else if server.command === 'http'}
+					<Globe size={20} class="server-icon" />
 				{:else}
 					<Terminal size={20} class="server-icon" />
 				{/if}

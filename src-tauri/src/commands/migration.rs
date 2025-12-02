@@ -191,6 +191,39 @@ pub async fn get_memory_schema_status(
     })
 }
 
+/// SQL for updating MCP server command field ASSERT constraint to include HTTP
+///
+/// This migration adds 'http' to the allowed values for the command field,
+/// enabling HTTP-based MCP server connections (SaaS, remote servers).
+const MCP_HTTP_MIGRATION: &str = r#"
+-- Update the command field ASSERT constraint to include 'http'
+DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
+"#;
+
+/// Migrates MCP server schema to support HTTP deployment method.
+///
+/// Updates the command field ASSERT constraint to include 'http',
+/// allowing HTTP-based MCP server connections.
+#[tauri::command]
+#[instrument(name = "migrate_mcp_http_schema", skip(state))]
+pub async fn migrate_mcp_http_schema(state: State<'_, AppState>) -> Result<MigrationResult, String> {
+    info!("Running MCP HTTP schema migration");
+
+    // Run migration query
+    let _: Vec<serde_json::Value> = state.db.query(MCP_HTTP_MIGRATION).await.map_err(|e| {
+        error!(error = %e, "MCP HTTP schema migration failed");
+        format!("MCP HTTP schema migration failed: {}", e)
+    })?;
+
+    info!("MCP HTTP schema migration completed successfully");
+
+    Ok(MigrationResult {
+        success: true,
+        message: "MCP schema updated to support HTTP deployment method".to_string(),
+        records_affected: 0,
+    })
+}
+
 /// Memory schema status information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySchemaStatus {
