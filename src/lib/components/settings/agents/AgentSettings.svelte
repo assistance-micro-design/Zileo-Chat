@@ -21,6 +21,19 @@ Provides CRUD operations for agents with list view and form modal.
 	import { Button, Modal } from '$lib/components/ui';
 	import { Plus } from 'lucide-svelte';
 
+	/**
+	 * Component props
+	 */
+	interface Props {
+		/**
+		 * Refresh trigger - increment this value to force a reload of agents.
+		 * Used after import operations to ensure UI updates with new data.
+		 */
+		refreshTrigger?: number;
+	}
+
+	let { refreshTrigger = 0 }: Props = $props();
+
 	/** Delete confirmation modal state */
 	let showDeleteConfirm = $state(false);
 	let agentToDelete = $state<string | null>(null);
@@ -31,6 +44,19 @@ Provides CRUD operations for agents with list view and form modal.
 	 */
 	onMount(() => {
 		agentStore.loadAgents();
+	});
+
+	/**
+	 * Watch for external refresh triggers (e.g., after import).
+	 * This ensures the agent list updates when refreshTrigger changes.
+	 */
+	$effect(() => {
+		// Track refreshTrigger changes
+		const trigger = refreshTrigger;
+		// Skip initial mount (onMount already handles that)
+		if (trigger > 0) {
+			agentStore.loadAgents();
+		}
 	});
 
 	/**

@@ -27,6 +27,7 @@ Includes MCP server configuration section for managing external tool servers.
 	import { AgentSettings } from '$lib/components/settings/agents';
 	import { ValidationSettings } from '$lib/components/settings/validation';
 	import { PromptSettings } from '$lib/components/settings/prompts';
+	import { ImportExportSettings } from '$lib/components/settings/import-export';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import {
@@ -66,6 +67,8 @@ Includes MCP server configuration section for managing external tool servers.
 		deleteModel,
 		updateProviderSettings
 	} from '$lib/stores/llm';
+	import { agentStore } from '$lib/stores/agents';
+	import { promptStore } from '$lib/stores/prompts';
 	import {
 		Globe,
 		Cpu,
@@ -80,7 +83,8 @@ Includes MCP server configuration section for managing external tool servers.
 		Brain,
 		Bot,
 		Settings,
-		BookOpen
+		BookOpen,
+		FolderSync
 	} from 'lucide-svelte';
 
 	/** Settings state (for API key input) */
@@ -116,6 +120,9 @@ Includes MCP server configuration section for managing external tool servers.
 	let showApiKeyModal = $state(false);
 	let apiKeyProvider = $state<ProviderType>('mistral');
 
+	/** Agent refresh trigger - increment to force AgentSettings to reload */
+	let agentRefreshKey = $state(0);
+
 	/** Navigation sections */
 	const sections = [
 		{ id: 'providers', label: 'Providers', icon: Globe },
@@ -125,6 +132,7 @@ Includes MCP server configuration section for managing external tool servers.
 		{ id: 'memory', label: 'Memory', icon: Brain },
 		{ id: 'validation', label: 'Validation', icon: ShieldCheck },
 		{ id: 'prompts', label: 'Prompts', icon: BookOpen },
+		{ id: 'import-export', label: 'Import/Export', icon: FolderSync },
 		{ id: 'theme', label: 'Theme', icon: Palette }
 	] as const;
 
@@ -164,6 +172,23 @@ Includes MCP server configuration section for managing external tool servers.
 		} catch (err) {
 			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${err}`);
 		}
+	}
+
+	/**
+	 * Refreshes all data stores after an import operation.
+	 * Called when ImportExportSettings signals that new data was imported.
+	 */
+	async function handleImportRefresh(): Promise<void> {
+		// Reload all data stores in parallel
+		await Promise.all([
+			loadMCPServers(),
+			loadLLMData(),
+			agentStore.loadAgents(),
+			promptStore.loadPrompts()
+		]);
+		// Increment refresh key to trigger AgentSettings $effect
+		// This ensures the UI updates even if store subscription doesn't propagate
+		agentRefreshKey++;
 	}
 
 	/**
@@ -773,7 +798,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Agents Section -->
 		<section id="agents" class="settings-section">
-			<AgentSettings />
+			<AgentSettings refreshTrigger={agentRefreshKey} />
 		</section>
 
 		<!-- MCP Servers Section -->
@@ -865,6 +890,11 @@ Includes MCP server configuration section for managing external tool servers.
 		<!-- Prompts Section -->
 		<section id="prompts" class="settings-section">
 			<PromptSettings />
+		</section>
+
+		<!-- Import/Export Section -->
+		<section id="import-export" class="settings-section">
+			<ImportExportSettings onRefreshNeeded={handleImportRefresh} />
 		</section>
 
 		<!-- Theme Section -->

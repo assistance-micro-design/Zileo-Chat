@@ -174,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
         .manage(app_state)
         .manage(keystore)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             // Workflow commands
             commands::workflow::create_workflow,
@@ -295,6 +296,13 @@ async fn main() -> anyhow::Result<()> {
             commands::prompt::update_prompt,
             commands::prompt::delete_prompt,
             commands::prompt::search_prompts,
+            // Import/Export commands
+            commands::import_export::prepare_export_preview,
+            commands::import_export::generate_export_file,
+            commands::import_export::validate_import,
+            commands::import_export::execute_import,
+            commands::import_export::save_export_to_file,
+            commands::import_export::read_import_file,
         ])
         .setup(|app| {
             // Set the app handle in AppState for event emission (validation, etc.)

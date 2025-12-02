@@ -141,6 +141,7 @@
 
 pub mod agent;
 pub mod embedding;
+pub mod import_export;
 pub mod llm;
 pub mod mcp;
 pub mod memory;

@@ -64,7 +64,7 @@ pub async fn list_prompts(state: State<'_, AppState>) -> Result<Vec<PromptSummar
             name,
             description,
             category,
-            array::len(variables) AS variables_count,
+            array::len(variables ?? []) AS variables_count,
             updated_at
         FROM prompt
         ORDER BY updated_at DESC
@@ -305,7 +305,7 @@ pub async fn search_prompts(
             name,
             description,
             category,
-            array::len(variables) AS variables_count,
+            array::len(variables ?? []) AS variables_count,
             updated_at
         FROM prompt
         {}

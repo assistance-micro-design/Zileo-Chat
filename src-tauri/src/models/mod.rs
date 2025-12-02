@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod embedding;
+pub mod import_export;
 pub mod llm_models;
 pub mod mcp;
 pub mod memory;
