@@ -82,6 +82,55 @@ pub struct RegenerateResult {
     pub failed: usize,
 }
 
+/// Result of embedding test operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingTestResult {
+    /// Whether embedding was generated successfully
+    pub success: bool,
+    /// Vector dimension (e.g., 1024)
+    pub dimension: usize,
+    /// First 5 values of the embedding (preview)
+    pub preview: Vec<f32>,
+    /// Generation time in milliseconds
+    pub duration_ms: u64,
+    /// Provider used (mistral/ollama)
+    pub provider: String,
+    /// Model used
+    pub model: String,
+    /// Error message if failed
+    pub error: Option<String>,
+}
+
+/// Token statistics for memory categories
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemoryTokenStats {
+    /// Statistics per memory type
+    pub categories: Vec<CategoryTokenStats>,
+    /// Total characters across all categories
+    pub total_chars: usize,
+    /// Estimated total tokens (chars / 4)
+    pub total_estimated_tokens: usize,
+    /// Total memories counted
+    pub total_memories: usize,
+}
+
+/// Token statistics for a single category
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategoryTokenStats {
+    /// Memory type (user_pref, context, knowledge, decision)
+    pub memory_type: String,
+    /// Number of memories in this category
+    pub count: usize,
+    /// Total characters in this category
+    pub total_chars: usize,
+    /// Estimated tokens (chars / 4)
+    pub estimated_tokens: usize,
+    /// Average characters per memory
+    pub avg_chars: usize,
+    /// Number with embeddings
+    pub with_embeddings: usize,
+}
+
 /// Memory export format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -150,5 +199,44 @@ mod tests {
 
         assert_eq!(serde_json::to_string(&json_format).unwrap(), "\"json\"");
         assert_eq!(serde_json::to_string(&csv_format).unwrap(), "\"csv\"");
+    }
+
+    #[test]
+    fn test_embedding_test_result_serialization() {
+        let result = EmbeddingTestResult {
+            success: true,
+            dimension: 1024,
+            preview: vec![0.1, 0.2, 0.3, 0.4, 0.5],
+            duration_ms: 150,
+            provider: "mistral".to_string(),
+            model: "mistral-embed".to_string(),
+            error: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"dimension\":1024"));
+    }
+
+    #[test]
+    fn test_memory_token_stats_default() {
+        let stats = MemoryTokenStats::default();
+        assert_eq!(stats.total_chars, 0);
+        assert_eq!(stats.total_estimated_tokens, 0);
+        assert!(stats.categories.is_empty());
+    }
+
+    #[test]
+    fn test_category_token_stats_serialization() {
+        let cat = CategoryTokenStats {
+            memory_type: "knowledge".to_string(),
+            count: 10,
+            total_chars: 5000,
+            estimated_tokens: 1250,
+            avg_chars: 500,
+            with_embeddings: 8,
+        };
+        let json = serde_json::to_string(&cat).unwrap();
+        assert!(json.contains("\"memory_type\":\"knowledge\""));
+        assert!(json.contains("\"estimated_tokens\":1250"));
     }
 }

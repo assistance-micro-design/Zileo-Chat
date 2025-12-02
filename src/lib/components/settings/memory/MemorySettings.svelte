@@ -8,12 +8,15 @@ Allows users to configure embedding provider, model, and chunking settings.
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { Button, Input, Select, Card, StatusIndicator } from '$lib/components/ui';
+	import { Button, Input, Select, Card, StatusIndicator, Textarea } from '$lib/components/ui';
+	import { TokenStatsCard } from './index';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
 		EmbeddingProviderType,
-		MemoryStats
+		MemoryStats,
+		EmbeddingTestResult,
+		MemoryTokenStats
 	} from '$types/embedding';
 
 	/** Props */
@@ -42,6 +45,14 @@ Allows users to configure embedding provider, model, and chunking settings.
 	let loading = $state(true);
 	let saving = $state(false);
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+
+	/** Test embedding state */
+	let testText = $state('');
+	let testingEmbedding = $state(false);
+	let testResult = $state<EmbeddingTestResult | null>(null);
+
+	/** Token stats state */
+	let tokenStats = $state<MemoryTokenStats | null>(null);
 
 	/** Provider options */
 	const providerOptions: SelectOption[] = [
@@ -75,12 +86,14 @@ Allows users to configure embedding provider, model, and chunking settings.
 	async function loadConfig(): Promise<void> {
 		loading = true;
 		try {
-			const [loadedConfig, loadedStats] = await Promise.all([
+			const [loadedConfig, loadedStats, loadedTokenStats] = await Promise.all([
 				invoke<EmbeddingConfig>('get_embedding_config'),
-				invoke<MemoryStats>('get_memory_stats')
+				invoke<MemoryStats>('get_memory_stats'),
+				invoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
 			]);
 			config = loadedConfig;
 			stats = loadedStats;
+			tokenStats = loadedTokenStats;
 		} catch (err) {
 			message = { type: 'error', text: `Failed to load config: ${err}` };
 		} finally {
@@ -140,6 +153,33 @@ Allows users to configure embedding provider, model, and chunking settings.
 	 */
 	function handleStrategyChange(event: Event & { currentTarget: HTMLSelectElement }): void {
 		config.strategy = event.currentTarget.value as 'fixed' | 'semantic' | 'recursive';
+	}
+
+	/**
+	 * Tests embedding generation with sample text
+	 */
+	async function handleTestEmbedding(): Promise<void> {
+		if (!testText.trim()) {
+			message = { type: 'error', text: 'Please enter test text' };
+			return;
+		}
+
+		testingEmbedding = true;
+		testResult = null;
+		message = null;
+
+		try {
+			testResult = await invoke<EmbeddingTestResult>('test_embedding', { text: testText });
+			if (testResult.success) {
+				message = { type: 'success', text: `Embedding generated in ${testResult.duration_ms}ms` };
+			} else {
+				message = { type: 'error', text: testResult.error || 'Unknown error' };
+			}
+		} catch (err) {
+			message = { type: 'error', text: `Test failed: ${err}` };
+		} finally {
+			testingEmbedding = false;
+		}
 	}
 
 	// Load config on mount
@@ -290,6 +330,76 @@ Allows users to configure embedding provider, model, and chunking settings.
 					{/if}
 				{/snippet}
 			</Card>
+		{/if}
+
+		<!-- Test Embedding Section -->
+		<Card>
+			{#snippet header()}
+				<h3 class="card-title">Test Embedding</h3>
+			{/snippet}
+			{#snippet body()}
+				<div class="test-section">
+					<Textarea
+						label="Test Text"
+						value={testText}
+						placeholder="Enter text to test embedding generation..."
+						rows={3}
+						oninput={(e) => (testText = e.currentTarget.value)}
+					/>
+					<div class="test-actions">
+						<Button
+							variant="secondary"
+							onclick={handleTestEmbedding}
+							disabled={!testText.trim() || testingEmbedding}
+						>
+							{testingEmbedding ? 'Testing...' : 'Test Embedding'}
+						</Button>
+					</div>
+
+					{#if testResult}
+						<div
+							class="test-result"
+							class:success={testResult.success}
+							class:error={!testResult.success}
+						>
+							{#if testResult.success}
+								<div class="result-row">
+									<span class="result-label">Dimension:</span>
+									<span class="result-value">{testResult.dimension}</span>
+								</div>
+								<div class="result-row">
+									<span class="result-label">Duration:</span>
+									<span class="result-value">{testResult.duration_ms}ms</span>
+								</div>
+								<div class="result-row">
+									<span class="result-label">Provider:</span>
+									<span class="result-value">{testResult.provider}</span>
+								</div>
+								<div class="result-row">
+									<span class="result-label">Model:</span>
+									<span class="result-value">{testResult.model}</span>
+								</div>
+								<div class="result-row">
+									<span class="result-label">Preview:</span>
+									<span class="result-value preview"
+										>[{testResult.preview
+											.slice(0, 3)
+											.map((v) => v.toFixed(4))
+											.join(', ')}...]</span
+									>
+								</div>
+							{:else}
+								<p class="error-text">{testResult.error}</p>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{/snippet}
+		</Card>
+
+		<!-- Token Statistics Section -->
+		{#if tokenStats}
+			<TokenStatsCard stats={tokenStats} />
 		{/if}
 
 		<!-- Actions -->
@@ -474,6 +584,59 @@ Allows users to configure embedding provider, model, and chunking settings.
 	.message.error {
 		background: var(--color-error-light);
 		color: var(--color-error);
+	}
+
+	.test-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.test-actions {
+		display: flex;
+		justify-content: flex-start;
+	}
+
+	.test-result {
+		padding: var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		font-size: var(--font-size-sm);
+	}
+
+	.test-result.success {
+		background: var(--color-success-light);
+		border: 1px solid var(--color-success);
+	}
+
+	.test-result.error {
+		background: var(--color-error-light);
+		border: 1px solid var(--color-error);
+	}
+
+	.result-row {
+		display: flex;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.result-label {
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-secondary);
+		min-width: 80px;
+	}
+
+	.result-value {
+		color: var(--color-text-primary);
+	}
+
+	.result-value.preview {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+	}
+
+	.error-text {
+		color: var(--color-error);
+		margin: 0;
 	}
 
 	@media (max-width: 768px) {

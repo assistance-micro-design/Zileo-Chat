@@ -289,6 +289,9 @@ async fn main() -> anyhow::Result<()> {
             commands::embedding::export_memories,
             commands::embedding::import_memories,
             commands::embedding::regenerate_embeddings,
+            commands::embedding::reinit_embedding_service,
+            commands::embedding::test_embedding,
+            commands::embedding::get_memory_token_stats,
             // Prompt commands (Prompt Library)
             commands::prompt::list_prompts,
             commands::prompt::get_prompt,

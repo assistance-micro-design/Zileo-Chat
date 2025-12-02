@@ -124,6 +124,58 @@ export interface RegenerateResult {
 }
 
 /**
+ * Result of embedding test operation
+ */
+export interface EmbeddingTestResult {
+  /** Whether embedding was generated successfully */
+  success: boolean;
+  /** Vector dimension (e.g., 1024) */
+  dimension: number;
+  /** First 5 values of the embedding (preview) */
+  preview: number[];
+  /** Generation time in milliseconds */
+  duration_ms: number;
+  /** Provider used (mistral/ollama) */
+  provider: string;
+  /** Model used */
+  model: string;
+  /** Error message if failed */
+  error?: string;
+}
+
+/**
+ * Token statistics for a single memory category
+ */
+export interface CategoryTokenStats {
+  /** Memory type (user_pref, context, knowledge, decision) */
+  memory_type: string;
+  /** Number of memories in this category */
+  count: number;
+  /** Total characters in this category */
+  total_chars: number;
+  /** Estimated tokens (chars / 4) */
+  estimated_tokens: number;
+  /** Average characters per memory */
+  avg_chars: number;
+  /** Number with embeddings generated */
+  with_embeddings: number;
+}
+
+/**
+ * Token statistics for all memory categories
+ */
+export interface MemoryTokenStats {
+  /** Statistics per memory type */
+  categories: CategoryTokenStats[];
+  /** Total characters across all categories */
+  total_chars: number;
+  /** Estimated total tokens (chars / 4) */
+  total_estimated_tokens: number;
+  /** Total memories counted */
+  total_memories: number;
+}
+
+/**
  * Available embedding models per provider
  */
 export const EMBEDDING_MODELS: Record<EmbeddingProviderType, { value: string; label: string; dimension: number }[]> = {

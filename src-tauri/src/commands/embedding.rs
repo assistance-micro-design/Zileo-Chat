@@ -10,13 +10,15 @@ use crate::{
     commands::SecureKeyStore,
     llm::embedding::{EmbeddingProvider, EmbeddingService},
     models::{
-        EmbeddingConfigSettings, ExportFormat, ImportResult, Memory, MemoryStats, RegenerateResult,
+        CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat,
+        ImportResult, Memory, MemoryStats, MemoryTokenStats, RegenerateResult,
     },
     AppState,
 };
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
@@ -115,7 +117,7 @@ pub async fn save_embedding_config(
 
     // Update the EmbeddingService in AppState
     // Note: For Mistral, the API key is retrieved from SecureKeyStore (OS keychain)
-    update_embedding_service(&config, &state, &keystore).await;
+    update_embedding_service_internal(&config, &state, &keystore).await;
 
     info!("Embedding configuration saved successfully");
     Ok(())
@@ -123,7 +125,7 @@ pub async fn save_embedding_config(
 
 /// Updates the EmbeddingService in AppState based on config.
 /// Note: For Mistral, requires API key to be pre-configured in Provider settings (OS keychain).
-async fn update_embedding_service(
+async fn update_embedding_service_internal(
     config: &EmbeddingConfigSettings,
     state: &State<'_, AppState>,
     keystore: &State<'_, SecureKeyStore>,
@@ -540,6 +542,209 @@ pub async fn regenerate_embeddings(
         success,
         failed,
     })
+}
+
+/// Helper function to get config internally
+async fn get_embedding_config_internal(
+    state: &State<'_, AppState>,
+) -> Result<EmbeddingConfigSettings, String> {
+    let query = format!("SELECT config FROM settings:`{}`", EMBEDDING_CONFIG_KEY);
+
+    let results: Vec<serde_json::Value> = state
+        .db
+        .query_json(&query)
+        .await
+        .map_err(|e| format!("Failed to query config: {}", e))?;
+
+    if let Some(row) = results.first() {
+        if let Some(config) = row.get("config") {
+            return serde_json::from_value(config.clone())
+                .map_err(|e| format!("Failed to parse config: {}", e));
+        }
+    }
+
+    Ok(EmbeddingConfigSettings::default())
+}
+
+/// Reinitializes the embedding service with current config
+#[tauri::command]
+#[instrument(name = "reinit_embedding_service", skip(state, keystore))]
+pub async fn reinit_embedding_service(
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
+) -> Result<(), String> {
+    info!("Reinitializing embedding service");
+    let config = get_embedding_config_internal(&state).await?;
+    update_embedding_service_internal(&config, &state, &keystore).await;
+    Ok(())
+}
+
+/// Tests embedding generation with current configuration
+#[tauri::command]
+#[instrument(name = "test_embedding", skip(state))]
+pub async fn test_embedding(
+    state: State<'_, AppState>,
+    text: String,
+) -> Result<EmbeddingTestResult, String> {
+    info!(text_len = text.len(), "Testing embedding generation");
+
+    // Validate input
+    if text.is_empty() {
+        return Err("Test text cannot be empty".to_string());
+    }
+
+    if text.len() > 10000 {
+        return Err("Test text too long (max 10000 chars)".to_string());
+    }
+
+    // Get embedding service
+    let embed_service = state.embedding_service.read().await;
+    let service = embed_service.as_ref().ok_or_else(|| {
+        "Embedding service not configured. Please save embedding settings first.".to_string()
+    })?;
+
+    let start = Instant::now();
+
+    match service.embed(&text).await {
+        Ok(embedding) => {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            let dimension = embedding.len();
+            let preview: Vec<f32> = embedding.iter().take(5).cloned().collect();
+
+            // Get provider/model from config (since EmbeddingService doesn't expose it directly)
+            let config = get_embedding_config_internal(&state).await;
+            let (provider, model) = match config {
+                Ok(c) => (c.provider, c.model),
+                Err(_) => ("unknown".to_string(), "unknown".to_string()),
+            };
+
+            info!(
+                dimension = dimension,
+                duration_ms = duration_ms,
+                "Embedding test successful"
+            );
+
+            Ok(EmbeddingTestResult {
+                success: true,
+                dimension,
+                preview,
+                duration_ms,
+                provider,
+                model,
+                error: None,
+            })
+        }
+        Err(e) => {
+            let config = get_embedding_config_internal(&state).await;
+            let (provider, model) = match config {
+                Ok(c) => (c.provider, c.model),
+                Err(_) => ("unknown".to_string(), "unknown".to_string()),
+            };
+
+            warn!(error = %e, "Embedding test failed");
+
+            Ok(EmbeddingTestResult {
+                success: false,
+                dimension: 0,
+                preview: vec![],
+                duration_ms: start.elapsed().as_millis() as u64,
+                provider,
+                model,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+/// Gets token/character statistics per memory category
+#[tauri::command]
+#[instrument(name = "get_memory_token_stats", skip(state))]
+pub async fn get_memory_token_stats(
+    state: State<'_, AppState>,
+    type_filter: Option<String>,
+) -> Result<MemoryTokenStats, String> {
+    info!(type_filter = ?type_filter, "Getting memory token statistics");
+
+    // Build query with optional filter
+    let query = if let Some(ref mem_type) = type_filter {
+        format!(
+            r#"SELECT
+                type,
+                count() AS count,
+                math::sum(string::len(content)) AS total_chars,
+                count(embedding != NONE) AS with_embeddings
+            FROM memory
+            WHERE type = '{}'
+            GROUP BY type"#,
+            mem_type
+        )
+    } else {
+        r#"SELECT
+            type,
+            count() AS count,
+            math::sum(string::len(content)) AS total_chars,
+            count(embedding != NONE) AS with_embeddings
+        FROM memory
+        GROUP BY type"#
+            .to_string()
+    };
+
+    let results: Vec<serde_json::Value> = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to get token stats");
+        format!("Failed to get token statistics: {}", e)
+    })?;
+
+    let mut categories = Vec::new();
+    let mut total_chars: usize = 0;
+    let mut total_memories: usize = 0;
+
+    for row in results {
+        let memory_type = row
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let count = row.get("count").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+
+        let chars = row.get("total_chars").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+
+        let with_embeddings = row
+            .get("with_embeddings")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0) as usize;
+
+        let avg_chars = if count > 0 { chars / count } else { 0 };
+        let estimated_tokens = chars / 4; // Standard approximation
+
+        categories.push(CategoryTokenStats {
+            memory_type,
+            count,
+            total_chars: chars,
+            estimated_tokens,
+            avg_chars,
+            with_embeddings,
+        });
+
+        total_chars += chars;
+        total_memories += count;
+    }
+
+    let stats = MemoryTokenStats {
+        categories,
+        total_chars,
+        total_estimated_tokens: total_chars / 4,
+        total_memories,
+    };
+
+    info!(
+        total_memories = stats.total_memories,
+        total_chars = stats.total_chars,
+        total_tokens = stats.total_estimated_tokens,
+        "Token statistics retrieved"
+    );
+
+    Ok(stats)
 }
 
 #[cfg(test)]

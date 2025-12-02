@@ -40,9 +40,9 @@ pub use task::{Task, TaskCreate, TaskPriority, TaskStatus, TaskUpdate};
 #[allow(unused_imports)]
 pub use validation::{
     AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
-    RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior, UpdateValidationSettingsRequest,
-    ValidationMode, ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
-    ValidationType,
+    RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior,
+    UpdateValidationSettingsRequest, ValidationMode, ValidationRequest, ValidationRequestCreate,
+    ValidationSettings, ValidationStatus, ValidationType,
 };
 
 // Re-export types for future RAG/streaming phases (currently unused)
@@ -101,7 +101,8 @@ pub use llm_models::{get_all_builtin_models, MISTRAL_BUILTIN_MODELS, OLLAMA_BUIL
 
 // Re-export embedding settings types for Phase 5 implementation
 pub use embedding::{
-    EmbeddingConfigSettings, ExportFormat, ImportResult, MemoryStats, RegenerateResult,
+    CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,
+    MemoryStats, MemoryTokenStats, RegenerateResult,
 };
 
 // Re-export prompt library types for Prompt Library feature
