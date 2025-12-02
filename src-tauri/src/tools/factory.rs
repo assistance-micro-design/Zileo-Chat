@@ -83,6 +83,7 @@ impl ToolFactory {
     /// * `tool_name` - Tool identifier (e.g., "MemoryTool", "TodoTool")
     /// * `workflow_id` - Optional workflow ID for scoping
     /// * `agent_id` - Agent ID using the tool
+    /// * `app_handle` - Optional Tauri app handle for event emission
     ///
     /// # Returns
     /// * `Ok(Arc<dyn Tool>)` - Tool instance ready for use
@@ -97,7 +98,8 @@ impl ToolFactory {
     /// let tool = factory.create_tool(
     ///     "MemoryTool",
     ///     Some("wf_001".into()),
-    ///     "db_agent".into()
+    ///     "db_agent".into(),
+    ///     None
     /// )?;
     /// ```
     pub fn create_tool(
@@ -105,6 +107,7 @@ impl ToolFactory {
         tool_name: &str,
         workflow_id: Option<String>,
         agent_id: String,
+        app_handle: Option<tauri::AppHandle>,
     ) -> Result<Arc<dyn Tool>, String> {
         debug!(
             tool_name = %tool_name,
@@ -127,7 +130,7 @@ impl ToolFactory {
 
             "TodoTool" => {
                 let wf_id = workflow_id.unwrap_or_else(|| "default".to_string());
-                let tool = TodoTool::new(self.db.clone(), wf_id, agent_id);
+                let tool = TodoTool::new(self.db.clone(), wf_id, agent_id, app_handle);
                 info!("TodoTool instance created");
                 Ok(Arc::new(tool))
             }
@@ -148,6 +151,7 @@ impl ToolFactory {
     /// * `tool_names` - List of tool identifiers
     /// * `workflow_id` - Optional workflow ID for scoping
     /// * `agent_id` - Agent ID using the tools
+    /// * `app_handle` - Optional Tauri app handle for event emission
     ///
     /// # Returns
     /// Vector of successfully created tools. Failed tools are logged but skipped.
@@ -156,11 +160,12 @@ impl ToolFactory {
         tool_names: &[String],
         workflow_id: Option<String>,
         agent_id: String,
+        app_handle: Option<tauri::AppHandle>,
     ) -> Vec<Arc<dyn Tool>> {
         let mut tools = Vec::new();
 
         for name in tool_names {
-            match self.create_tool(name, workflow_id.clone(), agent_id.clone()) {
+            match self.create_tool(name, workflow_id.clone(), agent_id.clone(), app_handle.clone()) {
                 Ok(tool) => {
                     tools.push(tool);
                 }
@@ -287,7 +292,11 @@ impl ToolFactory {
 
         match tool_name {
             // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" => self.create_tool(tool_name, workflow_id, agent_id),
+            "MemoryTool" | "TodoTool" => {
+                // Extract app_handle from context for basic tools
+                let app_handle = context.app_handle.clone();
+                self.create_tool(tool_name, workflow_id, agent_id, app_handle)
+            }
 
             // Sub-agent tools (require context)
             "SpawnAgentTool" => {
@@ -368,6 +377,9 @@ impl ToolFactory {
     ) -> Vec<Arc<dyn Tool>> {
         let mut tools = Vec::new();
 
+        // Extract app_handle from context if available
+        let app_handle = context.as_ref().and_then(|ctx| ctx.app_handle.clone());
+
         // First, create tools from the provided tool_names list
         for name in tool_names {
             let result = if Self::requires_context(name) {
@@ -387,7 +399,7 @@ impl ToolFactory {
                     Err("AgentToolContext required for sub-agent tools".to_string())
                 }
             } else {
-                self.create_tool(name, workflow_id.clone(), agent_id.clone())
+                self.create_tool(name, workflow_id.clone(), agent_id.clone(), app_handle.clone())
             };
 
             match result {
@@ -526,6 +538,7 @@ mod tests {
             "MemoryTool",
             Some("wf_test".to_string()),
             "test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_ok());
@@ -542,6 +555,7 @@ mod tests {
             "TodoTool",
             Some("wf_test".to_string()),
             "test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_ok());
@@ -553,7 +567,7 @@ mod tests {
     async fn test_create_unknown_tool() {
         let factory = create_test_factory().await;
 
-        let result = factory.create_tool("UnknownTool", None, "test_agent".to_string());
+        let result = factory.create_tool("UnknownTool", None, "test_agent".to_string(), None);
 
         assert!(result.is_err());
         match result {
@@ -576,6 +590,7 @@ mod tests {
             &tool_names,
             Some("wf_batch".to_string()),
             "batch_agent".to_string(),
+            None,
         );
 
         // Should create 2 valid tools, skip 1 invalid
@@ -587,7 +602,7 @@ mod tests {
         let factory = create_test_factory().await;
 
         // MemoryTool should still work without embedding service
-        let result = factory.create_tool("MemoryTool", None, "test_agent".to_string());
+        let result = factory.create_tool("MemoryTool", None, "test_agent".to_string(), None);
         assert!(result.is_ok());
     }
 }

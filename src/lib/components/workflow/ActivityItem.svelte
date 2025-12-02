@@ -22,7 +22,8 @@
 		Loader2,
 		CheckCircle2,
 		XCircle,
-		Clock
+		Clock,
+		ListTodo
 	} from 'lucide-svelte';
 
 	/**
@@ -61,6 +62,7 @@
 		if (type === 'reasoning') return Brain;
 		if (type.startsWith('sub_agent_')) return Bot;
 		if (type === 'validation') return ShieldCheck;
+		if (type.startsWith('task_')) return ListTodo;
 		return Activity;
 	}
 
@@ -186,6 +188,18 @@
 
 	.activity-item.status-error .item-icon :global(.type-icon) {
 		color: var(--color-error);
+	}
+
+	.activity-item.task_create .item-icon :global(.type-icon) {
+		color: var(--color-accent);
+	}
+
+	.activity-item.task_update .item-icon :global(.type-icon) {
+		color: var(--color-warning);
+	}
+
+	.activity-item.task_complete .item-icon :global(.type-icon) {
+		color: var(--color-success);
 	}
 
 	.item-content {

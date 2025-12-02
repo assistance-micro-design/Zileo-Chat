@@ -428,6 +428,7 @@ mod tests {
             "MemoryTool",
             Some("wf_test".to_string()),
             "test_agent".to_string(),
+            None, // app_handle not needed in tests
         );
         assert!(tool_result.is_ok(), "Should create MemoryTool");
     }

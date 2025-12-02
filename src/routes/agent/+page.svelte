@@ -24,8 +24,9 @@ Streaming integration for real-time response display (Phase 2).
 	import { Plus, Bot, Search, Settings, RefreshCw, StopCircle, Activity } from 'lucide-svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 	import type { ThinkingStep } from '$types/thinking';
-	import { combineActivities, convertToolExecutions, convertThinkingSteps, convertSubAgentExecutions, mergeActivities } from '$lib/utils/activity';
+	import { combineActivities, convertToolExecutions, convertThinkingSteps, convertSubAgentExecutions, taskToActivity, mergeActivities } from '$lib/utils/activity';
 	import type { SubAgentExecution } from '$types/sub-agent';
+	import type { Task } from '$types/task';
 	import { agentStore, agents as agentsStore, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
 		streamingStore,
@@ -34,6 +35,7 @@ Streaming integration for real-time response display (Phase 2).
 		activeTools,
 		reasoningSteps,
 		activeSubAgents,
+		activeTasks,
 		hasStreamingActivities,
 		tokensReceived
 	} from '$lib/stores/streaming';
@@ -89,6 +91,9 @@ Streaming integration for real-time response display (Phase 2).
 	/** Sub-agent executions state - persisted to backend */
 	let subAgentExecutions = $state<SubAgentExecution[]>([]);
 
+	/** Tasks state - persisted to backend */
+	let tasks = $state<Task[]>([]);
+
 	/** Input/Output state */
 	let result = $state<WorkflowResult | null>(null);
 	let loading = $state(false);
@@ -131,7 +136,7 @@ Streaming integration for real-time response display (Phase 2).
 	const activities = $derived.by<WorkflowActivityEvent[]>(() => {
 		if ($hasStreamingActivities) {
 			// During streaming (or just completed but not yet captured), show live activities
-			return combineActivities($activeTools, $activeSubAgents, $reasoningSteps);
+			return combineActivities($activeTools, $activeSubAgents, $reasoningSteps, $activeTasks);
 		}
 		// Not streaming and no pending activities, show historical activities
 		return historicalActivities;
@@ -291,6 +296,22 @@ Streaming integration for real-time response display (Phase 2).
 	}
 
 	/**
+	 * Loads tasks for the current workflow from backend.
+	 * Tasks are sorted by creation time.
+	 */
+	async function loadTasks(workflowId: string): Promise<void> {
+		try {
+			const loadedTasks = await invoke<Task[]>('list_workflow_tasks', {
+				workflowId
+			});
+			tasks = loadedTasks;
+		} catch (err) {
+			console.error('Failed to load tasks:', err);
+			tasks = [];
+		}
+	}
+
+	/**
 	 * Saves a user message to the backend.
 	 *
 	 * @param workflowId - The workflow ID
@@ -402,14 +423,17 @@ Streaming integration for real-time response display (Phase 2).
 			loadMessages(workflow.id),
 			loadToolExecutions(workflow.id),
 			loadThinkingSteps(workflow.id),
-			loadSubAgentExecutions(workflow.id)
+			loadSubAgentExecutions(workflow.id),
+			loadTasks(workflow.id)
 		]);
 
-		// Convert loaded tool executions, thinking steps, and sub-agent executions to activities for display
+		// Convert loaded tool executions, thinking steps, sub-agent executions, and tasks to activities for display
+		const taskActivities = tasks.map((t, i) => taskToActivity(t, i));
 		historicalActivities = mergeActivities(
 			convertToolExecutions(toolExecutions),
 			convertThinkingSteps(thinkingSteps),
-			convertSubAgentExecutions(subAgentExecutions)
+			convertSubAgentExecutions(subAgentExecutions),
+			taskActivities
 		);
 
 		// Load context_window from workflow's model_id (if available)
@@ -625,7 +649,8 @@ Streaming integration for real-time response display (Phase 2).
 			const newActivities = combineActivities(
 				streamingState.tools,
 				streamingState.subAgents,
-				streamingState.reasoning
+				streamingState.reasoning,
+				streamingState.tasks
 			);
 			// Append new activities to existing historical activities
 			historicalActivities = mergeActivities(historicalActivities, newActivities);
@@ -747,14 +772,19 @@ Streaming integration for real-time response display (Phase 2).
 			// Restore thinking steps
 			thinkingSteps = fullState.thinking_steps;
 
-			// Load sub-agent executions separately (not in WorkflowFullState)
-			await loadSubAgentExecutions(fullState.workflow.id);
+			// Load sub-agent executions and tasks separately (not in WorkflowFullState)
+			await Promise.all([
+				loadSubAgentExecutions(fullState.workflow.id),
+				loadTasks(fullState.workflow.id)
+			]);
 
-			// Convert loaded tool executions, thinking steps, and sub-agent executions to activities for display
+			// Convert loaded tool executions, thinking steps, sub-agent executions, and tasks to activities for display
+			const taskActivities = tasks.map((t, i) => taskToActivity(t, i));
 			historicalActivities = mergeActivities(
 				convertToolExecutions(fullState.tool_executions),
 				convertThinkingSteps(fullState.thinking_steps),
-				convertSubAgentExecutions(subAgentExecutions)
+				convertSubAgentExecutions(subAgentExecutions),
+				taskActivities
 			);
 
 			// Auto-select the agent associated with this workflow and load its config

@@ -12,10 +12,11 @@ import type {
 	ActivityStatus,
 	ActivityMetadata
 } from '$types/activity';
-import type { ActiveTool, ActiveSubAgent, ActiveReasoningStep } from '$lib/stores/streaming';
+import type { ActiveTool, ActiveSubAgent, ActiveReasoningStep, ActiveTask } from '$lib/stores/streaming';
 import type { ToolExecution } from '$types/tool';
 import type { ThinkingStep } from '$types/thinking';
 import type { SubAgentExecution } from '$types/sub-agent';
+import type { Task } from '$types/task';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
@@ -92,6 +93,60 @@ export function activeReasoningToActivity(
 			stepNumber: step.stepNumber
 		}
 	};
+}
+
+/**
+ * Convert an ActiveTask from streaming store to WorkflowActivityEvent.
+ */
+export function activeTaskToActivity(
+	task: ActiveTask,
+	index: number
+): WorkflowActivityEvent {
+	const type = getTaskActivityType(task.status);
+	const status = mapTaskStatusToActivityStatus(task.status);
+
+	return {
+		id: `task-${task.id}-${index}`,
+		timestamp: task.createdAt,
+		type,
+		title: task.name,
+		description: `Priority: ${task.priority}`,
+		status,
+		metadata: {
+			taskId: task.id,
+			priority: task.priority
+		}
+	};
+}
+
+/**
+ * Get activity type based on task status.
+ */
+function getTaskActivityType(status: ActiveTask['status']): ActivityType {
+	switch (status) {
+		case 'completed':
+			return 'task_complete';
+		case 'in_progress':
+			return 'task_update';
+		default:
+			return 'task_create';
+	}
+}
+
+/**
+ * Map task status to activity status.
+ */
+function mapTaskStatusToActivityStatus(status: ActiveTask['status']): ActivityStatus {
+	switch (status) {
+		case 'completed':
+			return 'completed';
+		case 'blocked':
+			return 'error';
+		case 'in_progress':
+			return 'running';
+		default:
+			return 'pending';
+	}
 }
 
 /**
@@ -188,13 +243,15 @@ export function formatActivityDuration(ms: number | undefined): string {
 export function combineActivities(
 	tools: ActiveTool[],
 	subAgents: ActiveSubAgent[],
-	reasoning: ActiveReasoningStep[]
+	reasoning: ActiveReasoningStep[],
+	tasks: ActiveTask[]
 ): WorkflowActivityEvent[] {
 	const toolActivities = tools.map((t, i) => activeToolToActivity(t, i));
 	const agentActivities = subAgents.map((a, i) => activeSubAgentToActivity(a, i));
 	const reasoningActivities = reasoning.map((r, i) => activeReasoningToActivity(r, i));
+	const taskActivities = tasks.map((t, i) => activeTaskToActivity(t, i));
 
-	return [...toolActivities, ...agentActivities, ...reasoningActivities].sort(
+	return [...toolActivities, ...agentActivities, ...reasoningActivities, ...taskActivities].sort(
 		(a, b) => a.timestamp - b.timestamp
 	);
 }
@@ -204,7 +261,7 @@ export function combineActivities(
  */
 export function filterActivities(
 	activities: WorkflowActivityEvent[],
-	filter: 'all' | 'tools' | 'agents' | 'reasoning'
+	filter: 'all' | 'tools' | 'agents' | 'reasoning' | 'todos'
 ): WorkflowActivityEvent[] {
 	if (filter === 'all') return activities;
 
@@ -216,6 +273,8 @@ export function filterActivities(
 				return a.type.startsWith('sub_agent_');
 			case 'reasoning':
 				return a.type === 'reasoning';
+			case 'todos':
+				return a.type.startsWith('task_');
 			default:
 				return true;
 		}
@@ -230,7 +289,8 @@ export function countActivitiesByType(activities: WorkflowActivityEvent[]): Reco
 		all: activities.length,
 		tools: activities.filter((a) => a.type.startsWith('tool_')).length,
 		agents: activities.filter((a) => a.type.startsWith('sub_agent_')).length,
-		reasoning: activities.filter((a) => a.type === 'reasoning').length
+		reasoning: activities.filter((a) => a.type === 'reasoning').length,
+		todos: activities.filter((a) => a.type.startsWith('task_')).length
 	};
 }
 
@@ -303,6 +363,45 @@ export function convertThinkingSteps(steps: ThinkingStep[]): WorkflowActivityEve
 	return steps
 		.map((s, i) => thinkingStepToActivity(s, i))
 		.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Convert a persisted Task to WorkflowActivityEvent.
+ * Used for restoring historical task activities from database.
+ */
+export function taskToActivity(task: Task, index: number): WorkflowActivityEvent {
+	const activityType: ActivityType =
+		task.status === 'completed'
+			? 'task_complete'
+			: task.status === 'in_progress'
+				? 'task_update'
+				: 'task_create';
+
+	const status = mapTaskStatusToActivityStatus(task.status);
+
+	const metadata: ActivityMetadata = {
+		taskId: task.id,
+		priority: task.priority
+	};
+
+	if (task.agent_assigned) {
+		metadata.agentAssigned = task.agent_assigned;
+	}
+
+	if (task.completed_at) {
+		metadata.completedAt = task.completed_at;
+	}
+
+	return {
+		id: `task-hist-${task.id}-${index}`,
+		timestamp: new Date(task.created_at).getTime(),
+		type: activityType,
+		title: task.name,
+		description: task.description?.substring(0, 100),
+		status,
+		duration: task.duration_ms,
+		metadata
+	};
 }
 
 /**

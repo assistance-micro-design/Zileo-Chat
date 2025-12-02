@@ -97,6 +97,24 @@ export interface ActiveSubAgent {
 }
 
 /**
+ * Active task being tracked
+ */
+export interface ActiveTask {
+	/** Task ID */
+	id: string;
+	/** Task name/description */
+	name: string;
+	/** Current execution status */
+	status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+	/** Task priority (1-5) */
+	priority: number;
+	/** Timestamp when task was created */
+	createdAt: number;
+	/** Timestamp when task was last updated */
+	updatedAt: number;
+}
+
+/**
  * Streaming state interface
  */
 export interface StreamingState {
@@ -110,6 +128,8 @@ export interface StreamingState {
 	reasoning: ActiveReasoningStep[];
 	/** Active sub-agents being executed */
 	subAgents: ActiveSubAgent[];
+	/** Active tasks being tracked */
+	tasks: ActiveTask[];
 	/** Whether streaming is currently active */
 	isStreaming: boolean;
 	/** Whether streaming completed but activities not yet captured */
@@ -135,6 +155,7 @@ const initialState: StreamingState = {
 	tools: [],
 	reasoning: [],
 	subAgents: [],
+	tasks: [],
 	isStreaming: false,
 	completed: false,
 	tokensReceived: 0,
@@ -155,6 +176,68 @@ const store = writable<StreamingState>(initialState);
  * Event listener cleanup functions
  */
 let unlisteners: UnlistenFn[] = [];
+
+// ============================================================================
+// Task Handler Functions
+// ============================================================================
+
+/**
+ * Adds a new task to the active tasks list.
+ *
+ * @param chunk - Stream chunk containing task creation data
+ */
+function addTask(chunk: StreamChunk): void {
+	store.update((s) => ({
+		...s,
+		tasks: [
+			...s.tasks,
+			{
+				id: chunk.task_id!,
+				name: chunk.task_name!,
+				status: (chunk.task_status ?? 'pending') as ActiveTask['status'],
+				priority: chunk.task_priority ?? 3,
+				createdAt: Date.now(),
+				updatedAt: Date.now()
+			}
+		]
+	}));
+}
+
+/**
+ * Updates the status of an existing task.
+ *
+ * @param chunk - Stream chunk containing task update data
+ */
+function updateTaskStatus(chunk: StreamChunk): void {
+	store.update((s) => ({
+		...s,
+		tasks: s.tasks.map((t) =>
+			t.id === chunk.task_id
+				? { ...t, status: chunk.task_status as ActiveTask['status'], updatedAt: Date.now() }
+				: t
+		)
+	}));
+}
+
+/**
+ * Marks a task as completed.
+ *
+ * @param chunk - Stream chunk containing task completion data
+ */
+function completeTask(chunk: StreamChunk): void {
+	store.update((s) => ({
+		...s,
+		tasks: s.tasks.map((t) =>
+			t.id === chunk.task_id
+				? { ...t, status: 'completed' as const, updatedAt: Date.now() }
+				: t
+		)
+	}));
+}
+
+// ============================================================================
+// Chunk Processing
+// ============================================================================
 
 /**
  * Process a stream chunk and update state accordingly.
@@ -281,6 +364,18 @@ function processChunk(chunk: StreamChunk): void {
 							: a
 					)
 				};
+
+			case 'task_create':
+				addTask(chunk);
+				return s;
+
+			case 'task_update':
+				updateTaskStatus(chunk);
+				return s;
+
+			case 'task_complete':
+				completeTask(chunk);
+				return s;
 
 			default:
 				return s;
@@ -573,7 +668,7 @@ export const isCompleted = derived(store, (s) => s.completed);
  */
 export const hasStreamingActivities = derived(
 	store,
-	(s) => s.isStreaming || (s.completed && (s.tools.length > 0 || s.reasoning.length > 0 || s.subAgents.length > 0))
+	(s) => s.isStreaming || (s.completed && (s.tools.length > 0 || s.reasoning.length > 0 || s.subAgents.length > 0 || s.tasks.length > 0))
 );
 
 /**
@@ -637,3 +732,38 @@ export const subAgentCount = derived(store, (s) => s.subAgents.length);
  * Derived store: whether there are any active sub-agents
  */
 export const hasActiveSubAgents = derived(store, (s) => s.subAgents.length > 0);
+
+// ============================================================================
+// Task Derived Stores
+// ============================================================================
+
+/**
+ * Derived store: all active tasks
+ */
+export const activeTasks = derived(store, (s) => s.tasks);
+
+/**
+ * Derived store: tasks with pending status
+ */
+export const pendingTasks = derived(store, (s) =>
+	s.tasks.filter((t) => t.status === 'pending')
+);
+
+/**
+ * Derived store: tasks currently in progress
+ */
+export const runningTasks = derived(store, (s) =>
+	s.tasks.filter((t) => t.status === 'in_progress')
+);
+
+/**
+ * Derived store: tasks that have completed
+ */
+export const completedTasks = derived(store, (s) =>
+	s.tasks.filter((t) => t.status === 'completed')
+);
+
+/**
+ * Derived store: whether there are any active tasks
+ */
+export const hasActiveTasks = derived(store, (s) => s.tasks.length > 0);

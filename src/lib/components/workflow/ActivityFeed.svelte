@@ -20,7 +20,7 @@
 	import { ACTIVITY_FILTERS } from '$types/activity';
 	import { filterActivities, countActivitiesByType } from '$lib/utils/activity';
 	import ActivityItem from './ActivityItem.svelte';
-	import { Activity, Wrench, Bot, Brain, Loader2 } from 'lucide-svelte';
+	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from 'lucide-svelte';
 
 	/**
 	 * ActivityFeed props
@@ -53,7 +53,8 @@
 		Activity: Activity,
 		Wrench: Wrench,
 		Bot: Bot,
-		Brain: Brain
+		Brain: Brain,
+		ListTodo: ListTodo
 	};
 
 	/**

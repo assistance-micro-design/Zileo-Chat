@@ -24,7 +24,10 @@ export type ChunkType =
   | 'sub_agent_start'
   | 'sub_agent_progress'
   | 'sub_agent_complete'
-  | 'sub_agent_error';
+  | 'sub_agent_error'
+  | 'task_create'
+  | 'task_update'
+  | 'task_complete';
 
 /**
  * Metrics included in sub-agent complete events.
@@ -54,7 +57,7 @@ export interface StreamChunk {
   content?: string;
   /** Tool name (for tool_start/tool_end chunks) */
   tool?: string;
-  /** Duration in milliseconds (for tool_end/sub_agent_complete/sub_agent_error chunks) */
+  /** Duration in milliseconds (for tool_end/sub_agent_complete/sub_agent_error/task_complete chunks) */
   duration?: number;
   /** Sub-agent ID (for sub_agent_* chunks) */
   sub_agent_id?: string;
@@ -66,6 +69,14 @@ export interface StreamChunk {
   metrics?: SubAgentStreamMetrics;
   /** Progress percentage 0-100 (for sub_agent_progress chunks) */
   progress?: number;
+  /** Task ID (for task_* chunks) */
+  task_id?: string;
+  /** Task name (for task_* chunks) */
+  task_name?: string;
+  /** Task status (for task_* chunks) */
+  task_status?: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  /** Task priority (for task_* chunks) */
+  task_priority?: 1 | 2 | 3 | 4 | 5;
 }
 
 /**

@@ -6,12 +6,14 @@
 //! This tool allows agents to manage workflow tasks through a unified interface.
 
 use crate::db::DBClient;
+use crate::models::streaming::{events, StreamChunk};
 use crate::models::task::{Task, TaskCreate};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{debug, info, instrument};
+use tauri::{AppHandle, Emitter};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 /// Tool for managing workflow tasks.
@@ -34,6 +36,8 @@ pub struct TodoTool {
     workflow_id: String,
     /// Agent ID using this tool
     agent_id: String,
+    /// Tauri app handle for emitting streaming events
+    app_handle: Option<AppHandle>,
 }
 
 #[allow(dead_code)]
@@ -44,16 +48,34 @@ impl TodoTool {
     /// * `db` - Database client for persistence
     /// * `workflow_id` - Workflow ID to scope tasks to
     /// * `agent_id` - Agent ID using this tool
+    /// * `app_handle` - Optional Tauri app handle for emitting events
     ///
     /// # Example
     /// ```ignore
-    /// let tool = TodoTool::new(db.clone(), "wf_001".into(), "db_agent".into());
+    /// let tool = TodoTool::new(db.clone(), "wf_001".into(), "db_agent".into(), None);
     /// ```
-    pub fn new(db: Arc<DBClient>, workflow_id: String, agent_id: String) -> Self {
+    pub fn new(
+        db: Arc<DBClient>,
+        workflow_id: String,
+        agent_id: String,
+        app_handle: Option<AppHandle>,
+    ) -> Self {
         Self {
             db,
             workflow_id,
             agent_id,
+            app_handle,
+        }
+    }
+
+    /// Helper method to emit streaming events.
+    ///
+    /// If no app_handle is available, the event is silently skipped.
+    fn emit_task_event(&self, chunk: StreamChunk) {
+        if let Some(ref handle) = self.app_handle {
+            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
+                warn!(error = %e, "Failed to emit TodoTool event");
+            }
         }
     }
 
@@ -118,6 +140,14 @@ impl TodoTool {
 
         info!(task_id = %task_id, name = %name, "Task created");
 
+        // Emit task creation event
+        self.emit_task_event(StreamChunk::task_create(
+            &self.workflow_id,
+            &task_id,
+            name,
+            priority,
+        ));
+
         Ok(serde_json::json!({
             "success": true,
             "task_id": task_id,
@@ -158,6 +188,22 @@ impl TodoTool {
             )));
         }
 
+        // Get task name before update for event emission
+        let task_query = format!(
+            "SELECT name FROM task WHERE meta::id(id) = '{}'",
+            task_id
+        );
+        let task_data: Vec<Value> = self
+            .db
+            .query(&task_query)
+            .await
+            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let task_name = task_data
+            .first()
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown Task");
+
         // Use execute() instead of query() to avoid serialization issues with enums
         let update_query = format!("UPDATE task:`{}` SET status = '{}'", task_id, status);
         self.db
@@ -166,6 +212,14 @@ impl TodoTool {
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
         info!(task_id = %task_id, status = %status, "Task status updated");
+
+        // Emit task update event
+        self.emit_task_event(StreamChunk::task_update(
+            &self.workflow_id,
+            task_id,
+            task_name,
+            status,
+        ));
 
         Ok(serde_json::json!({
             "success": true,
@@ -262,9 +316,9 @@ impl TodoTool {
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
     async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
-        // First check if task exists
+        // Get task name before update for event emission
         let check_query = format!(
-            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
+            "SELECT meta::id(id) AS id, name FROM task WHERE meta::id(id) = '{}'",
             task_id
         );
         let existing: Vec<Value> = self
@@ -279,6 +333,12 @@ impl TodoTool {
                 task_id
             )));
         }
+
+        let task_name = existing
+            .first()
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown Task");
 
         let duration_part = duration_ms
             .map(|d| format!(", duration_ms = {}", d))
@@ -295,6 +355,14 @@ impl TodoTool {
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
         info!(task_id = %task_id, duration_ms = ?duration_ms, "Task completed");
+
+        // Emit task completion event
+        self.emit_task_event(StreamChunk::task_complete(
+            &self.workflow_id,
+            task_id,
+            task_name,
+            duration_ms,
+        ));
 
         Ok(serde_json::json!({
             "success": true,

@@ -413,6 +413,11 @@ impl LLMAgent {
             return Vec::new();
         };
 
+        // Extract app_handle from context if available
+        let app_handle = self.agent_context
+            .as_ref()
+            .and_then(|ctx| ctx.app_handle.clone());
+
         // If this is the primary agent and we have context, use create_tools_with_context
         // to include sub-agent tools
         if is_primary_agent {
@@ -438,7 +443,7 @@ impl LLMAgent {
             has_context = self.agent_context.is_some(),
             "Creating basic tools (sub-agent tools NOT available)"
         );
-        factory.create_tools(&self.config.tools, workflow_id, self.config.id.clone())
+        factory.create_tools(&self.config.tools, workflow_id, self.config.id.clone(), app_handle)
     }
 
     /// Builds enhanced system prompt with tool definitions for LLM

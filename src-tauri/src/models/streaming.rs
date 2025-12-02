@@ -30,6 +30,12 @@ pub enum ChunkType {
     SubAgentComplete,
     /// Sub-agent execution error
     SubAgentError,
+    /// Task created
+    TaskCreate,
+    /// Task updated
+    TaskUpdate,
+    /// Task completed
+    TaskComplete,
 }
 
 /// Streaming chunk emitted during workflow execution
@@ -63,6 +69,18 @@ pub struct StreamChunk {
     /// Progress percentage 0-100 (for sub_agent_progress chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<u8>,
+    /// Task ID (for task_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    /// Task name (for task_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_name: Option<String>,
+    /// Task status (for task_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_status: Option<String>,
+    /// Task priority (for task_* chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_priority: Option<u8>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -90,6 +108,10 @@ impl StreamChunk {
             parent_agent_id: None,
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -106,6 +128,10 @@ impl StreamChunk {
             parent_agent_id: None,
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -122,6 +148,10 @@ impl StreamChunk {
             parent_agent_id: None,
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -138,6 +168,10 @@ impl StreamChunk {
             parent_agent_id: None,
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -154,6 +188,10 @@ impl StreamChunk {
             parent_agent_id: None,
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -178,6 +216,10 @@ impl StreamChunk {
             parent_agent_id: Some(parent_agent_id),
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -205,6 +247,10 @@ impl StreamChunk {
             parent_agent_id: Some(parent_agent_id),
             metrics: None,
             progress: Some(progress.min(100)),
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -230,6 +276,10 @@ impl StreamChunk {
             parent_agent_id: Some(parent_agent_id),
             metrics: Some(metrics),
             progress: Some(100),
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
         }
     }
 
@@ -255,6 +305,94 @@ impl StreamChunk {
             parent_agent_id: Some(parent_agent_id),
             metrics: None,
             progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
+        }
+    }
+
+    /// Creates a task create event chunk.
+    ///
+    /// Emitted when a new task is created.
+    #[allow(dead_code)]
+    pub fn task_create(
+        workflow_id: impl Into<String>,
+        task_id: impl Into<String>,
+        task_name: impl Into<String>,
+        priority: u8,
+    ) -> Self {
+        Self {
+            workflow_id: workflow_id.into(),
+            chunk_type: ChunkType::TaskCreate,
+            content: None,
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: Some(task_id.into()),
+            task_name: Some(task_name.into()),
+            task_status: Some("pending".to_string()),
+            task_priority: Some(priority),
+        }
+    }
+
+    /// Creates a task update event chunk.
+    ///
+    /// Emitted when a task status is updated.
+    #[allow(dead_code)]
+    pub fn task_update(
+        workflow_id: impl Into<String>,
+        task_id: impl Into<String>,
+        task_name: impl Into<String>,
+        status: impl Into<String>,
+    ) -> Self {
+        Self {
+            workflow_id: workflow_id.into(),
+            chunk_type: ChunkType::TaskUpdate,
+            content: None,
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: Some(task_id.into()),
+            task_name: Some(task_name.into()),
+            task_status: Some(status.into()),
+            task_priority: None,
+        }
+    }
+
+    /// Creates a task complete event chunk.
+    ///
+    /// Emitted when a task is completed.
+    #[allow(dead_code)]
+    pub fn task_complete(
+        workflow_id: impl Into<String>,
+        task_id: impl Into<String>,
+        task_name: impl Into<String>,
+        duration: Option<u64>,
+    ) -> Self {
+        Self {
+            workflow_id: workflow_id.into(),
+            chunk_type: ChunkType::TaskComplete,
+            content: None,
+            tool: None,
+            duration,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: Some(task_id.into()),
+            task_name: Some(task_name.into()),
+            task_status: Some("completed".to_string()),
+            task_priority: None,
         }
     }
 }

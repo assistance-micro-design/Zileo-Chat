@@ -25,7 +25,10 @@ export type ActivityType =
 	| 'sub_agent_complete'
 	| 'sub_agent_error'
 	| 'validation'
-	| 'message';
+	| 'message'
+	| 'task_create'
+	| 'task_update'
+	| 'task_complete';
 
 /**
  * Status of an activity event.
@@ -35,7 +38,7 @@ export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error';
 /**
  * Filter options for activity feed.
  */
-export type ActivityFilter = 'all' | 'tools' | 'agents' | 'reasoning';
+export type ActivityFilter = 'all' | 'tools' | 'agents' | 'reasoning' | 'todos';
 
 /**
  * Metadata specific to activity types.
@@ -62,6 +65,14 @@ export interface ActivityMetadata {
 	iteration?: number;
 	/** Step number (for reasoning) */
 	stepNumber?: number;
+	/** Task ID (for task_* types) */
+	taskId?: string;
+	/** Task priority (for task_* types) */
+	priority?: number;
+	/** Agent assigned to task (for task_* types) */
+	agentAssigned?: string;
+	/** Task completion timestamp (for task_* types) */
+	completedAt?: string;
 }
 
 /**
@@ -117,5 +128,6 @@ export const ACTIVITY_FILTERS: ActivityFilterConfig[] = [
 	{ id: 'all', label: 'All', icon: 'Activity' },
 	{ id: 'tools', label: 'Tools', icon: 'Wrench' },
 	{ id: 'agents', label: 'Agents', icon: 'Bot' },
-	{ id: 'reasoning', label: 'Reasoning', icon: 'Brain' }
+	{ id: 'reasoning', label: 'Reasoning', icon: 'Brain' },
+	{ id: 'todos', label: 'Todos', icon: 'ListTodo' }
 ];
