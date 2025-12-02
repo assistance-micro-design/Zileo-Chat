@@ -259,11 +259,21 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
     Ok(workflows)
 }
 
-/// Deletes a workflow
+/// Deletes a workflow and all related entities (cascade delete).
+///
+/// Deletes in order:
+/// - Tasks (TodoTool)
+/// - Messages
+/// - Tool executions
+/// - Thinking steps
+/// - Sub-agent executions
+/// - Validation requests
+/// - Memories (workflow-scoped)
+/// - Workflow itself
 #[tauri::command]
 #[instrument(name = "delete_workflow", skip(state), fields(workflow_id = %id))]
 pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(), String> {
-    info!("Deleting workflow");
+    info!("Deleting workflow with cascade");
 
     // Validate input
     let validated_id = Validator::validate_uuid(&id).map_err(|e| {
@@ -271,6 +281,87 @@ pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(
         format!("Invalid workflow ID: {}", e)
     })?;
 
+    // Delete related entities in parallel (order doesn't matter for independent tables)
+    let db = Arc::clone(&state.db);
+    let db2 = Arc::clone(&state.db);
+    let db3 = Arc::clone(&state.db);
+    let db4 = Arc::clone(&state.db);
+    let db5 = Arc::clone(&state.db);
+    let db6 = Arc::clone(&state.db);
+    let db7 = Arc::clone(&state.db);
+
+    let id1 = validated_id.clone();
+    let id2 = validated_id.clone();
+    let id3 = validated_id.clone();
+    let id4 = validated_id.clone();
+    let id5 = validated_id.clone();
+    let id6 = validated_id.clone();
+    let id7 = validated_id.clone();
+
+    // Execute cascade deletes in parallel
+    let (tasks, messages, tools, thinking, sub_agents, validations, memories) = tokio::join!(
+        // Delete tasks
+        async move {
+            let query = format!("DELETE task WHERE workflow_id = '{}'", id1);
+            match db.execute(&query).await {
+                Ok(_) => info!("Deleted tasks for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete tasks (may not exist)"),
+            }
+        },
+        // Delete messages
+        async move {
+            let query = format!("DELETE message WHERE workflow_id = '{}'", id2);
+            match db2.execute(&query).await {
+                Ok(_) => info!("Deleted messages for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete messages (may not exist)"),
+            }
+        },
+        // Delete tool executions
+        async move {
+            let query = format!("DELETE tool_execution WHERE workflow_id = '{}'", id3);
+            match db3.execute(&query).await {
+                Ok(_) => info!("Deleted tool executions for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete tool executions (may not exist)"),
+            }
+        },
+        // Delete thinking steps
+        async move {
+            let query = format!("DELETE thinking_step WHERE workflow_id = '{}'", id4);
+            match db4.execute(&query).await {
+                Ok(_) => info!("Deleted thinking steps for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete thinking steps (may not exist)"),
+            }
+        },
+        // Delete sub-agent executions
+        async move {
+            let query = format!("DELETE sub_agent_execution WHERE workflow_id = '{}'", id5);
+            match db5.execute(&query).await {
+                Ok(_) => info!("Deleted sub-agent executions for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete sub-agent executions (may not exist)"),
+            }
+        },
+        // Delete validation requests
+        async move {
+            let query = format!("DELETE validation_request WHERE workflow_id = '{}'", id6);
+            match db6.execute(&query).await {
+                Ok(_) => info!("Deleted validation requests for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete validation requests (may not exist)"),
+            }
+        },
+        // Delete workflow-scoped memories
+        async move {
+            let query = format!("DELETE memory WHERE workflow_id = '{}'", id7);
+            match db7.execute(&query).await {
+                Ok(_) => info!("Deleted memories for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete memories (may not exist)"),
+            }
+        }
+    );
+
+    // Consume the unit values to avoid warnings
+    let _ = (tasks, messages, tools, thinking, sub_agents, validations, memories);
+
+    // Finally delete the workflow itself
     state
         .db
         .delete(&format!("workflow:{}", validated_id))
@@ -280,7 +371,7 @@ pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(
             format!("Failed to delete workflow: {}", e)
         })?;
 
-    info!("Workflow deleted successfully");
+    info!("Workflow and all related entities deleted successfully");
     Ok(())
 }
 
