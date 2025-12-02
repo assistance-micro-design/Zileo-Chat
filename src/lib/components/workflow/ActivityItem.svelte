@@ -23,7 +23,11 @@
 		CheckCircle2,
 		XCircle,
 		Clock,
-		ListTodo
+		ListTodo,
+		ChevronDown,
+		ChevronRight,
+		User,
+		Flag
 	} from 'lucide-svelte';
 
 	/**
@@ -37,6 +41,28 @@
 	}
 
 	let { activity, expanded = false }: Props = $props();
+
+	/** Local state for task collapse */
+	let isTaskExpanded = $state(false);
+
+	/** Check if this is a task with expandable details */
+	const isTaskWithDetails = $derived(
+		activity.type.startsWith('task_') &&
+			(activity.description || activity.metadata?.agentAssigned || activity.metadata?.priority)
+	);
+
+	/** Format priority for display */
+	function formatPriority(priority: number | undefined): string {
+		if (priority === undefined) return '';
+		const labels: Record<number, string> = {
+			1: 'Critique',
+			2: 'Haute',
+			3: 'Moyenne',
+			4: 'Basse',
+			5: 'Minimale'
+		};
+		return labels[priority] || `${priority}`;
+	}
 
 	/**
 	 * Get status CSS class for styling
@@ -115,10 +141,28 @@
 
 <div class="activity-item {statusClass}" role="listitem">
 	<div class="item-icon">
-		<IconComponent size={14} class="type-icon" />
+		{#if isTaskWithDetails}
+			<button
+				class="expand-btn"
+				onclick={() => (isTaskExpanded = !isTaskExpanded)}
+				aria-expanded={isTaskExpanded}
+				aria-label={isTaskExpanded ? 'Collapse details' : 'Expand details'}
+			>
+				{#if isTaskExpanded}
+					<ChevronDown size={14} />
+				{:else}
+					<ChevronRight size={14} />
+				{/if}
+			</button>
+		{:else}
+			<IconComponent size={14} class="type-icon" />
+		{/if}
 	</div>
 	<div class="item-content">
 		<div class="item-title">
+			{#if isTaskWithDetails}
+				<ListTodo size={14} class="type-icon" />
+			{/if}
 			{activity.title}
 			<span class="status-icon-wrapper" class:spinning={activity.status === 'running'}>
 				<StatusIcon size={12} class="status-icon" />
@@ -129,6 +173,33 @@
 		{/if}
 		{#if activity.metadata?.error}
 			<div class="item-error">{activity.metadata.error}</div>
+		{/if}
+		<!-- Task details collapse -->
+		{#if isTaskWithDetails && isTaskExpanded}
+			<div class="task-details">
+				{#if activity.description}
+					<div class="task-detail-row">
+						<span class="task-detail-label">Description</span>
+						<span class="task-detail-value">{activity.description}</span>
+					</div>
+				{/if}
+				{#if activity.metadata?.priority}
+					<div class="task-detail-row">
+						<Flag size={12} class="task-detail-icon" />
+						<span class="task-detail-label">Priorite</span>
+						<span class="task-detail-value priority-{activity.metadata.priority}">
+							{formatPriority(activity.metadata.priority)}
+						</span>
+					</div>
+				{/if}
+				{#if activity.metadata?.agentAssigned}
+					<div class="task-detail-row">
+						<User size={12} class="task-detail-icon" />
+						<span class="task-detail-label">Agent</span>
+						<span class="task-detail-value">{activity.metadata.agentAssigned}</span>
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</div>
 	<div class="item-meta">
@@ -280,5 +351,92 @@
 		color: var(--color-text-tertiary);
 		min-width: 40px;
 		text-align: right;
+	}
+
+	/* Task expand button */
+	.expand-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: var(--color-text-secondary);
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast, 150ms) ease;
+	}
+
+	.expand-btn:hover {
+		color: var(--color-accent);
+		background: var(--color-bg-tertiary);
+	}
+
+	/* Task details collapse section */
+	.task-details {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-sm);
+		background: var(--color-bg-tertiary);
+		border-radius: var(--radius-sm);
+		border-left: 2px solid var(--color-accent);
+		animation: slideDown 150ms ease-out;
+	}
+
+	@keyframes slideDown {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.task-detail-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-xs);
+		font-size: var(--font-size-xs);
+	}
+
+	.task-detail-row :global(.task-detail-icon) {
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--color-text-tertiary);
+	}
+
+	.task-detail-label {
+		flex-shrink: 0;
+		color: var(--color-text-tertiary);
+		min-width: 70px;
+	}
+
+	.task-detail-value {
+		color: var(--color-text-secondary);
+		word-break: break-word;
+	}
+
+	/* Priority colors */
+	.task-detail-value.priority-1 {
+		color: var(--color-error);
+		font-weight: 600;
+	}
+
+	.task-detail-value.priority-2 {
+		color: var(--color-warning);
+		font-weight: 500;
+	}
+
+	.task-detail-value.priority-3 {
+		color: var(--color-text-primary);
+	}
+
+	.task-detail-value.priority-4,
+	.task-detail-value.priority-5 {
+		color: var(--color-text-tertiary);
 	}
 </style>

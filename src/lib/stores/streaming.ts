@@ -178,64 +178,6 @@ const store = writable<StreamingState>(initialState);
 let unlisteners: UnlistenFn[] = [];
 
 // ============================================================================
-// Task Handler Functions
-// ============================================================================
-
-/**
- * Adds a new task to the active tasks list.
- *
- * @param chunk - Stream chunk containing task creation data
- */
-function addTask(chunk: StreamChunk): void {
-	store.update((s) => ({
-		...s,
-		tasks: [
-			...s.tasks,
-			{
-				id: chunk.task_id!,
-				name: chunk.task_name!,
-				status: (chunk.task_status ?? 'pending') as ActiveTask['status'],
-				priority: chunk.task_priority ?? 3,
-				createdAt: Date.now(),
-				updatedAt: Date.now()
-			}
-		]
-	}));
-}
-
-/**
- * Updates the status of an existing task.
- *
- * @param chunk - Stream chunk containing task update data
- */
-function updateTaskStatus(chunk: StreamChunk): void {
-	store.update((s) => ({
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === chunk.task_id
-				? { ...t, status: chunk.task_status as ActiveTask['status'], updatedAt: Date.now() }
-				: t
-		)
-	}));
-}
-
-/**
- * Marks a task as completed.
- *
- * @param chunk - Stream chunk containing task completion data
- */
-function completeTask(chunk: StreamChunk): void {
-	store.update((s) => ({
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === chunk.task_id
-				? { ...t, status: 'completed' as const, updatedAt: Date.now() }
-				: t
-		)
-	}));
-}
-
-// ============================================================================
 // Chunk Processing
 // ============================================================================
 
@@ -366,16 +308,40 @@ function processChunk(chunk: StreamChunk): void {
 				};
 
 			case 'task_create':
-				addTask(chunk);
-				return s;
+				return {
+					...s,
+					tasks: [
+						...s.tasks,
+						{
+							id: chunk.task_id!,
+							name: chunk.task_name!,
+							status: (chunk.task_status ?? 'pending') as ActiveTask['status'],
+							priority: chunk.task_priority ?? 3,
+							createdAt: Date.now(),
+							updatedAt: Date.now()
+						}
+					]
+				};
 
 			case 'task_update':
-				updateTaskStatus(chunk);
-				return s;
+				return {
+					...s,
+					tasks: s.tasks.map((t) =>
+						t.id === chunk.task_id
+							? { ...t, status: chunk.task_status as ActiveTask['status'], updatedAt: Date.now() }
+							: t
+					)
+				};
 
 			case 'task_complete':
-				completeTask(chunk);
-				return s;
+				return {
+					...s,
+					tasks: s.tasks.map((t) =>
+						t.id === chunk.task_id
+							? { ...t, status: 'completed' as const, updatedAt: Date.now() }
+							: t
+					)
+				};
 
 			default:
 				return s;
