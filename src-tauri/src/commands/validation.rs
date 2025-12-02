@@ -290,14 +290,10 @@ pub async fn get_validation_settings(
 
     // Try to load existing settings from settings:validation record
     let query = "SELECT config FROM settings:`settings:validation`";
-    let results: Vec<serde_json::Value> = state
-        .db
-        .query_json(query)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to query validation settings");
-            format!("Failed to query validation settings: {}", e)
-        })?;
+    let results: Vec<serde_json::Value> = state.db.query_json(query).await.map_err(|e| {
+        error!(error = %e, "Failed to query validation settings");
+        format!("Failed to query validation settings: {}", e)
+    })?;
 
     // If we have a result with a config field, parse it
     if let Some(first) = results.first() {
@@ -385,14 +381,10 @@ pub async fn update_validation_settings(
         json_config
     );
 
-    state
-        .db
-        .execute(&upsert_query)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to save validation settings");
-            format!("Failed to save validation settings: {}", e)
-        })?;
+    state.db.execute(&upsert_query).await.map_err(|e| {
+        error!(error = %e, "Failed to save validation settings");
+        format!("Failed to save validation settings: {}", e)
+    })?;
 
     info!("Validation settings updated successfully");
     Ok(current)
@@ -422,14 +414,10 @@ pub async fn reset_validation_settings(
         json_config
     );
 
-    state
-        .db
-        .execute(&upsert_query)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to save default settings");
-            format!("Failed to save default settings: {}", e)
-        })?;
+    state.db.execute(&upsert_query).await.map_err(|e| {
+        error!(error = %e, "Failed to save default settings");
+        format!("Failed to save default settings: {}", e)
+    })?;
 
     info!("Validation settings reset to defaults successfully");
     Ok(settings)
@@ -464,7 +452,10 @@ async fn get_validation_settings_internal(
 }
 
 /// Apply partial selective config updates
-fn apply_selective_config(current: &mut SelectiveValidationConfig, partial: PartialSelectiveConfig) {
+fn apply_selective_config(
+    current: &mut SelectiveValidationConfig,
+    partial: PartialSelectiveConfig,
+) {
     if let Some(v) = partial.tools {
         current.tools = v;
     }
@@ -493,7 +484,10 @@ fn apply_risk_thresholds(current: &mut RiskThresholdConfig, partial: PartialRisk
 }
 
 /// Apply partial audit config updates with validation
-fn apply_audit_config(current: &mut AuditConfig, partial: PartialAuditConfig) -> Result<(), String> {
+fn apply_audit_config(
+    current: &mut AuditConfig,
+    partial: PartialAuditConfig,
+) -> Result<(), String> {
     if let Some(v) = partial.enable_logging {
         current.enable_logging = v;
     }

@@ -414,7 +414,8 @@ impl LLMAgent {
         };
 
         // Extract app_handle from context if available
-        let app_handle = self.agent_context
+        let app_handle = self
+            .agent_context
             .as_ref()
             .and_then(|ctx| ctx.app_handle.clone());
 
@@ -443,7 +444,12 @@ impl LLMAgent {
             has_context = self.agent_context.is_some(),
             "Creating basic tools (sub-agent tools NOT available)"
         );
-        factory.create_tools(&self.config.tools, workflow_id, self.config.id.clone(), app_handle)
+        factory.create_tools(
+            &self.config.tools,
+            workflow_id,
+            self.config.id.clone(),
+            app_handle,
+        )
     }
 
     /// Builds enhanced system prompt with tool definitions for LLM
@@ -1092,7 +1098,10 @@ impl Agent for LLMAgent {
                 // Emit progress event about max iterations
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
-                    format!("Max tool iterations ({}) reached, stopping execution", max_iterations),
+                    format!(
+                        "Max tool iterations ({}) reached, stopping execution",
+                        max_iterations
+                    ),
                 ));
                 break;
             }

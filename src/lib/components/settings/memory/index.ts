@@ -9,4 +9,3 @@
 export { default as MemorySettings } from './MemorySettings.svelte';
 export { default as MemoryList } from './MemoryList.svelte';
 export { default as MemoryForm } from './MemoryForm.svelte';
-export { default as TokenStatsCard } from './TokenStatsCard.svelte';

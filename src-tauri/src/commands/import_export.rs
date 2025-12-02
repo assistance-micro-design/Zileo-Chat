@@ -250,11 +250,19 @@ pub async fn generate_export_file(
                 },
                 tools: row["tools"]
                     .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 mcp_servers: row["mcp_servers"]
                     .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
                 max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
@@ -319,13 +327,21 @@ pub async fn generate_export_file(
                 } else {
                     row["args"]
                         .as_array()
-                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
                         .unwrap_or_default()
                 }
             } else {
                 row["args"]
                     .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default()
             };
 
@@ -715,8 +731,8 @@ pub async fn execute_import(
     );
 
     // Parse package
-    let package: ExportPackage = serde_json::from_str(&data)
-        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    let package: ExportPackage =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid JSON: {}", e))?;
 
     let mut imported = ImportCounts::default();
     let mut skipped = ImportCounts::default();
@@ -750,7 +766,10 @@ pub async fn execute_import(
                 .await
                 .map(|mut r| r.take(0).unwrap_or_default())
                 .unwrap_or_default();
-            results.first().and_then(|r| r["id"].as_str()).map(String::from)
+            results
+                .first()
+                .and_then(|r| r["id"].as_str())
+                .map(String::from)
         } else {
             None
         };
@@ -767,8 +786,10 @@ pub async fn execute_import(
 
         // Build insert/upsert query
         let tools_json = serde_json::to_string(&agent.tools).unwrap_or("[]".to_string());
-        let mcp_servers_json = serde_json::to_string(&agent.mcp_servers).unwrap_or("[]".to_string());
-        let system_prompt_json = serde_json::to_string(&agent.system_prompt).unwrap_or("\"\"".to_string());
+        let mcp_servers_json =
+            serde_json::to_string(&agent.mcp_servers).unwrap_or("[]".to_string());
+        let system_prompt_json =
+            serde_json::to_string(&agent.system_prompt).unwrap_or("\"\"".to_string());
         let name_json = serde_json::to_string(&name).unwrap_or("\"\"".to_string());
 
         let query = if resolution == Some(ConflictResolution::Overwrite) {
@@ -863,7 +884,10 @@ pub async fn execute_import(
                 .await
                 .map(|mut r| r.take(0).unwrap_or_default())
                 .unwrap_or_default();
-            results.first().and_then(|r| r["id"].as_str()).map(String::from)
+            results
+                .first()
+                .and_then(|r| r["id"].as_str())
+                .map(String::from)
         } else {
             None
         };
@@ -892,7 +916,8 @@ pub async fn execute_import(
 
         let args_json = serde_json::to_string(&server.args).unwrap_or("[]".to_string());
         let name_json = serde_json::to_string(&name).unwrap_or("\"\"".to_string());
-        let description_json = serde_json::to_string(&server.description).unwrap_or("null".to_string());
+        let description_json =
+            serde_json::to_string(&server.description).unwrap_or("null".to_string());
 
         let query = if resolution == Some(ConflictResolution::Overwrite) {
             format!(
@@ -976,7 +1001,10 @@ pub async fn execute_import(
                 .await
                 .map(|mut r| r.take(0).unwrap_or_default())
                 .unwrap_or_default();
-            results.first().and_then(|r| r["id"].as_str()).map(String::from)
+            results
+                .first()
+                .and_then(|r| r["id"].as_str())
+                .map(String::from)
         } else {
             None
         };
@@ -1092,7 +1120,10 @@ pub async fn execute_import(
                 .await
                 .map(|mut r| r.take(0).unwrap_or_default())
                 .unwrap_or_default();
-            results.first().and_then(|r| r["id"].as_str()).map(String::from)
+            results
+                .first()
+                .and_then(|r| r["id"].as_str())
+                .map(String::from)
         } else {
             None
         };
@@ -1108,7 +1139,8 @@ pub async fn execute_import(
         };
 
         let name_json = serde_json::to_string(&name).unwrap_or("\"\"".to_string());
-        let description_json = serde_json::to_string(&prompt.description).unwrap_or("\"\"".to_string());
+        let description_json =
+            serde_json::to_string(&prompt.description).unwrap_or("\"\"".to_string());
         let content_json = serde_json::to_string(&prompt.content).unwrap_or("\"\"".to_string());
 
         // Extract variables from content using the same pattern as create_prompt

@@ -49,7 +49,11 @@ pub struct PromptVariable {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none", rename = "defaultValue")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "defaultValue"
+    )]
     pub default_value: Option<String>,
 }
 
@@ -113,8 +117,8 @@ impl Prompt {
     /// assert_eq!(vars.len(), 2);
     /// ```
     pub fn detect_variables(content: &str) -> Vec<PromptVariable> {
-        let pattern = Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}")
-            .expect("Invalid regex pattern");
+        let pattern =
+            Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern");
 
         let mut seen = HashSet::new();
         let mut variables = Vec::new();
@@ -149,8 +153,8 @@ impl Prompt {
     /// ```
     #[allow(dead_code)] // Used in Phase 3 (Frontend)
     pub fn interpolate(content: &str, values: &HashMap<String, String>) -> String {
-        let pattern = Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}")
-            .expect("Invalid regex pattern");
+        let pattern =
+            Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern");
 
         pattern
             .replace_all(content, |caps: &regex::Captures| {

@@ -80,7 +80,8 @@ impl ValidationHelper {
         if let Some(first) = results.first() {
             if let Some(config) = first.get("config") {
                 if !config.is_null() {
-                    if let Ok(settings) = serde_json::from_value::<ValidationSettings>(config.clone())
+                    if let Ok(settings) =
+                        serde_json::from_value::<ValidationSettings>(config.clone())
                     {
                         return settings;
                     }
@@ -235,7 +236,10 @@ impl ValidationHelper {
 
         // 4. Wait for validation response (polling with timeout)
         let result = self
-            .wait_for_validation(&validation_id, Duration::from_secs(DEFAULT_VALIDATION_TIMEOUT_SECS))
+            .wait_for_validation(
+                &validation_id,
+                Duration::from_secs(DEFAULT_VALIDATION_TIMEOUT_SECS),
+            )
             .await;
 
         // 5. Return result

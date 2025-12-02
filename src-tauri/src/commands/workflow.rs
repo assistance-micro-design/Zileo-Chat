@@ -337,7 +337,9 @@ pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(
             let query = format!("DELETE sub_agent_execution WHERE workflow_id = '{}'", id5);
             match db5.execute(&query).await {
                 Ok(_) => info!("Deleted sub-agent executions for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete sub-agent executions (may not exist)"),
+                Err(e) => {
+                    warn!(error = %e, "Failed to delete sub-agent executions (may not exist)")
+                }
             }
         },
         // Delete validation requests
@@ -359,7 +361,15 @@ pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(
     );
 
     // Consume the unit values to avoid warnings
-    let _ = (tasks, messages, tools, thinking, sub_agents, validations, memories);
+    let _ = (
+        tasks,
+        messages,
+        tools,
+        thinking,
+        sub_agents,
+        validations,
+        memories,
+    );
 
     // Finally delete the workflow itself
     state

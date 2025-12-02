@@ -147,7 +147,9 @@ impl MCPHttpHandle {
         for (key, value) in &config.env {
             if let Some(header_name) = key.strip_prefix("HEADER_") {
                 if let Ok(header_value) = value.parse() {
-                    if let Ok(name) = reqwest::header::HeaderName::try_from(header_name.to_lowercase()) {
+                    if let Ok(name) =
+                        reqwest::header::HeaderName::try_from(header_name.to_lowercase())
+                    {
                         headers.insert(name, header_value);
                     }
                 }
@@ -198,15 +200,12 @@ impl MCPHttpHandle {
         );
 
         // Try a HEAD request to check if the endpoint is reachable
-        let response = self
-            .client
-            .head(&self.base_url)
-            .send()
-            .await
-            .map_err(|e| MCPError::ConnectionFailed {
+        let response = self.client.head(&self.base_url).send().await.map_err(|e| {
+            MCPError::ConnectionFailed {
                 server: self.config.name.clone(),
                 message: format!("Failed to connect to HTTP endpoint: {}", e),
-            })?;
+            }
+        })?;
 
         // Accept 2xx, 4xx (might require auth), or 405 (method not allowed - means server is there)
         let status = response.status();
@@ -245,12 +244,13 @@ impl MCPHttpHandle {
         let response = self.send_request(request).await?;
 
         // Parse initialization result
-        let init_result: MCPInitializeResult = serde_json::from_value(
-            response.result.ok_or_else(|| MCPError::InitializationFailed {
-                server: self.config.name.clone(),
-                message: "No result in initialize response".to_string(),
-            })?,
-        )?;
+        let init_result: MCPInitializeResult =
+            serde_json::from_value(response.result.ok_or_else(|| {
+                MCPError::InitializationFailed {
+                    server: self.config.name.clone(),
+                    message: "No result in initialize response".to_string(),
+                }
+            })?)?;
 
         // Store server info
         self.server_info = Some((
@@ -298,8 +298,7 @@ impl MCPHttpHandle {
 
     /// Internal method to refresh tools
     async fn refresh_tools_internal(&mut self) -> MCPResult<()> {
-        let request =
-            JsonRpcRequest::new("tools/list", None, self.next_request_id());
+        let request = JsonRpcRequest::new("tools/list", None, self.next_request_id());
 
         let response = self.send_request(request).await?;
 
@@ -323,8 +322,7 @@ impl MCPHttpHandle {
 
     /// Internal method to refresh resources
     async fn refresh_resources_internal(&mut self) -> MCPResult<()> {
-        let request =
-            JsonRpcRequest::new("resources/list", None, self.next_request_id());
+        let request = JsonRpcRequest::new("resources/list", None, self.next_request_id());
 
         let response = self.send_request(request).await?;
 
@@ -434,7 +432,9 @@ impl MCPHttpHandle {
             .iter()
             .filter_map(|c| match c {
                 MCPContent::Text { text } => Some(text.clone()),
-                MCPContent::Resource { resource } => Some(resource.text.clone().unwrap_or_default()),
+                MCPContent::Resource { resource } => {
+                    Some(resource.text.clone().unwrap_or_default())
+                }
                 MCPContent::Image { .. } => None, // Images cannot be converted to text
             })
             .collect::<Vec<_>>()
@@ -472,12 +472,14 @@ impl MCPHttpHandle {
         }
 
         // Parse JSON-RPC response
-        let json_response: JsonRpcResponse = response.json().await.map_err(|e| {
-            MCPError::SerializationError {
-                context: "HTTP response parsing".to_string(),
-                message: e.to_string(),
-            }
-        })?;
+        let json_response: JsonRpcResponse =
+            response
+                .json()
+                .await
+                .map_err(|e| MCPError::SerializationError {
+                    context: "HTTP response parsing".to_string(),
+                    message: e.to_string(),
+                })?;
 
         // Check for JSON-RPC error
         if let Some(ref error) = json_response.error {
@@ -592,7 +594,9 @@ impl MCPHttpHandle {
 
     /// Returns the server info (name, version) if available
     pub fn server_info(&self) -> Option<(&str, &str)> {
-        self.server_info.as_ref().map(|(n, v)| (n.as_str(), v.as_str()))
+        self.server_info
+            .as_ref()
+            .map(|(n, v)| (n.as_str(), v.as_str()))
     }
 
     /// Checks if the connection is active
@@ -648,7 +652,9 @@ mod tests {
     #[test]
     fn test_http_config_with_api_key() {
         let mut config = create_test_http_config();
-        config.env.insert("API_KEY".to_string(), "test_key_123".to_string());
+        config
+            .env
+            .insert("API_KEY".to_string(), "test_key_123".to_string());
 
         assert!(config.env.contains_key("API_KEY"));
     }
@@ -656,7 +662,10 @@ mod tests {
     #[test]
     fn test_http_config_with_custom_headers() {
         let mut config = create_test_http_config();
-        config.env.insert("HEADER_X-Custom-Auth".to_string(), "custom_value".to_string());
+        config.env.insert(
+            "HEADER_X-Custom-Auth".to_string(),
+            "custom_value".to_string(),
+        );
 
         assert!(config.env.contains_key("HEADER_X-Custom-Auth"));
     }

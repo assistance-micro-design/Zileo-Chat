@@ -142,9 +142,7 @@ impl MCPClient {
                 http_handle.initialize().await?;
                 TransportHandle::Http(http_handle)
             }
-            MCPDeploymentMethod::Docker
-            | MCPDeploymentMethod::Npx
-            | MCPDeploymentMethod::Uvx => {
+            MCPDeploymentMethod::Docker | MCPDeploymentMethod::Npx | MCPDeploymentMethod::Uvx => {
                 // Stdio transport (process-based)
                 let mut stdio_handle = MCPServerHandle::spawn(self.config.clone()).await?;
                 stdio_handle.initialize().await?;

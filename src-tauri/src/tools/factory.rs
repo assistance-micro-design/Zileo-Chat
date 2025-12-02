@@ -165,7 +165,12 @@ impl ToolFactory {
         let mut tools = Vec::new();
 
         for name in tool_names {
-            match self.create_tool(name, workflow_id.clone(), agent_id.clone(), app_handle.clone()) {
+            match self.create_tool(
+                name,
+                workflow_id.clone(),
+                agent_id.clone(),
+                app_handle.clone(),
+            ) {
                 Ok(tool) => {
                     tools.push(tool);
                 }
@@ -399,7 +404,12 @@ impl ToolFactory {
                     Err("AgentToolContext required for sub-agent tools".to_string())
                 }
             } else {
-                self.create_tool(name, workflow_id.clone(), agent_id.clone(), app_handle.clone())
+                self.create_tool(
+                    name,
+                    workflow_id.clone(),
+                    agent_id.clone(),
+                    app_handle.clone(),
+                )
             };
 
             match result {

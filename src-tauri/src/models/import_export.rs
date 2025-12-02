@@ -515,7 +515,9 @@ impl ImportValidation {
 /// Checks if an env var key matches sensitive patterns
 pub fn is_sensitive_env_key(key: &str) -> bool {
     let upper = key.to_uppercase();
-    SENSITIVE_ENV_PATTERNS.iter().any(|pattern| upper.contains(pattern))
+    SENSITIVE_ENV_PATTERNS
+        .iter()
+        .any(|pattern| upper.contains(pattern))
 }
 
 // ============================================================================

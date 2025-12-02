@@ -206,7 +206,9 @@ DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx'
 /// allowing HTTP-based MCP server connections.
 #[tauri::command]
 #[instrument(name = "migrate_mcp_http_schema", skip(state))]
-pub async fn migrate_mcp_http_schema(state: State<'_, AppState>) -> Result<MigrationResult, String> {
+pub async fn migrate_mcp_http_schema(
+    state: State<'_, AppState>,
+) -> Result<MigrationResult, String> {
     info!("Running MCP HTTP schema migration");
 
     // Run migration query

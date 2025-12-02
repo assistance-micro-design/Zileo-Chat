@@ -372,7 +372,9 @@ impl UpdateModelRequest {
         }
         if let Some(price_out) = self.output_price_per_mtok {
             if !(0.0..=1000.0).contains(&price_out) {
-                return Err("Output price must be between 0 and 1000 USD per million tokens".into());
+                return Err(
+                    "Output price must be between 0 and 1000 USD per million tokens".into(),
+                );
             }
         }
 

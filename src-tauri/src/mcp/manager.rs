@@ -548,10 +548,13 @@ impl MCPManager {
             description_json
         );
 
-        self.db.execute(&query).await.map_err(|e| MCPError::DatabaseError {
-            context: "update server config".to_string(),
-            message: e.to_string(),
-        })?;
+        self.db
+            .execute(&query)
+            .await
+            .map_err(|e| MCPError::DatabaseError {
+                context: "update server config".to_string(),
+                message: e.to_string(),
+            })?;
 
         // Also update in-memory client if it exists
         {

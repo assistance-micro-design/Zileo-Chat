@@ -189,10 +189,7 @@ impl TodoTool {
         }
 
         // Get task name before update for event emission
-        let task_query = format!(
-            "SELECT name FROM task WHERE meta::id(id) = '{}'",
-            task_id
-        );
+        let task_query = format!("SELECT name FROM task WHERE meta::id(id) = '{}'", task_id);
         let task_data: Vec<Value> = self
             .db
             .query(&task_query)

@@ -3,8 +3,8 @@
 //! Tauri IPC commands for managing prompt templates with variable interpolation.
 
 use crate::models::prompt::{
-    Prompt, PromptCreate, PromptSummary, PromptUpdate,
-    MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
+    Prompt, PromptCreate, PromptSummary, PromptUpdate, MAX_PROMPT_CONTENT_LEN,
+    MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
 use crate::AppState;
 use tauri::State;
@@ -116,8 +116,7 @@ pub async fn get_prompt(prompt_id: String, state: State<'_, AppState>) -> Result
         .next()
         .ok_or_else(|| format!("Prompt not found: {}", prompt_id))
         .and_then(|v| {
-            serde_json::from_value(v)
-                .map_err(|e| format!("Failed to deserialize prompt: {}", e))
+            serde_json::from_value(v).map_err(|e| format!("Failed to deserialize prompt: {}", e))
         })?;
 
     info!("Retrieved prompt");
@@ -149,9 +148,12 @@ pub async fn create_prompt(
     })?;
 
     // Serialize strings for SurrealDB
-    let name_json = serde_json::to_string(&name).map_err(|e| format!("Failed to serialize name: {}", e))?;
-    let description_json = serde_json::to_string(&description).map_err(|e| format!("Failed to serialize description: {}", e))?;
-    let content_json = serde_json::to_string(&content).map_err(|e| format!("Failed to serialize content: {}", e))?;
+    let name_json =
+        serde_json::to_string(&name).map_err(|e| format!("Failed to serialize name: {}", e))?;
+    let description_json = serde_json::to_string(&description)
+        .map_err(|e| format!("Failed to serialize description: {}", e))?;
+    let content_json = serde_json::to_string(&content)
+        .map_err(|e| format!("Failed to serialize content: {}", e))?;
     let category_str = config.category.to_string();
 
     let query = format!(
@@ -167,7 +169,13 @@ pub async fn create_prompt(
             updated_at: time::now()
         }}
         "#,
-        prompt_id, prompt_id, name_json, description_json, category_str, content_json, variables_json
+        prompt_id,
+        prompt_id,
+        name_json,
+        description_json,
+        category_str,
+        content_json,
+        variables_json
     );
 
     state.db.execute(&query).await.map_err(|e| {
