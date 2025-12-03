@@ -39,6 +39,7 @@ use crate::llm::embedding::EmbeddingService;
 use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
+use crate::tools::registry::TOOL_REGISTRY;
 use crate::tools::spawn_agent::SpawnAgentTool;
 use crate::tools::{MemoryTool, TodoTool, Tool};
 use std::sync::Arc;
@@ -109,6 +110,8 @@ impl ToolFactory {
         agent_id: String,
         app_handle: Option<tauri::AppHandle>,
     ) -> Result<Arc<dyn Tool>, String> {
+        // Validate tool exists in registry
+        TOOL_REGISTRY.validate(tool_name)?;
         debug!(
             tool_name = %tool_name,
             workflow_id = ?workflow_id,
@@ -201,18 +204,12 @@ impl ToolFactory {
     /// Note: Sub-agent tools require `AgentToolContext` and should be
     /// created using `create_tool_with_context()`.
     pub fn available_tools() -> Vec<&'static str> {
-        vec![
-            "MemoryTool",
-            "TodoTool",
-            "SpawnAgentTool",
-            "DelegateTaskTool",
-            "ParallelTasksTool",
-        ]
+        TOOL_REGISTRY.available_tools()
     }
 
     /// Returns list of basic tool names (those not requiring AgentToolContext).
     pub fn basic_tools() -> Vec<&'static str> {
-        vec!["MemoryTool", "TodoTool"]
+        TOOL_REGISTRY.basic_tools()
     }
 
     /// Returns list of sub-agent tool names (those requiring AgentToolContext).
@@ -220,17 +217,17 @@ impl ToolFactory {
     /// These tools are only available to the primary workflow agent
     /// and are NOT provided to sub-agents (to prevent chaining).
     pub fn sub_agent_tools() -> Vec<&'static str> {
-        vec!["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"]
+        TOOL_REGISTRY.sub_agent_tools()
     }
 
     /// Checks if a tool name is valid.
     pub fn is_valid_tool(name: &str) -> bool {
-        Self::available_tools().contains(&name)
+        TOOL_REGISTRY.has_tool(name)
     }
 
     /// Checks if a tool requires AgentToolContext.
     pub fn requires_context(name: &str) -> bool {
-        Self::sub_agent_tools().contains(&name)
+        TOOL_REGISTRY.requires_context(name)
     }
 
     /// Creates a tool instance with AgentToolContext.

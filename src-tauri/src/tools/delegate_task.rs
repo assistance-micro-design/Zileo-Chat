@@ -230,6 +230,21 @@ impl DelegateTaskTool {
 
         let agent_name = target_agent.config().name.clone();
 
+        // 6b. Optionally validate MCP server names configured for this agent
+        // (This is informational - delegation uses the agent's existing config)
+        let mcp_servers_info = target_agent.mcp_servers();
+        if !mcp_servers_info.is_empty() {
+            if let Some(ref mcp_mgr) = self.mcp_manager {
+                if let Err(invalid) = mcp_mgr.validate_server_names(&mcp_servers_info).await {
+                    warn!(
+                        agent_id = %agent_id,
+                        invalid_servers = ?invalid,
+                        "Delegated agent has unknown MCP servers configured"
+                    );
+                }
+            }
+        }
+
         // 7. Request human-in-the-loop validation
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
         let details = ValidationHelper::delegate_details(agent_id, &agent_name, prompt);

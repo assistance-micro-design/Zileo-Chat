@@ -48,9 +48,9 @@ impl std::fmt::Display for MCPDeploymentMethod {
 /// This is the input type for creating/updating server configurations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPServerConfig {
-    /// Unique identifier for the server (alphanumeric + underscore/hyphen)
+    /// Technical ID (for database storage only)
     pub id: String,
-    /// Human-readable server name
+    /// User-friendly name - MUST BE UNIQUE - used as identifier in MCPManager
     pub name: String,
     /// Whether the server is enabled and should start automatically
     pub enabled: bool,

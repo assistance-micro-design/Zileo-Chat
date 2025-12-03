@@ -27,24 +27,20 @@ use crate::agents::LLMAgent;
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
-use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
-use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, SubAgentExecutionComplete, SubAgentExecutionCreate, SubAgentMetrics,
-    SubAgentSpawnResult, SubAgentStatus,
-};
+use crate::models::streaming::SubAgentOperationType;
+use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use crate::tools::{
-    context::AgentToolContext, validation_helper::ValidationHelper, Tool, ToolDefinition,
-    ToolError, ToolFactory, ToolResult,
+    context::AgentToolContext, sub_agent_executor::SubAgentExecutor,
+    validation_helper::ValidationHelper, Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
-use tauri::Emitter;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 /// Default system prompt for sub-agents when none is provided
@@ -158,22 +154,6 @@ impl SpawnAgentTool {
         }
     }
 
-    /// Emits a streaming event to the frontend via Tauri.
-    ///
-    /// This is a helper method to emit sub-agent lifecycle events.
-    /// If no app_handle is available, the event is silently skipped.
-    fn emit_event(&self, event_name: &str, chunk: &StreamChunk) {
-        if let Some(ref handle) = self.app_handle {
-            if let Err(e) = handle.emit(event_name, chunk) {
-                warn!(
-                    event = %event_name,
-                    error = %e,
-                    "Failed to emit sub-agent event"
-                );
-            }
-        }
-    }
-
     /// Spawns a temporary sub-agent and executes a task.
     ///
     /// # Arguments
@@ -201,23 +181,11 @@ impl SpawnAgentTool {
         model: Option<&str>,
     ) -> ToolResult<Value> {
         // 1. Check if this agent is the primary (workflow starter)
-        if !self.is_primary_agent {
-            return Err(ToolError::PermissionDenied(
-                "Only the primary workflow agent can spawn sub-agents. \
-                 Sub-agents cannot create other sub-agents."
-                    .to_string(),
-            ));
-        }
+        SubAgentExecutor::check_primary_permission(self.is_primary_agent, "spawn sub-agents")?;
 
         // 2. Check sub-agent limit
         let current_count = self.spawned_children.read().await.len();
-        if current_count >= MAX_SUB_AGENTS {
-            return Err(ToolError::ValidationFailed(format!(
-                "Maximum {} sub-agents reached. Cannot spawn more. \
-                 Current sub-agents: {}",
-                MAX_SUB_AGENTS, current_count
-            )));
-        }
+        SubAgentExecutor::check_limit(current_count, "spawn")?;
 
         // 3. Validate inputs
         if name.trim().is_empty() {
@@ -264,23 +232,43 @@ impl SpawnAgentTool {
             }
         }
 
+        // 4b. Validate MCP server names if provided
+        if let Some(ref mcp_servers_list) = mcp_servers {
+            if !mcp_servers_list.is_empty() {
+                if let Some(ref mcp_mgr) = self.mcp_manager {
+                    if let Err(invalid) = mcp_mgr.validate_server_names(mcp_servers_list).await {
+                        return Err(ToolError::ValidationFailed(format!(
+                            "Unknown MCP server(s): {:?}. Available servers: {:?}",
+                            invalid,
+                            mcp_mgr.server_names().await
+                        )));
+                    }
+                }
+            }
+        }
+
         // 5. Request human-in-the-loop validation
-        let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
+        let executor = SubAgentExecutor::new(
+            self.db.clone(),
+            self.orchestrator.clone(),
+            self.mcp_manager.clone(),
+            self.app_handle.clone(),
+            self.workflow_id.clone(),
+            self.parent_agent_id.clone(),
+        );
+
         let details = ValidationHelper::spawn_details(
             name,
             prompt,
             &tools.clone().unwrap_or_default(),
             &mcp_servers.clone().unwrap_or_default(),
         );
-        let risk_level = ValidationHelper::determine_risk_level(&SubAgentOperationType::Spawn);
 
-        validation_helper
+        executor
             .request_validation(
-                &self.workflow_id,
                 SubAgentOperationType::Spawn,
                 &format!("Spawn sub-agent '{}' to execute task", name),
                 details,
-                risk_level,
             )
             .await?;
 
@@ -298,10 +286,7 @@ impl SpawnAgentTool {
             })?;
 
         // 7. Generate sub-agent ID
-        let sub_agent_id = format!("sub_{}", Uuid::new_v4());
-
-        // 8. Create execution record ID
-        let execution_id = Uuid::new_v4().to_string();
+        let sub_agent_id = SubAgentExecutor::generate_sub_agent_id();
 
         // 9. Build sub-agent configuration
         // Filter out sub-agent tools from available tools (sub-agents cannot spawn others)
@@ -339,23 +324,9 @@ impl SpawnAgentTool {
         );
 
         // 10. Create execution record in database (status: running)
-        let mut execution_create = SubAgentExecutionCreate::new(
-            self.workflow_id.clone(),
-            self.parent_agent_id.clone(),
-            sub_agent_id.clone(),
-            name.to_string(),
-            prompt.to_string(),
-        );
-        // Set status to running (new() defaults to pending)
-        execution_create.status = "running".to_string();
-
-        // Use db.create() which handles serialization correctly (avoids SDK enum issues)
-        self.db
-            .create("sub_agent_execution", &execution_id, execution_create)
-            .await
-            .map_err(|e| {
-                ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
-            })?;
+        let execution_id = executor
+            .create_execution_record(&sub_agent_id, name, prompt)
+            .await?;
 
         // 11. Create LLMAgent instance for sub-agent
         let sub_agent = LLMAgent::with_factory(
@@ -380,14 +351,7 @@ impl SpawnAgentTool {
         self.spawned_children.write().await.push(spawned_child);
 
         // 13b. Emit sub_agent_start event
-        let start_chunk = StreamChunk::sub_agent_start(
-            self.workflow_id.clone(),
-            sub_agent_id.clone(),
-            name.to_string(),
-            self.parent_agent_id.clone(),
-            prompt.to_string(),
-        );
-        self.emit_event(events::WORKFLOW_STREAM, &start_chunk);
+        executor.emit_start_event(&sub_agent_id, name, prompt);
 
         // 14. Create task for sub-agent
         let task = Task {
@@ -401,130 +365,21 @@ impl SpawnAgentTool {
         };
 
         // 15. Execute sub-agent
-        let start_time = std::time::Instant::now();
-        let execution_result = self
-            .orchestrator
-            .execute_with_mcp(&sub_agent_id, task, self.mcp_manager.clone())
-            .await;
+        let exec_result = executor.execute_with_metrics(&sub_agent_id, task).await;
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
-
-        // 16. Process result
-        let (report, metrics, success, error_message) = match execution_result {
-            Ok(report) => {
-                let metrics = SubAgentMetrics {
-                    duration_ms,
-                    tokens_input: report.metrics.tokens_input as u64,
-                    tokens_output: report.metrics.tokens_output as u64,
-                };
-                (report.content, metrics, true, None)
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                error!(
-                    sub_agent_id = %sub_agent_id,
-                    error = %error_msg,
-                    "Sub-agent execution failed"
-                );
-                let metrics = SubAgentMetrics {
-                    duration_ms,
-                    tokens_input: 0,
-                    tokens_output: 0,
-                };
-                (
-                    format!("# Sub-Agent Error\n\nExecution failed: {}", error_msg),
-                    metrics,
-                    false,
-                    Some(error_msg),
-                )
-            }
-        };
-
-        // 16b. Emit sub_agent_complete or sub_agent_error event
-        if success {
-            let complete_chunk = StreamChunk::sub_agent_complete(
-                self.workflow_id.clone(),
-                sub_agent_id.clone(),
-                name.to_string(),
-                self.parent_agent_id.clone(),
-                report.clone(),
-                SubAgentStreamMetrics {
-                    duration_ms,
-                    tokens_input: metrics.tokens_input,
-                    tokens_output: metrics.tokens_output,
-                },
-            );
-            self.emit_event(events::WORKFLOW_STREAM, &complete_chunk);
-        } else {
-            let error_chunk = StreamChunk::sub_agent_error(
-                self.workflow_id.clone(),
-                sub_agent_id.clone(),
-                name.to_string(),
-                self.parent_agent_id.clone(),
-                error_message
-                    .clone()
-                    .unwrap_or_else(|| "Unknown error".to_string()),
-                duration_ms,
-            );
-            self.emit_event(events::WORKFLOW_STREAM, &error_chunk);
-        }
+        // 16. Emit completion or error event
+        executor.emit_complete_event(&sub_agent_id, name, &exec_result);
 
         // 17. Update execution record
-        let completion = if success {
-            SubAgentExecutionComplete::success(
-                duration_ms,
-                Some(metrics.tokens_input),
-                Some(metrics.tokens_output),
-                report.clone(),
-            )
-        } else {
-            SubAgentExecutionComplete::error(
-                duration_ms,
-                error_message
-                    .clone()
-                    .unwrap_or_else(|| "Unknown error".to_string()),
-            )
-        };
-
-        let update_query = format!(
-            "UPDATE sub_agent_execution:`{}` SET \
-             status = '{}', \
-             duration_ms = {}, \
-             tokens_input = {}, \
-             tokens_output = {}, \
-             result_summary = {}, \
-             error_message = {}, \
-             completed_at = time::now()",
-            execution_id,
-            completion.status,
-            completion.duration_ms,
-            completion.tokens_input.unwrap_or(0),
-            completion.tokens_output.unwrap_or(0),
-            completion
-                .result_summary
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-            completion
-                .error_message
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-        );
-
-        if let Err(e) = self.db.execute(&update_query).await {
-            warn!(
-                execution_id = %execution_id,
-                error = %e,
-                "Failed to update execution record"
-            );
-        }
+        executor
+            .update_execution_record(&execution_id, &exec_result)
+            .await;
 
         // 18. Update spawned children status
         {
             let mut children = self.spawned_children.write().await;
             if let Some(child) = children.iter_mut().find(|c| c.id == sub_agent_id) {
-                child.status = if success {
+                child.status = if exec_result.success {
                     SubAgentStatus::Completed
                 } else {
                     SubAgentStatus::Error
@@ -543,17 +398,17 @@ impl SpawnAgentTool {
 
         info!(
             sub_agent_id = %sub_agent_id,
-            success = success,
-            duration_ms = duration_ms,
+            success = exec_result.success,
+            duration_ms = exec_result.metrics.duration_ms,
             "Sub-agent execution completed"
         );
 
         // 20. Return result
         let result = SubAgentSpawnResult {
-            success,
+            success: exec_result.success,
             child_id: sub_agent_id,
-            report,
-            metrics,
+            report: exec_result.report,
+            metrics: exec_result.metrics,
         };
 
         serde_json::to_value(&result)

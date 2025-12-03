@@ -71,7 +71,9 @@ pub async fn execute_workflow_streaming(
     })?;
 
     // Create cancellation token for this workflow (enables real cancel functionality)
-    let cancellation_token = state.create_cancellation_token(&validated_workflow_id).await;
+    let cancellation_token = state
+        .create_cancellation_token(&validated_workflow_id)
+        .await;
 
     // Load workflow with explicit ID conversion to avoid SurrealDB Thing enum issues
     // Use meta::id() to extract the UUID without SurrealDB's angle brackets
@@ -244,9 +246,11 @@ pub async fn execute_workflow_streaming(
 
     // Execute via orchestrator with MCP support, racing against cancellation token
     // Using tokio::select! allows the execution to be cancelled immediately when the user clicks Cancel
-    let execution_future = state
-        .orchestrator
-        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()));
+    let execution_future = state.orchestrator.execute_with_mcp(
+        &validated_agent_id,
+        task,
+        Some(state.mcp_manager.clone()),
+    );
 
     let report = tokio::select! {
         // Execution branch - runs the actual LLM call

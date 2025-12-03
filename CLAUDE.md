@@ -379,6 +379,147 @@ enabled = ["MemoryTool", "TodoTool"]
 required = ["serena"]  # Optional MCP servers to use
 ```
 
+## Tool Development Patterns
+
+### New Utility Modules
+
+The tools system has been refactored to reduce code duplication. Use these utilities when developing new tools:
+
+#### `tools/utils.rs` - Database and Validation Utilities
+
+```rust
+use crate::tools::utils::{
+    ensure_record_exists, delete_with_check, db_error,
+    validate_not_empty, validate_length, validate_range, validate_enum_value,
+    QueryBuilder
+};
+
+// Validate inputs
+validate_not_empty(name, "name")?;
+validate_length(content, 50000, "content")?;
+validate_range(priority, 1, 5, "priority")?;
+validate_enum_value(&status, &["pending", "done"], "status")?;
+
+// Database operations
+ensure_record_exists(&db, "memory", id, "Memory").await?;
+delete_with_check(&db, "task", id, "Task").await?;
+
+// Query building
+let query = QueryBuilder::new("memory")
+    .select(&["content", "memory_type"])
+    .where_eq("memory_type", "knowledge")
+    .order_by("created_at", true)
+    .limit(10)
+    .build();
+```
+
+#### `tools/constants.rs` - Centralized Constants
+
+```rust
+use crate::tools::constants::{memory, todo, sub_agent};
+
+// Memory tool constants
+let max = memory::MAX_CONTENT_LENGTH;  // 50_000
+let types = memory::VALID_TYPES;       // &["user_pref", "context", "knowledge", "decision"]
+
+// Todo tool constants
+let max_name = todo::MAX_NAME_LENGTH;  // 128
+let statuses = todo::VALID_STATUSES;   // &["pending", "in_progress", "completed", "blocked"]
+
+// Sub-agent limit
+let max_agents = sub_agent::MAX_SUB_AGENTS;  // 3
+```
+
+#### `tools/response.rs` - JSON Response Builder
+
+```rust
+use crate::tools::response::ResponseBuilder;
+
+// Standard success response
+ResponseBuilder::ok("memory_id", id, "Memory created successfully")
+
+// List response
+ResponseBuilder::list(&items, items.len())
+
+// Custom response with builder
+ResponseBuilder::new()
+    .success(true)
+    .id("task_id", task_id)
+    .message("Task updated")
+    .metrics(duration_ms, tokens_in, tokens_out)
+    .build()
+```
+
+#### `tools/registry.rs` - Tool Discovery
+
+```rust
+use crate::tools::registry::TOOL_REGISTRY;
+
+// Check if tool exists
+if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
+
+// Get tool metadata
+let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
+
+// List tools by category
+let basic = TOOL_REGISTRY.basic_tools();        // ["MemoryTool", "TodoTool"]
+let sub_agent = TOOL_REGISTRY.sub_agent_tools();  // ["SpawnAgentTool", ...]
+
+// Validate with error message
+TOOL_REGISTRY.validate(tool_name)?;
+```
+
+#### `tools/sub_agent_executor.rs` - Sub-Agent Operations
+
+```rust
+use crate::tools::sub_agent_executor::{SubAgentExecutor, ExecutionResult};
+
+// Permission and limit checks (static methods)
+SubAgentExecutor::check_primary_permission(is_primary, "spawn")?;
+SubAgentExecutor::check_limit(current_count, "spawn")?;
+
+// Create executor instance
+let executor = SubAgentExecutor::new(
+    db, orchestrator, mcp_manager, app_handle,
+    workflow_id, parent_agent_id
+);
+
+// Execution lifecycle
+let exec_id = executor.create_execution_record(agent_id, name, prompt).await?;
+executor.emit_start_event(agent_id, name, prompt);
+let result = executor.execute_with_metrics(agent_id, task).await;
+executor.update_execution_record(&exec_id, &result).await;
+executor.emit_complete_event(agent_id, name, &result);
+```
+
+### MCP Server Identification
+
+**IMPORTANT**: MCP servers are identified by **NAME** (not ID) throughout the system.
+
+```rust
+// MCPManager is keyed by server NAME
+let tools = mcp_manager.list_server_tools("Serena").await?;
+mcp_manager.call_tool("Serena", "tool_name", args).await?;
+
+// Agent configuration uses names
+AgentConfig {
+    mcp_servers: vec!["Serena".to_string(), "Context7".to_string()],
+    // ...
+}
+
+// Validate server names
+let invalid = mcp_manager.validate_server_names(&names).await;
+```
+
+**System prompt format:**
+```
+### Available MCP Servers
+- **Serena** [DIRECT] - Code analysis - 15 tools
+- **Context7** [DELEGATE] - Documentation - 8 tools
+
+To assign: {"mcp_servers": ["Serena"]}
+```
+
 ## Database Schema (SurrealDB)
 
 Key entities with graph relations:

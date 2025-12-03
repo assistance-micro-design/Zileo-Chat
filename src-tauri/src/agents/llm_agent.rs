@@ -73,16 +73,14 @@ pub struct ToolExecutionResult {
 /// so the agent can make informed decisions when spawning sub-agents.
 #[derive(Debug, Clone)]
 struct MCPServerSummary {
-    /// Server ID (used in mcp_servers parameter)
-    id: String,
-    /// Human-readable server name
+    /// Human-readable server name (used as identifier in mcp_servers parameter)
     name: String,
     /// Description of what the server does
     description: Option<String>,
-    /// Current status (running, stopped, etc.)
-    status: String,
     /// Number of tools available from this server
     tools_count: usize,
+    /// Whether this agent has direct access to this server
+    has_direct_access: bool,
 }
 
 /// Agent that uses real LLM calls via the ProviderManager
@@ -377,17 +375,23 @@ impl LLMAgent {
             }
         };
 
+        // Create a set of server names that this agent has direct access to
+        let direct_access: std::collections::HashSet<&String> =
+            self.config.mcp_servers.iter().collect();
+
         for server in all_servers {
             // Only include enabled servers that are running
             if server.config.enabled
                 && server.status == crate::models::mcp::MCPServerStatus::Running
             {
+                let name = server.config.name.clone();
+                let has_direct_access = direct_access.contains(&name);
+
                 summaries.push(MCPServerSummary {
-                    id: server.config.id.clone(),
-                    name: server.config.name.clone(),
+                    name,
                     description: server.config.description.clone(),
-                    status: server.status.to_string(),
                     tools_count: server.tools.len(),
+                    has_direct_access,
                 });
             }
         }
@@ -513,13 +517,13 @@ You can call multiple tools in sequence. Always analyze tool results before proc
         // MCP tools section - these are tools the agent can use DIRECTLY
         if !mcp_tools.is_empty() {
             let mut mcp_section = String::from(
-                "## MCP Tools (Direct Access)\n\n**IMPORTANT**: These are YOUR tools. Use them directly - do NOT delegate to a sub-agent.\nTo call MCP tools, use the format: `server_id:tool_name`\n",
+                "## MCP Tools (Direct Access)\n\n**IMPORTANT**: These are YOUR tools. Use them directly - do NOT delegate to a sub-agent.\nTo call MCP tools, use the format: `server_name:tool_name`\n",
             );
 
-            for (server_id, tool) in mcp_tools {
+            for (server_name, tool) in mcp_tools {
                 mcp_section.push_str(&format!(
                     "\n### {}:{}\n**Description**: {}\n\n**Input Schema**:\n```json\n{}\n```\n",
-                    server_id,
+                    server_name,
                     tool.name,
                     tool.description,
                     serde_json::to_string_pretty(&tool.input_schema).unwrap_or_default()
@@ -546,37 +550,35 @@ You are currently running with the following configuration:
         );
 
         // Add detailed MCP server information with descriptions
-        // Determine which MCP servers this agent has direct access to
-        let direct_mcp_ids: std::collections::HashSet<&String> =
-            self.config.mcp_servers.iter().collect();
-
         if mcp_server_summaries.is_empty() {
             config_section.push_str("\n- **Available MCP Servers**: None configured or running");
         } else {
             config_section.push_str("\n\n### Available MCP Servers for Delegation\n");
             config_section.push_str(
-                "These servers can be assigned to sub-agents using the `mcp_servers` parameter.\n",
+                "These servers can be assigned to sub-agents using the `mcp_servers` parameter (use server name).\n",
             );
             config_section.push_str(
                 "**Note**: If you already have direct access to an MCP (listed in 'MCP Tools' above), use it directly instead of delegating.\n",
             );
 
             for server in mcp_server_summaries {
-                let access_note = if direct_mcp_ids.contains(&server.id) {
-                    " [YOU HAVE DIRECT ACCESS - use it directly!]"
+                let access_marker = if server.has_direct_access {
+                    "[DIRECT]"
                 } else {
-                    " [Delegate only]"
+                    "[DELEGATE]"
                 };
                 config_section.push_str(&format!(
-                    "\n- **{}** (ID: `{}`){}\n  - Description: {}\n  - Status: {} | Tools: {}\n",
+                    "\n- **{}** {} - {} - {} tools\n",
                     server.name,
-                    server.id,
-                    access_note,
+                    access_marker,
                     server.description.as_deref().unwrap_or("No description"),
-                    server.status,
                     server.tools_count
                 ));
             }
+
+            // Add usage example
+            config_section.push_str("\n\n**Example**: To assign MCP servers to sub-agents:\n");
+            config_section.push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
         }
 
         config_section.push_str(

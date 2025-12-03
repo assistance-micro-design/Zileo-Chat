@@ -24,6 +24,7 @@ chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 futures = "0.3"
 regex = "1.10"
+lazy_static = "1.5"
 
 # Async utilities for cancellation tokens
 tokio-util = { version = "0.7", features = ["rt"] }

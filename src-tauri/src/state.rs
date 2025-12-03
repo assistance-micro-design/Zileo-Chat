@@ -473,7 +473,10 @@ mod tests {
             !state.is_cancelled(workflow_id).await,
             "Workflow should not be cancelled initially"
         );
-        assert!(!token.is_cancelled(), "Token should not be cancelled initially");
+        assert!(
+            !token.is_cancelled(),
+            "Token should not be cancelled initially"
+        );
 
         // Request cancellation
         state.request_cancellation(workflow_id).await;
@@ -481,7 +484,10 @@ mod tests {
             state.is_cancelled(workflow_id).await,
             "Workflow should be cancelled after request"
         );
-        assert!(token.is_cancelled(), "Token should be cancelled after request");
+        assert!(
+            token.is_cancelled(),
+            "Token should be cancelled after request"
+        );
 
         // Clear cancellation (removes token from map)
         state.clear_cancellation(workflow_id).await;
@@ -546,10 +552,7 @@ mod tests {
         state.request_cancellation(workflow_id).await;
 
         // The task should complete quickly now
-        let result = tokio::time::timeout(
-            tokio::time::Duration::from_millis(100),
-            handle
-        ).await;
+        let result = tokio::time::timeout(tokio::time::Duration::from_millis(100), handle).await;
 
         assert!(result.is_ok(), "Task should complete after cancellation");
         assert_eq!(result.unwrap().unwrap(), "cancelled");

@@ -8,6 +8,14 @@
 use crate::db::DBClient;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::task::{Task, TaskCreate};
+use crate::tools::constants::todo::{
+    MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, PRIORITY_MAX, PRIORITY_MIN, VALID_STATUSES,
+};
+use crate::tools::response::ResponseBuilder;
+use crate::tools::utils::{
+    db_error, delete_with_check, ensure_record_exists, validate_enum_value, validate_length,
+    validate_not_empty, validate_range,
+};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -95,32 +103,10 @@ impl TodoTool {
         dependencies: Vec<String>,
     ) -> ToolResult<Value> {
         // Validate inputs with actionable error messages
-        if name.is_empty() {
-            return Err(ToolError::ValidationFailed(
-                "Task name cannot be empty".to_string(),
-            ));
-        }
-
-        if name.len() > 128 {
-            return Err(ToolError::ValidationFailed(format!(
-                "Task name is {} chars, max is 128. Shorten the name or move details to description",
-                name.len()
-            )));
-        }
-
-        if description.len() > 1000 {
-            return Err(ToolError::ValidationFailed(format!(
-                "Description is {} chars, max is 1000. Consider splitting into multiple tasks",
-                description.len()
-            )));
-        }
-
-        if !(1..=5).contains(&priority) {
-            return Err(ToolError::ValidationFailed(format!(
-                "Priority {} is invalid. Use 1 (critical), 2 (high), 3 (medium), 4 (low), or 5 (minimal)",
-                priority
-            )));
-        }
+        validate_not_empty(name, "name")?;
+        validate_length(name, MAX_NAME_LENGTH, "name")?;
+        validate_length(description, MAX_DESCRIPTION_LENGTH, "description")?;
+        validate_range(priority, PRIORITY_MIN, PRIORITY_MAX, "priority")?;
 
         let task_id = Uuid::new_v4().to_string();
 
@@ -148,11 +134,11 @@ impl TodoTool {
             priority,
         ));
 
-        Ok(serde_json::json!({
-            "success": true,
-            "task_id": task_id,
-            "message": format!("Task '{}' created successfully", name)
-        }))
+        Ok(ResponseBuilder::ok(
+            "task_id",
+            task_id,
+            "Task created successfully",
+        ))
     }
 
     /// Updates task status.
@@ -162,31 +148,10 @@ impl TodoTool {
     /// * `status` - New status (pending/in_progress/completed/blocked)
     #[instrument(skip(self))]
     async fn update_status(&self, task_id: &str, status: &str) -> ToolResult<Value> {
-        let valid_statuses = ["pending", "in_progress", "completed", "blocked"];
-        if !valid_statuses.contains(&status) {
-            return Err(ToolError::ValidationFailed(format!(
-                "Status '{}' is not valid. Use: 'pending' (not started), 'in_progress' (working), 'completed' (done), or 'blocked' (waiting)",
-                status
-            )));
-        }
+        validate_enum_value(status, VALID_STATUSES, "status")?;
 
         // First check if task exists
-        let check_query = format!(
-            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
-            task_id
-        );
-        let existing: Vec<Value> = self
-            .db
-            .query(&check_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
-
-        if existing.is_empty() {
-            return Err(ToolError::NotFound(format!(
-                "Task '{}' not found. Use operation 'list' to see available tasks",
-                task_id
-            )));
-        }
+        ensure_record_exists(&self.db, "task", task_id, "Task").await?;
 
         // Get task name before update for event emission
         let task_query = format!("SELECT name FROM task WHERE meta::id(id) = '{}'", task_id);
@@ -218,12 +183,12 @@ impl TodoTool {
             status,
         ));
 
-        Ok(serde_json::json!({
-            "success": true,
-            "task_id": task_id,
-            "new_status": status,
-            "message": format!("Task status updated to '{}'", status)
-        }))
+        Ok(ResponseBuilder::new()
+            .success(true)
+            .id("task_id", task_id)
+            .field("new_status", status)
+            .message(format!("Task status updated to '{}'", status))
+            .build())
     }
 
     /// Lists tasks for current workflow.
@@ -248,20 +213,16 @@ impl TodoTool {
             ),
         };
 
-        let tasks: Vec<Value> = self
-            .db
-            .query(&query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let tasks: Vec<Value> = self.db.query(&query).await.map_err(db_error)?;
 
         debug!(count = tasks.len(), "Tasks listed");
 
-        Ok(serde_json::json!({
-            "success": true,
-            "workflow_id": self.workflow_id,
-            "count": tasks.len(),
-            "tasks": tasks
-        }))
+        Ok(ResponseBuilder::new()
+            .success(true)
+            .field("workflow_id", self.workflow_id.clone())
+            .count(tasks.len())
+            .data("tasks", tasks)
+            .build())
     }
 
     /// Gets a single task by ID.
@@ -376,38 +337,15 @@ impl TodoTool {
     /// * `task_id` - Task ID to delete
     #[instrument(skip(self))]
     async fn delete_task(&self, task_id: &str) -> ToolResult<Value> {
-        // First check if task exists
-        let check_query = format!(
-            "SELECT meta::id(id) AS id FROM task WHERE meta::id(id) = '{}'",
-            task_id
-        );
-        let existing: Vec<Value> = self
-            .db
-            .query(&check_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
-
-        if existing.is_empty() {
-            return Err(ToolError::NotFound(format!(
-                "Task '{}' does not exist. Nothing to delete",
-                task_id
-            )));
-        }
-
-        // Use execute() instead of query() to avoid serialization issues
-        let delete_query = format!("DELETE task:`{}`", task_id);
-        self.db
-            .execute(&delete_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        delete_with_check(&self.db, "task", task_id, "Task").await?;
 
         info!(task_id = %task_id, "Task deleted");
 
-        Ok(serde_json::json!({
-            "success": true,
-            "task_id": task_id,
-            "message": format!("Task '{}' has been deleted", task_id)
-        }))
+        Ok(ResponseBuilder::ok(
+            "task_id",
+            task_id,
+            "Task deleted successfully",
+        ))
     }
 }
 

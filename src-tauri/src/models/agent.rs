@@ -55,7 +55,8 @@ pub struct AgentConfig {
     /// - `MemoryTool` - Contextual memory with semantic search
     /// - `TodoTool` - Task management for workflow decomposition
     pub tools: Vec<String>,
-    /// List of MCP servers
+    /// MCP server NAMES (not IDs) that the agent can use
+    /// Example: ["Serena", "Context7"]
     pub mcp_servers: Vec<String>,
     /// System prompt
     pub system_prompt: String,
@@ -119,7 +120,7 @@ pub struct AgentConfigCreate {
     pub llm: LLMConfig,
     /// List of available tools
     pub tools: Vec<String>,
-    /// List of MCP servers
+    /// MCP server NAMES (not IDs) that the agent can use
     pub mcp_servers: Vec<String>,
     /// System prompt (1-10000 chars)
     pub system_prompt: String,
@@ -140,7 +141,7 @@ pub struct AgentConfigUpdate {
     /// List of available tools
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<String>>,
-    /// List of MCP servers
+    /// MCP server NAMES (not IDs) that the agent can use
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<String>>,
     /// System prompt (1-10000 chars)

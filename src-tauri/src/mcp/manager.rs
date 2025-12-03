@@ -153,14 +153,14 @@ impl MCPManager {
     ///
     /// # Errors
     ///
-    /// Returns `MCPError::ServerAlreadyExists` if a server with the same ID exists.
+    /// Returns `MCPError::ServerAlreadyExists` if a server with the same name exists.
     pub async fn spawn_server(&self, config: MCPServerConfig) -> MCPResult<MCPServer> {
-        // Check if server already exists (by ID)
+        // Check if server already exists (by NAME)
         {
             let clients = self.clients.read().await;
-            if clients.contains_key(&config.id) {
+            if clients.contains_key(&config.name) {
                 return Err(MCPError::ServerAlreadyExists {
-                    server: config.id.clone(),
+                    server: config.name.clone(),
                 });
             }
         }
@@ -184,7 +184,17 @@ impl MCPManager {
             "Spawning MCP server"
         );
 
-        let id = config.id.clone();
+        // Check name uniqueness
+        {
+            let clients = self.clients.read().await;
+            if clients.contains_key(&config.name) {
+                return Err(MCPError::ServerAlreadyExists {
+                    server: config.name.clone(),
+                });
+            }
+        }
+
+        let name = config.name.clone();
         let client = MCPClient::connect(config.clone()).await?;
 
         let server = MCPServer {
@@ -196,18 +206,18 @@ impl MCPManager {
             updated_at: Utc::now(),
         };
 
-        // Add to registry (keyed by ID for consistent lookup)
+        // Add to registry (keyed by NAME for functional identification)
         {
             let mut clients = self.clients.write().await;
-            clients.insert(id.clone(), client);
+            clients.insert(name.clone(), client);
         }
 
         info!(
-            server_id = %id,
-            server_name = %config.name,
+            server_id = %config.id,
+            server_name = %name,
             tools_count = server.tools.len(),
             resources_count = server.resources.len(),
-            "MCP server spawned and registered"
+            "MCP server spawned and registered by name"
         );
 
         Ok(server)
@@ -220,7 +230,7 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `id` - Server ID to stop
+    /// * `id` - Server ID to stop (will find server by ID in config, HashMap is keyed by NAME)
     ///
     /// # Errors
     ///
@@ -228,36 +238,50 @@ impl MCPManager {
     pub async fn stop_server(&self, id: &str) -> MCPResult<()> {
         info!(server_id = %id, "Stopping MCP server");
 
+        // Find the server name that matches this ID (HashMap is keyed by NAME, not ID)
+        let server_name = {
+            let clients = self.clients.read().await;
+            clients
+                .iter()
+                .find(|(_, client)| client.config().id == id)
+                .map(|(name, _)| name.clone())
+        };
+
+        let name = server_name.ok_or_else(|| MCPError::ServerNotFound {
+            server: id.to_string(),
+        })?;
+
         let mut client = {
             let mut clients = self.clients.write().await;
-            clients.remove(id).ok_or_else(|| MCPError::ServerNotFound {
+            clients.remove(&name).ok_or_else(|| MCPError::ServerNotFound {
                 server: id.to_string(),
             })?
         };
 
         client.disconnect().await?;
 
-        info!(server_id = %id, "MCP server stopped");
+        info!(server_id = %id, server_name = %name, "MCP server stopped");
 
         Ok(())
     }
 
     /// Gets a server by ID
     ///
-    /// Checks both running servers (in HashMap) and configured servers (in database).
+    /// Checks both running servers (in HashMap, keyed by NAME) and configured servers (in database).
     ///
     /// # Arguments
     ///
-    /// * `id` - Server ID to look up
+    /// * `id` - Server ID to look up (will search by ID in config since HashMap is keyed by NAME)
     ///
     /// # Returns
     ///
     /// Returns the server state if found (running or stopped).
     pub async fn get_server(&self, id: &str) -> Option<MCPServer> {
-        // First check running servers
+        // First check running servers (HashMap is keyed by NAME, so search by config.id)
         {
             let clients = self.clients.read().await;
-            if let Some(client) = clients.get(id) {
+            // Find client whose config.id matches the requested id
+            if let Some(client) = clients.values().find(|c| c.config().id == id) {
                 return Some(MCPServer {
                     config: client.config().clone(),
                     status: client.status(),
@@ -293,11 +317,12 @@ impl MCPManager {
         let mut servers = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
 
-        // First, add running servers (keyed by ID)
+        // First, add running servers (HashMap is keyed by NAME, but we track by config.id)
         {
             let clients = self.clients.read().await;
-            for (id, client) in clients.iter() {
-                seen_ids.insert(id.clone());
+            for (_name, client) in clients.iter() {
+                // Track by ID for deduplication with database configs
+                seen_ids.insert(client.config().id.clone());
                 servers.push(MCPServer {
                     config: client.config().clone(),
                     status: client.status(),
@@ -331,7 +356,7 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `server_name` - Name of the server to call (display name, not ID)
+    /// * `server_name` - The NAME of the MCP server (not ID)
     /// * `tool_name` - Name of the tool to invoke
     /// * `arguments` - Tool arguments as JSON value
     ///
@@ -358,8 +383,7 @@ impl MCPManager {
 
         let result = {
             let mut clients = self.clients.write().await;
-            // Find client by server ID (clients are keyed by ID in the HashMap)
-            // Note: server_name parameter is actually the server ID (e.g., "mcp-1764345441545-7tj9p")
+            // Clients are keyed by server NAME
             let client = clients
                 .get_mut(server_name)
                 .ok_or(MCPError::ServerNotFound {
@@ -408,21 +432,20 @@ impl MCPManager {
             .await
     }
 
-    /// Lists tools available on a specific server
+    /// Lists tools available on a specific server by NAME.
     ///
     /// # Arguments
     ///
-    /// * `server_id` - Server ID (e.g., "mcp-1764345441545-7tj9p")
+    /// * `server_name` - Server NAME (e.g., "Serena", "Context7")
     ///
     /// # Returns
     ///
     /// Returns the list of tools, or empty list if server not found.
-    pub async fn list_server_tools(&self, server_id: &str) -> Vec<MCPTool> {
+    pub async fn list_server_tools(&self, server_name: &str) -> Vec<MCPTool> {
         let clients = self.clients.read().await;
-        // Find client by server ID (config.id)
-        // Note: Clients are keyed by ID in the HashMap
+        // Clients are keyed by NAME
         clients
-            .get(server_id)
+            .get(server_name)
             .map(|c| c.tools().to_vec())
             .unwrap_or_default()
     }
@@ -457,6 +480,28 @@ impl MCPManager {
         );
 
         MCPClient::test_connection(config).await
+    }
+
+    /// Gets server names (for validation).
+    pub async fn server_names(&self) -> Vec<String> {
+        let clients = self.clients.read().await;
+        clients.keys().cloned().collect()
+    }
+
+    /// Validates server names exist.
+    pub async fn validate_server_names(&self, names: &[String]) -> Result<(), Vec<String>> {
+        let clients = self.clients.read().await;
+        let invalid: Vec<String> = names
+            .iter()
+            .filter(|name| !clients.contains_key(*name))
+            .cloned()
+            .collect();
+
+        if invalid.is_empty() {
+            Ok(())
+        } else {
+            Err(invalid)
+        }
     }
 
     /// Stops all running servers

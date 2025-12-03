@@ -9,6 +9,13 @@
 use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
 use crate::models::memory::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemoryType};
+use crate::tools::constants::memory::{
+    DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD, MAX_CONTENT_LENGTH, MAX_LIMIT, VALID_TYPES,
+};
+use crate::tools::response::ResponseBuilder;
+use crate::tools::utils::{
+    db_error, delete_with_check, validate_enum_value, validate_length, validate_not_empty,
+};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -16,21 +23,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
-
-/// Maximum content length for a memory (50KB as per spec)
-const MAX_CONTENT_LENGTH: usize = 50_000;
-
-/// Default similarity threshold for semantic search (0-1)
-const DEFAULT_SIMILARITY_THRESHOLD: f64 = 0.7;
-
-/// Default limit for list/search operations
-const DEFAULT_LIMIT: usize = 10;
-
-/// Maximum limit for list/search operations
-const MAX_LIMIT: usize = 100;
-
-/// Valid memory type strings
-const VALID_MEMORY_TYPES: [&str; 4] = ["user_pref", "context", "knowledge", "decision"];
 
 /// Tool for managing agent memories with semantic search.
 ///
@@ -163,21 +155,11 @@ impl MemoryTool {
         tags: Option<Vec<String>>,
     ) -> ToolResult<Value> {
         // Validate content length
-        if content.is_empty() {
-            return Err(ToolError::ValidationFailed(
-                "Memory content cannot be empty".to_string(),
-            ));
-        }
-
-        if content.len() > MAX_CONTENT_LENGTH {
-            return Err(ToolError::ValidationFailed(format!(
-                "Content is {} chars, max is {}. Consider splitting into multiple memories",
-                content.len(),
-                MAX_CONTENT_LENGTH
-            )));
-        }
+        validate_not_empty(content, "content")?;
+        validate_length(content, MAX_CONTENT_LENGTH, "content")?;
 
         // Validate memory type
+        validate_enum_value(memory_type, VALID_TYPES, "memory_type")?;
         let mem_type = Self::parse_memory_type(memory_type)?;
 
         let memory_id = Uuid::new_v4().to_string();
@@ -272,14 +254,14 @@ impl MemoryTool {
             "Memory created"
         );
 
-        Ok(serde_json::json!({
-            "success": true,
-            "memory_id": memory_id,
-            "type": memory_type,
-            "embedding_generated": embedding_generated,
-            "workflow_id": workflow_id,
-            "message": format!("Memory '{}' created successfully", memory_id)
-        }))
+        Ok(ResponseBuilder::new()
+            .success(true)
+            .id("memory_id", memory_id)
+            .field("type", memory_type)
+            .field("embedding_generated", embedding_generated)
+            .field("workflow_id", workflow_id)
+            .message("Memory created successfully")
+            .build())
     }
 
     /// Retrieves a memory by ID.
@@ -364,21 +346,24 @@ impl MemoryTool {
             where_clause, limit
         );
 
-        let memories: Vec<Memory> = self
-            .db
-            .query(&query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let memories: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
 
         debug!(count = memories.len(), "Memories listed");
 
-        Ok(serde_json::json!({
-            "success": true,
-            "count": memories.len(),
-            "scope": if workflow_id.is_some() { "workflow" } else { "general" },
-            "workflow_id": workflow_id,
-            "memories": memories
-        }))
+        Ok(ResponseBuilder::new()
+            .success(true)
+            .count(memories.len())
+            .field(
+                "scope",
+                if workflow_id.is_some() {
+                    "workflow"
+                } else {
+                    "general"
+                },
+            )
+            .field("workflow_id", workflow_id)
+            .data("memories", memories)
+            .build())
     }
 
     /// Searches memories using semantic similarity.
@@ -581,38 +566,15 @@ impl MemoryTool {
     /// * `memory_id` - Memory ID to delete
     #[instrument(skip(self), fields(memory_id = %memory_id))]
     async fn delete_memory(&self, memory_id: &str) -> ToolResult<Value> {
-        // First check if memory exists
-        let check_query = format!(
-            "SELECT meta::id(id) AS id FROM memory WHERE meta::id(id) = '{}'",
-            memory_id
-        );
-        let existing: Vec<Value> = self
-            .db
-            .query(&check_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
-
-        if existing.is_empty() {
-            return Err(ToolError::NotFound(format!(
-                "Memory '{}' does not exist. Nothing to delete",
-                memory_id
-            )));
-        }
-
-        // Use execute() instead of query() to avoid serialization issues with enums
-        let delete_query = format!("DELETE memory:`{}`", memory_id);
-        self.db
-            .execute(&delete_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        delete_with_check(&self.db, "memory", memory_id, "Memory").await?;
 
         info!(memory_id = %memory_id, "Memory deleted");
 
-        Ok(serde_json::json!({
-            "success": true,
-            "memory_id": memory_id,
-            "message": format!("Memory '{}' has been deleted", memory_id)
-        }))
+        Ok(ResponseBuilder::ok(
+            "memory_id",
+            memory_id,
+            "Memory deleted successfully",
+        ))
     }
 
     /// Clears all memories of a specific type.
@@ -905,7 +867,7 @@ EXAMPLES:
                 }
                 // Validate type value
                 if let Some(type_str) = input["type"].as_str() {
-                    if !VALID_MEMORY_TYPES.contains(&type_str) {
+                    if !VALID_TYPES.contains(&type_str) {
                         return Err(ToolError::ValidationFailed(format!(
                             "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
                             type_str
@@ -924,7 +886,7 @@ EXAMPLES:
             "list" => {
                 // Validate type_filter if provided
                 if let Some(type_str) = input["type_filter"].as_str() {
-                    if !VALID_MEMORY_TYPES.contains(&type_str) {
+                    if !VALID_TYPES.contains(&type_str) {
                         return Err(ToolError::ValidationFailed(format!(
                             "Invalid type_filter '{}'. Valid types: user_pref, context, knowledge, decision",
                             type_str
@@ -940,7 +902,7 @@ EXAMPLES:
                 }
                 // Validate type_filter if provided
                 if let Some(type_str) = input["type_filter"].as_str() {
-                    if !VALID_MEMORY_TYPES.contains(&type_str) {
+                    if !VALID_TYPES.contains(&type_str) {
                         return Err(ToolError::ValidationFailed(format!(
                             "Invalid type_filter '{}'. Valid types: user_pref, context, knowledge, decision",
                             type_str
@@ -965,7 +927,7 @@ EXAMPLES:
                 }
                 // Validate type value
                 if let Some(type_str) = input["type"].as_str() {
-                    if !VALID_MEMORY_TYPES.contains(&type_str) {
+                    if !VALID_TYPES.contains(&type_str) {
                         return Err(ToolError::ValidationFailed(format!(
                             "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
                             type_str
@@ -1092,11 +1054,11 @@ mod tests {
 
     #[test]
     fn test_memory_type_values() {
-        assert!(VALID_MEMORY_TYPES.contains(&"user_pref"));
-        assert!(VALID_MEMORY_TYPES.contains(&"context"));
-        assert!(VALID_MEMORY_TYPES.contains(&"knowledge"));
-        assert!(VALID_MEMORY_TYPES.contains(&"decision"));
-        assert!(!VALID_MEMORY_TYPES.contains(&"invalid"));
+        assert!(VALID_TYPES.contains(&"user_pref"));
+        assert!(VALID_TYPES.contains(&"context"));
+        assert!(VALID_TYPES.contains(&"knowledge"));
+        assert!(VALID_TYPES.contains(&"decision"));
+        assert!(!VALID_TYPES.contains(&"invalid"));
     }
 
     #[test]

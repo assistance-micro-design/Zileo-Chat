@@ -45,7 +45,7 @@ export interface AgentConfig {
   llm: LLMConfig;
   /** List of available tools */
   tools: string[];
-  /** List of MCP servers */
+  /** MCP server NAMES (not IDs) that the agent can use */
   mcp_servers: string[];
   /** System prompt */
   system_prompt: string;
@@ -129,9 +129,35 @@ export interface AgentSummary {
  * Available tools that agents can use.
  * These correspond to functional tools implemented in the Rust backend.
  */
-export const AVAILABLE_TOOLS = ['MemoryTool', 'TodoTool'] as const;
+export const AVAILABLE_TOOLS = [
+	'MemoryTool',
+	'TodoTool',
+	'SpawnAgentTool',
+	'DelegateTaskTool',
+	'ParallelTasksTool'
+] as const;
+
+/**
+ * Basic tools for memory and task management
+ */
+export const BASIC_TOOLS = ['MemoryTool', 'TodoTool'] as const;
+
+/**
+ * Sub-agent orchestration tools
+ */
+export const SUB_AGENT_TOOLS = ['SpawnAgentTool', 'DelegateTaskTool', 'ParallelTasksTool'] as const;
 
 /**
  * Type for available tool names
  */
 export type AvailableTool = (typeof AVAILABLE_TOOLS)[number];
+
+/**
+ * Type for basic tool names
+ */
+export type BasicToolName = (typeof BASIC_TOOLS)[number];
+
+/**
+ * Type for sub-agent tool names
+ */
+export type SubAgentToolName = (typeof SUB_AGENT_TOOLS)[number];

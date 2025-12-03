@@ -28,7 +28,7 @@
 //! - Ideal for independent analyses that can run in parallel
 
 use crate::agents::core::agent::Task;
-use crate::agents::core::AgentOrchestrator;
+use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
@@ -75,10 +75,11 @@ pub struct ParallelTaskSpec {
 pub struct ParallelTasksTool {
     /// Database client for persistence
     db: Arc<DBClient>,
+    /// Agent registry for agent lookup
+    registry: Arc<AgentRegistry>,
     /// Agent orchestrator for execution
     orchestrator: Arc<AgentOrchestrator>,
     /// MCP manager for tool routing (optional)
-    #[allow(dead_code)]
     mcp_manager: Option<Arc<MCPManager>>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
@@ -119,6 +120,7 @@ impl ParallelTasksTool {
     ) -> Self {
         Self {
             db,
+            registry: context.registry,
             orchestrator: context.orchestrator,
             mcp_manager: context.mcp_manager,
             app_handle: context.app_handle,
@@ -202,6 +204,25 @@ impl ParallelTasksTool {
                     "Task {} cannot delegate to self (agent '{}'). Choose different agents.",
                     i, task.agent_id
                 )));
+            }
+        }
+
+        // 3b. Optionally validate MCP server names for each agent
+        // (This is informational - agents use their existing configs)
+        if let Some(ref mcp_mgr) = self.mcp_manager {
+            for task_spec in &tasks {
+                if let Some(agent) = self.registry.get(&task_spec.agent_id).await {
+                    let mcp_servers = agent.mcp_servers();
+                    if !mcp_servers.is_empty() {
+                        if let Err(invalid) = mcp_mgr.validate_server_names(&mcp_servers).await {
+                            warn!(
+                                agent_id = %task_spec.agent_id,
+                                invalid_servers = ?invalid,
+                                "Parallel task agent has unknown MCP servers configured"
+                            );
+                        }
+                    }
+                }
             }
         }
 
