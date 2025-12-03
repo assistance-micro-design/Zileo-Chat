@@ -70,6 +70,9 @@ pub async fn execute_workflow_streaming(
         format!("Invalid agent ID: {}", e)
     })?;
 
+    // Create cancellation token for this workflow (enables real cancel functionality)
+    let cancellation_token = state.create_cancellation_token(&validated_workflow_id).await;
+
     // Load workflow with explicit ID conversion to avoid SurrealDB Thing enum issues
     // Use meta::id() to extract the UUID without SurrealDB's angle brackets
     let query = format!(
@@ -239,128 +242,148 @@ pub async fn execute_workflow_streaming(
 
     let start_time = std::time::Instant::now();
 
-    // Execute via orchestrator with MCP support
-    let report = match state
+    // Execute via orchestrator with MCP support, racing against cancellation token
+    // Using tokio::select! allows the execution to be cancelled immediately when the user clicks Cancel
+    let execution_future = state
         .orchestrator
-        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()))
-        .await
-    {
-        Ok(report) => {
-            let duration = start_time.elapsed().as_millis() as u64;
+        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()));
 
-            // Emit tool end
-            emit_chunk(
-                &window,
-                StreamChunk::tool_end(
-                    validated_workflow_id.clone(),
-                    validated_agent_id.clone(),
-                    duration,
-                ),
-            );
-
-            // Emit and persist reasoning step about execution completion
-            let completion_reasoning = format!(
-                "Execution completed in {}ms. Processing {} tool call(s).",
-                duration,
-                report.metrics.tool_executions.len()
-            );
-            emit_chunk(
-                &window,
-                StreamChunk::reasoning(validated_workflow_id.clone(), completion_reasoning.clone()),
-            );
-
-            // Persist the completion thinking step
-            let completion_step = ThinkingStepCreate {
-                workflow_id: validated_workflow_id.clone(),
-                message_id: message_id.clone(),
-                agent_id: validated_agent_id.clone(),
-                step_number: thinking_step_number,
-                content: completion_reasoning,
-                duration_ms: Some(duration),
-                tokens: None,
-            };
-            let completion_step_id = Uuid::new_v4().to_string();
-            if let Err(e) = state
-                .db
-                .create("thinking_step", &completion_step_id, completion_step)
-                .await
-            {
-                warn!(error = %e, "Failed to persist completion thinking step");
-            }
-            #[allow(unused_assignments)]
-            {
-                thinking_step_number += 1;
-            }
-
-            // Clear the placeholder and stream the actual response content
-            // First, emit a newline to visually separate from placeholder
-            emit_chunk(
-                &window,
-                StreamChunk::token(validated_workflow_id.clone(), "\n".to_string()),
-            );
-
-            // Stream the response content in chunks
-            let content = &report.content;
-            let chunk_size = 50; // Characters per chunk for simulated streaming
-            let mut cancelled = false;
-
-            for (i, chunk) in content
-                .chars()
-                .collect::<Vec<_>>()
-                .chunks(chunk_size)
-                .enumerate()
-            {
-                // Check for cancellation before each chunk
-                if state.is_cancelled(&validated_workflow_id).await {
-                    warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user");
-                    cancelled = true;
+    let report = tokio::select! {
+        // Execution branch - runs the actual LLM call
+        result = execution_future => {
+            match result {
+                Ok(report) => report,
+                Err(e) => {
+                    error!(error = %e, task_id = %task_id, "Streaming workflow execution failed");
                     emit_chunk(
                         &window,
-                        StreamChunk::error(
-                            validated_workflow_id.clone(),
-                            "Cancelled by user".to_string(),
-                        ),
+                        StreamChunk::error(validated_workflow_id.clone(), e.to_string()),
                     );
                     emit_complete(
                         &window,
-                        WorkflowComplete::cancelled(validated_workflow_id.clone()),
+                        WorkflowComplete::failed(validated_workflow_id.clone(), e.to_string()),
                     );
-                    // Clear the cancellation flag
                     state.clear_cancellation(&validated_workflow_id).await;
-                    break;
-                }
-
-                let chunk_text: String = chunk.iter().collect();
-                emit_chunk(
-                    &window,
-                    StreamChunk::token(validated_workflow_id.clone(), chunk_text),
-                );
-
-                // Small delay between chunks to simulate streaming
-                if i < content.len() / chunk_size {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    return Err(format!("Execution failed: {}", e));
                 }
             }
-
-            if cancelled {
-                return Err("Workflow cancelled by user".to_string());
-            }
-
-            report
         }
-        Err(e) => {
-            error!(error = %e, task_id = %task_id, "Streaming workflow execution failed");
+        // Cancellation branch - triggers when user clicks Cancel button
+        _ = cancellation_token.cancelled() => {
+            warn!(workflow_id = %validated_workflow_id, "Workflow cancelled by user during execution");
             emit_chunk(
                 &window,
-                StreamChunk::error(validated_workflow_id.clone(), e.to_string()),
+                StreamChunk::error(validated_workflow_id.clone(), "Cancelled by user".to_string()),
             );
             emit_complete(
                 &window,
-                WorkflowComplete::failed(validated_workflow_id.clone(), e.to_string()),
+                WorkflowComplete::cancelled(validated_workflow_id.clone()),
             );
-            return Err(format!("Execution failed: {}", e));
+            state.clear_cancellation(&validated_workflow_id).await;
+            return Err("Workflow cancelled by user".to_string());
         }
     };
+
+    // Execution completed successfully - process the report
+    let duration = start_time.elapsed().as_millis() as u64;
+
+    // Emit tool end
+    emit_chunk(
+        &window,
+        StreamChunk::tool_end(
+            validated_workflow_id.clone(),
+            validated_agent_id.clone(),
+            duration,
+        ),
+    );
+
+    // Emit and persist reasoning step about execution completion
+    let completion_reasoning = format!(
+        "Execution completed in {}ms. Processing {} tool call(s).",
+        duration,
+        report.metrics.tool_executions.len()
+    );
+    emit_chunk(
+        &window,
+        StreamChunk::reasoning(validated_workflow_id.clone(), completion_reasoning.clone()),
+    );
+
+    // Persist the completion thinking step
+    let completion_step = ThinkingStepCreate {
+        workflow_id: validated_workflow_id.clone(),
+        message_id: message_id.clone(),
+        agent_id: validated_agent_id.clone(),
+        step_number: thinking_step_number,
+        content: completion_reasoning,
+        duration_ms: Some(duration),
+        tokens: None,
+    };
+    let completion_step_id = Uuid::new_v4().to_string();
+    if let Err(e) = state
+        .db
+        .create("thinking_step", &completion_step_id, completion_step)
+        .await
+    {
+        warn!(error = %e, "Failed to persist completion thinking step");
+    }
+    #[allow(unused_assignments)]
+    {
+        thinking_step_number += 1;
+    }
+
+    // Clear the placeholder and stream the actual response content
+    // First, emit a newline to visually separate from placeholder
+    emit_chunk(
+        &window,
+        StreamChunk::token(validated_workflow_id.clone(), "\n".to_string()),
+    );
+
+    // Stream the response content in chunks
+    let content = &report.content;
+    let chunk_size = 50; // Characters per chunk for simulated streaming
+    let mut cancelled = false;
+
+    for (i, chunk) in content
+        .chars()
+        .collect::<Vec<_>>()
+        .chunks(chunk_size)
+        .enumerate()
+    {
+        // Check for cancellation before each chunk (still useful for post-execution streaming)
+        if state.is_cancelled(&validated_workflow_id).await {
+            warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user during response display");
+            cancelled = true;
+            emit_chunk(
+                &window,
+                StreamChunk::error(
+                    validated_workflow_id.clone(),
+                    "Cancelled by user".to_string(),
+                ),
+            );
+            emit_complete(
+                &window,
+                WorkflowComplete::cancelled(validated_workflow_id.clone()),
+            );
+            // Clear the cancellation flag
+            state.clear_cancellation(&validated_workflow_id).await;
+            break;
+        }
+
+        let chunk_text: String = chunk.iter().collect();
+        emit_chunk(
+            &window,
+            StreamChunk::token(validated_workflow_id.clone(), chunk_text),
+        );
+
+        // Small delay between chunks to simulate streaming
+        if i < content.len() / chunk_size {
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+    }
+
+    if cancelled {
+        return Err("Workflow cancelled by user".to_string());
+    }
 
     // Get agent config for accurate provider/model info
     let (provider, model) = match state.registry.get(&validated_agent_id).await {
@@ -561,6 +584,9 @@ pub async fn execute_workflow_streaming(
         "Streaming workflow execution completed"
     );
 
+    // Cleanup: remove cancellation token from map on successful completion
+    state.clear_cancellation(&validated_workflow_id).await;
+
     Ok(result)
 }
 
@@ -590,14 +616,15 @@ fn emit_error(window: &Window, workflow_id: &str, error: &str) {
     );
 }
 
-/// Cancels a streaming workflow execution.
+/// Cancels a streaming workflow execution immediately.
 ///
-/// Marks the workflow for cooperative cancellation. The streaming execution
-/// checks this flag between chunk emissions and will abort if set.
+/// Triggers the cancellation token associated with the workflow, causing the
+/// execute_workflow_streaming function to abort via tokio::select!.
+/// This provides immediate cancellation, even during LLM execution.
 ///
 /// # Arguments
 /// * `workflow_id` - The workflow ID to cancel
-/// * `state` - Application state containing the cancellation tracker
+/// * `state` - Application state containing the cancellation tokens
 #[tauri::command]
 #[instrument(name = "cancel_workflow_streaming", skip(state), fields(workflow_id = %workflow_id))]
 pub async fn cancel_workflow_streaming(

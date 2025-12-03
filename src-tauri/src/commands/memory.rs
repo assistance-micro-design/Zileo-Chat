@@ -357,7 +357,7 @@ mod tests {
             tool_factory: Arc::new(crate::tools::ToolFactory::new(db, None)),
             embedding_service: Arc::new(tokio::sync::RwLock::new(None)),
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
-                std::collections::HashSet::new(),
+                std::collections::HashMap::new(),
             )),
             app_handle: Arc::new(std::sync::RwLock::new(None)),
         }

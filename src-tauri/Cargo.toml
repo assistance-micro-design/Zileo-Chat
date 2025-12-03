@@ -25,6 +25,9 @@ async-trait = "0.1"
 futures = "0.3"
 regex = "1.10"
 
+# Async utilities for cancellation tokens
+tokio-util = { version = "0.7", features = ["rt"] }
+
 # LLM Integration (Rig.rs)
 rig-core = { version = "0.24.0", features = ["all"] }
 

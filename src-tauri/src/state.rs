@@ -7,10 +7,11 @@ use crate::llm::embedding::EmbeddingService;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::tools::ToolFactory;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock as StdRwLock};
 use tauri::AppHandle;
 use tokio::sync::{Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 
 /// Application state shared across Tauri commands
 pub struct AppState {
@@ -30,8 +31,8 @@ pub struct AppState {
     /// Embedding service for semantic search (configured via Settings UI)
     #[allow(dead_code)]
     pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
-    /// Set of workflow IDs that have been requested to cancel
-    pub streaming_cancellations: Arc<Mutex<HashSet<String>>>,
+    /// Cancellation tokens for streaming workflows (workflow_id -> CancellationToken)
+    pub streaming_cancellations: Arc<Mutex<HashMap<String, CancellationToken>>>,
     /// Tauri app handle for event emission (set after app initialization)
     /// Uses std::sync::RwLock for synchronous access in setup hook
     pub app_handle: Arc<StdRwLock<Option<AppHandle>>>,
@@ -65,8 +66,8 @@ impl AppState {
         // Initialize tool factory (will use embedding_service when configured)
         let tool_factory = Arc::new(ToolFactory::new(db.clone(), None));
 
-        // Initialize streaming cancellation tracker
-        let streaming_cancellations = Arc::new(Mutex::new(HashSet::new()));
+        // Initialize streaming cancellation token map
+        let streaming_cancellations = Arc::new(Mutex::new(HashMap::new()));
 
         // Initialize app handle as None (set later in setup hook)
         let app_handle = Arc::new(StdRwLock::new(None));
@@ -118,23 +119,45 @@ impl AppState {
         self.embedding_service.read().await.clone()
     }
 
+    /// Creates a cancellation token for a workflow and stores it.
+    /// Returns the token for use with tokio::select!
+    pub async fn create_cancellation_token(&self, workflow_id: &str) -> CancellationToken {
+        let token = CancellationToken::new();
+        self.streaming_cancellations
+            .lock()
+            .await
+            .insert(workflow_id.to_string(), token.clone());
+        token
+    }
+
+    /// Gets the cancellation token for a workflow if it exists.
+    #[allow(dead_code)]
+    pub async fn get_cancellation_token(&self, workflow_id: &str) -> Option<CancellationToken> {
+        self.streaming_cancellations
+            .lock()
+            .await
+            .get(workflow_id)
+            .cloned()
+    }
+
     /// Checks if a workflow has been requested to cancel
     pub async fn is_cancelled(&self, workflow_id: &str) -> bool {
         self.streaming_cancellations
             .lock()
             .await
-            .contains(workflow_id)
+            .get(workflow_id)
+            .map(|token| token.is_cancelled())
+            .unwrap_or(false)
     }
 
-    /// Marks a workflow for cancellation
+    /// Marks a workflow for cancellation by cancelling its token
     pub async fn request_cancellation(&self, workflow_id: &str) {
-        self.streaming_cancellations
-            .lock()
-            .await
-            .insert(workflow_id.to_string());
+        if let Some(token) = self.streaming_cancellations.lock().await.get(workflow_id) {
+            token.cancel();
+        }
     }
 
-    /// Removes a workflow from the cancellation set
+    /// Removes a workflow from the cancellation map
     pub async fn clear_cancellation(&self, workflow_id: &str) {
         self.streaming_cancellations
             .lock()
@@ -442,11 +465,15 @@ mod tests {
         let state = AppState::new(db_path_str).await.unwrap();
         let workflow_id = "test_workflow_123";
 
-        // Initially not cancelled
+        // Create a cancellation token first
+        let token = state.create_cancellation_token(workflow_id).await;
+
+        // Initially not cancelled (token exists but not cancelled)
         assert!(
             !state.is_cancelled(workflow_id).await,
             "Workflow should not be cancelled initially"
         );
+        assert!(!token.is_cancelled(), "Token should not be cancelled initially");
 
         // Request cancellation
         state.request_cancellation(workflow_id).await;
@@ -454,12 +481,13 @@ mod tests {
             state.is_cancelled(workflow_id).await,
             "Workflow should be cancelled after request"
         );
+        assert!(token.is_cancelled(), "Token should be cancelled after request");
 
-        // Clear cancellation
+        // Clear cancellation (removes token from map)
         state.clear_cancellation(workflow_id).await;
         assert!(
             !state.is_cancelled(workflow_id).await,
-            "Workflow should not be cancelled after clearing"
+            "Workflow should not be in map after clearing"
         );
     }
 
@@ -471,7 +499,12 @@ mod tests {
 
         let state = AppState::new(db_path_str).await.unwrap();
 
-        // Cancel multiple workflows
+        // Create tokens for multiple workflows
+        let _token1 = state.create_cancellation_token("wf1").await;
+        let _token2 = state.create_cancellation_token("wf2").await;
+        let _token3 = state.create_cancellation_token("wf3").await;
+
+        // Cancel all three
         state.request_cancellation("wf1").await;
         state.request_cancellation("wf2").await;
         state.request_cancellation("wf3").await;
@@ -479,12 +512,46 @@ mod tests {
         assert!(state.is_cancelled("wf1").await);
         assert!(state.is_cancelled("wf2").await);
         assert!(state.is_cancelled("wf3").await);
-        assert!(!state.is_cancelled("wf4").await);
+        assert!(!state.is_cancelled("wf4").await); // Never created
 
         // Clear one
         state.clear_cancellation("wf2").await;
         assert!(state.is_cancelled("wf1").await);
-        assert!(!state.is_cancelled("wf2").await);
+        assert!(!state.is_cancelled("wf2").await); // Removed from map
         assert!(state.is_cancelled("wf3").await);
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_token_works_with_select() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_db9");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let state = AppState::new(db_path_str).await.unwrap();
+        let workflow_id = "test_select_workflow";
+
+        let token = state.create_cancellation_token(workflow_id).await;
+
+        // Spawn a task that waits for cancellation
+        let token_clone = token.clone();
+        let handle = tokio::spawn(async move {
+            token_clone.cancelled().await;
+            "cancelled"
+        });
+
+        // Give the task a moment to start waiting
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        // Request cancellation
+        state.request_cancellation(workflow_id).await;
+
+        // The task should complete quickly now
+        let result = tokio::time::timeout(
+            tokio::time::Duration::from_millis(100),
+            handle
+        ).await;
+
+        assert!(result.is_ok(), "Task should complete after cancellation");
+        assert_eq!(result.unwrap().unwrap(), "cancelled");
     }
 }
