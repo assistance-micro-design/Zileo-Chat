@@ -319,6 +319,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         let agent = SimpleAgent::new(config);

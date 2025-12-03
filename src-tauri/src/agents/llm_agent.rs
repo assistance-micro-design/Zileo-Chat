@@ -52,6 +52,8 @@ pub struct ParsedToolCall {
     pub mcp_server: Option<String>,
     /// MCP tool name if is_mcp is true
     pub mcp_tool: Option<String>,
+    /// Parse error message if JSON parsing failed
+    pub parse_error: Option<String>,
 }
 
 /// Result of tool execution
@@ -578,7 +580,8 @@ You are currently running with the following configuration:
 
             // Add usage example
             config_section.push_str("\n\n**Example**: To assign MCP servers to sub-agents:\n");
-            config_section.push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
+            config_section
+                .push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
         }
 
         config_section.push_str(
@@ -597,23 +600,35 @@ You are currently running with the following configuration:
     /// {"operation": "...", "param": "value"}
     /// </tool_call>
     /// ```
+    ///
+    /// This parser is tolerant of malformed closing tags (accepts both </tool_call> and </tool_result>)
     fn parse_tool_calls(response: &str) -> Vec<ParsedToolCall> {
         let mut calls = Vec::new();
 
-        // Pattern: <tool_call name="...">...</tool_call>
-        let pattern = Regex::new(r#"<tool_call\s+name="([^"]+)">\s*([\s\S]*?)\s*</tool_call>"#)
-            .expect("Invalid regex");
+        // Pattern: <tool_call name="...">...</tool_call|tool_result>
+        // Tolerant regex that accepts both correct (</tool_call>) and incorrect (</tool_result>) closing tags
+        let pattern =
+            Regex::new(r#"<tool_call\s+name="([^"]+)">\s*([\s\S]*?)\s*</tool_(?:call|result)>"#)
+                .expect("Invalid regex");
 
         for cap in pattern.captures_iter(response) {
             let tool_name = cap[1].to_string();
             let json_str = cap[2].trim();
 
             // Try to parse the JSON arguments
-            let arguments = match serde_json::from_str(json_str) {
-                Ok(args) => args,
+            let (arguments, parse_error) = match serde_json::from_str::<serde_json::Value>(json_str)
+            {
+                Ok(args) => (args, None),
                 Err(e) => {
-                    warn!(tool = %tool_name, error = %e, "Failed to parse tool arguments");
-                    continue;
+                    warn!(tool = %tool_name, error = %e, json = %json_str, "Failed to parse tool arguments");
+                    // Instead of continuing, return a call with error info
+                    let error_msg = format!(
+                        "Invalid JSON in tool call '{}': {}. Received content (truncated): {}",
+                        tool_name,
+                        e,
+                        json_str.chars().take(200).collect::<String>()
+                    );
+                    (serde_json::json!({}), Some(error_msg))
                 }
             };
 
@@ -635,6 +650,7 @@ You are currently running with the following configuration:
                 is_mcp,
                 mcp_server,
                 mcp_tool,
+                parse_error,
             });
         }
 
@@ -745,6 +761,45 @@ You are currently running with the following configuration:
             Regex::new(r#"<tool_call\s+name="[^"]+">[\s\S]*?</tool_call>"#).expect("Invalid regex");
 
         pattern.replace_all(response, "").trim().to_string()
+    }
+
+    /// Detects malformed tool calls that won't be parsed by the regex
+    /// Returns an error message if malformed calls are detected, None if all looks good
+    fn detect_malformed_tool_calls(content: &str) -> Option<String> {
+        let has_tool_call_start = content.contains("<tool_call");
+        let has_proper_close = content.contains("</tool_call>");
+        let has_wrong_close = content.contains("</tool_result>");
+
+        // Check for JSON-like content after tool_call tag (indicates an attempted tool call)
+        let has_json_pattern =
+            content.contains("<tool_call") && content.contains("{") && content.contains("}");
+
+        // If there's a tool_call opening but no proper closing
+        if has_tool_call_start && !has_proper_close && has_json_pattern {
+            if has_wrong_close {
+                return Some(
+                    "TOOL CALL FORMAT ERROR: You used </tool_result> as the closing tag, but the correct closing tag is </tool_call>.\n\n\
+                     Expected format:\n\
+                     <tool_call name=\"ToolName\">\n\
+                     {\"param\": \"value\"}\n\
+                     </tool_call>\n\n\
+                     Please retry your tool call with the correct </tool_call> closing tag.".to_string()
+                );
+            }
+
+            // Missing closing tag entirely
+            return Some(
+                "TOOL CALL FORMAT ERROR: Your tool call appears to be missing a closing tag.\n\n\
+                 Expected format:\n\
+                 <tool_call name=\"ToolName\">\n\
+                 {\"param\": \"value\"}\n\
+                 </tool_call>\n\n\
+                 Please ensure your tool calls have proper opening and closing tags."
+                    .to_string(),
+            );
+        }
+
+        None
     }
 
     /// Emits a streaming event to the frontend via Tauri.
@@ -1145,6 +1200,23 @@ impl Agent for LLMAgent {
                     r
                 }
                 Err(e) => {
+                    // Check for "No content provided" error from Rig.rs
+                    // This occurs when Mistral API returns empty content, typically after completing tool iterations
+                    // Instead of failing, treat it as a completion signal
+                    let error_str = e.to_string();
+                    if error_str.contains("No content provided") && iteration > 1 {
+                        warn!(
+                            iteration = iteration,
+                            "Rig.rs returned 'No content provided', treating as task completion"
+                        );
+                        final_response_content = format!(
+                            "Task completed after {} iteration(s). Tool executions completed successfully.\n\n\
+                             Note: LLM returned empty response on final iteration, which indicates the task is complete.",
+                            iteration - 1
+                        );
+                        break;
+                    }
+
                     error!(error = %e, iteration = iteration, "LLM call failed");
 
                     let error_message = match &e {
@@ -1181,29 +1253,119 @@ impl Agent for LLMAgent {
                 }
             };
 
+            // Handle empty LLM response gracefully
+            // This can occur when the LLM has completed tool iterations but returns no text content
+            // Instead of failing, treat it as a completion signal
+            if response.content.trim().is_empty() {
+                warn!(
+                    iteration = iteration,
+                    "LLM returned empty content, treating as task completion"
+                );
+                final_response_content = format!(
+                    "Task completed after {} iteration(s). Tool executions completed successfully.",
+                    iteration
+                );
+                break;
+            }
+
             // Parse tool calls from response
             let tool_calls = Self::parse_tool_calls(&response.content);
 
             if tool_calls.is_empty() {
+                // Check if this might be a malformed tool call that wasn't parsed
+                if let Some(format_error) = Self::detect_malformed_tool_calls(&response.content) {
+                    warn!(error = %format_error, "Detected malformed tool call, injecting feedback");
+
+                    // Create feedback as a tool execution result
+                    let error_result = ToolExecutionResult {
+                        tool_name: "FORMAT_ERROR".to_string(),
+                        success: false,
+                        result: serde_json::json!({}),
+                        error: Some(format_error),
+                    };
+
+                    // Format and add to conversation for LLM to learn from
+                    let error_feedback = Self::format_tool_results(&[error_result]);
+                    let continuation = format!(
+                        "Tool execution results:\n{}\n\n\
+                         Please correct the tool call format and try again.",
+                        error_feedback
+                    );
+                    conversation_history.push(continuation);
+
+                    // Continue the loop to let LLM retry
+                    continue;
+                }
+
                 // No more tool calls, we're done
                 final_response_content = Self::strip_tool_calls(&response.content);
                 debug!(iteration = iteration, "No tool calls found, finishing");
                 break;
             }
 
+            // Also handle parse errors in successfully matched tool calls
+            let parse_errors: Vec<_> = tool_calls
+                .iter()
+                .filter_map(|c| {
+                    c.parse_error
+                        .as_ref()
+                        .map(|e| (c.tool_name.clone(), e.clone()))
+                })
+                .collect();
+
+            if !parse_errors.is_empty() {
+                let error_results: Vec<_> = parse_errors
+                    .iter()
+                    .map(|(name, error)| ToolExecutionResult {
+                        tool_name: name.clone(),
+                        success: false,
+                        result: serde_json::json!({}),
+                        error: Some(error.clone()),
+                    })
+                    .collect();
+
+                // Emit error events
+                for (name, _) in &parse_errors {
+                    self.emit_progress(StreamChunk::tool_start(
+                        event_workflow_id.clone(),
+                        name.clone(),
+                    ));
+                    self.emit_progress(StreamChunk::tool_end(
+                        event_workflow_id.clone(),
+                        name.clone(),
+                        0,
+                    ));
+                }
+
+                // Add error feedback to conversation
+                let error_feedback = Self::format_tool_results(&error_results);
+                conversation_history.push(format!(
+                    "Tool execution results:\n{}\n\n\
+                     Please fix the JSON format errors and retry.",
+                    error_feedback
+                ));
+                continue;
+            }
+
+            // Filter out calls with parse errors for actual execution
+            let valid_calls: Vec<_> = tool_calls
+                .into_iter()
+                .filter(|c| c.parse_error.is_none())
+                .collect();
+
             info!(
                 iteration = iteration,
-                tool_calls_count = tool_calls.len(),
+                tool_calls_count = valid_calls.len(),
                 "Found tool calls, executing"
             );
 
             // Emit progress event about found tool calls
-            let tool_names: Vec<String> = tool_calls.iter().map(|c| c.tool_name.clone()).collect();
+            let tool_names: Vec<String> = valid_calls.iter().map(|c| c.tool_name.clone()).collect();
             self.emit_progress(StreamChunk::reasoning(
                 event_workflow_id.clone(),
                 format!(
                     "Executing {} tool(s): {}",
-                    tool_calls.len(),
+                    valid_calls.len(),
                     tool_names.join(", ")
                 ),
             ));
@@ -1211,7 +1373,7 @@ impl Agent for LLMAgent {
             // Execute each tool call with detailed tracking
             let mut execution_results = Vec::new();
 
-            for call in tool_calls {
+            for call in valid_calls {
                 let exec_start = std::time::Instant::now();
                 let input_params = call.arguments.clone();
 
@@ -1511,6 +1673,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         }
     }
 
@@ -1713,7 +1876,10 @@ Now I'll store that for later.
 </tool_call>"#;
 
         let calls = LLMAgent::parse_tool_calls(response);
-        assert!(calls.is_empty());
+        // Now we expect the call to be returned with parse_error set
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].parse_error.is_some());
+        assert_eq!(calls[0].tool_name, "MemoryTool");
     }
 
     #[test]
@@ -1784,5 +1950,44 @@ End."#;
         assert!(stripped.contains("Middle"));
         assert!(stripped.contains("End"));
         assert!(!stripped.contains("tool_call"));
+    }
+
+    #[test]
+    fn test_detect_malformed_tool_calls_wrong_closing() {
+        let content = r#"<tool_call name="MemoryTool">{"op": "search"}</tool_result>"#;
+        let error = LLMAgent::detect_malformed_tool_calls(content);
+        assert!(error.is_some());
+        assert!(error.unwrap().contains("</tool_result>"));
+    }
+
+    #[test]
+    fn test_detect_malformed_tool_calls_missing_closing() {
+        let content = r#"<tool_call name="MemoryTool">{"op": "search"}"#;
+        let error = LLMAgent::detect_malformed_tool_calls(content);
+        assert!(error.is_some());
+        assert!(error.unwrap().contains("missing"));
+    }
+
+    #[test]
+    fn test_detect_malformed_tool_calls_valid() {
+        let content = r#"<tool_call name="MemoryTool">{"op": "search"}</tool_call>"#;
+        let error = LLMAgent::detect_malformed_tool_calls(content);
+        assert!(error.is_none());
+    }
+
+    #[test]
+    fn test_tolerant_regex_accepts_tool_result() {
+        let content = r#"<tool_call name="MemoryTool">{"operation": "search", "query": "test"}</tool_result>"#;
+        let calls = LLMAgent::parse_tool_calls(content);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].tool_name, "MemoryTool");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_with_json_error() {
+        let content = r#"<tool_call name="MemoryTool">{invalid json}</tool_call>"#;
+        let calls = LLMAgent::parse_tool_calls(content);
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].parse_error.is_some());
     }
 }

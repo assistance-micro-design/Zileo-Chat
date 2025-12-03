@@ -82,8 +82,9 @@ export function activeReasoningToActivity(
 	step: ActiveReasoningStep,
 	index: number
 ): WorkflowActivityEvent {
+	// Use stepNumber for unique ID (more reliable than timestamp+index which can collide)
 	return {
-		id: `reasoning-${step.timestamp}-${index}`,
+		id: `reasoning-stream-${step.stepNumber}-${step.timestamp}`,
 		timestamp: step.timestamp,
 		type: 'reasoning',
 		title: `Reasoning Step ${step.stepNumber}`,
@@ -483,3 +484,43 @@ export function convertSubAgentExecutions(executions: SubAgentExecution[]): Work
 		.map((e, i) => subAgentExecutionToActivity(e, i))
 		.sort((a, b) => a.timestamp - b.timestamp);
 }
+
+// ============================================================================
+// Streaming-to-Activity Conversion Functions (Phase B)
+// ============================================================================
+
+/**
+ * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
+ * Used by activityStore to merge streaming activities with historical.
+ *
+ * NOTE: This is the same as activeToolToActivity but exported with the expected name.
+ * @see activeToolToActivity
+ */
+export const toolToStreamingActivity = activeToolToActivity;
+
+/**
+ * Convert an ActiveReasoningStep from streaming store to WorkflowActivityEvent.
+ * Used by activityStore to merge streaming activities with historical.
+ *
+ * NOTE: This is the same as activeReasoningToActivity but exported with the expected name.
+ * @see activeReasoningToActivity
+ */
+export const reasoningToStreamingActivity = activeReasoningToActivity;
+
+/**
+ * Convert an ActiveSubAgent from streaming store to WorkflowActivityEvent.
+ * Used by activityStore to merge streaming activities with historical.
+ *
+ * NOTE: This is the same as activeSubAgentToActivity but exported with the expected name.
+ * @see activeSubAgentToActivity
+ */
+export const subAgentToStreamingActivity = activeSubAgentToActivity;
+
+/**
+ * Convert an ActiveTask from streaming store to WorkflowActivityEvent.
+ * Used by activityStore to merge streaming activities with historical.
+ *
+ * NOTE: This is the same as activeTaskToActivity but exported with the expected name.
+ * @see activeTaskToActivity
+ */
+export const taskToStreamingActivity = activeTaskToActivity;

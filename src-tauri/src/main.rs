@@ -383,6 +383,8 @@ async fn main() -> anyhow::Result<()> {
                         .unwrap_or(50)
                         .clamp(1, 200);
 
+                    let enable_thinking = row["enable_thinking"].as_bool().unwrap_or(true);
+
                     let config = crate::models::AgentConfig {
                         id: id.clone(),
                         name,
@@ -392,6 +394,7 @@ async fn main() -> anyhow::Result<()> {
                         mcp_servers: mcp_servers_list,
                         system_prompt,
                         max_tool_iterations,
+                        enable_thinking,
                     };
 
                     // Create agent context with app_handle

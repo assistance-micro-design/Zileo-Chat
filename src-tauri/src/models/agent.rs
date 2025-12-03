@@ -63,11 +63,19 @@ pub struct AgentConfig {
     /// Maximum number of tool execution iterations (1-200, default: 50)
     #[serde(default = "default_max_tool_iterations")]
     pub max_tool_iterations: usize,
+    /// Enable thinking mode for supported models (default: true for thinking models)
+    #[serde(default = "default_enable_thinking")]
+    pub enable_thinking: bool,
 }
 
 /// Default value for max_tool_iterations
 fn default_max_tool_iterations() -> usize {
     50
+}
+
+/// Default value for enable_thinking
+fn default_enable_thinking() -> bool {
+    true
 }
 
 // Allow dead code until Phase 6: Full Agent Integration
@@ -127,6 +135,9 @@ pub struct AgentConfigCreate {
     /// Maximum number of tool execution iterations (1-200, default: 50)
     #[serde(default = "default_max_tool_iterations")]
     pub max_tool_iterations: usize,
+    /// Enable thinking mode for supported models (default: true for thinking models)
+    #[serde(default = "default_enable_thinking")]
+    pub enable_thinking: bool,
 }
 
 /// Agent configuration for updates (all fields optional except lifecycle which cannot change)
@@ -150,6 +161,9 @@ pub struct AgentConfigUpdate {
     /// Maximum number of tool execution iterations (1-200)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tool_iterations: Option<usize>,
+    /// Enable thinking mode for supported models
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_thinking: Option<bool>,
 }
 
 /// Agent summary for listing (lightweight representation)
@@ -261,6 +275,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -307,6 +322,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         assert!(config.has_valid_tools());
@@ -333,6 +349,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         assert!(!config.has_valid_tools());
@@ -358,6 +375,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         assert!(config.has_valid_tools());

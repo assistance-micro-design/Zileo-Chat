@@ -219,6 +219,10 @@ DEFINE FIELD max_tool_iterations ON agent TYPE int
     ASSERT $value >= 1 AND $value <= 200
     DEFAULT 50;
 
+-- Enable thinking mode for supported models (default: true)
+DEFINE FIELD enable_thinking ON agent TYPE bool
+    DEFAULT true;
+
 -- Timestamps
 DEFINE FIELD created_at ON agent TYPE datetime DEFAULT time::now();
 DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();

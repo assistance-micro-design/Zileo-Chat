@@ -271,12 +271,12 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
 /// - Memories (workflow-scoped)
 /// - Workflow itself
 #[tauri::command]
-#[instrument(name = "delete_workflow", skip(state), fields(workflow_id = %id))]
-pub async fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<(), String> {
+#[instrument(name = "delete_workflow", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn delete_workflow(workflow_id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting workflow with cascade");
 
     // Validate input
-    let validated_id = Validator::validate_uuid(&id).map_err(|e| {
+    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
         warn!(error = %e, "Invalid workflow ID");
         format!("Invalid workflow ID: {}", e)
     })?;
@@ -639,6 +639,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test agent".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
         let agent = SimpleAgent::new(config);
         registry

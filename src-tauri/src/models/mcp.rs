@@ -227,6 +227,34 @@ pub struct MCPCallLog {
     pub timestamp: DateTime<Utc>,
 }
 
+/// MCP tool call log entry for database creation
+///
+/// This struct omits the `timestamp` field to let SurrealDB's
+/// `DEFAULT time::now()` generate the timestamp server-side.
+/// This avoids the DateTime<Utc> serialization issue where serde
+/// produces RFC3339 strings but SurrealDB expects native datetime.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MCPCallLogCreate {
+    /// Unique log entry ID
+    pub id: String,
+    /// Associated workflow ID (if called from a workflow)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// MCP server name
+    pub server_name: String,
+    /// Tool name that was called
+    pub tool_name: String,
+    /// Parameters passed to the tool
+    pub params: serde_json::Value,
+    /// Result returned by the tool
+    pub result: serde_json::Value,
+    /// Whether the call succeeded
+    pub success: bool,
+    /// Execution duration in milliseconds
+    pub duration_ms: u64,
+    // NOTE: `timestamp` field omitted - SurrealDB generates via DEFAULT time::now()
+}
+
 /// MCP server database record
 ///
 /// Used for database persistence. Converts command enum to string

@@ -184,6 +184,7 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
         mcp_servers: validate_mcp_servers(&config.mcp_servers)?,
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
+        enable_thinking: config.enable_thinking,
     })
 }
 
@@ -271,6 +272,7 @@ pub async fn create_agent(
         mcp_servers: validated.mcp_servers.clone(),
         system_prompt: validated.system_prompt.clone(),
         max_tool_iterations: validated.max_tool_iterations,
+        enable_thinking: validated.enable_thinking,
     };
 
     // Persist to database
@@ -314,6 +316,7 @@ pub async fn create_agent(
             mcp_servers: {},
             system_prompt: {},
             max_tool_iterations: {},
+            enable_thinking: {},
             created_at: time::now(),
             updated_at: time::now()
         }}",
@@ -325,7 +328,8 @@ pub async fn create_agent(
         tools_json,
         mcp_json,
         system_prompt_json,
-        validated.max_tool_iterations
+        validated.max_tool_iterations,
+        validated.enable_thinking
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -409,6 +413,11 @@ pub async fn update_agent(
         None => existing_config.max_tool_iterations,
     };
 
+    let new_enable_thinking = match config.enable_thinking {
+        Some(e) => e,
+        None => existing_config.enable_thinking,
+    };
+
     let updated_config = AgentConfig {
         id: validated_id.clone(),
         name: new_name.clone(),
@@ -418,6 +427,7 @@ pub async fn update_agent(
         mcp_servers: new_mcp.clone(),
         system_prompt: new_prompt.clone(),
         max_tool_iterations: new_max_iterations,
+        enable_thinking: new_enable_thinking,
     };
 
     // Update database
@@ -454,8 +464,16 @@ pub async fn update_agent(
             mcp_servers = {},
             system_prompt = {},
             max_tool_iterations = {},
+            enable_thinking = {},
             updated_at = time::now()",
-        validated_id, name_json, llm_json, tools_json, mcp_json, prompt_json, new_max_iterations
+        validated_id,
+        name_json,
+        llm_json,
+        tools_json,
+        mcp_json,
+        prompt_json,
+        new_max_iterations,
+        new_enable_thinking
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -603,6 +621,8 @@ pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
             .unwrap_or(50)
             .clamp(1, 200);
 
+        let enable_thinking = row["enable_thinking"].as_bool().unwrap_or(true);
+
         let config = AgentConfig {
             id: id.clone(),
             name,
@@ -612,6 +632,7 @@ pub async fn load_agents_from_db(state: &AppState) -> Result<usize, String> {
             mcp_servers,
             system_prompt,
             max_tool_iterations,
+            enable_thinking,
         };
 
         // Create LLMAgent with AgentToolContext for sub-agent operations
@@ -709,6 +730,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         let agent = SimpleAgent::new(config);
@@ -740,6 +762,7 @@ mod tests {
             mcp_servers: vec!["serena".to_string()],
             system_prompt: "You are a test agent".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         let agent = SimpleAgent::new(config.clone());
@@ -783,6 +806,7 @@ mod tests {
             mcp_servers: vec![],
             system_prompt: "Test prompt".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         // Verify JSON serialization
@@ -828,6 +852,7 @@ mod tests {
                 mcp_servers: vec![],
                 system_prompt: format!("Agent {} prompt", i),
                 max_tool_iterations: 50,
+            enable_thinking: true,
             };
 
             let agent = SimpleAgent::new(config);

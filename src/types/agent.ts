@@ -51,6 +51,8 @@ export interface AgentConfig {
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
   max_tool_iterations: number;
+  /** Enable thinking mode for supported models (default: true) */
+  enable_thinking?: boolean;
 }
 
 /**
@@ -85,6 +87,8 @@ export interface AgentConfigCreate {
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
   max_tool_iterations?: number;
+  /** Enable thinking mode for supported models (default: true) */
+  enable_thinking?: boolean;
 }
 
 /**
@@ -103,6 +107,8 @@ export interface AgentConfigUpdate {
   system_prompt?: string;
   /** Maximum number of tool execution iterations (1-200) */
   max_tool_iterations?: number;
+  /** Enable thinking mode for supported models */
+  enable_thinking?: boolean;
 }
 
 /**
