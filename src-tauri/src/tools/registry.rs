@@ -48,6 +48,14 @@ impl ToolRegistry {
                 requires_context: false,
             },
         );
+        tools.insert(
+            "CalculatorTool",
+            ToolMetadata {
+                name: "CalculatorTool",
+                category: ToolCategory::Basic,
+                requires_context: false,
+            },
+        );
 
         // Sub-agent tools
         tools.insert(
@@ -151,6 +159,7 @@ mod tests {
     fn test_registry_has_all_basic_tools() {
         assert!(TOOL_REGISTRY.has_tool("MemoryTool"));
         assert!(TOOL_REGISTRY.has_tool("TodoTool"));
+        assert!(TOOL_REGISTRY.has_tool("CalculatorTool"));
     }
 
     #[test]
@@ -184,6 +193,7 @@ mod tests {
         let basic = TOOL_REGISTRY.basic_tools();
         assert!(basic.contains(&"MemoryTool"));
         assert!(basic.contains(&"TodoTool"));
+        assert!(basic.contains(&"CalculatorTool"));
         assert!(!basic.contains(&"SpawnAgentTool"));
 
         let sub_agent = TOOL_REGISTRY.sub_agent_tools();
@@ -205,6 +215,15 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 5);
+        assert_eq!(all.len(), 6);
+    }
+
+    #[test]
+    fn test_registry_calculator_tool() {
+        assert!(TOOL_REGISTRY.has_tool("CalculatorTool"));
+        let metadata = TOOL_REGISTRY.get("CalculatorTool").unwrap();
+        assert_eq!(metadata.name, "CalculatorTool");
+        assert_eq!(metadata.category, ToolCategory::Basic);
+        assert!(!metadata.requires_context);
     }
 }

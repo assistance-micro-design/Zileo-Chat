@@ -341,7 +341,8 @@ impl MemoryTool {
                 // Only general memories (no workflow_id)
                 conditions.push("workflow_id IS NONE".to_string());
             }
-            "both" | _ => {
+            // "both" or any other value - include both workflow and general
+            _ => {
                 // Both workflow and general - add OR condition if workflow active
                 if let Some(ref wf_id) = workflow_id {
                     conditions.push(format!(
@@ -471,7 +472,8 @@ impl MemoryTool {
             "general" => {
                 conditions.push("workflow_id IS NONE".to_string());
             }
-            "both" | _ => {
+            // "both" or any other value - include both workflow and general
+            _ => {
                 if let Some(ref wf_id) = workflow_id {
                     conditions.push(format!(
                         "(workflow_id = '{}' OR workflow_id IS NONE)",
@@ -569,7 +571,8 @@ impl MemoryTool {
             "general" => {
                 conditions.push("workflow_id IS NONE".to_string());
             }
-            "both" | _ => {
+            // "both" or any other value - include both workflow and general
+            _ => {
                 if let Some(ref wf_id) = workflow_id {
                     conditions.push(format!(
                         "(workflow_id = '{}' OR workflow_id IS NONE)",

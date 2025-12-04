@@ -60,7 +60,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	/** Available tools (from backend) */
 	const availableTools = [
 		{ value: 'MemoryTool', label: 'Memory Tool', description: 'Store and retrieve persistent memories' },
-		{ value: 'TodoTool', label: 'Todo Tool', description: 'Manage task lists and track progress' }
+		{ value: 'TodoTool', label: 'Todo Tool', description: 'Manage task lists and track progress' },
+		{ value: 'CalculatorTool', label: 'Calculator Tool', description: 'Perform scientific mathematical calculations' }
 	];
 
 	/** Lifecycle options with descriptions */

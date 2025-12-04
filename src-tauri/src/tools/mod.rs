@@ -25,6 +25,7 @@
 //! |--------|------|-------------|
 //! | [`memory`] | `MemoryTool` | Contextual memory with semantic search |
 //! | [`todo`] | `TodoTool` | Task management for workflow decomposition |
+//! | [`calculator`] | `CalculatorTool` | Scientific calculator for mathematical operations |
 //!
 //! # Example
 //!
@@ -40,6 +41,7 @@
 //! })).await?;
 //! ```
 
+pub mod calculator;
 pub mod constants;
 pub mod context;
 pub mod delegate_task;
@@ -60,6 +62,8 @@ use serde_json::Value;
 use std::fmt;
 
 // Re-export tools for agent integration
+#[allow(unused_imports)]
+pub use calculator::CalculatorTool;
 #[allow(unused_imports)]
 pub use context::AgentToolContext;
 #[allow(unused_imports)]

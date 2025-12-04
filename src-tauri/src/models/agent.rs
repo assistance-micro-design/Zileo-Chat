@@ -88,8 +88,9 @@ impl AgentConfig {
     /// # Known Tools
     /// - `MemoryTool` - Contextual memory with semantic search
     /// - `TodoTool` - Task management for workflow decomposition
+    /// - `CalculatorTool` - Scientific calculator for mathematical operations
     pub fn validate_tools(&self) -> Vec<String> {
-        const KNOWN_TOOLS: [&str; 2] = ["MemoryTool", "TodoTool"];
+        const KNOWN_TOOLS: [&str; 3] = ["MemoryTool", "TodoTool", "CalculatorTool"];
 
         self.tools
             .iter()
@@ -200,7 +201,7 @@ impl From<&AgentConfig> for AgentSummary {
 }
 
 /// List of known tools that agents can use
-pub const KNOWN_TOOLS: [&str; 2] = ["MemoryTool", "TodoTool"];
+pub const KNOWN_TOOLS: [&str; 3] = ["MemoryTool", "TodoTool", "CalculatorTool"];
 
 #[cfg(test)]
 mod tests {
@@ -371,7 +372,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
             },
-            tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
+            tools: vec!["MemoryTool".to_string(), "TodoTool".to_string(), "CalculatorTool".to_string()],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
