@@ -18,6 +18,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		MemoryTokenStats
 	} from '$types/embedding';
 	import { Settings, Pencil, Trash2, Plus } from 'lucide-svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/** Props */
 	interface Props {
@@ -60,18 +61,18 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	let testingEmbedding = $state(false);
 	let testResult = $state<EmbeddingTestResult | null>(null);
 
-	/** Provider options */
-	const providerOptions: SelectOption[] = [
-		{ value: 'mistral', label: 'Mistral AI' },
-		{ value: 'ollama', label: 'Ollama (Local)' }
-	];
+	/** Provider options (reactive to locale) */
+	const providerOptions = $derived<SelectOption[]>([
+		{ value: 'mistral', label: t('memory_provider_mistral') },
+		{ value: 'ollama', label: t('memory_provider_ollama') }
+	]);
 
-	/** Strategy options */
-	const strategyOptions: SelectOption[] = [
-		{ value: 'fixed', label: 'Fixed' },
-		{ value: 'semantic', label: 'Semantic' },
-		{ value: 'recursive', label: 'Recursive' }
-	];
+	/** Strategy options (reactive to locale) */
+	const strategyOptions = $derived<SelectOption[]>([
+		{ value: 'fixed', label: t('memory_strategy_fixed') },
+		{ value: 'semantic', label: t('memory_strategy_semantic') },
+		{ value: 'recursive', label: t('memory_strategy_recursive') }
+	]);
 
 	/** Model options based on selected provider */
 	const modelOptions = $derived.by(() => {
@@ -104,7 +105,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			// Config exists if backend returns a valid config (provider and model are set)
 			configExists = Boolean(loadedConfig.provider && loadedConfig.model);
 		} catch (err) {
-			message = { type: 'error', text: `Failed to load config: ${err}` };
+			message = { type: 'error', text: t('memory_failed_load').replace('{error}', String(err)) };
 			configExists = false;
 		} finally {
 			loading = false;
@@ -154,11 +155,11 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			await invoke('save_embedding_config', { config: editConfig });
 			config = { ...editConfig };
 			configExists = true;
-			message = { type: 'success', text: 'Configuration saved successfully' };
+			message = { type: 'success', text: t('memory_config_saved') };
 			showConfigModal = false;
 			onsave?.();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to save: ${err}` };
+			message = { type: 'error', text: t('memory_failed_save').replace('{error}', String(err)) };
 		} finally {
 			saving = false;
 		}
@@ -168,7 +169,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	 * Deletes the embedding configuration (resets to defaults)
 	 */
 	async function handleDelete(): Promise<void> {
-		if (!confirm('Are you sure you want to delete this embedding configuration?')) {
+		if (!confirm(t('memory_confirm_delete_config'))) {
 			return;
 		}
 
@@ -179,9 +180,9 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			config = { ...defaultConfig };
 			editConfig = { ...defaultConfig };
 			configExists = false;
-			message = { type: 'success', text: 'Configuration deleted' };
+			message = { type: 'success', text: t('memory_config_deleted') };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${err}` };
+			message = { type: 'error', text: t('memory_failed_delete').replace('{error}', String(err)) };
 		} finally {
 			saving = false;
 		}
@@ -275,7 +276,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	 */
 	async function handleTestEmbedding(): Promise<void> {
 		if (!testText.trim()) {
-			message = { type: 'error', text: 'Please enter test text' };
+			message = { type: 'error', text: t('memory_enter_test_text') };
 			return;
 		}
 
@@ -286,12 +287,12 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		try {
 			testResult = await invoke<EmbeddingTestResult>('test_embedding', { text: testText });
 			if (testResult.success) {
-				message = { type: 'success', text: `Embedding generated in ${testResult.duration_ms}ms` };
+				message = { type: 'success', text: t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms)) };
 			} else {
-				message = { type: 'error', text: testResult.error || 'Unknown error' };
+				message = { type: 'error', text: testResult.error || t('common_error') };
 			}
 		} catch (err) {
-			message = { type: 'error', text: `Test failed: ${err}` };
+			message = { type: 'error', text: t('memory_test_failed').replace('{error}', String(err)) };
 		} finally {
 			testingEmbedding = false;
 		}
@@ -309,7 +310,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			{#snippet body()}
 				<div class="loading-state">
 					<StatusIndicator status="running" />
-					<span>Loading configuration...</span>
+					<span>{$i18n('memory_loading_config')}</span>
 				</div>
 			{/snippet}
 		</Card>
@@ -318,13 +319,13 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		<Card>
 			{#snippet header()}
 				<div class="card-header-row">
-					<h3 class="card-title">Embedding Configuration</h3>
+					<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
 					{#if configExists}
 						<div class="header-actions">
-							<button type="button" class="icon-btn" onclick={openConfigModal} title="Edit">
+							<button type="button" class="icon-btn" onclick={openConfigModal} title={$i18n('common_edit')}>
 								<Pencil size={16} />
 							</button>
-							<button type="button" class="icon-btn danger" onclick={handleDelete} title="Delete">
+							<button type="button" class="icon-btn danger" onclick={handleDelete} title={$i18n('common_delete')}>
 								<Trash2 size={16} />
 							</button>
 						</div>
@@ -336,39 +337,39 @@ Allows users to configure embedding provider, model, and chunking settings via m
 					<div class="config-display">
 						<div class="config-grid">
 							<div class="config-item">
-								<span class="config-label">Provider</span>
+								<span class="config-label">{$i18n('memory_provider')}</span>
 								<span class="config-value">{getProviderLabel(config.provider)}</span>
 							</div>
 							<div class="config-item">
-								<span class="config-label">Model</span>
+								<span class="config-label">{$i18n('memory_model')}</span>
 								<span class="config-value">{config.model}</span>
 							</div>
 							<div class="config-item">
-								<span class="config-label">Dimensions</span>
+								<span class="config-label">{$i18n('memory_dimensions')}</span>
 								<span class="config-value">{config.dimension}D</span>
 							</div>
 							<div class="config-item">
-								<span class="config-label">Strategy</span>
+								<span class="config-label">{$i18n('memory_strategy')}</span>
 								<span class="config-value">{getStrategyLabel(config.strategy || 'fixed')}</span>
 							</div>
 							<div class="config-item">
-								<span class="config-label">Chunk Size</span>
-								<span class="config-value">{config.chunk_size} chars</span>
+								<span class="config-label">{$i18n('memory_chunk_size')}</span>
+								<span class="config-value">{config.chunk_size} {$i18n('memory_chars')}</span>
 							</div>
 							<div class="config-item">
-								<span class="config-label">Overlap</span>
-								<span class="config-value">{config.chunk_overlap} chars</span>
+								<span class="config-label">{$i18n('memory_overlap')}</span>
+								<span class="config-value">{config.chunk_overlap} {$i18n('memory_chars')}</span>
 							</div>
 						</div>
 					</div>
 				{:else}
 					<div class="empty-state">
 						<Settings size={48} strokeWidth={1} />
-						<h4>No Embedding Configuration</h4>
-						<p>Configure an embedding model to enable semantic search and memory features.</p>
+						<h4>{$i18n('memory_no_config')}</h4>
+						<p>{$i18n('memory_no_config_description')}</p>
 						<Button variant="primary" onclick={openConfigModal}>
 							<Plus size={16} />
-							Add Embedding Configuration
+							{$i18n('memory_add_config')}
 						</Button>
 					</div>
 				{/if}
@@ -378,14 +379,14 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		<!-- Test Embedding Section -->
 		<Card>
 			{#snippet header()}
-				<h3 class="card-title">Test Embedding</h3>
+				<h3 class="card-title">{$i18n('memory_test_title')}</h3>
 			{/snippet}
 			{#snippet body()}
 				<div class="test-section">
 					<Textarea
-						label="Test Text"
+						label={$i18n('memory_test_text_label')}
 						value={testText}
-						placeholder="Enter text to test embedding generation..."
+						placeholder={$i18n('memory_test_text_placeholder')}
 						rows={3}
 						oninput={(e) => (testText = e.currentTarget.value)}
 					/>
@@ -395,10 +396,10 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							onclick={handleTestEmbedding}
 							disabled={!testText.trim() || testingEmbedding || !configExists}
 						>
-							{testingEmbedding ? 'Testing...' : 'Test Embedding'}
+							{testingEmbedding ? $i18n('memory_testing') : $i18n('memory_test_button')}
 						</Button>
 						{#if !configExists}
-							<span class="test-hint">Configure embedding first</span>
+							<span class="test-hint">{$i18n('memory_configure_first')}</span>
 						{/if}
 					</div>
 
@@ -410,23 +411,23 @@ Allows users to configure embedding provider, model, and chunking settings via m
 						>
 							{#if testResult.success}
 								<div class="result-row">
-									<span class="result-label">Dimension:</span>
+									<span class="result-label">{$i18n('memory_dimension')}</span>
 									<span class="result-value">{testResult.dimension}</span>
 								</div>
 								<div class="result-row">
-									<span class="result-label">Duration:</span>
+									<span class="result-label">{$i18n('memory_duration')}</span>
 									<span class="result-value">{testResult.duration_ms}ms</span>
 								</div>
 								<div class="result-row">
-									<span class="result-label">Provider:</span>
+									<span class="result-label">{$i18n('memory_provider')}</span>
 									<span class="result-value">{testResult.provider}</span>
 								</div>
 								<div class="result-row">
-									<span class="result-label">Model:</span>
+									<span class="result-label">{$i18n('memory_model')}</span>
 									<span class="result-value">{testResult.model}</span>
 								</div>
 								<div class="result-row">
-									<span class="result-label">Preview:</span>
+									<span class="result-label">{$i18n('memory_preview')}</span>
 									<span class="result-value preview"
 										>[{testResult.preview
 											.slice(0, 3)
@@ -453,7 +454,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		{#if stats || tokenStats}
 			<Card>
 				{#snippet header()}
-					<h3 class="card-title">Memory Statistics</h3>
+					<h3 class="card-title">{$i18n('memory_stats_title')}</h3>
 				{/snippet}
 				{#snippet body()}
 					<div class="unified-stats">
@@ -461,37 +462,37 @@ Allows users to configure embedding provider, model, and chunking settings via m
 						<div class="summary-stats">
 							<div class="summary-item">
 								<span class="summary-value">{formatNumber(stats?.total ?? tokenStats?.total_memories ?? 0)}</span>
-								<span class="summary-label">Total Memories</span>
+								<span class="summary-label">{$i18n('memory_total_memories')}</span>
 							</div>
 							<div class="summary-item">
 								<span class="summary-value">{formatNumber(tokenStats?.total_chars ?? 0)}</span>
-								<span class="summary-label">Total Characters</span>
+								<span class="summary-label">{$i18n('memory_total_characters')}</span>
 							</div>
 							<div class="summary-item">
 								<span class="summary-value">{formatNumber(tokenStats?.total_estimated_tokens ?? 0)}</span>
-								<span class="summary-label">Est. Tokens</span>
+								<span class="summary-label">{$i18n('memory_est_tokens')}</span>
 							</div>
 							<div class="summary-item">
 								<span class="summary-value">{stats?.with_embeddings ?? 0}/{stats?.total ?? 0}</span>
-								<span class="summary-label">With Embeddings</span>
+								<span class="summary-label">{$i18n('memory_with_embeddings')}</span>
 							</div>
 						</div>
 
 						<!-- Category Breakdown -->
 						{#if tokenStats && tokenStats.categories.length > 0}
 							<div class="categories-section">
-								<h4 class="section-title">By Category</h4>
+								<h4 class="section-title">{$i18n('memory_by_category')}</h4>
 								<div class="categories-list">
 									{#each tokenStats.categories as cat}
 										<div class="category-item">
 											<div class="category-header">
 												<Badge variant={getTypeVariant(cat.memory_type)}>{cat.memory_type}</Badge>
-												<span class="category-count">{cat.count} memories</span>
-												<span class="embedding-status">{cat.with_embeddings}/{cat.count} embedded</span>
+												<span class="category-count">{cat.count} {$i18n('memory_memories_count')}</span>
+												<span class="embedding-status">{cat.with_embeddings}/{cat.count} {$i18n('memory_embedded')}</span>
 											</div>
 											<div class="category-details">
-												<span class="token-count">{formatNumber(cat.estimated_tokens)} tokens</span>
-												<span class="char-count">({formatNumber(cat.total_chars)} chars)</span>
+												<span class="token-count">{formatNumber(cat.estimated_tokens)} {$i18n('memory_tokens')}</span>
+												<span class="char-count">({formatNumber(cat.total_chars)} {$i18n('memory_chars')})</span>
 											</div>
 											<ProgressBar
 												value={tokenStats.total_chars > 0 ? (cat.total_chars / tokenStats.total_chars) * 100 : 0}
@@ -503,7 +504,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							</div>
 						{:else if stats && Object.keys(stats.by_type).length > 0}
 							<div class="categories-section">
-								<h4 class="section-title">By Type</h4>
+								<h4 class="section-title">{$i18n('memory_by_type')}</h4>
 								<div class="type-list">
 									{#each Object.entries(stats.by_type) as [type, count]}
 										<div class="type-item">
@@ -524,46 +525,46 @@ Allows users to configure embedding provider, model, and chunking settings via m
 <!-- Configuration Modal -->
 <Modal
 	open={showConfigModal}
-	title="Embedding Configuration"
+	title={$i18n('memory_embedding_config')}
 	onclose={closeConfigModal}
 >
 	{#snippet body()}
 		<div class="modal-form">
 			<!-- Embedding Model Section -->
 			<div class="modal-section">
-				<h4 class="modal-section-title">Embedding Model</h4>
+				<h4 class="modal-section-title">{$i18n('memory_embedding_model')}</h4>
 				<div class="form-row">
 					<Select
-						label="Provider"
+						label={$i18n('memory_provider')}
 						options={providerOptions}
 						value={editConfig.provider}
 						onchange={handleProviderChange}
-						help="Select from enabled LLM providers"
+						help={$i18n('memory_select_provider_help')}
 					/>
 
 					<Select
-						label="Model"
+						label={$i18n('memory_model')}
 						options={modelOptions}
 						value={editConfig.model}
 						onchange={handleModelChange}
 						help={editConfig.provider === 'mistral'
-							? 'mistral-embed produces 1024D vectors'
-							: 'nomic-embed-text (768D) for speed, mxbai-embed-large (1024D) for accuracy'}
+							? $i18n('memory_mistral_help')
+							: $i18n('memory_ollama_help')}
 					/>
 				</div>
 				<div class="dimension-info">
-					<span class="dimension-label">Vector Dimensions:</span>
+					<span class="dimension-label">{$i18n('memory_vector_dimensions')}</span>
 					<span class="dimension-value">{editConfig.dimension}D</span>
 				</div>
 			</div>
 
 			<!-- Chunking Settings Section -->
 			<div class="modal-section">
-				<h4 class="modal-section-title">Chunking Settings</h4>
+				<h4 class="modal-section-title">{$i18n('memory_chunking_settings')}</h4>
 				<div class="form-row">
 					<div class="slider-input">
 						<span class="slider-label">
-							Chunk Size: {editConfig.chunk_size} characters
+							{$i18n('memory_chunk_size_label').replace('{size}', String(editConfig.chunk_size))}
 						</span>
 						<input
 							type="range"
@@ -572,14 +573,14 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							step="50"
 							bind:value={editConfig.chunk_size}
 							class="slider"
-							aria-label="Chunk size in characters"
+							aria-label={$i18n('memory_chunk_size')}
 						/>
-						<span class="slider-help">Characters per chunk (default: 512)</span>
+						<span class="slider-help">{$i18n('memory_chunk_size_help')}</span>
 					</div>
 
 					<div class="slider-input">
 						<span class="slider-label">
-							Overlap: {editConfig.chunk_overlap} characters
+							{$i18n('memory_overlap_label').replace('{size}', String(editConfig.chunk_overlap))}
 						</span>
 						<input
 							type="range"
@@ -588,18 +589,18 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							step="10"
 							bind:value={editConfig.chunk_overlap}
 							class="slider"
-							aria-label="Chunk overlap in characters"
+							aria-label={$i18n('memory_overlap')}
 						/>
-						<span class="slider-help">Overlap between chunks (default: 50)</span>
+						<span class="slider-help">{$i18n('memory_overlap_help')}</span>
 					</div>
 				</div>
 
 				<Select
-					label="Strategy"
+					label={$i18n('memory_strategy')}
 					options={strategyOptions}
 					value={editConfig.strategy || 'fixed'}
 					onchange={handleStrategyChange}
-					help="Chunking strategy for text processing"
+					help={$i18n('memory_strategy_help')}
 				/>
 			</div>
 
@@ -613,10 +614,10 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	{#snippet footer()}
 		<div class="modal-actions">
 			<Button variant="ghost" onclick={closeConfigModal} disabled={saving}>
-				Cancel
+				{$i18n('common_cancel')}
 			</Button>
 			<Button variant="primary" onclick={handleSave} disabled={saving}>
-				{saving ? 'Saving...' : 'Save Configuration'}
+				{saving ? $i18n('common_saving') : $i18n('memory_save_config')}
 			</Button>
 		</div>
 	{/snippet}

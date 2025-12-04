@@ -289,6 +289,123 @@ import type { Workflow } from '../types/workflow';     // NO!
 
 The `$types` alias is configured in `svelte.config.js` and points to `src/types/`.
 
+## Internationalization (i18n)
+
+The application supports multiple languages (English and French) with a simple JSON-based translation system.
+
+### Translation Files
+
+Translation files are located in `src/messages/`:
+- `src/messages/en.json` - English translations
+- `src/messages/fr.json` - French translations (no anglicisms)
+
+**File Structure**:
+```json
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_save": "Save",
+  "common_cancel": "Cancel",
+  "settings_title": "Settings",
+  "agent_loading": "Loading agents..."
+}
+```
+
+**Key Naming Convention**:
+- Use `snake_case` for keys
+- Prefix with section name: `common_`, `settings_`, `agent_`, `mcp_`, `theme_`, etc.
+- Be descriptive: `agent_no_agents_description` not `agent_desc`
+
+### Using Translations in Components
+
+**Import Pattern**:
+```typescript
+import { i18n } from '$lib/i18n';
+```
+
+**In Templates** (reactive):
+```svelte
+<script lang="ts">
+  import { i18n } from '$lib/i18n';
+</script>
+
+<h1>{$i18n('settings_title')}</h1>
+<p>{$i18n('agent_loading_description')}</p>
+<button>{$i18n('common_save')}</button>
+```
+
+**In Script** (non-reactive):
+```typescript
+import { t } from '$lib/i18n';
+
+// For one-time use (not reactive to locale changes)
+const message = t('common_error');
+```
+
+### Locale Store
+
+The locale is managed via `$lib/stores/locale.ts`:
+
+```typescript
+import { localeStore, locale, localeInfo } from '$lib/stores/locale';
+
+// Initialize on app start (in +layout.svelte)
+localeStore.init();
+
+// Change locale
+localeStore.setLocale('fr');
+
+// Access current locale (reactive)
+$locale       // 'en' | 'fr'
+$localeInfo   // { id: 'fr', nativeName: 'Francais', flag: 'FR', countryCode: 'FR' }
+```
+
+### Adding New Translations
+
+1. Add keys to both `src/messages/en.json` and `src/messages/fr.json`
+2. Use the `$i18n()` store in templates
+3. Follow naming conventions: `section_action_detail`
+
+**Example - Adding a new feature**:
+```json
+// en.json
+{
+  "feature_title": "New Feature",
+  "feature_description": "This is a new feature.",
+  "feature_button_enable": "Enable Feature"
+}
+
+// fr.json
+{
+  "feature_title": "Nouvelle fonctionnalite",
+  "feature_description": "Ceci est une nouvelle fonctionnalite.",
+  "feature_button_enable": "Activer la fonctionnalite"
+}
+```
+
+### Configuration
+
+The `$messages` alias is configured in:
+- `svelte.config.js` (SvelteKit alias)
+- `tsconfig.json` (TypeScript paths)
+
+```javascript
+// svelte.config.js
+alias: {
+  $messages: './src/messages',
+  '$messages/*': './src/messages/*'
+}
+```
+
+### French Translation Guidelines
+
+When adding French translations, avoid anglicisms:
+- "Settings" → "Parametres" (not "Settings")
+- "Provider" → "Fournisseur" (not "Provider")
+- "Workflow" → "Flux de travail" (not "Workflow")
+- "Loading" → "Chargement" (not "Loading")
+- "Server" → "Serveur" (not "Serveur")
+- "Theme" → "Theme" (acceptable, same in French)
+
 ### Type Definition Examples
 
 **TypeScript** (`src/types/`):

@@ -11,6 +11,7 @@ Provides fields for memory type, content, and metadata.
 	import { Button, Input, Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { Memory, MemoryType } from '$types/memory';
+	import { i18n, t } from '$lib/i18n';
 
 	/** Props */
 	interface Props {
@@ -38,13 +39,13 @@ Provides fields for memory type, content, and metadata.
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 
-	/** Memory type options */
-	const typeOptions: SelectOption[] = [
-		{ value: 'user_pref', label: 'User Preferences' },
-		{ value: 'context', label: 'Context' },
-		{ value: 'knowledge', label: 'Knowledge' },
-		{ value: 'decision', label: 'Decision' }
-	];
+	/** Memory type options (reactive to locale) */
+	const typeOptions = $derived<SelectOption[]>([
+		{ value: 'user_pref', label: t('memory_type_user_pref') },
+		{ value: 'context', label: t('memory_type_context') },
+		{ value: 'knowledge', label: t('memory_type_knowledge') },
+		{ value: 'decision', label: t('memory_type_decision') }
+	]);
 
 	/**
 	 * Initialize form data when memory prop changes
@@ -83,12 +84,12 @@ Provides fields for memory type, content, and metadata.
 
 		// Validate content
 		if (!formData.content.trim()) {
-			error = 'Content is required';
+			error = t('memory_form_error_required');
 			return;
 		}
 
 		if (formData.content.length > 50000) {
-			error = 'Content exceeds maximum length of 50,000 characters';
+			error = t('memory_form_error_max_length');
 			return;
 		}
 
@@ -98,7 +99,7 @@ Provides fields for memory type, content, and metadata.
 			// Build metadata
 			const metadata: Record<string, unknown> = {};
 			if (formData.tags.trim()) {
-				metadata.tags = formData.tags.split(',').map((t) => t.trim()).filter(Boolean);
+				metadata.tags = formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
 			}
 			if (formData.priority !== 0.5) {
 				metadata.priority = formData.priority;
@@ -122,7 +123,7 @@ Provides fields for memory type, content, and metadata.
 
 			onsave?.();
 		} catch (err) {
-			error = `Failed to save: ${err}`;
+			error = t('memory_failed_save').replace('{error}', String(err));
 		} finally {
 			saving = false;
 		}
@@ -144,34 +145,34 @@ Provides fields for memory type, content, and metadata.
 	{/if}
 
 	<Select
-		label="Type"
+		label={$i18n('memory_form_type_label')}
 		options={typeOptions}
 		value={formData.type}
 		onchange={handleTypeChange}
-		help="Category of this memory"
+		help={$i18n('memory_form_type_help')}
 	/>
 
 	<Textarea
-		label="Content"
-		placeholder="Enter memory content..."
+		label={$i18n('memory_form_content_label')}
+		placeholder={$i18n('memory_form_content_placeholder')}
 		value={formData.content}
 		oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => formData.content = e.currentTarget.value}
 		rows={6}
-		help="Maximum 50,000 characters"
+		help={$i18n('memory_form_content_help')}
 	/>
 
 	<Input
 		type="text"
-		label="Tags"
-		placeholder="tag1, tag2, tag3"
+		label={$i18n('memory_form_tags_label')}
+		placeholder={$i18n('memory_form_tags_placeholder')}
 		value={formData.tags}
 		oninput={(e: Event & { currentTarget: HTMLInputElement }) => formData.tags = e.currentTarget.value}
-		help="Comma-separated tags for organization"
+		help={$i18n('memory_form_tags_help')}
 	/>
 
 	<div class="slider-field">
 		<span class="slider-label">
-			Priority: {formData.priority.toFixed(1)}
+			{$i18n('memory_form_priority_label').replace('{value}', formData.priority.toFixed(1))}
 		</span>
 		<input
 			type="range"
@@ -180,9 +181,9 @@ Provides fields for memory type, content, and metadata.
 			step="0.1"
 			bind:value={formData.priority}
 			class="slider"
-			aria-label="Memory priority"
+			aria-label={$i18n('memory_form_priority_label').replace('{value}', '')}
 		/>
-		<span class="slider-help">0.0 (low) to 1.0 (high)</span>
+		<span class="slider-help">{$i18n('memory_form_priority_help')}</span>
 	</div>
 
 	<div class="form-actions">
@@ -192,14 +193,14 @@ Provides fields for memory type, content, and metadata.
 			onclick={handleCancel}
 			disabled={saving}
 		>
-			Cancel
+			{$i18n('common_cancel')}
 		</Button>
 		<Button
 			type="submit"
 			variant="primary"
 			disabled={saving || !formData.content.trim()}
 		>
-			{saving ? 'Saving...' : mode === 'add' ? 'Add Memory' : 'Save Changes'}
+			{saving ? $i18n('common_saving') : mode === 'add' ? $i18n('memory_modal_add') : $i18n('memory_form_save_changes')}
 		</Button>
 	</div>
 </form>

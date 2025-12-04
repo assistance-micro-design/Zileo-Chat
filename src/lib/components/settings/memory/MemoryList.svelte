@@ -14,6 +14,7 @@ Displays memories with filtering, search, and action buttons.
 	import type { ExportFormat, ImportResult, RegenerateResult } from '$types/embedding';
 	import MemoryForm from './MemoryForm.svelte';
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from 'lucide-svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/** Props */
 	interface Props {
@@ -43,14 +44,14 @@ Displays memories with filtering, search, and action buttons.
 	let actionLoading = $state(false);
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
-	/** Memory type options */
-	const typeOptions: SelectOption[] = [
-		{ value: '', label: 'All Types' },
-		{ value: 'user_pref', label: 'User Preferences' },
-		{ value: 'context', label: 'Context' },
-		{ value: 'knowledge', label: 'Knowledge' },
-		{ value: 'decision', label: 'Decision' }
-	];
+	/** Memory type options (reactive to locale) */
+	const typeOptions = $derived<SelectOption[]>([
+		{ value: '', label: t('memory_type_all') },
+		{ value: 'user_pref', label: t('memory_type_user_pref') },
+		{ value: 'context', label: t('memory_type_context') },
+		{ value: 'knowledge', label: t('memory_type_knowledge') },
+		{ value: 'decision', label: t('memory_type_decision') }
+	]);
 
 	/**
 	 * Truncates text to specified length
@@ -91,7 +92,7 @@ Displays memories with filtering, search, and action buttons.
 	 * Formats scope (workflow_id or General)
 	 */
 	function formatScope(workflowId: string | undefined | null): string {
-		if (!workflowId) return 'General';
+		if (!workflowId) return t('memory_scope_general');
 		// Truncate long workflow IDs
 		return workflowId.length > 12 ? workflowId.slice(0, 12) + '...' : workflowId;
 	}
@@ -106,7 +107,7 @@ Displays memories with filtering, search, and action buttons.
 			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
 			memories = await invoke<Memory[]>('list_memories', { typeFilter: filter, workflowId: null });
 		} catch (err) {
-			message = { type: 'error', text: `Failed to load memories: ${err}` };
+			message = { type: 'error', text: t('memory_failed_load').replace('{error}', String(err)) };
 		} finally {
 			loading = false;
 		}
@@ -134,7 +135,7 @@ Displays memories with filtering, search, and action buttons.
 			});
 			memories = results.map((r) => r.memory);
 		} catch (err) {
-			message = { type: 'error', text: `Search failed: ${err}` };
+			message = { type: 'error', text: t('memory_search_failed').replace('{error}', String(err)) };
 		} finally {
 			searching = false;
 		}
@@ -195,7 +196,7 @@ Displays memories with filtering, search, and action buttons.
 	 * Deletes a memory
 	 */
 	async function handleDelete(memory: Memory): Promise<void> {
-		if (!confirm(`Are you sure you want to delete this memory?`)) {
+		if (!confirm(t('memory_confirm_delete'))) {
 			return;
 		}
 
@@ -203,10 +204,10 @@ Displays memories with filtering, search, and action buttons.
 		try {
 			await invoke('delete_memory', { memoryId: memory.id });
 			memories = memories.filter((m) => m.id !== memory.id);
-			message = { type: 'success', text: 'Memory deleted' };
+			message = { type: 'success', text: t('memory_deleted') };
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${err}` };
+			message = { type: 'error', text: t('memory_failed_delete_memory').replace('{error}', String(err)) };
 		} finally {
 			actionLoading = false;
 		}
@@ -235,9 +236,9 @@ Displays memories with filtering, search, and action buttons.
 			document.body.removeChild(a);
 			URL.revokeObjectURL(url);
 
-			message = { type: 'success', text: `Exported ${memories.length} memories` };
+			message = { type: 'success', text: t('memory_exported').replace('{count}', String(memories.length)) };
 		} catch (err) {
-			message = { type: 'error', text: `Export failed: ${err}` };
+			message = { type: 'error', text: t('memory_export_failed').replace('{error}', String(err)) };
 		} finally {
 			actionLoading = false;
 		}
@@ -261,7 +262,7 @@ Displays memories with filtering, search, and action buttons.
 				const result = await invoke<ImportResult>('import_memories', { data: text });
 
 				if (result.imported > 0) {
-					message = { type: 'success', text: `Imported ${result.imported} memories` };
+					message = { type: 'success', text: t('memory_imported').replace('{count}', String(result.imported)) };
 					await loadMemories();
 					onchange?.();
 				}
@@ -269,11 +270,11 @@ Displays memories with filtering, search, and action buttons.
 				if (result.failed > 0) {
 					message = {
 						type: 'error',
-						text: `${result.failed} imports failed: ${result.errors.slice(0, 3).join(', ')}`
+						text: t('memory_import_failed').replace('{count}', String(result.failed)).replace('{errors}', result.errors.slice(0, 3).join(', '))
 					};
 				}
 			} catch (err) {
-				message = { type: 'error', text: `Import failed: ${err}` };
+				message = { type: 'error', text: t('memory_import_failed_generic').replace('{error}', String(err)) };
 			} finally {
 				actionLoading = false;
 			}
@@ -286,7 +287,7 @@ Displays memories with filtering, search, and action buttons.
 	 * Regenerates embeddings for all memories
 	 */
 	async function handleRegenerateEmbeddings(): Promise<void> {
-		if (!confirm('This will regenerate embeddings for all memories. Continue?')) {
+		if (!confirm(t('memory_confirm_regenerate'))) {
 			return;
 		}
 
@@ -297,11 +298,14 @@ Displays memories with filtering, search, and action buttons.
 			});
 			message = {
 				type: 'success',
-				text: `Processed ${result.processed}, success: ${result.success}, failed: ${result.failed}`
+				text: t('memory_regenerate_result')
+					.replace('{processed}', String(result.processed))
+					.replace('{success}', String(result.success))
+					.replace('{failed}', String(result.failed))
 			};
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: `Regeneration failed: ${err}` };
+			message = { type: 'error', text: t('memory_regenerate_failed').replace('{error}', String(err)) };
 		} finally {
 			actionLoading = false;
 		}
@@ -345,7 +349,7 @@ Displays memories with filtering, search, and action buttons.
 			/>
 			<Input
 				type="search"
-				placeholder="Search memories..."
+				placeholder={$i18n('memory_search_placeholder')}
 				value={searchQuery}
 				oninput={handleSearchInput}
 			/>
@@ -354,22 +358,22 @@ Displays memories with filtering, search, and action buttons.
 		<div class="actions">
 			<Button variant="secondary" size="sm" onclick={() => handleExport('json')} disabled={actionLoading}>
 				<Download size={16} />
-				<span>JSON</span>
+				<span>{$i18n('memory_export_json')}</span>
 			</Button>
 			<Button variant="secondary" size="sm" onclick={() => handleExport('csv')} disabled={actionLoading}>
 				<Download size={16} />
-				<span>CSV</span>
+				<span>{$i18n('memory_export_csv')}</span>
 			</Button>
 			<Button variant="secondary" size="sm" onclick={handleImport} disabled={actionLoading}>
 				<Upload size={16} />
-				<span>Import</span>
+				<span>{$i18n('memory_import')}</span>
 			</Button>
 			<Button variant="secondary" size="sm" onclick={handleRegenerateEmbeddings} disabled={actionLoading}>
 				<RefreshCw size={16} />
-				<span>Regenerate</span>
+				<span>{$i18n('memory_regenerate')}</span>
 			</Button>
 			<Button variant="primary" size="sm" onclick={openAddModal}>
-				Add Memory
+				{$i18n('memory_add')}
 			</Button>
 		</div>
 	</div>
@@ -386,7 +390,7 @@ Displays memories with filtering, search, and action buttons.
 			{#snippet body()}
 				<div class="loading-state">
 					<StatusIndicator status="running" />
-					<span>{searching ? 'Searching...' : 'Loading memories...'}</span>
+					<span>{searching ? $i18n('memory_searching') : $i18n('memory_loading')}</span>
 				</div>
 			{/snippet}
 		</Card>
@@ -394,15 +398,15 @@ Displays memories with filtering, search, and action buttons.
 		<Card>
 			{#snippet body()}
 				<div class="empty-state">
-					<h3>No Memories Found</h3>
+					<h3>{$i18n('memory_no_memories')}</h3>
 					<p>
 						{searchQuery
-							? 'No memories match your search query.'
-							: 'No memories have been created yet.'}
+							? $i18n('memory_no_match')
+							: $i18n('memory_no_created')}
 					</p>
 					{#if !searchQuery}
 						<Button variant="primary" onclick={openAddModal}>
-							Add Your First Memory
+							{$i18n('memory_add_first')}
 						</Button>
 					{/if}
 				</div>
@@ -413,11 +417,11 @@ Displays memories with filtering, search, and action buttons.
 			<table class="memory-table">
 				<thead>
 					<tr>
-						<th>Type</th>
-						<th>Scope</th>
-						<th>Content</th>
-						<th>Date</th>
-						<th>Actions</th>
+						<th>{$i18n('memory_table_type')}</th>
+						<th>{$i18n('memory_table_scope')}</th>
+						<th>{$i18n('memory_table_content')}</th>
+						<th>{$i18n('memory_table_date')}</th>
+						<th>{$i18n('memory_table_actions')}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -428,7 +432,7 @@ Displays memories with filtering, search, and action buttons.
 									{memory.type}
 								</Badge>
 							</td>
-							<td class="scope-cell" title={memory.workflow_id || 'General scope'}>
+							<td class="scope-cell" title={memory.workflow_id || $i18n('memory_scope_general')}>
 								<span class="scope-badge" class:workflow={memory.workflow_id}>
 									{formatScope(memory.workflow_id)}
 								</span>
@@ -444,7 +448,7 @@ Displays memories with filtering, search, and action buttons.
 									type="button"
 									class="action-btn"
 									onclick={() => openViewModal(memory)}
-									title="View"
+									title={$i18n('memory_modal_view')}
 								>
 									<Eye size={16} />
 								</button>
@@ -452,7 +456,7 @@ Displays memories with filtering, search, and action buttons.
 									type="button"
 									class="action-btn"
 									onclick={() => openEditModal(memory)}
-									title="Edit"
+									title={$i18n('common_edit')}
 								>
 									<Edit size={16} />
 								</button>
@@ -460,7 +464,7 @@ Displays memories with filtering, search, and action buttons.
 									type="button"
 									class="action-btn"
 									onclick={() => handleDelete(memory)}
-									title="Delete"
+									title={$i18n('common_delete')}
 								>
 									<Trash2 size={16} />
 								</button>
@@ -476,7 +480,7 @@ Displays memories with filtering, search, and action buttons.
 <!-- Add/Edit Modal -->
 <Modal
 	open={showFormModal}
-	title={formMode === 'add' ? 'Add Memory' : 'Edit Memory'}
+	title={formMode === 'add' ? $i18n('memory_modal_add') : $i18n('memory_modal_edit')}
 	onclose={closeFormModal}
 >
 	{#snippet body()}
@@ -492,29 +496,29 @@ Displays memories with filtering, search, and action buttons.
 <!-- View Modal -->
 <Modal
 	open={showViewModal}
-	title="View Memory"
+	title={$i18n('memory_modal_view')}
 	onclose={closeViewModal}
 >
 	{#snippet body()}
 		{#if viewingMemory}
 			<div class="view-content">
 				<div class="view-field">
-					<span class="field-label">Type</span>
+					<span class="field-label">{$i18n('memory_field_type')}</span>
 					<Badge variant={getTypeVariant(viewingMemory.type as MemoryType)}>
 						{viewingMemory.type}
 					</Badge>
 				</div>
 				<div class="view-field">
-					<span class="field-label">Content</span>
+					<span class="field-label">{$i18n('memory_field_content')}</span>
 					<pre class="content-preview">{viewingMemory.content}</pre>
 				</div>
 				<div class="view-field">
-					<span class="field-label">Created</span>
+					<span class="field-label">{$i18n('memory_field_created')}</span>
 					<span>{formatDate(viewingMemory.created_at)}</span>
 				</div>
 				{#if Object.keys(viewingMemory.metadata).length > 0}
 					<div class="view-field">
-						<span class="field-label">Metadata</span>
+						<span class="field-label">{$i18n('memory_field_metadata')}</span>
 						<pre class="metadata-preview">{JSON.stringify(viewingMemory.metadata, null, 2)}</pre>
 					</div>
 				{/if}
@@ -523,7 +527,7 @@ Displays memories with filtering, search, and action buttons.
 	{/snippet}
 	{#snippet footer()}
 		<Button variant="ghost" onclick={closeViewModal}>
-			Close
+			{$i18n('common_close')}
 		</Button>
 	{/snippet}
 </Modal>

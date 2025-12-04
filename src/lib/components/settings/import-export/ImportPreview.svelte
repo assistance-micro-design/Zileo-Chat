@@ -9,6 +9,7 @@ Shows warnings for conflicts and missing MCP env vars.
 
 <script lang="ts">
 	import { Card, Badge } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import type { ImportValidation, ImportSelection } from '$types/importExport';
 
 	/** Props */
@@ -83,7 +84,7 @@ Shows warnings for conflicts and missing MCP env vars.
 	function getConflictBadge(entityName: string): string {
 		const conflict = validation.conflicts.find((c) => c.entityName === entityName);
 		if (!conflict) return '';
-		return 'Name Conflict';
+		return $i18n('ie_name_conflict');
 	}
 
 	/**
@@ -114,10 +115,10 @@ Shows warnings for conflicts and missing MCP env vars.
 			{#snippet body()}
 				<div class="summary-card">
 					<div class="summary-header">
-						<h4>Agents</h4>
+						<h4>{$i18n('ie_entity_agents')}</h4>
 						<Badge variant="primary">{validation.entities.agents.length}</Badge>
 					</div>
-					<p class="summary-count">{selection.agents.length} selected</p>
+					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.agents.length))}</p>
 				</div>
 			{/snippet}
 		</Card>
@@ -126,10 +127,10 @@ Shows warnings for conflicts and missing MCP env vars.
 			{#snippet body()}
 				<div class="summary-card">
 					<div class="summary-header">
-						<h4>MCP Servers</h4>
+						<h4>{$i18n('ie_entity_mcp_servers')}</h4>
 						<Badge variant="primary">{validation.entities.mcpServers.length}</Badge>
 					</div>
-					<p class="summary-count">{selection.mcpServers.length} selected</p>
+					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.mcpServers.length))}</p>
 				</div>
 			{/snippet}
 		</Card>
@@ -138,10 +139,10 @@ Shows warnings for conflicts and missing MCP env vars.
 			{#snippet body()}
 				<div class="summary-card">
 					<div class="summary-header">
-						<h4>Models</h4>
+						<h4>{$i18n('ie_entity_models')}</h4>
 						<Badge variant="primary">{validation.entities.models.length}</Badge>
 					</div>
-					<p class="summary-count">{selection.models.length} selected</p>
+					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.models.length))}</p>
 				</div>
 			{/snippet}
 		</Card>
@@ -150,10 +151,10 @@ Shows warnings for conflicts and missing MCP env vars.
 			{#snippet body()}
 				<div class="summary-card">
 					<div class="summary-header">
-						<h4>Prompts</h4>
+						<h4>{$i18n('ie_entity_prompts')}</h4>
 						<Badge variant="primary">{validation.entities.prompts.length}</Badge>
 					</div>
-					<p class="summary-count">{selection.prompts.length} selected</p>
+					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.prompts.length))}</p>
 				</div>
 			{/snippet}
 		</Card>
@@ -163,7 +164,7 @@ Shows warnings for conflicts and missing MCP env vars.
 	<div class="entity-lists">
 		<!-- Agents -->
 		{#if validation.entities.agents.length > 0}
-			<Card title="Agents">
+			<Card title={$i18n('ie_entity_agents')}>
 				{#snippet body()}
 					<div class="entity-list">
 						<label class="entity-item header-item">
@@ -173,7 +174,7 @@ Shows warnings for conflicts and missing MCP env vars.
 								indeterminate={someSelected('agents')}
 								onchange={() => toggleAll('agents')}
 							/>
-							<span class="entity-name">Select All</span>
+							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
 						{#each validation.entities.agents as agent}
 							<label class="entity-item">
@@ -195,7 +196,7 @@ Shows warnings for conflicts and missing MCP env vars.
 
 		<!-- MCP Servers -->
 		{#if validation.entities.mcpServers.length > 0}
-			<Card title="MCP Servers">
+			<Card title={$i18n('ie_entity_mcp_servers')}>
 				{#snippet body()}
 					<div class="entity-list">
 						<label class="entity-item header-item">
@@ -205,7 +206,7 @@ Shows warnings for conflicts and missing MCP env vars.
 								indeterminate={someSelected('mcpServers')}
 								onchange={() => toggleAll('mcpServers')}
 							/>
-							<span class="entity-name">Select All</span>
+							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
 						{#each validation.entities.mcpServers as server}
 							<label class="entity-item">
@@ -219,7 +220,7 @@ Shows warnings for conflicts and missing MCP env vars.
 									<Badge variant="warning">{getConflictBadge(server.name)}</Badge>
 								{/if}
 								{#if hasMissingEnv(server.name)}
-									<Badge variant="error">Missing Env Vars</Badge>
+									<Badge variant="error">{$i18n('ie_missing_env_vars')}</Badge>
 								{/if}
 							</label>
 						{/each}
@@ -230,7 +231,7 @@ Shows warnings for conflicts and missing MCP env vars.
 
 		<!-- Models -->
 		{#if validation.entities.models.length > 0}
-			<Card title="Models">
+			<Card title={$i18n('ie_entity_models')}>
 				{#snippet body()}
 					<div class="entity-list">
 						<label class="entity-item header-item">
@@ -240,7 +241,7 @@ Shows warnings for conflicts and missing MCP env vars.
 								indeterminate={someSelected('models')}
 								onchange={() => toggleAll('models')}
 							/>
-							<span class="entity-name">Select All</span>
+							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
 						{#each validation.entities.models as model}
 							<label class="entity-item">
@@ -263,7 +264,7 @@ Shows warnings for conflicts and missing MCP env vars.
 
 		<!-- Prompts -->
 		{#if validation.entities.prompts.length > 0}
-			<Card title="Prompts">
+			<Card title={$i18n('ie_entity_prompts')}>
 				{#snippet body()}
 					<div class="entity-list">
 						<label class="entity-item header-item">
@@ -273,7 +274,7 @@ Shows warnings for conflicts and missing MCP env vars.
 								indeterminate={someSelected('prompts')}
 								onchange={() => toggleAll('prompts')}
 							/>
-							<span class="entity-name">Select All</span>
+							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
 						{#each validation.entities.prompts as prompt}
 							<label class="entity-item">

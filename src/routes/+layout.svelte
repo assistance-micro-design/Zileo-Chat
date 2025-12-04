@@ -3,6 +3,7 @@
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
 	import { localeStore } from '$lib/stores/locale';
+	import { i18n } from '$lib/i18n';
 	import { AppContainer, FloatingMenu } from '$lib/components/layout';
 
 	let { children } = $props();
@@ -22,7 +23,7 @@
 	/>
 </svelte:head>
 
-<a href="#main-content" class="skip-link">Skip to main content</a>
+<a href="#main-content" class="skip-link">{$i18n('nav_skip_to_content')}</a>
 <AppContainer>
 	<FloatingMenu />
 	<div id="main-content" class="main-content" role="main">

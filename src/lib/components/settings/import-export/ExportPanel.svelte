@@ -12,6 +12,7 @@ Multi-step process: entity selection, options, preview, and export.
 	import { Button, Card, Badge, StatusIndicator } from '$lib/components/ui';
 	import EntitySelector from './EntitySelector.svelte';
 	import ExportPreview from './ExportPreview.svelte';
+	import { i18n } from '$lib/i18n';
 	import type {
 		ExportSelection,
 		ExportOptions,
@@ -90,7 +91,7 @@ Multi-step process: entity selection, options, preview, and export.
 				invoke<PromptSummary[]>('list_prompts')
 			]);
 		} catch (err) {
-			error = `Failed to load entities: ${err}`;
+			error = `${$i18n('ie_load_entities_failed')}: ${err}`;
 		} finally {
 			loading = false;
 		}
@@ -121,7 +122,7 @@ Multi-step process: entity selection, options, preview, and export.
 
 			currentStep = 'preview';
 		} catch (err) {
-			error = `Failed to prepare preview: ${err}`;
+			error = `${$i18n('ie_prepare_preview_failed')}: ${err}`;
 		} finally {
 			loading = false;
 		}
@@ -178,7 +179,7 @@ Multi-step process: entity selection, options, preview, and export.
 						extensions: ['json']
 					}
 				],
-				title: 'Save Export File'
+				title: $i18n('ie_save_export_title')
 			});
 
 			// User cancelled
@@ -204,15 +205,15 @@ Multi-step process: entity selection, options, preview, and export.
 
 			message = {
 				type: 'success',
-				text: `Exported ${totalCount} items to ${savedFilename}`
+				text: $i18n('ie_exported_items').replace('{count}', String(totalCount)).replace('{filename}', savedFilename)
 			};
 			onexport?.(true);
 
 			// Reset state
 			resetWizard();
 		} catch (err) {
-			error = `Export failed: ${err}`;
-			message = { type: 'error', text: `Export failed: ${err}` };
+			error = `${$i18n('ie_export_failed')}: ${err}`;
+			message = { type: 'error', text: `${$i18n('ie_export_failed')}: ${err}` };
 			onexport?.(false);
 		} finally {
 			exporting = false;
@@ -276,18 +277,18 @@ Multi-step process: entity selection, options, preview, and export.
 <div class="export-panel">
 	<!-- Header -->
 	<div class="panel-header">
-		<h2 class="panel-title">Export Settings</h2>
+		<h2 class="panel-title">{$i18n('ie_export_title')}</h2>
 		<div class="step-indicator">
 			<Badge variant={currentStep === 'selection' ? 'primary' : 'success'}>
-				Step 1: Select
+				{$i18n('ie_step_select')}
 			</Badge>
 			<span class="step-arrow">→</span>
 			<Badge variant={currentStep === 'options' ? 'primary' : currentStep === 'preview' ? 'success' : 'primary'}>
-				Step 2: Options
+				{$i18n('ie_step_options')}
 			</Badge>
 			<span class="step-arrow">→</span>
 			<Badge variant={currentStep === 'preview' ? 'primary' : 'primary'}>
-				Step 3: Preview
+				{$i18n('ie_step_preview')}
 			</Badge>
 		</div>
 	</div>
@@ -300,7 +301,7 @@ Multi-step process: entity selection, options, preview, and export.
 
 	{#if error}
 		<div class="error-message">
-			<Badge variant="error">Error</Badge>
+			<Badge variant="error">{$i18n('common_error')}</Badge>
 			<span>{error}</span>
 		</div>
 	{/if}
@@ -310,7 +311,7 @@ Multi-step process: entity selection, options, preview, and export.
 			{#snippet body()}
 				<div class="loading-state">
 					<StatusIndicator status="running" />
-					<span>Loading...</span>
+					<span>{$i18n('common_loading')}</span>
 				</div>
 			{/snippet}
 		</Card>
@@ -320,9 +321,9 @@ Multi-step process: entity selection, options, preview, and export.
 			<Card>
 				{#snippet body()}
 					<div class="step-content">
-						<h3 class="step-title">Select Entities to Export</h3>
+						<h3 class="step-title">{$i18n('ie_select_entities_title')}</h3>
 						<p class="step-description">
-							Choose which agents, MCP servers, models, and prompts to include in the export.
+							{$i18n('ie_select_entities_description')}
 						</p>
 
 						<div class="entity-selectors">
@@ -356,7 +357,7 @@ Multi-step process: entity selection, options, preview, and export.
 				{#snippet footer()}
 					<div class="step-actions">
 						<Button variant="primary" onclick={nextStep} disabled={!hasSelection}>
-							Next: Options
+							{$i18n('ie_next_options')}
 						</Button>
 					</div>
 				{/snippet}
@@ -368,9 +369,9 @@ Multi-step process: entity selection, options, preview, and export.
 			<Card>
 				{#snippet body()}
 					<div class="step-content">
-						<h3 class="step-title">Export Options</h3>
+						<h3 class="step-title">{$i18n('ie_export_options_title')}</h3>
 						<p class="step-description">
-							Configure how the export should be generated.
+							{$i18n('ie_export_options_description')}
 						</p>
 
 						<div class="options-list">
@@ -381,9 +382,9 @@ Multi-step process: entity selection, options, preview, and export.
 									onchange={() => (includeTimestamps = !includeTimestamps)}
 								/>
 								<div class="option-info">
-									<span class="option-label">Include Timestamps</span>
+									<span class="option-label">{$i18n('ie_include_timestamps')}</span>
 									<span class="option-description">
-										Export created_at and updated_at timestamps for each entity.
+										{$i18n('ie_include_timestamps_description')}
 									</span>
 								</div>
 							</label>
@@ -395,9 +396,9 @@ Multi-step process: entity selection, options, preview, and export.
 									onchange={() => (sanitizeMcp = !sanitizeMcp)}
 								/>
 								<div class="option-info">
-									<span class="option-label">Sanitize MCP Environment Variables</span>
+									<span class="option-label">{$i18n('ie_sanitize_mcp')}</span>
 									<span class="option-description">
-										Review and clear sensitive environment variables before export (recommended).
+										{$i18n('ie_sanitize_mcp_description')}
 									</span>
 								</div>
 							</label>
@@ -407,10 +408,10 @@ Multi-step process: entity selection, options, preview, and export.
 				{#snippet footer()}
 					<div class="step-actions">
 						<Button variant="ghost" onclick={previousStep}>
-							Back
+							{$i18n('common_cancel')}
 						</Button>
 						<Button variant="primary" onclick={nextStep}>
-							Next: Preview
+							{$i18n('ie_next_preview')}
 						</Button>
 					</div>
 				{/snippet}
@@ -433,10 +434,10 @@ Multi-step process: entity selection, options, preview, and export.
 				{#snippet footer()}
 					<div class="step-actions">
 						<Button variant="ghost" onclick={previousStep} disabled={exporting}>
-							Back
+							{$i18n('common_cancel')}
 						</Button>
 						<Button variant="primary" onclick={generateExport} disabled={exporting}>
-							{exporting ? 'Exporting...' : 'Export File'}
+							{exporting ? $i18n('ie_exporting') : $i18n('ie_export_file')}
 						</Button>
 					</div>
 				{/snippet}

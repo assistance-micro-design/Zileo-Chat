@@ -11,6 +11,7 @@
 	import { ExportPanel } from './index';
 	import { ImportPanel } from './index';
 	import { Download, Upload } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/** Props */
 	interface Props {
@@ -28,9 +29,9 @@
 
 	function handleExportComplete(success: boolean) {
 		if (success) {
-			message = { type: 'success', text: 'Export completed successfully!' };
+			message = { type: 'success', text: $i18n('ie_export_success') };
 		} else {
-			message = { type: 'error', text: 'Export failed. Please try again.' };
+			message = { type: 'error', text: $i18n('ie_export_failed') };
 		}
 		// Clear message after 5 seconds
 		setTimeout(() => {
@@ -40,7 +41,7 @@
 
 	async function handleImportComplete(success: boolean): Promise<void> {
 		if (success) {
-			message = { type: 'success', text: 'Import completed successfully!' };
+			message = { type: 'success', text: $i18n('ie_import_success') };
 			// Signal that stores should be refreshed after successful import
 			// CRITICAL: Await the refresh to ensure UI updates with new data
 			try {
@@ -49,7 +50,7 @@
 				console.error('Failed to refresh stores after import:', err);
 			}
 		} else {
-			message = { type: 'error', text: 'Import failed. Please check the file and try again.' };
+			message = { type: 'error', text: $i18n('ie_import_failed') };
 		}
 		// Clear message after 5 seconds
 		setTimeout(() => {
@@ -60,10 +61,9 @@
 
 <div class="import-export-settings">
 	<div class="header">
-		<h2>Import / Export</h2>
+		<h2>{$i18n('ie_title')}</h2>
 		<p class="description">
-			Export your configuration to share with others or create backups. Import configurations from
-			exported files.
+			{$i18n('ie_description')}
 		</p>
 	</div>
 
@@ -75,7 +75,7 @@
 			onclick={() => (activeTab = 'export')}
 		>
 			<Download size={16} />
-			<span>Export</span>
+			<span>{$i18n('ie_tab_export')}</span>
 		</button>
 		<button
 			class="tab"
@@ -83,7 +83,7 @@
 			onclick={() => (activeTab = 'import')}
 		>
 			<Upload size={16} />
-			<span>Import</span>
+			<span>{$i18n('ie_tab_import')}</span>
 		</button>
 	</div>
 

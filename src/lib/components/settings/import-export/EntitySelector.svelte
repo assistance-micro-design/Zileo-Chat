@@ -7,6 +7,8 @@ Displays a list of checkboxes with select all/deselect all functionality.
 -->
 
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
+
 	/** Props */
 	interface Props {
 		/** Type of entity being selected */
@@ -23,13 +25,18 @@ Displays a list of checkboxes with select all/deselect all functionality.
 
 	let { entityType, items, selected, onchange, disabled = false }: Props = $props();
 
-	/** Entity type labels */
-	const typeLabels: Record<string, string> = {
-		agent: 'Agents',
-		mcp: 'MCP Servers',
-		model: 'Models',
-		prompt: 'Prompts'
+	/** Entity type labels - mapped to i18n keys */
+	const typeLabelsKeys: Record<string, string> = {
+		agent: 'ie_entity_agents',
+		mcp: 'ie_entity_mcp_servers',
+		model: 'ie_entity_models',
+		prompt: 'ie_entity_prompts'
 	};
+
+	/** Get translated label for entity type */
+	function getTypeLabel(type: string): string {
+		return $i18n(typeLabelsKeys[type] || type);
+	}
 
 	/** Check if all items are selected */
 	const allSelected = $derived(items.length > 0 && selected.length === items.length);
@@ -61,7 +68,7 @@ Displays a list of checkboxes with select all/deselect all functionality.
 
 <div class="entity-selector">
 	<div class="header">
-		<h4 class="title">{typeLabels[entityType]}</h4>
+		<h4 class="title">{getTypeLabel(entityType)}</h4>
 		<div class="actions">
 			<button
 				type="button"
@@ -69,7 +76,7 @@ Displays a list of checkboxes with select all/deselect all functionality.
 				onclick={selectAll}
 				disabled={disabled || allSelected}
 			>
-				Select All
+				{$i18n('ie_select_all')}
 			</button>
 			<span class="separator">|</span>
 			<button
@@ -78,14 +85,14 @@ Displays a list of checkboxes with select all/deselect all functionality.
 				onclick={deselectAll}
 				disabled={disabled || selected.length === 0}
 			>
-				Deselect All
+				{$i18n('ie_deselect_all')}
 			</button>
 		</div>
 	</div>
 
 	{#if items.length === 0}
 		<div class="empty-state">
-			<p>No {typeLabels[entityType].toLowerCase()} available</p>
+			<p>{$i18n('ie_no_available').replace('{type}', getTypeLabel(entityType).toLowerCase())}</p>
 		</div>
 	{:else}
 		<div class="items-list">
@@ -104,7 +111,7 @@ Displays a list of checkboxes with select all/deselect all functionality.
 
 		<div class="footer">
 			<span class="count">
-				{selected.length} of {items.length} selected
+				{$i18n('ie_x_of_y_selected').replace('{selected}', String(selected.length)).replace('{total}', String(items.length))}
 			</span>
 		</div>
 	{/if}

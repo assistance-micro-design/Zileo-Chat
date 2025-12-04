@@ -8,6 +8,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 
 <script lang="ts">
 	import { Badge } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import type { MCPSanitizationConfig } from '$types';
 	import { SENSITIVE_ENV_PATTERNS } from '$types/importExport';
 
@@ -80,7 +81,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 		<h4 class="server-name">{serverName}</h4>
 		{#if sensitiveCount > 0}
 			<Badge variant="warning">
-				{sensitiveCount} sensitive {sensitiveCount === 1 ? 'key' : 'keys'}
+				{sensitiveCount} {sensitiveCount === 1 ? $i18n('ie_sensitive').toLowerCase() : $i18n('ie_sensitive').toLowerCase() + 's'}
 			</Badge>
 		{/if}
 	</div>
@@ -88,12 +89,12 @@ Allows clearing sensitive env vars and excluding servers from export.
 	<div class="actions">
 		<label class="exclude-checkbox">
 			<input type="checkbox" checked={sanitization.excludeFromExport} onchange={toggleExclude} />
-			<span>Exclude this server from export</span>
+			<span>{$i18n('ie_exclude_from_export')}</span>
 		</label>
 
 		{#if sensitiveCount > 0 && !sanitization.excludeFromExport}
 			<button type="button" class="action-link" onclick={clearAllSensitive}>
-				Clear all sensitive keys
+				{$i18n('ie_clear_all_sensitive')}
 			</button>
 		{/if}
 	</div>
@@ -101,20 +102,20 @@ Allows clearing sensitive env vars and excluding servers from export.
 	{#if !sanitization.excludeFromExport}
 		{#if envKeys.length === 0}
 			<div class="empty-state">
-				<p>No environment variables configured</p>
+				<p>{$i18n('ie_no_env_vars')}</p>
 			</div>
 		{:else}
 			<div class="env-keys-list">
 				<div class="list-header">
-					<span class="header-label">Environment Variables</span>
-					<span class="header-label">Clear on Export</span>
+					<span class="header-label">{$i18n('ie_env_vars')}</span>
+					<span class="header-label">{$i18n('ie_clear_on_export')}</span>
 				</div>
 				{#each envKeys as key (key)}
 					<div class="env-key-item">
 						<div class="key-info">
 							<span class="key-name">{key}</span>
 							{#if isSensitiveKey(key)}
-								<Badge variant="warning">Sensitive</Badge>
+								<Badge variant="warning">{$i18n('ie_sensitive')}</Badge>
 							{/if}
 						</div>
 						<label class="clear-checkbox">
@@ -131,9 +132,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 			{#if sanitization.clearEnvKeys.length > 0}
 				<div class="summary">
 					<span class="summary-text">
-						{sanitization.clearEnvKeys.length} {sanitization.clearEnvKeys.length === 1
-							? 'variable'
-							: 'variables'} will be cleared
+						{$i18n('ie_x_vars_cleared').replace('{count}', String(sanitization.clearEnvKeys.length))}
 					</span>
 				</div>
 			{/if}

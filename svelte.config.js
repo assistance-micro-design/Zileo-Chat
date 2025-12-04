@@ -14,7 +14,9 @@ const config = {
     }),
     alias: {
       $types: './src/types',
-      '$types/*': './src/types/*'
+      '$types/*': './src/types/*',
+      $messages: './src/messages',
+      '$messages/*': './src/messages/*'
     }
   }
 };

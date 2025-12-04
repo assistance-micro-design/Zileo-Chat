@@ -9,6 +9,7 @@ Shows summaries for each entity type and MCP sanitization options.
 <script lang="ts">
 	import { Card, Badge } from '$lib/components/ui';
 	import MCPFieldEditor from './MCPFieldEditor.svelte';
+	import { i18n } from '$lib/i18n';
 	import type { ExportPreviewData, MCPSanitizationConfig } from '$types';
 
 	/** Props */
@@ -40,8 +41,8 @@ Shows summaries for each entity type and MCP sanitization options.
 
 <div class="export-preview">
 	<div class="preview-header">
-		<h3 class="preview-title">Export Preview</h3>
-		<Badge variant="primary">{totalCount} total items</Badge>
+		<h3 class="preview-title">{$i18n('ie_preview_title')}</h3>
+		<Badge variant="primary">{$i18n('ie_total_items').replace('{count}', String(totalCount))}</Badge>
 	</div>
 
 	<!-- Agents Section -->
@@ -54,7 +55,7 @@ Shows summaries for each entity type and MCP sanitization options.
 					onclick={() => (expandedAgents = !expandedAgents)}
 				>
 					<div class="section-title">
-						<span class="title-text">Agents</span>
+						<span class="title-text">{$i18n('ie_entity_agents')}</span>
 						<Badge variant="primary">{preview.agents.length}</Badge>
 					</div>
 					<span class="expand-icon" class:expanded={expandedAgents}>▼</span>
@@ -88,7 +89,7 @@ Shows summaries for each entity type and MCP sanitization options.
 					onclick={() => (expandedMcp = !expandedMcp)}
 				>
 					<div class="section-title">
-						<span class="title-text">MCP Servers</span>
+						<span class="title-text">{$i18n('ie_entity_mcp_servers')}</span>
 						<Badge variant="primary">{preview.mcpServers.length}</Badge>
 					</div>
 					<span class="expand-icon" class:expanded={expandedMcp}>▼</span>
@@ -108,11 +109,11 @@ Shows summaries for each entity type and MCP sanitization options.
 										<span class="item-name">{server.name}</span>
 										<div class="item-meta">
 											<Badge variant={server.enabled ? 'success' : 'error'}>
-												{server.enabled ? 'Enabled' : 'Disabled'}
+												{server.enabled ? $i18n('ie_enabled') : $i18n('ie_disabled')}
 											</Badge>
 											<span class="meta-text">{server.command}</span>
 											{#if server.toolsCount > 0}
-												<span class="meta-text">{server.toolsCount} tools</span>
+												<span class="meta-text">{$i18n('ie_x_tools').replace('{count}', String(server.toolsCount))}</span>
 											{/if}
 										</div>
 									</div>
@@ -130,7 +131,7 @@ Shows summaries for each entity type and MCP sanitization options.
 							{:else}
 								<div class="excluded-item">
 									<span class="item-name">{server.name}</span>
-									<Badge variant="error">Excluded from export</Badge>
+									<Badge variant="error">{$i18n('ie_excluded_from_export')}</Badge>
 								</div>
 							{/if}
 						{/each}
@@ -150,7 +151,7 @@ Shows summaries for each entity type and MCP sanitization options.
 					onclick={() => (expandedModels = !expandedModels)}
 				>
 					<div class="section-title">
-						<span class="title-text">Models</span>
+						<span class="title-text">{$i18n('ie_entity_models')}</span>
 						<Badge variant="primary">{preview.models.length}</Badge>
 					</div>
 					<span class="expand-icon" class:expanded={expandedModels}>▼</span>
@@ -166,9 +167,9 @@ Shows summaries for each entity type and MCP sanitization options.
 									<span class="meta-text">{model.provider}</span>
 									<span class="meta-text">{model.apiName}</span>
 									{#if model.isBuiltin}
-										<Badge variant="success">Built-in</Badge>
+										<Badge variant="success">{$i18n('ie_builtin')}</Badge>
 									{:else}
-										<Badge variant="warning">Custom</Badge>
+										<Badge variant="warning">{$i18n('ie_custom')}</Badge>
 									{/if}
 								</div>
 							</div>
@@ -189,7 +190,7 @@ Shows summaries for each entity type and MCP sanitization options.
 					onclick={() => (expandedPrompts = !expandedPrompts)}
 				>
 					<div class="section-title">
-						<span class="title-text">Prompts</span>
+						<span class="title-text">{$i18n('ie_entity_prompts')}</span>
 						<Badge variant="primary">{preview.prompts.length}</Badge>
 					</div>
 					<span class="expand-icon" class:expanded={expandedPrompts}>▼</span>
@@ -219,7 +220,7 @@ Shows summaries for each entity type and MCP sanitization options.
 		<Card>
 			{#snippet body()}
 				<div class="empty-state">
-					<p>No items selected for export</p>
+					<p>{$i18n('ie_no_items_selected')}</p>
 				</div>
 			{/snippet}
 		</Card>

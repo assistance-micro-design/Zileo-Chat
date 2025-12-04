@@ -89,6 +89,7 @@ Includes MCP server configuration section for managing external tool servers.
 		BookOpen,
 		FolderSync
 	} from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/** Settings state (for API key input) */
 	let settings = $state({
@@ -126,17 +127,17 @@ Includes MCP server configuration section for managing external tool servers.
 	/** Agent refresh trigger - increment to force AgentSettings to reload */
 	let agentRefreshKey = $state(0);
 
-	/** Navigation sections */
-	const sections = [
-		{ id: 'providers', label: 'Providers', icon: Globe },
-		{ id: 'models', label: 'Models', icon: Cpu },
-		{ id: 'agents', label: 'Agents', icon: Bot },
-		{ id: 'mcp', label: 'MCP Servers', icon: Plug },
-		{ id: 'memory', label: 'Memory', icon: Brain },
-		{ id: 'validation', label: 'Validation', icon: ShieldCheck },
-		{ id: 'prompts', label: 'Prompts', icon: BookOpen },
-		{ id: 'import-export', label: 'Import/Export', icon: FolderSync },
-		{ id: 'theme', label: 'Theme', icon: Palette }
+	/** Navigation sections with i18n keys */
+	const sectionDefs = [
+		{ id: 'providers', labelKey: 'settings_providers', icon: Globe },
+		{ id: 'models', labelKey: 'settings_models', icon: Cpu },
+		{ id: 'agents', labelKey: 'settings_agents', icon: Bot },
+		{ id: 'mcp', labelKey: 'settings_mcp_servers', icon: Plug },
+		{ id: 'memory', labelKey: 'settings_memory', icon: Brain },
+		{ id: 'validation', labelKey: 'settings_validation', icon: ShieldCheck },
+		{ id: 'prompts', labelKey: 'settings_prompts', icon: BookOpen },
+		{ id: 'import-export', labelKey: 'settings_import_export', icon: FolderSync },
+		{ id: 'theme', labelKey: 'settings_theme', icon: Palette }
 	] as const;
 
 	/**
@@ -602,7 +603,7 @@ Includes MCP server configuration section for managing external tool servers.
 			);
 
 			// Observe all sections
-			sections.forEach((section) => {
+			sectionDefs.forEach((section) => {
 				const element = document.getElementById(section.id);
 				if (element) {
 					observer?.observe(element);
@@ -623,18 +624,18 @@ Includes MCP server configuration section for managing external tool servers.
 	<Sidebar bind:collapsed={sidebarCollapsed}>
 		{#snippet header()}
 			{#if sidebarCollapsed}
-				<div class="sidebar-icon-collapsed" title="Settings">
+				<div class="sidebar-icon-collapsed" title={$i18n('settings_title')}>
 					<Settings size={24} />
 				</div>
 			{:else}
-				<h2 class="sidebar-title">Settings</h2>
+				<h2 class="sidebar-title">{$i18n('settings_title')}</h2>
 			{/if}
 		{/snippet}
 
 		{#snippet nav()}
 			{#if !sidebarCollapsed}
 				<div class="nav-items">
-					{#each sections as section}
+					{#each sectionDefs as section}
 						{@const Icon = section.icon}
 						<button
 							type="button"
@@ -643,20 +644,20 @@ Includes MCP server configuration section for managing external tool servers.
 							onclick={() => scrollToSection(section.id)}
 						>
 							<Icon size={20} />
-							<span class="nav-text">{section.label}</span>
+							<span class="nav-text">{$i18n(section.labelKey)}</span>
 						</button>
 					{/each}
 				</div>
 			{:else}
 				<div class="nav-items-collapsed">
-					{#each sections as section}
+					{#each sectionDefs as section}
 						{@const Icon = section.icon}
 						<button
 							type="button"
 							class="nav-button-icon"
 							class:active={activeSection === section.id}
 							onclick={() => scrollToSection(section.id)}
-							title={section.label}
+							title={$i18n(section.labelKey)}
 						>
 							<Icon size={20} />
 						</button>
@@ -667,13 +668,13 @@ Includes MCP server configuration section for managing external tool servers.
 
 		{#snippet footer()}
 			{#if sidebarCollapsed}
-				<div class="security-badge-collapsed" title="AES-256 Encrypted">
+				<div class="security-badge-collapsed" title={$i18n('settings_security_badge')}>
 					<ShieldCheck size={20} />
 				</div>
 			{:else}
 				<div class="security-badge">
 					<ShieldCheck size={16} />
-					<span class="security-text">AES-256 Encrypted</span>
+					<span class="security-text">{$i18n('settings_security_badge')}</span>
 				</div>
 			{/if}
 		{/snippet}
@@ -683,7 +684,7 @@ Includes MCP server configuration section for managing external tool servers.
 	<main class="content-area" bind:this={contentAreaRef}>
 		<!-- Providers Section -->
 		<section id="providers" class="settings-section">
-			<h2 class="section-title">Providers</h2>
+			<h2 class="section-title">{$i18n('settings_providers')}</h2>
 
 			{#if llmState.error}
 				<div class="llm-error">
@@ -696,7 +697,7 @@ Includes MCP server configuration section for managing external tool servers.
 					{#snippet body()}
 						<div class="llm-loading">
 							<StatusIndicator status="running" />
-							<span>Loading providers...</span>
+							<span>{$i18n('providers_loading')}</span>
 						</div>
 					{/snippet}
 				</Card>
@@ -740,7 +741,7 @@ Includes MCP server configuration section for managing external tool servers.
 		<!-- Models Section -->
 		<section id="models" class="settings-section">
 			<div class="section-header-row">
-				<h2 class="section-title">Models</h2>
+				<h2 class="section-title">{$i18n('settings_models')}</h2>
 				<div class="models-header-actions">
 					<Select
 						options={modelsProviderOptions}
@@ -749,7 +750,7 @@ Includes MCP server configuration section for managing external tool servers.
 					/>
 					<Button variant="primary" size="sm" onclick={openCreateModelModal}>
 						<Plus size={16} />
-						<span>Add Model</span>
+						<span>{$i18n('models_add')}</span>
 					</Button>
 				</div>
 			</div>
@@ -759,7 +760,7 @@ Includes MCP server configuration section for managing external tool servers.
 					{#snippet body()}
 						<div class="llm-loading">
 							<StatusIndicator status="running" />
-							<span>Loading models...</span>
+							<span>{$i18n('models_loading')}</span>
 						</div>
 					{/snippet}
 				</Card>
@@ -768,18 +769,20 @@ Includes MCP server configuration section for managing external tool servers.
 					{#snippet body()}
 						<div class="models-empty">
 							<Cpu size={48} class="empty-icon" />
-							<h3 class="empty-title">No Models Found</h3>
+							<h3 class="empty-title">{$i18n('models_not_found')}</h3>
 							<p class="empty-description">
 								{#if selectedModelsProvider === 'all'}
-									No models configured yet.
+									{$i18n('models_not_configured_all')}
+								{:else if selectedModelsProvider === 'mistral'}
+									{$i18n('models_not_configured_mistral')}
 								{:else}
-									No models configured for {selectedModelsProvider === 'mistral' ? 'Mistral' : 'Ollama'}.
+									{$i18n('models_not_configured_ollama')}
 								{/if}
-								Add a custom model to get started.
+								{$i18n('models_add_custom')}
 							</p>
 							<Button variant="primary" onclick={openCreateModelModal}>
 								<Plus size={16} />
-								<span>Add Your First Model</span>
+								<span>{$i18n('models_add_first')}</span>
 							</Button>
 						</div>
 					{/snippet}
@@ -807,10 +810,10 @@ Includes MCP server configuration section for managing external tool servers.
 		<!-- MCP Servers Section -->
 		<section id="mcp" class="settings-section">
 			<div class="section-header-row">
-				<h2 class="section-title">MCP Servers</h2>
+				<h2 class="section-title">{$i18n('settings_mcp_servers')}</h2>
 				<Button variant="primary" size="sm" onclick={openCreateModal}>
 					<Plus size={16} />
-					<span>Add Server</span>
+					<span>{$i18n('mcp_add_server')}</span>
 				</Button>
 			</div>
 
@@ -825,7 +828,7 @@ Includes MCP server configuration section for managing external tool servers.
 					{#snippet body()}
 						<div class="mcp-loading">
 							<StatusIndicator status="running" />
-							<span>Loading MCP servers...</span>
+							<span>{$i18n('mcp_loading')}</span>
 						</div>
 					{/snippet}
 				</Card>
@@ -834,14 +837,13 @@ Includes MCP server configuration section for managing external tool servers.
 					{#snippet body()}
 						<div class="mcp-empty">
 							<Plug size={48} class="empty-icon" />
-							<h3 class="empty-title">No MCP Servers Configured</h3>
+							<h3 class="empty-title">{$i18n('mcp_not_configured')}</h3>
 							<p class="empty-description">
-								MCP servers provide external tools and resources for your agents.
-								Add a server to get started.
+								{$i18n('mcp_description')}
 							</p>
 							<Button variant="primary" onclick={openCreateModal}>
 								<Plus size={16} />
-								<span>Add Your First Server</span>
+								<span>{$i18n('mcp_add_first')}</span>
 							</Button>
 						</div>
 					{/snippet}
@@ -864,18 +866,18 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Memory Section -->
 		<section id="memory" class="settings-section">
-			<h2 class="section-title">Memory</h2>
+			<h2 class="section-title">{$i18n('settings_memory')}</h2>
 
 			<div class="memory-subsections">
 				<!-- Embedding Configuration -->
 				<div class="memory-subsection">
-					<h3 class="subsection-title">Embedding Configuration</h3>
+					<h3 class="subsection-title">{$i18n('memory_embedding_config')}</h3>
 					<MemorySettings bind:this={memorySettingsRef} />
 				</div>
 
 				<!-- Memory Management -->
 				<div class="memory-subsection">
-					<h3 class="subsection-title">Memory Management</h3>
+					<h3 class="subsection-title">{$i18n('memory_management')}</h3>
 					<MemoryList onchange={() => memorySettingsRef?.refreshStats()} />
 				</div>
 			</div>
@@ -883,9 +885,9 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Validation Section -->
 		<section id="validation" class="settings-section">
-			<h2 class="section-title">Validation</h2>
+			<h2 class="section-title">{$i18n('settings_validation')}</h2>
 			<p class="section-description">
-				Configure when and how human-in-the-loop validation is triggered during workflow execution.
+				{$i18n('validation_description')}
 			</p>
 			<ValidationSettings />
 		</section>
@@ -902,7 +904,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Theme Section -->
 		<section id="theme" class="settings-section">
-			<h2 class="section-title">Theme</h2>
+			<h2 class="section-title">{$i18n('settings_theme')}</h2>
 
 			<div class="theme-grid">
 				<!-- Light Theme Card -->
@@ -916,8 +918,8 @@ Includes MCP server configuration section for managing external tool servers.
 						<div class="theme-header">
 							<Sun size={24} />
 							<div>
-								<h3 class="theme-title">Light Mode</h3>
-								<p class="theme-description">Bright and clean interface</p>
+								<h3 class="theme-title">{$i18n('theme_light')}</h3>
+								<p class="theme-description">{$i18n('theme_light_description')}</p>
 							</div>
 						</div>
 						<div class="theme-colors">
@@ -939,8 +941,8 @@ Includes MCP server configuration section for managing external tool servers.
 						<div class="theme-header">
 							<Moon size={24} />
 							<div>
-								<h3 class="theme-title">Dark Mode</h3>
-								<p class="theme-description">Easy on the eyes</p>
+								<h3 class="theme-title">{$i18n('theme_dark')}</h3>
+								<p class="theme-description">{$i18n('theme_dark_description')}</p>
 							</div>
 						</div>
 						<div class="theme-colors">
@@ -959,14 +961,12 @@ Includes MCP server configuration section for managing external tool servers.
 				{#snippet header()}
 					<div class="security-header">
 						<ShieldCheck size={24} class="icon-success" />
-						<h3 class="card-title">Security Information</h3>
+						<h3 class="card-title">{$i18n('security_title')}</h3>
 					</div>
 				{/snippet}
 				{#snippet body()}
 					<p class="security-info-text">
-						API keys are stored securely using your operating system's keychain
-						(Linux: libsecret, macOS: Keychain, Windows: Credential Manager) with
-						additional AES-256 encryption for defense in depth.
+						{$i18n('security_description')}
 					</p>
 				{/snippet}
 			</Card>
@@ -977,7 +977,7 @@ Includes MCP server configuration section for managing external tool servers.
 <!-- MCP Server Modal (Create/Edit) -->
 <Modal
 	open={showMCPModal}
-	title={mcpModalMode === 'create' ? 'Add MCP Server' : 'Edit MCP Server'}
+	title={mcpModalMode === 'create' ? $i18n('mcp_modal_add') : $i18n('mcp_modal_edit')}
 	onclose={closeMCPModal}
 >
 	{#snippet body()}
@@ -1007,7 +1007,7 @@ Includes MCP server configuration section for managing external tool servers.
 	{/snippet}
 	{#snippet footer()}
 		<Button variant="ghost" onclick={closeTestModal}>
-			Close
+			{$i18n('common_close')}
 		</Button>
 	{/snippet}
 </Modal>
@@ -1015,7 +1015,7 @@ Includes MCP server configuration section for managing external tool servers.
 <!-- Model Modal (Create/Edit) -->
 <Modal
 	open={showModelModal}
-	title={modelModalMode === 'create' ? 'Add Custom Model' : 'Edit Model'}
+	title={modelModalMode === 'create' ? $i18n('modal_add_custom_model') : $i18n('modal_edit_model')}
 	onclose={closeModelModal}
 >
 	{#snippet body()}
@@ -1033,42 +1033,42 @@ Includes MCP server configuration section for managing external tool servers.
 <!-- API Key Modal -->
 <Modal
 	open={showApiKeyModal}
-	title={`Configure ${apiKeyProvider === 'mistral' ? 'Mistral' : 'Ollama'}`}
+	title={apiKeyProvider === 'mistral' ? $i18n('api_key_modal_mistral') : $i18n('api_key_modal_ollama')}
 	onclose={closeApiKeyModal}
 >
 	{#snippet body()}
 		<div class="api-key-modal-content">
 			{#if apiKeyProvider === 'ollama'}
 				<p class="api-key-info">
-					Ollama runs locally and does not require an API key. You can configure the server URL below.
+					{$i18n('api_key_ollama_info')}
 				</p>
 				<Input
 					type="url"
-					label="Server URL"
+					label={$i18n('api_key_server_url')}
 					value={llmState.providers.ollama?.base_url ?? 'http://localhost:11434'}
-					help="The URL of your local Ollama server"
+					help={$i18n('api_key_server_url_help')}
 					disabled
 				/>
 				<div class="status-row">
 					<StatusIndicator status="completed" size="sm" />
-					<span class="status-text">No API key required</span>
+					<span class="status-text">{$i18n('api_key_not_required')}</span>
 				</div>
 			{:else}
 				<p class="api-key-info">
-					Enter your Mistral API key. It will be stored securely using your operating system's keychain.
+					{$i18n('api_key_mistral_info')}
 				</p>
 				<Input
 					type="password"
-					label="API Key"
-					placeholder="sk-..."
+					label={$i18n('api_key_label')}
+					placeholder={$i18n('api_key_placeholder')}
 					bind:value={settings.apiKey}
 					disabled={saving}
-					help="Your Mistral API key"
+					help={$i18n('api_key_help')}
 				/>
 				{#if providerHasApiKey('mistral')}
 					<div class="status-row">
 						<StatusIndicator status="completed" size="sm" />
-						<span class="status-text">API key already configured</span>
+						<span class="status-text">{$i18n('api_key_configured')}</span>
 					</div>
 				{/if}
 			{/if}
@@ -1077,7 +1077,7 @@ Includes MCP server configuration section for managing external tool servers.
 	{#snippet footer()}
 		<div class="api-key-modal-actions">
 			<Button variant="ghost" onclick={closeApiKeyModal} disabled={saving}>
-				Cancel
+				{$i18n('common_cancel')}
 			</Button>
 			{#if apiKeyProvider === 'mistral'}
 				{#if providerHasApiKey('mistral')}
@@ -1086,7 +1086,7 @@ Includes MCP server configuration section for managing external tool servers.
 						onclick={() => handleDeleteApiKey('mistral')}
 						disabled={saving}
 					>
-						Delete Key
+						{$i18n('api_key_delete')}
 					</Button>
 				{/if}
 				<Button
@@ -1094,11 +1094,11 @@ Includes MCP server configuration section for managing external tool servers.
 					onclick={handleSaveApiKey}
 					disabled={saving || !settings.apiKey.trim()}
 				>
-					{saving ? 'Saving...' : 'Save API Key'}
+					{saving ? $i18n('common_saving') : $i18n('api_key_save')}
 				</Button>
 			{:else}
 				<Button variant="primary" onclick={closeApiKeyModal}>
-					Done
+					{$i18n('common_done')}
 				</Button>
 			{/if}
 		</div>

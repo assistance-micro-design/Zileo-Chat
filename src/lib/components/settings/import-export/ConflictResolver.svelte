@@ -9,6 +9,7 @@ Supports bulk resolution with "Apply to all" option.
 
 <script lang="ts">
 	import { Card, Badge, Button } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import type { ImportConflict, ConflictResolution } from '$types/importExport';
 
 	/** Props */
@@ -45,13 +46,13 @@ Supports bulk resolution with "Apply to all" option.
 	 * Get entity type label
 	 */
 	function getEntityTypeLabel(type: 'agent' | 'mcp' | 'model' | 'prompt'): string {
-		const labels = {
-			agent: 'Agent',
-			mcp: 'MCP Server',
-			model: 'Model',
-			prompt: 'Prompt'
+		const keys = {
+			agent: 'ie_entity_agent',
+			mcp: 'ie_entity_mcp_server',
+			model: 'ie_entity_model',
+			prompt: 'ie_entity_prompt'
 		};
-		return labels[type] || type;
+		return $i18n(keys[type] || type);
 	}
 
 	/**
@@ -127,40 +128,40 @@ Supports bulk resolution with "Apply to all" option.
 <div class="conflict-resolver">
 	<!-- Header -->
 	<div class="resolver-header">
-		<h3>Resolve Import Conflicts</h3>
+		<h3>{$i18n('ie_resolve_conflicts_title')}</h3>
 		<p class="header-info">
-			{unresolvedCount} of {conflicts.length} conflicts need resolution
+			{$i18n('ie_conflicts_need_resolution').replace('{unresolved}', String(unresolvedCount)).replace('{total}', String(conflicts.length))}
 		</p>
 		{#if allResolved}
-			<Badge variant="success">All Resolved</Badge>
+			<Badge variant="success">{$i18n('ie_all_resolved')}</Badge>
 		{:else}
-			<Badge variant="warning">{unresolvedCount} Unresolved</Badge>
+			<Badge variant="warning">{$i18n('ie_x_unresolved').replace('{count}', String(unresolvedCount))}</Badge>
 		{/if}
 	</div>
 
 	<!-- Bulk Resolution -->
-	<Card title="Bulk Resolution">
+	<Card title={$i18n('ie_bulk_resolution')}>
 		{#snippet body()}
 			<div class="bulk-resolution">
 				<p class="bulk-help">
-					Apply the same resolution to all unresolved conflicts:
+					{$i18n('ie_bulk_resolution_help')}
 				</p>
 				<div class="bulk-controls">
 					<select
 						bind:value={bulkResolution}
 						class="bulk-select"
 					>
-						<option value="">Select resolution...</option>
-						<option value="skip">Skip All</option>
-						<option value="overwrite">Overwrite All</option>
-						<option value="rename">Rename All</option>
+						<option value="">{$i18n('ie_select_resolution')}</option>
+						<option value="skip">{$i18n('ie_skip_all')}</option>
+						<option value="overwrite">{$i18n('ie_overwrite_all')}</option>
+						<option value="rename">{$i18n('ie_rename_all')}</option>
 					</select>
 					<Button
 						variant="primary"
 						disabled={!canApplyBulk}
 						onclick={applyBulkResolution}
 					>
-						Apply to All Unresolved ({unresolvedCount})
+						{$i18n('ie_apply_to_unresolved').replace('{count}', String(unresolvedCount))}
 					</Button>
 				</div>
 			</div>
@@ -180,18 +181,18 @@ Supports bulk resolution with "Apply to all" option.
 								{getEntityTypeLabel(conflict.entityType)}
 							</Badge>
 							<Badge variant="warning">
-								Name Conflict
+								{$i18n('ie_name_conflict')}
 							</Badge>
 						</div>
 
 						<div class="conflict-details">
 							<div class="detail-row">
-								<span class="detail-label">Import:</span>
+								<span class="detail-label">{$i18n('ie_import_label')}</span>
 								<span class="detail-value">{conflict.entityName}</span>
 							</div>
 							<div class="detail-row conflict-arrow">↓</div>
 							<div class="detail-row">
-								<span class="detail-label">Existing:</span>
+								<span class="detail-label">{$i18n('ie_existing_label')}</span>
 								<span class="detail-value">{conflict.entityName}</span>
 								<span class="detail-id">(ID: {conflict.existingId})</span>
 							</div>
@@ -207,9 +208,9 @@ Supports bulk resolution with "Apply to all" option.
 									onchange={() => updateResolution(conflict, 'skip')}
 								/>
 								<div class="option-content">
-									<span class="option-label">Skip</span>
+									<span class="option-label">{$i18n('ie_resolution_skip')}</span>
 									<span class="option-description">
-										Do not import this entity
+										{$i18n('ie_resolution_skip_description')}
 									</span>
 								</div>
 							</label>
@@ -223,9 +224,9 @@ Supports bulk resolution with "Apply to all" option.
 									onchange={() => updateResolution(conflict, 'overwrite')}
 								/>
 								<div class="option-content">
-									<span class="option-label">Overwrite</span>
+									<span class="option-label">{$i18n('ie_resolution_overwrite')}</span>
 									<span class="option-description">
-										Replace existing entity with imported one
+										{$i18n('ie_resolution_overwrite_description')}
 									</span>
 								</div>
 							</label>
@@ -239,9 +240,9 @@ Supports bulk resolution with "Apply to all" option.
 									onchange={() => updateResolution(conflict, 'rename')}
 								/>
 								<div class="option-content">
-									<span class="option-label">Rename</span>
+									<span class="option-label">{$i18n('ie_resolution_rename')}</span>
 									<span class="option-description">
-										Import as new entity with modified name
+										{$i18n('ie_resolution_rename_description')}
 									</span>
 								</div>
 							</label>

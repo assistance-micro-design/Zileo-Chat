@@ -17,6 +17,7 @@ Orchestrates the multi-step import process:
 	import ImportPreview from './ImportPreview.svelte';
 	import ConflictResolver from './ConflictResolver.svelte';
 	import MCPEnvEditor from './MCPEnvEditor.svelte';
+	import { i18n } from '$lib/i18n';
 	import type {
 		ImportValidation,
 		ImportSelection,
@@ -113,7 +114,7 @@ Orchestrates the multi-step import process:
 
 			// Validate file size
 			if (file.size > MAX_IMPORT_FILE_SIZE) {
-				error = `File too large. Maximum size is ${MAX_IMPORT_FILE_SIZE / (1024 * 1024)}MB`;
+				error = $i18n('ie_file_too_large').replace('{size}', String(MAX_IMPORT_FILE_SIZE / (1024 * 1024)));
 				return;
 			}
 
@@ -127,7 +128,7 @@ Orchestrates the multi-step import process:
 				validation = await invoke<ImportValidation>('validate_import', { data: text });
 
 				if (!validation.valid) {
-					error = `Invalid import file: ${validation.errors.join(', ')}`;
+					error = `${$i18n('ie_invalid_import_file')}: ${validation.errors.join(', ')}`;
 					loading = false;
 					return;
 				}
@@ -153,7 +154,7 @@ Orchestrates the multi-step import process:
 
 				currentStep = 'preview';
 			} catch (err) {
-				error = `Failed to parse import file: ${err}`;
+				error = `${$i18n('ie_parse_failed')}: ${err}`;
 			} finally {
 				loading = false;
 			}
@@ -252,7 +253,7 @@ Orchestrates the multi-step import process:
 			// CRITICAL: Await the callback to ensure stores are refreshed before UI updates
 			await onimport?.(result.success);
 		} catch (err) {
-			error = `Import failed: ${err}`;
+			error = `${$i18n('ie_import_failed')}: ${err}`;
 			currentStep = 'preview';
 		} finally {
 			loading = false;
@@ -330,7 +331,7 @@ Orchestrates the multi-step import process:
 	<div class="step-indicator">
 		<div class="step" class:active={currentStep === 'upload'} class:completed={currentStep !== 'upload'}>
 			<div class="step-number">1</div>
-			<div class="step-label">Upload</div>
+			<div class="step-label">{$i18n('ie_step_upload')}</div>
 		</div>
 		<div class="step-divider"></div>
 		<div
@@ -339,7 +340,7 @@ Orchestrates the multi-step import process:
 			class:completed={['conflicts', 'mcp_env', 'executing', 'complete'].includes(currentStep)}
 		>
 			<div class="step-number">2</div>
-			<div class="step-label">Preview</div>
+			<div class="step-label">{$i18n('ie_step_preview_label')}</div>
 		</div>
 		{#if validation && (filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0)}
 			<div class="step-divider"></div>
@@ -349,7 +350,7 @@ Orchestrates the multi-step import process:
 				class:completed={['executing', 'complete'].includes(currentStep)}
 			>
 				<div class="step-number">3</div>
-				<div class="step-label">Configure</div>
+				<div class="step-label">{$i18n('ie_step_configure')}</div>
 			</div>
 		{/if}
 		<div class="step-divider"></div>
@@ -359,7 +360,7 @@ Orchestrates the multi-step import process:
 			class:completed={currentStep === 'complete'}
 		>
 			<div class="step-number">{validation && (filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0) ? '4' : '3'}</div>
-			<div class="step-label">Import</div>
+			<div class="step-label">{$i18n('ie_step_import_label')}</div>
 		</div>
 	</div>
 
@@ -378,18 +379,18 @@ Orchestrates the multi-step import process:
 	<!-- Step Content -->
 	<div class="step-content">
 		{#if currentStep === 'upload'}
-			<Card title="Import Configuration">
+			<Card title={$i18n('ie_import_config_title')}>
 				{#snippet body()}
 					<div class="upload-content">
 						<p class="upload-description">
-							Import agents, MCP servers, models, and prompts from a JSON export file.
+							{$i18n('ie_import_config_description')}
 						</p>
 						<Button variant="primary" onclick={handleFileUpload} disabled={loading}>
 							<Upload size={20} />
-							<span>{loading ? 'Loading...' : 'Select File'}</span>
+							<span>{loading ? $i18n('common_loading') : $i18n('ie_select_file')}</span>
 						</Button>
 						<p class="upload-help">
-							Maximum file size: {MAX_IMPORT_FILE_SIZE / (1024 * 1024)}MB
+							{$i18n('ie_max_file_size').replace('{size}', String(MAX_IMPORT_FILE_SIZE / (1024 * 1024)))}
 						</p>
 					</div>
 				{/snippet}
@@ -401,7 +402,7 @@ Orchestrates the multi-step import process:
 					<Card>
 						{#snippet body()}
 							<div class="warnings">
-								<Badge variant="warning">Warnings</Badge>
+								<Badge variant="warning">{$i18n('ie_warnings')}</Badge>
 								<ul class="warning-list">
 									{#each previewValidation.warnings as warning}
 										<li>{warning}</li>
@@ -443,8 +444,8 @@ Orchestrates the multi-step import process:
 				{#snippet body()}
 					<div class="executing-content">
 						<div class="spinner"></div>
-						<h3>Importing Configuration...</h3>
-						<p>Please wait while we import your entities.</p>
+						<h3>{$i18n('ie_importing_config')}</h3>
+						<p>{$i18n('ie_importing_wait')}</p>
 					</div>
 				{/snippet}
 			</Card>
@@ -455,40 +456,40 @@ Orchestrates the multi-step import process:
 					<div class="complete-content">
 						{#if completeResult.success}
 							<CheckCircle size={48} class="success-icon" />
-							<h3>Import Complete</h3>
+							<h3>{$i18n('ie_import_complete')}</h3>
 							<div class="result-summary">
 								<div class="result-row">
-									<span class="result-label">Imported:</span>
+									<span class="result-label">{$i18n('ie_imported')}</span>
 									<div class="result-counts">
 										{#if completeResult.imported.agents > 0}
-											<Badge variant="success">{completeResult.imported.agents} Agents</Badge>
+											<Badge variant="success">{completeResult.imported.agents} {$i18n('ie_entity_agents')}</Badge>
 										{/if}
 										{#if completeResult.imported.mcpServers > 0}
-											<Badge variant="success">{completeResult.imported.mcpServers} MCP Servers</Badge>
+											<Badge variant="success">{completeResult.imported.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge>
 										{/if}
 										{#if completeResult.imported.models > 0}
-											<Badge variant="success">{completeResult.imported.models} Models</Badge>
+											<Badge variant="success">{completeResult.imported.models} {$i18n('ie_entity_models')}</Badge>
 										{/if}
 										{#if completeResult.imported.prompts > 0}
-											<Badge variant="success">{completeResult.imported.prompts} Prompts</Badge>
+											<Badge variant="success">{completeResult.imported.prompts} {$i18n('ie_entity_prompts')}</Badge>
 										{/if}
 									</div>
 								</div>
 								{#if completeResult.skipped.agents > 0 || completeResult.skipped.mcpServers > 0 || completeResult.skipped.models > 0 || completeResult.skipped.prompts > 0}
 									<div class="result-row">
-										<span class="result-label">Skipped:</span>
+										<span class="result-label">{$i18n('ie_skipped')}</span>
 										<div class="result-counts">
 											{#if completeResult.skipped.agents > 0}
-												<Badge variant="warning">{completeResult.skipped.agents} Agents</Badge>
+												<Badge variant="warning">{completeResult.skipped.agents} {$i18n('ie_entity_agents')}</Badge>
 											{/if}
 											{#if completeResult.skipped.mcpServers > 0}
-												<Badge variant="warning">{completeResult.skipped.mcpServers} MCP Servers</Badge>
+												<Badge variant="warning">{completeResult.skipped.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge>
 											{/if}
 											{#if completeResult.skipped.models > 0}
-												<Badge variant="warning">{completeResult.skipped.models} Models</Badge>
+												<Badge variant="warning">{completeResult.skipped.models} {$i18n('ie_entity_models')}</Badge>
 											{/if}
 											{#if completeResult.skipped.prompts > 0}
-												<Badge variant="warning">{completeResult.skipped.prompts} Prompts</Badge>
+												<Badge variant="warning">{completeResult.skipped.prompts} {$i18n('ie_entity_prompts')}</Badge>
 											{/if}
 										</div>
 									</div>
@@ -496,7 +497,7 @@ Orchestrates the multi-step import process:
 							</div>
 							{#if completeResult.errors.length > 0}
 								<div class="errors">
-									<Badge variant="error">Errors</Badge>
+									<Badge variant="error">{$i18n('ie_errors')}</Badge>
 									<ul class="error-list">
 										{#each completeResult.errors as importError}
 											<li>
@@ -508,8 +509,8 @@ Orchestrates the multi-step import process:
 							{/if}
 						{:else}
 							<AlertCircle size={48} class="error-icon" />
-							<h3>Import Failed</h3>
-							<p>The import process encountered errors.</p>
+							<h3>{$i18n('ie_import_failed_title')}</h3>
+							<p>{$i18n('ie_import_failed_description')}</p>
 							{#if completeResult.errors.length > 0}
 								<ul class="error-list">
 									{#each completeResult.errors as importError}
@@ -530,16 +531,16 @@ Orchestrates the multi-step import process:
 	{#if currentStep !== 'upload' && currentStep !== 'executing' && currentStep !== 'complete'}
 		<div class="actions">
 			<Button variant="ghost" onclick={handleBack} disabled={loading}>
-				Back
+				{$i18n('common_cancel')}
 			</Button>
 			<Button variant="primary" onclick={handleNext} disabled={loading || !canProceed()}>
-				{currentStep === 'mcp_env' ? 'Import' : 'Next'}
+				{currentStep === 'mcp_env' ? $i18n('ie_tab_import') : $i18n('ie_next')}
 			</Button>
 		</div>
 	{:else if currentStep === 'complete'}
 		<div class="actions">
 			<Button variant="primary" onclick={handleReset}>
-				Import Another File
+				{$i18n('ie_import_another')}
 			</Button>
 		</div>
 	{/if}

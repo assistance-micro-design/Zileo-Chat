@@ -6,7 +6,7 @@
 import { writable, derived, get } from 'svelte/store';
 import type { Locale } from '$types/i18n';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, LOCALES } from '$types/i18n';
-import { setLanguageTag, isAvailableLanguageTag } from '$lib/i18n/generated/runtime';
+import { setLanguageTag, isAvailableLanguageTag } from '$lib/i18n';
 
 const STORAGE_KEY = 'locale';
 
@@ -35,7 +35,7 @@ function createLocaleStore() {
 				localStorage.setItem(STORAGE_KEY, locale);
 			}
 
-			// Update Paraglide runtime
+			// Update i18n runtime
 			setLanguageTag(locale);
 			set(locale);
 		},

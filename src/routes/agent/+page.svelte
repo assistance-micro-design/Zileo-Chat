@@ -23,6 +23,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { NewWorkflowModal, ConfirmDeleteModal, ValidationModal, TokenDisplay } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	// Service imports
 	import { WorkflowService, MessageService } from '$lib/services';
@@ -468,29 +469,28 @@ Uses extracted components, services, and stores for clean architecture.
 			<div class="empty-state">
 				{#if $agentsLoading}
 					<Bot size={64} class="empty-icon" />
-					<h3>Loading agents...</h3>
-					<p class="empty-description">Please wait while we load your configured agents.</p>
+					<h3>{$i18n('agent_loading')}</h3>
+					<p class="empty-description">{$i18n('agent_loading_description')}</p>
 				{:else if $agents.length === 0}
 					<Settings size={64} class="empty-icon" />
-					<h3>No agents configured</h3>
+					<h3>{$i18n('agent_no_agents')}</h3>
 					<p class="empty-description">
-						You need to create at least one agent before starting a workflow.
-						Configure your first agent in the Settings page.
+						{$i18n('agent_no_agents_description')}
 					</p>
 					<a href="/settings">
 						<Button variant="primary">
 							<Settings size={16} />
-							Go to Settings
+							{$i18n('agent_go_to_settings')}
 						</Button>
 					</a>
 				{:else}
 					<MessageSquare size={64} class="empty-icon" />
-					<h3>Select or create a workflow</h3>
+					<h3>{$i18n('agent_select_or_create')}</h3>
 					<p class="empty-description">
-						Choose an existing workflow from the sidebar or create a new one to get started.
+						{$i18n('agent_select_description')}
 					</p>
 					<Button variant="primary" onclick={() => modalState = { type: 'new-workflow' }}>
-						New Workflow
+						{$i18n('agent_new_workflow')}
 					</Button>
 				{/if}
 			</div>

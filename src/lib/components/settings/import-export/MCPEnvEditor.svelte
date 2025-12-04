@@ -9,6 +9,7 @@ Marks sensitive keys as required.
 
 <script lang="ts">
 	import { Card, Input, Badge } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import type { MCPAdditions } from '$types/importExport';
 	import { SENSITIVE_ENV_PATTERNS } from '$types/importExport';
 
@@ -81,19 +82,18 @@ Marks sensitive keys as required.
 					</div>
 					<div class="progress-info">
 						<span class="progress-text">
-							{filledCount} of {missingKeys.length} filled
+							{$i18n('ie_x_of_y_filled').replace('{filled}', String(filledCount)).replace('{total}', String(missingKeys.length))}
 						</span>
 						{#if allRequiredFilled}
-							<Badge variant="success">Required filled</Badge>
+							<Badge variant="success">{$i18n('ie_required_filled')}</Badge>
 						{:else}
-							<Badge variant="warning">Required missing</Badge>
+							<Badge variant="warning">{$i18n('ie_required_missing')}</Badge>
 						{/if}
 					</div>
 				</div>
 
 				<p class="help-text">
-					This MCP server requires environment variables that were not included in the export.
-					Please provide values for the following keys:
+					{$i18n('ie_mcp_env_help')}
 				</p>
 
 				<div class="env-fields">
@@ -109,9 +109,9 @@ Marks sensitive keys as required.
 								</label>
 								<div class="field-badges">
 									{#if sensitive}
-										<Badge variant="error">Sensitive</Badge>
+										<Badge variant="error">{$i18n('ie_sensitive')}</Badge>
 									{:else}
-										<Badge variant="primary">Optional</Badge>
+										<Badge variant="primary">{$i18n('ie_optional')}</Badge>
 									{/if}
 								</div>
 							</div>
@@ -119,7 +119,7 @@ Marks sensitive keys as required.
 								id="env-{serverId}-{key}"
 								type={sensitive ? 'password' : 'text'}
 								value={getEnvValue(key)}
-								placeholder="Enter value for {key}"
+								placeholder={$i18n('ie_enter_value_for').replace('{key}', key)}
 								required={sensitive}
 								oninput={(e) => updateEnvValue(key, e.currentTarget.value)}
 							/>
@@ -129,10 +129,9 @@ Marks sensitive keys as required.
 
 				{#if !allRequiredFilled}
 					<div class="warning-box">
-						<Badge variant="warning">Warning</Badge>
+						<Badge variant="warning">{$i18n('ie_warnings')}</Badge>
 						<p class="warning-text">
-							Please fill all required (sensitive) environment variables before proceeding.
-							The server may not function correctly without them.
+							{$i18n('ie_env_warning')}
 						</p>
 					</div>
 				{/if}

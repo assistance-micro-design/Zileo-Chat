@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
 </script>
 
 <svelte:head>
@@ -6,7 +7,7 @@
 </svelte:head>
 
 <div class="loading">
-  <p>Redirecting to Agent page...</p>
+  <p>{$i18n('page_redirecting')}</p>
 </div>
 
 <style>
