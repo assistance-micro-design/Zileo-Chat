@@ -107,4 +107,17 @@
 		color: var(--color-error);
 		margin-left: var(--spacing-xs);
 	}
+
+	/* Option styling for proper dark/light theme support */
+	select option {
+		background-color: var(--color-bg-primary);
+		color: var(--color-text-primary);
+		padding: var(--spacing-sm);
+	}
+
+	/* Ensure dark theme colors are applied */
+	:global([data-theme='dark']) select option {
+		background-color: var(--color-bg-primary);
+		color: var(--color-text-primary);
+	}
 </style>
