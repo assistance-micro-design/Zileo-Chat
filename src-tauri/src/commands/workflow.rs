@@ -272,7 +272,10 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
 /// - Workflow itself
 #[tauri::command]
 #[instrument(name = "delete_workflow", skip(state), fields(workflow_id = %workflow_id))]
-pub async fn delete_workflow(workflow_id: String, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn delete_workflow(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     info!("Deleting workflow with cascade");
 
     // Validate input

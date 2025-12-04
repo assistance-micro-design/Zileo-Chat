@@ -100,6 +100,7 @@ mod tool_factory_sub_agent_tests {
             "SpawnAgentTool",
             Some("wf_test".to_string()),
             "test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_err());
@@ -110,6 +111,7 @@ mod tool_factory_sub_agent_tests {
             "DelegateTaskTool",
             Some("wf_test".to_string()),
             "test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_err());

@@ -105,6 +105,53 @@ struct MistralErrorDetail {
     message: String,
 }
 
+// ============================================================================
+// Function Calling Types (JSON format - OpenAI compatible)
+// ============================================================================
+
+/// API request body for Mistral chat completions with tools
+#[derive(Debug, Serialize)]
+struct MistralToolChatRequest {
+    model: String,
+    messages: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
+}
+
+/// API response from Mistral with tool calls (used for JSON deserialization)
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct MistralToolChatResponse {
+    id: Option<String>,
+    choices: Vec<MistralToolChoice>,
+    usage: Option<MistralUsage>,
+}
+
+/// Choice in API response with potential tool calls (used for JSON deserialization)
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct MistralToolChoice {
+    message: MistralToolResponseMessage,
+    finish_reason: Option<String>,
+}
+
+/// Response message with optional tool calls (used for JSON deserialization)
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+struct MistralToolResponseMessage {
+    role: String,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<serde_json::Value>>,
+}
+
 /// Custom deserializer for content field that handles both string and array formats
 fn deserialize_content<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
@@ -366,6 +413,119 @@ impl MistralProvider {
             provider: ProviderType::Mistral,
             finish_reason,
         })
+    }
+
+    /// Makes a direct HTTP call to Mistral API with function calling support.
+    ///
+    /// This method sends tools definitions and handles tool_calls in responses.
+    ///
+    /// # Arguments
+    /// * `messages` - Conversation history as JSON messages
+    /// * `tools` - Tool definitions in OpenAI format
+    /// * `tool_choice` - How the model should use tools ("auto", "any", "none")
+    /// * `model` - Model to use
+    /// * `temperature` - Sampling temperature
+    /// * `max_tokens` - Maximum tokens to generate
+    ///
+    /// # Returns
+    /// Raw JSON response from the API (caller should use adapter to parse)
+    #[instrument(
+        name = "mistral_complete_with_tools",
+        skip(self, messages, tools, tool_choice),
+        fields(provider = "mistral", model = %model, tools_count = tools.len())
+    )]
+    pub async fn complete_with_tools(
+        &self,
+        messages: Vec<serde_json::Value>,
+        tools: Vec<serde_json::Value>,
+        tool_choice: Option<serde_json::Value>,
+        model: &str,
+        temperature: f32,
+        max_tokens: usize,
+    ) -> Result<serde_json::Value, LLMError> {
+        let api_key = self
+            .api_key
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| LLMError::NotConfigured("Mistral".to_string()))?;
+
+        let request_body = MistralToolChatRequest {
+            model: model.to_string(),
+            messages,
+            temperature: Some(temperature),
+            max_tokens: Some(max_tokens),
+            tools: if tools.is_empty() { None } else { Some(tools) },
+            tool_choice,
+        };
+
+        debug!(
+            model = model,
+            temperature = temperature,
+            max_tokens = max_tokens,
+            tools_count = request_body.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+            "Making Mistral API request with tools"
+        );
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(MISTRAL_API_URL)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| LLMError::RequestFailed(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| LLMError::RequestFailed(format!("Failed to read response body: {}", e)))?;
+
+        if !status.is_success() {
+            let error_msg =
+                if let Ok(error_response) = serde_json::from_str::<MistralErrorResponse>(&body) {
+                    error_response
+                        .message
+                        .map(|e| e.message)
+                        .unwrap_or_else(|| body.clone())
+                } else {
+                    body.clone()
+                };
+            return Err(LLMError::RequestFailed(format!(
+                "Mistral API error ({}): {}",
+                status, error_msg
+            )));
+        }
+
+        // Parse to JSON Value (caller will use adapter to extract specific fields)
+        let json_response: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            LLMError::RequestFailed(format!(
+                "Failed to parse Mistral response: {}. Body: {}",
+                e,
+                &body[..body.len().min(500)]
+            ))
+        })?;
+
+        // Log usage if available
+        if let Some(usage) = json_response.get("usage") {
+            let prompt_tokens = usage
+                .get("prompt_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let completion_tokens = usage
+                .get("completion_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            info!(
+                tokens_input = prompt_tokens,
+                tokens_output = completion_tokens,
+                "Mistral tool completion successful"
+            );
+        }
+
+        Ok(json_response)
     }
 }
 

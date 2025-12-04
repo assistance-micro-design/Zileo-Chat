@@ -37,6 +37,8 @@ interface TokenState {
 	isStreaming: boolean;
 	/** Timestamp when streaming started */
 	streamStartTime: number | null;
+	/** Session cost from backend (more accurate than frontend calculation) */
+	sessionCost: number | null;
 }
 
 /**
@@ -49,7 +51,8 @@ const initialState: TokenState = {
 	inputPrice: 0,
 	outputPrice: 0,
 	isStreaming: false,
-	streamStartTime: null
+	streamStartTime: null,
+	sessionCost: null
 };
 
 /**
@@ -108,7 +111,8 @@ export const tokenStore = {
 			...s,
 			streaming: { input: 0, output: 0, speed: null },
 			isStreaming: true,
-			streamStartTime: Date.now()
+			streamStartTime: Date.now(),
+			sessionCost: null
 		}));
 	},
 
@@ -160,6 +164,19 @@ export const tokenStore = {
 	},
 
 	/**
+	 * Set session cost directly from backend result.
+	 * Used when the backend has already calculated the cost.
+	 *
+	 * @param costUsd - Cost in USD from WorkflowMetrics
+	 */
+	setSessionCost(costUsd: number): void {
+		store.update((s) => ({
+			...s,
+			sessionCost: costUsd
+		}));
+	},
+
+	/**
 	 * Reset to initial state.
 	 * Clears all token metrics and streaming state.
 	 */
@@ -178,10 +195,19 @@ export const tokenStore = {
  * Combines streaming and cumulative metrics with cost calculations.
  */
 export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
-	// Calculate current session cost
-	const sessionCost =
+	// Determine if there's an active session (has streaming tokens or explicit session cost)
+	const hasActiveSession = $s.sessionCost !== null || $s.streaming.input > 0 || $s.streaming.output > 0;
+
+	// Use backend-calculated session cost if available, otherwise calculate from prices
+	const calculatedCost =
 		($s.streaming.input * $s.inputPrice) / 1_000_000 +
 		($s.streaming.output * $s.outputPrice) / 1_000_000;
+
+	// If no active session, show cumulative cost as main cost (avoids misleading "Free")
+	// If active session, show session cost (backend value preferred)
+	const displayCost = hasActiveSession
+		? ($s.sessionCost ?? calculatedCost)
+		: $s.cumulative.cost;
 
 	return {
 		tokens_input: $s.streaming.input,
@@ -189,7 +215,7 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cumulative_input: $s.cumulative.input,
 		cumulative_output: $s.cumulative.output,
 		context_max: $s.contextMax,
-		cost_usd: sessionCost,
+		cost_usd: displayCost,
 		cumulative_cost_usd: $s.cumulative.cost,
 		speed_tks: $s.streaming.speed ?? undefined,
 		is_streaming: $s.isStreaming

@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod embedding;
+pub mod function_calling;
 pub mod import_export;
 pub mod llm_models;
 pub mod mcp;
@@ -110,4 +111,12 @@ pub use embedding::{
 pub use prompt::{
     Prompt, PromptCategory, PromptCreate, PromptSummary, PromptUpdate, PromptVariable,
     MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
+};
+
+// Re-export function calling types for JSON-based tool calling (replacing XML)
+// Exported for public API but consumed directly from submodule internally
+#[allow(unused_imports)]
+pub use function_calling::{
+    AssistantToolCall, AssistantToolCallFunction, ChatMessage, FunctionCall, FunctionCallResult,
+    ToolChoiceMode,
 };

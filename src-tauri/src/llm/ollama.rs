@@ -251,6 +251,121 @@ impl OllamaProvider {
     pub fn is_thinking_model_name(&self, model: &str) -> bool {
         is_thinking_model(model)
     }
+
+    /// Makes a direct HTTP call to Ollama API with function calling support.
+    ///
+    /// This method sends tools definitions and handles tool_calls in responses.
+    /// Uses Ollama's OpenAI-compatible API endpoint for tools.
+    ///
+    /// # Arguments
+    /// * `messages` - Conversation history as JSON messages
+    /// * `tools` - Tool definitions in OpenAI format
+    /// * `model` - Model to use (must support tools: qwen2.5, llama3.1+, mistral)
+    /// * `temperature` - Sampling temperature
+    /// * `max_tokens` - Maximum tokens to generate
+    ///
+    /// # Returns
+    /// Raw JSON response from the API (caller should use adapter to parse)
+    ///
+    /// # Note
+    /// Not all Ollama models support tools. Recommended models:
+    /// - qwen2.5 (best tool support)
+    /// - llama3.1, llama3.2
+    /// - mistral, mistral-nemo
+    #[instrument(
+        name = "ollama_complete_with_tools",
+        skip(self, messages, tools),
+        fields(provider = "ollama", model = %model, tools_count = tools.len())
+    )]
+    pub async fn complete_with_tools(
+        &self,
+        messages: Vec<serde_json::Value>,
+        tools: Vec<serde_json::Value>,
+        model: &str,
+        temperature: f32,
+        max_tokens: usize,
+    ) -> Result<serde_json::Value, LLMError> {
+        let server_url = self.server_url.read().await.clone();
+        let url = format!("{}/api/chat", server_url);
+
+        // Build request body with tools
+        let mut body = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "stream": false,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens
+            }
+        });
+
+        // Add tools if provided
+        if !tools.is_empty() {
+            body["tools"] = serde_json::json!(tools);
+        }
+
+        debug!(
+            model = model,
+            temperature = temperature,
+            max_tokens = max_tokens,
+            tools_count = tools.len(),
+            "Making Ollama API request with tools"
+        );
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(300))
+            .send()
+            .await
+            .map_err(|e| {
+                LLMError::ConnectionError(format!(
+                    "Cannot connect to Ollama server at {}: {}",
+                    server_url, e
+                ))
+            })?;
+
+        let status = response.status();
+        let response_text = response.text().await.map_err(|e| {
+            LLMError::RequestFailed(format!("Failed to read Ollama response: {}", e))
+        })?;
+
+        if !status.is_success() {
+            return Err(LLMError::RequestFailed(format!(
+                "Ollama API error ({}): {}",
+                status, response_text
+            )));
+        }
+
+        // Parse to JSON Value (caller will use adapter to extract specific fields)
+        let json_response: serde_json::Value =
+            serde_json::from_str(&response_text).map_err(|e| {
+                LLMError::RequestFailed(format!(
+                    "Failed to parse Ollama response: {}. Body: {}",
+                    e,
+                    &response_text[..response_text.len().min(500)]
+                ))
+            })?;
+
+        // Log basic info
+        let has_tool_calls = json_response
+            .pointer("/message/tool_calls")
+            .and_then(|v| v.as_array())
+            .map(|arr| !arr.is_empty())
+            .unwrap_or(false);
+
+        info!(
+            has_tool_calls = has_tool_calls,
+            done = json_response
+                .get("done")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "Ollama tool completion successful"
+        );
+
+        Ok(json_response)
+    }
 }
 
 impl Default for OllamaProvider {

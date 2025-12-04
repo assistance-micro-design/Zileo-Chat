@@ -23,12 +23,14 @@
 //! let response = manager.complete("Hello", "mistral-large").await?;
 //! ```
 
+pub mod adapters;
 pub mod embedding;
 mod manager;
 mod mistral;
 mod ollama;
 pub mod pricing;
 mod provider;
+pub mod tool_adapter;
 
 pub use manager::ProviderManager;
 pub use provider::{LLMError, ProviderType};
@@ -47,3 +49,10 @@ pub use embedding::{
     EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService, MISTRAL_EMBED_DIMENSION,
     MISTRAL_EMBED_MODEL, OLLAMA_MXBAI_DIMENSION, OLLAMA_NOMIC_DIMENSION,
 };
+
+// Tool adapter exports for JSON function calling
+// Exported for public API but consumed directly from submodules internally
+#[allow(unused_imports)]
+pub use adapters::{MistralToolAdapter, OllamaToolAdapter};
+#[allow(unused_imports)]
+pub use tool_adapter::ProviderToolAdapter;

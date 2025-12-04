@@ -20,16 +20,17 @@ use crate::agents::core::agent::{
     Agent, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
 };
 use crate::db::DBClient;
+use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter};
+use crate::llm::tool_adapter::ProviderToolAdapter;
 use crate::llm::{LLMError, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
+use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::models::mcp::MCPTool;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::{AgentConfig, Lifecycle};
-use crate::tools::{context::AgentToolContext, Tool, ToolFactory};
+use crate::tools::{context::AgentToolContext, Tool, ToolDefinition, ToolFactory};
 use async_trait::async_trait;
 use chrono::Local;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::Emitter;
 use tracing::{debug, error, info, instrument, warn};
@@ -38,36 +39,6 @@ use tracing::{debug, error, info, instrument, warn};
 /// Can be overridden per-agent via AgentConfig.max_tool_iterations
 #[allow(dead_code)]
 const DEFAULT_MAX_TOOL_ITERATIONS: usize = 50;
-
-/// Parsed tool call extracted from LLM response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParsedToolCall {
-    /// Tool name (e.g., "MemoryTool" or "serena:find_symbol")
-    pub tool_name: String,
-    /// Arguments as JSON
-    pub arguments: serde_json::Value,
-    /// Whether this is an MCP tool (format: "server:tool")
-    pub is_mcp: bool,
-    /// MCP server name if is_mcp is true
-    pub mcp_server: Option<String>,
-    /// MCP tool name if is_mcp is true
-    pub mcp_tool: Option<String>,
-    /// Parse error message if JSON parsing failed
-    pub parse_error: Option<String>,
-}
-
-/// Result of tool execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolExecutionResult {
-    /// Tool that was called
-    pub tool_name: String,
-    /// Whether execution succeeded
-    pub success: bool,
-    /// Result JSON on success
-    pub result: serde_json::Value,
-    /// Error message on failure
-    pub error: Option<String>,
-}
 
 /// Summary of an MCP server for documentation in system prompt
 ///
@@ -458,14 +429,16 @@ impl LLMAgent {
         )
     }
 
-    /// Builds enhanced system prompt with tool definitions for LLM
+    /// Builds enhanced system prompt for JSON function calling
     ///
-    /// This method constructs a system prompt that includes:
+    /// With JSON function calling (OpenAI standard), tool definitions are passed
+    /// via the API's `tools` parameter, NOT in the system prompt. This method
+    /// builds a simplified prompt that includes:
     /// - The agent's base system prompt
-    /// - Instructions on how to call tools
-    /// - Definitions of all available local tools
-    /// - Definitions of all available MCP tools
-    /// - Available MCP servers with descriptions (for sub-agent spawning)
+    /// - Context about available tools (names only, schemas are in API)
+    /// - Available MCP servers for sub-agent delegation
+    ///
+    /// NOTE: No XML instructions! The LLM uses native JSON function calling.
     fn build_system_prompt_with_tools(
         &self,
         local_tools: &[Arc<dyn Tool>],
@@ -474,66 +447,42 @@ impl LLMAgent {
     ) -> String {
         let mut sections = vec![self.config.system_prompt.clone()];
 
-        // Only add tool instructions if there are tools available
+        // Only add tool context if there are tools available
         if local_tools.is_empty() && mcp_tools.is_empty() {
             return sections.join("\n\n");
         }
 
-        // Tool calling instructions
-        sections.push(
-            r#"## Tool Usage Instructions
-
-You have access to tools that can help you complete tasks. To call a tool, use this exact format:
-
-<tool_call name="ToolName">
-{"operation": "...", "param": "value"}
-</tool_call>
-
-After calling a tool, wait for the result before continuing. Tool results will be provided in this format:
-
-<tool_result name="ToolName" success="true">
-{...result JSON...}
-</tool_result>
-
-You can call multiple tools in sequence. Always analyze tool results before proceeding."#
-                .to_string(),
+        // Brief tool context (full definitions are in the API tools parameter)
+        let mut tools_context = String::from("## Available Tools\n\n");
+        tools_context.push_str(
+            "You have access to the following tools via function calling. \
+             The API will provide the tool schemas; use function calls to invoke them.\n",
         );
 
-        // Local tools section
+        // List local tools briefly
         if !local_tools.is_empty() {
-            let mut local_section = String::from("## Local Tools\n");
-
+            tools_context.push_str("\n### Local Tools\n");
             for tool in local_tools {
                 let def = tool.definition();
-                local_section.push_str(&format!(
-                    "\n### {}\n**Description**: {}\n\n**Input Schema**:\n```json\n{}\n```\n",
-                    def.name,
-                    def.description,
-                    serde_json::to_string_pretty(&def.input_schema).unwrap_or_default()
-                ));
+                tools_context.push_str(&format!("- **{}**: {}\n", def.name, def.description));
             }
-
-            sections.push(local_section);
         }
 
-        // MCP tools section - these are tools the agent can use DIRECTLY
+        // List MCP tools briefly with naming convention
         if !mcp_tools.is_empty() {
-            let mut mcp_section = String::from(
-                "## MCP Tools (Direct Access)\n\n**IMPORTANT**: These are YOUR tools. Use them directly - do NOT delegate to a sub-agent.\nTo call MCP tools, use the format: `server_name:tool_name`\n",
+            tools_context.push_str("\n### MCP Tools (Direct Access)\n");
+            tools_context.push_str(
+                "MCP tools use the naming format `mcp__server__tool`. Use them directly.\n",
             );
-
             for (server_name, tool) in mcp_tools {
-                mcp_section.push_str(&format!(
-                    "\n### {}:{}\n**Description**: {}\n\n**Input Schema**:\n```json\n{}\n```\n",
-                    server_name,
-                    tool.name,
-                    tool.description,
-                    serde_json::to_string_pretty(&tool.input_schema).unwrap_or_default()
+                tools_context.push_str(&format!(
+                    "- **mcp__{}__{}**: {}\n",
+                    server_name, tool.name, tool.description
                 ));
             }
-
-            sections.push(mcp_section);
         }
+
+        sections.push(tools_context);
 
         // Add agent configuration context (provider, model, available resources)
         // This helps the LLM make informed decisions when spawning sub-agents
@@ -592,214 +541,121 @@ You are currently running with the following configuration:
         sections.join("\n\n")
     }
 
-    /// Parses tool calls from LLM response text
+    // =========================================================================
+    // JSON Function Calling Helpers (replacing XML-based tool calling)
+    // =========================================================================
+
+    /// Collects all tool definitions from local tools and MCP tools.
     ///
-    /// Extracts tool calls using XML-style markers:
-    /// ```text
-    /// <tool_call name="ToolName">
-    /// {"operation": "...", "param": "value"}
-    /// </tool_call>
-    /// ```
-    ///
-    /// This parser is tolerant of malformed closing tags (accepts both </tool_call> and </tool_result>)
-    fn parse_tool_calls(response: &str) -> Vec<ParsedToolCall> {
-        let mut calls = Vec::new();
+    /// Creates ToolDefinition structs for all available tools so they can
+    /// be formatted by the provider adapter for JSON function calling.
+    fn collect_tool_definitions(
+        &self,
+        local_tools: &[Arc<dyn Tool>],
+        mcp_tools: &[(String, MCPTool)],
+    ) -> Vec<ToolDefinition> {
+        let mut definitions = Vec::new();
 
-        // Pattern: <tool_call name="...">...</tool_call|tool_result>
-        // Tolerant regex that accepts both correct (</tool_call>) and incorrect (</tool_result>) closing tags
-        let pattern =
-            Regex::new(r#"<tool_call\s+name="([^"]+)">\s*([\s\S]*?)\s*</tool_(?:call|result)>"#)
-                .expect("Invalid regex");
+        // Add local tool definitions
+        for tool in local_tools {
+            definitions.push(tool.definition());
+        }
 
-        for cap in pattern.captures_iter(response) {
-            let tool_name = cap[1].to_string();
-            let json_str = cap[2].trim();
-
-            // Try to parse the JSON arguments
-            let (arguments, parse_error) = match serde_json::from_str::<serde_json::Value>(json_str)
-            {
-                Ok(args) => (args, None),
-                Err(e) => {
-                    warn!(tool = %tool_name, error = %e, json = %json_str, "Failed to parse tool arguments");
-                    // Instead of continuing, return a call with error info
-                    let error_msg = format!(
-                        "Invalid JSON in tool call '{}': {}. Received content (truncated): {}",
-                        tool_name,
-                        e,
-                        json_str.chars().take(200).collect::<String>()
-                    );
-                    (serde_json::json!({}), Some(error_msg))
-                }
-            };
-
-            // Check if this is an MCP tool (format: server:tool)
-            let (is_mcp, mcp_server, mcp_tool) = if tool_name.contains(':') {
-                let parts: Vec<&str> = tool_name.splitn(2, ':').collect();
-                if parts.len() == 2 {
-                    (true, Some(parts[0].to_string()), Some(parts[1].to_string()))
-                } else {
-                    (false, None, None)
-                }
-            } else {
-                (false, None, None)
-            };
-
-            calls.push(ParsedToolCall {
-                tool_name,
-                arguments,
-                is_mcp,
-                mcp_server,
-                mcp_tool,
-                parse_error,
+        // Add MCP tool definitions with mcp__server__tool naming
+        for (server_name, mcp_tool) in mcp_tools {
+            definitions.push(ToolDefinition {
+                id: format!("mcp__{}__{}", server_name, mcp_tool.name),
+                name: mcp_tool.name.clone(),
+                description: mcp_tool.description.clone(),
+                input_schema: mcp_tool.input_schema.clone(),
+                output_schema: serde_json::json!({}),
+                requires_confirmation: false,
             });
         }
 
-        debug!(count = calls.len(), "Parsed tool calls from response");
-        calls
+        definitions
     }
 
-    /// Executes a local tool and returns the result
-    async fn execute_local_tool(
-        tool: &Arc<dyn Tool>,
-        arguments: serde_json::Value,
-    ) -> ToolExecutionResult {
-        let tool_name = tool.definition().id.clone();
+    /// Executes a single function call (local or MCP tool).
+    ///
+    /// # Arguments
+    /// * `call` - The function call to execute
+    /// * `local_tools` - Available local tools
+    /// * `mcp_manager` - Optional MCP manager for MCP tools
+    /// * `tools_used` - Mutable vector to track local tool usage
+    /// * `mcp_calls_made` - Mutable vector to track MCP tool calls
+    async fn execute_function_call(
+        &self,
+        call: &FunctionCall,
+        local_tools: &[Arc<dyn Tool>],
+        mcp_manager: Option<&Arc<MCPManager>>,
+        tools_used: &mut Vec<String>,
+        mcp_calls_made: &mut Vec<String>,
+    ) -> FunctionCallResult {
+        let start = std::time::Instant::now();
 
-        match tool.execute(arguments.clone()).await {
-            Ok(result) => {
-                info!(tool = %tool_name, "Local tool executed successfully");
-                ToolExecutionResult {
-                    tool_name,
-                    success: true,
-                    result,
-                    error: None,
-                }
-            }
-            Err(e) => {
-                warn!(tool = %tool_name, error = %e, "Local tool execution failed");
-                ToolExecutionResult {
-                    tool_name,
-                    success: false,
-                    result: serde_json::json!({}),
-                    error: Some(e.to_string()),
-                }
-            }
-        }
-    }
+        // Check if MCP tool
+        if let Some((server, tool)) = call.parse_mcp_name() {
+            // Execute via MCP
+            if let Some(mcp) = mcp_manager {
+                mcp_calls_made.push(call.name.clone());
 
-    /// Executes an MCP tool and returns the result
-    async fn execute_mcp_tool(
-        mcp_manager: &MCPManager,
-        server_name: &str,
-        tool_name: &str,
-        arguments: serde_json::Value,
-    ) -> ToolExecutionResult {
-        let full_name = format!("{}:{}", server_name, tool_name);
-
-        match mcp_manager
-            .call_tool(server_name, tool_name, arguments)
-            .await
-        {
-            Ok(result) => {
-                if result.success {
-                    info!(tool = %full_name, "MCP tool executed successfully");
-                    ToolExecutionResult {
-                        tool_name: full_name,
-                        success: true,
-                        result: result.content,
-                        error: None,
+                match mcp.call_tool(server, tool, call.arguments.clone()).await {
+                    Ok(result) => {
+                        if result.success {
+                            info!(tool = %call.name, "MCP tool executed successfully");
+                            FunctionCallResult::success(&call.id, &call.name, result.content)
+                                .with_execution_time(start.elapsed().as_millis() as u64)
+                        } else {
+                            let error_msg =
+                                result.error.unwrap_or_else(|| "Unknown error".to_string());
+                            warn!(tool = %call.name, error = %error_msg, "MCP tool returned error");
+                            FunctionCallResult::failure(&call.id, &call.name, error_msg)
+                        }
                     }
-                } else {
-                    let error_msg = result.error.unwrap_or_else(|| "Unknown error".to_string());
-                    warn!(tool = %full_name, error = %error_msg, "MCP tool returned error");
-                    ToolExecutionResult {
-                        tool_name: full_name,
-                        success: false,
-                        result: serde_json::json!({}),
-                        error: Some(error_msg),
+                    Err(e) => {
+                        warn!(tool = %call.name, error = %e, "MCP tool call failed");
+                        FunctionCallResult::failure(&call.id, &call.name, e.to_string())
                     }
                 }
+            } else {
+                FunctionCallResult::failure(&call.id, &call.name, "MCP manager not available")
             }
-            Err(e) => {
-                warn!(tool = %full_name, error = %e, "MCP tool call failed");
-                ToolExecutionResult {
-                    tool_name: full_name,
-                    success: false,
-                    result: serde_json::json!({}),
-                    error: Some(e.to_string()),
+        } else {
+            // Execute local tool
+            let matching_tool = local_tools.iter().find(|t| t.definition().id == call.name);
+
+            if let Some(tool) = matching_tool {
+                tools_used.push(call.name.clone());
+
+                match tool.execute(call.arguments.clone()).await {
+                    Ok(result) => {
+                        info!(tool = %call.name, "Local tool executed successfully");
+                        FunctionCallResult::success(&call.id, &call.name, result)
+                            .with_execution_time(start.elapsed().as_millis() as u64)
+                    }
+                    Err(e) => {
+                        warn!(tool = %call.name, error = %e, "Local tool execution failed");
+                        FunctionCallResult::failure(&call.id, &call.name, e.to_string())
+                    }
                 }
+            } else {
+                let available_tools: Vec<String> = local_tools
+                    .iter()
+                    .map(|t| t.definition().id.clone())
+                    .collect();
+
+                FunctionCallResult::failure(
+                    &call.id,
+                    &call.name,
+                    format!(
+                        "Unknown tool '{}'. Available tools: {}",
+                        call.name,
+                        available_tools.join(", ")
+                    ),
+                )
             }
         }
-    }
-
-    /// Formats tool execution results for injection back to LLM
-    fn format_tool_results(results: &[ToolExecutionResult]) -> String {
-        results
-            .iter()
-            .map(|r| {
-                if r.success {
-                    format!(
-                        "<tool_result name=\"{}\" success=\"true\">\n{}\n</tool_result>",
-                        r.tool_name,
-                        serde_json::to_string_pretty(&r.result).unwrap_or_default()
-                    )
-                } else {
-                    format!(
-                        "<tool_result name=\"{}\" success=\"false\">\nError: {}\n</tool_result>",
-                        r.tool_name,
-                        r.error.as_deref().unwrap_or("Unknown error")
-                    )
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    }
-
-    /// Strips tool calls from response text, leaving only the regular content
-    fn strip_tool_calls(response: &str) -> String {
-        let pattern =
-            Regex::new(r#"<tool_call\s+name="[^"]+">[\s\S]*?</tool_call>"#).expect("Invalid regex");
-
-        pattern.replace_all(response, "").trim().to_string()
-    }
-
-    /// Detects malformed tool calls that won't be parsed by the regex
-    /// Returns an error message if malformed calls are detected, None if all looks good
-    fn detect_malformed_tool_calls(content: &str) -> Option<String> {
-        let has_tool_call_start = content.contains("<tool_call");
-        let has_proper_close = content.contains("</tool_call>");
-        let has_wrong_close = content.contains("</tool_result>");
-
-        // Check for JSON-like content after tool_call tag (indicates an attempted tool call)
-        let has_json_pattern =
-            content.contains("<tool_call") && content.contains("{") && content.contains("}");
-
-        // If there's a tool_call opening but no proper closing
-        if has_tool_call_start && !has_proper_close && has_json_pattern {
-            if has_wrong_close {
-                return Some(
-                    "TOOL CALL FORMAT ERROR: You used </tool_result> as the closing tag, but the correct closing tag is </tool_call>.\n\n\
-                     Expected format:\n\
-                     <tool_call name=\"ToolName\">\n\
-                     {\"param\": \"value\"}\n\
-                     </tool_call>\n\n\
-                     Please retry your tool call with the correct </tool_call> closing tag.".to_string()
-                );
-            }
-
-            // Missing closing tag entirely
-            return Some(
-                "TOOL CALL FORMAT ERROR: Your tool call appears to be missing a closing tag.\n\n\
-                 Expected format:\n\
-                 <tool_call name=\"ToolName\">\n\
-                 {\"param\": \"value\"}\n\
-                 </tool_call>\n\n\
-                 Please ensure your tool calls have proper opening and closing tags."
-                    .to_string(),
-            );
-        }
-
-        None
     }
 
     /// Emits a streaming event to the frontend via Tauri.
@@ -995,15 +851,16 @@ impl Agent for LLMAgent {
         }
     }
 
-    /// Executes a task with full tool support (local + MCP)
+    /// Executes a task with full tool support (local + MCP) using JSON function calling.
     ///
-    /// This method implements a complete tool execution loop:
+    /// This method implements a complete tool execution loop using native JSON function
+    /// calling supported by Mistral and Ollama APIs (replacing the old XML-based approach):
     /// 1. Creates local tool instances via ToolFactory
     /// 2. Discovers MCP tools from configured servers
-    /// 3. Builds enhanced system prompt with tool definitions
-    /// 4. Calls LLM with tool-aware prompt
-    /// 5. Parses tool calls from response
-    /// 6. Executes tools and feeds results back to LLM
+    /// 3. Formats tool definitions via provider adapter
+    /// 4. Calls LLM with tools parameter
+    /// 5. Parses tool_calls from JSON response
+    /// 6. Executes tools and sends results back to LLM
     /// 7. Repeats until no tool calls or MAX_TOOL_ITERATIONS reached
     #[instrument(
         name = "llm_agent_execute_with_mcp",
@@ -1078,6 +935,12 @@ impl Agent for LLMAgent {
             });
         }
 
+        // Get the adapter based on provider type for JSON function calling
+        let adapter: Box<dyn ProviderToolAdapter> = match provider_type {
+            ProviderType::Mistral => Box::new(MistralToolAdapter::new()),
+            ProviderType::Ollama => Box::new(OllamaToolAdapter::new()),
+        };
+
         // Extract workflow_id early for event emission
         let workflow_id = task
             .context
@@ -1089,8 +952,6 @@ impl Agent for LLMAgent {
         let event_workflow_id = workflow_id.clone().unwrap_or_else(|| task.id.clone());
 
         // Check if this is the primary workflow agent
-        // Sub-agents have "is_sub_agent": true in their context
-        // Primary agents have "is_primary_agent": true in their context
         let is_primary_agent = task
             .context
             .get("is_primary_agent")
@@ -1100,16 +961,12 @@ impl Agent for LLMAgent {
         let local_tools = self.create_local_tools(workflow_id, is_primary_agent);
 
         // Discover MCP tools and server summaries if manager is available
-        // Note: get_mcp_tool_definitions uses self.config.mcp_servers (tools assigned to this agent)
-        // but get_mcp_server_summaries returns ALL available servers (for sub-agent spawning)
         let (mcp_tools, mcp_server_summaries) = if let Some(ref mcp) = mcp_manager {
-            // Get tools only from servers assigned to this agent
             let tools = if !self.config.mcp_servers.is_empty() {
                 self.get_mcp_tool_definitions(mcp).await
             } else {
                 Vec::new()
             };
-            // Get ALL available servers (for documentation when spawning sub-agents)
             let summaries = self.get_mcp_server_summaries(mcp).await;
             (tools, summaries)
         } else {
@@ -1127,18 +984,27 @@ impl Agent for LLMAgent {
             local_tools_count = local_tools.len(),
             mcp_tools_count = mcp_tools.len(),
             mcp_servers_count = mcp_server_summaries.len(),
-            "LLM Agent starting task execution with tool support"
+            "LLM Agent starting task execution with JSON function calling"
         );
 
-        // Build enhanced system prompt with tool definitions and MCP server info
+        // Collect tool definitions and format for API
+        let tool_definitions = self.collect_tool_definitions(&local_tools, &mcp_tools);
+        let tools_json = adapter.format_tools(&tool_definitions);
+
+        // Build simplified system prompt (tool schemas are in the API call, not the prompt)
         let system_prompt =
             self.build_system_prompt_with_tools(&local_tools, &mcp_tools, &mcp_server_summaries);
 
         // Build initial user prompt
         let base_prompt = self.build_prompt(&task);
 
+        // Initialize messages array for JSON function calling
+        let mut messages: Vec<serde_json::Value> = vec![
+            serde_json::json!({"role": "system", "content": system_prompt}),
+            serde_json::json!({"role": "user", "content": base_prompt}),
+        ];
+
         // Tool execution loop
-        let mut conversation_history = vec![base_prompt];
         let mut final_response_content = String::new();
         let mut iteration = 0;
 
@@ -1152,7 +1018,6 @@ impl Agent for LLMAgent {
                     iterations = max_iterations,
                     "Max tool iterations reached, stopping execution"
                 );
-                // Emit progress event about max iterations
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
                     format!(
@@ -1171,57 +1036,51 @@ impl Agent for LLMAgent {
                 ));
             }
 
-            // Build the full prompt from conversation history
-            let full_prompt = conversation_history.join("\n\n");
-
             debug!(
                 iteration = iteration,
-                prompt_len = full_prompt.len(),
-                "Executing LLM call"
+                messages_count = messages.len(),
+                "Executing LLM call with JSON function calling"
             );
 
-            // Execute LLM call
-            let llm_result = self
+            // Execute LLM call with tools via JSON function calling API
+            let response = match self
                 .provider_manager
-                .complete_with_provider(
+                .complete_with_tools(
                     provider_type,
-                    &full_prompt,
-                    Some(&system_prompt),
-                    Some(&self.config.llm.model),
+                    messages.clone(),
+                    tools_json.clone(),
+                    Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
+                    &self.config.llm.model,
                     self.config.llm.temperature,
                     self.config.llm.max_tokens,
                 )
-                .await;
-
-            let response = match llm_result {
+                .await
+            {
                 Ok(r) => {
-                    total_tokens_input += r.tokens_input;
-                    total_tokens_output += r.tokens_output;
+                    // Track token usage from response using provider-specific adapter
+                    let (input_tokens, output_tokens) = adapter.extract_usage(&r);
+                    total_tokens_input += input_tokens;
+                    total_tokens_output += output_tokens;
+
+                    debug!(
+                        input_tokens = input_tokens,
+                        output_tokens = output_tokens,
+                        total_input = total_tokens_input,
+                        total_output = total_tokens_output,
+                        "Accumulated token usage"
+                    );
+
                     r
                 }
                 Err(e) => {
-                    // Check for "No content provided" error from Rig.rs
-                    // This occurs when Mistral API returns empty content, typically after completing tool iterations
-                    // Instead of failing, treat it as a completion signal
-                    let error_str = e.to_string();
-                    if error_str.contains("No content provided") && iteration > 1 {
-                        warn!(
-                            iteration = iteration,
-                            "Rig.rs returned 'No content provided', treating as task completion"
-                        );
-                        final_response_content = format!(
-                            "Task completed after {} iteration(s). Tool executions completed successfully.\n\n\
-                             Note: LLM returned empty response on final iteration, which indicates the task is complete.",
-                            iteration - 1
-                        );
-                        break;
-                    }
-
-                    error!(error = %e, iteration = iteration, "LLM call failed");
+                    error!(error = %e, iteration = iteration, "LLM call with tools failed");
 
                     let error_message = match &e {
                         LLMError::ConnectionError(msg) => {
-                            format!("Connection error: {}\n\nMake sure the LLM service is running and accessible.", msg)
+                            format!(
+                                "Connection error: {}\n\nMake sure the LLM service is running and accessible.",
+                                msg
+                            )
                         }
                         LLMError::ModelNotFound(msg) => format!("Model not found: {}", msg),
                         LLMError::MissingApiKey(provider) => {
@@ -1253,301 +1112,112 @@ impl Agent for LLMAgent {
                 }
             };
 
-            // Handle empty LLM response gracefully
-            // This can occur when the LLM has completed tool iterations but returns no text content
-            // Instead of failing, treat it as a completion signal
-            if response.content.trim().is_empty() {
-                warn!(
-                    iteration = iteration,
-                    "LLM returned empty content, treating as task completion"
-                );
-                final_response_content = format!(
-                    "Task completed after {} iteration(s). Tool executions completed successfully.",
-                    iteration
-                );
-                break;
-            }
+            // Parse tool calls from response using the adapter (JSON function calling)
+            let function_calls = adapter.parse_tool_calls(&response);
 
-            // Parse tool calls from response
-            let tool_calls = Self::parse_tool_calls(&response.content);
-
-            if tool_calls.is_empty() {
-                // Check if this might be a malformed tool call that wasn't parsed
-                if let Some(format_error) = Self::detect_malformed_tool_calls(&response.content) {
-                    warn!(error = %format_error, "Detected malformed tool call, injecting feedback");
-
-                    // Create feedback as a tool execution result
-                    let error_result = ToolExecutionResult {
-                        tool_name: "FORMAT_ERROR".to_string(),
-                        success: false,
-                        result: serde_json::json!({}),
-                        error: Some(format_error),
-                    };
-
-                    // Format and add to conversation for LLM to learn from
-                    let error_feedback = Self::format_tool_results(&[error_result]);
-                    let continuation = format!(
-                        "Tool execution results:\n{}\n\n\
-                         Please correct the tool call format and try again.",
-                        error_feedback
+            // Check if we're finished (no tool calls)
+            if function_calls.is_empty() {
+                // Extract final content from response
+                if let Some(content) = adapter.extract_content(&response) {
+                    if !content.trim().is_empty() {
+                        final_response_content = content;
+                    } else {
+                        // Handle empty LLM response gracefully
+                        warn!(
+                            iteration = iteration,
+                            "LLM returned empty content, treating as task completion"
+                        );
+                        final_response_content = format!(
+                            "Task completed after {} iteration(s). Tool executions completed successfully.",
+                            iteration
+                        );
+                    }
+                } else {
+                    final_response_content = format!(
+                        "Task completed after {} iteration(s). Tool executions completed successfully.",
+                        iteration
                     );
-                    conversation_history.push(continuation);
-
-                    // Continue the loop to let LLM retry
-                    continue;
                 }
-
-                // No more tool calls, we're done
-                final_response_content = Self::strip_tool_calls(&response.content);
                 debug!(iteration = iteration, "No tool calls found, finishing");
                 break;
             }
 
-            // Also handle parse errors in successfully matched tool calls
-            let parse_errors: Vec<_> = tool_calls
-                .iter()
-                .filter_map(|c| {
-                    c.parse_error
-                        .as_ref()
-                        .map(|e| (c.tool_name.clone(), e.clone()))
-                })
-                .collect();
-
-            if !parse_errors.is_empty() {
-                let error_results: Vec<_> = parse_errors
-                    .iter()
-                    .map(|(name, error)| ToolExecutionResult {
-                        tool_name: name.clone(),
-                        success: false,
-                        result: serde_json::json!({}),
-                        error: Some(error.clone()),
-                    })
-                    .collect();
-
-                // Emit error events
-                for (name, _) in &parse_errors {
-                    self.emit_progress(StreamChunk::tool_start(
-                        event_workflow_id.clone(),
-                        name.clone(),
-                    ));
-                    self.emit_progress(StreamChunk::tool_end(
-                        event_workflow_id.clone(),
-                        name.clone(),
-                        0,
-                    ));
-                }
-
-                // Add error feedback to conversation
-                let error_feedback = Self::format_tool_results(&error_results);
-                conversation_history.push(format!(
-                    "Tool execution results:\n{}\n\n\
-                     Please fix the JSON format errors and retry.",
-                    error_feedback
-                ));
-                continue;
-            }
-
-            // Filter out calls with parse errors for actual execution
-            let valid_calls: Vec<_> = tool_calls
-                .into_iter()
-                .filter(|c| c.parse_error.is_none())
-                .collect();
-
             info!(
                 iteration = iteration,
-                tool_calls_count = valid_calls.len(),
+                tool_calls_count = function_calls.len(),
                 "Found tool calls, executing"
             );
 
             // Emit progress event about found tool calls
-            let tool_names: Vec<String> = valid_calls.iter().map(|c| c.tool_name.clone()).collect();
+            let tool_names: Vec<String> = function_calls.iter().map(|c| c.name.clone()).collect();
             self.emit_progress(StreamChunk::reasoning(
                 event_workflow_id.clone(),
                 format!(
                     "Executing {} tool(s): {}",
-                    valid_calls.len(),
+                    function_calls.len(),
                     tool_names.join(", ")
                 ),
             ));
 
-            // Execute each tool call with detailed tracking
-            let mut execution_results = Vec::new();
+            // Add assistant message with tool calls to messages array
+            // This preserves the conversation flow for the next iteration
+            let assistant_message = adapter.build_assistant_message(&response);
+            messages.push(assistant_message);
 
-            for call in valid_calls {
+            // Execute each function call and collect results
+            for call in &function_calls {
                 let exec_start = std::time::Instant::now();
-                let input_params = call.arguments.clone();
 
                 // Emit tool_start event
                 self.emit_progress(StreamChunk::tool_start(
                     event_workflow_id.clone(),
-                    call.tool_name.clone(),
+                    call.name.clone(),
                 ));
 
-                let result = if call.is_mcp {
-                    // MCP tool execution
-                    if let (Some(server), Some(tool)) = (&call.mcp_server, &call.mcp_tool) {
-                        if let Some(ref mcp) = mcp_manager {
-                            mcp_calls_made.push(call.tool_name.clone());
-                            let exec_result =
-                                Self::execute_mcp_tool(mcp, server, tool, call.arguments).await;
+                // Execute the function call using our helper
+                let result = self
+                    .execute_function_call(
+                        call,
+                        &local_tools,
+                        mcp_manager.as_ref(),
+                        &mut tools_used,
+                        &mut mcp_calls_made,
+                    )
+                    .await;
 
-                            // Capture detailed execution data for MCP tool
-                            let exec_duration = exec_start.elapsed().as_millis() as u64;
-                            tool_executions_data.push(ToolExecutionData {
-                                tool_type: "mcp".to_string(),
-                                tool_name: tool.clone(),
-                                server_name: Some(server.clone()),
-                                input_params: input_params.clone(),
-                                output_result: exec_result.result.clone(),
-                                success: exec_result.success,
-                                error_message: exec_result.error.clone(),
-                                duration_ms: exec_duration,
-                                iteration: iteration as u32,
-                            });
-
-                            exec_result
-                        } else {
-                            let exec_result = ToolExecutionResult {
-                                tool_name: call.tool_name.clone(),
-                                success: false,
-                                result: serde_json::json!({}),
-                                error: Some("MCP manager not available".to_string()),
-                            };
-
-                            // Capture failed execution data
-                            let exec_duration = exec_start.elapsed().as_millis() as u64;
-                            tool_executions_data.push(ToolExecutionData {
-                                tool_type: "mcp".to_string(),
-                                tool_name: call.tool_name.clone(),
-                                server_name: call.mcp_server.clone(),
-                                input_params: input_params.clone(),
-                                output_result: exec_result.result.clone(),
-                                success: false,
-                                error_message: exec_result.error.clone(),
-                                duration_ms: exec_duration,
-                                iteration: iteration as u32,
-                            });
-
-                            exec_result
-                        }
+                // Capture detailed execution data
+                let exec_duration = exec_start.elapsed().as_millis() as u64;
+                let tool_type = if call.is_mcp_tool() { "mcp" } else { "local" };
+                let (server_name, tool_name_for_data) =
+                    if let Some((server, tool)) = call.parse_mcp_name() {
+                        (Some(server.to_string()), tool.to_string())
                     } else {
-                        let exec_result = ToolExecutionResult {
-                            tool_name: call.tool_name.clone(),
-                            success: false,
-                            result: serde_json::json!({}),
-                            error: Some("Invalid MCP tool format".to_string()),
-                        };
+                        (None, call.name.clone())
+                    };
 
-                        // Capture failed execution data
-                        let exec_duration = exec_start.elapsed().as_millis() as u64;
-                        tool_executions_data.push(ToolExecutionData {
-                            tool_type: "mcp".to_string(),
-                            tool_name: call.tool_name.clone(),
-                            server_name: None,
-                            input_params: input_params.clone(),
-                            output_result: exec_result.result.clone(),
-                            success: false,
-                            error_message: exec_result.error.clone(),
-                            duration_ms: exec_duration,
-                            iteration: iteration as u32,
-                        });
+                tool_executions_data.push(ToolExecutionData {
+                    tool_type: tool_type.to_string(),
+                    tool_name: tool_name_for_data,
+                    server_name,
+                    input_params: call.arguments.clone(),
+                    output_result: result.result.clone(),
+                    success: result.success,
+                    error_message: result.error.clone(),
+                    duration_ms: exec_duration,
+                    iteration: iteration as u32,
+                });
 
-                        exec_result
-                    }
-                } else {
-                    // Local tool execution
-                    let matching_tool = local_tools
-                        .iter()
-                        .find(|t| t.definition().id == call.tool_name);
-
-                    if let Some(tool) = matching_tool {
-                        tools_used.push(call.tool_name.clone());
-                        let exec_result = Self::execute_local_tool(tool, call.arguments).await;
-
-                        // Capture detailed execution data for local tool
-                        let exec_duration = exec_start.elapsed().as_millis() as u64;
-                        tool_executions_data.push(ToolExecutionData {
-                            tool_type: "local".to_string(),
-                            tool_name: call.tool_name.clone(),
-                            server_name: None,
-                            input_params: input_params.clone(),
-                            output_result: exec_result.result.clone(),
-                            success: exec_result.success,
-                            error_message: exec_result.error.clone(),
-                            duration_ms: exec_duration,
-                            iteration: iteration as u32,
-                        });
-
-                        exec_result
-                    } else {
-                        let exec_result = ToolExecutionResult {
-                            tool_name: call.tool_name.clone(),
-                            success: false,
-                            result: serde_json::json!({}),
-                            error: Some(format!(
-                                "Unknown tool '{}'. Available tools: {}",
-                                call.tool_name,
-                                local_tools
-                                    .iter()
-                                    .map(|t| t.definition().id)
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            )),
-                        };
-
-                        // Capture failed execution data
-                        let exec_duration = exec_start.elapsed().as_millis() as u64;
-                        tool_executions_data.push(ToolExecutionData {
-                            tool_type: "local".to_string(),
-                            tool_name: call.tool_name.clone(),
-                            server_name: None,
-                            input_params: input_params.clone(),
-                            output_result: exec_result.result.clone(),
-                            success: false,
-                            error_message: exec_result.error.clone(),
-                            duration_ms: exec_duration,
-                            iteration: iteration as u32,
-                        });
-
-                        exec_result
-                    }
-                };
-
-                // Calculate duration and emit tool_end event
-                let tool_duration = exec_start.elapsed().as_millis() as u64;
+                // Emit tool_end event
                 self.emit_progress(StreamChunk::tool_end(
                     event_workflow_id.clone(),
-                    call.tool_name.clone(),
-                    tool_duration,
+                    call.name.clone(),
+                    exec_duration,
                 ));
 
-                execution_results.push(result);
+                // Format and add tool result to messages using adapter
+                let tool_message = adapter.format_tool_result(&result);
+                messages.push(tool_message);
             }
-
-            // Format results and add to conversation
-            let results_text = Self::format_tool_results(&execution_results);
-            let clean_response = Self::strip_tool_calls(&response.content);
-
-            // Build continuation context for next iteration
-            // Mistral API requires the last message to be from "user" or "tool" role.
-            // We structure the prompt as a user request with embedded context to satisfy this constraint.
-            // Pattern from CrewAI/AutoGen: append a user continuation message after tool results.
-            let continuation = format!(
-                "---\n\
-                 Context from previous step:\n\
-                 {}\n\n\
-                 Tool execution results:\n\
-                 {}\n\
-                 ---\n\n\
-                 Based on the tool results above, please continue with the task.",
-                if clean_response.is_empty() {
-                    "(No additional text)".to_string()
-                } else {
-                    clean_response
-                },
-                results_text
-            );
-            conversation_history.push(continuation);
         }
 
         let duration_ms = start.elapsed().as_millis() as u64;
@@ -1807,187 +1477,9 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_parse_tool_calls_single_local() {
-        let response = r#"I will use the MemoryTool to store this.
-
-<tool_call name="MemoryTool">
-{"operation": "add", "type": "knowledge", "content": "Important fact"}
-</tool_call>
-
-Let me know if you need anything else."#;
-
-        let calls = LLMAgent::parse_tool_calls(response);
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].tool_name, "MemoryTool");
-        assert!(!calls[0].is_mcp);
-        assert_eq!(calls[0].arguments["operation"], "add");
-        assert_eq!(calls[0].arguments["type"], "knowledge");
-    }
-
-    #[test]
-    fn test_parse_tool_calls_mcp() {
-        let response = r#"I will search for the symbol.
-
-<tool_call name="serena:find_symbol">
-{"name_path_pattern": "MyClass", "include_body": true}
-</tool_call>"#;
-
-        let calls = LLMAgent::parse_tool_calls(response);
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].tool_name, "serena:find_symbol");
-        assert!(calls[0].is_mcp);
-        assert_eq!(calls[0].mcp_server, Some("serena".to_string()));
-        assert_eq!(calls[0].mcp_tool, Some("find_symbol".to_string()));
-    }
-
-    #[test]
-    fn test_parse_tool_calls_multiple() {
-        let response = r#"Let me create tasks and store memory.
-
-<tool_call name="TodoTool">
-{"operation": "create", "name": "Analyze code", "priority": 1}
-</tool_call>
-
-Now I'll store that for later.
-
-<tool_call name="MemoryTool">
-{"operation": "add", "type": "context", "content": "Task created"}
-</tool_call>"#;
-
-        let calls = LLMAgent::parse_tool_calls(response);
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0].tool_name, "TodoTool");
-        assert_eq!(calls[1].tool_name, "MemoryTool");
-    }
-
-    #[test]
-    fn test_parse_tool_calls_none() {
-        let response = "I don't need to use any tools for this response.";
-
-        let calls = LLMAgent::parse_tool_calls(response);
-        assert!(calls.is_empty());
-    }
-
-    #[test]
-    fn test_parse_tool_calls_invalid_json() {
-        let response = r#"<tool_call name="MemoryTool">
-{invalid json here}
-</tool_call>"#;
-
-        let calls = LLMAgent::parse_tool_calls(response);
-        // Now we expect the call to be returned with parse_error set
-        assert_eq!(calls.len(), 1);
-        assert!(calls[0].parse_error.is_some());
-        assert_eq!(calls[0].tool_name, "MemoryTool");
-    }
-
-    #[test]
-    fn test_format_tool_results_success() {
-        let results = vec![ToolExecutionResult {
-            tool_name: "MemoryTool".to_string(),
-            success: true,
-            result: serde_json::json!({"success": true, "memory_id": "abc123"}),
-            error: None,
-        }];
-
-        let formatted = LLMAgent::format_tool_results(&results);
-        assert!(formatted.contains("MemoryTool"));
-        assert!(formatted.contains("success=\"true\""));
-        assert!(formatted.contains("abc123"));
-    }
-
-    #[test]
-    fn test_format_tool_results_failure() {
-        let results = vec![ToolExecutionResult {
-            tool_name: "TodoTool".to_string(),
-            success: false,
-            result: serde_json::json!({}),
-            error: Some("Task not found".to_string()),
-        }];
-
-        let formatted = LLMAgent::format_tool_results(&results);
-        assert!(formatted.contains("TodoTool"));
-        assert!(formatted.contains("success=\"false\""));
-        assert!(formatted.contains("Task not found"));
-    }
-
-    #[test]
-    fn test_strip_tool_calls() {
-        let response = r#"I will help you with that.
-
-<tool_call name="MemoryTool">
-{"operation": "add"}
-</tool_call>
-
-Here is some more text after the tool call."#;
-
-        let stripped = LLMAgent::strip_tool_calls(response);
-        assert!(!stripped.contains("<tool_call"));
-        assert!(!stripped.contains("</tool_call>"));
-        assert!(stripped.contains("I will help you with that"));
-        assert!(stripped.contains("Here is some more text"));
-    }
-
-    #[test]
-    fn test_strip_tool_calls_multiple() {
-        let response = r#"First part.
-
-<tool_call name="Tool1">
-{"a": 1}
-</tool_call>
-
-Middle.
-
-<tool_call name="Tool2">
-{"b": 2}
-</tool_call>
-
-End."#;
-
-        let stripped = LLMAgent::strip_tool_calls(response);
-        assert!(stripped.contains("First part"));
-        assert!(stripped.contains("Middle"));
-        assert!(stripped.contains("End"));
-        assert!(!stripped.contains("tool_call"));
-    }
-
-    #[test]
-    fn test_detect_malformed_tool_calls_wrong_closing() {
-        let content = r#"<tool_call name="MemoryTool">{"op": "search"}</tool_result>"#;
-        let error = LLMAgent::detect_malformed_tool_calls(content);
-        assert!(error.is_some());
-        assert!(error.unwrap().contains("</tool_result>"));
-    }
-
-    #[test]
-    fn test_detect_malformed_tool_calls_missing_closing() {
-        let content = r#"<tool_call name="MemoryTool">{"op": "search"}"#;
-        let error = LLMAgent::detect_malformed_tool_calls(content);
-        assert!(error.is_some());
-        assert!(error.unwrap().contains("missing"));
-    }
-
-    #[test]
-    fn test_detect_malformed_tool_calls_valid() {
-        let content = r#"<tool_call name="MemoryTool">{"op": "search"}</tool_call>"#;
-        let error = LLMAgent::detect_malformed_tool_calls(content);
-        assert!(error.is_none());
-    }
-
-    #[test]
-    fn test_tolerant_regex_accepts_tool_result() {
-        let content = r#"<tool_call name="MemoryTool">{"operation": "search", "query": "test"}</tool_result>"#;
-        let calls = LLMAgent::parse_tool_calls(content);
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].tool_name, "MemoryTool");
-    }
-
-    #[test]
-    fn test_parse_tool_calls_with_json_error() {
-        let content = r#"<tool_call name="MemoryTool">{invalid json}</tool_call>"#;
-        let calls = LLMAgent::parse_tool_calls(content);
-        assert_eq!(calls.len(), 1);
-        assert!(calls[0].parse_error.is_some());
-    }
+    // Note: XML-based tool calling tests have been removed.
+    // JSON function calling tests are in:
+    // - src/llm/adapters/tests.rs (adapter parsing)
+    // - src/models/function_calling.rs (type tests)
+    // - Integration tests in tests/ directory
 }

@@ -33,7 +33,6 @@ Uses extracted components, services, and stores for clean architecture.
 		workflows,
 		selectedWorkflow,
 		filteredWorkflows,
-		workflowsLoading,
 		workflowSearchFilter
 	} from '$lib/stores/workflows';
 	import {
@@ -48,6 +47,8 @@ Uses extracted components, services, and stores for clean architecture.
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
 	import { validationStore, hasPendingValidation, pendingValidation } from '$lib/stores/validation';
+	import { fetchModelByApiName } from '$lib/stores/llm';
+	import type { ProviderType } from '$types/llm';
 
 	/** LocalStorage key for persisting selected workflow */
 	const LAST_WORKFLOW_KEY = 'zileo_last_workflow_id';
@@ -73,7 +74,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/** Agent config (loaded on demand) */
 	let currentMaxIterations = $state(50);
-	let currentContextWindow = $state(128000);
+	let _currentContextWindow = $state(128000);
 
 	/** Messages (local state, could move to store later) */
 	let messages = $state<Message[]>([]);
@@ -253,16 +254,34 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/**
 	 * Load agent configuration (max iterations and model info).
+	 * Also loads the full model data to get context_window and pricing.
 	 */
 	async function loadAgentConfig(agentId: string): Promise<void> {
 		try {
 			const config = await agentStore.getAgentConfig(agentId);
 			currentMaxIterations = config.max_tool_iterations ?? 50;
-			currentContextWindow = config.llm?.max_tokens ?? 128000;
+
+			// Load full model data to get context_window and pricing
+			if (config.llm?.model && config.llm?.provider) {
+				try {
+					const model = await fetchModelByApiName(
+						config.llm.model,
+						config.llm.provider.toLowerCase() as ProviderType
+					);
+					// Update token store with model context window and pricing
+					tokenStore.updateFromModel(model);
+					_currentContextWindow = model.context_window;
+				} catch (modelErr) {
+					console.warn('Failed to load model for token metrics, using defaults:', modelErr);
+					_currentContextWindow = 128000;
+				}
+			} else {
+				_currentContextWindow = 128000;
+			}
 		} catch (e) {
 			console.error('Failed to load agent config:', e);
 			currentMaxIterations = 50;
-			currentContextWindow = 128000;
+			_currentContextWindow = 128000;
 		}
 	}
 
@@ -299,15 +318,24 @@ Uses extracted components, services, and stores for clean architecture.
 				selectedAgentId
 			);
 
-			// 4. Save and display assistant response
+			// 4. Update streaming tokens and cost with final result
+			tokenStore.setInputTokens(result.metrics.tokens_input);
+			tokenStore.updateStreamingTokens(result.metrics.tokens_output);
+			tokenStore.setSessionCost(result.metrics.cost_usd);
+
+			// 5. Save and display assistant response
 			await MessageService.saveAssistant(selectedWorkflowId, result.report, result.metrics);
 			messages = [...messages, createLocalAssistantMessage(result)];
 
-			// 5. Capture streaming activities to historical
+			// 6. Capture streaming activities to historical
 			activityStore.captureStreamingActivities();
 
-			// 6. Refresh workflows to update cumulative tokens
+			// 7. Refresh workflows and update cumulative tokens
 			await workflowStore.loadWorkflows();
+			const workflow = workflowStore.getSelected();
+			if (workflow) {
+				tokenStore.updateFromWorkflow(workflow);
+			}
 
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);

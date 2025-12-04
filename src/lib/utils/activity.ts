@@ -80,7 +80,7 @@ export function activeSubAgentToActivity(
  */
 export function activeReasoningToActivity(
 	step: ActiveReasoningStep,
-	index: number
+	_index: number
 ): WorkflowActivityEvent {
 	// Use stepNumber for unique ID (more reliable than timestamp+index which can collide)
 	return {

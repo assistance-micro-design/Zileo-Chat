@@ -40,6 +40,7 @@ mod tool_factory_tests {
             "MemoryTool",
             Some("wf_integration_test".to_string()),
             "integration_test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_ok(), "Should create MemoryTool");
@@ -66,6 +67,7 @@ mod tool_factory_tests {
             "TodoTool",
             Some("wf_integration_test".to_string()),
             "integration_test_agent".to_string(),
+            None,
         );
 
         assert!(result.is_ok(), "Should create TodoTool");
@@ -95,6 +97,7 @@ mod tool_factory_tests {
             &tool_names,
             Some("wf_batch".to_string()),
             "batch_agent".to_string(),
+            None, // app_handle not needed in tests
         );
 
         // Should create 2 valid tools, skip 1 invalid
@@ -284,6 +287,7 @@ mod agent_config_tests {
             mcp_servers: vec![],
             system_prompt: "You are an agent with memory capabilities.".to_string(),
             max_tool_iterations: 50,
+            enable_thinking: true,
         };
 
         assert!(config.has_valid_tools());

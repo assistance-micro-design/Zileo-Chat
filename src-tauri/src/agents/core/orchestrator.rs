@@ -180,7 +180,7 @@ mod tests {
                     mcp_servers: vec![],
                     system_prompt: "Test prompt".to_string(),
                     max_tool_iterations: 50,
-            enable_thinking: true,
+                    enable_thinking: true,
                 },
                 delay_ms,
             }
@@ -254,7 +254,7 @@ mod tests {
                     mcp_servers: vec![],
                     system_prompt: "Test prompt".to_string(),
                     max_tool_iterations: 50,
-            enable_thinking: true,
+                    enable_thinking: true,
                 },
             }
         }

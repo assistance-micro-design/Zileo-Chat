@@ -398,6 +398,17 @@ export async function fetchModel(id: string): Promise<LLMModel> {
 }
 
 /**
+ * Gets a model by API name and provider.
+ * Used to retrieve model details (context_window, pricing) from agent config.
+ * @param apiName - Model API name (e.g., "mistral-large-latest")
+ * @param provider - Provider type (e.g., "mistral", "ollama")
+ * @returns Promise resolving to the model
+ */
+export async function fetchModelByApiName(apiName: string, provider: ProviderType): Promise<LLMModel> {
+	return invoke<LLMModel>('get_model_by_api_name', { apiName, provider });
+}
+
+/**
  * Creates a new custom model.
  * @param data - Model creation data
  * @returns Promise resolving to created model

@@ -239,6 +239,66 @@ impl ProviderManager {
         }
     }
 
+    /// Completes with tools using a specific provider.
+    ///
+    /// This method is used for JSON function calling with tool definitions.
+    ///
+    /// # Arguments
+    /// * `provider` - Which provider to use
+    /// * `messages` - Conversation history as JSON messages
+    /// * `tools` - Tool definitions in OpenAI format
+    /// * `tool_choice` - How the model should use tools (provider-specific)
+    /// * `model` - Model to use
+    /// * `temperature` - Sampling temperature
+    /// * `max_tokens` - Maximum tokens to generate
+    ///
+    /// # Returns
+    /// Raw JSON response from the API (caller should use adapter to parse)
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(
+        name = "manager_complete_with_tools",
+        skip(self, messages, tools, tool_choice),
+        fields(provider = ?provider, tools_count = tools.len())
+    )]
+    pub async fn complete_with_tools(
+        &self,
+        provider: ProviderType,
+        messages: Vec<serde_json::Value>,
+        tools: Vec<serde_json::Value>,
+        tool_choice: Option<serde_json::Value>,
+        model: &str,
+        temperature: f32,
+        max_tokens: usize,
+    ) -> Result<serde_json::Value, LLMError> {
+        debug!(
+            ?provider,
+            model = model,
+            tools_count = tools.len(),
+            "Executing completion with tools via manager"
+        );
+
+        match provider {
+            ProviderType::Mistral => {
+                self.mistral
+                    .complete_with_tools(
+                        messages,
+                        tools,
+                        tool_choice,
+                        model,
+                        temperature,
+                        max_tokens,
+                    )
+                    .await
+            }
+            ProviderType::Ollama => {
+                // Ollama doesn't use tool_choice, so we ignore it
+                self.ollama
+                    .complete_with_tools(messages, tools, model, temperature, max_tokens)
+                    .await
+            }
+        }
+    }
+
     /// Streaming completion using the active provider
     pub async fn complete_stream(
         &self,
