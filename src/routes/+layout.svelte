@@ -2,12 +2,14 @@
 	import { onMount } from 'svelte';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
+	import { localeStore } from '$lib/stores/locale';
 	import { AppContainer, FloatingMenu } from '$lib/components/layout';
 
 	let { children } = $props();
 
 	onMount(() => {
 		theme.init();
+		localeStore.init();
 	});
 </script>
 

@@ -14,6 +14,7 @@
 	import type { Snippet } from 'svelte';
 	import { Sun, Moon, Settings, Bot } from 'lucide-svelte';
 	import { theme } from '$lib/stores/theme';
+	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
 
 	/**
 	 * FloatingMenu props
@@ -56,6 +57,8 @@
 		{#if actions}
 			{@render actions()}
 		{/if}
+
+		<LanguageSelector />
 
 		<button
 			type="button"

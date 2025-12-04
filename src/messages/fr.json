@@ -1,0 +1,14 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "common_save": "Enregistrer",
+  "common_cancel": "Annuler",
+  "common_delete": "Supprimer",
+  "common_edit": "Modifier",
+  "common_create": "Creer",
+  "common_close": "Fermer",
+  "common_confirm": "Confirmer",
+  "common_loading": "Chargement...",
+  "common_error": "Erreur",
+  "common_success": "Succes",
+  "common_warning": "Attention"
+}
