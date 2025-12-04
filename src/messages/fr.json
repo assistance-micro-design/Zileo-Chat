@@ -742,5 +742,52 @@
   "ui_status_completed": "Termine",
   "ui_status_error": "Erreur",
   "ui_status_label": "Etat : {status}",
-  "ui_modal_close": "Fermer"
+  "ui_modal_close": "Fermer",
+
+  "onboarding_progress": "Etape {current} sur {total}",
+  "onboarding_skip": "Passer",
+  "onboarding_previous": "Precedent",
+  "onboarding_next": "Suivant",
+
+  "onboarding_language_title": "Choisissez votre langue",
+  "onboarding_language_description": "Cette preference sera utilisee dans toute l'application.",
+  "onboarding_language_english": "English",
+  "onboarding_language_french": "Francais",
+
+  "onboarding_theme_title": "Apparence",
+  "onboarding_theme_description": "Selectionnez le theme de votre choix.",
+  "onboarding_theme_light": "Clair",
+  "onboarding_theme_dark": "Sombre",
+
+  "onboarding_welcome_title": "Bienvenue dans Zileo Chat",
+  "onboarding_welcome_description": "Votre assistant IA multi-agents pour le bureau.",
+
+  "onboarding_values_title": "Nos valeurs",
+  "onboarding_values_opensource_title": "Code source libre",
+  "onboarding_values_opensource_description": "Code source libre et transparent. Contribuez et personnalisez.",
+  "onboarding_values_local_title": "Donnees locales",
+  "onboarding_values_local_description": "Vos donnees restent sur votre ordinateur. Aucun nuage obligatoire.",
+  "onboarding_values_api_title": "API de confiance",
+  "onboarding_values_api_description": "Mistral (France, RGPD) et Ollama (nuage prive). Vous choisissez.",
+  "onboarding_values_nonsaas_title": "Non-SaaS",
+  "onboarding_values_nonsaas_description": "Pas d'abonnement. Vous controlez votre installation.",
+
+  "onboarding_apikey_title": "Cle API Mistral",
+  "onboarding_apikey_description": "Entrez votre cle API pour utiliser Mistral AI.",
+  "onboarding_apikey_placeholder": "sk-...",
+  "onboarding_apikey_help": "Obtenez une cle sur console.mistral.ai",
+  "onboarding_apikey_test": "Tester la connexion",
+  "onboarding_apikey_testing": "Test en cours...",
+  "onboarding_apikey_valid": "Connexion reussie !",
+  "onboarding_apikey_invalid": "Cle API invalide",
+  "onboarding_apikey_skip": "Je n'ai pas de cle",
+
+  "onboarding_import_title": "Importer une configuration",
+  "onboarding_import_description": "Demarrez rapidement avec des configurations pre-faites.",
+  "onboarding_import_browse": "Consulter les configurations disponibles",
+  "onboarding_import_skip": "Passer cette etape",
+
+  "onboarding_complete_title": "Configuration terminee !",
+  "onboarding_complete_description": "Vous etes pret a utiliser Zileo Chat.",
+  "onboarding_complete_button": "Commencer"
 }

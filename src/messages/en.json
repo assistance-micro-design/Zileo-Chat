@@ -742,5 +742,52 @@
   "ui_status_completed": "Completed",
   "ui_status_error": "Error",
   "ui_status_label": "Status: {status}",
-  "ui_modal_close": "Close"
+  "ui_modal_close": "Close",
+
+  "onboarding_progress": "Step {current} of {total}",
+  "onboarding_skip": "Skip",
+  "onboarding_previous": "Previous",
+  "onboarding_next": "Next",
+
+  "onboarding_language_title": "Choose your language",
+  "onboarding_language_description": "This preference will be used throughout the application.",
+  "onboarding_language_english": "English",
+  "onboarding_language_french": "Francais",
+
+  "onboarding_theme_title": "Appearance",
+  "onboarding_theme_description": "Select your preferred theme.",
+  "onboarding_theme_light": "Light",
+  "onboarding_theme_dark": "Dark",
+
+  "onboarding_welcome_title": "Welcome to Zileo Chat",
+  "onboarding_welcome_description": "Your multi-agent AI assistant for desktop.",
+
+  "onboarding_values_title": "Our Values",
+  "onboarding_values_opensource_title": "Open Source",
+  "onboarding_values_opensource_description": "Free and transparent source code. Contribute and customize.",
+  "onboarding_values_local_title": "Local Data",
+  "onboarding_values_local_description": "Your data stays on your computer. No cloud required.",
+  "onboarding_values_api_title": "Trusted APIs",
+  "onboarding_values_api_description": "Mistral (France, GDPR) and Ollama (private cloud). Your choice.",
+  "onboarding_values_nonsaas_title": "Non-SaaS",
+  "onboarding_values_nonsaas_description": "No subscription. You control your installation.",
+
+  "onboarding_apikey_title": "Mistral API Key",
+  "onboarding_apikey_description": "Enter your API key to use Mistral AI.",
+  "onboarding_apikey_placeholder": "sk-...",
+  "onboarding_apikey_help": "Get a key at console.mistral.ai",
+  "onboarding_apikey_test": "Test Connection",
+  "onboarding_apikey_testing": "Testing...",
+  "onboarding_apikey_valid": "Connection successful!",
+  "onboarding_apikey_invalid": "Invalid API key",
+  "onboarding_apikey_skip": "I don't have a key",
+
+  "onboarding_import_title": "Import a Configuration",
+  "onboarding_import_description": "Get started quickly with pre-made configurations.",
+  "onboarding_import_browse": "Browse Available Configurations",
+  "onboarding_import_skip": "Skip this step",
+
+  "onboarding_complete_title": "Setup Complete!",
+  "onboarding_complete_description": "You're ready to use Zileo Chat.",
+  "onboarding_complete_button": "Get Started"
 }

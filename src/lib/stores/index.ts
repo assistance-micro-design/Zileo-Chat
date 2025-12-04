@@ -16,3 +16,4 @@ export * from './prompts';
 export * from './activity';
 export * from './tokens';
 export * from './locale';
+export * from './onboarding';

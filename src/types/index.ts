@@ -38,3 +38,4 @@ export * from './embedding';
 export * from './prompt';
 export * from './importExport';
 export * from './function_calling';
+export * from './onboarding';
