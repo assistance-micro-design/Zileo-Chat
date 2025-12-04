@@ -9,6 +9,7 @@
 <script lang="ts">
 	import type { Message } from '$types/message';
 	import { Clock, Hash } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MessageBubble props
@@ -48,7 +49,7 @@
 		{#if message.tokens > 0}
 			<span class="message-tokens">
 				<Hash size={12} />
-				{message.tokens} tokens
+				{$i18n('chat_tokens').replace('{count}', String(message.tokens))}
 			</span>
 		{/if}
 	</div>

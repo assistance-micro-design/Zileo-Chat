@@ -21,6 +21,7 @@
 	import { filterActivities, countActivitiesByType } from '$lib/utils/activity';
 	import ActivityItem from './ActivityItem.svelte';
 	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ActivityFeed props
@@ -107,10 +108,10 @@
 				<div class="empty-state">
 					{#if isStreaming}
 						<Loader2 class="spinning" size={20} />
-						<span>Waiting for activity...</span>
+						<span>{$i18n('workflow_activity_waiting')}</span>
 					{:else}
 						<Activity size={20} />
-						<span>No activity yet</span>
+						<span>{$i18n('workflow_activity_none')}</span>
 					{/if}
 				</div>
 			{:else}
@@ -121,7 +122,7 @@
 				{#if isStreaming}
 					<div class="streaming-indicator">
 						<Loader2 class="spinning" size={14} />
-						<span>Processing...</span>
+						<span>{$i18n('workflow_activity_processing')}</span>
 					</div>
 				{/if}
 			{/if}

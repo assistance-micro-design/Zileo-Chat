@@ -10,6 +10,7 @@
    */
   import { onMount } from 'svelte';
   import { Button } from '$lib/components/ui';
+  import { i18n } from '$lib/i18n';
   import {
     validationSettingsStore,
     settings,
@@ -33,22 +34,22 @@
   let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
   let hasChanges = $state(false);
 
-  // Mode options for card selector
-  const modeOptions: Array<{ value: ValidationMode; label: string; description: string }> = [
+  // Mode options for card selector (using translation keys)
+  const modeOptions: Array<{ value: ValidationMode; labelKey: string; descKey: string }> = [
     {
       value: 'auto',
-      label: 'Auto',
-      description: 'Execute all operations without confirmation'
+      labelKey: 'validation_mode_auto',
+      descKey: 'validation_mode_auto_desc'
     },
     {
       value: 'manual',
-      label: 'Manual',
-      description: 'Request confirmation for every operation'
+      labelKey: 'validation_mode_manual',
+      descKey: 'validation_mode_manual_desc'
     },
     {
       value: 'selective',
-      label: 'Selective',
-      description: 'Choose which operations require confirmation'
+      labelKey: 'validation_mode_selective',
+      descKey: 'validation_mode_selective_desc'
     }
   ];
 
@@ -99,13 +100,13 @@
         riskThresholds: localRiskThresholds
       };
       await validationSettingsStore.updateSettings(updateRequest);
-      message = { type: 'success', text: 'Settings saved successfully' };
+      message = { type: 'success', text: $i18n('validation_saved') };
       hasChanges = false;
       setTimeout(() => {
         if (message?.type === 'success') message = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: `Failed to save: ${err}` };
+      message = { type: 'error', text: $i18n('validation_save_failed').replace('{error}', String(err)) };
     }
   }
 
@@ -114,13 +115,13 @@
     message = null;
     try {
       await validationSettingsStore.resetToDefaults();
-      message = { type: 'success', text: 'Settings reset to defaults' };
+      message = { type: 'success', text: $i18n('validation_reset_success') };
       hasChanges = false;
       setTimeout(() => {
         if (message?.type === 'success') message = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: `Failed to reset: ${err}` };
+      message = { type: 'error', text: $i18n('validation_reset_failed').replace('{error}', String(err)) };
     }
   }
 </script>
@@ -129,13 +130,13 @@
   {#if $isLoading}
     <div class="loading-state">
       <span class="spinner"></span>
-      <span>Loading settings...</span>
+      <span>{$i18n('validation_loading')}</span>
     </div>
   {:else}
     <!-- Mode Selector -->
     <div class="settings-section">
-      <h3 class="section-title">Validation Mode</h3>
-      <div class="card-selector" role="group" aria-label="Validation mode">
+      <h3 class="section-title">{$i18n('validation_mode_title')}</h3>
+      <div class="card-selector" role="group" aria-label={$i18n('validation_mode_title')}>
         {#each modeOptions as option}
           <button
             type="button"
@@ -143,8 +144,8 @@
             class:selected={localMode === option.value}
             onclick={() => selectMode(option.value)}
           >
-            <span class="selector-card-title">{option.label}</span>
-            <span class="selector-card-description">{option.description}</span>
+            <span class="selector-card-title">{$i18n(option.labelKey)}</span>
+            <span class="selector-card-description">{$i18n(option.descKey)}</span>
           </button>
         {/each}
       </div>
@@ -153,8 +154,8 @@
     <!-- Selective Configuration (conditional) -->
     {#if localMode === 'selective'}
       <div class="settings-section">
-        <h3 class="section-title">Selective Configuration</h3>
-        <p class="section-help">Choose which operations require validation</p>
+        <h3 class="section-title">{$i18n('validation_selective_title')}</h3>
+        <p class="section-help">{$i18n('validation_selective_help')}</p>
         <div class="checkbox-group">
           <label class="checkbox-item">
             <input
@@ -163,8 +164,8 @@
               onchange={markChanged}
             />
             <div class="checkbox-content">
-              <span class="checkbox-label">Sub-Agent Operations</span>
-              <span class="checkbox-description">Validate spawn, delegate, and parallel execution of sub-agents</span>
+              <span class="checkbox-label">{$i18n('validation_sub_agents')}</span>
+              <span class="checkbox-description">{$i18n('validation_sub_agents_desc')}</span>
             </div>
           </label>
         </div>
@@ -173,7 +174,7 @@
 
     <!-- Risk Thresholds -->
     <div class="settings-section">
-      <h3 class="section-title">Risk Thresholds</h3>
+      <h3 class="section-title">{$i18n('validation_risk_title')}</h3>
       <div class="checkbox-group">
         <label class="checkbox-item">
           <input
@@ -182,8 +183,8 @@
             onchange={markChanged}
           />
           <div class="checkbox-content">
-            <span class="checkbox-label">Auto-approve LOW risk operations</span>
-            <span class="checkbox-description">Skip validation for low-risk operations</span>
+            <span class="checkbox-label">{$i18n('validation_risk_auto_approve_low')}</span>
+            <span class="checkbox-description">{$i18n('validation_risk_auto_approve_low_desc')}</span>
           </div>
         </label>
         <label class="checkbox-item">
@@ -193,8 +194,8 @@
             onchange={markChanged}
           />
           <div class="checkbox-content">
-            <span class="checkbox-label">Always confirm HIGH risk operations</span>
-            <span class="checkbox-description warning">Require validation even in Auto mode</span>
+            <span class="checkbox-label">{$i18n('validation_risk_always_confirm_high')}</span>
+            <span class="checkbox-description warning">{$i18n('validation_risk_always_confirm_high_desc')}</span>
           </div>
         </label>
       </div>
@@ -214,14 +215,14 @@
         onclick={handleReset}
         disabled={$isSaving}
       >
-        Reset to Defaults
+        {$i18n('validation_reset_button')}
       </Button>
       <Button
         variant="primary"
         onclick={handleSave}
         disabled={$isSaving || !hasChanges}
       >
-        {$isSaving ? 'Saving...' : 'Save Changes'}
+        {$isSaving ? $i18n('validation_saving') : $i18n('validation_save_changes')}
       </Button>
     </div>
   {/if}

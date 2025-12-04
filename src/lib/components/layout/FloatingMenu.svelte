@@ -14,6 +14,7 @@
 	import type { Snippet } from 'svelte';
 	import { Sun, Moon, Settings, Bot } from 'lucide-svelte';
 	import { theme } from '$lib/stores/theme';
+	import { i18n } from '$lib/i18n';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
 
 	/**
@@ -48,7 +49,7 @@
 	}
 </script>
 
-<nav class="floating-menu" aria-label="Main navigation">
+<nav class="floating-menu" aria-label={$i18n('layout_main_navigation')}>
 	<div class="flex items-center gap-md flex-1">
 		<h1 class="floating-menu-title">{title}</h1>
 	</div>
@@ -64,7 +65,7 @@
 			type="button"
 			class="btn btn-ghost btn-icon"
 			onclick={toggleTheme}
-			aria-label={currentTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+			aria-label={currentTheme === 'light' ? $i18n('layout_switch_to_dark_mode') : $i18n('layout_switch_to_light_mode')}
 		>
 			{#if currentTheme === 'light'}
 				<Moon size={18} />
@@ -75,12 +76,12 @@
 
 		<a href="/settings" class="btn btn-secondary">
 			<Settings size={16} />
-			<span class="floating-menu-link-text">Configuration</span>
+			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
 		</a>
 
 		<a href="/agent" class="btn btn-primary">
 			<Bot size={16} />
-			<span class="floating-menu-link-text">Agent</span>
+			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
 		</a>
 	</div>
 </nav>

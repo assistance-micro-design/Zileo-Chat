@@ -24,6 +24,7 @@
 		Clock,
 		Cpu
 	} from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * SubAgentActivity props
@@ -115,7 +116,7 @@
 		>
 			<div class="header-left">
 				<Cpu size={16} class="panel-icon" />
-				<span class="panel-title">Sub-Agents</span>
+				<span class="panel-title">{$i18n('workflow_sub_agents_title')}</span>
 				<span class="agent-count">{subAgents.length}</span>
 				{#if runningCount > 0}
 					<span class="count-badge running">{runningCount}</span>
@@ -190,7 +191,7 @@
 										{formatDuration(agent.metrics.duration_ms)}
 									</span>
 									<span class="metric">
-										{agent.metrics.tokens_input} in / {agent.metrics.tokens_output} out
+										{$i18n('workflow_sub_agents_in_out').replace('{input}', String(agent.metrics.tokens_input)).replace('{output}', String(agent.metrics.tokens_output))}
 									</span>
 								</div>
 							{/if}

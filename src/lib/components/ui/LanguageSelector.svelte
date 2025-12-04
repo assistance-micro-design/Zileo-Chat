@@ -7,6 +7,7 @@
   <LanguageSelector />
 -->
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
 	import { localeStore, localeInfo } from '$lib/stores/locale';
 	import { LOCALES, SUPPORTED_LOCALES, type Locale } from '$types/i18n';
 
@@ -80,7 +81,7 @@
 		type="button"
 		class="btn btn-ghost btn-icon language-btn"
 		onclick={toggleDropdown}
-		aria-label="Select language"
+		aria-label={$i18n('ui_language_select')}
 		aria-expanded={isOpen}
 		aria-haspopup="listbox"
 	>
@@ -88,7 +89,7 @@
 	</button>
 
 	{#if isOpen}
-		<ul class="dropdown" role="listbox" aria-label="Available languages">
+		<ul class="dropdown" role="listbox" aria-label={$i18n('ui_language_available')}>
 			{#each SUPPORTED_LOCALES as loc}
 				{@const info = LOCALES[loc]}
 				<li role="option" aria-selected={loc === currentInfo.id}>

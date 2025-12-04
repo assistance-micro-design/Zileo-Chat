@@ -19,6 +19,7 @@ Displays an MCP server with status, command info, and action buttons.
 	import type { MCPServer, MCPServerStatus } from '$types/mcp';
 	import { Card, Button, Badge } from '$lib/components/ui';
 	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal, Globe } from 'lucide-svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/**
 	 * MCPServerCard props
@@ -71,17 +72,17 @@ Displays an MCP server with status, command info, and action buttons.
 	function getStatusLabel(status: MCPServerStatus): string {
 		switch (status) {
 			case 'running':
-				return 'Running';
+				return t('mcp_card_status_running');
 			case 'starting':
-				return 'Starting';
+				return t('mcp_card_status_starting');
 			case 'stopped':
-				return 'Stopped';
+				return t('mcp_card_status_stopped');
 			case 'error':
-				return 'Error';
+				return t('mcp_card_status_error');
 			case 'disconnected':
-				return 'Disconnected';
+				return t('mcp_card_status_disconnected');
 			default:
-				return 'Unknown';
+				return t('mcp_card_status_unknown');
 		}
 	}
 
@@ -135,16 +136,16 @@ Displays an MCP server with status, command info, and action buttons.
 
 			<div class="server-stats">
 				<div class="stat-item">
-					<span class="stat-label">Tools</span>
+					<span class="stat-label">{$i18n('mcp_card_tools')}</span>
 					<span class="stat-value">{toolCount}</span>
 				</div>
 				<div class="stat-item">
-					<span class="stat-label">Resources</span>
+					<span class="stat-label">{$i18n('mcp_card_resources')}</span>
 					<span class="stat-value">{resourceCount}</span>
 				</div>
 				{#if !server.enabled}
 					<div class="stat-item disabled-indicator">
-						<span class="stat-value">Disabled</span>
+						<span class="stat-value">{$i18n('mcp_card_disabled')}</span>
 					</div>
 				{/if}
 			</div>
@@ -158,10 +159,10 @@ Displays an MCP server with status, command info, and action buttons.
 				size="sm"
 				onclick={onEdit}
 				disabled={isStarting}
-				ariaLabel="Edit server {server.name}"
+				ariaLabel={$i18n('mcp_card_edit_arialabel').replace('{name}', server.name)}
 			>
 				<Pencil size={16} />
-				<span>Edit</span>
+				<span>{$i18n('mcp_card_edit')}</span>
 			</Button>
 
 			<Button
@@ -169,10 +170,10 @@ Displays an MCP server with status, command info, and action buttons.
 				size="sm"
 				onclick={onTest}
 				disabled={testing || isStarting}
-				ariaLabel="Test connection to {server.name}"
+				ariaLabel={$i18n('mcp_card_test_arialabel').replace('{name}', server.name)}
 			>
 				<TestTube2 size={16} />
-				<span>{testing ? 'Testing...' : 'Test'}</span>
+				<span>{testing ? $i18n('mcp_card_testing') : $i18n('mcp_card_test')}</span>
 			</Button>
 
 			<Button
@@ -180,14 +181,14 @@ Displays an MCP server with status, command info, and action buttons.
 				size="sm"
 				onclick={onToggle}
 				disabled={isStarting || !server.enabled}
-				ariaLabel={isRunning ? `Stop ${server.name}` : `Start ${server.name}`}
+				ariaLabel={isRunning ? $i18n('mcp_card_stop_arialabel').replace('{name}', server.name) : $i18n('mcp_card_start_arialabel').replace('{name}', server.name)}
 			>
 				{#if isRunning}
 					<Square size={16} />
-					<span>Stop</span>
+					<span>{$i18n('mcp_card_stop')}</span>
 				{:else}
 					<Play size={16} />
-					<span>Start</span>
+					<span>{$i18n('mcp_card_start')}</span>
 				{/if}
 			</Button>
 
@@ -196,7 +197,7 @@ Displays an MCP server with status, command info, and action buttons.
 				size="sm"
 				onclick={onDelete}
 				disabled={isRunning || isStarting}
-				ariaLabel="Delete server {server.name}"
+				ariaLabel={$i18n('mcp_card_delete_arialabel').replace('{name}', server.name)}
 			>
 				<Trash2 size={16} />
 			</Button>

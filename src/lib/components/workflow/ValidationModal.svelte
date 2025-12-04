@@ -12,6 +12,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { AlertTriangle, ShieldCheck, Info } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ValidationModal props
@@ -83,7 +84,7 @@
 	}
 </script>
 
-<Modal {open} title="Validation Required" onclose={handleClose}>
+<Modal {open} title={$i18n('workflow_validation_title')} onclose={handleClose}>
 	{#snippet body()}
 		{#if request}
 			<div class="validation-content">
@@ -100,19 +101,19 @@
 					<div class="validation-info">
 						<span class="validation-type">{request.type.replace('_', ' ')}</span>
 						<Badge variant={getRiskBadgeVariant(request.risk_level)}>
-							{request.risk_level} risk
+							{$i18n('workflow_validation_risk').replace('{level}', request.risk_level)}
 						</Badge>
 					</div>
 				</div>
 
 				<div class="validation-operation">
-					<h4>Operation</h4>
+					<h4>{$i18n('workflow_validation_operation')}</h4>
 					<p>{request.operation}</p>
 				</div>
 
 				{#if Object.keys(request.details).length > 0}
 					<div class="validation-details">
-						<h4>Details</h4>
+						<h4>{$i18n('workflow_validation_details')}</h4>
 						<pre>{formatDetails(request.details)}</pre>
 					</div>
 				{/if}
@@ -120,22 +121,22 @@
 				<div class="validation-warning">
 					{#if request.risk_level === 'critical'}
 						<AlertTriangle size={16} />
-						<span>CRITICAL: This operation is flagged as critical risk. Review all details carefully.</span>
+						<span>{$i18n('workflow_validation_critical_warning')}</span>
 					{:else if request.risk_level === 'high'}
 						<AlertTriangle size={16} />
-						<span>This operation has been flagged as high risk. Please review carefully before approving.</span>
+						<span>{$i18n('workflow_validation_high_warning')}</span>
 					{:else if request.risk_level === 'medium'}
 						<Info size={16} />
-						<span>This operation may have side effects. Review the details before proceeding.</span>
+						<span>{$i18n('workflow_validation_medium_warning')}</span>
 					{/if}
 				</div>
 
 				<div class="reject-reason">
-					<label for="reject-reason">Rejection reason (optional)</label>
+					<label for="reject-reason">{$i18n('workflow_validation_reject_label')}</label>
 					<textarea
 						id="reject-reason"
 						bind:value={rejectReason}
-						placeholder="Enter reason for rejection..."
+						placeholder={$i18n('workflow_validation_reject_placeholder')}
 						rows="2"
 					></textarea>
 				</div>
@@ -144,9 +145,9 @@
 	{/snippet}
 
 	{#snippet footer()}
-		<Button variant="ghost" onclick={handleClose}>Cancel</Button>
-		<Button variant="danger" onclick={handleReject}>Reject</Button>
-		<Button variant="primary" onclick={handleApprove}>Approve</Button>
+		<Button variant="ghost" onclick={handleClose}>{$i18n('common_cancel')}</Button>
+		<Button variant="danger" onclick={handleReject}>{$i18n('workflow_validation_reject')}</Button>
+		<Button variant="primary" onclick={handleApprove}>{$i18n('workflow_validation_approve')}</Button>
 	{/snippet}
 </Modal>
 

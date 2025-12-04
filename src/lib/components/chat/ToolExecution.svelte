@@ -11,6 +11,7 @@
 	import type { Status } from '$lib/components/ui/StatusIndicator.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 	import { Wrench, Clock } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * Tool execution status
@@ -49,14 +50,16 @@
 	}
 
 	/**
-	 * Get status label for accessibility
+	 * Get status label for accessibility (i18n)
 	 */
-	const statusLabel = $derived({
-		pending: 'Pending',
-		running: 'Running',
-		completed: 'Completed',
-		error: 'Failed'
-	}[status]);
+	const statusLabel = $derived(
+		({
+			pending: $i18n('chat_tool_pending'),
+			running: $i18n('chat_tool_running'),
+			completed: $i18n('chat_tool_completed'),
+			error: $i18n('chat_tool_failed')
+		})[status]
+	);
 </script>
 
 <div class="tool-execution" class:error={status === 'error'}>

@@ -26,6 +26,7 @@
 		CircleDollarSign,
 		Activity
 	} from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * TokenDisplay props
@@ -75,7 +76,7 @@
 	 * Format cost in USD
 	 */
 	function formatCost(usd: number): string {
-		if (usd === 0) return 'Free';
+		if (usd === 0) return $i18n('workflow_metrics_free');
 		if (usd < 0.0001) return '<$0.0001';
 		if (usd < 0.01) return `$${usd.toFixed(4)}`;
 		return `$${usd.toFixed(2)}`;
@@ -97,7 +98,7 @@
 	class:critical={warningLevel === 'critical'}
 	class:full={warningLevel === 'full'}
 	role="status"
-	aria-label="Token usage metrics"
+	aria-label={$i18n('workflow_token_arialabel')}
 >
 	<!-- Context Progress Section -->
 	<div class="metric context-metric">
@@ -128,7 +129,7 @@
 				</span>
 			</div>
 			{#if !compact}
-				<span class="context-label">{formatTokens(contextUsed)} / {formatTokens(data.context_max)} context</span>
+				<span class="context-label">{formatTokens(contextUsed)} / {formatTokens(data.context_max)} {$i18n('workflow_token_context')}</span>
 			{/if}
 		</div>
 	</div>
@@ -147,7 +148,7 @@
 			<span class="token-value output-value">{formatTokens(data.tokens_output)}</span>
 		</div>
 		{#if !compact}
-			<span class="metric-label">in/out</span>
+			<span class="metric-label">{$i18n('workflow_token_in_out')}</span>
 		{/if}
 	</div>
 
@@ -162,7 +163,7 @@
 				<span class="token-separator">/</span>
 				<span class="token-value output-value">{formatTokens(data.cumulative_output)}</span>
 			</div>
-			<span class="metric-label">total</span>
+			<span class="metric-label">{$i18n('workflow_token_total')}</span>
 		</div>
 	{/if}
 
@@ -187,7 +188,7 @@
 				<Activity size={14} />
 			</div>
 			<span class="speed-value">{formatSpeed(data.speed_tks)}</span>
-			<span class="speed-unit">tk/s</span>
+			<span class="speed-unit">{$i18n('workflow_token_speed')}</span>
 		</div>
 	{/if}
 </div>

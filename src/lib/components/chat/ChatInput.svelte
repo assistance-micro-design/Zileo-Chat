@@ -10,6 +10,7 @@
 	import { Send, BookOpen } from 'lucide-svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ChatInput props
@@ -29,11 +30,16 @@
 
 	let {
 		value = $bindable(''),
-		placeholder = 'Type your message...',
+		placeholder = '',
 		disabled = false,
 		loading = false,
 		onsend
 	}: Props = $props();
+
+	/**
+	 * Get effective placeholder (prop or i18n)
+	 */
+	const effectivePlaceholder = $derived(placeholder || $i18n('chat_input_placeholder'));
 
 	let textareaRef: HTMLTextAreaElement;
 	let showPromptSelector = $state(false);
@@ -96,21 +102,21 @@
 	<textarea
 		bind:this={textareaRef}
 		bind:value
-		{placeholder}
+		placeholder={effectivePlaceholder}
 		disabled={disabled || loading}
 		class="chat-input"
 		rows="1"
 		oninput={handleInput}
 		onkeydown={handleKeydown}
-		aria-label="Message input"
+		aria-label={$i18n('chat_input_arialabel')}
 	></textarea>
 	<button
 		type="button"
 		class="prompt-button"
-		title="Select from prompt library (Ctrl+P)"
+		title={$i18n('chat_prompt_library_title')}
 		disabled={loading || disabled}
 		onclick={() => (showPromptSelector = true)}
-		aria-label="Open prompt library"
+		aria-label={$i18n('chat_prompt_library_arialabel')}
 	>
 		<BookOpen size={18} />
 	</button>
@@ -119,7 +125,7 @@
 		class="send-button"
 		onclick={handleSend}
 		disabled={disabled || loading || !value.trim()}
-		aria-label="Send message"
+		aria-label={$i18n('chat_send_arialabel')}
 	>
 		{#if loading}
 			<Spinner size="sm" />
@@ -127,7 +133,7 @@
 			<Send size={20} />
 		{/if}
 	</button>
-	<span class="keyboard-hint">Ctrl+Enter to send | Ctrl+P for prompts</span>
+	<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
 </div>
 
 <PromptSelectorModal

@@ -13,6 +13,7 @@
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 	import { Bot } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * Union type for items that can be displayed in the selector.
@@ -100,7 +101,10 @@
 			const tools = selectedAgent.tools_count;
 			const mcp = selectedAgent.mcp_servers_count;
 			const parts: string[] = [];
-			if (tools > 0) parts.push(`${tools} tool${tools > 1 ? 's' : ''}`);
+			if (tools > 0) {
+				const toolLabel = tools > 1 ? $i18n('workflow_agent_tools') : $i18n('workflow_agent_tool');
+				parts.push(`${tools} ${toolLabel}`);
+			}
 			if (mcp > 0) parts.push(`${mcp} MCP`);
 			return parts.length > 0 ? parts.join(', ') : null;
 		}
@@ -133,7 +137,7 @@
 		{options}
 		value={selected}
 		{disabled}
-		placeholder="Select an agent..."
+		placeholder={$i18n('workflow_agent_select')}
 		onchange={handleChange}
 	/>
 	{#if selectedAgent}

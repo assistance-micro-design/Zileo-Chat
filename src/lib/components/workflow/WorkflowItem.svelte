@@ -10,6 +10,7 @@
 	import type { Workflow } from '$types/workflow';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 	import { X } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * WorkflowItem props
@@ -115,7 +116,7 @@
 			onblur={finishEdit}
 			onkeydown={handleEditKeydown}
 			onclick={(e) => e.stopPropagation()}
-			aria-label="Workflow name"
+			aria-label={$i18n('workflow_name_arialabel')}
 		/>
 	{:else}
 		<span class="workflow-name">{workflow.name}</span>
@@ -124,7 +125,7 @@
 		type="button"
 		class="workflow-delete"
 		onclick={handleDelete}
-		aria-label={`Delete ${workflow.name}`}
+		aria-label={$i18n('workflow_delete_arialabel').replace('{name}', workflow.name)}
 	>
 		<X size={14} />
 	</button>

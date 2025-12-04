@@ -9,6 +9,7 @@
 <script lang="ts">
 	import type { WorkflowMetrics } from '$types/workflow';
 	import { Clock, Hash, Server, DollarSign } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MetricsBar props
@@ -35,7 +36,7 @@
 	 * Format cost in USD
 	 */
 	function formatCost(usd: number): string {
-		if (usd === 0) return 'Free';
+		if (usd === 0) return $i18n('workflow_metrics_free');
 		if (usd < 0.01) return '<$0.01';
 		return `$${usd.toFixed(4)}`;
 	}
@@ -48,24 +49,24 @@
 	}
 </script>
 
-<div class="metrics-bar" class:compact role="status" aria-label="Workflow metrics">
-	<div class="metric" title="Duration">
+<div class="metrics-bar" class:compact role="status" aria-label={$i18n('workflow_token_arialabel')}>
+	<div class="metric" title={$i18n('workflow_metrics_duration')}>
 		<Clock size={14} />
 		<span class="metric-value">{formatDuration(metrics.duration_ms)}</span>
 		{#if !compact}
-			<span class="metric-label">duration</span>
+			<span class="metric-label">{$i18n('workflow_metrics_duration')}</span>
 		{/if}
 	</div>
 
-	<div class="metric" title="Tokens (input / output)">
+	<div class="metric" title={$i18n('workflow_metrics_tokens_title')}>
 		<Hash size={14} />
 		<span class="metric-value">{formatTokens(metrics.tokens_input, metrics.tokens_output)}</span>
 		{#if !compact}
-			<span class="metric-label">tokens</span>
+			<span class="metric-label">{$i18n('workflow_metrics_tokens')}</span>
 		{/if}
 	</div>
 
-	<div class="metric" title="Provider / Model">
+	<div class="metric" title={$i18n('workflow_metrics_provider_title')}>
 		<Server size={14} />
 		<span class="metric-value">{metrics.provider}</span>
 		{#if !compact}
@@ -74,11 +75,11 @@
 	</div>
 
 	{#if metrics.cost_usd > 0 || !compact}
-		<div class="metric" title="Cost">
+		<div class="metric" title={$i18n('workflow_metrics_cost_title')}>
 			<DollarSign size={14} />
 			<span class="metric-value">{formatCost(metrics.cost_usd)}</span>
 			{#if !compact}
-				<span class="metric-label">cost</span>
+				<span class="metric-label">{$i18n('workflow_metrics_cost')}</span>
 			{/if}
 		</div>
 	{/if}

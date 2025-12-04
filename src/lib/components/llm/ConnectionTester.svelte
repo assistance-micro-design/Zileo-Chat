@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { Button, Spinner, StatusIndicator } from '$lib/components/ui';
 	import { testConnection } from '$lib/stores/llm';
+	import { i18n } from '$lib/i18n';
 	import type { ProviderType, ConnectionTestResult } from '$types/llm';
 
 	/**
@@ -65,10 +66,10 @@
 		{#if testing}
 			<span class="tester-loading">
 				<Spinner size="sm" />
-				<span>Testing...</span>
+				<span>{$i18n('llm_connection_testing')}</span>
 			</span>
 		{:else}
-			Test Connection
+			{$i18n('llm_connection_test')}
 		{/if}
 	</Button>
 
@@ -76,9 +77,9 @@
 		<div class="test-result" class:success={result.success} class:error={!result.success}>
 			<StatusIndicator status={result.success ? 'completed' : 'error'} size="sm" />
 			{#if result.success}
-				<span class="result-text">Connected ({formatLatency(result.latency_ms)})</span>
+				<span class="result-text">{$i18n('llm_connection_connected').replace('{latency}', formatLatency(result.latency_ms))}</span>
 			{:else}
-				<span class="result-text">{result.error_message || 'Connection failed'}</span>
+				<span class="result-text">{result.error_message || $i18n('llm_connection_failed')}</span>
 			{/if}
 		</div>
 	{/if}

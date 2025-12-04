@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
 	import { Card, Badge, Button } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import type { LLMModel } from '$types/llm';
 
 	/**
@@ -70,10 +71,10 @@
 			</div>
 			<div class="model-badges">
 				{#if model.is_builtin}
-					<Badge variant="primary">Builtin</Badge>
+					<Badge variant="primary">{$i18n('llm_model_builtin')}</Badge>
 				{/if}
 				{#if isDefault}
-					<Badge variant="warning">Default</Badge>
+					<Badge variant="warning">{$i18n('llm_model_default')}</Badge>
 				{/if}
 				<span class="provider-name">{formatProvider(model.provider)}</span>
 			</div>
@@ -83,15 +84,15 @@
 	{#snippet body()}
 		<div class="model-specs">
 			<div class="spec-item">
-				<span class="spec-label">Context Window</span>
-				<span class="spec-value">{formatContextWindow(model.context_window)} tokens</span>
+				<span class="spec-label">{$i18n('llm_model_context_window')}</span>
+				<span class="spec-value">{formatContextWindow(model.context_window)} {$i18n('llm_model_tokens')}</span>
 			</div>
 			<div class="spec-item">
-				<span class="spec-label">Max Output</span>
-				<span class="spec-value">{formatNumber(model.max_output_tokens)} tokens</span>
+				<span class="spec-label">{$i18n('llm_model_max_output')}</span>
+				<span class="spec-value">{formatNumber(model.max_output_tokens)} {$i18n('llm_model_tokens')}</span>
 			</div>
 			<div class="spec-item">
-				<span class="spec-label">Temperature</span>
+				<span class="spec-label">{$i18n('llm_model_temperature')}</span>
 				<span class="spec-value">{model.temperature_default.toFixed(1)}</span>
 			</div>
 		</div>
@@ -101,18 +102,18 @@
 		<div class="model-actions">
 			{#if !isDefault && onSetDefault}
 				<Button variant="ghost" size="sm" onclick={onSetDefault}>
-					Set Default
+					{$i18n('llm_model_set_default')}
 				</Button>
 			{/if}
 			{#if !model.is_builtin}
 				{#if onEdit}
 					<Button variant="ghost" size="sm" onclick={onEdit}>
-						Edit
+						{$i18n('llm_model_edit')}
 					</Button>
 				{/if}
 				{#if onDelete}
 					<Button variant="danger" size="sm" onclick={onDelete}>
-						Delete
+						{$i18n('llm_model_delete')}
 					</Button>
 				{/if}
 			{/if}

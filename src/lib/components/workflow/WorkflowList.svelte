@@ -11,6 +11,7 @@
 	import type { Workflow } from '$types/workflow';
 	import WorkflowItem from './WorkflowItem.svelte';
 	import WorkflowItemCompact from './WorkflowItemCompact.svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * WorkflowList props
@@ -33,14 +34,14 @@
 	let { workflows, selectedId, collapsed = false, onselect, ondelete, onrename }: Props = $props();
 </script>
 
-<div class="workflow-list" class:collapsed role="listbox" aria-label="Workflow list">
+<div class="workflow-list" class:collapsed role="listbox" aria-label={$i18n('workflow_list_arialabel')}>
 	{#if workflows.length === 0}
 		<div class="workflow-list-empty">
 			{#if collapsed}
-				<span class="empty-icon" title="No workflows">-</span>
+				<span class="empty-icon" title={$i18n('workflow_no_workflows_short')}>-</span>
 			{:else}
-				<p>No workflows yet</p>
-				<p class="hint">Create a new workflow to get started</p>
+				<p>{$i18n('workflow_no_workflows')}</p>
+				<p class="hint">{$i18n('workflow_no_workflows_hint')}</p>
 			{/if}
 		</div>
 	{:else if collapsed}

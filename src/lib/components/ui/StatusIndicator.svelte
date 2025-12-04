@@ -10,6 +10,8 @@
   <StatusIndicator status="error" />
 -->
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
+
 	/**
 	 * Possible status states
 	 */
@@ -28,9 +30,24 @@
 	let { status, size = 'md' }: Props = $props();
 
 	/**
+	 * Map status to i18n key
+	 */
+	const statusI18nKeys: Record<Status, string> = {
+		idle: 'ui_status_idle',
+		running: 'ui_status_running',
+		completed: 'ui_status_completed',
+		error: 'ui_status_error'
+	};
+
+	/**
+	 * Get translated status label
+	 */
+	const translatedStatus = $derived($i18n(statusI18nKeys[status]));
+
+	/**
 	 * Get aria label for accessibility
 	 */
-	const ariaLabel = $derived(`Status: ${status}`);
+	const ariaLabel = $derived($i18n('ui_status_label').replace('{status}', translatedStatus));
 </script>
 
 <span

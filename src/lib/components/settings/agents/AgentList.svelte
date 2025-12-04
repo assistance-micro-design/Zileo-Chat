@@ -10,6 +10,7 @@ Shows agent summary with actions for edit and delete.
 	import type { AgentSummary } from '$types/agent';
 	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
 	import { Bot, Wrench, Plug, Edit, Trash2 } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * Component props
@@ -35,6 +36,15 @@ Shows agent summary with actions for edit and delete.
 	}
 
 	/**
+	 * Gets localized lifecycle label
+	 */
+	function getLifecycleLabel(lifecycle: string): string {
+		return lifecycle === 'permanent'
+			? $i18n('agents_lifecycle_permanent')
+			: $i18n('agents_lifecycle_temporary');
+	}
+
+	/**
 	 * Formats provider name for display
 	 */
 	function formatProvider(provider: string): string {
@@ -52,7 +62,7 @@ Shows agent summary with actions for edit and delete.
 			{#snippet body()}
 				<div class="loading-state">
 					<StatusIndicator status="running" />
-					<span>Loading agents...</span>
+					<span>{$i18n('agents_loading')}</span>
 				</div>
 			{/snippet}
 		</Card>
@@ -61,10 +71,9 @@ Shows agent summary with actions for edit and delete.
 			{#snippet body()}
 				<div class="empty-state">
 					<Bot size={48} class="empty-icon" />
-					<h3 class="empty-title">No Agents Configured</h3>
+					<h3 class="empty-title">{$i18n('agents_no_agents')}</h3>
 					<p class="empty-description">
-						Create your first agent to start using AI-powered workflows.
-						Agents can use tools and MCP servers to accomplish tasks.
+						{$i18n('agents_no_agents_description')}
 					</p>
 				</div>
 			{/snippet}
@@ -81,43 +90,43 @@ Shows agent summary with actions for edit and delete.
 									<h4 class="agent-name">{agent.name}</h4>
 								</div>
 								<Badge variant={getLifecycleVariant(agent.lifecycle)}>
-									{agent.lifecycle}
+									{getLifecycleLabel(agent.lifecycle)}
 								</Badge>
 							</div>
 
 							<div class="agent-details">
 								<div class="detail-row">
-									<span class="detail-label">Provider</span>
+									<span class="detail-label">{$i18n('agents_provider')}</span>
 									<span class="detail-value">{formatProvider(agent.provider)}</span>
 								</div>
 								<div class="detail-row">
-									<span class="detail-label">Model</span>
+									<span class="detail-label">{$i18n('agents_model')}</span>
 									<span class="detail-value model-value">{agent.model}</span>
 								</div>
 								<div class="detail-row">
 									<span class="detail-label">
 										<Wrench size={14} />
-										Tools
+										{$i18n('agents_tools')}
 									</span>
-									<span class="detail-value">{agent.tools_count} enabled</span>
+									<span class="detail-value">{$i18n('agents_tools_enabled', { count: agent.tools_count })}</span>
 								</div>
 								<div class="detail-row">
 									<span class="detail-label">
 										<Plug size={14} />
-										MCP Servers
+										{$i18n('agents_mcp_servers')}
 									</span>
-									<span class="detail-value">{agent.mcp_servers_count} configured</span>
+									<span class="detail-value">{$i18n('agents_mcp_configured', { count: agent.mcp_servers_count })}</span>
 								</div>
 							</div>
 
 							<div class="agent-actions">
 								<Button variant="ghost" size="sm" onclick={() => onedit(agent.id)}>
 									<Edit size={16} />
-									<span>Edit</span>
+									<span>{$i18n('common_edit')}</span>
 								</Button>
 								<Button variant="danger" size="sm" onclick={() => ondelete(agent.id)}>
 									<Trash2 size={16} />
-									<span>Delete</span>
+									<span>{$i18n('common_delete')}</span>
 								</Button>
 							</div>
 						</div>

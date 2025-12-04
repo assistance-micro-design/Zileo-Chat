@@ -21,6 +21,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { PanelRightClose, PanelRightOpen } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * RightSidebar props
@@ -44,7 +45,7 @@
 	}
 </script>
 
-<aside class="right-sidebar" class:collapsed aria-label="Activity sidebar">
+<aside class="right-sidebar" class:collapsed aria-label={$i18n('layout_activity_sidebar')}>
 	{#if header}
 		<div class="right-sidebar-header">
 			{@render header(collapsed)}
@@ -61,9 +62,9 @@
 		type="button"
 		class="right-sidebar-toggle"
 		onclick={toggleCollapsed}
-		aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+		aria-label={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
 		aria-expanded={!collapsed}
-		title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+		title={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
 	>
 		{#if collapsed}
 			<PanelRightOpen size={18} />

@@ -16,6 +16,7 @@ Displays MCP server connection test results including tools, resources, and late
 	import type { MCPTestResult } from '$types/mcp';
 	import { Button, Badge, Spinner } from '$lib/components/ui';
 	import { CheckCircle2, XCircle, RefreshCw, Wrench, FileText, Clock } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MCPServerTester props
@@ -63,19 +64,19 @@ Displays MCP server connection test results including tools, resources, and late
 	{#if loading}
 		<div class="tester-loading">
 			<Spinner size="md" />
-			<span class="loading-text">Testing connection...</span>
+			<span class="loading-text">{$i18n('mcp_tester_loading')}</span>
 		</div>
 	{:else if error}
 		<div class="tester-error">
 			<div class="error-header">
 				<XCircle size={24} class="error-icon" />
-				<span class="error-title">Test Failed</span>
+				<span class="error-title">{$i18n('mcp_tester_failed')}</span>
 			</div>
 			<p class="error-message">{error}</p>
 			{#if onRetry}
 				<Button variant="ghost" size="sm" onclick={onRetry}>
 					<RefreshCw size={16} />
-					<span>Retry Test</span>
+					<span>{$i18n('mcp_tester_retry')}</span>
 				</Button>
 			{/if}
 		</div>
@@ -84,10 +85,10 @@ Displays MCP server connection test results including tools, resources, and late
 			<div class="result-header">
 				{#if result.success}
 					<CheckCircle2 size={24} class="success-icon" />
-					<span class="result-title">Connection Successful</span>
+					<span class="result-title">{$i18n('mcp_tester_success')}</span>
 				{:else}
 					<XCircle size={24} class="error-icon" />
-					<span class="result-title">Connection Failed</span>
+					<span class="result-title">{$i18n('mcp_tester_failure')}</span>
 				{/if}
 				<Badge variant={result.success ? 'success' : 'error'}>
 					<Clock size={12} />
@@ -103,10 +104,10 @@ Displays MCP server connection test results including tools, resources, and late
 					<div class="detail-section">
 						<div class="section-header">
 							<Wrench size={16} />
-							<span class="section-title">Tools ({result.tools.length})</span>
+							<span class="section-title">{$i18n('mcp_tester_tools')} ({result.tools.length})</span>
 						</div>
 						{#if result.tools.length === 0}
-							<p class="empty-list">No tools available</p>
+							<p class="empty-list">{$i18n('mcp_tester_tools_empty')}</p>
 						{:else}
 							<ul class="tool-list">
 								{#each result.tools as tool}
@@ -125,10 +126,10 @@ Displays MCP server connection test results including tools, resources, and late
 					<div class="detail-section">
 						<div class="section-header">
 							<FileText size={16} />
-							<span class="section-title">Resources ({result.resources.length})</span>
+							<span class="section-title">{$i18n('mcp_tester_resources')} ({result.resources.length})</span>
 						</div>
 						{#if result.resources.length === 0}
-							<p class="empty-list">No resources available</p>
+							<p class="empty-list">{$i18n('mcp_tester_resources_empty')}</p>
 						{:else}
 							<ul class="resource-list">
 								{#each result.resources as resource}
@@ -147,14 +148,14 @@ Displays MCP server connection test results including tools, resources, and late
 				<div class="result-actions">
 					<Button variant="ghost" size="sm" onclick={onRetry}>
 						<RefreshCw size={16} />
-						<span>Test Again</span>
+						<span>{$i18n('mcp_tester_test_again')}</span>
 					</Button>
 				</div>
 			{/if}
 		</div>
 	{:else}
 		<div class="tester-empty">
-			<p class="empty-text">No test results yet. Click Test to check the connection.</p>
+			<p class="empty-text">{$i18n('mcp_tester_empty')}</p>
 		</div>
 	{/if}
 </div>

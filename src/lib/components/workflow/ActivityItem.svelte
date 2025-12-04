@@ -29,6 +29,7 @@
 		User,
 		Flag
 	} from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ActivityItem props
@@ -54,14 +55,8 @@
 	/** Format priority for display */
 	function formatPriority(priority: number | undefined): string {
 		if (priority === undefined) return '';
-		const labels: Record<number, string> = {
-			1: 'Critique',
-			2: 'Haute',
-			3: 'Moyenne',
-			4: 'Basse',
-			5: 'Minimale'
-		};
-		return labels[priority] || `${priority}`;
+		const key = `workflow_activity_priority_${priority}`;
+		return $i18n(key) || `${priority}`;
 	}
 
 	/**
@@ -146,7 +141,7 @@
 				class="expand-btn"
 				onclick={() => (isTaskExpanded = !isTaskExpanded)}
 				aria-expanded={isTaskExpanded}
-				aria-label={isTaskExpanded ? 'Collapse details' : 'Expand details'}
+				aria-label={isTaskExpanded ? $i18n('workflow_activity_collapse') : $i18n('workflow_activity_expand')}
 			>
 				{#if isTaskExpanded}
 					<ChevronDown size={14} />
@@ -179,14 +174,14 @@
 			<div class="task-details">
 				{#if activity.description}
 					<div class="task-detail-row">
-						<span class="task-detail-label">Description</span>
+						<span class="task-detail-label">{$i18n('workflow_activity_description')}</span>
 						<span class="task-detail-value">{activity.description}</span>
 					</div>
 				{/if}
 				{#if activity.metadata?.priority}
 					<div class="task-detail-row">
 						<Flag size={12} class="task-detail-icon" />
-						<span class="task-detail-label">Priorite</span>
+						<span class="task-detail-label">{$i18n('workflow_activity_priority')}</span>
 						<span class="task-detail-value priority-{activity.metadata.priority}">
 							{formatPriority(activity.metadata.priority)}
 						</span>
@@ -195,7 +190,7 @@
 				{#if activity.metadata?.agentAssigned}
 					<div class="task-detail-row">
 						<User size={12} class="task-detail-icon" />
-						<span class="task-detail-label">Agent</span>
+						<span class="task-detail-label">{$i18n('workflow_activity_agent')}</span>
 						<span class="task-detail-value">{activity.metadata.agentAssigned}</span>
 					</div>
 				{/if}

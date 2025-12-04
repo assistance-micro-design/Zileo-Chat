@@ -18,6 +18,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 	import ConnectionTester from './ConnectionTester.svelte';
 	import type { ProviderSettings, ProviderType, LLMModel } from '$types/llm';
 
@@ -49,30 +50,30 @@
 	}: Props = $props();
 
 	/**
-	 * Gets the display name for the provider
+	 * Gets the translation key for provider name
 	 */
-	function getProviderName(p: ProviderType): string {
+	function getProviderNameKey(p: ProviderType): string {
 		switch (p) {
 			case 'mistral':
-				return 'Mistral';
+				return 'llm_provider_mistral';
 			case 'ollama':
-				return 'Ollama';
+				return 'llm_provider_ollama';
 			default:
-				return p;
+				return 'llm_provider_type';
 		}
 	}
 
 	/**
-	 * Gets the provider type description
+	 * Gets the translation key for provider type description
 	 */
-	function getProviderType(p: ProviderType): string {
+	function getProviderTypeKey(p: ProviderType): string {
 		switch (p) {
 			case 'mistral':
-				return 'Cloud API';
+				return 'llm_provider_cloud_api';
 			case 'ollama':
-				return 'Local Server';
+				return 'llm_provider_local_server';
 			default:
-				return 'Provider';
+				return 'llm_provider_type';
 		}
 	}
 
@@ -84,10 +85,10 @@
 	}
 
 	/**
-	 * Gets the status text for the badge
+	 * Gets the translation key for status text
 	 */
-	function getStatusText(): string {
-		return isConfigured ? 'Ready' : 'Not Configured';
+	function getStatusKey(): string {
+		return isConfigured ? 'llm_provider_ready' : 'llm_provider_not_configured';
 	}
 
 	/**
@@ -106,12 +107,12 @@
 					</div>
 				{/if}
 				<div class="provider-details">
-					<h3 class="provider-name">{getProviderName(provider)}</h3>
-					<p class="provider-type">{getProviderType(provider)}</p>
+					<h3 class="provider-name">{$i18n(getProviderNameKey(provider))}</h3>
+					<p class="provider-type">{$i18n(getProviderTypeKey(provider))}</p>
 				</div>
 			</div>
 			<Badge variant={getBadgeVariant()}>
-				{getStatusText()}
+				{$i18n(getStatusKey())}
 			</Badge>
 		</div>
 	{/snippet}
@@ -123,26 +124,26 @@
 					<div class="status-row">
 						<StatusIndicator status="completed" size="sm" />
 						<span class="status-text">
-							{provider === 'mistral' ? 'API Key Configured' : 'Server Available'}
+							{provider === 'mistral' ? $i18n('llm_provider_api_key_configured') : $i18n('llm_provider_server_available')}
 						</span>
 					</div>
 				{:else}
 					<div class="status-row">
 						<StatusIndicator status="error" size="sm" />
-						<span class="status-text">Not Configured</span>
+						<span class="status-text">{$i18n('llm_provider_not_configured')}</span>
 					</div>
 				{/if}
 
 				{#if defaultModel}
 					<div class="info-row">
-						<span class="info-label">Default Model:</span>
+						<span class="info-label">{$i18n('llm_provider_default_model')}</span>
 						<span class="info-value">{defaultModel.name}</span>
 					</div>
 				{/if}
 
 				{#if settings?.base_url && provider === 'ollama'}
 					<div class="info-row">
-						<span class="info-label">Server URL:</span>
+						<span class="info-label">{$i18n('llm_provider_server_url')}</span>
 						<span class="info-value url">{settings.base_url}</span>
 					</div>
 				{/if}
@@ -155,7 +156,7 @@
 	{#snippet footer()}
 		<div class="provider-actions">
 			<Button variant="primary" size="sm" onclick={onConfigure}>
-				Configure
+				{$i18n('llm_provider_configure')}
 			</Button>
 		</div>
 	{/snippet}

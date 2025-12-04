@@ -12,6 +12,7 @@ Main chat area with message display, streaming content, and input controls.
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
+	import { i18n } from '$lib/i18n';
 	import type { Message } from '$types/message';
 
 	interface Props {
@@ -59,7 +60,7 @@ Main chat area with message display, streaming content, and input controls.
 				<div class="streaming-text-bubble">
 					<div class="streaming-header">
 						<Bot size={16} class="bot-icon" />
-						<span>Assistant</span>
+						<span>{$i18n('chat_assistant')}</span>
 						<Spinner size="sm" />
 					</div>
 					<div class="streaming-content">
@@ -76,9 +77,9 @@ Main chat area with message display, streaming content, and input controls.
 		{#if isStreaming}
 			<div class="chat-input-wrapper">
 				<ChatInput disabled={true} loading={true} onsend={() => {}} />
-				<Button variant="danger" size="sm" onclick={oncancel} ariaLabel="Cancel generation">
+				<Button variant="danger" size="sm" onclick={oncancel} ariaLabel={$i18n('chat_cancel_arialabel')}>
 					<StopCircle size={16} />
-					Cancel
+					{$i18n('chat_cancel')}
 				</Button>
 			</div>
 		{:else}

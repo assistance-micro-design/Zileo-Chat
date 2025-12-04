@@ -25,6 +25,7 @@ Includes validation and environment variable editor.
 	import { Button, Input, Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { Plus, X } from 'lucide-svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/**
 	 * MCPServerForm props
@@ -89,13 +90,13 @@ Includes validation and environment variable editor.
 		env?: string;
 	}>({});
 
-	/** Command options for select */
-	const commandOptions: SelectOption[] = [
-		{ value: 'docker', label: 'Docker' },
-		{ value: 'npx', label: 'NPX (Node.js)' },
-		{ value: 'uvx', label: 'UVX (Python)' },
-		{ value: 'http', label: 'HTTP (Remote)' }
-	];
+	/** Command options for select - reactive to locale changes */
+	const commandOptions: SelectOption[] = $derived([
+		{ value: 'docker', label: t('mcp_form_deployment_docker') },
+		{ value: 'npx', label: t('mcp_form_deployment_npx') },
+		{ value: 'uvx', label: t('mcp_form_deployment_uvx') },
+		{ value: 'http', label: t('mcp_form_deployment_http') }
+	]);
 
 	/**
 	 * Validates form data
@@ -106,26 +107,26 @@ Includes validation and environment variable editor.
 
 		// Name validation
 		if (!formData.name.trim()) {
-			newErrors.name = 'Server name is required';
+			newErrors.name = t('mcp_form_name_required');
 		} else if (!/^[a-zA-Z0-9_-]+$/.test(formData.name)) {
-			newErrors.name = 'Name must contain only letters, numbers, underscores, and hyphens';
+			newErrors.name = t('mcp_form_name_format');
 		} else if (formData.name.length > 64) {
-			newErrors.name = 'Name must be 64 characters or less';
+			newErrors.name = t('mcp_form_name_length');
 		}
 
 		// Args validation (must have at least one argument for most commands)
 		// HTTP and Docker have different requirements
 		if (!formData.args.trim()) {
 			if (formData.command === 'http') {
-				newErrors.args = 'HTTP endpoint URL is required';
+				newErrors.args = t('mcp_form_args_url_required');
 			} else if (formData.command !== 'docker') {
-				newErrors.args = 'At least one argument is required';
+				newErrors.args = t('mcp_form_args_required');
 			}
 		} else if (formData.command === 'http') {
 			// Validate HTTP URL format
 			const url = formData.args.trim().split('\n')[0];
 			if (!/^https?:\/\/.+/.test(url)) {
-				newErrors.args = 'Must be a valid HTTP or HTTPS URL';
+				newErrors.args = t('mcp_form_args_invalid_url');
 			}
 		}
 
@@ -133,7 +134,7 @@ Includes validation and environment variable editor.
 		const envKeys = formData.env.map((e) => e.key).filter((k) => k.trim());
 		const uniqueKeys = new Set(envKeys);
 		if (envKeys.length !== uniqueKeys.size) {
-			newErrors.env = 'Duplicate environment variable keys are not allowed';
+			newErrors.env = t('mcp_form_env_duplicate');
 		}
 
 		errors = newErrors;
@@ -202,12 +203,12 @@ Includes validation and environment variable editor.
 <form class="mcp-form" onsubmit={handleSubmit}>
 	<div class="form-section">
 		<Input
-			label="Server Name"
+			label={$i18n('mcp_form_name_label')}
 			value={formData.name}
 			oninput={(e) => { formData.name = e.currentTarget.value; }}
-			placeholder="my-mcp-server"
+			placeholder={$i18n('mcp_form_name_placeholder')}
 			required
-			help={errors.name ?? 'Unique identifier (letters, numbers, hyphens, underscores)'}
+			help={errors.name ?? $i18n('mcp_form_name_help')}
 		/>
 		{#if errors.name}
 			<span class="error-text">{errors.name}</span>
@@ -216,23 +217,23 @@ Includes validation and environment variable editor.
 
 	<div class="form-section">
 		<Select
-			label="Deployment Method"
+			label={$i18n('mcp_form_deployment_label')}
 			options={commandOptions}
 			value={formData.command}
 			onchange={handleCommandChange}
 			required
-			help="How to run the MCP server"
+			help={$i18n('mcp_form_deployment_help')}
 		/>
 	</div>
 
 	<div class="form-section">
 		<Textarea
-			label="Command Arguments"
+			label={$i18n('mcp_form_args_label')}
 			value={formData.args}
 			oninput={(e) => { formData.args = e.currentTarget.value; }}
-			placeholder="run&#10;-i&#10;--rm&#10;my-image:latest"
+			placeholder={$i18n('mcp_form_args_placeholder')}
 			rows={4}
-			help={errors.args ?? 'One argument per line'}
+			help={errors.args ?? $i18n('mcp_form_args_help')}
 		/>
 		{#if errors.args}
 			<span class="error-text">{errors.args}</span>
@@ -241,21 +242,21 @@ Includes validation and environment variable editor.
 
 	<div class="form-section">
 		<div class="env-header">
-			<span class="form-label" id="env-vars-label">Environment Variables</span>
+			<span class="form-label" id="env-vars-label">{$i18n('mcp_form_env_label')}</span>
 			<Button
 				type="button"
 				variant="ghost"
 				size="sm"
 				onclick={addEnvVar}
-				ariaLabel="Add environment variable"
+				ariaLabel={$i18n('mcp_form_env_add')}
 			>
 				<Plus size={16} />
-				<span>Add Variable</span>
+				<span>{$i18n('mcp_form_env_add')}</span>
 			</Button>
 		</div>
 
 		{#if formData.env.length === 0}
-			<p class="env-empty">No environment variables configured</p>
+			<p class="env-empty">{$i18n('mcp_form_env_empty')}</p>
 		{:else}
 			<div class="env-list">
 				{#each formData.env as envVar, index}
@@ -265,8 +266,8 @@ Includes validation and environment variable editor.
 							class="form-input env-key"
 							value={envVar.key}
 							oninput={(e) => { formData.env[index].key = e.currentTarget.value; }}
-							placeholder="KEY"
-							aria-label="Environment variable key"
+							placeholder={$i18n('mcp_form_env_key_placeholder')}
+							aria-label={$i18n('mcp_form_env_key_arialabel')}
 						/>
 						<span class="env-equals">=</span>
 						<input
@@ -274,14 +275,14 @@ Includes validation and environment variable editor.
 							class="form-input env-value"
 							value={envVar.value}
 							oninput={(e) => { formData.env[index].value = e.currentTarget.value; }}
-							placeholder="value"
-							aria-label="Environment variable value"
+							placeholder={$i18n('mcp_form_env_value_placeholder')}
+							aria-label={$i18n('mcp_form_env_value_arialabel')}
 						/>
 						<button
 							type="button"
 							class="btn btn-ghost btn-icon env-remove"
 							onclick={() => removeEnvVar(index)}
-							aria-label="Remove environment variable"
+							aria-label={$i18n('mcp_form_env_remove_arialabel')}
 						>
 							<X size={16} />
 						</button>
@@ -296,12 +297,12 @@ Includes validation and environment variable editor.
 
 	<div class="form-section">
 		<Textarea
-			label="Description"
+			label={$i18n('mcp_form_description_label')}
 			value={formData.description}
 			oninput={(e) => { formData.description = e.currentTarget.value; }}
-			placeholder="What does this MCP server provide?"
+			placeholder={$i18n('mcp_form_description_placeholder')}
 			rows={2}
-			help="Optional description of the server's purpose"
+			help={$i18n('mcp_form_description_help')}
 		/>
 	</div>
 
@@ -314,7 +315,7 @@ Includes validation and environment variable editor.
 				onchange={(e) => { formData.enabled = e.currentTarget.checked; }}
 			/>
 			<label for="mcp-server-enabled" class="checkbox-label">
-				Enable server (start automatically)
+				{$i18n('mcp_form_enabled_label')}
 			</label>
 		</div>
 	</div>
@@ -326,7 +327,7 @@ Includes validation and environment variable editor.
 			onclick={oncancel}
 			disabled={saving}
 		>
-			Cancel
+			{$i18n('common_cancel')}
 		</Button>
 		<Button
 			type="submit"
@@ -334,9 +335,9 @@ Includes validation and environment variable editor.
 			disabled={saving}
 		>
 			{#if saving}
-				{mode === 'create' ? 'Creating...' : 'Saving...'}
+				{mode === 'create' ? $i18n('mcp_form_creating') : $i18n('mcp_form_saving')}
 			{:else}
-				{mode === 'create' ? 'Create Server' : 'Save Changes'}
+				{mode === 'create' ? $i18n('mcp_form_create_server') : $i18n('mcp_form_save_changes')}
 			{/if}
 		</Button>
 	</div>

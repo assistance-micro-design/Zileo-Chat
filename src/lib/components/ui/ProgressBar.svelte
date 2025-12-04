@@ -8,6 +8,8 @@
   <ProgressBar value={3} max={10} showLabel />
 -->
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
+
 	/**
 	 * ProgressBar props
 	 */
@@ -18,11 +20,16 @@
 		max?: number;
 		/** Show percentage label */
 		showLabel?: boolean;
-		/** Accessible label */
+		/** Accessible label (uses i18n default if not provided) */
 		label?: string;
 	}
 
-	let { value, max = 100, showLabel = false, label = 'Progress' }: Props = $props();
+	let { value, max = 100, showLabel = false, label }: Props = $props();
+
+	/**
+	 * Get label with i18n fallback
+	 */
+	const displayLabel = $derived(label ?? $i18n('ui_progress_label'));
 
 	/**
 	 * Calculate percentage
@@ -37,7 +44,7 @@
 		aria-valuenow={value}
 		aria-valuemin={0}
 		aria-valuemax={max}
-		aria-label={label}
+		aria-label={displayLabel}
 	>
 		<div class="progress-fill" style="width: {percentage}%;"></div>
 	</div>

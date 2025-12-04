@@ -16,6 +16,7 @@
 	import type { ToolExecution, WorkflowToolExecution, ToolExecutionStatus } from '$types/tool';
 	import { formatToolDuration, getToolTypeDisplay, getToolIdentifier } from '$types/tool';
 	import { Wrench, Clock, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * Active tool execution (during streaming)
@@ -181,7 +182,7 @@
 		>
 			<div class="header-left">
 				<Wrench size={16} class="panel-icon" />
-				<span class="panel-title">Tool Executions</span>
+				<span class="panel-title">{$i18n('workflow_tools_title')}</span>
 				<span class="execution-count">{executionCount}</span>
 				{#if successCount > 0}
 					<span class="count-badge success">{successCount}</span>

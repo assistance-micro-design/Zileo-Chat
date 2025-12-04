@@ -15,6 +15,7 @@
   </Modal>
 -->
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
 	import { X } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
 
@@ -62,7 +63,7 @@
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{title}</h3>
-				<button type="button" class="btn btn-ghost btn-icon" onclick={onclose} aria-label="Close">
+				<button type="button" class="btn btn-ghost btn-icon" onclick={onclose} aria-label={$i18n('ui_modal_close')}>
 					<X size={20} />
 				</button>
 			</div>

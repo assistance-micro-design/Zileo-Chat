@@ -16,6 +16,7 @@
 	import type { ThinkingStep, ActiveThinkingStep } from '$types/thinking';
 	import { formatThinkingDuration, truncateThinkingContent } from '$types/thinking';
 	import { Brain, Clock, ChevronDown, ChevronUp, Loader2 } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ReasoningPanel props
@@ -162,9 +163,9 @@
 		>
 			<div class="header-left">
 				<Brain size={16} class="panel-icon" />
-				<span class="panel-title">Reasoning</span>
+				<span class="panel-title">{$i18n('workflow_reasoning_title')}</span>
 				<span class="step-count">
-					{stepCount} step{stepCount !== 1 ? 's' : ''}
+					{stepCount} {stepCount !== 1 ? $i18n('workflow_reasoning_steps') : $i18n('workflow_reasoning_step')}
 				</span>
 				{#if totalDuration > 0}
 					<span class="duration-badge">
@@ -173,7 +174,7 @@
 					</span>
 				{/if}
 				{#if totalTokens > 0}
-					<span class="token-badge">{totalTokens} tokens</span>
+					<span class="token-badge">{totalTokens} {$i18n('workflow_reasoning_tokens')}</span>
 				{/if}
 			</div>
 			<div class="header-right">
@@ -223,7 +224,7 @@
 										{getDisplayContent(step.id, step.content)}
 									</p>
 									<span class="toggle-hint">
-										{expandedStepId === step.id ? 'Show less' : 'Show more'}
+										{expandedStepId === step.id ? $i18n('workflow_reasoning_show_less') : $i18n('workflow_reasoning_show_more')}
 									</span>
 								</button>
 							{:else}

@@ -20,6 +20,7 @@ Provides CRUD operations for agents with list view and form modal.
 	import AgentForm from './AgentForm.svelte';
 	import { Button, Modal } from '$lib/components/ui';
 	import { Plus } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * Component props
@@ -124,14 +125,14 @@ Provides CRUD operations for agents with list view and form modal.
 	<!-- Header with title and create button -->
 	<header class="settings-header">
 		<div class="header-content">
-			<h3 class="header-title">Agent Configuration</h3>
+			<h3 class="header-title">{$i18n('agents_config_title')}</h3>
 			<p class="header-description">
-				Create and manage AI agents with custom tools and MCP server access.
+				{$i18n('agents_config_description')}
 			</p>
 		</div>
 		<Button variant="primary" size="sm" onclick={handleCreate}>
 			<Plus size={16} />
-			<span>Create Agent</span>
+			<span>{$i18n('agents_create')}</span>
 		</Button>
 	</header>
 
@@ -140,7 +141,7 @@ Provides CRUD operations for agents with list view and form modal.
 		<div class="error-banner">
 			<span class="error-text">{$error}</span>
 			<button type="button" class="dismiss-btn" onclick={handleDismissError}>
-				Dismiss
+				{$i18n('common_close')}
 			</button>
 		</div>
 	{/if}
@@ -165,21 +166,21 @@ Provides CRUD operations for agents with list view and form modal.
 <!-- Delete confirmation modal -->
 <Modal
 	open={showDeleteConfirm}
-	title="Delete Agent"
+	title={$i18n('agents_delete_title')}
 	onclose={cancelDelete}
 >
 	{#snippet body()}
 		<p class="confirm-text">
-			Are you sure you want to delete this agent? This action cannot be undone.
+			{$i18n('agents_delete_confirm')}
 		</p>
 	{/snippet}
 	{#snippet footer()}
 		<div class="modal-actions">
 			<Button variant="ghost" onclick={cancelDelete} disabled={deleting}>
-				Cancel
+				{$i18n('common_cancel')}
 			</Button>
 			<Button variant="danger" onclick={confirmDelete} disabled={deleting}>
-				{deleting ? 'Deleting...' : 'Delete'}
+				{deleting ? $i18n('agents_deleting') : $i18n('common_delete')}
 			</Button>
 		</div>
 	{/snippet}

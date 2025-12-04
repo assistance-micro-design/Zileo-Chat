@@ -13,6 +13,7 @@
 <script lang="ts">
 	import { AlertTriangle, X } from 'lucide-svelte';
 	import { Button } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ConfirmDeleteModal props
@@ -76,19 +77,19 @@
 					<div class="icon-wrapper">
 						<AlertTriangle size={24} class="modal-icon" />
 					</div>
-					<h3 id="modal-title" class="modal-title">Delete Workflow</h3>
+					<h3 id="modal-title" class="modal-title">{$i18n('workflow_delete_title')}</h3>
 				</div>
-				<button type="button" class="close-button" onclick={oncancel} aria-label="Close" disabled={isDeleting}>
+				<button type="button" class="close-button" onclick={oncancel} aria-label={$i18n('common_close')} disabled={isDeleting}>
 					<X size={20} />
 				</button>
 			</div>
 
 			<div class="modal-body">
 				<p id="modal-description" class="delete-message">
-					Are you sure you want to delete <strong class="workflow-name">"{workflowName}"</strong>?
+					{$i18n('workflow_delete_confirm')} <strong class="workflow-name">"{workflowName}"</strong>?
 				</p>
 				<p class="delete-warning">
-					This action cannot be undone. All messages, tool history, and reasoning steps will be permanently removed.
+					{$i18n('workflow_delete_warning')}
 				</p>
 			</div>
 
@@ -98,7 +99,7 @@
 					onclick={oncancel}
 					disabled={isDeleting}
 				>
-					Cancel
+					{$i18n('common_cancel')}
 				</Button>
 				<Button
 					variant="danger"
@@ -106,9 +107,9 @@
 					disabled={isDeleting}
 				>
 					{#if isDeleting}
-						Deleting...
+						{$i18n('workflow_deleting')}
 					{:else}
-						Delete Workflow
+						{$i18n('workflow_delete_button')}
 					{/if}
 				</Button>
 			</div>

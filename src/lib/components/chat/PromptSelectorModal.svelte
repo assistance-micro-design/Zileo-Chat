@@ -27,6 +27,7 @@
 	} from '$lib/stores/prompts';
 	import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
 	import type { Prompt, PromptSummary, PromptCategory } from '$types/prompt';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * PromptSelectorModal props
@@ -49,14 +50,14 @@
 	let variableValues = $state<Record<string, string>>({});
 	let loadingPrompt = $state(false);
 
-	// Category options for Select component
-	const categoryOptions = [
-		{ value: '', label: 'All Categories' },
+	// Category options for Select component (derived for i18n reactivity)
+	const categoryOptions = $derived([
+		{ value: '', label: $i18n('chat_all_categories') },
 		...Object.entries(PROMPT_CATEGORY_LABELS).map(([value, label]) => ({
 			value: value as PromptCategory,
 			label
 		}))
-	];
+	]);
 
 	// Filtered prompts based on search query and category filter
 	let filteredPrompts = $derived.by(() => {
@@ -149,12 +150,12 @@
 	}
 </script>
 
-<Modal {open} onclose={handleClose} title={selectedPrompt ? 'Fill Variables' : 'Select Prompt'}>
+<Modal {open} onclose={handleClose} title={selectedPrompt ? $i18n('chat_fill_variables') : $i18n('chat_select_prompt')}>
 	{#snippet body()}
 		{#if selectedPrompt}
 			<!-- Variable Input View -->
 			<div class="variable-view">
-				<button type="button" class="back-button" onclick={goBack}> &larr; Back to list </button>
+				<button type="button" class="back-button" onclick={goBack}> &larr; {$i18n('chat_back_to_list')} </button>
 
 				<div class="prompt-info">
 					<h4>{selectedPrompt.name}</h4>
@@ -168,17 +169,17 @@
 								<Input
 									label={variable}
 									bind:value={variableValues[variable]}
-									placeholder={`Enter value for ${variable}`}
+									placeholder={$i18n('chat_enter_value_for').replace('{variable}', variable)}
 								/>
 							</div>
 						{/each}
 					</div>
 				{:else}
-					<p class="no-variables">This prompt has no variables.</p>
+					<p class="no-variables">{$i18n('chat_no_variables')}</p>
 				{/if}
 
 				<div class="preview-section">
-					<h5>Preview</h5>
+					<h5>{$i18n('chat_preview')}</h5>
 					<div class="preview-content">{preview}</div>
 				</div>
 			</div>
@@ -186,7 +187,7 @@
 			<!-- Prompt List View -->
 			<div class="list-view">
 				<div class="filters">
-					<Input placeholder="Search prompts..." bind:value={searchQuery} />
+					<Input placeholder={$i18n('chat_search_prompts')} bind:value={searchQuery} />
 					<Select
 						value={categoryFilter}
 						options={categoryOptions}
@@ -197,15 +198,15 @@
 				{#if $promptLoading || loadingPrompt}
 					<div class="loading-state">
 						<Spinner />
-						<span>Loading...</span>
+						<span>{$i18n('common_loading')}</span>
 					</div>
 				{:else if filteredPrompts.length === 0}
 					<div class="empty-state">
 						{#if $prompts.length === 0}
-							<p>No prompts available.</p>
-							<p class="hint">Create prompts in Settings to use them here.</p>
+							<p>{$i18n('chat_no_prompts')}</p>
+							<p class="hint">{$i18n('chat_create_prompts_hint')}</p>
 						{:else}
-							<p>No matching prompts found.</p>
+							<p>{$i18n('chat_no_matching_prompts')}</p>
 						{/if}
 					</div>
 				{:else}
@@ -222,9 +223,11 @@
 										{PROMPT_CATEGORY_LABELS[prompt.category]}
 									</Badge>
 								</div>
-								<p class="prompt-description">{prompt.description || 'No description'}</p>
+								<p class="prompt-description">{prompt.description || $i18n('chat_no_description')}</p>
 								<span class="prompt-vars">
-									{prompt.variables_count} variable{prompt.variables_count !== 1 ? 's' : ''}
+									{prompt.variables_count !== 1
+										? $i18n('chat_variables_count_plural').replace('{count}', String(prompt.variables_count))
+										: $i18n('chat_variables_count').replace('{count}', String(prompt.variables_count))}
 								</span>
 							</button>
 						{/each}
@@ -236,10 +239,10 @@
 
 	{#snippet footer()}
 		<div class="modal-footer">
-			<Button variant="ghost" onclick={handleClose}>Cancel</Button>
+			<Button variant="ghost" onclick={handleClose}>{$i18n('common_cancel')}</Button>
 			{#if selectedPrompt}
 				<Button variant="primary" onclick={handleUsePrompt} disabled={!allVariablesFilled}>
-					Use Prompt
+					{$i18n('chat_use_prompt')}
 				</Button>
 			{/if}
 		</div>

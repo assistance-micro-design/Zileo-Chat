@@ -16,6 +16,7 @@
 	import ReasoningStep from './ReasoningStep.svelte';
 	import { Spinner } from '$lib/components/ui';
 	import { Bot } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * StreamingMessage props
@@ -69,11 +70,11 @@
 	<!-- Header with status -->
 	<div class="streaming-header">
 		<Bot size={16} class="assistant-icon" />
-		<span class="assistant-label">Assistant</span>
+		<span class="assistant-label">{$i18n('chat_assistant')}</span>
 		{#if isStreaming}
 			<div class="streaming-indicator">
 				<Spinner size="sm" />
-				<span class="streaming-text">Generating...</span>
+				<span class="streaming-text">{$i18n('chat_generating')}</span>
 			</div>
 		{/if}
 	</div>
@@ -83,7 +84,9 @@
 		<div class="reasoning-section">
 			<details>
 				<summary class="reasoning-summary">
-					Reasoning ({reasoning.length} step{reasoning.length !== 1 ? 's' : ''})
+					{reasoning.length !== 1
+						? $i18n('chat_reasoning_steps_plural').replace('{count}', String(reasoning.length))
+						: $i18n('chat_reasoning_steps').replace('{count}', String(reasoning.length))}
 				</summary>
 				<div class="reasoning-list">
 					{#each reasoning as step (step.timestamp)}
@@ -103,7 +106,9 @@
 		<div class="tools-section">
 			<div class="tools-header">
 				<span class="tools-label">
-					Tools ({runningToolsCount > 0 ? `${runningToolsCount} running` : `${tools.length} executed`})
+					{runningToolsCount > 0
+						? $i18n('chat_tools_running').replace('{count}', String(runningToolsCount))
+						: $i18n('chat_tools_executed').replace('{count}', String(tools.length))}
 				</span>
 			</div>
 			<div class="tools-list">

@@ -8,6 +8,7 @@
 -->
 <script lang="ts">
 	import { Skeleton } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MessageListSkeleton props
@@ -30,7 +31,7 @@
 	);
 </script>
 
-<div class="message-list-skeleton" role="presentation" aria-label="Loading messages">
+<div class="message-list-skeleton" role="presentation" aria-label={$i18n('chat_loading_messages')}>
 	{#each skeletonItems as item (item.id)}
 		<div class="skeleton-message" class:user={item.isUser}>
 			<div class="skeleton-avatar">

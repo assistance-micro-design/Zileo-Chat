@@ -8,9 +8,9 @@ Shows prompt summary with actions for edit and delete.
 
 <script lang="ts">
 	import type { PromptSummary, PromptCategory } from '$types/prompt';
-	import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
 	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
 	import { FileText, Edit, Trash2, Variable } from 'lucide-svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/**
 	 * Component props
@@ -32,14 +32,24 @@ Shows prompt summary with actions for edit and delete.
 	let searchQuery = $state('');
 	let categoryFilter = $state<PromptCategory | ''>('');
 
+	// Category labels mapping for i18n
+	const categoryI18nKeys: Record<PromptCategory, string> = {
+		system: 'prompts_category_system',
+		user: 'prompts_category_user',
+		analysis: 'prompts_category_analysis',
+		generation: 'prompts_category_generation',
+		coding: 'prompts_category_coding',
+		custom: 'prompts_category_custom'
+	};
+
 	// Category options with "All" option
-	const categoryOptions = [
-		{ value: '', label: 'All Categories' },
-		...Object.entries(PROMPT_CATEGORY_LABELS).map(([value, label]) => ({
-			value: value as PromptCategory,
-			label
+	let categoryOptions = $derived([
+		{ value: '', label: t('prompts_all_categories') },
+		...(['system', 'user', 'analysis', 'generation', 'coding', 'custom'] as PromptCategory[]).map((value) => ({
+			value,
+			label: t(categoryI18nKeys[value])
 		}))
-	];
+	]);
 
 	// Filtered prompts
 	let filteredPrompts = $derived.by(() => {
@@ -84,7 +94,7 @@ Shows prompt summary with actions for edit and delete.
 	<!-- Filters -->
 	<div class="list-filters">
 		<Input
-			placeholder="Search prompts..."
+			placeholder={$i18n('prompts_search_placeholder')}
 			value={searchQuery}
 			oninput={(e) => (searchQuery = e.currentTarget.value)}
 		/>
@@ -100,7 +110,7 @@ Shows prompt summary with actions for edit and delete.
 			{#snippet body()}
 				<div class="loading-state">
 					<StatusIndicator status="running" />
-					<span>Loading prompts...</span>
+					<span>{$i18n('prompts_loading')}</span>
 				</div>
 			{/snippet}
 		</Card>
@@ -110,15 +120,14 @@ Shows prompt summary with actions for edit and delete.
 				<div class="empty-state">
 					<FileText size={48} class="empty-icon" />
 					{#if prompts.length === 0}
-						<h3 class="empty-title">No Prompts Yet</h3>
+						<h3 class="empty-title">{$i18n('prompts_no_prompts')}</h3>
 						<p class="empty-description">
-							Create your first prompt template to start building reusable prompts
-							with variable placeholders.
+							{$i18n('prompts_no_prompts_description')}
 						</p>
 					{:else}
-						<h3 class="empty-title">No Matching Prompts</h3>
+						<h3 class="empty-title">{$i18n('prompts_no_match')}</h3>
 						<p class="empty-description">
-							Try adjusting your search query or category filter.
+							{$i18n('prompts_no_match_description')}
 						</p>
 					{/if}
 				</div>
@@ -136,26 +145,26 @@ Shows prompt summary with actions for edit and delete.
 									<h4 class="prompt-name">{prompt.name}</h4>
 								</div>
 								<Badge variant={getCategoryVariant(prompt.category)}>
-									{PROMPT_CATEGORY_LABELS[prompt.category]}
+									{$i18n(categoryI18nKeys[prompt.category])}
 								</Badge>
 							</div>
 
 							<p class="prompt-description">
-								{prompt.description || 'No description provided'}
+								{prompt.description || $i18n('prompts_no_description')}
 							</p>
 
 							<div class="prompt-details">
 								<div class="detail-row">
 									<span class="detail-label">
 										<Variable size={14} />
-										Variables
+										{$i18n('prompts_variables')}
 									</span>
 									<span class="detail-value">
-										{prompt.variables_count} placeholder{prompt.variables_count !== 1 ? 's' : ''}
+										{prompt.variables_count !== 1 ? $i18n('prompts_placeholder_count_plural').replace('{count}', String(prompt.variables_count)) : $i18n('prompts_placeholder_count').replace('{count}', String(prompt.variables_count))}
 									</span>
 								</div>
 								<div class="detail-row">
-									<span class="detail-label">Updated</span>
+									<span class="detail-label">{$i18n('prompts_updated')}</span>
 									<span class="detail-value">{formatDate(prompt.updated_at)}</span>
 								</div>
 							</div>
@@ -163,11 +172,11 @@ Shows prompt summary with actions for edit and delete.
 							<div class="prompt-actions">
 								<Button variant="ghost" size="sm" onclick={() => onedit(prompt.id)}>
 									<Edit size={16} />
-									<span>Edit</span>
+									<span>{$i18n('common_edit')}</span>
 								</Button>
 								<Button variant="danger" size="sm" onclick={() => ondelete(prompt.id)}>
 									<Trash2 size={16} />
-									<span>Delete</span>
+									<span>{$i18n('common_delete')}</span>
 								</Button>
 							</div>
 						</div>

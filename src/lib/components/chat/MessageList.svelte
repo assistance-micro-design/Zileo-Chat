@@ -10,6 +10,7 @@
 	import type { Message } from '$types/message';
 	import MessageBubble from './MessageBubble.svelte';
 	import { tick } from 'svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MessageList props
@@ -57,11 +58,11 @@
 	bind:this={containerRef}
 	role="log"
 	aria-live="polite"
-	aria-label="Chat messages"
+	aria-label={$i18n('chat_messages_arialabel')}
 >
 	{#if messages.length === 0}
 		<div class="message-list-empty">
-			<p>No messages yet. Start a conversation!</p>
+			<p>{$i18n('chat_no_messages')}</p>
 		</div>
 	{:else}
 		{#each messages as message (message.id)}

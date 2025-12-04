@@ -9,6 +9,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 <script lang="ts">
 	import { Bot } from 'lucide-svelte';
 	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
+	import { i18n } from '$lib/i18n';
 	import type { AgentSummary } from '$types/agent';
 	import type { Workflow } from '$types/workflow';
 
@@ -44,14 +45,14 @@ Displays workflow title, agent selector, iteration controls, and context informa
 <header class="agent-header">
 	<div class="header-content">
 		<Bot size={24} class="agent-icon" />
-		<h2 class="agent-title">{workflow?.name ?? 'Agent'}</h2>
+		<h2 class="agent-title">{workflow?.name ?? $i18n('agent_header_default_title')}</h2>
 		<span class="header-separator"></span>
 
 		{#if agentsLoading}
-			<span class="agents-loading">Loading...</span>
+			<span class="agents-loading">{$i18n('agent_header_loading')}</span>
 		{:else if agents.length === 0}
 			<span class="no-agents">
-				<a href="/settings" class="settings-link">Add agent</a>
+				<a href="/settings" class="settings-link">{$i18n('agent_header_add_agent')}</a>
 			</span>
 		{:else}
 			<div class="agent-controls">
@@ -62,7 +63,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 					label=""
 				/>
 				<div class="iterations-control">
-					<label for="max-iterations" class="iterations-label">Iterations:</label>
+					<label for="max-iterations" class="iterations-label">{$i18n('agent_header_iterations')}</label>
 					<input
 						type="number"
 						id="max-iterations"
@@ -71,7 +72,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 						max="200"
 						value={maxIterations}
 						oninput={handleIterationsInput}
-						title="Max tool iterations (1-200)"
+						title={$i18n('agent_header_iterations_tooltip')}
 					/>
 				</div>
 			</div>

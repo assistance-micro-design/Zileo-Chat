@@ -8,17 +8,24 @@
   <Spinner size={32} />
 -->
 <script lang="ts">
+	import { i18n } from '$lib/i18n';
+
 	/**
 	 * Spinner props
 	 */
 	interface Props {
 		/** Size preset or pixel value */
 		size?: 'sm' | 'md' | 'lg' | number;
-		/** Accessible label */
+		/** Accessible label (uses i18n default if not provided) */
 		label?: string;
 	}
 
-	let { size = 'md', label = 'Loading' }: Props = $props();
+	let { size = 'md', label }: Props = $props();
+
+	/**
+	 * Get label with i18n fallback
+	 */
+	const displayLabel = $derived(label ?? $i18n('ui_spinner_loading'));
 
 	/**
 	 * Compute actual size in pixels
@@ -32,9 +39,9 @@
 	class="spinner"
 	style="width: {pixelSize}px; height: {pixelSize}px;"
 	role="status"
-	aria-label={label}
+	aria-label={displayLabel}
 >
-	<span class="sr-only">{label}</span>
+	<span class="sr-only">{displayLabel}</span>
 </span>
 
 <style>

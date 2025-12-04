@@ -22,6 +22,7 @@
 <script lang="ts">
 	import { Input, Select, Button } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
+	import { i18n, t } from '$lib/i18n';
 	import type { CreateModelRequest, UpdateModelRequest, LLMModel, ProviderType } from '$types/llm';
 
 	/**
@@ -44,11 +45,11 @@
 
 	let { mode, model, provider, onsubmit, oncancel, saving = false }: Props = $props();
 
-	/** Provider options for the select dropdown */
-	const providerOptions: SelectOption[] = [
-		{ value: 'mistral', label: 'Mistral' },
-		{ value: 'ollama', label: 'Ollama' }
-	];
+	/** Provider options for the select dropdown (computed reactively) */
+	const providerOptions: SelectOption[] = $derived([
+		{ value: 'mistral', label: $i18n('llm_provider_mistral') },
+		{ value: 'ollama', label: $i18n('llm_provider_ollama') }
+	]);
 
 	/** Form data state */
 	let formData = $state({
@@ -79,54 +80,53 @@
 		// Name validation
 		const trimmedName = formData.name.trim();
 		if (!trimmedName) {
-			newErrors.name = 'Name is required';
+			newErrors.name = t('llm_form_name_required');
 		} else if (trimmedName.length > 64) {
-			newErrors.name = 'Name must be 64 characters or less';
+			newErrors.name = t('llm_form_name_max_length');
 		}
 
 		// API name validation
 		const trimmedApiName = formData.api_name.trim();
 		if (!trimmedApiName) {
-			newErrors.api_name = 'API name is required';
+			newErrors.api_name = t('llm_form_api_name_required');
 		} else if (trimmedApiName.length > 128) {
-			newErrors.api_name = 'API name must be 128 characters or less';
+			newErrors.api_name = t('llm_form_api_name_max_length');
 		} else if (!/^[a-zA-Z0-9._\-/:]+$/.test(trimmedApiName)) {
-			newErrors.api_name =
-				'API name can only contain letters, numbers, dots, hyphens, underscores, slashes, and colons';
+			newErrors.api_name = t('llm_form_api_name_format');
 		}
 
 		// Context window validation
 		if (formData.context_window < 1024) {
-			newErrors.context_window = 'Minimum 1,024 tokens';
+			newErrors.context_window = t('llm_form_context_window_min');
 		} else if (formData.context_window > 2000000) {
-			newErrors.context_window = 'Maximum 2,000,000 tokens';
+			newErrors.context_window = t('llm_form_context_window_max');
 		}
 
 		// Max output tokens validation
 		if (formData.max_output_tokens < 256) {
-			newErrors.max_output_tokens = 'Minimum 256 tokens';
+			newErrors.max_output_tokens = t('llm_form_max_output_min');
 		} else if (formData.max_output_tokens > 128000) {
-			newErrors.max_output_tokens = 'Maximum 128,000 tokens';
+			newErrors.max_output_tokens = t('llm_form_max_output_max');
 		}
 
 		// Temperature validation
 		if (formData.temperature_default < 0) {
-			newErrors.temperature_default = 'Minimum is 0';
+			newErrors.temperature_default = t('llm_form_temperature_min');
 		} else if (formData.temperature_default > 2) {
-			newErrors.temperature_default = 'Maximum is 2';
+			newErrors.temperature_default = t('llm_form_temperature_max');
 		}
 
 		// Pricing validation
 		if (formData.input_price_per_mtok < 0) {
-			newErrors.input_price_per_mtok = 'Price cannot be negative';
+			newErrors.input_price_per_mtok = t('llm_form_price_negative');
 		} else if (formData.input_price_per_mtok > 1000) {
-			newErrors.input_price_per_mtok = 'Maximum is $1000/M tokens';
+			newErrors.input_price_per_mtok = t('llm_form_price_max');
 		}
 
 		if (formData.output_price_per_mtok < 0) {
-			newErrors.output_price_per_mtok = 'Price cannot be negative';
+			newErrors.output_price_per_mtok = t('llm_form_price_negative');
 		} else if (formData.output_price_per_mtok > 1000) {
-			newErrors.output_price_per_mtok = 'Maximum is $1000/M tokens';
+			newErrors.output_price_per_mtok = t('llm_form_price_max');
 		}
 
 		errors = newErrors;
@@ -218,10 +218,10 @@
 	const isBuiltin = $derived(model?.is_builtin ?? false);
 
 	/** Form title based on mode */
-	const formTitle = $derived(mode === 'create' ? 'Create Custom Model' : 'Edit Model');
+	const formTitle = $derived(mode === 'create' ? $i18n('llm_form_create_title') : $i18n('llm_form_edit_title'));
 
 	/** Submit button text */
-	const submitText = $derived(saving ? 'Saving...' : mode === 'create' ? 'Create Model' : 'Save Changes');
+	const submitText = $derived(saving ? $i18n('llm_form_saving') : mode === 'create' ? $i18n('llm_form_create_button') : $i18n('llm_form_save_changes'));
 </script>
 
 <form class="model-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
@@ -229,13 +229,13 @@
 
 	{#if isBuiltin}
 		<div class="builtin-notice">
-			<p>This is a builtin model. Only the default temperature can be modified.</p>
+			<p>{$i18n('llm_form_builtin_notice')}</p>
 		</div>
 	{/if}
 
 	{#if mode === 'create'}
 		<Select
-			label="Provider"
+			label={$i18n('llm_form_provider_label')}
 			value={formData.provider}
 			options={providerOptions}
 			onchange={handleProviderChange}
@@ -244,10 +244,10 @@
 	{/if}
 
 	<Input
-		label="Display Name"
+		label={$i18n('llm_form_name_label')}
 		bind:value={formData.name}
-		placeholder="e.g., My Custom Model"
-		help="Human-readable name for the model"
+		placeholder={$i18n('llm_form_name_placeholder')}
+		help={$i18n('llm_form_name_help')}
 		disabled={isBuiltin || saving}
 		required
 	/>
@@ -256,10 +256,10 @@
 	{/if}
 
 	<Input
-		label="API Name"
+		label={$i18n('llm_form_api_name_label')}
 		bind:value={formData.api_name}
-		placeholder="e.g., my-custom-model"
-		help="Model identifier used in API calls"
+		placeholder={$i18n('llm_form_api_name_placeholder')}
+		help={$i18n('llm_form_api_name_help')}
 		disabled={isBuiltin || saving}
 		required
 	/>
@@ -270,11 +270,11 @@
 	<div class="form-row">
 		<div class="form-field">
 			<Input
-				label="Context Window"
+				label={$i18n('llm_form_context_window_label')}
 				type="number"
 				value={formData.context_window.toString()}
 				oninput={(e) => handleNumberInput('context_window', e)}
-				help="Max context length (tokens)"
+				help={$i18n('llm_form_context_window_help')}
 				disabled={isBuiltin || saving}
 			/>
 			{#if touched && errors.context_window}
@@ -284,11 +284,11 @@
 
 		<div class="form-field">
 			<Input
-				label="Max Output Tokens"
+				label={$i18n('llm_form_max_output_label')}
 				type="number"
 				value={formData.max_output_tokens.toString()}
 				oninput={(e) => handleNumberInput('max_output_tokens', e)}
-				help="Max generation length"
+				help={$i18n('llm_form_max_output_help')}
 				disabled={isBuiltin || saving}
 			/>
 			{#if touched && errors.max_output_tokens}
@@ -298,14 +298,14 @@
 	</div>
 
 	<Input
-		label="Default Temperature"
+		label={$i18n('llm_form_temperature_label')}
 		type="number"
 		value={formData.temperature_default.toString()}
 		oninput={(e) => handleNumberInput('temperature_default', e)}
 		step="0.1"
 		min="0"
 		max="2"
-		help="Sampling temperature (0.0 - 2.0)"
+		help={$i18n('llm_form_temperature_help')}
 		disabled={saving}
 	/>
 	{#if touched && errors.temperature_default}
@@ -315,11 +315,11 @@
 	<!-- Pricing Section -->
 	<div class="pricing-section">
 		<div class="pricing-header">
-			<h4 class="pricing-title">Pricing (USD per million tokens)</h4>
+			<h4 class="pricing-title">{$i18n('llm_form_pricing_title')}</h4>
 			<p class="pricing-help">
-				Enter your provider's pricing for cost tracking.
+				{$i18n('llm_form_pricing_help')}
 				<a href="https://mistral.ai/technology/#pricing" target="_blank" rel="noopener noreferrer">
-					View Mistral pricing
+					{$i18n('llm_form_pricing_link')}
 				</a>
 			</p>
 		</div>
@@ -327,14 +327,14 @@
 		<div class="form-row">
 			<div class="form-field">
 				<Input
-					label="Input Price"
+					label={$i18n('llm_form_input_price_label')}
 					type="number"
 					value={formData.input_price_per_mtok.toString()}
 					oninput={(e) => handleNumberInput('input_price_per_mtok', e)}
 					step="0.01"
 					min="0"
 					max="1000"
-					help="$/M input tokens"
+					help={$i18n('llm_form_input_price_help')}
 					disabled={saving}
 				/>
 				{#if touched && errors.input_price_per_mtok}
@@ -344,14 +344,14 @@
 
 			<div class="form-field">
 				<Input
-					label="Output Price"
+					label={$i18n('llm_form_output_price_label')}
 					type="number"
 					value={formData.output_price_per_mtok.toString()}
 					oninput={(e) => handleNumberInput('output_price_per_mtok', e)}
 					step="0.01"
 					min="0"
 					max="1000"
-					help="$/M output tokens"
+					help={$i18n('llm_form_output_price_help')}
 					disabled={saving}
 				/>
 				{#if touched && errors.output_price_per_mtok}
@@ -368,14 +368,14 @@
 				bind:checked={formData.is_reasoning}
 				disabled={saving}
 			/>
-			<span class="checkbox-text">Reasoning Model</span>
+			<span class="checkbox-text">{$i18n('llm_form_reasoning_label')}</span>
 		</label>
-		<p class="checkbox-help">Enable for thinking/reasoning models (Magistral, DeepSeek-R1, Qwen3, etc.)</p>
+		<p class="checkbox-help">{$i18n('llm_form_reasoning_help')}</p>
 	</div>
 
 	<div class="form-actions">
 		<Button variant="ghost" onclick={oncancel} disabled={saving}>
-			Cancel
+			{$i18n('llm_form_cancel')}
 		</Button>
 		<Button variant="primary" type="submit" disabled={saving}>
 			{submitText}

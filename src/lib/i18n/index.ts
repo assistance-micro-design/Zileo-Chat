@@ -64,21 +64,40 @@ export function languageTag(): Locale {
 }
 
 /**
- * Get a translation by key
- * @param key - The translation key
- * @returns The translated string or the key if not found
+ * Interpolate variables in a translation string
+ * Replaces {varName} with the corresponding value from the params object
+ * @param template - The template string with {placeholders}
+ * @param params - Object with values to interpolate
+ * @returns The interpolated string
  */
-export function t(key: string): string {
-	const messages = get(currentMessages);
-	return messages[key] || key;
+function interpolate(template: string, params?: Record<string, string | number>): string {
+	if (!params) return template;
+	return template.replace(/\{(\w+)\}/g, (match, key) => {
+		return params[key] !== undefined ? String(params[key]) : match;
+	});
 }
 
 /**
- * Reactive translation store
+ * Get a translation by key with optional interpolation
+ * @param key - The translation key
+ * @param params - Optional interpolation parameters
+ * @returns The translated string or the key if not found
+ */
+export function t(key: string, params?: Record<string, string | number>): string {
+	const messages = get(currentMessages);
+	const template = messages[key] || key;
+	return interpolate(template, params);
+}
+
+/**
+ * Reactive translation store with interpolation support
  * Subscribe to get automatic updates when locale changes
  */
 export const i18n = derived(currentMessages, ($messages) => {
-	return (key: string): string => $messages[key] || key;
+	return (key: string, params?: Record<string, string | number>): string => {
+		const template = $messages[key] || key;
+		return interpolate(template, params);
+	};
 });
 
 /**

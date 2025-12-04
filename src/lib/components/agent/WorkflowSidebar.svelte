@@ -11,6 +11,7 @@ Left sidebar for workflow management with search and CRUD operations.
 	import { Button } from '$lib/components/ui';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';
+	import { i18n } from '$lib/i18n';
 	import type { Workflow } from '$types/workflow';
 
 	interface Props {
@@ -59,15 +60,15 @@ Left sidebar for workflow management with search and CRUD operations.
 					variant="primary"
 					size="icon"
 					onclick={oncreate}
-					ariaLabel="New workflow"
-					title="New workflow"
+					ariaLabel={$i18n('workflow_new')}
+					title={$i18n('workflow_new')}
 				>
 					<Plus size={16} />
 				</Button>
 			{:else}
 				<div class="flex justify-between items-center">
-					<h2 class="sidebar-title">Workflows</h2>
-					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel="New workflow">
+					<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
+					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
 						<Plus size={14} />
 					</Button>
 				</div>
@@ -78,7 +79,7 @@ Left sidebar for workflow management with search and CRUD operations.
 					<input
 						type="search"
 						class="search-input"
-						placeholder="Filter workflows..."
+						placeholder={$i18n('workflow_filter_placeholder')}
 						value={searchFilter}
 						oninput={handleSearchInput}
 					/>

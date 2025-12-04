@@ -15,6 +15,7 @@
 	import { X, Workflow, Bot } from 'lucide-svelte';
 	import type { AgentSummary } from '$types/agent';
 	import { Button } from '$lib/components/ui';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * NewWorkflowModal props
@@ -62,13 +63,13 @@
 
 		const trimmedName = workflowName.trim();
 		if (!trimmedName) {
-			error = 'Please enter a workflow name';
+			error = $i18n('workflow_modal_error_name');
 			nameInputRef?.focus();
 			return;
 		}
 
 		if (!chosenAgentId) {
-			error = 'Please select an agent';
+			error = $i18n('workflow_modal_error_agent');
 			return;
 		}
 
@@ -103,9 +104,9 @@
 			<div class="modal-header">
 				<div class="modal-title-wrapper">
 					<Workflow size={24} class="modal-icon" />
-					<h3 id="modal-title" class="modal-title">New Workflow</h3>
+					<h3 id="modal-title" class="modal-title">{$i18n('workflow_modal_new_title')}</h3>
 				</div>
-				<button type="button" class="close-button" onclick={onclose} aria-label="Close">
+				<button type="button" class="close-button" onclick={onclose} aria-label={$i18n('common_close')}>
 					<X size={20} />
 				</button>
 			</div>
@@ -120,7 +121,7 @@
 
 					<div class="form-field">
 						<label for="workflow-name" class="form-label">
-							Workflow Name
+							{$i18n('workflow_modal_name_label')}
 							<span class="required">*</span>
 						</label>
 						<input
@@ -129,21 +130,21 @@
 							type="text"
 							id="workflow-name"
 							class="form-input"
-							placeholder="Enter workflow name..."
+							placeholder={$i18n('workflow_modal_name_placeholder')}
 							autocomplete="off"
 							disabled={isSubmitting}
 						/>
-						<p class="form-hint">Give your workflow a descriptive name</p>
+						<p class="form-hint">{$i18n('workflow_modal_name_hint')}</p>
 					</div>
 
 					<div class="form-field">
 						<label for="workflow-agent" class="form-label">
 							<Bot size={16} class="label-icon" />
-							Agent
+							{$i18n('workflow_modal_agent_label')}
 						</label>
 						{#if agents.length === 0}
 							<div class="no-agents-warning">
-								No agents available. Please create an agent in Settings first.
+								{$i18n('workflow_modal_no_agents')}
 							</div>
 						{:else}
 							<div class="agent-selector">
@@ -169,7 +170,7 @@
 
 				<div class="modal-footer">
 					<Button variant="ghost" onclick={onclose} disabled={isSubmitting}>
-						Cancel
+						{$i18n('common_cancel')}
 					</Button>
 					<Button
 						variant="primary"
@@ -177,9 +178,9 @@
 						disabled={isSubmitting || agents.length === 0 || !workflowName.trim()}
 					>
 						{#if isSubmitting}
-							Creating...
+							{$i18n('workflow_modal_creating')}
 						{:else}
-							Create Workflow
+							{$i18n('workflow_modal_create')}
 						{/if}
 					</Button>
 				</div>

@@ -21,6 +21,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	import { Button, Modal } from '$lib/components/ui';
 	import { Plus } from 'lucide-svelte';
 	import type { PromptCreate } from '$types/prompt';
+	import { i18n } from '$lib/i18n';
 
 	/** Form modal saving state */
 	let saving = $state(false);
@@ -120,14 +121,14 @@ Provides CRUD operations for prompts with list view and form modal.
 	<!-- Header with title and create button -->
 	<header class="settings-header">
 		<div class="header-content">
-			<h3 class="header-title">Prompt Library</h3>
+			<h3 class="header-title">{$i18n('prompts_title')}</h3>
 			<p class="header-description">
-				Create and manage reusable prompt templates with variable placeholders.
+				{$i18n('prompts_description')}
 			</p>
 		</div>
 		<Button variant="primary" size="sm" onclick={handleCreate}>
 			<Plus size={16} />
-			<span>Create Prompt</span>
+			<span>{$i18n('prompts_create')}</span>
 		</Button>
 	</header>
 
@@ -136,7 +137,7 @@ Provides CRUD operations for prompts with list view and form modal.
 		<div class="error-banner">
 			<span class="error-text">{$promptError}</span>
 			<button type="button" class="dismiss-btn" onclick={handleDismissError}>
-				Dismiss
+				{$i18n('prompts_dismiss')}
 			</button>
 		</div>
 	{/if}
@@ -153,7 +154,7 @@ Provides CRUD operations for prompts with list view and form modal.
 <!-- Create/Edit Form Modal -->
 <Modal
 	open={$promptFormMode !== null}
-	title={$promptFormMode === 'create' ? 'Create Prompt' : 'Edit Prompt'}
+	title={$promptFormMode === 'create' ? $i18n('prompts_create') : $i18n('prompts_edit')}
 	onclose={handleFormClose}
 >
 	{#snippet body()}
@@ -170,21 +171,21 @@ Provides CRUD operations for prompts with list view and form modal.
 <!-- Delete confirmation modal -->
 <Modal
 	open={showDeleteConfirm}
-	title="Delete Prompt"
+	title={$i18n('prompts_delete_title')}
 	onclose={cancelDelete}
 >
 	{#snippet body()}
 		<p class="confirm-text">
-			Are you sure you want to delete this prompt? This action cannot be undone.
+			{$i18n('prompts_delete_confirm')}
 		</p>
 	{/snippet}
 	{#snippet footer()}
 		<div class="modal-actions">
 			<Button variant="ghost" onclick={cancelDelete} disabled={deleting}>
-				Cancel
+				{$i18n('common_cancel')}
 			</Button>
 			<Button variant="danger" onclick={confirmDelete} disabled={deleting}>
-				{deleting ? 'Deleting...' : 'Delete'}
+				{deleting ? $i18n('prompts_deleting') : $i18n('common_delete')}
 			</Button>
 		</div>
 	{/snippet}

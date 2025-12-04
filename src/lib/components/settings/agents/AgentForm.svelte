@@ -26,6 +26,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';
+	import { i18n, t } from '$lib/i18n';
 
 	/**
 	 * Component props
@@ -57,24 +58,24 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let mcpState = $state<MCPState>(createInitialMCPState());
 	let llmState = $state<LLMState>(createInitialLLMState());
 
-	/** Available tools (from backend) */
-	const availableTools = [
-		{ value: 'MemoryTool', label: 'Memory Tool', description: 'Store and retrieve persistent memories' },
-		{ value: 'TodoTool', label: 'Todo Tool', description: 'Manage task lists and track progress' },
-		{ value: 'CalculatorTool', label: 'Calculator Tool', description: 'Perform scientific mathematical calculations' }
-	];
+	/** Available tools (from backend) - reactive to locale */
+	const availableTools = $derived([
+		{ value: 'MemoryTool', label: $i18n('agents_tool_memory'), description: $i18n('agents_tool_memory_desc') },
+		{ value: 'TodoTool', label: $i18n('agents_tool_todo'), description: $i18n('agents_tool_todo_desc') },
+		{ value: 'CalculatorTool', label: $i18n('agents_tool_calculator'), description: $i18n('agents_tool_calculator_desc') }
+	]);
 
-	/** Lifecycle options with descriptions */
-	const lifecycleOptions = [
-		{ value: 'permanent' as Lifecycle, label: 'Permanent', description: 'Persists across sessions' },
-		{ value: 'temporary' as Lifecycle, label: 'Temporary', description: 'Deleted after session ends' }
-	];
+	/** Lifecycle options with descriptions - reactive to locale */
+	const lifecycleOptions = $derived([
+		{ value: 'permanent' as Lifecycle, label: $i18n('agents_lifecycle_permanent'), description: $i18n('agents_lifecycle_permanent_desc') },
+		{ value: 'temporary' as Lifecycle, label: $i18n('agents_lifecycle_temporary'), description: $i18n('agents_lifecycle_temporary_desc') }
+	]);
 
-	/** Provider options with details */
-	const providerOptions = [
-		{ value: 'Mistral', label: 'Mistral', type: 'Cloud API' },
-		{ value: 'Ollama', label: 'Ollama', type: 'Local Server' }
-	];
+	/** Provider options with details - reactive to locale */
+	const providerOptions = $derived([
+		{ value: 'Mistral', label: $i18n('agents_provider_mistral'), type: $i18n('agents_provider_mistral_type') },
+		{ value: 'Ollama', label: $i18n('agents_provider_ollama'), type: $i18n('agents_provider_ollama_type') }
+	]);
 
 	/**
 	 * Converts provider name to ProviderType (lowercase)
@@ -100,7 +101,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		mcpState.servers.map((s) => ({
 			value: s.name,
 			label: s.name,
-			description: s.description || 'No description'
+			description: s.description || $i18n('agents_mcp_no_description')
 		}))
 	);
 
@@ -146,25 +147,25 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		errors = {};
 
 		if (!name.trim() || name.length < 1 || name.length > 64) {
-			errors.name = 'Name must be 1-64 characters';
+			errors.name = t('agents_name_error');
 		}
 
 		if (availableModels.length === 0) {
-			errors.model = 'No models available - add models in Models section first';
+			errors.model = t('agents_no_models_error');
 		} else if (!model) {
-			errors.model = 'Model is required';
+			errors.model = t('agents_model_required');
 		} else if (!selectedModel) {
-			errors.model = 'Selected model not found';
+			errors.model = t('agents_model_not_found');
 		}
 
 		if (maxToolIterations < 1 || maxToolIterations > 200) {
-			errors.maxToolIterations = 'Max iterations must be between 1 and 200';
+			errors.maxToolIterations = t('agents_max_iterations_error');
 		}
 
 		if (!systemPrompt.trim()) {
-			errors.systemPrompt = 'System prompt is required';
+			errors.systemPrompt = t('agents_system_prompt_required');
 		} else if (systemPrompt.length > 10000) {
-			errors.systemPrompt = 'System prompt must be under 10000 characters';
+			errors.systemPrompt = t('agents_system_prompt_max');
 		}
 
 		return Object.keys(errors).length === 0;
@@ -261,25 +262,25 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	{#snippet body()}
 		<form class="agent-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
 			<h3 class="form-title">
-				{mode === 'create' ? 'Create New Agent' : 'Edit Agent'}
+				{mode === 'create' ? $i18n('agents_create_new') : $i18n('agents_edit')}
 			</h3>
 
 			<div class="form-grid">
 				<!-- Basic Information -->
 				<div class="form-section">
-					<h4 class="section-title">Basic Information</h4>
+					<h4 class="section-title">{$i18n('agents_basic_info')}</h4>
 
 					<Input
-						label="Agent Name"
+						label={$i18n('agents_name_label')}
 						value={name}
 						oninput={(e) => { name = e.currentTarget.value; }}
-						placeholder="My Custom Agent"
+						placeholder={$i18n('agents_name_placeholder')}
 						required
-						help={errors.name || 'A unique name for this agent (1-64 characters)'}
+						help={errors.name || $i18n('agents_name_help')}
 					/>
 
-					<div class="field-group" role="group" aria-label="Lifecycle">
-						<span class="field-label">Lifecycle</span>
+					<div class="field-group" role="group" aria-label={$i18n('agents_lifecycle')}>
+						<span class="field-label">{$i18n('agents_lifecycle')}</span>
 						<div class="card-selector">
 							{#each lifecycleOptions as option}
 								<button
@@ -296,17 +297,17 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							{/each}
 						</div>
 						{#if mode === 'edit'}
-							<span class="field-help">Lifecycle cannot be changed after creation</span>
+							<span class="field-help">{$i18n('agents_lifecycle_readonly')}</span>
 						{/if}
 					</div>
 				</div>
 
 				<!-- LLM Configuration -->
 				<div class="form-section">
-					<h4 class="section-title">LLM Configuration</h4>
+					<h4 class="section-title">{$i18n('agents_llm_config')}</h4>
 
-					<div class="field-group" role="group" aria-label="Provider">
-						<span class="field-label">Provider</span>
+					<div class="field-group" role="group" aria-label={$i18n('agents_provider')}>
+						<span class="field-label">{$i18n('agents_provider')}</span>
 						<div class="card-selector">
 							{#each providerOptions as option}
 								<button
@@ -322,12 +323,12 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						</div>
 					</div>
 
-					<div class="field-group" role="group" aria-label="Model">
-						<span class="field-label">Model</span>
+					<div class="field-group" role="group" aria-label={$i18n('agents_model')}>
+						<span class="field-label">{$i18n('agents_model')}</span>
 						{#if availableModels.length === 0}
 							<div class="no-models-message">
-								<p>No models configured for {provider}.</p>
-								<p>Add models in the Models section above.</p>
+								<p>{$i18n('agents_no_models', { provider })}</p>
+								<p>{$i18n('agents_no_models_hint')}</p>
 							</div>
 						{:else}
 							<div class="model-selector">
@@ -342,10 +343,10 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 											<span class="model-card-name">{m.name}</span>
 											<div class="model-card-badges">
 												{#if m.is_builtin}
-													<Badge variant="primary">Builtin</Badge>
+													<Badge variant="primary">{$i18n('agents_model_builtin')}</Badge>
 												{/if}
 												{#if m.is_reasoning}
-													<Badge variant="warning">Reasoning</Badge>
+													<Badge variant="warning">{$i18n('agents_model_reasoning')}</Badge>
 												{/if}
 											</div>
 										</div>
@@ -366,17 +367,17 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 					<Input
 						type="number"
-						label="Max Tool Iterations"
+						label={$i18n('agents_max_iterations_label')}
 						value={String(maxToolIterations)}
 						oninput={handleMaxToolIterationsInput}
-						help={errors.maxToolIterations || 'Maximum tool execution loops (1-200)'}
+						help={errors.maxToolIterations || $i18n('agents_max_iterations_help')}
 					/>
 				</div>
 
 				<!-- Tools -->
 				<div class="form-section">
-					<h4 class="section-title">Tools</h4>
-					<p class="section-help">Select tools this agent can use</p>
+					<h4 class="section-title">{$i18n('agents_tools_section')}</h4>
+					<p class="section-help">{$i18n('agents_tools_help')}</p>
 
 					<div class="checkbox-group">
 						{#each availableTools as tool}
@@ -397,12 +398,12 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 				<!-- MCP Servers -->
 				<div class="form-section">
-					<h4 class="section-title">MCP Servers</h4>
-					<p class="section-help">Select MCP servers this agent can access</p>
+					<h4 class="section-title">{$i18n('agents_mcp_section')}</h4>
+					<p class="section-help">{$i18n('agents_mcp_help')}</p>
 
 					{#if availableMcpServers.length === 0}
 						<p class="no-servers">
-							No MCP servers configured. Add servers in the MCP Settings section.
+							{$i18n('agents_mcp_none')}
 						</p>
 					{:else}
 						<div class="checkbox-group">
@@ -425,26 +426,26 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 				<!-- System Prompt -->
 				<div class="form-section full-width">
-					<h4 class="section-title">System Prompt</h4>
+					<h4 class="section-title">{$i18n('agents_system_prompt')}</h4>
 
 					<Textarea
-						label="Instructions for the agent"
+						label={$i18n('agents_system_prompt_label')}
 						value={systemPrompt}
 						oninput={handleSystemPromptInput}
 						rows={8}
-						placeholder="You are a helpful AI assistant specialized in..."
+						placeholder={$i18n('agents_system_prompt_placeholder')}
 						required
-						help={errors.systemPrompt || `${systemPrompt.length}/10000 characters`}
+						help={errors.systemPrompt || $i18n('agents_system_prompt_chars', { count: systemPrompt.length })}
 					/>
 				</div>
 			</div>
 
 			<div class="form-actions">
 				<Button variant="ghost" type="button" onclick={oncancel} disabled={saving}>
-					Cancel
+					{$i18n('common_cancel')}
 				</Button>
 				<Button variant="primary" type="submit" disabled={saving}>
-					{saving ? 'Saving...' : mode === 'create' ? 'Create Agent' : 'Save Changes'}
+					{saving ? $i18n('agents_saving') : mode === 'create' ? $i18n('agents_create') : $i18n('agents_save_changes')}
 				</Button>
 			</div>
 		</form>

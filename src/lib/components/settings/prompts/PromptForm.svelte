@@ -9,8 +9,8 @@ Displays in a modal with variable detection and preview.
 <script lang="ts">
 	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
-	import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
 	import { extractVariables } from '$lib/stores/prompts';
+	import { i18n, t } from '$lib/i18n';
 
 	/**
 	 * Component props
@@ -41,11 +41,23 @@ Displays in a modal with variable detection and preview.
 	let contentLength = $derived(content.length);
 	let isValid = $derived(name.trim().length > 0 && content.trim().length > 0);
 
+	// Category labels mapping for i18n
+	const categoryI18nKeys: Record<PromptCategory, string> = {
+		system: 'prompts_category_system',
+		user: 'prompts_category_user',
+		analysis: 'prompts_category_analysis',
+		generation: 'prompts_category_generation',
+		coding: 'prompts_category_coding',
+		custom: 'prompts_category_custom'
+	};
+
 	// Category options for Select
-	const categoryOptions = Object.entries(PROMPT_CATEGORY_LABELS).map(([value, label]) => ({
-		value: value as PromptCategory,
-		label
-	}));
+	let categoryOptions = $derived(
+		(['system', 'user', 'analysis', 'generation', 'coding', 'custom'] as PromptCategory[]).map((value) => ({
+			value,
+			label: t(categoryI18nKeys[value])
+		}))
+	);
 
 	/**
 	 * Handles form submission
@@ -83,10 +95,10 @@ Displays in a modal with variable detection and preview.
 <form class="prompt-form" onsubmit={handleSubmit}>
 	<div class="form-field">
 		<Input
-			label="Name"
+			label={$i18n('prompts_form_name_label')}
 			value={name}
 			oninput={(e) => (name = e.currentTarget.value)}
-			placeholder="Enter prompt name"
+			placeholder={$i18n('prompts_form_name_placeholder')}
 			required
 			disabled={saving}
 		/>
@@ -95,10 +107,10 @@ Displays in a modal with variable detection and preview.
 
 	<div class="form-field">
 		<Textarea
-			label="Description"
+			label={$i18n('prompts_form_description_label')}
 			value={description}
 			oninput={(e) => (description = e.currentTarget.value)}
-			placeholder="Brief description of this prompt"
+			placeholder={$i18n('prompts_form_description_placeholder')}
 			rows={2}
 			disabled={saving}
 		/>
@@ -107,7 +119,7 @@ Displays in a modal with variable detection and preview.
 
 	<div class="form-field">
 		<Select
-			label="Category"
+			label={$i18n('prompts_form_category_label')}
 			value={category}
 			onchange={(e) => (category = e.currentTarget.value as PromptCategory)}
 			options={categoryOptions}
@@ -117,10 +129,10 @@ Displays in a modal with variable detection and preview.
 
 	<div class="form-field">
 		<Textarea
-			label="Content"
+			label={$i18n('prompts_form_content_label')}
 			value={content}
 			oninput={(e) => (content = e.currentTarget.value)}
-			placeholder="Enter prompt content. Use &#123;&#123;variable_name&#125;&#125; for placeholders."
+			placeholder={$i18n('prompts_form_content_placeholder')}
 			rows={8}
 			required
 			disabled={saving}
@@ -130,7 +142,7 @@ Displays in a modal with variable detection and preview.
 
 	{#if detectedVariables.length > 0}
 		<div class="variables-section">
-			<span class="variables-label">Detected Variables:</span>
+			<span class="variables-label">{$i18n('prompts_detected_variables')}</span>
 			<div class="variables-list">
 				{#each detectedVariables as variable}
 					<Badge variant="primary">{variable}</Badge>
@@ -141,10 +153,10 @@ Displays in a modal with variable detection and preview.
 
 	<div class="form-actions">
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
-			Cancel
+			{$i18n('common_cancel')}
 		</Button>
 		<Button type="submit" variant="primary" disabled={!isValid || saving}>
-			{saving ? 'Saving...' : mode === 'create' ? 'Create Prompt' : 'Save Changes'}
+			{saving ? $i18n('prompts_saving') : mode === 'create' ? $i18n('prompts_create') : $i18n('prompts_save_changes')}
 		</Button>
 	</div>
 </form>

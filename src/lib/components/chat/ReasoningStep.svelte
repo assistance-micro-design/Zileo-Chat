@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import { ChevronDown, ChevronRight, Brain } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ReasoningStep props
@@ -44,7 +45,7 @@
 			<Brain size={14} />
 		</span>
 		{#if stepNumber !== undefined}
-			<span class="step-number">Step {stepNumber}</span>
+			<span class="step-number">{$i18n('chat_step').replace('{number}', String(stepNumber))}</span>
 		{/if}
 		<span class="reasoning-preview">
 			{expanded ? step : step.slice(0, 50) + (step.length > 50 ? '...' : '')}
