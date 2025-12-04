@@ -25,6 +25,8 @@ export interface Memory {
   type: MemoryType;
   /** Text content of the memory */
   content: string;
+  /** Optional workflow ID for scoped memories (null = general) */
+  workflow_id?: string | null;
   /** Additional metadata */
   metadata: Record<string, unknown>;
   /** Creation timestamp (ISO string from backend) */
@@ -36,11 +38,23 @@ export interface Memory {
  */
 export interface CreateMemoryParams {
   /** Type of memory content */
-  type: MemoryType;
+  memoryType: MemoryType;
   /** Text content of the memory */
   content: string;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Optional workflow ID for scoped memories (None = general) */
+  workflowId?: string;
+}
+
+/**
+ * Parameters for listing memories
+ */
+export interface ListMemoryParams {
+  /** Filter by memory type */
+  typeFilter?: MemoryType;
+  /** Optional workflow ID filter (None = all memories) */
+  workflowId?: string;
 }
 
 /**
@@ -52,7 +66,11 @@ export interface SearchMemoryParams {
   /** Maximum number of results */
   limit?: number;
   /** Filter by memory type */
-  type_filter?: MemoryType;
+  typeFilter?: MemoryType;
+  /** Optional workflow ID filter (None = all memories) */
+  workflowId?: string;
+  /** Similarity threshold 0-1 for vector search (default: 0.7) */
+  threshold?: number;
 }
 
 /**

@@ -24,6 +24,9 @@ Includes MCP server configuration section for managing external tool servers.
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
+
+	/** Reference to MemorySettings for refreshing stats when memories change */
+	let memorySettingsRef: MemorySettings;
 	import { AgentSettings } from '$lib/components/settings/agents';
 	import { ValidationSettings } from '$lib/components/settings/validation';
 	import { PromptSettings } from '$lib/components/settings/prompts';
@@ -867,13 +870,13 @@ Includes MCP server configuration section for managing external tool servers.
 				<!-- Embedding Configuration -->
 				<div class="memory-subsection">
 					<h3 class="subsection-title">Embedding Configuration</h3>
-					<MemorySettings />
+					<MemorySettings bind:this={memorySettingsRef} />
 				</div>
 
 				<!-- Memory Management -->
 				<div class="memory-subsection">
 					<h3 class="subsection-title">Memory Management</h3>
-					<MemoryList />
+					<MemoryList onchange={() => memorySettingsRef?.refreshStats()} />
 				</div>
 			</div>
 		</section>

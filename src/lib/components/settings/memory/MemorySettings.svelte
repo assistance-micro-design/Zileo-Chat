@@ -112,6 +112,22 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	}
 
 	/**
+	 * Refreshes only the memory statistics (called when memories change)
+	 */
+	export async function refreshStats(): Promise<void> {
+		try {
+			const [loadedStats, loadedTokenStats] = await Promise.all([
+				invoke<MemoryStats>('get_memory_stats'),
+				invoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
+			]);
+			stats = loadedStats;
+			tokenStats = loadedTokenStats;
+		} catch (err) {
+			console.error('Failed to refresh stats:', err);
+		}
+	}
+
+	/**
 	 * Opens the config modal for adding/editing
 	 */
 	function openConfigModal(): void {

@@ -122,18 +122,18 @@ describe('Memory Types', () => {
 	describe('CreateMemoryParams', () => {
 		it('should create minimal params with required fields', () => {
 			const params: CreateMemoryParams = {
-				type: 'knowledge',
+				memoryType: 'knowledge',
 				content: 'Rust is a systems programming language'
 			};
 
-			expect(params.type).toBe('knowledge');
+			expect(params.memoryType).toBe('knowledge');
 			expect(params.content).toBeDefined();
 			expect(params.metadata).toBeUndefined();
 		});
 
 		it('should create params with optional metadata', () => {
 			const params: CreateMemoryParams = {
-				type: 'user_pref',
+				memoryType: 'user_pref',
 				content: 'User prefers dark mode',
 				metadata: { priority: 0.5, tags: ['ui', 'theme'] }
 			};
@@ -142,16 +142,26 @@ describe('Memory Types', () => {
 			expect(params.metadata?.priority).toBe(0.5);
 		});
 
+		it('should create params with workflowId', () => {
+			const params: CreateMemoryParams = {
+				memoryType: 'context',
+				content: 'Workflow-specific context',
+				workflowId: 'wf_001'
+			};
+
+			expect(params.workflowId).toBe('wf_001');
+		});
+
 		it('should accept all memory types', () => {
 			const types: MemoryType[] = ['user_pref', 'context', 'knowledge', 'decision'];
 
 			for (const type of types) {
 				const params: CreateMemoryParams = {
-					type,
+					memoryType: type,
 					content: `Content for ${type}`
 				};
 
-				expect(params.type).toBe(type);
+				expect(params.memoryType).toBe(type);
 			}
 		});
 	});
@@ -168,19 +178,23 @@ describe('Memory Types', () => {
 
 			expect(params.query).toBe('vector database');
 			expect(params.limit).toBeUndefined();
-			expect(params.type_filter).toBeUndefined();
+			expect(params.typeFilter).toBeUndefined();
 		});
 
 		it('should create params with all options', () => {
 			const params: SearchMemoryParams = {
 				query: 'embedding generation',
 				limit: 5,
-				type_filter: 'knowledge'
+				typeFilter: 'knowledge',
+				workflowId: 'wf_001',
+				threshold: 0.8
 			};
 
 			expect(params.query).toBe('embedding generation');
 			expect(params.limit).toBe(5);
-			expect(params.type_filter).toBe('knowledge');
+			expect(params.typeFilter).toBe('knowledge');
+			expect(params.workflowId).toBe('wf_001');
+			expect(params.threshold).toBe(0.8);
 		});
 
 		it('should accept all memory types as filter', () => {
@@ -189,10 +203,10 @@ describe('Memory Types', () => {
 			for (const type of types) {
 				const params: SearchMemoryParams = {
 					query: 'test',
-					type_filter: type
+					typeFilter: type
 				};
 
-				expect(params.type_filter).toBe(type);
+				expect(params.typeFilter).toBe(type);
 			}
 		});
 	});

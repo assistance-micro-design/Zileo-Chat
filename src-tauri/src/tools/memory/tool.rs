@@ -306,16 +306,51 @@ impl MemoryTool {
     /// # Arguments
     /// * `type_filter` - Optional memory type to filter by
     /// * `limit` - Maximum number of results (default: 10)
-    #[instrument(skip(self), fields(type_filter = ?type_filter, limit = limit))]
-    async fn list_memories(&self, type_filter: Option<&str>, limit: usize) -> ToolResult<Value> {
+    /// * `scope` - Scope filter: "workflow", "general", or "both" (default: "both")
+    #[instrument(skip(self), fields(type_filter = ?type_filter, limit = limit, scope = %scope))]
+    async fn list_memories(
+        &self,
+        type_filter: Option<&str>,
+        limit: usize,
+        scope: &str,
+    ) -> ToolResult<Value> {
         let workflow_id = self.current_workflow_id().await;
         let limit = limit.min(MAX_LIMIT);
 
         let mut conditions = Vec::new();
 
-        // Workflow scope condition
-        if let Some(ref wf_id) = workflow_id {
-            conditions.push(format!("workflow_id = '{}'", wf_id));
+        // Scope condition based on parameter
+        match scope {
+            "workflow" => {
+                // Only workflow-scoped memories
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!("workflow_id = '{}'", wf_id));
+                } else {
+                    // No active workflow, return empty
+                    return Ok(ResponseBuilder::new()
+                        .success(true)
+                        .count(0)
+                        .field("scope", "workflow")
+                        .field("workflow_id", Option::<String>::None)
+                        .data("memories", Vec::<Memory>::new())
+                        .message("No active workflow. Use 'activate_workflow' first or scope='both'")
+                        .build());
+                }
+            }
+            "general" => {
+                // Only general memories (no workflow_id)
+                conditions.push("workflow_id IS NONE".to_string());
+            }
+            "both" | _ => {
+                // Both workflow and general - add OR condition if workflow active
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!(
+                        "(workflow_id = '{}' OR workflow_id IS NONE)",
+                        wf_id
+                    ));
+                }
+                // If no workflow active, no scope filter = all memories
+            }
         }
 
         // Type filter condition
@@ -348,19 +383,12 @@ impl MemoryTool {
 
         let memories: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
 
-        debug!(count = memories.len(), "Memories listed");
+        debug!(count = memories.len(), scope = %scope, "Memories listed");
 
         Ok(ResponseBuilder::new()
             .success(true)
             .count(memories.len())
-            .field(
-                "scope",
-                if workflow_id.is_some() {
-                    "workflow"
-                } else {
-                    "general"
-                },
-            )
+            .field("scope", scope)
             .field("workflow_id", workflow_id)
             .data("memories", memories)
             .build())
@@ -375,13 +403,15 @@ impl MemoryTool {
     /// * `limit` - Maximum results (default: 10)
     /// * `type_filter` - Optional type filter
     /// * `threshold` - Similarity threshold 0-1 (default: 0.7)
-    #[instrument(skip(self), fields(query_len = query_text.len(), limit = limit))]
+    /// * `scope` - Scope filter: "workflow", "general", or "both" (default: "both")
+    #[instrument(skip(self), fields(query_len = query_text.len(), limit = limit, scope = %scope))]
     async fn search_memories(
         &self,
         query_text: &str,
         limit: usize,
         type_filter: Option<&str>,
         threshold: f64,
+        scope: &str,
     ) -> ToolResult<Value> {
         let workflow_id = self.current_workflow_id().await;
         let limit = limit.min(MAX_LIMIT);
@@ -403,6 +433,7 @@ impl MemoryTool {
                             type_filter,
                             threshold,
                             &workflow_id,
+                            scope,
                         )
                         .await;
                 }
@@ -413,7 +444,7 @@ impl MemoryTool {
         }
 
         // Fallback to text search
-        self.text_search(query_text, limit, type_filter, &workflow_id)
+        self.text_search(query_text, limit, type_filter, &workflow_id, scope)
             .await
     }
 
@@ -425,12 +456,29 @@ impl MemoryTool {
         type_filter: Option<&str>,
         threshold: f64,
         workflow_id: &Option<String>,
+        scope: &str,
     ) -> ToolResult<Value> {
         // Build conditions
         let mut conditions = vec!["embedding IS NOT NONE".to_string()];
 
-        if let Some(ref wf_id) = workflow_id {
-            conditions.push(format!("workflow_id = '{}'", wf_id));
+        // Scope condition
+        match scope {
+            "workflow" => {
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!("workflow_id = '{}'", wf_id));
+                }
+            }
+            "general" => {
+                conditions.push("workflow_id IS NONE".to_string());
+            }
+            "both" | _ => {
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!(
+                        "(workflow_id = '{}' OR workflow_id IS NONE)",
+                        wf_id
+                    ));
+                }
+            }
         }
 
         if let Some(mem_type) = type_filter {
@@ -478,6 +526,7 @@ impl MemoryTool {
         debug!(
             count = results.len(),
             threshold = threshold,
+            scope = %scope,
             "Vector search completed"
         );
 
@@ -486,7 +535,7 @@ impl MemoryTool {
             "search_type": "vector",
             "count": results.len(),
             "threshold": threshold,
-            "scope": if workflow_id.is_some() { "workflow" } else { "general" },
+            "scope": scope,
             "workflow_id": workflow_id,
             "results": results
         }))
@@ -499,6 +548,7 @@ impl MemoryTool {
         limit: usize,
         type_filter: Option<&str>,
         workflow_id: &Option<String>,
+        scope: &str,
     ) -> ToolResult<Value> {
         let mut conditions = Vec::new();
 
@@ -509,8 +559,24 @@ impl MemoryTool {
             escaped_query
         ));
 
-        if let Some(ref wf_id) = workflow_id {
-            conditions.push(format!("workflow_id = '{}'", wf_id));
+        // Scope condition
+        match scope {
+            "workflow" => {
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!("workflow_id = '{}'", wf_id));
+                }
+            }
+            "general" => {
+                conditions.push("workflow_id IS NONE".to_string());
+            }
+            "both" | _ => {
+                if let Some(ref wf_id) = workflow_id {
+                    conditions.push(format!(
+                        "(workflow_id = '{}' OR workflow_id IS NONE)",
+                        wf_id
+                    ));
+                }
+            }
         }
 
         if let Some(mem_type) = type_filter {
@@ -540,13 +606,13 @@ impl MemoryTool {
             .await
             .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
-        debug!(count = results.len(), "Text search completed");
+        debug!(count = results.len(), scope = %scope, "Text search completed");
 
         Ok(serde_json::json!({
             "success": true,
             "search_type": "text",
             "count": results.len(),
-            "scope": if workflow_id.is_some() { "workflow" } else { "general" },
+            "scope": scope,
             "workflow_id": workflow_id,
             "results": results.into_iter().map(|m| serde_json::json!({
                 "id": m.id,
@@ -640,31 +706,36 @@ OPERATIONS:
 - activate_general: Switch to general mode (cross-workflow access)
 - add: Store new memory with automatic embedding generation
 - get: Retrieve specific memory by ID
-- list: View memories with optional type filter
+- list: View memories with optional type filter and scope
 - search: Find semantically similar memories using vector search
 - delete: Remove a memory
 - clear_by_type: Bulk delete all memories of a specific type
+
+SCOPE PARAMETER (for list/search):
+- "both" (default): Shows workflow-specific AND general memories
+- "workflow": Only memories from current workflow
+- "general": Only global memories (not tied to any workflow)
 
 BEST PRACTICES:
 - Use 'knowledge' type for facts and domain expertise
 - Use 'decision' type for rationale behind choices
 - Use 'context' type for conversation-specific information
 - Use 'user_pref' type for user preferences and settings
-- Activate workflow scope when working on specific tasks
+- Use scope='both' to see all available memories
 - Search before adding to avoid duplicates
 
 EXAMPLES:
-1. Store knowledge:
-   {"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}
+1. List all memories (workflow + general):
+   {"operation": "list"}
 
-2. Search memories:
+2. List only workflow memories:
+   {"operation": "list", "scope": "workflow"}
+
+3. Search all memories:
    {"operation": "search", "query": "vector database indexing", "limit": 5}
 
-3. Activate workflow scope:
-   {"operation": "activate_workflow", "workflow_id": "wf_abc123"}
-
-4. List user preferences:
-   {"operation": "list", "type_filter": "user_pref"}"#
+4. Store knowledge:
+   {"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}"#
                     .to_string(),
 
             input_schema: serde_json::json!({
@@ -716,6 +787,12 @@ EXAMPLES:
                         "type": "string",
                         "enum": ["user_pref", "context", "knowledge", "decision"],
                         "description": "Filter by type (for list/search)"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["workflow", "general", "both"],
+                        "default": "both",
+                        "description": "Memory scope filter (for list/search): 'workflow' = current workflow only, 'general' = global memories only, 'both' = both scopes (default)"
                     },
                     "threshold": {
                         "type": "number",
@@ -795,7 +872,8 @@ EXAMPLES:
             "list" => {
                 let type_filter = input["type_filter"].as_str();
                 let limit = input["limit"].as_u64().unwrap_or(DEFAULT_LIMIT as u64) as usize;
-                self.list_memories(type_filter, limit).await
+                let scope = input["scope"].as_str().unwrap_or("both");
+                self.list_memories(type_filter, limit, scope).await
             }
 
             "search" => {
@@ -807,8 +885,9 @@ EXAMPLES:
                 let threshold = input["threshold"]
                     .as_f64()
                     .unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
+                let scope = input["scope"].as_str().unwrap_or("both");
 
-                self.search_memories(query, limit, type_filter, threshold)
+                self.search_memories(query, limit, type_filter, threshold, scope)
                     .await
             }
 

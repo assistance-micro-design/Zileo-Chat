@@ -88,13 +88,23 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Loads memories from backend
+	 * Formats scope (workflow_id or General)
+	 */
+	function formatScope(workflowId: string | undefined | null): string {
+		if (!workflowId) return 'General';
+		// Truncate long workflow IDs
+		return workflowId.length > 12 ? workflowId.slice(0, 12) + '...' : workflowId;
+	}
+
+	/**
+	 * Loads memories from backend (both workflow and general scope)
 	 */
 	async function loadMemories(): Promise<void> {
 		loading = true;
 		try {
 			const filter = typeFilter || undefined;
-			memories = await invoke<Memory[]>('list_memories', { typeFilter: filter });
+			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
+			memories = await invoke<Memory[]>('list_memories', { typeFilter: filter, workflowId: null });
 		} catch (err) {
 			message = { type: 'error', text: `Failed to load memories: ${err}` };
 		} finally {
@@ -103,7 +113,7 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Searches memories semantically
+	 * Searches memories semantically using vector search with text fallback
 	 */
 	async function handleSearch(): Promise<void> {
 		if (!searchQuery.trim()) {
@@ -113,10 +123,14 @@ Displays memories with filtering, search, and action buttons.
 
 		searching = true;
 		try {
+			// Search all memories (both workflow-scoped and general)
+			// Vector search will be used if embedding service is configured
 			const results = await invoke<MemorySearchResult[]>('search_memories', {
 				query: searchQuery,
 				limit: 50,
-				typeFilter: typeFilter || undefined
+				typeFilter: typeFilter || undefined,
+				workflowId: null, // Search all scopes
+				threshold: 0.7 // Similarity threshold for vector search
 			});
 			memories = results.map((r) => r.memory);
 		} catch (err) {
@@ -400,6 +414,7 @@ Displays memories with filtering, search, and action buttons.
 				<thead>
 					<tr>
 						<th>Type</th>
+						<th>Scope</th>
 						<th>Content</th>
 						<th>Date</th>
 						<th>Actions</th>
@@ -412,6 +427,11 @@ Displays memories with filtering, search, and action buttons.
 								<Badge variant={getTypeVariant(memory.type as MemoryType)}>
 									{memory.type}
 								</Badge>
+							</td>
+							<td class="scope-cell" title={memory.workflow_id || 'General scope'}>
+								<span class="scope-badge" class:workflow={memory.workflow_id}>
+									{formatScope(memory.workflow_id)}
+								</span>
 							</td>
 							<td class="content-cell">
 								{truncate(memory.content, 100)}
@@ -618,6 +638,25 @@ Displays memories with filtering, search, and action buttons.
 	.date-cell {
 		white-space: nowrap;
 		color: var(--color-text-secondary);
+	}
+
+	.scope-cell {
+		white-space: nowrap;
+	}
+
+	.scope-badge {
+		display: inline-block;
+		padding: var(--spacing-2xs) var(--spacing-xs);
+		border-radius: var(--border-radius-sm);
+		font-size: var(--font-size-xs);
+		font-weight: var(--font-weight-medium);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-secondary);
+	}
+
+	.scope-badge.workflow {
+		background: var(--color-accent-light);
+		color: var(--color-accent);
 	}
 
 	.actions-cell {

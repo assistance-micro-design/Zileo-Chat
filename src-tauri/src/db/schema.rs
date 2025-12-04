@@ -58,6 +58,10 @@ DEFINE FIELD content ON memory TYPE string;
 DEFINE FIELD embedding ON memory TYPE option<array<float>>;
 DEFINE FIELD workflow_id ON memory TYPE option<string>;
 DEFINE FIELD metadata ON memory TYPE object;
+-- Explicit metadata sub-fields (required for SCHEMAFULL to persist dynamic keys)
+DEFINE FIELD metadata.tags ON memory TYPE option<array<string>>;
+DEFINE FIELD metadata.priority ON memory TYPE option<float>;
+DEFINE FIELD metadata.agent_source ON memory TYPE option<string>;
 DEFINE FIELD created_at ON memory TYPE datetime DEFAULT time::now();
 
 -- Index HNSW pour vector search (1024D Mistral/Ollama embeddings)
