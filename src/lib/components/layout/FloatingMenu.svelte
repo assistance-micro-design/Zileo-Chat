@@ -3,15 +3,12 @@
   A fixed top navigation bar with logo, navigation, and theme toggle.
   Uses backdrop blur for visual depth and stays fixed at the top.
 
+  Layout: Logo (left) | Navigation (center) | Theme/Language (right)
+
   @example
-  <FloatingMenu>
-    {#snippet actions()}
-      <Button>Custom Action</Button>
-    {/snippet}
-  </FloatingMenu>
+  <FloatingMenu />
 -->
 <script lang="ts">
-	import type { Snippet } from 'svelte';
 	import { Sun, Moon, Settings, Bot } from 'lucide-svelte';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
@@ -23,11 +20,9 @@
 	interface Props {
 		/** Application title */
 		title?: string;
-		/** Additional actions slot (rendered before theme toggle) */
-		actions?: Snippet;
 	}
 
-	let { title = 'Zileo Chat 3', actions }: Props = $props();
+	let { title = 'Zileo Chat' }: Props = $props();
 
 	/**
 	 * Current theme value for reactive UI updates
@@ -50,15 +45,26 @@
 </script>
 
 <nav class="floating-menu" aria-label={$i18n('layout_main_navigation')}>
-	<div class="flex items-center gap-md flex-1">
+	<!-- Left: Logo/Title -->
+	<div class="menu-left">
 		<h1 class="floating-menu-title">{title}</h1>
 	</div>
 
-	<div class="flex items-center gap-md">
-		{#if actions}
-			{@render actions()}
-		{/if}
+	<!-- Center: Main Navigation -->
+	<div class="menu-center">
+		<a href="/agent" class="btn btn-primary">
+			<Bot size={16} />
+			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
+		</a>
 
+		<a href="/settings" class="btn btn-secondary">
+			<Settings size={16} />
+			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
+		</a>
+	</div>
+
+	<!-- Right: Language & Theme -->
+	<div class="menu-right">
 		<LanguageSelector />
 
 		<button
@@ -73,20 +79,34 @@
 				<Sun size={18} />
 			{/if}
 		</button>
-
-		<a href="/settings" class="btn btn-secondary">
-			<Settings size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
-		</a>
-
-		<a href="/agent" class="btn btn-primary">
-			<Bot size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
-		</a>
 	</div>
 </nav>
 
 <style>
+	.floating-menu {
+		justify-content: space-between;
+	}
+
+	.menu-left {
+		flex: 1;
+		display: flex;
+		align-items: center;
+	}
+
+	.menu-center {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+	}
+
+	.menu-right {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--spacing-md);
+	}
+
 	.floating-menu-title {
 		font-size: var(--font-size-xl);
 		font-weight: var(--font-weight-semibold);
