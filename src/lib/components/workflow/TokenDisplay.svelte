@@ -42,8 +42,10 @@
 
 	/**
 	 * Calculate context usage percentage
+	 * Uses tokens_input which represents the actual context size at last API call
+	 * (not cumulative, but the real context window usage)
 	 */
-	const contextUsed = $derived(data.cumulative_input + data.cumulative_output);
+	const contextUsed = $derived(data.tokens_input);
 	const contextPercentage = $derived(
 		data.context_max > 0 ? Math.min((contextUsed / data.context_max) * 100, 100) : 0
 	);
@@ -176,6 +178,7 @@
 			<CircleDollarSign size={14} />
 		</div>
 		<span class="cost-value">{formatCost(data.cost_usd)}</span>
+		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
 		{#if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
 			<span class="cost-total">({formatCost(data.cumulative_cost_usd)})</span>
 		{/if}
@@ -434,6 +437,12 @@
 		font-family: var(--font-mono);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-secondary);
+	}
+
+	.cost-estimate {
+		font-size: 10px;
+		color: var(--color-text-tertiary);
+		font-style: italic;
 	}
 
 	.cost-total {

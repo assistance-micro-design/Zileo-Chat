@@ -50,6 +50,9 @@ pub struct Workflow {
     /// Model ID used (for context_window lookup)
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Current context size (last API call context window usage)
+    #[serde(default)]
+    pub current_context_tokens: u64,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -209,6 +212,7 @@ mod tests {
             total_tokens_output: 0,
             total_cost_usd: 0.0,
             model_id: None,
+            current_context_tokens: 0,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();

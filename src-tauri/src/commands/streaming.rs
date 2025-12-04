@@ -164,7 +164,8 @@ pub async fn execute_workflow_streaming(
     }
     thinking_step_number += 1;
 
-    // Load conversation history for context
+    // Load conversation history for context (API-native format for continuation)
+    // Messages are stored with role: system|user|assistant
     let history_query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -196,16 +197,17 @@ pub async fn execute_workflow_streaming(
         .filter_map(|v| serde_json::from_value(v).ok())
         .collect();
 
+    // Check if we have a system message (indicates existing context)
+    let has_system_message = conversation_history
+        .iter()
+        .any(|msg| matches!(msg.role, crate::models::MessageRole::System));
+
     // Build conversation context for the LLM
-    // Include is_primary_agent: true to enable sub-agent tools for the workflow starter
-    let history_context = if conversation_history.is_empty() {
-        serde_json::json!({
-            "is_primary_agent": true,
-            "workflow_id": validated_workflow_id.clone()
-        })
-    } else {
-        // Format conversation history as context
-        let formatted_history: Vec<serde_json::Value> = conversation_history
+    // If we have existing messages with system prompt, pass them as conversation_messages
+    // for direct reuse (no reconstruction needed)
+    let history_context = if has_system_message && !conversation_history.is_empty() {
+        // Continuation: format messages for API-native reuse
+        let api_messages: Vec<serde_json::Value> = conversation_history
             .iter()
             .map(|msg| {
                 serde_json::json!({
@@ -215,7 +217,13 @@ pub async fn execute_workflow_streaming(
             })
             .collect();
         serde_json::json!({
-            "conversation_history": formatted_history,
+            "conversation_messages": api_messages,
+            "is_primary_agent": true,
+            "workflow_id": validated_workflow_id.clone()
+        })
+    } else {
+        // First message or no system prompt: let agent build the context
+        serde_json::json!({
             "is_primary_agent": true,
             "workflow_id": validated_workflow_id.clone()
         })
@@ -223,6 +231,8 @@ pub async fn execute_workflow_streaming(
 
     info!(
         history_count = conversation_history.len(),
+        has_system_message = has_system_message,
+        is_continuation = has_system_message && !conversation_history.is_empty(),
         "Loaded conversation history for context"
     );
 
@@ -300,6 +310,39 @@ pub async fn execute_workflow_streaming(
             duration,
         ),
     );
+
+    // If this is the first message, save the system prompt for future conversations
+    // This enables context reuse without reconstruction
+    if let Some(ref system_prompt) = report.system_prompt {
+        let system_message_id = Uuid::new_v4().to_string();
+        let system_content = system_prompt.clone();
+
+        // Save system prompt as a system message (will be loaded in future conversations)
+        let insert_query = format!(
+            "CREATE message:`{}` CONTENT {{ \
+                workflow_id: '{}', \
+                role: 'system', \
+                content: {}, \
+                tokens: 0, \
+                tokens_input: 0, \
+                tokens_output: 0, \
+                timestamp: time::now() \
+            }}",
+            system_message_id,
+            validated_workflow_id,
+            serde_json::to_string(&system_content).unwrap_or_else(|_| "\"\"".to_string())
+        );
+
+        if let Err(e) = state.db.execute(&insert_query).await {
+            warn!(error = %e, "Failed to persist system prompt as message");
+        } else {
+            info!(
+                system_message_id = %system_message_id,
+                system_prompt_len = system_content.len(),
+                "Saved system prompt for workflow context reuse"
+            );
+        }
+    }
 
     // Emit and persist reasoning step about execution completion
     let completion_reasoning = format!(
@@ -466,15 +509,17 @@ pub async fn execute_workflow_streaming(
         "Calculated token cost"
     );
 
-    // Update workflow with cumulative tokens, cost, and model_id (real UUID)
+    // Update workflow with cumulative tokens, cost, model_id, and current context size
     // Use IF/THEN/ELSE for robust null handling in SurrealDB
     // Use explicit float formatting to avoid scientific notation (e.g., 1.6e-5)
+    // current_context_tokens = tokens_input (actual context size at last API call)
     let update_query = format!(
         "UPDATE workflow:`{}` SET \
             total_tokens_input = IF total_tokens_input IS NOT NONE THEN total_tokens_input + {} ELSE {} END, \
             total_tokens_output = IF total_tokens_output IS NOT NONE THEN total_tokens_output + {} ELSE {} END, \
             total_cost_usd = IF total_cost_usd IS NOT NONE THEN total_cost_usd + {:.10} ELSE {:.10} END, \
             model_id = '{}', \
+            current_context_tokens = {}, \
             updated_at = time::now()",
         validated_workflow_id,
         report.metrics.tokens_input,
@@ -483,7 +528,8 @@ pub async fn execute_workflow_streaming(
         report.metrics.tokens_output,
         cost_usd,
         cost_usd,
-        model_id  // Use real model UUID, not api_name
+        model_id,  // Use real model UUID, not api_name
+        report.metrics.tokens_input  // Current context size (last API call)
     );
 
     // Log the query for debugging
@@ -496,9 +542,10 @@ pub async fn execute_workflow_streaming(
             workflow_id = %validated_workflow_id,
             tokens_input = report.metrics.tokens_input,
             tokens_output = report.metrics.tokens_output,
+            current_context = report.metrics.tokens_input,
             cost_usd = cost_usd,
             model_id = %model_id,
-            "Updated workflow cumulative tokens"
+            "Updated workflow cumulative tokens and context"
         );
     }
 

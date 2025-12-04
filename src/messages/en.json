@@ -656,6 +656,7 @@
   "workflow_token_in_out": "in/out",
   "workflow_token_total": "total",
   "workflow_token_speed": "tk/s",
+  "workflow_cost_estimate": "(estimate)",
 
   "workflow_agent_select": "Select an agent...",
   "workflow_agent_tool": "tool",

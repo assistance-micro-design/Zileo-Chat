@@ -69,6 +69,8 @@ impl Agent for SimpleAgent {
                 mcp_calls: vec![],
                 tool_executions: vec![],
             },
+            system_prompt: None,
+            tools_json: None,
         };
 
         info!(

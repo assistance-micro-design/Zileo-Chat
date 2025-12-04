@@ -20,6 +20,8 @@ DEFINE FIELD total_tokens_input ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD total_tokens_output ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD total_cost_usd ON workflow TYPE float DEFAULT 0.0;
 DEFINE FIELD model_id ON workflow TYPE option<string>;
+-- Current context size (last API call context window usage)
+DEFINE FIELD current_context_tokens ON workflow TYPE int DEFAULT 0;
 
 -- Table: agent_state
 DEFINE TABLE agent_state SCHEMAFULL;

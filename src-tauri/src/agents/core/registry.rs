@@ -184,6 +184,8 @@ mod tests {
                     mcp_calls: vec![],
                     tool_executions: vec![],
                 },
+                system_prompt: None,
+                tools_json: None,
             })
         }
 

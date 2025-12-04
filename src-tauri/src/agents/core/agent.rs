@@ -29,6 +29,14 @@ pub struct Report {
     pub content: String,
     /// Execution metrics
     pub metrics: ReportMetrics,
+    /// System prompt used (for persistence on first message)
+    /// Only populated on first message of a workflow
+    pub system_prompt: Option<String>,
+    /// Tools JSON definition (for persistence on first message)
+    /// Only populated on first message of a workflow
+    /// Reserved for future use (caching tool definitions between messages)
+    #[allow(dead_code)]
+    pub tools_json: Option<serde_json::Value>,
 }
 
 /// Report status

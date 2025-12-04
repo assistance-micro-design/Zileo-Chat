@@ -727,6 +727,8 @@ impl Agent for LLMAgent {
                         mcp_calls: vec![],
                         tool_executions: vec![],
                     },
+                    system_prompt: None,
+                    tools_json: None,
                 });
             }
         };
@@ -752,6 +754,8 @@ impl Agent for LLMAgent {
                     mcp_calls: vec![],
                     tool_executions: vec![],
                 },
+                system_prompt: None,
+                tools_json: None,
             });
         }
 
@@ -805,6 +809,8 @@ impl Agent for LLMAgent {
                         mcp_calls: vec![],
                         tool_executions: vec![],
                     },
+                    system_prompt: None,
+                    tools_json: None,
                 })
             }
             Err(e) => {
@@ -846,6 +852,8 @@ impl Agent for LLMAgent {
                         mcp_calls: vec![],
                         tool_executions: vec![],
                     },
+                    system_prompt: None,
+                    tools_json: None,
                 })
             }
         }
@@ -907,6 +915,8 @@ impl Agent for LLMAgent {
                         mcp_calls: vec![],
                         tool_executions: vec![],
                     },
+                    system_prompt: None,
+                    tools_json: None,
                 });
             }
         };
@@ -932,6 +942,8 @@ impl Agent for LLMAgent {
                     mcp_calls: vec![],
                     tool_executions: vec![],
                 },
+                system_prompt: None,
+                tools_json: None,
             });
         }
 
@@ -991,18 +1003,46 @@ impl Agent for LLMAgent {
         let tool_definitions = self.collect_tool_definitions(&local_tools, &mcp_tools);
         let tools_json = adapter.format_tools(&tool_definitions);
 
-        // Build simplified system prompt (tool schemas are in the API call, not the prompt)
-        let system_prompt =
-            self.build_system_prompt_with_tools(&local_tools, &mcp_tools, &mcp_server_summaries);
+        // Check if we have existing conversation messages (continuation of workflow)
+        let existing_messages = task
+            .context
+            .get("conversation_messages")
+            .and_then(|v| v.as_array())
+            .cloned();
 
-        // Build initial user prompt
-        let base_prompt = self.build_prompt(&task);
+        // Track if this is the first message (need to return system_prompt for persistence)
+        let is_first_message = existing_messages.is_none();
 
         // Initialize messages array for JSON function calling
-        let mut messages: Vec<serde_json::Value> = vec![
-            serde_json::json!({"role": "system", "content": system_prompt}),
-            serde_json::json!({"role": "user", "content": base_prompt}),
-        ];
+        let (mut messages, system_prompt_for_report): (Vec<serde_json::Value>, Option<String>) =
+            if let Some(existing) = existing_messages {
+                // Continuation: use existing messages (already contains system prompt)
+                // Just add the new user message
+                let mut msgs: Vec<serde_json::Value> = existing;
+                msgs.push(serde_json::json!({
+                    "role": "user",
+                    "content": task.description
+                }));
+                debug!(
+                    existing_messages_count = msgs.len() - 1,
+                    "Continuing conversation with existing context"
+                );
+                (msgs, None)
+            } else {
+                // First message: build system prompt and initial messages
+                let system_prompt = self.build_system_prompt_with_tools(
+                    &local_tools,
+                    &mcp_tools,
+                    &mcp_server_summaries,
+                );
+                let base_prompt = self.build_prompt(&task);
+                let msgs = vec![
+                    serde_json::json!({"role": "system", "content": system_prompt}),
+                    serde_json::json!({"role": "user", "content": base_prompt}),
+                ];
+                debug!("First message: building new system prompt with tools");
+                (msgs, Some(system_prompt))
+            };
 
         // Tool execution loop
         let mut final_response_content = String::new();
@@ -1058,16 +1098,17 @@ impl Agent for LLMAgent {
             {
                 Ok(r) => {
                     // Track token usage from response using provider-specific adapter
+                    // We track both cumulative (for billing) and last-call (for context size)
                     let (input_tokens, output_tokens) = adapter.extract_usage(&r);
-                    total_tokens_input += input_tokens;
-                    total_tokens_output += output_tokens;
+                    total_tokens_input = input_tokens; // Last call only (context size)
+                    total_tokens_output += output_tokens; // Cumulative (total generated)
 
                     debug!(
+                        iteration = iteration,
                         input_tokens = input_tokens,
                         output_tokens = output_tokens,
-                        total_input = total_tokens_input,
                         total_output = total_tokens_output,
-                        "Accumulated token usage"
+                        "Token usage - input shows last call context size"
                     );
 
                     r
@@ -1108,6 +1149,8 @@ impl Agent for LLMAgent {
                             mcp_calls: mcp_calls_made,
                             tool_executions: tool_executions_data,
                         },
+                        system_prompt: None,
+                        tools_json: None,
                     });
                 }
             };
@@ -1290,6 +1333,13 @@ impl Agent for LLMAgent {
                 tools_used,
                 mcp_calls: mcp_calls_made,
                 tool_executions: tool_executions_data,
+            },
+            // Return system_prompt and tools_json only on first message for persistence
+            system_prompt: system_prompt_for_report,
+            tools_json: if is_first_message {
+                Some(serde_json::Value::Array(tools_json))
+            } else {
+                None
             },
         })
     }
