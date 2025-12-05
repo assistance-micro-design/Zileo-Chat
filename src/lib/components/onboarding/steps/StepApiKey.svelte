@@ -26,8 +26,8 @@
 		testSuccess = false;
 
 		try {
-			// First save the API key
-			await invoke('save_api_key', { provider: 'mistral', apiKey: apiKey.trim() });
+			// First save the API key (must use 'Mistral' capitalized - KeyStore is case-sensitive)
+			await invoke('save_api_key', { provider: 'Mistral', apiKey: apiKey.trim() });
 
 			// Then test the connection
 			const result = await invoke<{ success: boolean; latency_ms?: number; error?: string }>(
