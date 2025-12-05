@@ -63,10 +63,21 @@ export const WorkflowService = {
 	 * @param workflowId - Workflow ID to execute
 	 * @param message - User message to process
 	 * @param agentId - Agent ID to use for execution
+	 * @param locale - User's selected language (e.g., "en", "fr")
 	 * @returns Workflow result with metrics and report
 	 */
-	async executeStreaming(workflowId: string, message: string, agentId: string): Promise<WorkflowResult> {
-		return invoke<WorkflowResult>('execute_workflow_streaming', { workflowId, message, agentId });
+	async executeStreaming(
+		workflowId: string,
+		message: string,
+		agentId: string,
+		locale: string
+	): Promise<WorkflowResult> {
+		return invoke<WorkflowResult>('execute_workflow_streaming', {
+			workflowId,
+			message,
+			agentId,
+			locale
+		});
 	},
 
 	/**

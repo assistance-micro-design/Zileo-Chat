@@ -32,6 +32,7 @@ use uuid::Uuid;
 /// * `workflow_id` - Associated workflow ID
 /// * `message` - User message to process
 /// * `agent_id` - Agent to execute with
+/// * `locale` - User's selected language (e.g., "en", "fr")
 ///
 /// # Returns
 /// Final workflow result after streaming completes
@@ -42,7 +43,8 @@ use uuid::Uuid;
     fields(
         workflow_id = %workflow_id,
         agent_id = %agent_id,
-        message_len = message.len()
+        message_len = message.len(),
+        locale = %locale
     )
 )]
 pub async fn execute_workflow_streaming(
@@ -50,6 +52,7 @@ pub async fn execute_workflow_streaming(
     workflow_id: String,
     message: String,
     agent_id: String,
+    locale: String,
     state: State<'_, AppState>,
 ) -> Result<WorkflowResult, String> {
     info!("Starting streaming workflow execution");
@@ -205,6 +208,7 @@ pub async fn execute_workflow_streaming(
     // Build conversation context for the LLM
     // If we have existing messages with system prompt, pass them as conversation_messages
     // for direct reuse (no reconstruction needed)
+    // Note: locale is always passed for system prompt injection (first message only uses it)
     let history_context = if has_system_message && !conversation_history.is_empty() {
         // Continuation: format messages for API-native reuse
         let api_messages: Vec<serde_json::Value> = conversation_history
@@ -219,13 +223,15 @@ pub async fn execute_workflow_streaming(
         serde_json::json!({
             "conversation_messages": api_messages,
             "is_primary_agent": true,
-            "workflow_id": validated_workflow_id.clone()
+            "workflow_id": validated_workflow_id.clone(),
+            "locale": locale.clone()
         })
     } else {
         // First message or no system prompt: let agent build the context
         serde_json::json!({
             "is_primary_agent": true,
-            "workflow_id": validated_workflow_id.clone()
+            "workflow_id": validated_workflow_id.clone(),
+            "locale": locale.clone()
         })
     };
 

@@ -49,6 +49,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
 	import { validationStore, hasPendingValidation, pendingValidation } from '$lib/stores/validation';
 	import { fetchModelByApiName } from '$lib/stores/llm';
+	import { locale } from '$lib/stores/locale';
 	import type { ProviderType } from '$types/llm';
 
 	/** LocalStorage key for persisting selected workflow */
@@ -312,11 +313,12 @@ Uses extracted components, services, and stores for clean architecture.
 			tokenStore.startStreaming();
 			await streamingStore.start(selectedWorkflowId);
 
-			// 3. Execute workflow
+			// 3. Execute workflow with user's selected locale
 			const result = await WorkflowService.executeStreaming(
 				selectedWorkflowId,
 				message,
-				selectedAgentId
+				selectedAgentId,
+				$locale
 			);
 
 			// 4. Update streaming tokens and cost with final result

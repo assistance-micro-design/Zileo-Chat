@@ -437,6 +437,7 @@ impl LLMAgent {
     /// - The agent's base system prompt
     /// - Context about available tools (names only, schemas are in API)
     /// - Available MCP servers for sub-agent delegation
+    /// - Current date/time and user's selected language
     ///
     /// NOTE: No XML instructions! The LLM uses native JSON function calling.
     fn build_system_prompt_with_tools(
@@ -444,6 +445,7 @@ impl LLMAgent {
         local_tools: &[Arc<dyn Tool>],
         mcp_tools: &[(String, MCPTool)],
         mcp_server_summaries: &[MCPServerSummary],
+        locale: Option<&str>,
     ) -> String {
         let mut sections = vec![self.config.system_prompt.clone()];
 
@@ -487,15 +489,26 @@ impl LLMAgent {
         // Add agent configuration context (provider, model, available resources)
         // This helps the LLM make informed decisions when spawning sub-agents
         let now = Local::now();
+
+        // Convert locale code to full language name for clarity
+        let language_display = match locale {
+            Some("fr") => "French (Francais)",
+            Some("en") => "English",
+            Some(code) => code, // Fallback to code if unknown
+            None => "English", // Default
+        };
+
         let mut config_section = format!(
             r#"## Your Configuration
 
 **Current Date and Time**: {} (local timezone)
+**User Language**: {} - Always respond in this language unless explicitly asked otherwise.
 
 You are currently running with the following configuration:
 - **Provider**: {}
 - **Model**: {}"#,
             now.format("%A %d %B %Y, %H:%M:%S"),
+            language_display,
             self.config.llm.provider,
             self.config.llm.model,
         );
@@ -970,6 +983,13 @@ impl Agent for LLMAgent {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // Extract user's selected locale for system prompt language instruction
+        let locale = task
+            .context
+            .get("locale")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
         let local_tools = self.create_local_tools(workflow_id, is_primary_agent);
 
         // Discover MCP tools and server summaries if manager is available
@@ -1034,6 +1054,7 @@ impl Agent for LLMAgent {
                     &local_tools,
                     &mcp_tools,
                     &mcp_server_summaries,
+                    locale.as_deref(),
                 );
                 let base_prompt = self.build_prompt(&task);
                 let msgs = vec![
