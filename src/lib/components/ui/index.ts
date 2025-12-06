@@ -21,3 +21,4 @@ export { default as Textarea } from './Textarea.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export type { SkeletonVariant } from './Skeleton.svelte';
 export { default as LanguageSelector } from './LanguageSelector.svelte';
+export { default as HelpButton } from './HelpButton.svelte';

@@ -10,6 +10,7 @@ Right sidebar for displaying workflow activity feed with filtering.
 	import { Activity } from 'lucide-svelte';
 	import RightSidebar from '$lib/components/layout/RightSidebar.svelte';
 	import ActivityFeed from '$lib/components/workflow/ActivityFeed.svelte';
+	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 
@@ -41,6 +42,11 @@ Right sidebar for displaying workflow activity feed with filtering.
 			<Activity size={20} class="header-icon" />
 			{#if !isCollapsed}
 				<span class="activity-title">{$i18n('activity_title')}</span>
+				<HelpButton
+					titleKey="help_activity_sidebar_title"
+					descriptionKey="help_activity_sidebar_description"
+					tutorialKey="help_activity_sidebar_tutorial"
+				/>
 				{#if isStreaming}
 					<span class="streaming-indicator"></span>
 				{/if}

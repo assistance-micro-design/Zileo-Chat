@@ -9,6 +9,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 <script lang="ts">
 	import { Bot } from 'lucide-svelte';
 	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
+	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import type { AgentSummary } from '$types/agent';
 	import type { Workflow } from '$types/workflow';
@@ -46,6 +47,11 @@ Displays workflow title, agent selector, iteration controls, and context informa
 	<div class="header-content">
 		<Bot size={24} class="agent-icon" />
 		<h2 class="agent-title">{workflow?.name ?? $i18n('agent_header_default_title')}</h2>
+		<HelpButton
+			titleKey="help_agent_header_title"
+			descriptionKey="help_agent_header_description"
+			tutorialKey="help_agent_header_tutorial"
+		/>
 		<span class="header-separator"></span>
 
 		{#if agentsLoading}

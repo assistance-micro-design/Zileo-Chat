@@ -27,6 +27,7 @@
 		Activity
 	} from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
+	import { HelpButton } from '$lib/components/ui';
 
 	/**
 	 * TokenDisplay props
@@ -102,6 +103,13 @@
 	role="status"
 	aria-label={$i18n('workflow_token_arialabel')}
 >
+	<!-- Help Button -->
+	<HelpButton
+		titleKey="help_token_display_title"
+		descriptionKey="help_token_display_description"
+		tutorialKey="help_token_display_tutorial"
+	/>
+
 	<!-- Context Progress Section -->
 	<div class="metric context-metric">
 		<div class="metric-icon context-icon" class:warning={warningLevel === 'warning'} class:critical={warningLevel === 'critical' || warningLevel === 'full'}>

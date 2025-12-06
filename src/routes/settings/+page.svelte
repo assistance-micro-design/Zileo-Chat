@@ -20,7 +20,7 @@ Includes MCP server configuration section for managing external tool servers.
 		LLMState
 	} from '$types/llm';
 	import { Sidebar } from '$lib/components/layout';
-	import { Card, Button, Input, Select, StatusIndicator, Modal } from '$lib/components/ui';
+	import { Card, Button, Input, Select, StatusIndicator, Modal, HelpButton } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
@@ -684,7 +684,14 @@ Includes MCP server configuration section for managing external tool servers.
 	<main class="content-area" bind:this={contentAreaRef}>
 		<!-- Providers Section -->
 		<section id="providers" class="settings-section">
-			<h2 class="section-title">{$i18n('settings_providers')}</h2>
+			<div class="section-title-row">
+				<h2 class="section-title">{$i18n('settings_providers')}</h2>
+				<HelpButton
+					titleKey="help_providers_title"
+					descriptionKey="help_providers_description"
+					tutorialKey="help_providers_tutorial"
+				/>
+			</div>
 
 			{#if llmState.error}
 				<div class="llm-error">
@@ -741,7 +748,14 @@ Includes MCP server configuration section for managing external tool servers.
 		<!-- Models Section -->
 		<section id="models" class="settings-section">
 			<div class="section-header-row">
-				<h2 class="section-title">{$i18n('settings_models')}</h2>
+				<div class="section-title-row">
+					<h2 class="section-title">{$i18n('settings_models')}</h2>
+					<HelpButton
+						titleKey="help_models_title"
+						descriptionKey="help_models_description"
+						tutorialKey="help_models_tutorial"
+					/>
+				</div>
 				<div class="models-header-actions">
 					<Select
 						options={modelsProviderOptions}
@@ -810,7 +824,14 @@ Includes MCP server configuration section for managing external tool servers.
 		<!-- MCP Servers Section -->
 		<section id="mcp" class="settings-section">
 			<div class="section-header-row">
-				<h2 class="section-title">{$i18n('settings_mcp_servers')}</h2>
+				<div class="section-title-row">
+					<h2 class="section-title">{$i18n('settings_mcp_servers')}</h2>
+					<HelpButton
+						titleKey="help_mcp_title"
+						descriptionKey="help_mcp_description"
+						tutorialKey="help_mcp_tutorial"
+					/>
+				</div>
 				<Button variant="primary" size="sm" onclick={openCreateModal}>
 					<Plus size={16} />
 					<span>{$i18n('mcp_add_server')}</span>
@@ -866,7 +887,14 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Memory Section -->
 		<section id="memory" class="settings-section">
-			<h2 class="section-title">{$i18n('settings_memory')}</h2>
+			<div class="section-title-row">
+				<h2 class="section-title">{$i18n('settings_memory')}</h2>
+				<HelpButton
+					titleKey="help_memory_title"
+					descriptionKey="help_memory_description"
+					tutorialKey="help_memory_tutorial"
+				/>
+			</div>
 
 			<div class="memory-subsections">
 				<!-- Embedding Configuration -->
@@ -885,7 +913,14 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Validation Section -->
 		<section id="validation" class="settings-section">
-			<h2 class="section-title">{$i18n('settings_validation')}</h2>
+			<div class="section-title-row">
+				<h2 class="section-title">{$i18n('settings_validation')}</h2>
+				<HelpButton
+					titleKey="help_validation_title"
+					descriptionKey="help_validation_description"
+					tutorialKey="help_validation_tutorial"
+				/>
+			</div>
 			<p class="section-description">
 				{$i18n('validation_description')}
 			</p>
@@ -904,7 +939,14 @@ Includes MCP server configuration section for managing external tool servers.
 
 		<!-- Theme Section -->
 		<section id="theme" class="settings-section">
-			<h2 class="section-title">{$i18n('settings_theme')}</h2>
+			<div class="section-title-row">
+				<h2 class="section-title">{$i18n('settings_theme')}</h2>
+				<HelpButton
+					titleKey="help_theme_title"
+					descriptionKey="help_theme_description"
+					tutorialKey="help_theme_tutorial"
+				/>
+			</div>
 
 			<div class="theme-grid">
 				<!-- Light Theme Card -->
@@ -1234,6 +1276,17 @@ Includes MCP server configuration section for managing external tool servers.
 		font-size: var(--font-size-2xl);
 		font-weight: var(--font-weight-semibold);
 		margin-bottom: var(--spacing-lg);
+	}
+
+	.section-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-lg);
+	}
+
+	.section-title-row .section-title {
+		margin-bottom: 0;
 	}
 
 	.section-description {

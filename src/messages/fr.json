@@ -789,5 +789,66 @@
 
   "onboarding_complete_title": "Configuration terminee !",
   "onboarding_complete_description": "Vous etes pret a utiliser Zileo Chat.",
-  "onboarding_complete_button": "Commencer"
+  "onboarding_complete_button": "Commencer",
+
+  "help_button_tooltip": "Cliquez pour obtenir de l'aide",
+  "help_button_label": "Aide",
+  "help_how_to_use": "Comment utiliser",
+  "common_understood": "Compris",
+
+  "help_providers_title": "Fournisseurs LLM",
+  "help_providers_description": "Les fournisseurs sont les services d'IA qui alimentent vos agents. Configurez les cles d'API pour les fournisseurs en nuage (Mistral) ou connectez-vous aux serveurs locaux (Ollama).",
+  "help_providers_tutorial": "Cliquez sur 'Configurer' sur une carte de fournisseur\nSaisissez votre cle d'API ou l'adresse du serveur\nL'indicateur d'etat affichera 'Pret' une fois configure\nVous pouvez supprimer et reconfigurer les cles a tout moment",
+
+  "help_models_title": "Modeles d'IA",
+  "help_models_description": "Les modeles sont les moteurs d'IA specifiques disponibles chez chaque fournisseur. Chaque modele a des capacites, des tailles de contexte et des tarifs differents. Vous pouvez ajouter des modeles personnalises ou utiliser ceux integres.",
+  "help_models_tutorial": "Utilisez le menu deroulant pour filtrer par fournisseur\nCliquez sur 'Ajouter un modele' pour creer un modele personnalise\nCliquez sur l'icone etoile pour definir un modele par defaut\nModifiez les modeles pour ajuster la temperature et autres parametres",
+
+  "help_agents_title": "Agents IA",
+  "help_agents_description": "Les agents sont des assistants IA configures avec des modeles, outils et instructions systeme specifiques. Creez des agents specialises pour differentes taches comme le codage, l'analyse ou la redaction creative.",
+  "help_agents_tutorial": "Cliquez sur 'Creer un agent' pour commencer\nChoisissez un fournisseur et un modele\nSelectionnez les outils que l'agent peut utiliser\nRedigez une instruction systeme pour definir la personnalite de l'agent\nEnregistrez pour rendre l'agent disponible dans les flux de travail",
+
+  "help_mcp_title": "Serveurs MCP",
+  "help_mcp_description": "Les serveurs MCP (Model Context Protocol) fournissent des outils et ressources externes a vos agents. Ils peuvent acceder aux bases de donnees, API, systemes de fichiers et plus encore.",
+  "help_mcp_tutorial": "Cliquez sur 'Ajouter un serveur' pour configurer un nouveau serveur MCP\nChoisissez la methode de deploiement (Docker, NPX, UVX ou HTTP)\nSaisissez les arguments de commande et les variables d'environnement\nTestez la connexion pour verifier qu'elle fonctionne\nActivez le serveur pour le rendre disponible aux agents",
+
+  "help_memory_title": "Systeme de memoire",
+  "help_memory_description": "Le systeme de memoire permet aux agents de stocker et recuperer des informations entre les conversations. Configurez les incorporations pour la recherche semantique et gerez les memoires stockees.",
+  "help_memory_tutorial": "Configurez d'abord un modele d'incorporation (Mistral ou Ollama)\nAjustez la taille des segments et le chevauchement pour le traitement du texte\nConsultez et gerez les memoires stockees dans la liste ci-dessous\nUtilisez la recherche pour trouver des memoires specifiques\nExportez les memoires pour la sauvegarde ou le partage",
+
+  "help_validation_title": "Validation humaine",
+  "help_validation_description": "Controlez quand les agents ont besoin d'une approbation humaine avant d'executer des operations critiques. Utile pour la securite et la supervision des actions de l'IA.",
+  "help_validation_tutorial": "Choisissez un mode de validation (Automatique, Manuel ou Selectif)\nEn mode Selectif, configurez quelles operations necessitent une approbation\nDefinissez les seuils de risque pour le traitement automatique\nLes validations en attente apparaissent sous forme de fenetres contextuelles pendant les flux de travail",
+
+  "help_prompts_title": "Bibliotheque d'instructions",
+  "help_prompts_description": "Creez des modeles d'instructions reutilisables avec des espaces reservables. Utilisez-les dans les conversations pour inserer rapidement des instructions complexes.",
+  "help_prompts_tutorial": "Cliquez sur 'Creer une instruction' pour ajouter un nouveau modele\nUtilisez la syntaxe {{nom_variable}} pour les espaces reservables\nOrganisez les instructions par categorie\nAccedez aux instructions dans le chat avec Ctrl+P\nRemplissez les variables lors de l'utilisation d'une instruction",
+
+  "help_import_export_title": "Importation / Exportation",
+  "help_import_export_description": "Sauvegardez votre configuration ou partagez-la avec d'autres. Exportez les agents, modeles, serveurs MCP et instructions vers un fichier JSON.",
+  "help_import_export_tutorial": "Allez dans l'onglet Exporter pour creer une sauvegarde\nSelectionnez les entites a inclure\nVerifiez et nettoyez les donnees sensibles\nTelechargez le fichier d'exportation\nUtilisez Importer pour restaurer depuis un fichier de sauvegarde",
+
+  "help_theme_title": "Parametres du theme",
+  "help_theme_description": "Personnalisez l'apparence visuelle de l'application. Choisissez entre les modes clair et sombre pour un affichage confortable.",
+  "help_theme_tutorial": "Cliquez sur une carte de theme pour le selectionner\nLe changement s'applique immediatement\nVotre preference est enregistree automatiquement",
+
+  "help_workflow_sidebar_title": "Liste des flux de travail",
+  "help_workflow_sidebar_description": "Les flux de travail sont des sessions de conversation avec un agent selectionne. Chaque flux de travail conserve son propre historique de messages et son contexte.",
+  "help_workflow_sidebar_tutorial": "Cliquez sur '+' pour creer un nouveau flux de travail\nSelectionnez un flux existant pour le continuer\nUtilisez la barre de recherche pour filtrer les flux\nFaites un clic droit ou utilisez les icones pour renommer ou supprimer\nLes flux de travail sont enregistres automatiquement",
+
+  "help_agent_header_title": "Selection de l'agent",
+  "help_agent_header_description": "Selectionnez quel agent traite vos messages dans ce flux de travail. Vous pouvez egalement configurer le nombre maximal d'iterations d'outils.",
+  "help_agent_header_tutorial": "Utilisez le menu deroulant pour selectionner un agent\nAjustez les iterations maximales si l'agent a besoin de plus d'appels d'outils\nLe modele et le fournisseur de l'agent sont affiches ci-dessous\nAllez dans les Parametres pour creer de nouveaux agents",
+
+  "help_chat_title": "Zone de discussion",
+  "help_chat_description": "C'est ici que vous communiquez avec votre agent IA. Saisissez des messages, consultez les reponses et suivez le raisonnement et l'utilisation des outils de l'agent.",
+  "help_chat_tutorial": "Saisissez votre message dans le champ de saisie\nAppuyez sur Ctrl+Entree ou cliquez sur Envoyer\nUtilisez Ctrl+P pour inserer un modele d'instruction\nSurveillez la barre laterale d'activite pour les executions d'outils\nCliquez sur Annuler pour arreter une reponse en cours",
+
+  "help_token_display_title": "Metriques des jetons",
+  "help_token_display_description": "Suivez l'utilisation des jetons et les couts pour le flux de travail actuel. Les jetons sont les unites de base du texte que les modeles d'IA traitent.",
+  "help_token_display_tutorial": "Le contexte indique quelle part de la memoire du modele est utilisee\nEntree/Sortie indique les jetons envoyes et recus\nLe total suit l'utilisation cumulative du flux de travail\nLes estimations de cout sont basees sur les tarifs du modele",
+
+  "help_activity_sidebar_title": "Flux d'activite",
+  "help_activity_sidebar_description": "Surveillez les actions de l'agent en temps reel. Voyez les executions d'outils, les etapes de raisonnement et les operations des sous-agents au fur et a mesure.",
+  "help_activity_sidebar_tutorial": "Observez les appels d'outils pendant que l'agent travaille\nDeveloppez les elements pour voir les informations detaillees\nFiltrez par type d'activite a l'aide du menu deroulant\nLes activites historiques sont chargees lorsque vous selectionnez un flux de travail"
 }

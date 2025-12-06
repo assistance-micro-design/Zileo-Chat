@@ -18,7 +18,7 @@ Provides CRUD operations for agents with list view and form modal.
 	} from '$lib/stores/agents';
 	import AgentList from './AgentList.svelte';
 	import AgentForm from './AgentForm.svelte';
-	import { Button, Modal } from '$lib/components/ui';
+	import { Button, Modal, HelpButton } from '$lib/components/ui';
 	import { Plus } from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -125,7 +125,14 @@ Provides CRUD operations for agents with list view and form modal.
 	<!-- Header with title and create button -->
 	<header class="settings-header">
 		<div class="header-content">
-			<h3 class="header-title">{$i18n('agents_config_title')}</h3>
+			<div class="header-title-row">
+				<h3 class="header-title">{$i18n('agents_config_title')}</h3>
+				<HelpButton
+					titleKey="help_agents_title"
+					descriptionKey="help_agents_description"
+					tutorialKey="help_agents_tutorial"
+				/>
+			</div>
 			<p class="header-description">
 				{$i18n('agents_config_description')}
 			</p>
@@ -204,10 +211,16 @@ Provides CRUD operations for agents with list view and form modal.
 		flex: 1;
 	}
 
+	.header-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
 	.header-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
-		margin: 0 0 var(--spacing-xs) 0;
+		margin: 0;
 	}
 
 	.header-description {

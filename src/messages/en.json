@@ -789,5 +789,66 @@
 
   "onboarding_complete_title": "Setup Complete!",
   "onboarding_complete_description": "You're ready to use Zileo Chat.",
-  "onboarding_complete_button": "Get Started"
+  "onboarding_complete_button": "Get Started",
+
+  "help_button_tooltip": "Click for help",
+  "help_button_label": "Help",
+  "help_how_to_use": "How to use",
+  "common_understood": "Got it",
+
+  "help_providers_title": "LLM Providers",
+  "help_providers_description": "Providers are the AI services that power your agents. Configure API keys for cloud providers (Mistral) or connect to local servers (Ollama).",
+  "help_providers_tutorial": "Click 'Configure' on a provider card\nEnter your API key or server URL\nThe status indicator will show 'Ready' when configured\nYou can delete and reconfigure keys at any time",
+
+  "help_models_title": "AI Models",
+  "help_models_description": "Models are the specific AI engines available from each provider. Each model has different capabilities, context sizes, and pricing. You can add custom models or use the built-in ones.",
+  "help_models_tutorial": "Use the dropdown to filter by provider\nClick 'Add Model' to create a custom model\nClick the star icon to set a model as default\nEdit models to adjust temperature and other settings",
+
+  "help_agents_title": "AI Agents",
+  "help_agents_description": "Agents are AI assistants configured with specific models, tools, and system prompts. Create specialized agents for different tasks like coding, analysis, or creative writing.",
+  "help_agents_tutorial": "Click 'Create Agent' to start\nChoose a provider and model\nSelect which tools the agent can use\nWrite a system prompt to define the agent's personality\nSave to make the agent available in workflows",
+
+  "help_mcp_title": "MCP Servers",
+  "help_mcp_description": "MCP (Model Context Protocol) servers provide external tools and resources to your agents. They can access databases, APIs, file systems, and more.",
+  "help_mcp_tutorial": "Click 'Add Server' to configure a new MCP server\nChoose the deployment method (Docker, NPX, UVX, or HTTP)\nEnter the command arguments and environment variables\nTest the connection to verify it works\nEnable the server to make it available to agents",
+
+  "help_memory_title": "Memory System",
+  "help_memory_description": "The memory system allows agents to store and retrieve information across conversations. Configure embeddings for semantic search and manage stored memories.",
+  "help_memory_tutorial": "Configure an embedding model first (Mistral or Ollama)\nAdjust chunk size and overlap for text processing\nView and manage stored memories in the list below\nUse search to find specific memories\nExport memories for backup or sharing",
+
+  "help_validation_title": "Human Validation",
+  "help_validation_description": "Control when agents need human approval before executing critical operations. Useful for safety and oversight of AI actions.",
+  "help_validation_tutorial": "Choose a validation mode (Auto, Manual, or Selective)\nIn Selective mode, configure which operations require approval\nSet risk thresholds for automatic handling\nPending validations appear as pop-ups during workflows",
+
+  "help_prompts_title": "Prompt Library",
+  "help_prompts_description": "Create reusable prompt templates with variable placeholders. Use them in conversations to quickly insert complex instructions.",
+  "help_prompts_tutorial": "Click 'Create Prompt' to add a new template\nUse {{variable_name}} syntax for placeholders\nOrganize prompts by category\nAccess prompts in chat with Ctrl+P\nFill in variables when using a prompt",
+
+  "help_import_export_title": "Import / Export",
+  "help_import_export_description": "Backup your configuration or share it with others. Export agents, models, MCP servers, and prompts to a JSON file.",
+  "help_import_export_tutorial": "Go to the Export tab to create a backup\nSelect which entities to include\nReview and sanitize sensitive data\nDownload the export file\nUse Import to restore from a backup file",
+
+  "help_theme_title": "Theme Settings",
+  "help_theme_description": "Customize the visual appearance of the application. Choose between light and dark modes for comfortable viewing.",
+  "help_theme_tutorial": "Click on a theme card to select it\nThe change applies immediately\nYour preference is saved automatically",
+
+  "help_workflow_sidebar_title": "Workflow List",
+  "help_workflow_sidebar_description": "Workflows are conversation sessions with a selected agent. Each workflow maintains its own message history and context.",
+  "help_workflow_sidebar_tutorial": "Click '+' to create a new workflow\nSelect an existing workflow to continue it\nUse the search bar to filter workflows\nRight-click or use icons to rename or delete\nWorkflows are saved automatically",
+
+  "help_agent_header_title": "Agent Selection",
+  "help_agent_header_description": "Select which agent handles your messages in this workflow. You can also configure the maximum number of tool iterations.",
+  "help_agent_header_tutorial": "Use the dropdown to select an agent\nAdjust max iterations if the agent needs more tool calls\nThe agent's model and provider are shown below\nGo to Settings to create new agents",
+
+  "help_chat_title": "Chat Area",
+  "help_chat_description": "This is where you communicate with your AI agent. Type messages, view responses, and track the agent's reasoning and tool usage.",
+  "help_chat_tutorial": "Type your message in the input field\nPress Ctrl+Enter or click Send\nUse Ctrl+P to insert a prompt template\nWatch the activity sidebar for tool executions\nClick Cancel to stop a long-running response",
+
+  "help_token_display_title": "Token Metrics",
+  "help_token_display_description": "Track token usage and costs for the current workflow. Tokens are the basic units of text that AI models process.",
+  "help_token_display_tutorial": "Context shows how much of the model's memory is used\nIn/Out shows tokens sent and received\nTotal tracks cumulative usage for the workflow\nCost estimates are based on model pricing",
+
+  "help_activity_sidebar_title": "Activity Feed",
+  "help_activity_sidebar_description": "Monitor the agent's actions in real-time. See tool executions, reasoning steps, and sub-agent operations as they happen.",
+  "help_activity_sidebar_tutorial": "Watch for tool calls as the agent works\nExpand items to see detailed information\nFilter by activity type using the dropdown\nHistorical activities are loaded when you select a workflow"
 }

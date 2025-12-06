@@ -12,6 +12,7 @@
 	import { ImportPanel } from './index';
 	import { Download, Upload } from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
+	import { HelpButton } from '$lib/components/ui';
 
 	/** Props */
 	interface Props {
@@ -61,7 +62,14 @@
 
 <div class="import-export-settings">
 	<div class="header">
-		<h2>{$i18n('ie_title')}</h2>
+		<div class="header-title-row">
+			<h2>{$i18n('ie_title')}</h2>
+			<HelpButton
+				titleKey="help_import_export_title"
+				descriptionKey="help_import_export_description"
+				tutorialKey="help_import_export_tutorial"
+			/>
+		</div>
 		<p class="description">
 			{$i18n('ie_description')}
 		</p>
@@ -116,8 +124,14 @@
 		margin-bottom: var(--spacing-sm, 0.5rem);
 	}
 
+	.header-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm, 0.5rem);
+	}
+
 	.header h2 {
-		margin: 0 0 var(--spacing-xs, 0.25rem) 0;
+		margin: 0;
 		font-size: var(--font-size-xl, 1.25rem);
 		font-weight: 600;
 		color: var(--color-text-primary, #1a1a2e);

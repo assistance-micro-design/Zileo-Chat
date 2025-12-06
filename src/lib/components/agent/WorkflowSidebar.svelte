@@ -8,7 +8,7 @@ Left sidebar for workflow management with search and CRUD operations.
 
 <script lang="ts">
 	import { Plus, Search } from 'lucide-svelte';
-	import { Button } from '$lib/components/ui';
+	import { Button, HelpButton } from '$lib/components/ui';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';
 	import { i18n } from '$lib/i18n';
@@ -67,7 +67,14 @@ Left sidebar for workflow management with search and CRUD operations.
 				</Button>
 			{:else}
 				<div class="flex justify-between items-center">
-					<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
+					<div class="title-row">
+						<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
+						<HelpButton
+							titleKey="help_workflow_sidebar_title"
+							descriptionKey="help_workflow_sidebar_description"
+							tutorialKey="help_workflow_sidebar_tutorial"
+						/>
+					</div>
 					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
 						<Plus size={14} />
 					</Button>
@@ -112,6 +119,12 @@ Left sidebar for workflow management with search and CRUD operations.
 		align-items: center;
 		justify-content: center;
 		gap: 0;
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
 	.sidebar-title {

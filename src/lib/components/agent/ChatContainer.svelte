@@ -8,7 +8,7 @@ Main chat area with message display, streaming content, and input controls.
 
 <script lang="ts">
 	import { StopCircle, Bot } from 'lucide-svelte';
-	import { Button, Spinner } from '$lib/components/ui';
+	import { Button, Spinner, HelpButton } from '$lib/components/ui';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
@@ -46,6 +46,15 @@ Main chat area with message display, streaming content, and input controls.
 </script>
 
 <div class="chat-container">
+	<!-- Help Button -->
+	<div class="chat-help">
+		<HelpButton
+			titleKey="help_chat_title"
+			descriptionKey="help_chat_description"
+			tutorialKey="help_chat_tutorial"
+		/>
+	</div>
+
 	<!-- Messages Area -->
 	<div class="messages-area" bind:this={messagesContainer}>
 		{#if messagesLoading}
@@ -95,6 +104,14 @@ Main chat area with message display, streaming content, and input controls.
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
+		position: relative;
+	}
+
+	.chat-help {
+		position: absolute;
+		top: var(--spacing-sm);
+		right: var(--spacing-sm);
+		z-index: 10;
 	}
 
 	.messages-area {

@@ -18,7 +18,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	} from '$lib/stores/prompts';
 	import PromptList from './PromptList.svelte';
 	import PromptForm from './PromptForm.svelte';
-	import { Button, Modal } from '$lib/components/ui';
+	import { Button, Modal, HelpButton } from '$lib/components/ui';
 	import { Plus } from 'lucide-svelte';
 	import type { PromptCreate } from '$types/prompt';
 	import { i18n } from '$lib/i18n';
@@ -121,7 +121,14 @@ Provides CRUD operations for prompts with list view and form modal.
 	<!-- Header with title and create button -->
 	<header class="settings-header">
 		<div class="header-content">
-			<h3 class="header-title">{$i18n('prompts_title')}</h3>
+			<div class="header-title-row">
+				<h3 class="header-title">{$i18n('prompts_title')}</h3>
+				<HelpButton
+					titleKey="help_prompts_title"
+					descriptionKey="help_prompts_description"
+					tutorialKey="help_prompts_tutorial"
+				/>
+			</div>
 			<p class="header-description">
 				{$i18n('prompts_description')}
 			</p>
@@ -209,10 +216,16 @@ Provides CRUD operations for prompts with list view and form modal.
 		flex: 1;
 	}
 
+	.header-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
 	.header-title {
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
-		margin: 0 0 var(--spacing-xs) 0;
+		margin: 0;
 	}
 
 	.header-description {
