@@ -151,28 +151,208 @@ codesign --sign "Developer ID Application: Your Name" \
 
 ---
 
-### Windows (Prevu Phase 2)
+### Windows (Guide Complet)
 
-> **Statut** : Non configure. Necessite ajout de "msi" dans bundle.targets.
+#### Prerequisites Windows
 
-#### .msi (Installer)
-```bash
-# Ajouter "msi" dans tauri.conf.json bundle.targets
-npm run tauri:build
+**1. Visual Studio Build Tools 2022** (obligatoire)
+
+```powershell
+# Via winget (recommande)
+winget install Microsoft.VisualStudio.2022.BuildTools
+
+# OU telecharger: https://visualstudio.microsoft.com/visual-cpp-build-tools/
 ```
 
-**Output prevu** : `zileo-chat_0.1.0_x64.msi`
+Lors de l'installation, selectionner:
+- "Desktop development with C++"
+- Windows 10/11 SDK
+
+**2. Rust avec toolchain MSVC**
+
+```powershell
+# Installer Rust
+winget install Rustlang.Rustup
+
+# OU telecharger: https://rustup.rs/
+
+# Configurer le toolchain MSVC (IMPORTANT)
+rustup default stable-msvc
+
+# Verifier
+rustup show
+# Doit afficher: stable-x86_64-pc-windows-msvc (default)
+```
+
+**3. Node.js 20+**
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+
+# Verifier
+node --version   # >= 20.x
+```
+
+**4. WebView2 Runtime**
+
+Normalement pre-installe sur Windows 10/11 recent. Si absent:
+```powershell
+winget install Microsoft.EdgeWebView2Runtime
+```
+
+#### Build Manuel Windows
+
+```powershell
+# 1. Cloner le projet
+git clone https://github.com/xxx/Zileo-Chat-3.git
+cd Zileo-Chat-3
+
+# 2. Installer les dependances
+npm ci
+
+# 3. Valider le projet (optionnel mais recommande)
+npm run check
+npm run lint
+
+# 4. Build release
+npm run tauri build
+
+# 5. Le MSI est genere dans:
+explorer "src-tauri\target\release\bundle\msi"
+```
+
+**Output** :
+```
+src-tauri/target/release/bundle/
+├── msi/
+│   └── zileo-chat_0.1.0_x64-setup.msi    # Installer MSI
+└── nsis/
+    └── zileo-chat_0.1.0_x64-setup.exe    # Installer NSIS (alternative)
+```
+
+#### Script Automatise Windows
+
+Un script PowerShell est fourni pour automatiser le setup complet:
+
+```powershell
+# Telecharger et executer le script
+cd Zileo-Chat-3
+
+# Setup complet (installe prerequisites si manquants + build)
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
+
+# Build uniquement (prerequisites deja installes)
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -SkipPrerequisites
+
+# Mode developpement (lance l'app sans build release)
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -DevMode
+```
+
+**Options du script:**
+| Option | Description |
+|--------|-------------|
+| (aucune) | Setup complet + build release |
+| `-SkipPrerequisites` | Passe la verification/installation des prerequisites |
+| `-BuildOnly` | Build uniquement, pas de verification |
+| `-DevMode` | Lance `npm run tauri dev` au lieu de build |
+
+#### Troubleshooting Windows
+
+**Erreur: "MSVC not found"**
+```powershell
+# Verifier le toolchain
+rustup show
+
+# Si "gnu" au lieu de "msvc":
+rustup default stable-msvc
+```
+
+**Erreur: "link.exe not found"**
+```powershell
+# Reinstaller Visual Studio Build Tools avec les composants C++
+winget install Microsoft.VisualStudio.2022.BuildTools `
+  --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+**Erreur: "WebView2 not found"**
+```powershell
+winget install Microsoft.EdgeWebView2Runtime
+```
+
+**Build tres lent (premiere fois)**
+
+Normal! La premiere compilation Rust telecharge et compile toutes les dependances (~10-15 min).
+Les builds suivants sont beaucoup plus rapides (~2-5 min).
+
+Pour accelerer:
+```powershell
+# Utiliser plus de CPU cores
+$env:CARGO_BUILD_JOBS = "8"
+npm run tauri build
+```
+
+**Erreur: "npm ci failed"**
+```powershell
+# Nettoyer et reinstaller
+npm cache clean --force
+Remove-Item -Recurse -Force node_modules
+npm ci
+```
+
+#### Workflow Complet Windows
+
+```powershell
+# === SETUP INITIAL (une seule fois) ===
+
+# 1. Installer prerequisites
+winget install Microsoft.VisualStudio.2022.BuildTools
+winget install Rustlang.Rustup
+winget install OpenJS.NodeJS.LTS
+
+# 2. Configurer Rust
+rustup default stable-msvc
+
+# 3. Cloner le projet
+git clone https://github.com/xxx/Zileo-Chat-3.git
+cd Zileo-Chat-3
+
+# 4. Installer dependances npm
+npm ci
+
+
+# === DEVELOPPEMENT (quotidien) ===
+
+# Lancer en mode dev (hot reload)
+npm run tauri dev
+
+
+# === BUILD RELEASE ===
+
+# Generer l'installeur MSI
+npm run tauri build
+
+# Installer pour tester
+Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.1.0_x64-setup.msi"
+```
+
+#### Checklist Pre-Build Windows
+
+```powershell
+# Verifier tous les prerequisites
+rustc --version          # >= 1.80
+rustup show              # stable-x86_64-pc-windows-msvc
+node --version           # >= 20.x
+npm --version            # >= 10.x
+
+# Verifier Visual Studio Build Tools
+# Ouvrir "Developer PowerShell for VS 2022" - si ca marche, c'est OK
+```
 
 ---
 
-## CI/CD Pipeline (Prevu)
+## CI/CD Pipeline
 
-> **Statut** : Aucun workflow CI/CD configure actuellement.
-> Les fichiers `.github/workflows/` et `.gitlab-ci.yml` n'existent pas.
-
-### Validation Locale (Disponible)
-
-En attendant CI/CD, utiliser les commandes locales :
+### Validation Locale
 
 ```bash
 # Frontend validation
@@ -187,20 +367,264 @@ cargo clippy -- -D warnings  # Linting
 cargo test                # Unit tests
 ```
 
-### Structure CI/CD Recommandee
+### GitHub Actions - Build Multi-OS
 
-Quand les workflows seront crees :
+**Contrainte importante** : Tauri ne supporte PAS la cross-compilation.
+Chaque OS doit etre builde sur son propre runner.
 
-**Branches** :
-- `feature/*` : Lint + Tests
-- `main` : Build multi-OS
-- `tags (v*)` : Release publique
+#### Etape 1: Creer le workflow
 
-**Jobs prevus** :
-1. Lint & Test (ubuntu-latest)
-2. Build Linux (appimage + deb)
-3. Build macOS (dmg) - Phase 1.5
-4. Build Windows (msi) - Phase 2
+Creer `.github/workflows/release.yml` :
+
+```yaml
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # Permet lancement manuel
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - platform: ubuntu-22.04
+            target: ''
+            bundle_targets: 'appimage,deb'
+          # macOS Universal (Intel + Apple Silicon)
+          - platform: macos-latest
+            target: 'universal-apple-darwin'
+            bundle_targets: 'dmg'
+          # Windows
+          - platform: windows-latest
+            target: ''
+            bundle_targets: 'msi'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Zileo Chat ${{ github.ref_name }}'
+          releaseBody: |
+            ## Installation
+
+            | OS | Fichier | Instructions |
+            |----|---------|--------------|
+            | Linux | `.AppImage` | `chmod +x *.AppImage && ./*.AppImage` |
+            | Linux (Debian) | `.deb` | `sudo dpkg -i *.deb` |
+            | macOS | `.dmg` | Double-clic, glisser dans Applications |
+            | Windows | `.msi` | Double-clic, suivre assistant |
+
+            ## Checksums
+            Voir `SHA256SUMS` pour verifier l'integrite.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      - name: Generate checksums (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          cd src-tauri/target/release/bundle
+          sha256sum appimage/*.AppImage deb/*.deb > SHA256SUMS-linux.txt
+          cat SHA256SUMS-linux.txt
+
+      - name: Upload checksums
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: src-tauri/target/release/bundle/SHA256SUMS-linux.txt
+          draft: true
+```
+
+#### Etape 2: Mettre a jour tauri.conf.json
+
+Modifier `bundle.targets` pour supporter tous les OS :
+
+```json
+{
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ]
+  }
+}
+```
+
+#### Etape 3: Creer une release
+
+```bash
+# Mettre a jour les versions
+# package.json, tauri.conf.json, Cargo.toml doivent avoir la meme version
+
+# Creer et pousser le tag
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions va automatiquement :
+1. Builder sur Linux, macOS et Windows en parallele
+2. Creer une draft release avec tous les artifacts
+3. Generer les checksums
+
+#### Etape 4: Publier
+
+1. Aller sur GitHub → Releases
+2. Verifier la draft release
+3. Editer les release notes si necessaire
+4. Cliquer "Publish release"
+
+### Workflow Validate (CI sur chaque push)
+
+Creer `.github/workflows/validate.yml` pour validation continue :
+
+```yaml
+name: Validate
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-action@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Frontend checks
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type check (svelte-check)
+        run: npm run check
+
+      - name: Frontend tests
+        run: npm run test
+
+      # Backend checks
+      - name: Format check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Backend tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+### Resume des Workflows
+
+| Workflow | Declencheur | Action |
+|----------|-------------|--------|
+| `validate.yml` | Push/PR sur main, feature/* | Lint + Tests |
+| `release.yml` | Tag v* | Build 3 OS + Release |
+
+### Alternatives sans GitHub Actions
+
+Si tu preferes builder manuellement sur chaque OS :
+
+**Sur Windows (VM ou machine physique)** :
+```powershell
+# Installer prerequisites
+winget install Microsoft.VisualStudio.2022.BuildTools
+winget install Rustlang.Rustup
+
+rustup default stable-msvc
+npm ci
+npm run tauri build
+# Output: src-tauri/target/release/bundle/msi/*.msi
+```
+
+**Sur macOS (Mac physique ou MacStadium)** :
+```bash
+xcode-select --install
+npm ci
+npm run tauri build -- --target universal-apple-darwin
+# Output: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+```
+
+### Services Cloud pour macOS
+
+| Service | Usage | Cout |
+|---------|-------|------|
+| GitHub Actions | 3000 min/mois (gratuit public) | Gratuit |
+| MacStadium | Mac dedies | ~$99/mois |
+| AWS EC2 Mac | Mac a la demande | ~$1/heure |
+| Codemagic | CI/CD mobile/desktop | Gratuit tier dispo |
 
 ---
 
