@@ -2,6 +2,8 @@
 
 > Application desktop multi-agent avec interface conversationnelle
 
+**Developed by**: [Assistance Micro Design](https://github.com/assistance-micro-design)
+
 **Stack**: SvelteKit 2.49.0 + Svelte 5.43.14 | Rust 1.91.1 + Tauri 2.9.4 | SurrealDB 2.3.10
 
 ## Statut du Projet
@@ -81,7 +83,7 @@ cargo --version   # >= 1.91.1
 
 ```bash
 # Clone du repository
-git clone https://github.com/your-org/zileo-chat-3.git
+git clone https://github.com/assistance-micro-design/zileo-chat-3.git
 cd zileo-chat-3
 
 # Installation des dépendances
@@ -180,7 +182,7 @@ cargo build --release     # Release build
 
 ## Contribuer
 
-Les contributions sont les bienvenues ! Consultez [CLAUDE.md](CLAUDE.md) pour les guidelines de développement.
+Les contributions sont les bienvenues ! Consultez [CONTRIBUTORS.md](CONTRIBUTORS.md) et [CLAUDE.md](CLAUDE.md) pour les guidelines de développement.
 
 ### Workflow
 1. Fork le projet
@@ -205,14 +207,14 @@ Les contributions sont les bienvenues ! Consultez [CLAUDE.md](CLAUDE.md) pour le
 - Tauri allowlist explicite (no wildcard)
 - Audit trail avec structured logging
 
-Pour signaler une vulnérabilité, contactez: security@zileo.example.com
+Pour signaler une vulnerabilite, ouvrez une issue privee sur [GitHub](https://github.com/assistance-micro-design/zileo-chat-3/security).
 
 ## Licence
 
 Ce projet est distribué sous **licence Apache 2.0**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
 ```
-Copyright 2025 Zileo-Chat-3 Contributors
+Copyright 2025 Assistance Micro Design
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -237,7 +239,7 @@ limitations under the License.
 ## Ressources
 
 - **Documentation**: [docs/](docs/)
-- **Spécifications**: [docs/specs/](docs/specs/)
+- **Specifications**: [docs/specs/](docs/specs/)
 - **Tauri**: https://v2.tauri.app
 - **SvelteKit**: https://kit.svelte.dev
 - **SurrealDB**: https://surrealdb.com
@@ -245,10 +247,12 @@ limitations under the License.
 
 ## Support
 
-- 📖 Documentation complète dans `/docs`
-- 💬 Issues GitHub pour bugs et features requests
-- 🤝 Discussions pour questions et support communautaire
+- Documentation complete dans `/docs`
+- Issues GitHub pour bugs et features requests: [GitHub Issues](https://github.com/assistance-micro-design/zileo-chat-3/issues)
+- Discussions pour questions et support communautaire
 
 ---
 
-**Statut**: En developpement actif - Phase 5 complete (99 commands, 6 tools, 18 tables), Phase 6 Integration en cours
+**Project Owner**: [Assistance Micro Design](https://github.com/assistance-micro-design)
+
+**Status**: En developpement actif - Phase 5 complete (99 commands, 6 tools, 18 tables), Phase 6 Integration en cours
