@@ -39,7 +39,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Zero agents at startup (user creates all agents via Settings)
 - Full CRUD via UI (create, read, update, delete)
 - Agents persist in SurrealDB (table `agent`)
-- Tool execution loop with MemoryTool and TodoTool
+- Tool execution loop with MemoryTool, TodoTool, UserQuestionTool
+- Human-in-the-loop via UserQuestionTool (interactive prompts)
 - MCP server integration per agent
 
 ### Phase 1 Deliverables (Complete)
@@ -447,7 +448,7 @@ const agentId = await invoke<string>('create_agent', {
     name: 'My Agent',
     lifecycle: 'permanent',
     llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
-    tools: ['MemoryTool', 'TodoTool'],
+    tools: ['MemoryTool', 'TodoTool', 'UserQuestionTool'],
     mcp_servers: ['serena'],
     system_prompt: 'You are a helpful assistant...'
   }
@@ -511,7 +512,7 @@ let query = QueryBuilder::new("memory")
 #### `tools/constants.rs` - Centralized Constants
 
 ```rust
-use crate::tools::constants::{memory, todo, sub_agent};
+use crate::tools::constants::{memory, todo, user_question, sub_agent};
 
 // Memory tool constants
 let max = memory::MAX_CONTENT_LENGTH;  // 50_000
@@ -520,6 +521,11 @@ let types = memory::VALID_TYPES;       // &["user_pref", "context", "knowledge",
 // Todo tool constants
 let max_name = todo::MAX_NAME_LENGTH;  // 128
 let statuses = todo::VALID_STATUSES;   // &["pending", "in_progress", "completed", "blocked"]
+
+// User question tool constants
+let max_question = user_question::MAX_QUESTION_LENGTH;  // 2000
+let max_options = user_question::MAX_OPTIONS;           // 20
+let question_types = user_question::VALID_TYPES;        // &["checkbox", "text", "mixed"]
 
 // Sub-agent limit
 let max_agents = sub_agent::MAX_SUB_AGENTS;  // 3
@@ -557,7 +563,8 @@ if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
 let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
 
 // List tools by category
-let basic = TOOL_REGISTRY.basic_tools();        // ["MemoryTool", "TodoTool"]
+let basic = TOOL_REGISTRY.basic_tools();          // ["MemoryTool", "TodoTool", "CalculatorTool"]
+let interaction = TOOL_REGISTRY.interaction_tools(); // ["UserQuestionTool"]
 let sub_agent = TOOL_REGISTRY.sub_agent_tools();  // ["SpawnAgentTool", ...]
 
 // Validate with error message
@@ -617,7 +624,7 @@ To assign: {"mcp_servers": ["Serena"]}
 
 ## Database Schema (SurrealDB)
 
-**18 tables** with graph relations. Key entities:
+**19 tables** with graph relations. Key entities:
 
 **Core**:
 - **workflow**: Manages agent workflows (relations: agent, messages, tasks, validations)
@@ -629,6 +636,7 @@ To assign: {"mcp_servers": ["Serena"]}
 **Tracking**:
 - **task**: Todo items with status tracking
 - **validation_request**: Human-in-the-loop validation tracking
+- **user_question**: Interactive questions from agents to users (pending/answered/skipped)
 - **tool_execution**: Tool call persistence with metrics
 - **thinking_step**: Agent reasoning chain-of-thought
 - **sub_agent_execution**: Sub-agent spawn history
@@ -878,6 +886,7 @@ Essential reading for context:
 - `docs/ARCHITECTURE_DECISIONS.md`: All architectural decisions with justifications
 - `docs/MULTI_AGENT_ARCHITECTURE.md`: Agent hierarchy, communication, factory patterns
 - `docs/API_REFERENCE.md`: Tauri command signatures and types
+- `docs/AGENT_TOOLS_DOCUMENTATION.md`: Tool system documentation (7 tools)
 - `docs/GETTING_STARTED.md`: Development setup and first workflow
 - `docs/TESTING_STRATEGY.md`: Testing approach and coverage targets
 - `docs/MCP_CONFIGURATION_GUIDE.md`: MCP server setup and configuration

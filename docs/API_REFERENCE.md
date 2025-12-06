@@ -492,6 +492,120 @@ async fn delete_memory(
 
 ---
 
+## User Questions (Human-in-the-Loop)
+
+Interactive questions from agents to users during workflow execution.
+
+### submit_user_response
+
+Soumet une reponse a une question en attente.
+
+**Frontend**
+```typescript
+await invoke('submit_user_response', {
+  questionId: string,
+  selectedOptions: string[],      // Option IDs selected (can be empty)
+  textResponse: string | null     // Optional text response
+});
+```
+
+**Backend Signature**
+```rust
+async fn submit_user_response(
+    question_id: String,
+    selected_options: Vec<String>,
+    text_response: Option<String>,
+    state: State<'_, AppState>,
+    window: Window
+) -> Result<(), String>
+```
+
+**Side Effects**:
+- Updates question status to "answered"
+- Records selected_options, text_response, answered_at
+- Emits `workflow_stream` event with `user_question_complete`
+
+**Errors**: Question not found, question not pending
+
+---
+
+### get_pending_questions
+
+Liste toutes les questions en attente pour un workflow.
+
+**Frontend**
+```typescript
+const questions = await invoke<UserQuestion[]>('get_pending_questions', {
+  workflowId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_pending_questions(
+    workflow_id: String,
+    state: State<'_, AppState>
+) -> Result<Vec<UserQuestion>, String>
+```
+
+**UserQuestion Type**
+```typescript
+interface UserQuestion {
+  id: string;
+  workflow_id: string;
+  agent_id: string;
+  question: string;
+  question_type: 'checkbox' | 'text' | 'mixed';
+  options?: QuestionOption[];
+  text_placeholder?: string;
+  text_required: boolean;
+  context?: string;
+  status: 'pending' | 'answered' | 'skipped';
+  selected_options?: string[];
+  text_response?: string;
+  created_at: string;
+  answered_at?: string;
+}
+
+interface QuestionOption {
+  id: string;
+  label: string;
+}
+```
+
+**Returns**: Array of pending questions sorted by created_at ASC
+
+---
+
+### skip_question
+
+Ignore une question (l'utilisateur choisit de ne pas repondre).
+
+**Frontend**
+```typescript
+await invoke('skip_question', {
+  questionId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn skip_question(
+    question_id: String,
+    state: State<'_, AppState>,
+    window: Window
+) -> Result<(), String>
+```
+
+**Side Effects**:
+- Updates question status to "skipped"
+- Records answered_at timestamp
+- Emits `workflow_stream` event with `user_question_complete`
+
+**Errors**: Question not found, question not pending
+
+---
+
 ## LLM Models CRUD
 
 ### list_models
@@ -1408,11 +1522,29 @@ const unlisten = await listen<StreamChunk>('workflow_stream', (event) => {
 ```typescript
 type StreamChunk = {
   workflow_id: string;
-  type: 'token' | 'tool_start' | 'tool_end' | 'reasoning' | 'error';
+  type: 'token' | 'tool_start' | 'tool_end' | 'reasoning' | 'error'
+      | 'user_question_start' | 'user_question_complete';
   content?: string;
   tool?: string;
   duration?: number;
+  // User question specific fields
+  user_question?: UserQuestionStreamPayload;  // For user_question_start
+  question_id?: string;                        // For user_question_complete
+  status?: 'answered' | 'skipped';             // For user_question_complete
 };
+```
+
+**UserQuestionStreamPayload**
+```typescript
+interface UserQuestionStreamPayload {
+  question_id: string;
+  question: string;
+  question_type: 'checkbox' | 'text' | 'mixed';
+  options?: QuestionOption[];
+  text_placeholder?: string;
+  text_required: boolean;
+  context?: string;
+}
 ```
 
 ---

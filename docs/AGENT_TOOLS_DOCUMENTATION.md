@@ -11,6 +11,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 | **TodoTool** | Implemented | `src-tauri/src/tools/todo/tool.rs` |
 | **MemoryTool** | Implemented | `src-tauri/src/tools/memory/tool.rs` |
 | **CalculatorTool** | Implemented | `src-tauri/src/tools/calculator/tool.rs` |
+| **UserQuestionTool** | Implemented | `src-tauri/src/tools/user_question/tool.rs` |
 | **SpawnAgentTool** | Implemented | `src-tauri/src/tools/spawn_agent.rs` |
 | **DelegateTaskTool** | Implemented | `src-tauri/src/tools/delegate_task.rs` |
 | **ParallelTasksTool** | Implemented | `src-tauri/src/tools/parallel_tasks.rs` |
@@ -20,6 +21,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 
 **Categories**:
 - **Basic Tools**: MemoryTool, TodoTool, CalculatorTool (no special context required)
+- **Interaction Tools**: UserQuestionTool (human-in-the-loop interactions)
 - **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
 
 ### ToolFactory
@@ -294,7 +296,169 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 ---
 
-## 4. Internal Report Tool (Future - Not Implemented)
+## 4. User Question Tool
+
+**Objectif** : Permettre aux agents de poser des questions interactives aux utilisateurs pendant l'execution du workflow
+
+**Implementation** : `src-tauri/src/tools/user_question/tool.rs` (UserQuestionTool)
+
+**Statut** : Implemented
+
+### Operations Disponibles (via JSON)
+
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `ask` | Poser une question a l'utilisateur | `question`, `questionType` |
+
+### Parametres de l'Operation "ask"
+
+| Parametre | Type | Requis | Contraintes | Description |
+|-----------|------|--------|-------------|-------------|
+| `operation` | string | Oui | "ask" | Operation a effectuer |
+| `question` | string | Oui | Max 2000 chars, non vide | La question a poser |
+| `questionType` | string | Oui | "checkbox" \| "text" \| "mixed" | Type de question |
+| `options` | array | Conditionnel | Requis pour "checkbox"/"mixed", max 20 options | Options de choix |
+| `textPlaceholder` | string | Non | - | Placeholder du champ texte |
+| `textRequired` | boolean | Non | Default: false | Texte requis (pour "mixed") |
+| `context` | string | Non | Max 5000 chars | Contexte additionnel a afficher |
+
+### Structure QuestionOption
+
+```json
+{
+  "id": "option_1",      // Identifiant unique (non vide)
+  "label": "Option 1"    // Texte affiche (max 256 chars)
+}
+```
+
+### Types de Questions
+
+| Type | Description | Options requises | Texte disponible |
+|------|-------------|------------------|------------------|
+| `checkbox` | Choix multiple avec cases a cocher | Oui | Non |
+| `text` | Champ de texte libre | Non | Oui |
+| `mixed` | Combinaison checkbox + texte | Oui | Oui |
+
+### Exemples d'Utilisation
+
+**Question checkbox (choix multiple)**:
+```json
+{
+  "operation": "ask",
+  "question": "Quelles fonctionnalites voulez-vous implementer ?",
+  "questionType": "checkbox",
+  "options": [
+    {"id": "auth", "label": "Authentification"},
+    {"id": "api", "label": "API REST"},
+    {"id": "db", "label": "Base de donnees"}
+  ],
+  "context": "Selectionnez toutes les options applicables"
+}
+```
+
+**Question texte**:
+```json
+{
+  "operation": "ask",
+  "question": "Quel nom voulez-vous donner au projet ?",
+  "questionType": "text",
+  "textPlaceholder": "Entrez le nom du projet..."
+}
+```
+
+**Question mixte**:
+```json
+{
+  "operation": "ask",
+  "question": "Comment souhaitez-vous proceder ?",
+  "questionType": "mixed",
+  "options": [
+    {"id": "option_a", "label": "Approche A"},
+    {"id": "option_b", "label": "Approche B"}
+  ],
+  "textPlaceholder": "Ou decrivez votre propre approche...",
+  "textRequired": false
+}
+```
+
+### Structure de Reponse
+
+**Succes**:
+```json
+{
+  "success": true,
+  "selectedOptions": ["auth", "api"],
+  "textResponse": "Details additionnels...",
+  "message": "User response received"
+}
+```
+
+**Erreur (question ignoree)**:
+```json
+{
+  "success": false,
+  "error": "Question skipped by user"
+}
+```
+
+### Mecanisme de Polling
+
+Le tool utilise un pattern de polling progressif pour attendre la reponse utilisateur:
+
+| Etape | Intervalle |
+|-------|------------|
+| 1-2 | 500ms |
+| 3-4 | 1000ms |
+| 5-6 | 2000ms |
+| 7+ | 5000ms (repete indefiniment) |
+
+**Note** : Pas de timeout - le tool attend indefiniment jusqu'a ce que l'utilisateur reponde ou ignore la question.
+
+### Events Emis
+
+| Event | Type | Description |
+|-------|------|-------------|
+| `workflow_stream` | `user_question_start` | Question envoyee, en attente de reponse |
+| `workflow_stream` | `user_question_complete` | Reponse recue ou question ignoree |
+
+### Commandes Tauri IPC (Frontend)
+
+| Commande | Description | Parametres |
+|----------|-------------|------------|
+| `submit_user_response` | Soumettre une reponse | `questionId`, `selectedOptions`, `textResponse?` |
+| `get_pending_questions` | Lister questions en attente | `workflowId` |
+| `skip_question` | Ignorer une question | `questionId` |
+
+### Cas d'Usage
+
+- **Clarification** : Demander des precisions sur les requirements
+- **Choix d'implementation** : Proposer des options d'architecture
+- **Validation** : Confirmer avant operations critiques
+- **Collecte d'information** : Recueillir parametres manquants
+
+### Configuration Agent
+
+Pour activer le UserQuestionTool sur un agent:
+```json
+{
+  "tools": ["UserQuestionTool", "MemoryTool", "TodoTool"]
+}
+```
+
+### Constantes de Validation
+
+```rust
+pub const MAX_QUESTION_LENGTH: usize = 2000;
+pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
+pub const MAX_OPTIONS: usize = 20;
+pub const MAX_CONTEXT_LENGTH: usize = 5000;
+pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
+pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped"];
+```
+
+---
+
+## 5. Internal Report Tool (Future - Not Implemented)
 
 **Statut** : NOT IMPLEMENTED - Design specification only
 
@@ -316,7 +480,7 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 ---
 
-## 5. Tool Execution Integration (LLMAgent)
+## 6. Tool Execution Integration (LLMAgent)
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
@@ -476,9 +640,9 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.5
-**Derniere mise a jour** : 2025-12-05
-**Phase** : Functional Agent System Phase 5 Complete (6 Tools: MemoryTool, TodoTool, CalculatorTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
+**Version** : 1.6
+**Derniere mise a jour** : 2025-12-06
+**Phase** : Functional Agent System Phase 5 Complete (7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
 
 ### Test Coverage
 
