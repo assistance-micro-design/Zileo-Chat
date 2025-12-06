@@ -381,8 +381,15 @@ box-shadow: 0 0 0 3px var(--color-accent-light);
 
 ```css
 :root {
-  --sidebar-width: 240px;
+  /* Left Sidebar */
+  --sidebar-width: 280px;
   --sidebar-collapsed-width: 60px;
+
+  /* Right Sidebar (Activity) */
+  --right-sidebar-width: 320px;
+  --right-sidebar-collapsed-width: 48px;
+
+  /* Top Menu */
   --floating-menu-height: 60px;
 }
 ```
@@ -1187,6 +1194,85 @@ box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 ```
 
+### Skeleton (Loading Placeholder)
+
+```svelte
+<script lang="ts">
+  import { Skeleton } from '$lib/components/ui';
+</script>
+
+<!-- Text skeleton -->
+<Skeleton variant="text" width="200px" />
+
+<!-- Circular skeleton (avatar) -->
+<Skeleton variant="circular" size="48px" />
+
+<!-- Rectangular skeleton (image/card) -->
+<Skeleton variant="rectangular" width="100%" height="200px" />
+```
+
+**Props**:
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `variant` | `'text' \| 'circular' \| 'rectangular'` | `'text'` | Shape variant |
+| `width` | `string` | `'100%'` | Width (CSS value) |
+| `height` | `string` | `'1em'` | Height (CSS value) |
+| `size` | `string` | - | Width & height (for circular) |
+| `animate` | `boolean` | `true` | Enable shimmer animation |
+
+```css
+.skeleton {
+  background: var(--color-bg-tertiary);
+  border-radius: var(--border-radius-sm);
+}
+
+.skeleton.animate {
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-text {
+  height: 1em;
+  border-radius: var(--border-radius-sm);
+}
+
+.skeleton-circular {
+  border-radius: var(--border-radius-full);
+}
+
+.skeleton-rectangular {
+  border-radius: var(--border-radius-md);
+}
+
+@keyframes skeleton-shimmer {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+```
+
+### LanguageSelector (i18n)
+
+```svelte
+<script lang="ts">
+  import { LanguageSelector } from '$lib/components/ui';
+</script>
+
+<!-- Self-contained language picker -->
+<LanguageSelector />
+```
+
+The LanguageSelector is a self-contained component that:
+- Displays current locale with country flag
+- Shows dropdown with available languages
+- Uses `localeStore` internally for state management
+- Persists selection to localStorage
+
+**Supported Locales**:
+| Code | Language | Flag |
+|------|----------|------|
+| `en` | English | US |
+| `fr` | Francais | FR |
+
 ---
 
 ## Utility Classes
@@ -1412,6 +1498,57 @@ lucide.createIcons();
 - Large text (18px+): minimum 3:1 ratio
 - UI components: minimum 3:1 ratio against background
 
+### Reduced Motion Support
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```
+
+Users who prefer reduced motion (system setting) will see:
+- No animations (spinners, pulses, shimmers)
+- Instant transitions
+- No scroll animations
+
+### High Contrast Support
+
+```css
+@media (prefers-contrast: high) {
+  :root {
+    --color-border: rgba(0, 0, 0, 0.5);
+    --color-text-secondary: var(--color-text-primary);
+  }
+}
+```
+
+High contrast mode enhances:
+- Border visibility
+- Text readability (secondary text uses primary color)
+
+### Screen Reader Support
+
+```css
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+```
+
+Use `.sr-only` for content that should be read by screen readers but not displayed visually.
+
 ---
 
 ## SvelteKit Implementation
@@ -1435,17 +1572,19 @@ Create `src/styles/variables.css`:
 
 ```
 src/lib/components/
-  ui/
-    Button.svelte
-    Card.svelte
-    Modal.svelte
-    Badge.svelte
-    Input.svelte
-    Select.svelte
-    Table.svelte
-    ProgressBar.svelte
-    Spinner.svelte
-    StatusIndicator.svelte
+  ui/                        # 12 atomic components
+    Button.svelte            # 4 variants, 4 sizes
+    Card.svelte              # Flexible snippet slots
+    Modal.svelte             # Accessible dialog
+    Badge.svelte             # 4 semantic variants
+    Input.svelte             # 6 input types
+    Select.svelte            # Dropdown with options
+    Textarea.svelte          # Multi-line input
+    ProgressBar.svelte       # Progress indicator
+    Spinner.svelte           # Loading spinner
+    StatusIndicator.svelte   # Status dots (4 states)
+    Skeleton.svelte          # Loading placeholder (3 variants)
+    LanguageSelector.svelte  # i18n language picker
   layout/
     AppContainer.svelte
     FloatingMenu.svelte
@@ -1456,6 +1595,8 @@ src/lib/components/
     FilterBar.svelte
     SearchBox.svelte
 ```
+
+**Note**: Table styles are provided as CSS classes (`.table`, `.table-container`) rather than a dedicated Svelte component. Use the CSS patterns documented in the [Table section](#table).
 
 ### Button Component Example
 
@@ -1530,6 +1671,33 @@ function createThemeStore() {
 }
 
 export const theme = createThemeStore();
+```
+
+### All Svelte Stores
+
+The application uses 13 Svelte stores for state management:
+
+| Store | File | Purpose |
+|-------|------|---------|
+| `theme` | `theme.ts` | Light/dark theme management |
+| `agentStore` | `agents.ts` | Agent CRUD and selection state |
+| `localeStore` | `locale.ts` | i18n language management |
+| `workflowStore` | `workflows.ts` | Workflow execution state |
+| `activityStore` | `activity.ts` | Real-time activity feed |
+| `tokenStore` | `tokens.ts` | LLM token usage metrics |
+| `streamingStore` | `streaming.ts` | Streaming workflow execution |
+| `validationStore` | `validation.ts` | Human-in-the-loop validation |
+| `promptStore` | `prompts.ts` | System prompt library |
+| `llmStore` | `llm.ts` | LLM provider/model configuration |
+| `mcpStore` | `mcp.ts` | MCP server management |
+| `onboardingStore` | `onboarding.ts` | First-launch wizard state |
+| `validationSettings` | `validation-settings.ts` | Validation configuration |
+
+**Import Pattern**:
+```typescript
+import { theme } from '$lib/stores/theme';
+import { agentStore, agents, isLoading } from '$lib/stores/agents';
+import { localeStore, locale, localeInfo } from '$lib/stores/locale';
 ```
 
 ### Lucide Icons in Svelte
@@ -1626,3 +1794,22 @@ Option 2: Create wrapper component:
 | lg | 12px |
 | xl | 16px |
 | full | 9999px |
+
+### Layout Quick Reference
+
+| Element | Expanded | Collapsed |
+|---------|----------|-----------|
+| Left Sidebar | 280px | 60px |
+| Right Sidebar | 320px | 48px |
+| Floating Menu | 60px (height) | - |
+
+### UI Components Quick Reference
+
+| Component | Variants | Sizes |
+|-----------|----------|-------|
+| Button | primary, secondary, ghost, danger | sm, md, lg, icon |
+| Badge | primary, success, warning, error | - |
+| StatusIndicator | idle, running, completed, error | sm, md, lg |
+| Skeleton | text, circular, rectangular | custom |
+| Spinner | - | sm, md, lg, custom |
+| Input | text, password, email, number, search, url | - |

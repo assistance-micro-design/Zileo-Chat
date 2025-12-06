@@ -5,11 +5,15 @@ Documentation complete des tools disponibles pour les agents dans Zileo-Chat-3.
 ## Table des matieres
 
 - [Architecture](#architecture)
+- [Tool Registry](#tool-registry)
 - [MemoryTool](#1-memorytool)
 - [TodoTool](#2-todotool)
-- [SpawnAgentTool](#3-spawnagentool)
-- [DelegateTaskTool](#4-delegatetasktool)
-- [ParallelTasksTool](#5-paralleltaskstool)
+- [CalculatorTool](#3-calculatortool)
+- [SpawnAgentTool](#4-spawnagentool)
+- [DelegateTaskTool](#5-delegatetasktool)
+- [ParallelTasksTool](#6-paralleltaskstool)
+- [Utility Modules](#utility-modules)
+- [ToolError Types](#toolerror-types)
 - [Fichiers source](#fichiers-source)
 
 ---
@@ -22,13 +26,16 @@ Documentation complete des tools disponibles pour les agents dans Zileo-Chat-3.
 ToolFactory
 ├── Basic Tools (tous agents)
 │   ├── MemoryTool      - Memoire persistante avec recherche semantique
-│   └── TodoTool        - Gestion des taches de workflow
+│   ├── TodoTool        - Gestion des taches de workflow
+│   └── CalculatorTool  - Operations mathematiques (stateless)
 │
 └── Sub-Agent Tools (Primary Agent uniquement)
     ├── SpawnAgentTool      - Creation de sous-agents temporaires
     ├── DelegateTaskTool    - Delegation a agents permanents
     └── ParallelTasksTool   - Execution parallele multi-agents
 ```
+
+**Total**: 6 tools (3 basic + 3 sub-agent)
 
 ### Trait Tool
 
@@ -58,6 +65,56 @@ let tool = factory.create_tool_with_context(
     context,
     is_primary_agent
 )?;
+```
+
+---
+
+## Tool Registry
+
+**Fichier**: `src-tauri/src/tools/registry.rs`
+
+Le `TOOL_REGISTRY` est un singleton global (lazy_static) pour la decouverte et validation des tools.
+
+### Tools enregistres
+
+| Tool | Categorie | Requires Context |
+|------|-----------|-----------------|
+| MemoryTool | Basic | false |
+| TodoTool | Basic | false |
+| CalculatorTool | Basic | false |
+| SpawnAgentTool | SubAgent | true |
+| DelegateTaskTool | SubAgent | true |
+| ParallelTasksTool | SubAgent | true |
+
+### API du Registry
+
+| Methode | Description | Return |
+|---------|-------------|--------|
+| `has_tool(name: &str)` | Verifie si le tool existe | `bool` |
+| `get(name: &str)` | Recupere les metadata du tool | `Option<&ToolMetadata>` |
+| `requires_context(name: &str)` | Verifie si le tool necessite AgentToolContext | `bool` |
+| `available_tools()` | Liste tous les noms de tools | `Vec<&'static str>` |
+| `basic_tools()` | Liste les basic tools (no context) | `Vec<&'static str>` |
+| `sub_agent_tools()` | Liste les sub-agent tools | `Vec<&'static str>` |
+| `validate(name: &str)` | Valide avec message d'erreur | `Result<&ToolMetadata, String>` |
+
+### Exemple d'utilisation
+
+```rust
+use crate::tools::registry::TOOL_REGISTRY;
+
+// Verifier l'existence
+if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
+
+// Obtenir les metadata
+let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
+
+// Lister par categorie
+let basic = TOOL_REGISTRY.basic_tools();        // ["MemoryTool", "TodoTool", "CalculatorTool"]
+let sub_agent = TOOL_REGISTRY.sub_agent_tools(); // ["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"]
+
+// Valider avec erreur descriptive
+TOOL_REGISTRY.validate(tool_name)?;
 ```
 
 ---
@@ -232,6 +289,12 @@ Liste les memoires avec filtrage optionnel.
 |-----------|------|--------|---------|-------------|
 | `type_filter` | string | Non | - | Filtrer par type |
 | `limit` | integer | Non | 10 | Nombre max de resultats (max 100) |
+| `scope` | string | Non | "both" | Scope de recherche (`both`, `workflow`, `general`) |
+
+**Valeurs de scope:**
+- `both` (defaut): Memoires workflow + general
+- `workflow`: Uniquement memoires du workflow actif
+- `general`: Uniquement memoires globales (sans workflow_id)
 
 **Exemple minimal:**
 ```json
@@ -245,7 +308,8 @@ Liste les memoires avec filtrage optionnel.
 {
   "operation": "list",
   "type_filter": "knowledge",
-  "limit": 25
+  "limit": 25,
+  "scope": "workflow"
 }
 ```
 
@@ -279,6 +343,7 @@ Recherche par similarite vectorielle.
 | `limit` | integer | Non | 10 | Nombre max de resultats (max 100) |
 | `type_filter` | string | Non | - | Filtrer par type |
 | `threshold` | number | Non | 0.7 | Seuil de similarite (0-1) |
+| `scope` | string | Non | "both" | Scope de recherche (`both`, `workflow`, `general`) |
 
 **Exemple minimal:**
 ```json
@@ -295,7 +360,8 @@ Recherche par similarite vectorielle.
   "query": "how to implement semantic search with embeddings",
   "limit": 15,
   "type_filter": "knowledge",
-  "threshold": 0.6
+  "threshold": 0.6,
+  "scope": "both"
 }
 ```
 
@@ -642,7 +708,159 @@ Supprime une tache du workflow.
 
 ---
 
-## 3. SpawnAgentTool
+## 3. CalculatorTool
+
+**Fichier**: `src-tauri/src/tools/calculator/tool.rs`
+
+Operations mathematiques stateless. Aucune dependance externe (pas de DB, pas de workflow).
+
+### Cas d'usage
+
+- Calculs scientifiques et ingenerie
+- Conversions d'unites (angles, logarithmes)
+- Operations trigonometriques
+- Fonctions mathematiques avancees
+
+### Operations unaires (23 operations)
+
+Prennent une seule valeur en entree.
+
+| Operation | Description | Contraintes |
+|-----------|-------------|-------------|
+| `sin`, `cos`, `tan` | Trigonometrie | tan undefined a multiples impairs de pi/2 |
+| `asin`, `acos`, `atan` | Trigonometrie inverse | asin/acos: valeur dans [-1, 1] |
+| `sinh`, `cosh`, `tanh` | Hyperbolique | Aucune |
+| `sqrt` | Racine carree | valeur >= 0 |
+| `cbrt` | Racine cubique | Aucune (fonctionne avec negatifs) |
+| `exp`, `exp2` | Exponentielle (e^x, 2^x) | Aucune |
+| `ln`, `log10` | Logarithmes | valeur > 0 |
+| `floor`, `ceil`, `round`, `trunc` | Arrondis | Aucune |
+| `abs`, `sign` | Absolu/signe | Aucune |
+| `degrees`, `radians` | Conversion d'angles | Aucune |
+
+### Operations binaires (11 operations)
+
+Prennent deux valeurs (a, b) en entree.
+
+| Operation | Description | Contraintes |
+|-----------|-------------|-------------|
+| `add`, `subtract`, `multiply` | Arithmetique | Aucune |
+| `divide`, `modulo` | Division/reste | b != 0 |
+| `pow` | Puissance (a^b) | Si a < 0, b doit etre entier |
+| `log` | Logarithme base b de a | a > 0, b > 0, b != 1 |
+| `min`, `max` | Min/max | Aucune |
+| `atan2` | Arctangente a deux arguments | Aucune |
+| `nroot` | Racine b-ieme de a | Racine paire: a >= 0 |
+
+### Constantes (6 constantes)
+
+| Nom | Valeur | Description |
+|-----|--------|-------------|
+| `pi` | 3.14159... | Constante de cercle (pi) |
+| `e` | 2.71828... | Nombre d'Euler (base de ln) |
+| `tau` | 6.28318... | Tau (2*pi) |
+| `sqrt2` | 1.41421... | Racine carree de 2 |
+| `ln2` | 0.69314... | Logarithme naturel de 2 |
+| `ln10` | 2.30258... | Logarithme naturel de 10 |
+
+### Operations
+
+#### `unary` - Operation unaire
+
+Execute une operation sur une seule valeur.
+
+**Parametres:**
+
+| Parametre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `operation` | string | Oui | Nom de l'operation (voir liste ci-dessus) |
+| `value` | number | Oui | Valeur d'entree |
+
+**Exemple:**
+```json
+{
+  "operation": "unary",
+  "op": "sqrt",
+  "value": 16
+}
+```
+
+**Reponse:**
+```json
+{
+  "success": true,
+  "result": 4.0,
+  "operation": "sqrt",
+  "input": 16
+}
+```
+
+---
+
+#### `binary` - Operation binaire
+
+Execute une operation sur deux valeurs.
+
+**Parametres:**
+
+| Parametre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `operation` | string | Oui | Nom de l'operation (voir liste ci-dessus) |
+| `a` | number | Oui | Premiere valeur |
+| `b` | number | Oui | Deuxieme valeur |
+
+**Exemple:**
+```json
+{
+  "operation": "binary",
+  "op": "pow",
+  "a": 2,
+  "b": 10
+}
+```
+
+**Reponse:**
+```json
+{
+  "success": true,
+  "result": 1024.0,
+  "operation": "pow",
+  "inputs": {"a": 2, "b": 10}
+}
+```
+
+---
+
+#### `constant` - Obtenir une constante
+
+Recupere la valeur d'une constante mathematique.
+
+**Parametres:**
+
+| Parametre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `name` | string | Oui | Nom de la constante |
+
+**Exemple:**
+```json
+{
+  "operation": "constant",
+  "name": "pi"
+}
+```
+
+**Reponse:**
+```json
+{
+  "success": true,
+  "constant": "pi",
+  "value": 3.141592653589793
+}
+```
+
+---
+
+## 4. SpawnAgentTool
 
 **Fichier**: `src-tauri/src/tools/spawn_agent.rs`
 
@@ -663,6 +881,7 @@ Creation et execution de sous-agents temporaires pour paralleliser le travail.
 Les sous-agents peuvent uniquement utiliser les **basic tools**:
 - `MemoryTool`
 - `TodoTool`
+- `CalculatorTool`
 
 Les sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool) sont **interdits** pour les sous-agents.
 
@@ -790,7 +1009,7 @@ Force l'arret d'un sous-agent en cours.
 
 ---
 
-## 4. DelegateTaskTool
+## 5. DelegateTaskTool
 
 **Fichier**: `src-tauri/src/tools/delegate_task.rs`
 
@@ -887,7 +1106,7 @@ Liste les agents LLM disponibles pour delegation (exclut soi-meme et les tempora
 
 ---
 
-## 5. ParallelTasksTool
+## 6. ParallelTasksTool
 
 **Fichier**: `src-tauri/src/tools/parallel_tasks.rs`
 
@@ -1040,21 +1259,139 @@ Execute plusieurs taches simultanement.
 
 ---
 
+## Utility Modules
+
+Modules utilitaires partages entre les tools.
+
+### constants.rs
+
+**Fichier**: `src-tauri/src/tools/constants.rs`
+
+Constantes centralisees pour tous les tools.
+
+| Namespace | Constantes |
+|-----------|------------|
+| `memory::` | MAX_CONTENT_LENGTH (50000), DEFAULT_LIMIT (10), MAX_LIMIT (100), DEFAULT_SIMILARITY_THRESHOLD (0.7), VALID_TYPES |
+| `todo::` | MAX_NAME_LENGTH (128), MAX_DESCRIPTION_LENGTH (1000), PRIORITY_MIN (1), PRIORITY_MAX (5), VALID_STATUSES |
+| `calculator::` | MAX_VALUE (1e308), MIN_POSITIVE (1e-308), UNARY_OPS, BINARY_OPS, VALID_CONSTANTS |
+| `sub_agent::` | MAX_SUB_AGENTS (3) |
+
+### response.rs
+
+**Fichier**: `src-tauri/src/tools/response.rs`
+
+Fluent builder pour reponses JSON standardisees.
+
+```rust
+use crate::tools::response::ResponseBuilder;
+
+// Success simple
+ResponseBuilder::ok("memory_id", id, "Memory created successfully")
+
+// Liste
+ResponseBuilder::list(&items, items.len())
+
+// Reponse complexe
+ResponseBuilder::new()
+    .success(true)
+    .id("task_id", task_id)
+    .field("status", "completed")
+    .metrics(duration_ms, tokens_in, tokens_out)
+    .build()
+```
+
+### utils.rs
+
+**Fichier**: `src-tauri/src/tools/utils.rs`
+
+Helpers de validation et base de donnees.
+
+**Validation:**
+| Fonction | Description |
+|----------|-------------|
+| `validate_not_empty(value, field_name)` | String non vide |
+| `validate_length(value, max, field_name)` | Longueur maximale |
+| `validate_range(value, min, max, field_name)` | Range numerique |
+| `validate_enum_value(value, valid_values, field_name)` | Valeur dans enum |
+
+**Database:**
+| Fonction | Description |
+|----------|-------------|
+| `ensure_record_exists(db, table, id, resource_name)` | Verifie existence |
+| `delete_with_check(db, table, id, resource_name)` | Suppression avec verif |
+| `db_error(e)` | Conversion erreur DB |
+
+**QueryBuilder:**
+```rust
+let query = QueryBuilder::new("memory")
+    .select(&["content", "memory_type"])
+    .where_eq("memory_type", "knowledge")
+    .order_by("created_at", true)
+    .limit(10)
+    .build();
+```
+
+### sub_agent_executor.rs
+
+**Fichier**: `src-tauri/src/tools/sub_agent_executor.rs`
+
+Logique commune pour les sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
+
+| Methode | Description |
+|---------|-------------|
+| `check_primary_permission(is_primary, operation)` | Verifie agent primaire |
+| `check_limit(current_count, operation)` | Verifie limite MAX_SUB_AGENTS |
+| `request_validation(operation_type, description, details)` | Human-in-the-loop |
+| `create_execution_record(child_id, name, prompt)` | DB record status "running" |
+| `execute_with_metrics(agent_id, task)` | Execute avec metriques |
+| `update_execution_record(execution_id, result)` | Update DB avec resultat |
+| `emit_start_event(agent_id, name, prompt)` | Event Tauri "sub_agent_start" |
+| `emit_complete_event(agent_id, name, result)` | Event Tauri completion |
+
+---
+
+## ToolError Types
+
+**Fichier**: `src-tauri/src/tools/mod.rs`
+
+Tous les tools utilisent l'enum `ToolError` pour les erreurs.
+
+| Variant | Description | Suggestion |
+|---------|-------------|------------|
+| `InvalidInput(String)` | Parametres invalides | Verifier format et types |
+| `ExecutionFailed(String)` | Operation echouee | Reessayer ou verifier prerequisites |
+| `NotFound(String)` | Ressource non trouvee | Verifier l'ID existe |
+| `PermissionDenied(String)` | Permissions insuffisantes | Seul primary agent peut utiliser sub-agent tools |
+| `Timeout(String)` | Timeout atteint | Reduire la complexite ou augmenter timeout |
+| `DatabaseError(String)` | Erreur persistence | Verifier connexion DB |
+| `ValidationFailed(String)` | Validation business | Corriger les donnees selon les regles |
+| `DependencyError(String)` | Dependance manquante | Verifier l'etat requis |
+
+Chaque erreur inclut un **message actionnable** avec suggestion de correction.
+
+---
+
 ## Fichiers source
 
 | Fichier | Description |
 |---------|-------------|
 | `src-tauri/src/tools/mod.rs` | Trait Tool, ToolDefinition, ToolError, exports |
 | `src-tauri/src/tools/factory.rs` | ToolFactory pour creation d'instances |
+| `src-tauri/src/tools/registry.rs` | TOOL_REGISTRY singleton pour decouverte |
+| `src-tauri/src/tools/constants.rs` | Constantes centralisees |
+| `src-tauri/src/tools/response.rs` | ResponseBuilder fluent API |
+| `src-tauri/src/tools/utils.rs` | Validation + QueryBuilder |
 | `src-tauri/src/tools/context.rs` | AgentToolContext pour sub-agent tools |
+| `src-tauri/src/tools/sub_agent_executor.rs` | Logique commune sub-agents |
+| `src-tauri/src/tools/validation_helper.rs` | Helpers de validation legacy |
 | `src-tauri/src/tools/memory/tool.rs` | Implementation MemoryTool |
 | `src-tauri/src/tools/memory/mod.rs` | Module memory exports |
 | `src-tauri/src/tools/todo/tool.rs` | Implementation TodoTool |
 | `src-tauri/src/tools/todo/mod.rs` | Module todo exports |
+| `src-tauri/src/tools/calculator/tool.rs` | Implementation CalculatorTool |
 | `src-tauri/src/tools/spawn_agent.rs` | Implementation SpawnAgentTool |
 | `src-tauri/src/tools/delegate_task.rs` | Implementation DelegateTaskTool |
 | `src-tauri/src/tools/parallel_tasks.rs` | Implementation ParallelTasksTool |
-| `src-tauri/src/tools/validation_helper.rs` | Helpers de validation |
 
 ---
 
@@ -1071,9 +1408,10 @@ Execute plusieurs taches simultanement.
 
 1. **MemoryTool**: Rechercher avant d'ajouter pour eviter les doublons
 2. **TodoTool**: Creer les taches AVANT de commencer le travail complexe
-3. **SpawnAgentTool**: Utiliser pour taches ad-hoc necessitant config specifique
-4. **DelegateTaskTool**: Utiliser pour leverager l'expertise d'agents specialises
-5. **ParallelTasksTool**: Utiliser quand les taches sont independantes
+3. **CalculatorTool**: Preferer pour calculs precis (evite erreurs d'arrondi LLM)
+4. **SpawnAgentTool**: Utiliser pour taches ad-hoc necessitant config specifique
+5. **DelegateTaskTool**: Utiliser pour leverager l'expertise d'agents specialises
+6. **ParallelTasksTool**: Utiliser quand les taches sont independantes
 
 ### Gestion des erreurs
 

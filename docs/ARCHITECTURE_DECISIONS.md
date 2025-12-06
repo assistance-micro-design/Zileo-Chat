@@ -1,8 +1,8 @@
 # Décisions Architecture Projet
 
-> **Date** : 2025-11-23
-> **Phase** : Architecture conceptuelle
-> **Niveau** : Décisions fonctionnelles sans implémentation code
+> **Date** : 2025-11-23 (décisions initiales) | 2025-12-06 (validation implémentation)
+> **Phase** : Phase 5 Backend Features complète, Phase 6 Integration en cours
+> **Statut** : Décisions validées et implémentées (111 commandes Tauri, 87 fichiers Rust, 77 composants Svelte)
 
 ---
 
@@ -115,6 +115,8 @@ zileo-chat-3/
 - workflow → validations (one-to-many)
 - agent → memory (one-to-many)
 - memory ↔ memory (many-to-many, relations sémantiques)
+
+> **Note Implémentation** : Le schéma final contient 18 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `prompt`, `settings`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
 
 **Pas de schéma rigide** :
 - SurrealDB = schemaless possible
@@ -667,8 +669,8 @@ zileo-chat-3/
 - Errors : anyhow + thiserror
 
 ### ✅ Features
-- MCP Priority : serena → context7 → sequential-thinking → playwright
-- Provider : User choice + suggestions intelligentes
+- MCP : Configuration utilisateur (pas de serveurs pré-intégrés)
+- Provider : User choice + suggestions intelligentes (Mistral + Ollama Phase 1)
 - Testing : Critical paths (~70% backend)
 - CI/CD : GitHub Actions / GitLab CI
 
@@ -683,14 +685,21 @@ zileo-chat-3/
 
 ---
 
-## Prochaine Phase : Plan Développement
+## Statut Implémentation (Décembre 2025)
 
-**Après validation décisions** :
-1. Spécifications techniques détaillées
-2. Schemas DB exacts (SurrealQL)
-3. API contracts (Tauri commands, types)
-4. Error types definitions
-5. Configuration formats (TOML structures)
-6. Implementation roadmap avec milestones
+**Phases Complétées** :
+1. ✅ Phase 0 : Base implementation (agents, LLM, DB, security, 19 commandes initiales)
+2. ✅ Phase 1 : Design System Foundation (theme, 12 composants UI)
+3. ✅ Phase 2 : Layout Components (AppContainer, Sidebar, FloatingMenu)
+4. ✅ Phase 3 : Chat & Workflow Components
+5. ✅ Phase 4 : Pages Refactoring (agent page, settings page)
+6. ✅ Phase 5 : Backend Features (validation, memory, streaming - 111 commandes total)
 
-**Pas maintenant** : Code implémentation détaillée
+**En Cours** :
+- Phase 6 : Integration & Polish (tests E2E, audit accessibilité)
+
+**Documentation Technique** :
+- Schéma DB : `docs/DATABASE_SCHEMA.md`
+- API Reference : `docs/API_REFERENCE.md`
+- Stack Technique : `docs/TECH_STACK.md`
+- Guide MCP : `docs/MCP_CONFIGURATION_GUIDE.md`

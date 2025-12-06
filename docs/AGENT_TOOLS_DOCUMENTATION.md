@@ -10,9 +10,17 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 |-------|--------|---------|
 | **TodoTool** | Implemented | `src-tauri/src/tools/todo/tool.rs` |
 | **MemoryTool** | Implemented | `src-tauri/src/tools/memory/tool.rs` |
+| **CalculatorTool** | Implemented | `src-tauri/src/tools/calculator/tool.rs` |
+| **SpawnAgentTool** | Implemented | `src-tauri/src/tools/spawn_agent.rs` |
+| **DelegateTaskTool** | Implemented | `src-tauri/src/tools/delegate_task.rs` |
+| **ParallelTasksTool** | Implemented | `src-tauri/src/tools/parallel_tasks.rs` |
 | **Tool Execution** | Implemented | `src-tauri/src/agents/llm_agent.rs` |
 
 **Note**: Les DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) ont été retirés - l'accès DB se fait via les commands Tauri IPC.
+
+**Categories**:
+- **Basic Tools**: MemoryTool, TodoTool, CalculatorTool (no special context required)
+- **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
 
 ### ToolFactory
 
@@ -240,64 +248,75 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 ---
 
-## 3. Internal Report Tool
+## 3. Calculator Tool
+
+**Objectif** : Evaluation d'expressions mathematiques pour les agents
+
+**Implementation** : `src-tauri/src/tools/calculator/tool.rs` (CalculatorTool)
+
+**Statut** : Implemented
+
+### Operations Disponibles (via JSON)
+
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `eval` | Evaluation expression | `expression` |
+
+### Exemples d'Utilisation
+
+**Evaluation simple**:
+```json
+{
+  "operation": "eval",
+  "expression": "2 + 2 * 3"
+}
+```
+
+**Resultat**:
+```json
+{
+  "success": true,
+  "result": 8.0,
+  "expression": "2 + 2 * 3"
+}
+```
+
+### Operations Supportees
+- Arithmetique basique : `+`, `-`, `*`, `/`
+- Parentheses : `(2 + 3) * 4`
+- Nombres decimaux : `3.14 * 2`
+- Nombres negatifs : `-5 + 3`
+
+### Cas d'Usage
+- **Calculs de metriques** : Tokens, couts, durees
+- **Conversions** : Unites, pourcentages
+- **Validations numeriques** : Verification de calculs dans les rapports
+
+---
+
+## 4. Internal Report Tool (Future - Not Implemented)
+
+**Statut** : NOT IMPLEMENTED - Design specification only
 
 **Objectif** : Communication inter-agents via rapports Markdown persistés localement
 
-### Opérations
+> **Note** : Cet outil est une specification future. Il n'est pas encore implémenté dans le système.
+
+### Opérations Prevues
 - `read` : Lecture rapports existants
 - `write` : Création nouveaux rapports
-- `write_diff` : modifier un document 
+- `write_diff` : modifier un document
 - `glob` : Recherche pattern-based de rapports
 - `delete` : Suppression rapports obsolètes
-- Créer un dossier 
-- supprimer un dossier
 
-### Localisation Tauri
+### Localisation Tauri (Future)
 
 **Répertoire** : `appDataDir()` résolu comme `${dataDir}/${bundleIdentifier}`
 ([Référence officielle](https://v2.tauri.app/plugin/file-system/))
 
-**Sécurité** : Scope configuration requis avec glob patterns (ex: `["$APPDATA/reports/*"]`)
-
-**Initialisation** : Création manuelle du répertoire au premier lancement application
-
-### Structure de Rapport
-```
-# Titre Rapport
-**Agent** : nom_agent
-**Timestamp** : ISO-8601
-**Type** : analysis | decision | error | status
-
-## Contexte
-[Description situation/problème]
-
-## Données
-[Informations pertinentes structurées]
-
-## Conclusions
-[Résultats, décisions, recommandations]
-
-## Actions Requises
-- [ ] Action 1
-- [ ] Action 2
-```
-
-### Cas d'Usage
-- **Handoff inter-agents** : Transmission contexte entre agents spécialisés
-- **Audit trail** : Traçabilité décisions pour debugging/analyse
-- **Coordination asynchrone** : Communication non-bloquante entre agents
-- **Rapports utilisateur** : Synthèses techniques pour revue humaine
-
-### Bonnes Pratiques
-- **Nomenclature** : `{timestamp}_{agent}_{type}.md` pour organisation chronologique
-- **Atomicité** : Un rapport = une unité sémantique complète
-- **Cleanup** : Archivage ou suppression rapports >30 jours selon politique retention
-- **Compression** : Utiliser symboles markdown pour verbosité réduite (tableaux, listes)
-
 ---
 
-## 4. Tool Execution Integration (LLMAgent)
+## 5. Tool Execution Integration (LLMAgent)
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
@@ -457,9 +476,9 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.4
-**Derniere mise a jour** : 2025-11-27
-**Phase** : Functional Agent System Phase 5 Complete (Tool Execution Integration)
+**Version** : 1.5
+**Derniere mise a jour** : 2025-12-05
+**Phase** : Functional Agent System Phase 5 Complete (6 Tools: MemoryTool, TodoTool, CalculatorTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
 
 ### Test Coverage
 

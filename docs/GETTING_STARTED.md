@@ -70,7 +70,7 @@ Vérifier `src-tauri/tauri.conf.json` :
 
 ### 1. Mode Dev (Frontend + Backend)
 ```bash
-npm run tauri dev
+npm run tauri:dev
 ```
 
 **Résultat** :
@@ -98,27 +98,41 @@ Test commands Rust isolé.
 ```
 zileo-chat-3/
 ├─ src/                     # Frontend SvelteKit
-│  ├─ routes/               # Pages
-│  │  ├─ settings/          # Page Settings
-│  │  └─ agent/             # Page Agent
+│  ├─ routes/               # Pages (file-based routing)
+│  │  ├─ +layout.svelte     # Layout global (theme, locale, onboarding)
+│  │  ├─ +page.svelte       # Accueil (redirect vers /agent)
+│  │  ├─ settings/          # Page Settings (9 sections)
+│  │  └─ agent/             # Page Agent (chat principal)
 │  ├─ lib/
-│  │  ├─ components/        # Composants réutilisables
-│  │  └─ stores/            # State management Svelte
+│  │  ├─ components/        # 79 composants Svelte
+│  │  │  ├─ ui/             # Composants atomiques (14)
+│  │  │  ├─ layout/         # Layout (4)
+│  │  │  ├─ chat/           # Chat UI (8)
+│  │  │  ├─ workflow/       # Gestion workflows (14)
+│  │  │  ├─ settings/       # Sections settings (13)
+│  │  │  └─ onboarding/     # Assistant premier lancement (9)
+│  │  ├─ stores/            # 14 stores Svelte
+│  │  ├─ services/          # Couche business logic
+│  │  └─ i18n.ts            # Internationalisation
+│  ├─ types/                # Définitions TypeScript (22 fichiers)
+│  ├─ messages/             # Traductions (en.json, fr.json)
 │  └─ app.html              # Template HTML
 │
 ├─ src-tauri/               # Backend Rust
 │  ├─ src/
 │  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # Tauri commands (IPC)
+│  │  ├─ commands/          # 18 modules (112 commandes Tauri)
 │  │  ├─ agents/            # Système multi-agents
-│  │  ├─ llm/               # Rig.rs integration
+│  │  ├─ llm/               # Rig.rs integration (Mistral, Ollama)
 │  │  ├─ mcp/               # MCP client/server
-│  │  ├─ tools/             # Custom tools
-│  │  └─ db/                # SurrealDB client
+│  │  ├─ tools/             # 6 outils (Memory, Todo, Calculator, SubAgent)
+│  │  ├─ models/            # Structs Rust (sync avec TS)
+│  │  ├─ security/          # Keystore + validation
+│  │  └─ db/                # SurrealDB client (17 tables)
 │  ├─ Cargo.toml            # Dépendances Rust
 │  └─ tauri.conf.json       # Config Tauri
 │
-└─ docs/                    # Documentation
+└─ docs/                    # Documentation (16 fichiers)
 ```
 
 ---
@@ -127,39 +141,49 @@ zileo-chat-3/
 
 ### 1. Lancer Application
 ```bash
-npm run tauri dev
+npm run tauri:dev
 ```
 
-### 2. Configuration Initiale
+### 2. Assistant Premier Lancement (Onboarding)
 
-**Page Settings** :
+Au premier lancement, un assistant guide la configuration :
+1. **Langue** : Sélection français/anglais
+2. **Thème** : Light/Dark
+3. **Provider** : Configuration API key (Mistral recommandé)
+4. **Import** : Option d'importer une configuration existante
+
+### 3. Configuration Avancée
+
+**Page Settings** (9 sections) :
 1. **Providers** : Configurer Mistral (API key) et/ou Ollama (local)
-2. **Models** : Sélectionner modèle
-   - Mistral : mistral-large, mistral-medium
-   - Ollama : llama3, mistral, codellama
-3. **Theme** : Choisir Light/Dark
-4. **Agents** : Vérifier agents par défaut (db_agent, api_agent)
+2. **Models** : Gérer modèles LLM (builtin + custom)
+3. **Agents** : Créer votre premier agent (aucun agent par défaut)
+4. **MCP Servers** : Configurer serveurs MCP (Docker/NPX/UVX)
+5. **Memory** : Configuration embeddings + gestion mémoires
+6. **Validation** : Paramètres human-in-the-loop
+7. **Prompts** : Bibliothèque de prompts
+8. **Import/Export** : Sauvegarde/restauration configuration
+9. **Theme** : Choisir Light/Dark
 
 **Note** : Toutes les API keys sont configurées via UI et stockées de manière sécurisée (Tauri secure storage + encryption)
 
-### 3. Créer Workflow
+### 4. Créer Workflow
 
 **Page Agent** :
-1. Click **+ New** (sidebar workflows)
-2. Sélectionner agent : `db_agent`
-3. Sélectionner provider : Mistral ou Ollama
-4. Nommer workflow : "Test Query"
-5. Envoyer message : "Query all users from database"
+1. Cliquer **+ New** (sidebar workflows)
+2. Sélectionner votre agent créé précédemment
+3. Nommer workflow : "Mon premier workflow"
+4. Envoyer message dans la zone de chat
 
-### 4. Observer Exécution
+### 5. Observer Exécution
 
 **Indicateurs Temps Réel** :
 - Status workflow : ● Running
-- Tokens : Update incrémental
-- Tools : SurrealDBTool actif
-- MCP : Si servers configurés
+- Tokens : Mise à jour incrémentale (input/output/coût)
+- Tools : MemoryTool, TodoTool, CalculatorTool (selon config agent)
+- MCP : Si serveurs MCP configurés
 
-### 5. Validation (si Human-in-the-Loop)
+### 6. Validation (si Human-in-the-Loop)
 
 Si mode validation activé :
 1. Modal apparaît : "Validation Required"
@@ -237,7 +261,7 @@ cargo test --lib    # Tests library
 
 ### Dev Build
 ```bash
-npm run tauri build
+npm run tauri:build
 ```
 
 **Outputs** :
@@ -273,7 +297,7 @@ error: package requires Rust 1.80.1+
 ### Tauri Build Failed
 **Solution** :
 1. Clear cache : `cargo clean`
-2. Rebuild : `npm run tauri build`
+2. Rebuild : `npm run tauri:build`
 3. Check logs : `src-tauri/target/release/build/`
 
 ### MCP Server Offline
@@ -287,9 +311,10 @@ error: package requires Rust 1.80.1+
 ## Next Steps
 
 1. **Explorer Agents** : [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md)
-2. **Configurer Providers** : [MULTI_PROVIDER_SPECIFICATIONS.md](MULTI_PROVIDER_SPECIFICATIONS.md)
-3. **Intégrer MCP** : [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md)
+2. **Configurer MCP** : [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md)
+3. **Outils Agents** : [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md)
 4. **API Reference** : [API_REFERENCE.md](API_REFERENCE.md)
+5. **Sub-Agents** : [SUB_AGENT_GUIDE.md](SUB_AGENT_GUIDE.md)
 
 ---
 

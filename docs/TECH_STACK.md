@@ -1,7 +1,7 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 24 Novembre 2025**
-> Versions de production utilisées dans le projet (compatibilité testée).
+> **Versions actuelles du projet : 5 Decembre 2025**
+> Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
 
@@ -14,30 +14,94 @@ Desktop   : Tauri (cross-platform)
 
 ## Technologies & Versions
 
-### Frontend
-- **SvelteKit**: 2.49.0 (Nov 2025)
-- **Svelte**: 5.43.14 (Nov 2025)
-- **TypeScript**: 5.9.3
-- **Vite**: 5.4.0 (compatible with Node 20.19)
-- **@sveltejs/adapter-static**: 3.0.0+
-- **@sveltejs/vite-plugin-svelte**: 4.0.0+
+### Frontend (package.json)
 
-### Backend
-- **Rust**: 1.91.1 (stable)
-- **Tauri CLI**: 2.9.4
-- **@tauri-apps/api**: 2.9.0
-- **@tauri-apps/cli**: 2.9.4
-- **serde**: 1.0.228
+**Core Framework**:
+- **svelte**: ^5.43.14
+- **@sveltejs/kit**: ^2.49.0
+- **@sveltejs/adapter-static**: ^3.0.0
+- **@sveltejs/vite-plugin-svelte**: ^4.0.0
+- **vite**: ^5.4.0
+
+**TypeScript**:
+- **typescript**: ^5.9.3
+- **svelte-check**: ^4.0.0
+
+**Tauri Integration**:
+- **@tauri-apps/api**: ^2.9.0
+- **@tauri-apps/cli**: ^2.9.4
+- **@tauri-apps/plugin-dialog**: ^2.2.0
+
+**UI Components**:
+- **lucide-svelte**: ^0.554.0 (icon library)
+
+**Testing**:
+- **vitest**: ^2.0.0 (unit tests)
+- **@playwright/test**: ^1.47.0 (E2E tests)
+- **jsdom**: ^27.2.0 (DOM testing)
+
+**Linting**:
+- **eslint**: ^9.0.0
+- **eslint-plugin-svelte**: ^2.46.0
+- **@eslint/js**: ^9.39.1
+- **@typescript-eslint/eslint-plugin**: ^8.0.0
+- **@typescript-eslint/parser**: ^8.0.0
+- **typescript-eslint**: ^8.48.0
+- **globals**: ^16.5.0
+
+### Backend (Cargo.toml)
+
+**Core Framework**:
+- **Rust**: 1.91.1 (stable, edition 2021)
+- **tauri**: 2 (framework)
+- **tauri-build**: 2 (build dependencies)
+- **tauri-plugin-opener**: 2
+- **tauri-plugin-dialog**: 2
+
+**LLM & Multi-Agent**:
+- **rig-core**: 0.24.0 (features: all) - LLM abstraction framework
+- **async-trait**: 0.1 (agent trait definitions)
+- **futures**: 0.3 (parallel execution)
+- **futures-util**: 0.3
+
+**Database**:
+- **surrealdb**: 2.3.10 (features: kv-rocksdb)
+
+**Serialization**:
+- **serde**: 1.0.228 (features: derive)
 - **serde_json**: 1.0.145
+
+**Async Runtime**:
 - **tokio**: 1.48.0 (features: full)
-- **tauri-build**: 2.9.4
-- **async-trait**: 0.1 (for agent trait)
-- **futures**: 0.3 (for parallel execution)
+- **tokio-util**: 0.7 (features: rt)
+
+**Error Handling**:
+- **anyhow**: 1.0
+- **thiserror**: 1.0
+
+**Logging**:
+- **tracing**: 0.1
+- **tracing-subscriber**: 0.3 (features: json, env-filter)
+
+**Utilities**:
+- **uuid**: 1.0 (features: v4, serde)
+- **chrono**: 0.4 (features: serde)
+- **regex**: 1.10
+- **lazy_static**: 1.5
+
+**HTTP & Network**:
+- **reqwest**: 0.12 (features: rustls-tls, json, stream)
+
+**Security**:
+- **keyring**: 2.0 (OS keychain integration)
+- **aes-gcm**: 0.10 (AES-256 encryption)
+
+**Dev Dependencies**:
+- **tempfile**: 3.14
 
 ### Database
-- **SurrealDB**: 2.3.10 (server + crate with kv-rocksdb)
-- **surrealdb.rs**: 2.3.10 (Rust client)
-- **surrealdb.js**: Latest (JS client, optional)
+- **SurrealDB**: 2.3.10 (embedded with kv-rocksdb feature)
+- **surrealdb.rs**: 2.3.10 (Rust client via Cargo)
 
 ## Architecture
 
@@ -95,23 +159,21 @@ Desktop   : Tauri (cross-platform)
 
 ## Security
 
-```rust
-// Tauri allowlist (tauri.conf.json)
+```json
+// Tauri v2 security (tauri.conf.json)
 {
   "app": {
     "security": {
-      "csp": "default-src 'self'"
-    }
-  },
-  "allowlist": {
-    "all": false,
-    "invoke": {
-      "all": false,
-      "commands": ["create_record", "query_db"]
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
     }
   }
 }
 ```
+
+**Security Features**:
+- **CSP**: Content Security Policy restricts resource loading
+- **API Key Storage**: OS keychain via `keyring` crate + AES-256 encryption
+- **Tauri v2**: Capability-based permissions (no v1 allowlist)
 
 ## Build Outputs
 
@@ -152,10 +214,13 @@ cargo --version   # >= 1.91.1
 
 ## Version Update Notes
 
-**Nov 2025 - Actual Project Versions**:
+**Dec 2025 - Actual Project Versions**:
 - Vite 5.4.0 used for compatibility with Node.js 20.19
 - Svelte 5.43.14 includes latest runes improvements
 - SvelteKit 2.49.0 stable release
-- Tauri 2.9.4 latest stable with protocol-asset features
-- SurrealDB 2.3.10 with improved HNSW vector cache and kv-rocksdb
-- async-trait 0.1 and futures 0.3 added for multi-agent system
+- Tauri 2.x with plugin-dialog and plugin-opener
+- SurrealDB 2.3.10 with kv-rocksdb for embedded desktop use
+- **rig-core 0.24.0** for multi-provider LLM abstraction (Mistral, Ollama)
+- async-trait 0.1 and futures 0.3 for multi-agent async patterns
+- keyring 2.0 + aes-gcm 0.10 for secure API key storage
+- lucide-svelte 0.554.0 for UI icons

@@ -6,23 +6,34 @@
 
 ## Statut du Projet
 
-**Phase actuelle**: Architecture et Documentation complète
-**Prochaine étape**: Implémentation de la base (Phase 0-9)
+**Phase actuelle**: Phase 5 Backend Features complete
+**Prochaine etape**: Phase 6 Integration & Polish
+
+### Metriques du Code
+- **99 commandes Tauri** (agent, workflow, memory, validation, streaming, MCP, LLM, prompts, etc.)
+- **6 outils** (MemoryTool, TodoTool, CalculatorTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
+- **18 tables SurrealDB** (workflow, agent, message, memory, task, validation_request, etc.)
+- **12 composants UI** (Button, Card, Modal, Input, Select, Badge, StatusIndicator, etc.)
+- **14 stores Svelte** (agentStore, workflowStore, streamingStore, tokenStore, etc.)
 
 ## Description
 
 Zileo-Chat-3 est une application desktop sophistiquée construite sur une architecture multi-agent, permettant l'orchestration intelligente de tâches via une interface conversationnelle.
 
-### Caractéristiques Principales
+### Caracteristiques Principales
 
-- 🤖 **Système Multi-Agent**: Orchestration centralisée avec agents permanents et temporaires
-- 💬 **Interface Conversationnelle**: Communication naturelle avec les agents
-- 🗄️ **Base de Données Hybride**: SurrealDB avec support relationnel, graph et vectoriel (HNSW)
-- 🔐 **Sécurité Production**: API keys chiffrées (OS keychain + AES-256), validation stricte, CSP
-- 🎨 **Interface Moderne**: SvelteKit + Svelte 5 (runes) pour une UI réactive
-- 🦀 **Backend Performant**: Rust avec Tauri pour une application native cross-platform
-- 🔌 **Extensibilité MCP**: Support du Model Context Protocol pour intégration d'outils externes
-- 📊 **Observabilité**: Logging structuré avec tracing, spans workflow/agent
+- **Systeme Multi-Agent**: Orchestration avec sub-agents (spawn, delegate, parallel tasks)
+- **Interface Conversationnelle**: Streaming temps-reel avec affichage tokens
+- **Base de Donnees Hybride**: SurrealDB avec support relationnel, graph et vectoriel (HNSW)
+- **Securite Production**: API keys chiffrees (OS keychain + AES-256), validation stricte, CSP
+- **Interface Moderne**: SvelteKit + Svelte 5 (runes) avec 12 composants UI
+- **Backend Performant**: Rust avec Tauri, 99 commandes IPC
+- **Extensibilite MCP**: Model Context Protocol avec gestion serveurs dynamique
+- **Observabilite**: Logging structure avec tracing, spans workflow/agent
+- **i18n**: Support multilingue (EN/FR) avec detection systeme
+- **Validation Human-in-the-loop**: Approbation des operations critiques
+- **Bibliotheque de Prompts**: Gestion et reutilisation de prompts systeme
+- **Import/Export**: Sauvegarde et restauration des configurations
 
 ## Architecture
 
@@ -38,16 +49,19 @@ Backend (Rust + Tokio)
 
 ## Documentation
 
-Toute la documentation technique est disponible dans le répertoire `docs/`:
+Toute la documentation technique est disponible dans le repertoire `docs/`:
 
-- **[TECH_STACK.md](docs/TECH_STACK.md)**: Versions exactes et requirements
-- **[ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)**: 19 décisions techniques justifiées
-- **[MULTI_AGENT_ARCHITECTURE.md](docs/MULTI_AGENT_ARCHITECTURE.md)**: Système multi-agent détaillé
-- **[API_REFERENCE.md](docs/API_REFERENCE.md)**: Signatures des commandes Tauri
-- **[DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)**: Schéma SurrealDB complet
-- **[TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md)**: Stratégie de tests (~70% coverage)
-- **[CLAUDE.md](CLAUDE.md)**: Guidelines pour développement avec Claude Code
-- **[specs/](docs/specs/)**: Spécifications d'implémentation détaillées
+| Document | Description |
+|----------|-------------|
+| **[TECH_STACK.md](docs/TECH_STACK.md)** | Versions exactes et requirements |
+| **[ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)** | Decisions techniques justifiees |
+| **[MULTI_AGENT_ARCHITECTURE.md](docs/MULTI_AGENT_ARCHITECTURE.md)** | Systeme multi-agent detaille |
+| **[DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** | Schema SurrealDB (18 tables) |
+| **[FRONTEND_SPECIFICATIONS.md](docs/FRONTEND_SPECIFICATIONS.md)** | Composants et stores frontend |
+| **[TOOLS_REFERENCE.md](docs/TOOLS_REFERENCE.md)** | Reference des 6 outils |
+| **[MCP_CONFIGURATION_GUIDE.md](docs/MCP_CONFIGURATION_GUIDE.md)** | Configuration serveurs MCP |
+| **[DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)** | Systeme de design UI |
+| **[CLAUDE.md](CLAUDE.md)** | Guidelines pour developpement avec Claude Code |
 
 ## Requirements
 
@@ -82,45 +96,41 @@ npm run tauri:build
 
 ## Roadmap
 
-### v0.1.0 - Base (En cours)
-✅ Infrastructure complète
-✅ Documentation exhaustive
-⏳ Implémentation fondations (15-20 jours estimés)
+### Phases Completees
 
-**Phases d'implémentation**:
-- Phase 0: Setup Projet (1j)
-- Phase 1: Database Foundation (2j)
-- Phase 2: Types Synchronisés (1j)
-- Phase 3: Infrastructure Multi-Agent (3j)
-- Phase 4: Tauri Commands Core (2j)
-- Phase 5: UI Basique (2j)
-- Phase 6: Logging et Monitoring (1j)
-- Phase 7: Sécurité de Base (2j)
-- Phase 8: Tests et Documentation (2j)
-- Phase 9: Build et Packaging (1j)
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 0 | Base implementation (agents, LLM, DB, security, 19 commands) | Complete |
+| Phase 1 | Design System Foundation (theme, 12 UI components) | Complete |
+| Phase 2 | Layout Components (AppContainer, Sidebar, FloatingMenu) | Complete |
+| Phase 3 | Chat & Workflow Components (MessageBubble, ChatInput) | Complete |
+| Phase 4 | Pages Refactoring (agent page, settings page) | Complete |
+| **Phase 5** | **Backend Features (validation, memory, streaming, 99 commands)** | **Complete** |
 
-### v0.2.0 - LLM Functional (+1 semaine)
-- Intégration LLM réelle (Mistral + Ollama)
-- Streaming responses
-- Token counting et cost tracking
+### Phase Actuelle
 
-### v0.3.0 - Multi-Agent Core (+2 semaines)
-- Agents spécialisés (DB, API, RAG, UI, Code)
-- MCP client integration
-- Tools custom (SurrealDB, HTTP, Embeddings)
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 6 | Integration & Polish (E2E tests, accessibility audit) | En cours |
 
-### v1.0.0 - Public Release (+5 semaines)
+### Fonctionnalites Implementees
+
+- Integration LLM (Mistral + Ollama via Rig.rs)
+- Streaming responses avec affichage tokens
+- Systeme multi-agent complet (6 outils)
+- Sub-agents (spawn, delegate, parallel tasks)
 - Human-in-the-loop validation UI
-- Système RAG complet
-- Métriques temps-réel avancées
-- macOS builds
+- Bibliotheque de prompts
+- Import/Export configurations
+- i18n (EN/FR)
+- Onboarding wizard
 
-### v1.1.0+
-- Multi-provider LLM (Claude, GPT-4, Gemini)
+### Prochaines Etapes
+
+- Tests E2E complets (Playwright)
+- Audit accessibilite
+- macOS builds
 - Windows builds
-- Theme customization
-- Export/Import workflows
-- Auto-updates
 
 ## Développement
 
@@ -129,20 +139,26 @@ npm run tauri:build
 ```
 zileo-chat-3/
 ├── src/                    # Frontend SvelteKit
-│   ├── routes/            # File-based routing
-│   ├── lib/               # Components, stores, utils
-│   └── types/             # TypeScript interfaces
-├── src-tauri/             # Backend Rust
+│   ├── routes/             # File-based routing (3 pages)
+│   │   ├── agent/          # Page agent (chat, workflows)
+│   │   └── settings/       # Page parametres
+│   ├── lib/
+│   │   ├── components/ui/  # 12 composants UI atomiques
+│   │   ├── stores/         # 14 stores Svelte
+│   │   └── i18n/           # Internationalisation
+│   ├── types/              # TypeScript interfaces
+│   └── messages/           # Traductions (en.json, fr.json)
+├── src-tauri/              # Backend Rust
 │   └── src/
-│       ├── commands/      # Tauri IPC handlers
-│       ├── agents/        # Multi-agent system
-│       ├── db/            # SurrealDB client
-│       ├── llm/           # Rig.rs integration
-│       ├── mcp/           # MCP protocol
-│       └── models/        # Rust types
-├── docs/                  # Documentation technique
-│   └── specs/             # Spécifications détaillées
-└── LICENSE                # Apache 2.0
+│       ├── commands/       # 99 commandes Tauri (18 fichiers)
+│       ├── tools/          # 6 outils (memory, todo, calculator, sub-agent)
+│       ├── agents/         # Systeme multi-agent
+│       ├── db/             # SurrealDB (18 tables)
+│       ├── llm/            # Rig.rs (Mistral, Ollama)
+│       ├── mcp/            # MCP protocol client
+│       └── models/         # Types Rust
+├── docs/                   # Documentation technique
+└── LICENSE                 # Apache 2.0
 ```
 
 ### Validation
@@ -235,4 +251,4 @@ limitations under the License.
 
 ---
 
-**Statut**: 🚧 En développement actif - Phase Architecture complète, implémentation en cours
+**Statut**: En developpement actif - Phase 5 complete (99 commands, 6 tools, 18 tables), Phase 6 Integration en cours

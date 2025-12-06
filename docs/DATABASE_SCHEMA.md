@@ -6,13 +6,26 @@
 
 ## Vue d'Ensemble
 
+**Total : 18 tables**
+
 ```
-workflow ─┐
-          ├─→ agent_state
-          ├─→ message
-          ├─→ task
-          ├─→ validation_request
-          └─→ memory (vectoriel)
+workflow ─────────────┐
+                      ├─→ agent (user-created configs)
+                      ├─→ agent_state (runtime state)
+                      ├─→ message
+                      ├─→ task
+                      ├─→ validation_request
+                      ├─→ memory (vectoriel)
+                      ├─→ tool_execution
+                      ├─→ thinking_step
+                      └─→ sub_agent_execution
+
+mcp_server ───────────→ mcp_call_log
+
+llm_model ────────────→ provider_settings
+
+prompt (standalone)
+settings (key-value config)
 ```
 
 ## Tables Principales
@@ -190,6 +203,229 @@ Tâches décomposées workflow avec statut progression.
 - `priority` (tri urgence)
 
 **Requête type** : Tasks pending non-bloquées workflow
+
+---
+
+### mcp_server
+
+Configuration des serveurs MCP utilisateur.
+
+**Champs**
+- `id` : string (unique identifier)
+- `name` : string (unique, user-friendly name)
+- `enabled` : boolean
+- `command` : string (docker, npx, uvx, http)
+- `args` : array<string>
+- `env` : string (JSON-encoded HashMap for dynamic keys)
+- `description` : string?
+- `created_at` : datetime
+- `updated_at` : datetime
+
+**Indexes**
+- `id` (UNIQUE)
+- `name` (UNIQUE)
+
+---
+
+### mcp_call_log
+
+Journal d'audit des appels MCP tools.
+
+**Champs**
+- `id` : UUID
+- `workflow_id` : string?
+- `server_name` : string
+- `tool_name` : string
+- `params` : object
+- `result` : object
+- `success` : boolean
+- `duration_ms` : int
+- `timestamp` : datetime
+
+**Indexes**
+- `workflow_id`
+- `server_name`
+- `timestamp`
+
+---
+
+### llm_model
+
+Registre des modeles LLM (builtin + custom).
+
+**Champs**
+- `id` : string (UUID for custom, api_name for builtin)
+- `provider` : string (mistral, ollama)
+- `name` : string (human-readable)
+- `api_name` : string (model identifier for API)
+- `context_window` : int (1024-2000000)
+- `max_output_tokens` : int (256-128000)
+- `temperature_default` : float (0.0-2.0)
+- `is_builtin` : boolean
+- `is_reasoning` : boolean
+- `input_price_per_mtok` : float?
+- `output_price_per_mtok` : float?
+- `created_at` : datetime
+- `updated_at` : datetime
+
+**Indexes**
+- `id` (UNIQUE)
+- `provider`
+- `(provider, api_name)` (UNIQUE)
+
+---
+
+### provider_settings
+
+Configuration des providers LLM.
+
+**Champs**
+- `provider` : string (UNIQUE, mistral/ollama)
+- `enabled` : boolean
+- `default_model_id` : string?
+- `base_url` : string?
+- `updated_at` : datetime
+
+**Indexes**
+- `provider` (UNIQUE)
+
+---
+
+### tool_execution
+
+Persistance des executions d'outils.
+
+**Champs**
+- `id` : UUID
+- `workflow_id` : string
+- `message_id` : string
+- `agent_id` : string
+- `tool_type` : string (local, mcp)
+- `tool_name` : string
+- `server_name` : string? (for MCP tools)
+- `input_params` : object
+- `output_result` : object
+- `success` : boolean
+- `error_message` : string?
+- `duration_ms` : int
+- `iteration` : int
+- `created_at` : datetime
+
+**Indexes**
+- `workflow_id`
+- `message_id`
+- `agent_id`
+- `tool_type`
+
+---
+
+### thinking_step
+
+Etapes de raisonnement agent (chain-of-thought).
+
+**Champs**
+- `id` : UUID
+- `workflow_id` : string
+- `message_id` : string
+- `agent_id` : string
+- `step_number` : int
+- `content` : string
+- `duration_ms` : int?
+- `tokens` : int?
+- `created_at` : datetime
+
+**Indexes**
+- `workflow_id`
+- `message_id`
+- `agent_id`
+
+---
+
+### sub_agent_execution
+
+Historique des executions de sub-agents.
+
+**Champs**
+- `id` : UUID
+- `workflow_id` : string
+- `parent_agent_id` : string
+- `sub_agent_id` : string
+- `sub_agent_name` : string
+- `task_description` : string
+- `status` : enum (running, completed, error)
+- `duration_ms` : int?
+- `tokens_input` : int?
+- `tokens_output` : int?
+- `result_summary` : string?
+- `error_message` : string?
+- `created_at` : datetime
+- `completed_at` : datetime?
+
+**Indexes**
+- `workflow_id`
+- `parent_agent_id`
+- `status`
+
+---
+
+### prompt
+
+Bibliotheque de prompts systeme.
+
+**Champs**
+- `id` : UUID
+- `name` : string
+- `description` : string?
+- `category` : string?
+- `content` : string
+- `variables` : array<string>
+- `created_at` : datetime
+- `updated_at` : datetime
+
+**Indexes**
+- `name`
+- `category`
+
+---
+
+### settings
+
+Stockage cle-valeur pour configurations globales.
+
+**Champs**
+- `id` : string (key, e.g., "settings:validation", "settings:embedding_config")
+- `config` : object (JSON configuration)
+- `updated_at` : datetime
+
+**Usage** : ValidationSettings, EmbeddingConfig, etc.
+
+---
+
+### agent
+
+Configuration des agents crees par l'utilisateur.
+
+**Champs**
+- `id` : UUID
+- `name` : string (1-64 chars)
+- `lifecycle` : enum (permanent, temporary)
+- `llm` : object
+  - `provider` : string
+  - `model` : string
+  - `temperature` : float (0.0-2.0)
+  - `max_tokens` : int (256-128000)
+- `tools` : array<string>
+- `mcp_servers` : array<string>
+- `system_prompt` : string (1-10000 chars)
+- `max_tool_iterations` : int?
+- `enable_thinking` : boolean?
+- `created_at` : datetime
+- `updated_at` : datetime
+
+**Indexes**
+- `id` (UNIQUE)
+- `name`
+- `llm.provider`
 
 ---
 

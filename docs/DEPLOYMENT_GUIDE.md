@@ -1,12 +1,14 @@
-# Guide Déploiement
+# Guide Deploiement
 
 > Build, packaging et distribution multi-OS
 
 ## Vue d'Ensemble
 
-**Stratégie** : Linux → macOS → Windows (progressif)
-**Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
-**Auto-updates** : Non v1, prévu v1.5
+**Version actuelle** : 0.1.0
+**Strategie** : Linux → macOS → Windows (progressif)
+**Format** : AppImage, .deb (Linux), .dmg (macOS prevu), .msi (Windows prevu)
+**CI/CD** : Non configure (prevu)
+**Auto-updates** : Non configure (prevu v1.5)
 
 ---
 
@@ -41,314 +43,262 @@ xcode-select --install
 
 ## Configuration Build
 
-### tauri.conf.json
+### tauri.conf.json (Configuration Reelle)
 
-**Identifier** : Unique bundle ID
 ```json
 {
-  "identifier": "com.zileo.chat3"
-}
-```
-
-**Version** : Synchroniser avec package.json
-```json
-{
-  "version": "1.0.0"
-}
-```
-
-**Bundle Targets**
-```json
-{
+  "productName": "Zileo Chat",
+  "version": "0.1.0",
+  "identifier": "com.zileo.chat",
+  "build": {
+    "frontendDist": "../build",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [{ "title": "Zileo Chat", "width": 1200, "height": 800 }],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb"],  // Linux
-    "identifier": "com.zileo.chat3",
+    "targets": ["appimage", "deb"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",  // macOS
-      "icons/icon.ico"    // Windows
+      "icons/icon.ico",
+      "icons/icon.icns"
     ]
   }
 }
 ```
 
+**Note** : Les icons incluent aussi `Zileo-icon.png` (branding custom).
+
 ---
 
 ## Build Local
 
+### Scripts Disponibles (package.json)
+
+```bash
+npm run tauri:dev      # Developpement avec HMR
+npm run tauri:build    # Build production
+```
+
 ### Development Build
 ```bash
-npm run tauri build
+npm run tauri:build
 ```
 
 **Output** : `src-tauri/target/release/bundle/`
 
-### Release Build (Optimisé)
+### Release Build
 ```bash
-npm run tauri build -- --release
+npm run tauri:build
 ```
 
-**Optimisations** :
-- Strip symbols (taille réduite)
-- LTO (Link-Time Optimization)
-- Codegen optimized
+**Note** : Le profil release est utilise par defaut. LTO n'est pas encore configure dans Cargo.toml.
 
 ---
 
 ## Packaging par OS
 
-### Linux
+### Linux (Configure)
+
+Les targets Linux sont configures dans tauri.conf.json : `["appimage", "deb"]`
 
 #### AppImage (Universal)
 ```bash
-npm run tauri build -- --target appimage
+npm run tauri:build
 ```
 
 **Avantages** : Pas installation, portable, compatible toutes distros
-**Output** : `zileo-chat-3_1.0.0_amd64.AppImage`
+**Output** : `zileo-chat_0.1.0_amd64.AppImage`
 
 #### .deb (Debian/Ubuntu)
-```bash
-npm run tauri build -- --target deb
-```
+Build produit automatiquement les deux formats.
 
 **Installation** :
 ```bash
-sudo dpkg -i zileo-chat-3_1.0.0_amd64.deb
+sudo dpkg -i zileo-chat_0.1.0_amd64.deb
 ```
 
-**Output** : `zileo-chat-3_1.0.0_amd64.deb`
+**Output** : `zileo-chat_0.1.0_amd64.deb`
 
 ---
 
-### macOS
+### macOS (Prevu)
+
+> **Statut** : Non configure. Necessite ajout de "dmg" dans bundle.targets.
 
 #### .dmg (Image Disque)
 ```bash
-npm run tauri build -- --target dmg
+# Ajouter "dmg" dans tauri.conf.json bundle.targets
+npm run tauri:build
 ```
 
 **Code Signing** (requis distribution publique) :
 ```bash
 codesign --sign "Developer ID Application: Your Name" \
-  src-tauri/target/release/bundle/macos/Zileo\ Chat\ 3.app
+  src-tauri/target/release/bundle/macos/Zileo\ Chat.app
 ```
 
-**Notarization** (Apple requirement) :
-```bash
-xcrun notarytool submit zileo-chat-3.dmg \
-  --apple-id your@email.com \
-  --password app-specific-password \
-  --team-id TEAMID
-```
-
-**Output** : `zileo-chat-3_1.0.0_x64.dmg`
+**Output prevu** : `zileo-chat_0.1.0_x64.dmg`
 
 ---
 
-### Windows
+### Windows (Prevu Phase 2)
+
+> **Statut** : Non configure. Necessite ajout de "msi" dans bundle.targets.
 
 #### .msi (Installer)
 ```bash
-npm run tauri build -- --target msi
+# Ajouter "msi" dans tauri.conf.json bundle.targets
+npm run tauri:build
 ```
 
-**Code Signing** (optionnel mais recommandé) :
-```powershell
-signtool sign /f certificate.pfx /p password zileo-chat-3_1.0.0_x64.msi
-```
-
-**Output** : `zileo-chat-3_1.0.0_x64.msi`
+**Output prevu** : `zileo-chat_0.1.0_x64.msi`
 
 ---
 
-## CI/CD Pipeline
+## CI/CD Pipeline (Prevu)
 
-### GitHub Actions
+> **Statut** : Aucun workflow CI/CD configure actuellement.
+> Les fichiers `.github/workflows/` et `.gitlab-ci.yml` n'existent pas.
 
-**Workflow** : `.github/workflows/build.yml`
+### Validation Locale (Disponible)
 
-#### Branches
-- **feature/** : Linting + Tests
-- **main** : Build multi-OS + Tests E2E
-- **tags (v*)** : Release publique
+En attendant CI/CD, utiliser les commandes locales :
 
-#### Jobs
+```bash
+# Frontend validation
+npm run lint              # ESLint
+npm run check             # svelte-check + TypeScript
+npm run test              # Vitest unit tests
 
-**1. Lint & Test**
-```yaml
-- runs: npm run lint
-- runs: npm run test
-- runs: cargo clippy
-- runs: cargo test
+# Backend validation
+cd src-tauri
+cargo fmt --check         # Format verification
+cargo clippy -- -D warnings  # Linting
+cargo test                # Unit tests
 ```
 
-**2. Build Linux**
-```yaml
-- os: ubuntu-latest
-- runs: npm run tauri build -- --target appimage deb
-- upload: artifacts
-```
+### Structure CI/CD Recommandee
 
-**3. Build macOS**
-```yaml
-- os: macos-latest
-- runs: npm run tauri build -- --target dmg
-- code-sign: if secrets.MACOS_CERTIFICATE
-- upload: artifacts
-```
+Quand les workflows seront crees :
 
-**4. Build Windows** (Phase 2)
-```yaml
-- os: windows-latest
-- runs: npm run tauri build -- --target msi
-- code-sign: if secrets.WINDOWS_CERTIFICATE
-- upload: artifacts
-```
+**Branches** :
+- `feature/*` : Lint + Tests
+- `main` : Build multi-OS
+- `tags (v*)` : Release publique
 
-**5. Release**
-```yaml
-- if: startsWith(github.ref, 'refs/tags/v')
-- create: GitHub Release
-- upload: All artifacts
-```
-
----
-
-### GitLab CI
-
-**Workflow** : `.gitlab-ci.yml`
-
-#### Stages
-1. `test` : Linting, tests unitaires
-2. `build` : Compilation multi-OS (runners spécifiques)
-3. `deploy` : Publication artifacts
-
-#### Runners
-- **Linux** : Docker avec deps Tauri
-- **macOS** : Shell runner macOS 12+
-- **Windows** : Shell runner Windows Server
+**Jobs prevus** :
+1. Lint & Test (ubuntu-latest)
+2. Build Linux (appimage + deb)
+3. Build macOS (dmg) - Phase 1.5
+4. Build Windows (msi) - Phase 2
 
 ---
 
 ## Distribution
 
-### GitHub Releases
+### GitHub Releases (Manuel)
 
-**Création Release**
-1. Tag version : `git tag v1.0.0`
-2. Push tag : `git push origin v1.0.0`
-3. CI/CD auto-crée release avec artifacts
+**Creation Release** :
+1. Tag version : `git tag v0.1.0`
+2. Push tag : `git push origin v0.1.0`
+3. Build local : `npm run tauri:build`
+4. Creer release manuellement sur GitHub
+5. Upload artifacts
 
-**Assets** :
-- `zileo-chat-3_1.0.0_amd64.AppImage`
-- `zileo-chat-3_1.0.0_amd64.deb`
-- `zileo-chat-3_1.0.0_x64.dmg`
-- `zileo-chat-3_1.0.0_x64.msi` (Phase 2)
+**Assets attendus** :
+- `zileo-chat_0.1.0_amd64.AppImage` (Linux)
+- `zileo-chat_0.1.0_amd64.deb` (Linux)
+- `zileo-chat_0.1.0_x64.dmg` (macOS - prevu)
+- `zileo-chat_0.1.0_x64.msi` (Windows - prevu)
 
 ### Checksums
 
-**Génération** :
+**Generation** :
 ```bash
-sha256sum zileo-chat-3* > SHA256SUMS
+sha256sum zileo-chat_* > SHA256SUMS
 ```
 
-**Vérification utilisateur** :
+**Verification utilisateur** :
 ```bash
 sha256sum -c SHA256SUMS
 ```
 
 ---
 
-## Auto-Updates (v1.5)
+## Auto-Updates (Prevu v1.5)
 
-### Tauri Updater
+> **Statut** : Non configure. La configuration updater n'existe pas dans tauri.conf.json.
 
-**Config** : `tauri.conf.json`
+### Configuration Requise (Quand Active)
+
+Ajouter dans `tauri.conf.json` :
 ```json
 {
-  "updater": {
-    "active": true,
-    "endpoints": [
-      "https://releases.zileo.com/{{target}}/{{current_version}}"
-    ],
-    "dialog": true,
-    "pubkey": "PUBLIC_KEY_HERE"
-  }
-}
-```
-
-### Update Manifest
-
-**Format JSON** : `latest.json`
-```json
-{
-  "version": "1.0.1",
-  "notes": "Bug fixes and performance improvements",
-  "pub_date": "2025-11-23T10:00:00Z",
-  "platforms": {
-    "linux-x86_64": {
-      "signature": "SIGNATURE",
-      "url": "https://releases.zileo.com/zileo-chat-3_1.0.1_amd64.AppImage"
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": ["https://releases.zileo.com/{{target}}/{{current_version}}"],
+      "dialog": true,
+      "pubkey": "PUBLIC_KEY_HERE"
     }
   }
 }
 ```
 
-### Signing
+### Commandes Tauri (Reference)
 
-**Generate keypair** :
 ```bash
-tauri signer generate
+# Generer keypair
+npx tauri signer generate
+
+# Signer release
+npx tauri signer sign zileo-chat_0.1.0_amd64.AppImage
 ```
 
-**Sign release** :
-```bash
-tauri signer sign zileo-chat-3.AppImage
-```
+Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
 
 ---
 
 ## Environnements
 
 ### Development
-- **Build** : Debug mode, symbols inclus
-- **DB** : SurrealDB embedded local
-- **Logs** : Verbose (DEBUG level)
-
-### Staging
-- **Build** : Release optimized
-- **DB** : SurrealDB server (staging)
-- **Logs** : INFO level
-- **Testing** : E2E complets
+- **Build** : Debug mode via `npm run tauri:dev`
+- **DB** : SurrealDB embedded (RocksDB local)
+- **Logs** : Configure via tracing-subscriber (env-filter)
 
 ### Production
-- **Build** : Release + strip + LTO
-- **DB** : SurrealDB embedded (desktop app)
-- **Logs** : WARN/ERROR uniquement
-- **Security** : API keys encrypted, CSP strict
+- **Build** : Release via `npm run tauri:build`
+- **DB** : SurrealDB embedded (RocksDB)
+- **Security** : API keys via keyring + AES-256, CSP configure
+
+**Note** : Pas d'environnement staging separe (application desktop).
 
 ---
 
-## Monitoring Post-Release
+## Monitoring Post-Release (Prevu)
 
-### Crash Reports
+> **Statut** : Aucun monitoring configure. Sentry n'est pas integre.
 
-**Sentry Integration** (optionnel)
-```rust
-// src-tauri/src/main.rs
-sentry::init(("DSN", sentry::ClientOptions {
-    release: Some(env!("CARGO_PKG_VERSION").into()),
-    ..Default::default()
-}));
+### Crash Reports (Prevu)
+
+Pour integrer Sentry, ajouter dans Cargo.toml :
+```toml
+sentry = "0.32"
 ```
 
 ### Analytics
 
-**Telemetry Opt-in** (privacy-first)
+**Approche recommandee** : Telemetry opt-in (privacy-first)
 - Version OS utilisée
 - Version app
 - Crashes (anonymisés)
@@ -363,23 +313,23 @@ sentry::init(("DSN", sentry::ClientOptions {
 
 ## Rollback Strategy
 
-### Problème Post-Release
+### Probleme Post-Release
 
-**1. Identifier version stable précédente**
+**1. Identifier version stable precedente**
 ```bash
 git tag -l "v*"
 ```
 
-**2. Revert tag**
+**2. Supprimer tag problematique** (exemple)
 ```bash
-git tag -d v1.0.1
-git push origin :refs/tags/v1.0.1
+git tag -d v0.1.1
+git push origin :refs/tags/v0.1.1
 ```
 
-**3. Republier version stable**
+**3. Republier version stable** (exemple)
 ```bash
-git tag v1.0.0-hotfix
-git push origin v1.0.0-hotfix
+git tag v0.1.0-hotfix
+git push origin v0.1.0-hotfix
 ```
 
 **4. Communiquer** : Release notes + notification utilisateurs
@@ -389,23 +339,24 @@ git push origin v1.0.0-hotfix
 ## Checklist Release
 
 ### Pre-Release
-- [ ] Tests passent (unitaires + E2E)
-- [ ] Version bumped (package.json + tauri.conf.json)
-- [ ] Changelog updated
-- [ ] Security audit (cargo audit)
-- [ ] Dependencies updated
+- [ ] Tests passent : `npm run test` + `cargo test`
+- [ ] Lint OK : `npm run lint` + `cargo clippy`
+- [ ] Version synchronisee (package.json + tauri.conf.json + Cargo.toml)
+- [ ] Changelog mis a jour
+- [ ] Security audit : `cargo audit` (si configure)
 
-### Release
-- [ ] Tag créé et pushed
-- [ ] CI/CD builds réussis
-- [ ] Artifacts téléchargés et testés manuellement
-- [ ] Checksums générés
-- [ ] GitHub Release créée
+### Release (Manuel - CI/CD non configure)
+- [ ] Build local : `npm run tauri:build`
+- [ ] Test manuel de l'AppImage/deb
+- [ ] Tag cree : `git tag v0.x.y && git push origin v0.x.y`
+- [ ] Checksums generes : `sha256sum zileo-chat_* > SHA256SUMS`
+- [ ] GitHub Release creee manuellement
+- [ ] Artifacts uploades
 
 ### Post-Release
-- [ ] Monitoring crashes 24h
-- [ ] Feedback utilisateurs collecté
-- [ ] Hotfix si critique (rollback si nécessaire)
+- [ ] Test installation sur machine propre
+- [ ] Feedback utilisateurs collecte
+- [ ] Hotfix si critique (rollback si necessaire)
 
 ---
 
@@ -429,9 +380,9 @@ git push origin v1.0.0-hotfix
 ### Large Binary Size
 
 **Solutions** :
-1. Strip symbols : `strip target/release/zileo-chat-3`
-2. Enable LTO : `lto = "thin"` dans Cargo.toml
-3. Optimize dependencies : Exclude unused features
+1. Strip symbols : `strip target/release/zileo-chat`
+2. Enable LTO : Ajouter `[profile.release] lto = "thin"` dans Cargo.toml (non configure)
+3. Optimize dependencies : Exclude unused features dans Cargo.toml
 
 ---
 

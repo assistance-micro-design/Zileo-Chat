@@ -33,9 +33,14 @@ Sub-agents operate at exactly one level below the primary agent:
 
 ### Maximum Limits
 
-- **3 sub-agents per workflow** (MAX_SUB_AGENTS constant)
-- **3 tasks per parallel batch**
-- Sub-agents have restricted tool access by default
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_SUB_AGENTS` | 3 | Maximum sub-agents per workflow |
+| `MAX_TASK_DESCRIPTION_LEN` | 10000 | Maximum task description length |
+| `MAX_RESULT_SUMMARY_LEN` | 5000 | Maximum result summary length |
+
+- **3 tasks per parallel batch** (matches MAX_SUB_AGENTS)
+- Sub-agents have restricted tool access by default (sub-agent tools filtered out)
 
 ---
 
@@ -45,10 +50,28 @@ Sub-agents operate at exactly one level below the primary agent:
 
 Creates temporary sub-agents with custom configurations for specialized tasks.
 
+**Operations**:
+| Operation | Description |
+|-----------|-------------|
+| `spawn` | Create and execute a temporary sub-agent |
+| `list_children` | List currently spawned sub-agents for this workflow |
+| `terminate` | Force-stop a spawned sub-agent |
+
 **When to Use**:
 - Need a specialized agent with specific capabilities
 - Task requires custom tools or MCP servers
 - One-time analysis that doesn't need a permanent agent
+
+**Parameters** (spawn operation):
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `name` | Yes | - | Sub-agent name |
+| `prompt` | Yes | - | Complete prompt (only input sub-agent receives) |
+| `system_prompt` | No | Default sub-agent prompt | Custom system prompt |
+| `tools` | No | Parent's tools (minus sub-agent tools) | Tools list |
+| `mcp_servers` | No | Parent's MCP servers | MCP servers |
+| `provider` | No | Parent's provider | LLM provider |
+| `model` | No | Parent's model | Model ID |
 
 **Example Prompt for Primary Agent**:
 ```
@@ -89,6 +112,12 @@ Use the spawn tool to create a CodeAnalyzer agent that:
 ### 2. DelegateTaskTool
 
 Routes tasks to existing permanent agents already configured in the system.
+
+**Operations**:
+| Operation | Description |
+|-----------|-------------|
+| `delegate` | Execute a task via an existing permanent agent |
+| `list_agents` | List available agents for delegation (excludes self and temporary agents) |
 
 **When to Use**:
 - Task fits a permanent agent's specialty
@@ -398,7 +427,7 @@ DEFINE FIELD parent_agent_id ON sub_agent_execution TYPE string;
 DEFINE FIELD sub_agent_id ON sub_agent_execution TYPE string;
 DEFINE FIELD sub_agent_name ON sub_agent_execution TYPE string;
 DEFINE FIELD task_description ON sub_agent_execution TYPE string;
-DEFINE FIELD status ON sub_agent_execution TYPE string;
+DEFINE FIELD status ON sub_agent_execution TYPE string;  -- pending | running | completed | error | cancelled
 DEFINE FIELD duration_ms ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD tokens_input ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD tokens_output ON sub_agent_execution TYPE option<int>;
@@ -406,6 +435,39 @@ DEFINE FIELD result_summary ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD error_message ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD created_at ON sub_agent_execution TYPE datetime;
 DEFINE FIELD completed_at ON sub_agent_execution TYPE option<datetime>;
+```
+
+---
+
+## Tauri Commands
+
+Frontend can interact with sub-agent execution history via Tauri IPC:
+
+### load_workflow_sub_agent_executions
+
+Loads all sub-agent executions for a workflow.
+
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+import type { SubAgentExecution } from '$types/sub-agent';
+
+const executions = await invoke<SubAgentExecution[]>(
+  'load_workflow_sub_agent_executions',
+  { workflowId: 'wf_123' }
+);
+// Returns executions sorted by created_at (oldest first)
+```
+
+### clear_workflow_sub_agent_executions
+
+Deletes all sub-agent executions for a workflow.
+
+```typescript
+const deletedCount = await invoke<number>(
+  'clear_workflow_sub_agent_executions',
+  { workflowId: 'wf_123' }
+);
+console.log(`Deleted ${deletedCount} executions`);
 ```
 
 ---

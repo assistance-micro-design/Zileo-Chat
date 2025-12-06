@@ -1216,43 +1216,151 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library
+### Component Library (82 Total Components)
 
 ```
 src/lib/components/
-├─ ui/
+├─ ui/                  # 12 atomic UI components
 │  ├─ Button.svelte
+│  ├─ Badge.svelte
+│  ├─ Card.svelte
 │  ├─ Input.svelte
 │  ├─ Select.svelte
 │  ├─ Textarea.svelte
 │  ├─ Modal.svelte
-│  ├─ Toast.svelte
-│  └─ Progress.svelte
-├─ layout/
+│  ├─ Spinner.svelte
+│  ├─ ProgressBar.svelte
+│  ├─ StatusIndicator.svelte
+│  ├─ Skeleton.svelte
+│  └─ LanguageSelector.svelte
+├─ layout/              # 4 layout containers
+│  ├─ AppContainer.svelte
 │  ├─ Sidebar.svelte
-│  ├─ FloatingMenu.svelte
-│  └─ Panel.svelte
-├─ workflow/
-│  ├─ WorkflowList.svelte
-│  ├─ WorkflowCard.svelte
-│  ├─ MessageStream.svelte
-│  └─ InputArea.svelte
-├─ agent/
+│  ├─ RightSidebar.svelte
+│  └─ FloatingMenu.svelte
+├─ navigation/          # 1 navigation element
+│  └─ NavItem.svelte
+├─ agent/               # 4 agent page sections
+│  ├─ AgentHeader.svelte
+│  ├─ ActivitySidebar.svelte
+│  ├─ ChatContainer.svelte
+│  └─ WorkflowSidebar.svelte
+├─ chat/                # 8 chat components
+│  ├─ ChatInput.svelte
+│  ├─ MessageBubble.svelte
+│  ├─ MessageList.svelte
+│  ├─ MessageListSkeleton.svelte
+│  ├─ PromptSelectorModal.svelte
+│  ├─ ReasoningStep.svelte
+│  ├─ StreamingMessage.svelte
+│  └─ ToolExecution.svelte
+├─ workflow/            # 13 workflow components
+│  ├─ ActivityFeed.svelte
+│  ├─ ActivityItem.svelte
 │  ├─ AgentSelector.svelte
-│  ├─ AgentSettings.svelte
-│  ├─ AgentWizard.svelte
-│  └─ SubAgentCard.svelte
-├─ monitoring/
+│  ├─ ConfirmDeleteModal.svelte
+│  ├─ MetricsBar.svelte
+│  ├─ NewWorkflowModal.svelte
+│  ├─ ReasoningPanel.svelte
+│  ├─ SubAgentActivity.svelte
 │  ├─ TokenDisplay.svelte
-│  ├─ ToolsPanel.svelte
-│  ├─ MCPStatus.svelte
-│  └─ ReasoningPanel.svelte
-└─ settings/
-   ├─ ProviderConfig.svelte
-   ├─ ModelConfig.svelte
-   ├─ ThemeSelector.svelte
-   └─ PromptLibrary.svelte
+│  ├─ ToolExecutionPanel.svelte
+│  ├─ ValidationModal.svelte
+│  ├─ WorkflowItem.svelte
+│  ├─ WorkflowItemCompact.svelte
+│  └─ WorkflowList.svelte
+├─ mcp/                 # 3 MCP management components
+│  ├─ MCPServerCard.svelte
+│  ├─ MCPServerForm.svelte
+│  └─ MCPServerTester.svelte
+├─ llm/                 # 4 LLM management components
+│  ├─ ConnectionTester.svelte
+│  ├─ ModelCard.svelte
+│  ├─ ModelForm.svelte
+│  └─ ProviderCard.svelte
+├─ settings/            # 24 settings components
+│  ├─ agents/           # Agent CRUD (3)
+│  │  ├─ AgentSettings.svelte
+│  │  ├─ AgentList.svelte
+│  │  └─ AgentForm.svelte
+│  ├─ memory/           # Memory CRUD (3)
+│  │  ├─ MemorySettings.svelte
+│  │  ├─ MemoryList.svelte
+│  │  └─ MemoryForm.svelte
+│  ├─ prompts/          # Prompt CRUD (3)
+│  │  ├─ PromptSettings.svelte
+│  │  ├─ PromptList.svelte
+│  │  └─ PromptForm.svelte
+│  ├─ validation/       # Validation config (1)
+│  │  └─ ValidationSettings.svelte
+│  └─ import-export/    # Data portability (9)
+│     ├─ ImportExportSettings.svelte
+│     ├─ ExportPanel.svelte
+│     ├─ ImportPanel.svelte
+│     ├─ EntitySelector.svelte
+│     ├─ ExportPreview.svelte
+│     ├─ ImportPreview.svelte
+│     ├─ ConflictResolver.svelte
+│     ├─ MCPFieldEditor.svelte
+│     └─ MCPEnvEditor.svelte
+└─ onboarding/          # 9 first-launch wizard components
+   ├─ OnboardingModal.svelte
+   ├─ OnboardingProgress.svelte
+   └─ steps/
+      ├─ StepWelcome.svelte
+      ├─ StepLanguage.svelte
+      ├─ StepTheme.svelte
+      ├─ StepApiKey.svelte
+      ├─ StepValues.svelte
+      ├─ StepImport.svelte
+      └─ StepComplete.svelte
 ```
+
+### Stores (14 Total)
+
+| Store | Type | Key Exports | Description |
+|-------|------|-------------|-------------|
+| `theme` | custom | `theme`, `setTheme()`, `toggle()`, `init()` | Light/dark mode with localStorage persistence |
+| `agents` | custom | `agentStore`, `agents`, `selectedAgent`, `isLoading`, `hasAgents`, `agentCount` | Agent CRUD with reactive state |
+| `workflows` | custom | `workflowStore`, `workflows`, `selectedWorkflow`, `filteredWorkflows` | Workflow management (pure functions + reactive store) |
+| `locale` | custom | `localeStore`, `locale`, `localeInfo` | i18n language management |
+| `llm` | pure functions | `createInitialLLMState()`, `loadModels()`, `updateProviderSettings()` | LLM provider/model state |
+| `mcp` | pure functions | `createInitialMCPState()`, `loadServers()`, `testServer()`, `callTool()` | MCP server state |
+| `streaming` | custom | `streamingStore`, `isStreaming`, `streamContent`, `activeTools`, `reasoningSteps` | Real-time workflow execution |
+| `activity` | custom | `activityStore`, `historicalActivities`, `allActivities`, `filteredActivities` | Workflow activity tracking |
+| `prompts` | custom | `promptStore`, `prompts`, `selectedPrompt`, `hasPrompts` | Prompt library management |
+| `validation` | custom | `validationStore`, `hasPendingValidation`, `pendingValidation` | Human-in-the-loop requests |
+| `tokens` | custom | `tokenStore`, `tokenDisplayData`, `streamingTokens`, `cumulativeTokens` | Token usage/cost tracking |
+| `validation-settings` | custom | N/A | Validation configuration |
+| `onboarding` | custom | N/A | First-launch wizard state |
+| `index` | barrel | All stores | Re-exports all stores |
+
+### Types (22 Modules in src/types/)
+
+| Module | Key Types | Description |
+|--------|-----------|-------------|
+| `agent.ts` | `Agent`, `AgentConfig`, `AgentConfigCreate`, `AgentSummary`, `LLMConfig` | Agent configuration |
+| `workflow.ts` | `Workflow`, `WorkflowResult`, `WorkflowMetrics`, `WorkflowFullState` | Workflow execution |
+| `llm.ts` | `LLMModel`, `ProviderSettings`, `ConnectionTestResult`, `LLMState` | LLM providers |
+| `mcp.ts` | `MCPServer`, `MCPServerConfig`, `MCPTool`, `MCPTestResult` | MCP servers |
+| `streaming.ts` | `StreamChunk`, `WorkflowComplete`, `ChunkType` | Streaming events |
+| `message.ts` | `Message` | Chat messages |
+| `task.ts` | `Task` | Todo/task items |
+| `tool.ts` | `ToolExecution`, `WorkflowToolExecution` | Tool execution |
+| `thinking.ts` | `ThinkingStep` | Reasoning steps |
+| `sub-agent.ts` | `SubAgentExecution`, `ValidationRequiredEvent` | Sub-agent execution |
+| `validation.ts` | `ValidationRequest`, `ValidationType`, `RiskLevel` | Validation requests |
+| `prompt.ts` | `Prompt`, `PromptCreate`, `PromptSummary`, `PromptCategory` | Prompt library |
+| `activity.ts` | `WorkflowActivityEvent`, `ActivityFilter` | Activity events |
+| `memory.ts` | `Memory`, `MemoryType` | Memory/RAG |
+| `embedding.ts` | Embedding config types | Vector embeddings |
+| `services.ts` | `ModalState` | Service layer |
+| `security.ts` | `LLMProvider` | Security/credentials |
+| `function_calling.ts` | Function calling schemas | LLM function calling |
+| `importExport.ts` | Import/export structures | Backup/restore |
+| `i18n.ts` | `Locale`, `LocaleInfo`, `LOCALES` | Internationalization |
+| `onboarding.ts` | Onboarding state types | First-launch wizard |
+| `index.ts` | All types | Barrel export |
 
 ### Props Pattern (TypeScript)
 

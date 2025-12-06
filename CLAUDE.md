@@ -19,11 +19,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 0 | Complete | Base implementation (agents, LLM, DB, security, 19 Tauri commands) |
-| Phase 1 | Complete | Design System Foundation (theme, 10 UI components) |
+| Phase 1 | Complete | Design System Foundation (theme, 12 UI components) |
 | Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
 | Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
 | Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
-| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 37 Tauri commands) |
+| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 99 Tauri commands) |
 | Phase 6 | Pending | Integration & Polish (E2E tests, accessibility audit) |
 
 ### Functional Agent System (Complete)
@@ -61,6 +61,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `Input` | Text input with label and help text |
 | `Select` | Dropdown with typed options |
 | `Textarea` | Multi-line input |
+| `Skeleton` | Loading placeholder with text, circular, rectangular variants |
+| `LanguageSelector` | i18n language picker with flag display |
 
 **Usage**:
 ```typescript
@@ -146,10 +148,9 @@ zileo-chat-3/
 │  │  ├─ main.rs            # Entry point
 │  │  ├─ commands/          # Tauri IPC commands
 │  │  ├─ agents/            # Multi-agent system
-│  │  │  ├─ core/           # Orchestrator, registry
-│  │  │  ├─ specialized/    # Permanent agents
-│  │  │  ├─ config/         # TOML agent configurations
-│  │  │  └─ prompts/        # System prompts + templates
+│  │  │  ├─ core/           # Orchestrator, registry, agent trait
+│  │  │  ├─ llm_agent.rs    # LLM-backed agent implementation
+│  │  │  └─ simple_agent.rs # Basic agent implementation
 │  │  ├─ llm/               # Rig.rs integration, providers
 │  │  ├─ mcp/               # MCP client/server
 │  │  ├─ tools/             # Custom MCP tools
@@ -473,29 +474,6 @@ $isLoading    // boolean
 $hasAgents    // boolean
 ```
 
-### TOML Configuration (Reference Only)
-
-TOML files in `src-tauri/agents/config/` are for reference documentation only:
-
-```toml
-[agent]
-id = "db_agent"
-name = "Database Agent"
-lifecycle = "Permanent"  # or "Temporary"
-
-[llm]
-provider = "Mistral"  # Phase 1: Mistral|Ollama
-model = "mistral-large"
-temperature = 0.7
-max_tokens = 4096
-
-[tools]
-enabled = ["MemoryTool", "TodoTool"]
-
-[mcp_servers]
-required = ["serena"]  # Optional MCP servers to use
-```
-
 ## Tool Development Patterns
 
 ### New Utility Modules
@@ -639,15 +617,31 @@ To assign: {"mcp_servers": ["Serena"]}
 
 ## Database Schema (SurrealDB)
 
-Key entities with graph relations:
+**18 tables** with graph relations. Key entities:
 
-- **agent**: Agent configurations (id, name, lifecycle, llm, tools, mcp_servers, system_prompt)
+**Core**:
 - **workflow**: Manages agent workflows (relations: agent, messages, tasks, validations)
+- **agent**: User-created agent configurations (id, name, lifecycle, llm, tools, mcp_servers, system_prompt)
 - **agent_state**: Persistent agent runtime state
-- **memory**: Vector embeddings for agent memory (user_pref, context, knowledge types)
 - **message**: Conversation messages with role (user/assistant/system)
-- **validation_request**: Human-in-the-loop validation tracking
+- **memory**: Vector embeddings for agent memory (user_pref, context, knowledge, decision types)
+
+**Tracking**:
 - **task**: Todo items with status tracking
+- **validation_request**: Human-in-the-loop validation tracking
+- **tool_execution**: Tool call persistence with metrics
+- **thinking_step**: Agent reasoning chain-of-thought
+- **sub_agent_execution**: Sub-agent spawn history
+
+**Configuration**:
+- **llm_model**: LLM model registry (builtin + custom)
+- **provider_settings**: Provider configuration (mistral, ollama)
+- **mcp_server**: MCP server configurations
+- **mcp_call_log**: MCP tool audit log
+- **prompt**: Prompt library
+- **settings**: Key-value config storage
+
+See `docs/DATABASE_SCHEMA.md` for full schema details.
 
 ### Agent Table Schema
 
@@ -903,11 +897,12 @@ Essential reading for context:
 
 ### Agent Development
 
-1. Create TOML config in `src-tauri/agents/config/`
-2. Define system prompt in `src-tauri/agents/prompts/`
-3. Implement agent logic following trait pattern
-4. Register in agent registry
-5. Add tools and MCP server dependencies
+Agents are created dynamically via Settings UI and stored in SurrealDB:
+
+1. **UI Creation**: Settings → Agents → Create new agent
+2. **Configuration**: Name, lifecycle, LLM settings, tools, MCP servers, system prompt
+3. **Persistence**: Agent stored in SurrealDB `agent` table
+4. **Runtime**: LLMAgent loads config from DB and executes with Orchestrator
 
 ### For Bug Fixes
 
