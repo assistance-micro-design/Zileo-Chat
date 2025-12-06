@@ -8,7 +8,7 @@
 ```
 Frontend  : SvelteKit 2.49.0 | Svelte 5.43.14
 Backend   : Rust 1.91.1 + Tauri 2.9.4
-Database  : SurrealDB 2.3.10
+Database  : SurrealDB 2.4.0
 Desktop   : Tauri (cross-platform)
 ```
 
@@ -65,7 +65,7 @@ Desktop   : Tauri (cross-platform)
 - **futures-util**: 0.3
 
 **Database**:
-- **surrealdb**: 2.3.10 (features: kv-rocksdb)
+- **surrealdb**: 2.4.0 (features: kv-rocksdb)
 
 **Serialization**:
 - **serde**: 1.0.228 (features: derive)
@@ -100,8 +100,8 @@ Desktop   : Tauri (cross-platform)
 - **tempfile**: 3.14
 
 ### Database
-- **SurrealDB**: 2.3.10 (embedded with kv-rocksdb feature)
-- **surrealdb.rs**: 2.3.10 (Rust client via Cargo)
+- **SurrealDB**: 2.4.0 (embedded with kv-rocksdb feature)
+- **surrealdb.rs**: 2.4.0 (Rust client via Cargo)
 
 ## Architecture
 
@@ -219,7 +219,7 @@ cargo --version   # >= 1.91.1
 - Svelte 5.43.14 includes latest runes improvements
 - SvelteKit 2.49.0 stable release
 - Tauri 2.x with plugin-dialog and plugin-opener
-- SurrealDB 2.3.10 with kv-rocksdb for embedded desktop use
+- SurrealDB 2.4.0 with kv-rocksdb for embedded desktop use
 - **rig-core 0.24.0** for multi-provider LLM abstraction (Mistral, Ollama)
 - async-trait 0.1 and futures 0.3 for multi-agent async patterns
 - keyring 2.0 + aes-gcm 0.10 for secure API key storage

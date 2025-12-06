@@ -116,15 +116,12 @@ pub async fn get_api_key(
 
     // Get from keystore
     let api_key = keystore.inner.get(&validated_provider).map_err(|e| {
+        // Normalized error message to prevent provider enumeration
+        warn!("API key operation failed for provider");
         match &e {
-            KeyStoreError::NotFound(_) => {
-                warn!(provider = %validated_provider, "API key not found");
-            }
-            _ => {
-                error!(error = %e, "Failed to retrieve API key");
-            }
+            KeyStoreError::NotFound(_) => "API key not found".to_string(),
+            _ => "API key operation failed".to_string(),
         }
-        format!("Failed to retrieve API key: {}", e)
     })?;
 
     info!("API key retrieved successfully");
@@ -148,15 +145,12 @@ pub async fn delete_api_key(
 
     // Delete from keystore
     keystore.inner.delete(&validated_provider).map_err(|e| {
+        // Normalized error message to prevent provider enumeration
+        warn!("API key operation failed for provider");
         match &e {
-            KeyStoreError::NotFound(_) => {
-                warn!(provider = %validated_provider, "API key not found for deletion");
-            }
-            _ => {
-                error!(error = %e, "Failed to delete API key");
-            }
+            KeyStoreError::NotFound(_) => "API key not found".to_string(),
+            _ => "API key operation failed".to_string(),
         }
-        format!("Failed to delete API key: {}", e)
     })?;
 
     info!("API key deleted successfully");

@@ -1,7 +1,7 @@
 # Schéma Database SurrealDB
 
 > **Version** : 1.0
-> **SurrealDB** : 2.3.10
+> **SurrealDB** : 2.4.0
 > **Type** : Graph relationnel avec support vectoriel
 
 ## Vue d'Ensemble

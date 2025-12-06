@@ -709,6 +709,41 @@ Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
 
 ---
 
+## Variables d'Environnement Critiques
+
+### SURREAL_SYNC_DATA (CRITICAL - Production)
+
+**IMPORTANT**: Cette variable DOIT etre configuree en production pour garantir la securite des donnees.
+
+```bash
+# Production (OBLIGATOIRE)
+export SURREAL_SYNC_DATA=true
+
+# Development (optionnel, defaut: false)
+export SURREAL_SYNC_DATA=false
+```
+
+**Impact**:
+- Sans cette variable, RocksDB/SurrealKV n'est PAS crash-safe
+- En cas de crash ou coupure electrique, les donnees peuvent etre corrompues
+- Active la synchronisation WAL (Write-Ahead Log) pour durabilite
+
+**Reference**: [SurrealDB Performance Best Practices](https://surrealdb.com/docs/surrealdb/reference-guide/performance-best-practices)
+
+### SURREAL_LOG (Production)
+
+```bash
+# Production (performance optimale)
+export SURREAL_LOG=error
+
+# Development (debug)
+export SURREAL_LOG=debug
+```
+
+**Impact**: Le logging verbose a un impact significatif sur les performances en production.
+
+---
+
 ## Monitoring Post-Release (Prevu)
 
 > **Statut** : Aucun monitoring configure. Sentry n'est pas integre.

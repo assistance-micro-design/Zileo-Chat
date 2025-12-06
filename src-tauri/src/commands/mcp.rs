@@ -232,6 +232,16 @@ fn validate_mcp_env(
                 ));
             }
 
+            // Shell injection prevention: reject shell metacharacters
+            const FORBIDDEN_SHELL_CHARS: &[char] =
+                &['|', ';', '`', '$', '(', ')', '<', '>', '&', '\\', '"', '\''];
+            if value.chars().any(|c| FORBIDDEN_SHELL_CHARS.contains(&c)) {
+                return Err(format!(
+                    "Environment variable '{}' value contains forbidden shell characters",
+                    name
+                ));
+            }
+
             Ok((name.clone(), value.clone()))
         })
         .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
@@ -916,6 +926,48 @@ mod tests {
         let result = validate_mcp_env(&env);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("null character"));
+    }
+
+    #[test]
+    fn test_validate_mcp_env_shell_injection() {
+        // OPT-6: Shell injection prevention tests
+        let test_cases = vec![
+            ("PIPE", "value|cmd", "pipe"),
+            ("SEMI", "value;cmd", "semicolon"),
+            ("BACKTICK", "value`cmd`", "backtick"),
+            ("DOLLAR", "$HOME", "dollar sign"),
+            ("PAREN_OPEN", "$(cmd)", "parenthesis"),
+            ("PAREN_CLOSE", "$(cmd)", "parenthesis"),
+            ("LT", "<file", "less than"),
+            ("GT", ">file", "greater than"),
+            ("AMP", "cmd&", "ampersand"),
+            ("BACKSLASH", "path\\file", "backslash"),
+            ("DOUBLE_QUOTE", "\"value\"", "double quote"),
+            ("SINGLE_QUOTE", "'value'", "single quote"),
+        ];
+
+        for (key, value, _desc) in test_cases {
+            let mut env = HashMap::new();
+            env.insert(key.to_string(), value.to_string());
+            let result = validate_mcp_env(&env);
+            assert!(
+                result.is_err(),
+                "Should reject shell metacharacter in value for key {}",
+                key
+            );
+            assert!(result.unwrap_err().contains("forbidden shell characters"));
+        }
+    }
+
+    #[test]
+    fn test_validate_mcp_env_allows_safe_values() {
+        // Ensure normal values still work
+        let mut env = HashMap::new();
+        env.insert("API_KEY".to_string(), "sk-1234567890abcdef".to_string());
+        env.insert("DEBUG".to_string(), "true".to_string());
+        env.insert("PORT".to_string(), "3000".to_string());
+        env.insert("PATH_SAFE".to_string(), "/usr/local/bin".to_string());
+        assert!(validate_mcp_env(&env).is_ok());
     }
 
     #[test]

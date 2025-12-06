@@ -239,11 +239,15 @@ impl Validator {
             });
         }
 
-        // Check for control characters (non-printable except tab, newline)
-        if api_key
-            .chars()
-            .any(|c| c.is_control() && c != '\t' && c != '\n' && c != '\r')
-        {
+        // Reject newlines (HTTP header injection prevention)
+        if api_key.contains('\n') || api_key.contains('\r') {
+            return Err(ValidationError::InvalidCharacters {
+                details: "API key cannot contain newline characters".to_string(),
+            });
+        }
+
+        // Check for control characters (non-printable except tab)
+        if api_key.chars().any(|c| c.is_control() && c != '\t') {
             return Err(ValidationError::InvalidCharacters {
                 details: "API key contains invalid control characters".to_string(),
             });
@@ -465,6 +469,28 @@ mod tests {
         let long_key = "a".repeat(MAX_API_KEY_LEN + 1);
         let result = Validator::validate_api_key(&long_key);
         assert!(matches!(result, Err(ValidationError::TooLong { .. })));
+    }
+
+    #[test]
+    fn test_validate_api_key_rejects_newlines() {
+        // OPT-4: Reject newlines (HTTP header injection prevention)
+        let result = Validator::validate_api_key("sk-1234567890abcdef\nInjection");
+        assert!(matches!(
+            result,
+            Err(ValidationError::InvalidCharacters { .. })
+        ));
+
+        let result = Validator::validate_api_key("sk-1234567890abcdef\r\nInjection");
+        assert!(matches!(
+            result,
+            Err(ValidationError::InvalidCharacters { .. })
+        ));
+
+        let result = Validator::validate_api_key("sk-1234567890\rabcdef");
+        assert!(matches!(
+            result,
+            Err(ValidationError::InvalidCharacters { .. })
+        ));
     }
 
     // Sanitize for logging tests
