@@ -36,7 +36,7 @@ Uses extracted components, services, and stores for clean architecture.
 		ActivitySidebar,
 		ChatContainer
 	} from '$lib/components/agent';
-	import { NewWorkflowModal, ConfirmDeleteModal, ValidationModal, TokenDisplay } from '$lib/components/workflow';
+	import { NewWorkflowModal, ConfirmDeleteModal, ValidationModal, TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
@@ -64,6 +64,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
 	import { validationStore, hasPendingValidation, pendingValidation } from '$lib/stores/validation';
+	import { userQuestionStore } from '$lib/stores/userQuestion';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
 	import type { ProviderType } from '$types/llm';
@@ -416,8 +417,9 @@ Uses extracted components, services, and stores for clean architecture.
 			await selectWorkflow(lastWorkflowId);
 		}
 
-		// Initialize validation store
+		// Initialize validation and user question stores
 		await validationStore.init();
+		await userQuestionStore.init();
 	});
 
 	/**
@@ -426,6 +428,7 @@ Uses extracted components, services, and stores for clean architecture.
 	onDestroy(() => {
 		streamingStore.cleanup();
 		validationStore.cleanup();
+		userQuestionStore.cleanup();
 	});
 
 	/**
@@ -562,6 +565,9 @@ Uses extracted components, services, and stores for clean architecture.
 			onclose={() => modalState = { type: 'none' }}
 		/>
 	{/if}
+
+	<!-- User Question Modal -->
+	<UserQuestionModal />
 </div>
 
 <style>

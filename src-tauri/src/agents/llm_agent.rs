@@ -506,7 +506,7 @@ impl LLMAgent {
             Some("fr") => "French (Francais)",
             Some("en") => "English",
             Some(code) => code, // Fallback to code if unknown
-            None => "English", // Default
+            None => "English",  // Default
         };
 
         let mut config_section = format!(

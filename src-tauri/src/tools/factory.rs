@@ -52,7 +52,7 @@ use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::registry::TOOL_REGISTRY;
 use crate::tools::spawn_agent::SpawnAgentTool;
-use crate::tools::{CalculatorTool, MemoryTool, TodoTool, Tool};
+use crate::tools::{CalculatorTool, MemoryTool, TodoTool, Tool, UserQuestionTool};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -155,10 +155,17 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
+            "UserQuestionTool" => {
+                let wf_id = workflow_id.unwrap_or_else(|| "default".to_string());
+                let tool = UserQuestionTool::new(self.db.clone(), wf_id, agent_id, app_handle);
+                info!("UserQuestionTool instance created");
+                Ok(Arc::new(tool))
+            }
+
             _ => {
                 warn!(tool_name = %tool_name, "Unknown tool requested");
                 Err(format!(
-                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool",
+                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool",
                     tool_name
                 ))
             }
@@ -311,7 +318,7 @@ impl ToolFactory {
 
         match tool_name {
             // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" | "CalculatorTool" => {
+            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" => {
                 // Extract app_handle from context for basic tools
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
@@ -512,10 +519,11 @@ mod tests {
         assert!(tools.contains(&"MemoryTool"));
         assert!(tools.contains(&"TodoTool"));
         assert!(tools.contains(&"CalculatorTool"));
+        assert!(tools.contains(&"UserQuestionTool"));
         assert!(tools.contains(&"SpawnAgentTool"));
         assert!(tools.contains(&"DelegateTaskTool"));
         assert!(tools.contains(&"ParallelTasksTool"));
-        assert_eq!(tools.len(), 6);
+        assert_eq!(tools.len(), 7); // 4 basic + 3 sub-agent
     }
 
     #[test]
@@ -524,8 +532,9 @@ mod tests {
         assert!(tools.contains(&"MemoryTool"));
         assert!(tools.contains(&"TodoTool"));
         assert!(tools.contains(&"CalculatorTool"));
+        assert!(tools.contains(&"UserQuestionTool"));
         assert!(!tools.contains(&"SpawnAgentTool"));
-        assert_eq!(tools.len(), 3);
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]
@@ -543,6 +552,7 @@ mod tests {
         assert!(ToolFactory::is_valid_tool("MemoryTool"));
         assert!(ToolFactory::is_valid_tool("TodoTool"));
         assert!(ToolFactory::is_valid_tool("CalculatorTool"));
+        assert!(ToolFactory::is_valid_tool("UserQuestionTool"));
         assert!(ToolFactory::is_valid_tool("SpawnAgentTool"));
         assert!(!ToolFactory::is_valid_tool("InvalidTool"));
         assert!(!ToolFactory::is_valid_tool("memory_tool"));
@@ -553,6 +563,7 @@ mod tests {
         assert!(!ToolFactory::requires_context("MemoryTool"));
         assert!(!ToolFactory::requires_context("TodoTool"));
         assert!(!ToolFactory::requires_context("CalculatorTool"));
+        assert!(!ToolFactory::requires_context("UserQuestionTool"));
         assert!(ToolFactory::requires_context("SpawnAgentTool"));
         assert!(ToolFactory::requires_context("DelegateTaskTool"));
         assert!(ToolFactory::requires_context("ParallelTasksTool"));

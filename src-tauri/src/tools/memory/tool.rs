@@ -344,7 +344,9 @@ impl MemoryTool {
                         .field("scope", "workflow")
                         .field("workflow_id", Option::<String>::None)
                         .data("memories", Vec::<Memory>::new())
-                        .message("No active workflow. Use 'activate_workflow' first or scope='both'")
+                        .message(
+                            "No active workflow. Use 'activate_workflow' first or scope='both'",
+                        )
                         .build());
                 }
             }

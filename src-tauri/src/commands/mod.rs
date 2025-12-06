@@ -145,6 +145,11 @@
 //! - `delete_prompt` - Delete a prompt template
 //! - `search_prompts` - Search prompts by query and/or category
 //!
+//! ### User Question Commands ([`user_question`])
+//! - `submit_user_response` - Submit user's answer to a pending question
+//! - `get_pending_questions` - Get all pending questions for a workflow
+//! - `skip_question` - Skip a question (user chooses not to answer)
+//!
 //! ## Input Validation
 //!
 //! All commands validate inputs using the [`crate::security::Validator`]
@@ -166,6 +171,7 @@ pub mod sub_agent_execution;
 pub mod task;
 pub mod thinking;
 pub mod tool_execution;
+pub mod user_question;
 pub mod validation;
 pub mod workflow;
 

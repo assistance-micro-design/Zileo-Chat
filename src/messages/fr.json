@@ -468,6 +468,8 @@
   "agents_tool_memory_desc": "Stocker et recuperer des souvenirs persistants",
   "agents_tool_todo": "Outil Taches",
   "agents_tool_todo_desc": "Gerer les listes de taches et suivre la progression",
+  "agents_tool_user_question": "Outil Question Utilisateur",
+  "agents_tool_user_question_desc": "Poser des questions a l'utilisateur et attendre ses reponses",
   "agents_tool_calculator": "Outil Calculatrice",
   "agents_tool_calculator_desc": "Effectuer des calculs mathematiques scientifiques",
   "agents_mcp_section": "Serveurs MCP",
@@ -850,5 +852,13 @@
 
   "help_activity_sidebar_title": "Flux d'activite",
   "help_activity_sidebar_description": "Surveillez les actions de l'agent en temps reel. Voyez les executions d'outils, les etapes de raisonnement et les operations des sous-agents au fur et a mesure.",
-  "help_activity_sidebar_tutorial": "Observez les appels d'outils pendant que l'agent travaille\nDeveloppez les elements pour voir les informations detaillees\nFiltrez par type d'activite a l'aide du menu deroulant\nLes activites historiques sont chargees lorsque vous selectionnez un flux de travail"
+  "help_activity_sidebar_tutorial": "Observez les appels d'outils pendant que l'agent travaille\nDeveloppez les elements pour voir les informations detaillees\nFiltrez par type d'activite a l'aide du menu deroulant\nLes activites historiques sont chargees lorsque vous selectionnez un flux de travail",
+
+  "user_question_modal_title": "Question de l'agent",
+  "user_question_context": "Contexte",
+  "user_question_text_label": "Votre reponse",
+  "user_question_text_placeholder": "Saisissez votre reponse ici...",
+  "user_question_text_required": "Une reponse textuelle est requise",
+  "user_question_skip": "Passer",
+  "user_question_submit": "Soumettre"
 }

@@ -64,6 +64,7 @@ pub mod response;
 pub mod spawn_agent;
 pub mod sub_agent_executor;
 pub mod todo;
+pub mod user_question;
 pub mod utils;
 pub mod validation_helper;
 
@@ -91,6 +92,8 @@ pub use registry::TOOL_REGISTRY;
 pub use spawn_agent::SpawnAgentTool;
 #[allow(unused_imports)]
 pub use todo::TodoTool;
+#[allow(unused_imports)]
+pub use user_question::UserQuestionTool;
 
 /// Tool definition metadata for LLM understanding.
 ///

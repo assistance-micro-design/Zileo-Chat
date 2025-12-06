@@ -317,6 +317,10 @@ async fn main() -> anyhow::Result<()> {
             commands::import_export::execute_import,
             commands::import_export::save_export_to_file,
             commands::import_export::read_import_file,
+            // User Question commands (Phase 8 - UserQuestionTool)
+            commands::user_question::submit_user_response,
+            commands::user_question::get_pending_questions,
+            commands::user_question::skip_question,
         ])
         .setup(|app| {
             // Set the app handle in AppState for event emission (validation, etc.)

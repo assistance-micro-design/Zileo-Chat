@@ -443,7 +443,11 @@ async fn vector_search(
             let score = v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
             // Deserialize memory fields
             let memory = Memory {
-                id: v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
+                id: v
+                    .get("id")
+                    .and_then(|i| i.as_str())
+                    .unwrap_or("")
+                    .to_string(),
                 memory_type: serde_json::from_value(v.get("type").cloned().unwrap_or_default())
                     .unwrap_or(MemoryType::Knowledge),
                 content: v
@@ -451,7 +455,10 @@ async fn vector_search(
                     .and_then(|c| c.as_str())
                     .unwrap_or("")
                     .to_string(),
-                workflow_id: v.get("workflow_id").and_then(|w| w.as_str()).map(String::from),
+                workflow_id: v
+                    .get("workflow_id")
+                    .and_then(|w| w.as_str())
+                    .map(String::from),
                 metadata: v.get("metadata").cloned().unwrap_or(serde_json::json!({})),
                 created_at: v
                     .get("created_at")

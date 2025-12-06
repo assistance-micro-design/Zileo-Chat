@@ -318,4 +318,33 @@ DEFINE FIELD completed_at ON sub_agent_execution TYPE option<datetime>;
 DEFINE INDEX sub_agent_workflow_idx ON sub_agent_execution FIELDS workflow_id;
 DEFINE INDEX sub_agent_parent_idx ON sub_agent_execution FIELDS parent_agent_id;
 DEFINE INDEX sub_agent_status_idx ON sub_agent_execution FIELDS status;
+
+-- =============================================
+-- Table: user_question
+-- Stores user interaction questions for agent clarification
+-- Phase 4: UserQuestionTool - Database Schema Setup
+-- =============================================
+DEFINE TABLE user_question SCHEMAFULL;
+DEFINE FIELD id ON user_question TYPE string;
+DEFINE FIELD workflow_id ON user_question TYPE string;
+DEFINE FIELD agent_id ON user_question TYPE string;
+DEFINE FIELD question ON user_question TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 1000;
+DEFINE FIELD question_type ON user_question TYPE string
+    ASSERT $value IN ['checkbox', 'text', 'mixed'];
+DEFINE FIELD options ON user_question TYPE string DEFAULT '[]';
+DEFINE FIELD text_placeholder ON user_question TYPE option<string>;
+DEFINE FIELD text_required ON user_question TYPE bool DEFAULT false;
+DEFINE FIELD context ON user_question TYPE option<string>;
+DEFINE FIELD status ON user_question TYPE string DEFAULT 'pending'
+    ASSERT $value IN ['pending', 'answered', 'skipped'];
+DEFINE FIELD selected_options ON user_question TYPE string DEFAULT '[]';
+DEFINE FIELD text_response ON user_question TYPE option<string>;
+DEFINE FIELD created_at ON user_question TYPE datetime DEFAULT time::now();
+DEFINE FIELD answered_at ON user_question TYPE option<datetime>;
+
+-- Indexes for efficient querying
+DEFINE INDEX user_question_workflow_idx ON user_question FIELDS workflow_id;
+DEFINE INDEX user_question_status_idx ON user_question FIELDS status;
+DEFINE INDEX user_question_workflow_status_idx ON user_question FIELDS workflow_id, status;
 "#;

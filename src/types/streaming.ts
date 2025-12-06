@@ -26,6 +26,8 @@
  * @module types/streaming
  */
 
+import type { UserQuestionStreamPayload } from './user-question';
+
 /**
  * Type of streaming chunk content.
  *
@@ -43,7 +45,9 @@ export type ChunkType =
   | 'sub_agent_error'
   | 'task_create'
   | 'task_update'
-  | 'task_complete';
+  | 'task_complete'
+  | 'user_question_start'
+  | 'user_question_complete';
 
 /**
  * Metrics included in sub-agent complete events.
@@ -93,6 +97,8 @@ export interface StreamChunk {
   task_status?: 'pending' | 'in_progress' | 'completed' | 'blocked';
   /** Task priority (for task_* chunks) */
   task_priority?: 1 | 2 | 3 | 4 | 5;
+  /** User question payload (for user_question_start chunks) */
+  user_question?: UserQuestionStreamPayload;
 }
 
 /**

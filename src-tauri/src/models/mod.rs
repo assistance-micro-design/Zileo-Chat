@@ -27,6 +27,7 @@ pub mod sub_agent;
 pub mod task;
 pub mod thinking_step;
 pub mod tool_execution;
+pub mod user_question;
 pub mod validation;
 pub mod workflow;
 
@@ -130,4 +131,11 @@ pub use prompt::{
 pub use function_calling::{
     AssistantToolCall, AssistantToolCallFunction, ChatMessage, FunctionCall, FunctionCallResult,
     ToolChoiceMode,
+};
+
+// Re-export user question types for UserQuestionTool implementation
+#[allow(unused_imports)]
+pub use user_question::{
+    QuestionOption, QuestionStatus, QuestionType, UserQuestion, UserQuestionCreate,
+    UserQuestionStreamPayload,
 };

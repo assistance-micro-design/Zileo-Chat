@@ -33,3 +33,4 @@ export * from './activity';
 export * from './tokens';
 export * from './locale';
 export * from './onboarding';
+export * from './userQuestion';

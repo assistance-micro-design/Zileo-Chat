@@ -468,6 +468,8 @@
   "agents_tool_memory_desc": "Store and retrieve persistent memories",
   "agents_tool_todo": "Todo Tool",
   "agents_tool_todo_desc": "Manage task lists and track progress",
+  "agents_tool_user_question": "User Question Tool",
+  "agents_tool_user_question_desc": "Ask questions to the user and wait for responses",
   "agents_tool_calculator": "Calculator Tool",
   "agents_tool_calculator_desc": "Perform scientific mathematical calculations",
   "agents_mcp_section": "MCP Servers",
@@ -850,5 +852,13 @@
 
   "help_activity_sidebar_title": "Activity Feed",
   "help_activity_sidebar_description": "Monitor the agent's actions in real-time. See tool executions, reasoning steps, and sub-agent operations as they happen.",
-  "help_activity_sidebar_tutorial": "Watch for tool calls as the agent works\nExpand items to see detailed information\nFilter by activity type using the dropdown\nHistorical activities are loaded when you select a workflow"
+  "help_activity_sidebar_tutorial": "Watch for tool calls as the agent works\nExpand items to see detailed information\nFilter by activity type using the dropdown\nHistorical activities are loaded when you select a workflow",
+
+  "user_question_modal_title": "Question from Agent",
+  "user_question_context": "Context",
+  "user_question_text_label": "Your Answer",
+  "user_question_text_placeholder": "Type your answer here...",
+  "user_question_text_required": "Text response is required",
+  "user_question_skip": "Skip",
+  "user_question_submit": "Submit"
 }

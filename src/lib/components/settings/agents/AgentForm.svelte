@@ -78,6 +78,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	const availableTools = $derived([
 		{ value: 'MemoryTool', label: $i18n('agents_tool_memory'), description: $i18n('agents_tool_memory_desc') },
 		{ value: 'TodoTool', label: $i18n('agents_tool_todo'), description: $i18n('agents_tool_todo_desc') },
+		{ value: 'UserQuestionTool', label: $i18n('agents_tool_user_question'), description: $i18n('agents_tool_user_question_desc') },
 		{ value: 'CalculatorTool', label: $i18n('agents_tool_calculator'), description: $i18n('agents_tool_calculator_desc') }
 	]);
 

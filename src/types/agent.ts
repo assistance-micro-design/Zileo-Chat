@@ -154,6 +154,8 @@ export interface AgentSummary {
 export const AVAILABLE_TOOLS = [
 	'MemoryTool',
 	'TodoTool',
+	'CalculatorTool',
+	'UserQuestionTool',
 	'SpawnAgentTool',
 	'DelegateTaskTool',
 	'ParallelTasksTool'
@@ -162,7 +164,7 @@ export const AVAILABLE_TOOLS = [
 /**
  * Basic tools for memory and task management
  */
-export const BASIC_TOOLS = ['MemoryTool', 'TodoTool'] as const;
+export const BASIC_TOOLS = ['MemoryTool', 'TodoTool', 'CalculatorTool', 'UserQuestionTool'] as const;
 
 /**
  * Sub-agent orchestration tools

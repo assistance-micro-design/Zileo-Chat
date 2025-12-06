@@ -32,6 +32,19 @@ pub mod todo {
     pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "completed", "blocked"];
 }
 
+// ===== User Question Tool =====
+#[allow(dead_code)]
+pub mod user_question {
+    pub const MAX_QUESTION_LENGTH: usize = 2000;
+    pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
+    pub const MAX_OPTIONS: usize = 20;
+    pub const MAX_CONTEXT_LENGTH: usize = 5000;
+    pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
+    pub const POLL_INTERVALS_MS: &[u64] = &[500, 500, 1000, 1000, 2000, 2000, 5000];
+    pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
+    pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped"];
+}
+
 // ===== Sub-Agent Tools =====
 #[allow(unused_imports)]
 pub mod sub_agent {

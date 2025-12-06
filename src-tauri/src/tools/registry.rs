@@ -67,6 +67,14 @@ impl ToolRegistry {
                 requires_context: false,
             },
         );
+        tools.insert(
+            "UserQuestionTool",
+            ToolMetadata {
+                name: "UserQuestionTool",
+                category: ToolCategory::Basic,
+                requires_context: false,
+            },
+        );
 
         // Sub-agent tools
         tools.insert(
@@ -205,19 +213,23 @@ mod tests {
         assert!(basic.contains(&"MemoryTool"));
         assert!(basic.contains(&"TodoTool"));
         assert!(basic.contains(&"CalculatorTool"));
+        assert!(basic.contains(&"UserQuestionTool"));
         assert!(!basic.contains(&"SpawnAgentTool"));
+        assert_eq!(basic.len(), 4);
 
         let sub_agent = TOOL_REGISTRY.sub_agent_tools();
         assert!(sub_agent.contains(&"SpawnAgentTool"));
         assert!(sub_agent.contains(&"DelegateTaskTool"));
         assert!(sub_agent.contains(&"ParallelTasksTool"));
         assert!(!sub_agent.contains(&"MemoryTool"));
+        assert_eq!(sub_agent.len(), 3);
     }
 
     #[test]
     fn test_registry_requires_context() {
         assert!(!TOOL_REGISTRY.requires_context("MemoryTool"));
         assert!(!TOOL_REGISTRY.requires_context("TodoTool"));
+        assert!(!TOOL_REGISTRY.requires_context("UserQuestionTool"));
         assert!(TOOL_REGISTRY.requires_context("SpawnAgentTool"));
         assert!(TOOL_REGISTRY.requires_context("DelegateTaskTool"));
         assert!(TOOL_REGISTRY.requires_context("ParallelTasksTool"));
@@ -226,7 +238,7 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 6);
+        assert_eq!(all.len(), 7); // 4 basic + 3 sub-agent
     }
 
     #[test]

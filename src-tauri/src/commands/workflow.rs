@@ -303,6 +303,7 @@ pub async fn delete_workflow(
     let db5 = Arc::clone(&state.db);
     let db6 = Arc::clone(&state.db);
     let db7 = Arc::clone(&state.db);
+    let db8 = Arc::clone(&state.db);
 
     let id1 = validated_id.clone();
     let id2 = validated_id.clone();
@@ -311,9 +312,10 @@ pub async fn delete_workflow(
     let id5 = validated_id.clone();
     let id6 = validated_id.clone();
     let id7 = validated_id.clone();
+    let id8 = validated_id.clone();
 
     // Execute cascade deletes in parallel
-    let (tasks, messages, tools, thinking, sub_agents, validations, memories) = tokio::join!(
+    let (tasks, messages, tools, thinking, sub_agents, validations, memories, questions) = tokio::join!(
         // Delete tasks
         async move {
             let query = format!("DELETE task WHERE workflow_id = '{}'", id1);
@@ -371,6 +373,14 @@ pub async fn delete_workflow(
                 Ok(_) => info!("Deleted memories for workflow"),
                 Err(e) => warn!(error = %e, "Failed to delete memories (may not exist)"),
             }
+        },
+        // Delete user questions
+        async move {
+            let query = format!("DELETE user_question WHERE workflow_id = '{}'", id8);
+            match db8.execute(&query).await {
+                Ok(_) => info!("Deleted user questions for workflow"),
+                Err(e) => warn!(error = %e, "Failed to delete user questions (may not exist)"),
+            }
         }
     );
 
@@ -383,6 +393,7 @@ pub async fn delete_workflow(
         sub_agents,
         validations,
         memories,
+        questions,
     );
 
     // Finally delete the workflow itself
