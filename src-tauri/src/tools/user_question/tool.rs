@@ -174,10 +174,7 @@ impl UserQuestionTool {
         // Use execute_with_params for CREATE (CLAUDE.md SurrealDB SDK 2.x pattern)
         let json_data = serde_json::to_value(&create_data)
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to encode JSON: {}", e)))?;
-        let query = format!(
-            "CREATE user_question:`{}` CONTENT $data",
-            question_id
-        );
+        let query = format!("CREATE user_question:`{}` CONTENT $data", question_id);
 
         info!(question_id = %question_id, "Creating user question in DB");
 
@@ -187,14 +184,11 @@ impl UserQuestionTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create question: {}", e)))?;
 
         // Verify the question was created
-        let verify_query = format!(
-            "SELECT status FROM user_question:`{}`",
-            question_id
-        );
-        let verify_result: Vec<serde_json::Value> = self.db
-            .query_json(&verify_query)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to verify question creation: {}", e)))?;
+        let verify_query = format!("SELECT status FROM user_question:`{}`", question_id);
+        let verify_result: Vec<serde_json::Value> =
+            self.db.query_json(&verify_query).await.map_err(|e| {
+                ToolError::ExecutionFailed(format!("Failed to verify question creation: {}", e))
+            })?;
 
         if verify_result.is_empty() {
             return Err(ToolError::ExecutionFailed(format!(

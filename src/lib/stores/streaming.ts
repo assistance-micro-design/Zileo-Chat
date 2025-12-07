@@ -743,6 +743,7 @@ export const currentWorkflowId = derived(store, (s) => s.workflowId);
 
 /**
  * Derived store: whether there are any running tools
+ * @deprecated Use `runningTools.length > 0` instead for better readability
  */
 export const hasRunningTools = derived(store, (s) => s.tools.some((t) => t.status === 'running'));
 
@@ -757,6 +758,7 @@ export const activeSubAgents = derived(store, (s) => s.subAgents);
 
 /**
  * Derived store: sub-agents currently running
+ * @deprecated Use `activeSubAgents.filter(a => a.status === 'running')` instead
  */
 export const runningSubAgents = derived(store, (s) =>
 	s.subAgents.filter((a) => a.status === 'running')
@@ -764,6 +766,7 @@ export const runningSubAgents = derived(store, (s) =>
 
 /**
  * Derived store: sub-agents that have completed
+ * @deprecated Use `activeSubAgents.filter(a => a.status === 'completed')` instead
  */
 export const completedSubAgents = derived(store, (s) =>
 	s.subAgents.filter((a) => a.status === 'completed')
@@ -771,6 +774,7 @@ export const completedSubAgents = derived(store, (s) =>
 
 /**
  * Derived store: sub-agents that have errored
+ * @deprecated Use `activeSubAgents.filter(a => a.status === 'error')` instead
  */
 export const erroredSubAgents = derived(store, (s) =>
 	s.subAgents.filter((a) => a.status === 'error')
@@ -778,6 +782,7 @@ export const erroredSubAgents = derived(store, (s) =>
 
 /**
  * Derived store: whether there are any running sub-agents
+ * @deprecated Use `runningSubAgents.length > 0` instead for better readability
  */
 export const hasRunningSubAgents = derived(store, (s) =>
 	s.subAgents.some((a) => a.status === 'running')
@@ -785,11 +790,13 @@ export const hasRunningSubAgents = derived(store, (s) =>
 
 /**
  * Derived store: total count of sub-agents
+ * @deprecated Use `activeSubAgents.length` instead
  */
 export const subAgentCount = derived(store, (s) => s.subAgents.length);
 
 /**
  * Derived store: whether there are any active sub-agents
+ * @deprecated Use `activeSubAgents.length > 0` instead for better readability
  */
 export const hasActiveSubAgents = derived(store, (s) => s.subAgents.length > 0);
 
@@ -804,6 +811,7 @@ export const activeTasks = derived(store, (s) => s.tasks);
 
 /**
  * Derived store: tasks with pending status
+ * @deprecated Use `activeTasks.filter(t => t.status === 'pending')` instead
  */
 export const pendingTasks = derived(store, (s) =>
 	s.tasks.filter((t) => t.status === 'pending')
@@ -811,6 +819,7 @@ export const pendingTasks = derived(store, (s) =>
 
 /**
  * Derived store: tasks currently in progress
+ * @deprecated Use `activeTasks.filter(t => t.status === 'in_progress')` instead
  */
 export const runningTasks = derived(store, (s) =>
 	s.tasks.filter((t) => t.status === 'in_progress')
@@ -818,6 +827,7 @@ export const runningTasks = derived(store, (s) =>
 
 /**
  * Derived store: tasks that have completed
+ * @deprecated Use `activeTasks.filter(t => t.status === 'completed')` instead
  */
 export const completedTasks = derived(store, (s) =>
 	s.tasks.filter((t) => t.status === 'completed')
@@ -825,5 +835,6 @@ export const completedTasks = derived(store, (s) =>
 
 /**
  * Derived store: whether there are any active tasks
+ * @deprecated Use `activeTasks.length > 0` instead for better readability
  */
 export const hasActiveTasks = derived(store, (s) => s.tasks.length > 0);

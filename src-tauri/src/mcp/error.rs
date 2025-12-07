@@ -17,7 +17,44 @@
 //! This module defines error types for MCP operations including
 //! process spawning, JSON-RPC communication, and protocol errors.
 
+use serde::Serialize;
 use std::fmt;
+
+/// Error category for filtering and reporting
+///
+/// Categories allow grouping errors by their nature for logging,
+/// monitoring, and error handling strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum MCPErrorCategory {
+    /// Network and connection errors (ConnectionFailed, Timeout, IoError)
+    Connection,
+    /// JSON-RPC and MCP protocol errors (ProtocolError, SerializationError)
+    Protocol,
+    /// Server-side or process errors (ProcessSpawnFailed, InitializationFailed, ServerNotRunning)
+    ServerInternal,
+    /// Invalid configuration (InvalidConfig)
+    Configuration,
+    /// Resource not found (ToolNotFound, ServerNotFound, ServerAlreadyExists)
+    ResourceNotFound,
+    /// Database operation errors (DatabaseError)
+    Database,
+    /// Resilience pattern errors (CircuitBreakerOpen)
+    Resilience,
+}
+
+impl std::fmt::Display for MCPErrorCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MCPErrorCategory::Connection => write!(f, "connection"),
+            MCPErrorCategory::Protocol => write!(f, "protocol"),
+            MCPErrorCategory::ServerInternal => write!(f, "server_internal"),
+            MCPErrorCategory::Configuration => write!(f, "configuration"),
+            MCPErrorCategory::ResourceNotFound => write!(f, "resource_not_found"),
+            MCPErrorCategory::Database => write!(f, "database"),
+            MCPErrorCategory::Resilience => write!(f, "resilience"),
+        }
+    }
+}
 
 /// MCP operation error
 ///
@@ -197,6 +234,60 @@ impl fmt::Display for MCPError {
 
 impl std::error::Error for MCPError {}
 
+impl MCPError {
+    /// Returns the category of this error for filtering and reporting.
+    ///
+    /// # Example
+    /// ```
+    /// let err = MCPError::ConnectionFailed { server: "test".into(), message: "timeout".into() };
+    /// assert_eq!(err.category(), MCPErrorCategory::Connection);
+    /// ```
+    pub fn category(&self) -> MCPErrorCategory {
+        match self {
+            // Connection category
+            MCPError::ConnectionFailed { .. } => MCPErrorCategory::Connection,
+            MCPError::Timeout { .. } => MCPErrorCategory::Connection,
+            MCPError::IoError { .. } => MCPErrorCategory::Connection,
+
+            // Protocol category
+            MCPError::ProtocolError { .. } => MCPErrorCategory::Protocol,
+            MCPError::SerializationError { .. } => MCPErrorCategory::Protocol,
+
+            // Server internal category
+            MCPError::ProcessSpawnFailed { .. } => MCPErrorCategory::ServerInternal,
+            MCPError::InitializationFailed { .. } => MCPErrorCategory::ServerInternal,
+            MCPError::ServerNotRunning { .. } => MCPErrorCategory::ServerInternal,
+
+            // Configuration category
+            MCPError::InvalidConfig { .. } => MCPErrorCategory::Configuration,
+
+            // Resource not found category
+            MCPError::ToolNotFound { .. } => MCPErrorCategory::ResourceNotFound,
+            MCPError::ServerNotFound { .. } => MCPErrorCategory::ResourceNotFound,
+            MCPError::ServerAlreadyExists { .. } => MCPErrorCategory::ResourceNotFound,
+
+            // Database category
+            MCPError::DatabaseError { .. } => MCPErrorCategory::Database,
+
+            // Resilience category
+            MCPError::CircuitBreakerOpen { .. } => MCPErrorCategory::Resilience,
+        }
+    }
+
+    /// Returns true if this is a connection-related error
+    pub fn is_connection_error(&self) -> bool {
+        self.category() == MCPErrorCategory::Connection
+    }
+
+    /// Returns true if this is a transient error that may resolve with retry
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self.category(),
+            MCPErrorCategory::Connection | MCPErrorCategory::Resilience
+        )
+    }
+}
+
 impl From<std::io::Error> for MCPError {
     fn from(err: std::io::Error) -> Self {
         MCPError::IoError {
@@ -325,5 +416,110 @@ mod tests {
             }
             _ => panic!("Expected SerializationError variant"),
         }
+    }
+
+    #[test]
+    fn test_error_category_connection() {
+        let err = MCPError::ConnectionFailed {
+            server: "test".to_string(),
+            message: "timeout".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Connection);
+    }
+
+    #[test]
+    fn test_error_category_protocol() {
+        let err = MCPError::ProtocolError {
+            code: -32600,
+            message: "Invalid Request".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Protocol);
+    }
+
+    #[test]
+    fn test_error_category_server_internal() {
+        let err = MCPError::ProcessSpawnFailed {
+            command: "docker".to_string(),
+            message: "not found".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::ServerInternal);
+    }
+
+    #[test]
+    fn test_error_category_configuration() {
+        let err = MCPError::InvalidConfig {
+            field: "name".to_string(),
+            reason: "empty".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Configuration);
+    }
+
+    #[test]
+    fn test_error_category_resource_not_found() {
+        let err = MCPError::ServerNotFound {
+            server: "test".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::ResourceNotFound);
+    }
+
+    #[test]
+    fn test_error_category_database() {
+        let err = MCPError::DatabaseError {
+            context: "query".to_string(),
+            message: "failed".to_string(),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Database);
+    }
+
+    #[test]
+    fn test_error_category_resilience() {
+        let err = MCPError::CircuitBreakerOpen {
+            server: "test".to_string(),
+            cooldown_remaining_secs: 30,
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Resilience);
+    }
+
+    #[test]
+    fn test_is_connection_error() {
+        let conn_err = MCPError::Timeout {
+            operation: "init".to_string(),
+            timeout_ms: 30000,
+        };
+        assert!(conn_err.is_connection_error());
+
+        let proto_err = MCPError::ProtocolError {
+            code: -32600,
+            message: "Invalid".to_string(),
+        };
+        assert!(!proto_err.is_connection_error());
+    }
+
+    #[test]
+    fn test_is_transient() {
+        let transient = MCPError::ConnectionFailed {
+            server: "test".to_string(),
+            message: "timeout".to_string(),
+        };
+        assert!(transient.is_transient());
+
+        let circuit = MCPError::CircuitBreakerOpen {
+            server: "test".to_string(),
+            cooldown_remaining_secs: 30,
+        };
+        assert!(circuit.is_transient());
+
+        let permanent = MCPError::InvalidConfig {
+            field: "name".to_string(),
+            reason: "empty".to_string(),
+        };
+        assert!(!permanent.is_transient());
+    }
+
+    #[test]
+    fn test_category_display() {
+        assert_eq!(MCPErrorCategory::Connection.to_string(), "connection");
+        assert_eq!(MCPErrorCategory::Protocol.to_string(), "protocol");
+        assert_eq!(MCPErrorCategory::Database.to_string(), "database");
     }
 }

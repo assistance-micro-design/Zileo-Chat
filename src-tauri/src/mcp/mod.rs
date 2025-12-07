@@ -77,6 +77,8 @@ pub mod circuit_breaker;
 pub mod client;
 pub mod error;
 #[allow(dead_code)]
+pub mod helpers;
+#[allow(dead_code)]
 pub mod http_handle;
 #[allow(dead_code)]
 pub mod manager;
@@ -101,6 +103,8 @@ pub use protocol::{
 pub use circuit_breaker::{CircuitBreaker, CircuitState};
 #[allow(unused_imports)]
 pub use client::MCPClient;
+#[allow(unused_imports)]
+pub use helpers::{parse_deployment_method, parse_env_json};
 #[allow(unused_imports)]
 pub use http_handle::MCPHttpHandle;
 pub use manager::MCPManager;

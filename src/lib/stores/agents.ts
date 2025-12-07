@@ -211,6 +211,7 @@ export const editingAgent = derivedStores.editing;
 
 /**
  * Derived store: number of agents
+ * @deprecated Use `agents.length` instead
  */
 export const agentCount = derivedStores.count;
 

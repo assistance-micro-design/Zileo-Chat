@@ -237,7 +237,7 @@ Phase 8 (Nice-to-Have) [Optionnel]
 | 5 | Pending | 0% | - |
 | 6 | Complete | 100% | 2025-12-07 - Circuit breaker, ID lookup O(1), Health checks periodic |
 | 7 | Complete | 100% | 2025-12-07 - OPT-6/7/8 stores done, OPT-5 specta differe (tauri-specta incompatible) |
-| 8 | Complete | 100% | 2025-12-07 - All Nice-to-Have items implemented (OPT-7/8/9 backend, OPT-9/10/11 db) |
+| 8 | Complete | 100% | 2025-12-07 - All Nice-to-Have: backend OPT-7/8/9, db OPT-9/10/11, mcp OPT-9/10, stores OPT-9/10 |
 
 ### Effort Cumule
 

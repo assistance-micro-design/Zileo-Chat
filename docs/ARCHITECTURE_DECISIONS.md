@@ -683,6 +683,11 @@ zileo-chat-3/
 - Hot-reload : Non v1 (restart required)
 - Error recovery : Retry → Fallback → User decision
 
+### ✅ Frontend State
+- Store pattern : CRUD factory canonique, pure functions acceptable
+- Event-driven : Cleanup lifecycle obligatoire
+- Runes migration : Différée post-v1
+
 ---
 
 ## Statut Implémentation (Décembre 2025)
@@ -703,3 +708,163 @@ zileo-chat-3/
 - API Reference : `docs/API_REFERENCE.md`
 - Stack Technique : `docs/TECH_STACK.md`
 - Guide MCP : `docs/MCP_CONFIGURATION_GUIDE.md`
+
+---
+
+## 7. Frontend State Management (Stores)
+
+### Question 20 : Store Pattern Canonique
+
+**Décision** : **Factory CRUD comme pattern canonique pour entités persistées**
+
+**Raisons** :
+- Pattern agents.ts/prompts.ts prouvé et maintenable
+- Réduction duplication via createCRUDStore factory
+- Derived stores pour consommation optimisée
+- Intégration Tauri IPC standardisée
+
+**Patterns Reconnus** :
+
+| Pattern | Stores | Use Case | Status |
+|---------|--------|----------|--------|
+| **CRUD Factory** | agents.ts, prompts.ts | Entités avec CRUD backend | ✅ Canonique |
+| **Pure Functions** | llm.ts, mcp.ts | API calls sans state local | ✅ Acceptable |
+| **Event-Driven** | streaming.ts, validation.ts, userQuestion.ts | Events Tauri real-time | ✅ Acceptable |
+| **Custom Factory** | theme.ts, locale.ts, onboarding.ts | Persistence localStorage | ✅ Acceptable |
+| **Hybrid** | workflows.ts (legacy) | Duplication pure + reactive | ⚠️ Deprecated |
+
+**Pattern CRUD Factory (Canonique)** :
+
+```typescript
+// src/lib/stores/factory/createCRUDStore.ts
+const store = createCRUDStore<TFull, TCreate, TUpdate, TSummary>({
+  name: 'entity',
+  commands: {
+    list: 'list_entities',
+    get: 'get_entity',
+    create: 'create_entity',
+    update: 'update_entity',
+    delete: 'delete_entity'
+  }
+});
+
+// Exports derived stores
+export const items = derived(store, $s => $s.items);
+export const selected = derived(store, $s => $s.selected);
+export const isLoading = derived(store, $s => $s.loading);
+```
+
+**Pattern Pure Functions (Acceptable)** :
+
+```typescript
+// Utilisé pour: opérations async sans state local nécessaire
+// Exemple: llm.ts, mcp.ts
+
+export async function listModels(provider: string): Promise<LLMModel[]> {
+  return invoke('list_models', { provider });
+}
+
+// Pas de store writable - le composant gère son propre state
+```
+
+**Pattern Event-Driven (Acceptable)** :
+
+```typescript
+// Utilisé pour: événements Tauri real-time
+// Exemple: streaming.ts, validation.ts
+
+const store = writable<State>(initialState);
+let unlisteners: UnlistenFn[] = [];
+
+export const streamingStore = {
+  subscribe: store.subscribe,
+
+  async init() {
+    // IMPORTANT: Cleanup obligatoire pour éviter memory leaks
+    if (isInitialized) await this.cleanup();
+
+    unlisteners.push(
+      await listen<StreamChunk>('workflow_stream', (event) => {
+        store.update(s => processChunk(s, event.payload));
+      })
+    );
+  },
+
+  async cleanup() {
+    for (const unlisten of unlisteners) unlisten();
+    unlisteners = [];
+  }
+};
+```
+
+**Pattern Deprecated (À Éviter)** :
+
+```typescript
+// NE PAS FAIRE: Duplication pure functions + reactive store
+// Exemple legacy: workflows.ts avait les deux patterns
+
+// ❌ Deprecated
+export async function loadWorkflows(): Promise<Workflow[]> { ... }
+export const workflowStore = { loadWorkflows: async () => { ... } };
+
+// ✅ Correct: Un seul pattern par store
+```
+
+**Règles** :
+
+1. **Nouvelle entité persistée** → Utiliser `createCRUDStore` factory
+2. **API calls pures** → Pure functions (si pas besoin de state réactif)
+3. **Events Tauri** → Event-driven avec cleanup obligatoire
+4. **Persistence locale** → Custom factory avec localStorage
+
+**Gestion Mémoire (Event-Driven)** :
+
+Les stores event-driven DOIVENT implémenter:
+- `init()` avec guard contre double initialisation
+- `cleanup()` pour libérer tous les listeners
+- `reset()` appelant cleanup + reinitialisation state
+
+```typescript
+// Pattern obligatoire pour stores avec listeners
+let isInitialized = false;
+
+async init() {
+  if (isInitialized) {
+    console.warn('Store already initialized');
+    await this.cleanup();
+  }
+  isInitialized = true;
+  // ... setup listeners
+}
+
+async cleanup() {
+  for (const unlisten of unlisteners) unlisten();
+  unlisteners = [];
+  isInitialized = false;
+}
+```
+
+---
+
+### Question 21 : Migration Svelte 5 Runes
+
+**Décision** : **Différée - Migration post-v1 si bénéfice prouvé**
+
+**Raisons** :
+- Stores Svelte 4 actuels fonctionnent avec Svelte 5
+- Migration = effort 8-16h sans gain fonctionnel immédiat
+- Runes = optimisation performance (2-3x) mais overhead migration
+- Priorité v1 = stabilité, pas refactoring
+
+**Stratégie Migration Future** :
+1. Bottom-up : composants feuilles d'abord
+2. Un store à la fois
+3. Tests avant/après chaque migration
+4. Documentation patterns runes
+
+**Coexistence** :
+- Stores writable/derived coexistent avec runes
+- Pas de breaking change Svelte 5 sur stores
+- Migration graduelle possible
+
+---

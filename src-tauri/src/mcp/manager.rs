@@ -768,6 +768,8 @@ impl MCPManager {
 
     /// Gets all saved server configurations from the database
     async fn get_saved_configs(&self) -> MCPResult<Vec<MCPServerConfig>> {
+        use crate::mcp::helpers::{parse_deployment_method, parse_env_json};
+
         let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description FROM mcp_server";
 
         let result: Vec<serde_json::Value> =
@@ -789,83 +791,29 @@ impl MCPManager {
             .filter_map(|v| {
                 let server_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
 
-                // Convert command string back to enum
-                let command_value = v.get("command");
-                debug!(
-                    server_id = %server_id,
-                    command_value = ?command_value,
-                    "Parsing MCP server config from database"
-                );
-
-                let command_str = match command_value {
-                    Some(val) => match val.as_str() {
-                        Some(s) => s,
-                        None => {
-                            warn!(
-                                server_id = %server_id,
-                                command_value = ?val,
-                                "Command field is not a string"
-                            );
-                            return None;
-                        }
-                    },
+                // Use helper for deployment method parsing
+                let command = match parse_deployment_method(v.get("command")) {
+                    Some(method) => method,
                     None => {
                         warn!(
                             server_id = %server_id,
-                            "Command field is missing"
-                        );
-                        return None;
-                    }
-                };
-
-                let command = match command_str {
-                    "docker" => crate::models::mcp::MCPDeploymentMethod::Docker,
-                    "npx" => crate::models::mcp::MCPDeploymentMethod::Npx,
-                    "uvx" => crate::models::mcp::MCPDeploymentMethod::Uvx,
-                    "http" => crate::models::mcp::MCPDeploymentMethod::Http,
-                    unknown => {
-                        warn!(
-                            server_id = %server_id,
-                            command = %unknown,
+                            command_value = ?v.get("command"),
                             "Unknown deployment method, skipping server"
                         );
                         return None;
                     }
                 };
 
-                // Extract env from JSON string (stored as string to bypass SurrealDB SCHEMAFULL filtering)
+                // Use helper for env parsing (with logging)
                 let env_value = v.get("env");
-                let env: HashMap<String, String> = match env_value {
-                    Some(e) => {
-                        // env is stored as a JSON string, so first get the string value
-                        let env_str = e.as_str().unwrap_or("{}");
-                        match serde_json::from_str::<HashMap<String, String>>(env_str) {
-                            Ok(map) => {
-                                debug!(
-                                    server_id = %server_id,
-                                    env_count = map.len(),
-                                    "Loaded env variables from database"
-                                );
-                                map
-                            }
-                            Err(parse_err) => {
-                                warn!(
-                                    server_id = %server_id,
-                                    error = %parse_err,
-                                    "Failed to parse env JSON string, using empty map"
-                                );
-                                HashMap::new()
-                            }
-                        }
-                    }
-                    None => {
-                        debug!(
-                            server_id = %server_id,
-                            "Env field not present, using empty map"
-                        );
-                        HashMap::new()
-                    }
-                };
+                let env = parse_env_json(env_value);
+                if !env.is_empty() {
+                    debug!(
+                        server_id = %server_id,
+                        env_count = env.len(),
+                        "Loaded env variables from database"
+                    );
+                }
 
                 Some(MCPServerConfig {
                     id: v.get("id")?.as_str()?.to_string(),

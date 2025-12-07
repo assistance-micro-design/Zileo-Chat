@@ -211,7 +211,10 @@ export const editingPrompt = derivedStores.editing;
 /** Whether any prompts exist */
 export const hasPrompts = derivedStores.hasItems;
 
-/** Prompt count */
+/**
+ * Prompt count
+ * @deprecated Use `prompts.length` instead
+ */
 export const promptCount = derivedStores.count;
 
 // ============================================================================
