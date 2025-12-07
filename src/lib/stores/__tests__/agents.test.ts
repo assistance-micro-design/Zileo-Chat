@@ -132,7 +132,7 @@ describe('Agent Store', () => {
 
 			await agentStore.loadAgents();
 
-			expect(get(error)).toBe('Error: Network error');
+			expect(get(error)).toBe('Network error');
 			expect(get(isLoading)).toBe(false);
 		});
 	});
@@ -182,7 +182,7 @@ describe('Agent Store', () => {
 			mockInvoke.mockRejectedValueOnce(new Error('Validation failed'));
 
 			await expect(agentStore.createAgent(config)).rejects.toThrow();
-			expect(get(error)).toBe('Error: Validation failed');
+			expect(get(error)).toBe('Validation failed');
 		});
 	});
 
@@ -302,7 +302,7 @@ describe('Agent Store', () => {
 			mockInvoke.mockRejectedValueOnce(new Error('Test error'));
 			await agentStore.loadAgents();
 
-			expect(get(error)).toBe('Error: Test error');
+			expect(get(error)).toBe('Test error');
 
 			agentStore.clearError();
 			expect(get(error)).toBeNull();

@@ -236,7 +236,7 @@ Phase 8 (Nice-to-Have) [Optionnel]
 | 4 | Complete | 100% | 2025-12-07 - Tool caching, HTTP pooling, latency metrics, Drop cleanup |
 | 5 | Pending | 0% | - |
 | 6 | Complete | 100% | 2025-12-07 - Circuit breaker, ID lookup O(1), Health checks periodic |
-| 7 | Complete | 100% | 2025-12-07 - OPT-6 workflows dedup (-215 lines), OPT-7 processChunk handlers |
+| 7 | Complete | 100% | 2025-12-07 - OPT-6 workflows dedup, OPT-7 processChunk, OPT-8 CRUD factory |
 | 8 | Pending | 0% | Optionnel |
 
 ### Effort Cumule

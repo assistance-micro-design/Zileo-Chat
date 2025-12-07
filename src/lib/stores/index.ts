@@ -35,6 +35,7 @@ export * from './locale';
 export * from './onboarding';
 export * from './userQuestion';
 export * from './validation';
+export * from './factory';
 export {
 	validationSettingsStore,
 	settings as validationSettings,

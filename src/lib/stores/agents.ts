@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-// Copyright 2025 Zileo-Chat-3 Contributors
-// SPDX-License-Identifier: Apache-2.0
-
 /**
  * Agent store for managing agent state in the frontend.
- * Provides reactive state management with Svelte stores and Tauri IPC integration.
+ * Uses the CRUD store factory for standardized state management.
  * @module stores/agents
  */
 
-import { writable, derived } from 'svelte/store';
-import { invoke } from '@tauri-apps/api/core';
+import {
+	createCRUDStore,
+	createDerivedStores
+} from './factory/createCRUDStore';
 import type {
 	AgentConfig,
 	AgentSummary,
@@ -32,8 +31,13 @@ import type {
 	AgentConfigUpdate
 } from '$types/agent';
 
+// ============================================================================
+// Store State Type (for backward compatibility)
+// ============================================================================
+
 /**
  * State interface for the agent store
+ * Maps to CRUDStoreState with agent-specific field names
  */
 export interface AgentStoreState {
 	/** List of all agents (summary view) */
@@ -50,22 +54,30 @@ export interface AgentStoreState {
 	editingAgent: AgentConfig | null;
 }
 
-/**
- * Initial state for the agent store
- */
-const initialState: AgentStoreState = {
-	agents: [],
-	selectedId: null,
-	loading: false,
-	error: null,
-	formMode: null,
-	editingAgent: null
-};
+// ============================================================================
+// Base CRUD Store
+// ============================================================================
 
-/**
- * Internal writable store
- */
-const store = writable<AgentStoreState>(initialState);
+const baseCrudStore = createCRUDStore<
+	AgentConfig,
+	AgentConfigCreate,
+	AgentConfigUpdate,
+	AgentSummary
+>({
+	name: 'agent',
+	idParamName: 'agentId',
+	commands: {
+		list: 'list_agents',
+		get: 'get_agent_config',
+		create: 'create_agent',
+		update: 'update_agent',
+		delete: 'delete_agent'
+	}
+});
+
+// ============================================================================
+// Agent Store (with backward-compatible API)
+// ============================================================================
 
 /**
  * Agent store with actions for CRUD operations and UI state management.
@@ -74,22 +86,26 @@ const store = writable<AgentStoreState>(initialState);
 export const agentStore = {
 	/**
 	 * Subscribe to store changes
+	 * Maps internal state to AgentStoreState interface
 	 */
-	subscribe: store.subscribe,
+	subscribe: (run: (value: AgentStoreState) => void) => {
+		return baseCrudStore.subscribe((state) => {
+			run({
+				agents: state.items,
+				selectedId: state.selectedId,
+				loading: state.loading,
+				error: state.error,
+				formMode: state.formMode,
+				editingAgent: state.editing
+			});
+		});
+	},
 
 	/**
 	 * Loads all agents from the backend.
 	 * Updates the store with agent summaries.
 	 */
-	async loadAgents(): Promise<void> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			const agents = await invoke<AgentSummary[]>('list_agents');
-			store.update((s) => ({ ...s, agents, loading: false }));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-		}
-	},
+	loadAgents: () => baseCrudStore.loadItems(),
 
 	/**
 	 * Creates a new agent.
@@ -97,18 +113,7 @@ export const agentStore = {
 	 * @returns The created agent's ID
 	 * @throws Error if creation fails
 	 */
-	async createAgent(config: AgentConfigCreate): Promise<string> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			const id = await invoke<string>('create_agent', { config });
-			await this.loadAgents();
-			store.update((s) => ({ ...s, formMode: null }));
-			return id;
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-			throw e;
-		}
-	},
+	createAgent: (config: AgentConfigCreate) => baseCrudStore.createItem(config),
 
 	/**
 	 * Updates an existing agent.
@@ -116,139 +121,103 @@ export const agentStore = {
 	 * @param config - Partial configuration with fields to update
 	 * @throws Error if update fails
 	 */
-	async updateAgent(agentId: string, config: AgentConfigUpdate): Promise<void> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			await invoke('update_agent', { agentId, config });
-			await this.loadAgents();
-			store.update((s) => ({ ...s, formMode: null, editingAgent: null }));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-			throw e;
-		}
-	},
+	updateAgent: (agentId: string, config: AgentConfigUpdate) =>
+		baseCrudStore.updateItem(agentId, config),
 
 	/**
 	 * Deletes an agent.
 	 * @param agentId - ID of the agent to delete
 	 * @throws Error if deletion fails
 	 */
-	async deleteAgent(agentId: string): Promise<void> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			await invoke('delete_agent', { agentId });
-			await this.loadAgents();
-			store.update((s) => ({
-				...s,
-				selectedId: s.selectedId === agentId ? null : s.selectedId
-			}));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-			throw e;
-		}
-	},
+	deleteAgent: (agentId: string) => baseCrudStore.deleteItem(agentId),
 
 	/**
 	 * Gets the full configuration of an agent.
 	 * @param agentId - ID of the agent
 	 * @returns Full agent configuration
 	 */
-	async getAgentConfig(agentId: string): Promise<AgentConfig> {
-		return await invoke<AgentConfig>('get_agent_config', { agentId });
-	},
+	getAgentConfig: (agentId: string) => baseCrudStore.getItem(agentId),
 
 	/**
 	 * Selects an agent by ID.
 	 * @param agentId - ID to select (or null to deselect)
 	 */
-	select(agentId: string | null): void {
-		store.update((s) => ({ ...s, selectedId: agentId }));
-	},
+	select: (agentId: string | null) => baseCrudStore.select(agentId),
 
 	/**
 	 * Opens the create agent form.
 	 */
-	openCreateForm(): void {
-		store.update((s) => ({ ...s, formMode: 'create', editingAgent: null }));
-	},
+	openCreateForm: () => baseCrudStore.openCreateForm(),
 
 	/**
 	 * Opens the edit form for a specific agent.
 	 * Loads the full agent configuration.
 	 * @param agentId - ID of the agent to edit
 	 */
-	async openEditForm(agentId: string): Promise<void> {
-		const config = await this.getAgentConfig(agentId);
-		store.update((s) => ({ ...s, formMode: 'edit', editingAgent: config }));
-	},
+	openEditForm: (agentId: string) => baseCrudStore.openEditForm(agentId),
 
 	/**
 	 * Closes the form (create or edit).
 	 */
-	closeForm(): void {
-		store.update((s) => ({ ...s, formMode: null, editingAgent: null }));
-	},
+	closeForm: () => baseCrudStore.closeForm(),
 
 	/**
 	 * Clears the current error message.
 	 */
-	clearError(): void {
-		store.update((s) => ({ ...s, error: null }));
-	},
+	clearError: () => baseCrudStore.clearError(),
 
 	/**
 	 * Resets the store to initial state.
 	 */
-	reset(): void {
-		store.set(initialState);
-	}
+	reset: () => baseCrudStore.reset()
 };
 
 // ============================================================================
 // Derived Stores
 // ============================================================================
 
+// Get base derived stores
+const derivedStores = createDerivedStores(baseCrudStore);
+
 /**
  * Derived store: list of all agents
  */
-export const agents = derived(store, ($s) => $s.agents);
+export const agents = derivedStores.items;
 
 /**
  * Derived store: currently selected agent summary
  */
-export const selectedAgent = derived(store, ($s) =>
-	$s.agents.find((a) => a.id === $s.selectedId) ?? null
-);
+export const selectedAgent = derivedStores.selected;
 
 /**
  * Derived store: loading state
  */
-export const isLoading = derived(store, ($s) => $s.loading);
+export const isLoading = derivedStores.isLoading;
 
 /**
  * Derived store: error message
  */
-export const error = derived(store, ($s) => $s.error);
+export const error = derivedStores.error;
 
 /**
  * Derived store: current form mode
  */
-export const formMode = derived(store, ($s) => $s.formMode);
+export const formMode = derivedStores.formMode;
 
 /**
  * Derived store: agent being edited
  */
-export const editingAgent = derived(store, ($s) => $s.editingAgent);
+export const editingAgent = derivedStores.editing;
 
 /**
  * Derived store: number of agents
  */
-export const agentCount = derived(store, ($s) => $s.agents.length);
+export const agentCount = derivedStores.count;
 
 /**
  * Derived store: whether agents are available (non-empty list)
  */
-export const hasAgents = derived(store, ($s) => $s.agents.length > 0);
+export const hasAgents = derivedStores.hasItems;
 
 // ============================================================================
 // Legacy Pure Functions (for backward compatibility)

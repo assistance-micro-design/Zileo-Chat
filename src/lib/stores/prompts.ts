@@ -18,11 +18,18 @@
  * Prompt Library Store
  *
  * Manages prompt state with Tauri IPC integration.
- * Pattern follows src/lib/stores/agents.ts
+ * Uses the CRUD store factory for standardized state management.
+ *
+ * @module stores/prompts
  */
 
-import { writable, derived } from 'svelte/store';
+import { derived } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import {
+	createCRUDStore,
+	createDerivedStores
+} from './factory/createCRUDStore';
+import { getErrorMessage } from '$lib/utils/error';
 import type {
 	Prompt,
 	PromptCreate,
@@ -32,82 +39,86 @@ import type {
 	PromptCategory
 } from '$types/prompt';
 
-// ===== Initial State =====
+// ============================================================================
+// Base CRUD Store
+// ============================================================================
 
-const initialState: PromptStoreState = {
-	prompts: [],
-	selectedId: null,
-	loading: false,
-	error: null,
-	formMode: null,
-	editingPrompt: null
-};
+const baseCrudStore = createCRUDStore<Prompt, PromptCreate, PromptUpdate, PromptSummary>({
+	name: 'prompt',
+	idParamName: 'promptId',
+	commands: {
+		list: 'list_prompts',
+		get: 'get_prompt',
+		create: 'create_prompt',
+		update: 'update_prompt',
+		delete: 'delete_prompt'
+	}
+});
 
-// ===== Store =====
+// ============================================================================
+// Prompt Store (with backward-compatible API + search extension)
+// ============================================================================
 
-const store = writable<PromptStoreState>(initialState);
-
+/**
+ * Prompt store with actions for CRUD operations, search, and UI state management.
+ * Extends the base CRUD store with prompt-specific search functionality.
+ */
 export const promptStore = {
-	subscribe: store.subscribe,
+	/**
+	 * Subscribe to store changes
+	 * Maps internal state to PromptStoreState interface
+	 */
+	subscribe: (run: (value: PromptStoreState) => void) => {
+		return baseCrudStore.subscribe((state) => {
+			run({
+				prompts: state.items,
+				selectedId: state.selectedId,
+				loading: state.loading,
+				error: state.error,
+				formMode: state.formMode,
+				editingPrompt: state.editing
+			});
+		});
+	},
 
 	// ===== CRUD Operations =====
 
 	/**
 	 * Load all prompts from backend
 	 */
-	async loadPrompts(): Promise<void> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			const prompts = await invoke<PromptSummary[]>('list_prompts');
-			store.update((s) => ({ ...s, prompts, loading: false }));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-		}
-	},
+	loadPrompts: () => baseCrudStore.loadItems(),
 
 	/**
 	 * Get full prompt by ID
 	 */
-	async getPrompt(id: string): Promise<Prompt> {
-		return await invoke<Prompt>('get_prompt', { promptId: id });
-	},
+	getPrompt: (id: string) => baseCrudStore.getItem(id),
 
 	/**
 	 * Create a new prompt
 	 */
-	async createPrompt(config: PromptCreate): Promise<string> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			const id = await invoke<string>('create_prompt', { config });
-			await this.loadPrompts();
-			store.update((s) => ({ ...s, formMode: null, loading: false }));
-			return id;
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-			throw e;
-		}
-	},
+	createPrompt: (config: PromptCreate) => baseCrudStore.createItem(config),
 
 	/**
 	 * Update an existing prompt
 	 */
 	async updatePrompt(id: string, updates: PromptUpdate): Promise<Prompt> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
+		// Store state before update
+		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
 			const updated = await invoke<Prompt>('update_prompt', {
 				promptId: id,
 				config: updates
 			});
-			await this.loadPrompts();
-			store.update((s) => ({
+			await baseCrudStore.loadItems();
+			baseCrudStore._store.update((s) => ({
 				...s,
 				formMode: null,
-				editingPrompt: null,
+				editing: null,
 				loading: false
 			}));
 			return updated;
 		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
+			baseCrudStore._store.update((s) => ({ ...s, error: getErrorMessage(e), loading: false }));
 			throw e;
 		}
 	},
@@ -115,36 +126,23 @@ export const promptStore = {
 	/**
 	 * Delete a prompt
 	 */
-	async deletePrompt(id: string): Promise<void> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
-		try {
-			await invoke('delete_prompt', { promptId: id });
-			await this.loadPrompts();
-			store.update((s) => ({
-				...s,
-				loading: false,
-				selectedId: s.selectedId === id ? null : s.selectedId
-			}));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-			throw e;
-		}
-	},
+	deletePrompt: (id: string) => baseCrudStore.deleteItem(id),
 
 	/**
 	 * Search prompts by query and/or category
+	 * (Prompt-specific extension, not part of base CRUD)
 	 */
 	async searchPrompts(query?: string, category?: PromptCategory): Promise<PromptSummary[]> {
-		store.update((s) => ({ ...s, loading: true, error: null }));
+		baseCrudStore._store.update((s) => ({ ...s, loading: true, error: null }));
 		try {
 			const prompts = await invoke<PromptSummary[]>('search_prompts', {
 				query: query || null,
 				category: category || null
 			});
-			store.update((s) => ({ ...s, prompts, loading: false }));
+			baseCrudStore._store.update((s) => ({ ...s, items: prompts, loading: false }));
 			return prompts;
 		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
+			baseCrudStore._store.update((s) => ({ ...s, error: getErrorMessage(e), loading: false }));
 			throw e;
 		}
 	},
@@ -154,89 +152,71 @@ export const promptStore = {
 	/**
 	 * Select a prompt by ID
 	 */
-	select(promptId: string | null): void {
-		store.update((s) => ({ ...s, selectedId: promptId }));
-	},
+	select: (promptId: string | null) => baseCrudStore.select(promptId),
 
 	/**
 	 * Open the create form
 	 */
-	openCreateForm(): void {
-		store.update((s) => ({ ...s, formMode: 'create', editingPrompt: null }));
-	},
+	openCreateForm: () => baseCrudStore.openCreateForm(),
 
 	/**
 	 * Open the edit form for a specific prompt
 	 */
-	async openEditForm(id: string): Promise<void> {
-		store.update((s) => ({ ...s, loading: true }));
-		try {
-			const prompt = await this.getPrompt(id);
-			store.update((s) => ({
-				...s,
-				formMode: 'edit',
-				editingPrompt: prompt,
-				loading: false
-			}));
-		} catch (e) {
-			store.update((s) => ({ ...s, error: String(e), loading: false }));
-		}
-	},
+	openEditForm: (id: string) => baseCrudStore.openEditForm(id),
 
 	/**
 	 * Close the form (create or edit)
 	 */
-	closeForm(): void {
-		store.update((s) => ({ ...s, formMode: null, editingPrompt: null }));
-	},
+	closeForm: () => baseCrudStore.closeForm(),
 
 	/**
 	 * Clear error state
 	 */
-	clearError(): void {
-		store.update((s) => ({ ...s, error: null }));
-	},
+	clearError: () => baseCrudStore.clearError(),
 
 	/**
 	 * Reset store to initial state
 	 */
-	reset(): void {
-		store.set(initialState);
-	}
+	reset: () => baseCrudStore.reset()
 };
 
-// ===== Derived Stores =====
+// ============================================================================
+// Derived Stores
+// ============================================================================
+
+// Get base derived stores
+const derivedStores = createDerivedStores(baseCrudStore);
 
 /** All prompts (summaries) */
-export const prompts = derived(store, (s) => s.prompts);
+export const prompts = derivedStores.items;
 
 /** Currently selected prompt ID */
-export const selectedPromptId = derived(store, (s) => s.selectedId);
+export const selectedPromptId = derived(baseCrudStore._store, (s) => s.selectedId);
 
 /** Currently selected prompt (from list) */
-export const selectedPrompt = derived(store, (s) =>
-	s.prompts.find((p) => p.id === s.selectedId) ?? null
-);
+export const selectedPrompt = derivedStores.selected;
 
 /** Prompt loading state */
-export const promptLoading = derived(store, (s) => s.loading);
+export const promptLoading = derivedStores.isLoading;
 
 /** Prompt error state */
-export const promptError = derived(store, (s) => s.error);
+export const promptError = derivedStores.error;
 
 /** Prompt form mode */
-export const promptFormMode = derived(store, (s) => s.formMode);
+export const promptFormMode = derivedStores.formMode;
 
 /** Prompt being edited (full data) */
-export const editingPrompt = derived(store, (s) => s.editingPrompt);
+export const editingPrompt = derivedStores.editing;
 
 /** Whether any prompts exist */
-export const hasPrompts = derived(store, (s) => s.prompts.length > 0);
+export const hasPrompts = derivedStores.hasItems;
 
 /** Prompt count */
-export const promptCount = derived(store, (s) => s.prompts.length);
+export const promptCount = derivedStores.count;
 
-// ===== Utility Functions (Frontend-only) =====
+// ============================================================================
+// Utility Functions (Frontend-only)
+// ============================================================================
 
 /**
  * Extract variables from content (frontend version)
@@ -263,23 +243,14 @@ export function extractVariables(content: string): string[] {
  * Interpolate variables into content (frontend version)
  * Mirrors backend Prompt::interpolate
  */
-export function interpolateVariables(
-	content: string,
-	values: Record<string, string>
-): string {
-	return content.replace(
-		/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g,
-		(match, name) => values[name] ?? match
-	);
+export function interpolateVariables(content: string, values: Record<string, string>): string {
+	return content.replace(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (match, name) => values[name] ?? match);
 }
 
 /**
  * Check if all required variables have values
  */
-export function getMissingVariables(
-	content: string,
-	values: Record<string, string>
-): string[] {
+export function getMissingVariables(content: string, values: Record<string, string>): string[] {
 	const required = extractVariables(content);
 	return required.filter((name) => !values[name] || values[name].trim() === '');
 }
