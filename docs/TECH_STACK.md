@@ -20,8 +20,8 @@ Desktop   : Tauri (cross-platform)
 - **svelte**: 5.45.6
 - **@sveltejs/kit**: 2.49.1
 - **@sveltejs/adapter-static**: ^3.0.0
-- **@sveltejs/vite-plugin-svelte**: ^4.0.0
-- **vite**: 5.4.21
+- **@sveltejs/vite-plugin-svelte**: ^6.2.1
+- **vite**: ^7.2.6
 
 **TypeScript**:
 - **typescript**: ^5.9.3
@@ -33,7 +33,7 @@ Desktop   : Tauri (cross-platform)
 - **@tauri-apps/plugin-dialog**: ^2.2.0
 
 **UI Components**:
-- **lucide-svelte**: ^0.554.0 (icon library)
+- **lucide-svelte**: ^0.556.0 (icon library)
 
 **Testing**:
 - **vitest**: ^2.0.0 (unit tests)
@@ -217,10 +217,17 @@ cargo --version   # >= 1.91.1
 
 ## Version Update Notes
 
+**7 Dec 2025 - Phase 7 Quick Wins (Frontend Optimization)**:
+- **Vite 7.2.6** (upgraded from 5.4.21 - performance improvement)
+- **@sveltejs/vite-plugin-svelte 6.2.1** (required for Vite 7 compatibility)
+- **lucide-svelte 0.556.0** (minor update)
+- New utilities: `createModalController` (modal.svelte.ts), `createAsyncHandler` (async.ts)
+- Modal controller pattern reduces ~30 lines per modal in Settings page
+- ComponentType fix for Svelte 5 compatibility with lucide icons
+
 **7 Dec 2025 - Phase 0-2 Optimization Updates**:
 - Svelte 5.45.6 (upgraded from 5.43.14, Phase 1 stability)
 - SvelteKit 2.49.1 (fixes state_referenced_locally warnings)
-- Vite 5.4.21 for compatibility with Node.js 20.19
 - SurrealDB 2.4.0 with protocol-http feature enabled
 - Strict CSP policy with frame-ancestors 'none'
 - API key validation (newline rejection)

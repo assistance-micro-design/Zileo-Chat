@@ -4,8 +4,8 @@ Application desktop multi-agents avec interface conversationnelle.
 
 ## Stack Technique
 
-**Frontend** : SvelteKit 2.49.0 + Svelte 5.43.14
-**Backend** : Rust 1.91.1 + Tauri 2.9.4
+**Frontend** : SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 7.2.6
+**Backend** : Rust 1.91.1 + Tauri 2.9.3
 **Database** : SurrealDB 2.4.0
 **LLM Framework** : Rig.rs 0.24.0 (multi-provider)
 **LLM Providers Phase 1** : Mistral + Ollama
@@ -65,7 +65,10 @@ Guide configuration MCP servers : npx, uvx, docker, transports, sécurité
 ### 🎨 Frontend & UX
 
 **[FRONTEND_SPECIFICATIONS.md](FRONTEND_SPECIFICATIONS.md)**
-Spécifications complètes UI/UX : pages (Settings, Agent), multi-workflow, validation human-in-the-loop, composants réutilisables
+Spécifications complètes UI/UX : pages (Settings, Agent), multi-workflow, validation human-in-the-loop, composants et utilities réutilisables
+
+**[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)**
+Systeme de design complet : couleurs, typographie, composants UI, theme light/dark, accessibilite
 
 ### 🚀 Développement & Déploiement
 
@@ -145,6 +148,6 @@ Audit cohérence documentation, vérification interdépendances, status correcti
 
 ✅ **Cohérente** : Interdépendances vérifiées
 ✅ **Complète** : Toutes sections couvertes
-✅ **À jour** : Versions confirmées Nov 2025
+✅ **À jour** : Versions confirmées Dec 2025
 
-Dernière validation : 2025-11-23
+Dernière validation : 2025-12-07

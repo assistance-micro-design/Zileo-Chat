@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **Zileo-Chat-3** is a desktop multi-agent application with a conversational interface, built using a modern stack:
-- **Frontend**: SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 5.4.21
+- **Frontend**: SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 7.2.6
 - **Backend**: Rust 1.91.1 + Tauri 2.9.3
 - **Database**: SurrealDB 2.4.0 (embedded RocksDB for desktop, protocol-http enabled)
 - **LLM Framework**: Rig.rs 0.24.0 (multi-provider abstraction)
@@ -466,6 +466,59 @@ try {
   const message = getErrorMessage(e);  // Extracts message from any error type
   console.error(message);
 }
+```
+
+### Modal Controller Utility
+
+Use `createModalController` for modals with create/edit modes (requires `.svelte.ts` extension for runes):
+
+```typescript
+import { createModalController } from '$lib/utils/modal.svelte';
+import type { MCPServerConfig } from '$types/mcp';
+
+// Create controller with type
+const mcpModal = createModalController<MCPServerConfig>();
+
+// Usage
+mcpModal.openCreate();           // Opens in create mode
+mcpModal.openEdit(server);       // Opens in edit mode with item
+mcpModal.close();                // Closes and clears state
+
+// Reactive properties
+mcpModal.show     // boolean - whether modal is visible
+mcpModal.mode     // 'create' | 'edit'
+mcpModal.editing  // T | undefined - item being edited
+
+// In template
+{#if mcpModal.show}
+  <Modal title={mcpModal.mode === 'create' ? 'Add' : 'Edit'}>
+    <Form data={mcpModal.editing} mode={mcpModal.mode} />
+  </Modal>
+{/if}
+```
+
+### Async Handler Utility
+
+Use `createAsyncHandler` for async operations with loading/error handling:
+
+```typescript
+import { createAsyncHandler } from '$lib/utils/async';
+
+const handleSave = createAsyncHandler(
+  () => invoke('save_data', { data }),
+  {
+    setLoading: (loading) => saving = loading,
+    onSuccess: (result) => {
+      message = { type: 'success', text: 'Saved successfully' };
+    },
+    onError: (error) => {
+      message = { type: 'error', text: getErrorMessage(error) };
+    }
+  }
+);
+
+// Use directly as event handler
+<button onclick={handleSave}>Save</button>
 ```
 
 ## Tool Development Patterns

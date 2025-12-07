@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.0 | Svelte 5.43.14 | Tauri 2.9.4
+> **Stack**: SvelteKit 2.49.1 | Svelte 5.45.6 | Vite 7.2.6 | Tauri 2.9.4
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 
@@ -1361,6 +1361,47 @@ src/lib/components/
 | `i18n.ts` | `Locale`, `LocaleInfo`, `LOCALES` | Internationalization |
 | `onboarding.ts` | Onboarding state types | First-launch wizard |
 | `index.ts` | All types | Barrel export |
+
+### Utilities (src/lib/utils/)
+
+| Module | Key Exports | Description |
+|--------|-------------|-------------|
+| `modal.svelte.ts` | `createModalController<T>()`, `ModalController`, `ModalMode` | Factory for modal state management (show/mode/editing) using Svelte 5 runes |
+| `async.ts` | `createAsyncHandler()`, `createAsyncHandlerWithEvent()`, `withLoadingState()` | Async operation wrappers with loading/error handling |
+| `error.ts` | `getErrorMessage()`, `formatErrorForDisplay()` | Error extraction and formatting utilities |
+| `activity.ts` | `combineActivities()`, `filterActivities()`, `countActivitiesByType()` | Activity feed helpers |
+| `index.ts` | All utilities | Barrel export |
+
+**Modal Controller Pattern** (Phase 7 Quick Win):
+```typescript
+// Creates reactive modal state with create/edit modes
+const mcpModal = createModalController<MCPServerConfig>();
+
+// Usage
+mcpModal.openCreate();          // Opens in create mode
+mcpModal.openEdit(server);      // Opens in edit mode with item
+mcpModal.close();               // Closes and clears state
+
+// Template
+{#if mcpModal.show}
+  <Modal title={mcpModal.mode === 'create' ? 'Add' : 'Edit'}>
+    <Form data={mcpModal.editing} />
+  </Modal>
+{/if}
+```
+
+**Async Handler Pattern** (Phase 7 Quick Win):
+```typescript
+// Wraps async operations with loading state and error handling
+const handleSave = createAsyncHandler(
+  () => invoke('save_data', { data }),
+  {
+    setLoading: (l) => saving = l,
+    onSuccess: () => message = { type: 'success', text: 'Saved' },
+    onError: (e) => message = { type: 'error', text: getErrorMessage(e) }
+  }
+);
+```
 
 ### Props Pattern (TypeScript)
 

@@ -699,9 +699,11 @@ zileo-chat-3/
 4. ✅ Phase 3 : Chat & Workflow Components
 5. ✅ Phase 4 : Pages Refactoring (agent page, settings page)
 6. ✅ Phase 5 : Backend Features (validation, memory, streaming - 111 commandes total)
+7. ✅ Phase 6 : Strategic Optimizations (MCP, backend, DB)
+8. ✅ Phase 7 : Quick Wins Frontend (Vite 7, utilities, modal pattern)
 
 **En Cours** :
-- Phase 6 : Integration & Polish (tests E2E, audit accessibilité)
+- Phase 8 : Strategic Refactoring (settings page decomposition)
 
 **Documentation Technique** :
 - Schéma DB : `docs/DATABASE_SCHEMA.md`
@@ -866,5 +868,54 @@ async cleanup() {
 - Stores writable/derived coexistent avec runes
 - Pas de breaking change Svelte 5 sur stores
 - Migration graduelle possible
+
+---
+
+### Question 22 : Utility Factories (Phase 7 Quick Win)
+
+**Décision** : **Factories pour patterns répétitifs (modal, async handlers)**
+
+**Raisons** :
+- Réduction duplication code (~30 lignes par modal)
+- Patterns cohérents dans toute l'application
+- Svelte 5 runes pour state réactif hors composants
+
+**Modal Controller Factory** :
+
+```typescript
+// src/lib/utils/modal.svelte.ts
+// Utilise .svelte.ts pour accès aux runes ($state) hors composants
+
+const mcpModal = createModalController<MCPServerConfig>();
+
+// API
+mcpModal.show       // boolean - modal visible
+mcpModal.mode       // 'create' | 'edit'
+mcpModal.editing    // T | undefined - item en cours d'édition
+mcpModal.openCreate()   // Ouvre en mode création
+mcpModal.openEdit(item) // Ouvre en mode édition
+mcpModal.close()        // Ferme et reset
+```
+
+**Async Handler Factory** :
+
+```typescript
+// src/lib/utils/async.ts
+// Élimine pattern try/catch/finally répétitif
+
+const handleSave = createAsyncHandler(
+  () => invoke('save_data', { data }),
+  {
+    setLoading: (l) => saving = l,
+    onSuccess: (result) => { /* ... */ },
+    onError: (error) => { /* ... */ }
+  }
+);
+```
+
+**Usage dans Settings** :
+- `mcpModal` : Modal création/édition serveurs MCP
+- `modelModal` : Modal création/édition modèles LLM
+- Réduit ~60 lignes de boilerplate dans +page.svelte
 
 ---
