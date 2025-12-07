@@ -147,14 +147,13 @@ Les corrections suivantes ont ete appliquees a `optimization-backend.md`:
 ---
 
 ### Phase 7: Strategic Frontend
-**Effort**: ~12h | **Impact**: Maintenabilite, performance
+**Effort**: ~7.5h | **Impact**: Maintenabilite, performance
 
 | Spec | Item | Description | Effort |
 |------|------|-------------|--------|
 | stores | OPT-6 | Supprimer duplication workflows.ts | 1.5h |
 | stores | OPT-7 | Refactorer processChunk en handlers | 2h |
 | stores | OPT-8 | Creer CRUD factory (agents/prompts) | 4h |
-| types | OPT-5 | Implementer specta + tauri-specta | 8-10h |
 
 **Prerequis**: stores/OPT-2 (error utility) pour OPT-8
 **Validation**: `npm run test && npm run build`
@@ -182,7 +181,7 @@ Les corrections suivantes ont ete appliquees a `optimization-backend.md`:
 ---
 
 ### Phase 9: Differe [Post-v1]
-**Effort**: ~18h | **Impact**: Variable
+**Effort**: ~26-28h | **Impact**: Variable
 
 | Spec | Item | Description | Raison du report |
 |------|------|-------------|------------------|
@@ -190,6 +189,7 @@ Les corrections suivantes ont ete appliquees a `optimization-backend.md`:
 | db | OPT-DB-12 | thiserror CommandError | Meme raison |
 | db | OPT-DB-13 | Query caching | SDK ne supporte pas prepared statements |
 | db | OPT-DB-14 | Live Query API | Feature 2.4.0, pas critique v1 |
+| types | OPT-5 | specta + tauri-specta | tauri-specta v2 en RC, incompatible Tauri 2.9.x (Dec 2025) |
 | stores | - | Svelte 5 runes migration | Effort 8-16h, planification requise |
 | stores | - | Tauri channels vs events | Changements backend requis |
 
@@ -236,7 +236,7 @@ Phase 8 (Nice-to-Have) [Optionnel]
 | 4 | Complete | 100% | 2025-12-07 - Tool caching, HTTP pooling, latency metrics, Drop cleanup |
 | 5 | Pending | 0% | - |
 | 6 | Complete | 100% | 2025-12-07 - Circuit breaker, ID lookup O(1), Health checks periodic |
-| 7 | Complete | 100% | 2025-12-07 - OPT-6 workflows dedup, OPT-7 processChunk, OPT-8 CRUD factory |
+| 7 | Complete | 100% | 2025-12-07 - OPT-6/7/8 stores done, OPT-5 specta differe (tauri-specta incompatible) |
 | 8 | Pending | 0% | Optionnel |
 
 ### Effort Cumule

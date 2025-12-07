@@ -193,37 +193,23 @@ Les contraintes suivantes sont NON-NEGOCIABLES (source: CLAUDE.md, ARCHITECTURE_
 
 ### Optimisations Strategiques (Impact haut, Effort eleve)
 
-#### OPT-5: Implementer specta + tauri-specta
-- **Fichiers**:
-  - `src-tauri/Cargo.toml` (nouvelles deps)
-  - `src-tauri/src/main.rs` (export config)
-  - Tous les fichiers `src-tauri/src/models/*.rs` (derive macro)
-  - `src/types/generated.ts` (nouveau fichier genere)
-- **Changement**:
-  1. Ajouter dependances:
-     ```toml
-     [dependencies]
-     specta = { version = "2", features = ["derive"] }
-     tauri-specta = { version = "2", features = ["derive"] }
-     ```
-  2. Annoter tous les types avec `#[derive(specta::Type)]`
-  3. Configurer export dans main.rs
-  4. Generer `src/types/generated.ts` au build
-  5. Migrer imports progressivement
-- **Phases**:
-  1. Setup specta (2h)
-  2. Annoter types core: agent, workflow, message (2h)
-  3. Annoter types secondaires (2h)
-  4. Configurer CI check (1h)
-  5. Migrer imports frontend (2h)
-- **Prerequis**: Aucun
-- **Risque regression**: Moyen - types generes peuvent differer des manuels
-- **Mitigation**: Comparer types generes vs manuels avant switch complet
-- **Tests requis**:
-  - Comparer output specta vs types manuels existants
-  - npm run check apres migration
-  - Tests E2E pour valider IPC
-- **Effort estime**: 8-10h
+#### ~~OPT-5: Implementer specta + tauri-specta~~ [DIFFERE]
+
+**Status**: Differe en Phase 9 (Post-v1)
+**Raison**: tauri-specta v2.0.0-rc.21 (Janvier 2025) est incompatible avec Tauri 2.9.x stable.
+- Derniere release: 11 mois sans version stable
+- Issue connue: "broken until tauri-apps/tauri#12371"
+- Documentation pinne sur Tauri 2.0.0-beta.22
+
+**Condition de reactivation**: Quand tauri-specta 2.0 stable sort avec support Tauri 2.9+
+
+**Fichiers** (pour reference future):
+- `src-tauri/Cargo.toml` (nouvelles deps)
+- `src-tauri/src/main.rs` (export config)
+- Tous les fichiers `src-tauri/src/models/*.rs` (derive macro)
+- `src/types/generated.ts` (nouveau fichier genere)
+
+**Effort estime**: 8-10h (quand disponible)
 
 ### Nice to Have (Impact moyen, Effort moyen)
 
@@ -266,7 +252,11 @@ Les contraintes suivantes sont NON-NEGOCIABLES (source: CLAUDE.md, ARCHITECTURE_
 
 ### Differe (Non prioritaire)
 
-Aucune optimisation identifiee comme devant etre differee. Toutes les optimisations ci-dessus ont un ROI positif et aucune n'est suffisamment risquee ou complexe pour justifier un report indefini.
+| Item | Description | Raison du report |
+|------|-------------|------------------|
+| OPT-5 | specta + tauri-specta | tauri-specta v2 en RC, incompatible Tauri 2.9.x (Dec 2025) |
+
+**Note**: OPT-5 sera reactivee quand tauri-specta 2.0 stable sortira avec support Tauri 2.9+.
 
 ## Dependencies
 
@@ -317,21 +307,21 @@ time cargo build --release  # +5-10% pour generation types
 
 ## Estimation
 
-| Optimisation | Effort | Impact | Priorite |
-|--------------|--------|--------|----------|
-| OPT-1: Sync user-question | 1h | Haut | P1 |
-| OPT-2: Standardiser nullabilite | 2h | Moyen | P1 |
-| OPT-3: Centraliser constantes | 1h | Moyen | P1 |
-| OPT-4: Documenter deserializers | 1h | Faible | P2 |
-| OPT-5: Implementer specta | 8-10h | Haut | P2 |
-| OPT-6: Specialiser Record<> | 3h | Moyen | P3 |
-| OPT-7: Validation Zod | 4h | Moyen | P3 |
+| Optimisation | Effort | Impact | Priorite | Status |
+|--------------|--------|--------|----------|--------|
+| OPT-1: Sync user-question | 1h | Haut | P1 | Complete (Phase 3) |
+| OPT-2: Standardiser nullabilite | 2h | Moyen | P1 | Complete (Phase 3) |
+| OPT-3: Centraliser constantes | 1h | Moyen | P1 | Complete (Phase 3) |
+| OPT-4: Documenter deserializers | 1h | Faible | P2 | Complete (Phase 3) |
+| ~~OPT-5: Implementer specta~~ | 8-10h | Haut | - | **DIFFERE** |
+| OPT-6: Specialiser Record<> | 3h | Moyen | P3 | Optionnel (Phase 8) |
+| OPT-7: Validation Zod | 4h | Moyen | P3 | Optionnel (Phase 8) |
 
-**Total Quick Wins (P1)**: 4-5h
-**Total Strategique (P2)**: 9-11h
-**Total Nice to Have (P3)**: 7h
+**Total Quick Wins (P1)**: 4-5h - COMPLETE
+**Total Strategique (P2)**: 1h - COMPLETE (OPT-5 differe)
+**Total Nice to Have (P3)**: 7h - OPTIONNEL
 
-**Total estime**: 20-23h
+**Total restant**: ~7h (optionnel)
 
 ## Risques et Mitigations
 
@@ -344,14 +334,14 @@ time cargo build --release  # +5-10% pour generation types
 
 ## Prochaines Etapes
 
-1. [ ] Valider ce plan avec l'utilisateur
-2. [ ] Executer OPT-1 (sync user-question) - 1h
-3. [ ] Executer OPT-2 (nullabilite) - 2h
-4. [ ] Executer OPT-3 (constantes) - 1h
-5. [ ] Mesurer impact (build time, erreurs TypeScript)
-6. [ ] Decider go/no-go pour OPT-5 (specta)
-7. [ ] Si go: Implementer specta progressivement
-8. [ ] Ajouter CI check pour synchronisation
+1. [x] Valider ce plan avec l'utilisateur
+2. [x] Executer OPT-1 (sync user-question) - Complete Phase 3
+3. [x] Executer OPT-2 (nullabilite) - Complete Phase 3
+4. [x] Executer OPT-3 (constantes) - Complete Phase 3
+5. [x] Executer OPT-4 (deserializers docs) - Complete Phase 3
+6. [x] OPT-5 (specta) - **DIFFERE** (tauri-specta incompatible Tauri 2.9.x)
+7. [ ] OPT-6, OPT-7 - Optionnel Phase 8
+8. [ ] Surveiller sortie tauri-specta 2.0 stable pour reactivation OPT-5
 
 ## References
 
