@@ -143,17 +143,21 @@ export const userQuestionStore = {
 	 * @throws Error if submission fails
 	 */
 	async submitResponse(response: UserQuestionResponse): Promise<void> {
+		console.log('[userQuestionStore] submitResponse called:', response);
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		try {
+			console.log('[userQuestionStore] Invoking submit_user_response...');
 			await invoke('submit_user_response', {
 				questionId: response.questionId,
 				selectedOptions: response.selectedOptions,
 				textResponse: response.textResponse
 			});
+			console.log('[userQuestionStore] submit_user_response success');
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== response.questionId);
+				console.log('[userQuestionStore] Updated state, remaining questions:', remaining.length);
 				return {
 					...s,
 					pendingQuestions: remaining,
@@ -163,6 +167,7 @@ export const userQuestionStore = {
 				};
 			});
 		} catch (e) {
+			console.error('[userQuestionStore] submitResponse error:', e);
 			store.update((s) => ({
 				...s,
 				isSubmitting: false,
@@ -178,13 +183,17 @@ export const userQuestionStore = {
 	 * @throws Error if skip operation fails
 	 */
 	async skipQuestion(questionId: string): Promise<void> {
+		console.log('[userQuestionStore] skipQuestion called:', questionId);
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		try {
+			console.log('[userQuestionStore] Invoking skip_question...');
 			await invoke('skip_question', { questionId });
+			console.log('[userQuestionStore] skip_question success');
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== questionId);
+				console.log('[userQuestionStore] Updated state, remaining questions:', remaining.length);
 				return {
 					...s,
 					pendingQuestions: remaining,
@@ -194,6 +203,7 @@ export const userQuestionStore = {
 				};
 			});
 		} catch (e) {
+			console.error('[userQuestionStore] skipQuestion error:', e);
 			store.update((s) => ({
 				...s,
 				isSubmitting: false,

@@ -42,11 +42,15 @@ pub async fn submit_user_response(
         return Err(format!("Question is not pending (status: {})", status));
     }
 
+    // Encode selected_options as JSON string (matching the CREATE pattern)
+    let selected_options_json = serde_json::to_string(&selected_options)
+        .map_err(|e| format!("Failed to encode selected_options: {}", e))?;
+
     // Build params for update - use bind parameters for user-provided values
     let mut params: Vec<(String, serde_json::Value)> = vec![
         (
             "selected_options".to_string(),
-            serde_json::json!(selected_options),
+            serde_json::json!(selected_options_json),
         ),
         ("status".to_string(), serde_json::json!("answered")),
     ];
@@ -64,13 +68,39 @@ pub async fn submit_user_response(
         )
     };
 
+    info!(
+        question_id = %validated_id,
+        update_query = %update_query,
+        "Executing update query"
+    );
+
     state
         .db
         .execute_with_params(&update_query, params)
         .await
         .map_err(|e| format!("Failed to update question: {}", e))?;
 
-    info!(question_id = %validated_id, "User submitted response");
+    // Verify the update by reading back
+    let verify_result: Vec<serde_json::Value> = state
+        .db
+        .query_json(&format!(
+            "SELECT status FROM user_question:`{}`",
+            validated_id
+        ))
+        .await
+        .map_err(|e| format!("Failed to verify update: {}", e))?;
+
+    let new_status = verify_result
+        .first()
+        .and_then(|r| r.get("status"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    info!(
+        question_id = %validated_id,
+        new_status = %new_status,
+        "User submitted response - verified status"
+    );
 
     // Emit event for any listeners
     let chunk = json!({

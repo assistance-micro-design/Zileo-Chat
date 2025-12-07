@@ -171,19 +171,39 @@ impl UserQuestionTool {
             status: "pending".to_string(),
         };
 
-        // Use execute() with JSON encoding (SurrealDB SDK 2.x pattern for writes)
-        let json_str = serde_json::to_string(&create_data)
+        // Use execute_with_params for CREATE (CLAUDE.md SurrealDB SDK 2.x pattern)
+        let json_data = serde_json::to_value(&create_data)
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to encode JSON: {}", e)))?;
         let query = format!(
-            "CREATE user_question:`{}` CONTENT {}",
-            question_id, json_str
+            "CREATE user_question:`{}` CONTENT $data",
+            question_id
         );
+
+        info!(question_id = %question_id, "Creating user question in DB");
+
         self.db
-            .execute(&query)
+            .execute_with_params(&query, vec![("data".to_string(), json_data)])
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create question: {}", e)))?;
 
-        info!(question_id = %question_id, "Created user question");
+        // Verify the question was created
+        let verify_query = format!(
+            "SELECT status FROM user_question:`{}`",
+            question_id
+        );
+        let verify_result: Vec<serde_json::Value> = self.db
+            .query_json(&verify_query)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to verify question creation: {}", e)))?;
+
+        if verify_result.is_empty() {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Question was not created in DB: {}",
+                question_id
+            )));
+        }
+
+        info!(question_id = %question_id, verify_result = ?verify_result, "Created and verified user question");
 
         // Emit streaming event
         if let Some(ref handle) = self.app_handle {
@@ -249,10 +269,14 @@ impl UserQuestionTool {
                 .map_err(|e| ToolError::ExecutionFailed(format!("DB query failed: {}", e)))?;
 
             if let Some(record) = result.first() {
+                debug!(question_id = %question_id, record = ?record, "Poll result");
+
                 let status = record
                     .get("status")
                     .and_then(|v| v.as_str())
                     .unwrap_or("pending");
+
+                debug!(question_id = %question_id, status = %status, "Parsed status");
 
                 match status {
                     "answered" => {

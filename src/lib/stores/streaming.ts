@@ -203,6 +203,224 @@ let isInitialized = false;
 // ============================================================================
 
 /**
+ * Type for chunk handler functions that process stream chunks
+ */
+type ChunkHandler = (state: StreamingState, chunk: StreamChunk) => StreamingState;
+
+/**
+ * Handle token chunk - append content and increment token counter
+ */
+function handleToken(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		content: s.content + (c.content ?? ''),
+		tokensReceived: s.tokensReceived + 1
+	};
+}
+
+/**
+ * Handle tool_start chunk - add new tool with running status
+ */
+function handleToolStart(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		tools: [
+			...s.tools,
+			{
+				name: c.tool ?? 'unknown',
+				status: 'running' as ToolStatus,
+				startedAt: Date.now()
+			}
+		]
+	};
+}
+
+/**
+ * Handle tool_end chunk - mark tool as completed with duration
+ */
+function handleToolEnd(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		tools: s.tools.map((t) =>
+			t.name === c.tool && t.status === 'running'
+				? { ...t, status: 'completed' as ToolStatus, duration: c.duration }
+				: t
+		)
+	};
+}
+
+/**
+ * Handle reasoning chunk - add new reasoning step
+ */
+function handleReasoning(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		reasoning: [
+			...s.reasoning,
+			{
+				content: c.content ?? '',
+				timestamp: Date.now(),
+				stepNumber: s.reasoning.length + 1
+			}
+		]
+	};
+}
+
+/**
+ * Handle error chunk - set error message and stop streaming
+ */
+function handleError(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		error: c.content ?? 'Unknown error',
+		isStreaming: false
+	};
+}
+
+/**
+ * Handle sub_agent_start chunk - add new sub-agent with running status
+ */
+function handleSubAgentStart(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		subAgents: [
+			...s.subAgents,
+			{
+				id: c.sub_agent_id ?? 'unknown',
+				name: c.sub_agent_name ?? 'Unknown Agent',
+				parentAgentId: c.parent_agent_id ?? '',
+				taskDescription: c.content ?? '',
+				status: 'running' as SubAgentStatus,
+				startedAt: Date.now(),
+				progress: 0
+			}
+		]
+	};
+}
+
+/**
+ * Handle sub_agent_progress chunk - update sub-agent progress and status message
+ */
+function handleSubAgentProgress(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		subAgents: s.subAgents.map((a) =>
+			a.id === c.sub_agent_id
+				? {
+						...a,
+						progress: c.progress ?? a.progress,
+						statusMessage: c.content ?? a.statusMessage
+					}
+				: a
+		)
+	};
+}
+
+/**
+ * Handle sub_agent_complete chunk - mark sub-agent as completed with metrics
+ */
+function handleSubAgentComplete(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		subAgents: s.subAgents.map((a) =>
+			a.id === c.sub_agent_id
+				? {
+						...a,
+						status: 'completed' as SubAgentStatus,
+						progress: 100,
+						duration: c.duration,
+						report: c.content,
+						metrics: c.metrics
+					}
+				: a
+		)
+	};
+}
+
+/**
+ * Handle sub_agent_error chunk - mark sub-agent as errored with error message
+ */
+function handleSubAgentError(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		subAgents: s.subAgents.map((a) =>
+			a.id === c.sub_agent_id
+				? {
+						...a,
+						status: 'error' as SubAgentStatus,
+						error: c.content ?? 'Unknown error',
+						duration: c.duration
+					}
+				: a
+		)
+	};
+}
+
+/**
+ * Handle task_create chunk - add new task
+ */
+function handleTaskCreate(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		tasks: [
+			...s.tasks,
+			{
+				id: c.task_id!,
+				name: c.task_name!,
+				status: (c.task_status ?? 'pending') as ActiveTask['status'],
+				priority: c.task_priority ?? 3,
+				createdAt: Date.now(),
+				updatedAt: Date.now()
+			}
+		]
+	};
+}
+
+/**
+ * Handle task_update chunk - update task status
+ */
+function handleTaskUpdate(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		tasks: s.tasks.map((t) =>
+			t.id === c.task_id
+				? { ...t, status: c.task_status as ActiveTask['status'], updatedAt: Date.now() }
+				: t
+		)
+	};
+}
+
+/**
+ * Handle task_complete chunk - mark task as completed
+ */
+function handleTaskComplete(s: StreamingState, c: StreamChunk): StreamingState {
+	return {
+		...s,
+		tasks: s.tasks.map((t) =>
+			t.id === c.task_id ? { ...t, status: 'completed' as const, updatedAt: Date.now() } : t
+		)
+	};
+}
+
+/**
+ * Chunk handler registry mapping chunk types to their handler functions
+ */
+const chunkHandlers: Record<string, ChunkHandler> = {
+	token: handleToken,
+	tool_start: handleToolStart,
+	tool_end: handleToolEnd,
+	reasoning: handleReasoning,
+	error: handleError,
+	sub_agent_start: handleSubAgentStart,
+	sub_agent_progress: handleSubAgentProgress,
+	sub_agent_complete: handleSubAgentComplete,
+	sub_agent_error: handleSubAgentError,
+	task_create: handleTaskCreate,
+	task_update: handleTaskUpdate,
+	task_complete: handleTaskComplete
+};
+
+/**
  * Process a stream chunk and update state accordingly.
  *
  * @param chunk - The stream chunk to process
@@ -214,159 +432,9 @@ function processChunk(chunk: StreamChunk): void {
 			return s;
 		}
 
-		switch (chunk.chunk_type) {
-			case 'token':
-				return {
-					...s,
-					content: s.content + (chunk.content ?? ''),
-					tokensReceived: s.tokensReceived + 1
-				};
-
-			case 'tool_start':
-				return {
-					...s,
-					tools: [
-						...s.tools,
-						{
-							name: chunk.tool ?? 'unknown',
-							status: 'running' as ToolStatus,
-							startedAt: Date.now()
-						}
-					]
-				};
-
-			case 'tool_end':
-				return {
-					...s,
-					tools: s.tools.map((t) =>
-						t.name === chunk.tool && t.status === 'running'
-							? { ...t, status: 'completed' as ToolStatus, duration: chunk.duration }
-							: t
-					)
-				};
-
-			case 'reasoning':
-				return {
-					...s,
-					reasoning: [
-						...s.reasoning,
-						{
-							content: chunk.content ?? '',
-							timestamp: Date.now(),
-							stepNumber: s.reasoning.length + 1
-						}
-					]
-				};
-
-			case 'error':
-				return {
-					...s,
-					error: chunk.content ?? 'Unknown error',
-					isStreaming: false
-				};
-
-			case 'sub_agent_start':
-				return {
-					...s,
-					subAgents: [
-						...s.subAgents,
-						{
-							id: chunk.sub_agent_id ?? 'unknown',
-							name: chunk.sub_agent_name ?? 'Unknown Agent',
-							parentAgentId: chunk.parent_agent_id ?? '',
-							taskDescription: chunk.content ?? '',
-							status: 'running' as SubAgentStatus,
-							startedAt: Date.now(),
-							progress: 0
-						}
-					]
-				};
-
-			case 'sub_agent_progress':
-				return {
-					...s,
-					subAgents: s.subAgents.map((a) =>
-						a.id === chunk.sub_agent_id
-							? {
-									...a,
-									progress: chunk.progress ?? a.progress,
-									statusMessage: chunk.content ?? a.statusMessage
-								}
-							: a
-					)
-				};
-
-			case 'sub_agent_complete':
-				return {
-					...s,
-					subAgents: s.subAgents.map((a) =>
-						a.id === chunk.sub_agent_id
-							? {
-									...a,
-									status: 'completed' as SubAgentStatus,
-									progress: 100,
-									duration: chunk.duration,
-									report: chunk.content,
-									metrics: chunk.metrics
-								}
-							: a
-					)
-				};
-
-			case 'sub_agent_error':
-				return {
-					...s,
-					subAgents: s.subAgents.map((a) =>
-						a.id === chunk.sub_agent_id
-							? {
-									...a,
-									status: 'error' as SubAgentStatus,
-									error: chunk.content ?? 'Unknown error',
-									duration: chunk.duration
-								}
-							: a
-					)
-				};
-
-			case 'task_create':
-				return {
-					...s,
-					tasks: [
-						...s.tasks,
-						{
-							id: chunk.task_id!,
-							name: chunk.task_name!,
-							status: (chunk.task_status ?? 'pending') as ActiveTask['status'],
-							priority: chunk.task_priority ?? 3,
-							createdAt: Date.now(),
-							updatedAt: Date.now()
-						}
-					]
-				};
-
-			case 'task_update':
-				return {
-					...s,
-					tasks: s.tasks.map((t) =>
-						t.id === chunk.task_id
-							? { ...t, status: chunk.task_status as ActiveTask['status'], updatedAt: Date.now() }
-							: t
-					)
-				};
-
-			case 'task_complete':
-				return {
-					...s,
-					tasks: s.tasks.map((t) =>
-						t.id === chunk.task_id
-							? { ...t, status: 'completed' as const, updatedAt: Date.now() }
-							: t
-					)
-				};
-
-			default:
-				return s;
-		}
+		// Lookup handler and execute, or return unchanged state
+		const handler = chunkHandlers[chunk.chunk_type];
+		return handler ? handler(s, chunk) : s;
 	});
 }
 

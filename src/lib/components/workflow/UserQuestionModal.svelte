@@ -84,7 +84,17 @@
 	 * Handle form submission
 	 */
 	async function handleSubmit(): Promise<void> {
-		if (!$currentQuestion || !isValid()) return;
+		console.log('[UserQuestionModal] handleSubmit called', {
+			currentQuestion: $currentQuestion,
+			isValid: isValid(),
+			selectedOptions,
+			textResponse
+		});
+
+		if (!$currentQuestion || !isValid()) {
+			console.warn('[UserQuestionModal] Submit blocked - invalid state');
+			return;
+		}
 
 		const response: UserQuestionResponse = {
 			questionId: $currentQuestion.id,
@@ -92,28 +102,40 @@
 			textResponse: textResponse.trim() || undefined
 		};
 
+		console.log('[UserQuestionModal] Submitting response:', response);
 		await userQuestionStore.submitResponse(response);
+		console.log('[UserQuestionModal] Response submitted');
 	}
 
 	/**
 	 * Handle skipping the question
 	 */
 	async function handleSkip(): Promise<void> {
-		if (!$currentQuestion) return;
+		console.log('[UserQuestionModal] handleSkip called', { currentQuestion: $currentQuestion });
+
+		if (!$currentQuestion) {
+			console.warn('[UserQuestionModal] Skip blocked - no current question');
+			return;
+		}
+
+		console.log('[UserQuestionModal] Skipping question:', $currentQuestion.id);
 		await userQuestionStore.skipQuestion($currentQuestion.id);
+		console.log('[UserQuestionModal] Question skipped');
 	}
 
-	/**
-	 * Prevent backdrop clicks and escape key from closing
-	 */
-	function preventClose(event: MouseEvent | KeyboardEvent): void {
-		event.stopPropagation();
-	}
 </script>
 
 {#if $isModalOpen}
-	<div class="modal-backdrop" role="presentation" onclick={preventClose}>
-		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+	<div class="modal-backdrop" role="presentation">
+		<div
+			class="modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="modal-title"
+			tabindex="-1"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+		>
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{$i18n('user_question_modal_title')}</h3>
 			</div>

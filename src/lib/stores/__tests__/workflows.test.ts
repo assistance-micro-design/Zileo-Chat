@@ -17,29 +17,30 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { get } from 'svelte/store';
 import {
-	createInitialState,
-	addWorkflow,
-	updateWorkflow,
-	removeWorkflow,
-	selectWorkflow,
-	setLoading,
-	setError,
-	setLastResult,
-	setWorkflows,
-	updateWorkflowStatus,
-	getSelectedWorkflow,
-	getWorkflowsByStatus,
-	hasWorkflow,
-	getWorkflowCount,
+	workflowStore,
+	workflows,
+	selectedWorkflowId,
+	workflowsLoading,
+	workflowsError,
+	workflowSearchFilter,
+	selectedWorkflow,
+	filteredWorkflows,
 	type WorkflowState
 } from '../workflows';
-import type { Workflow, WorkflowResult } from '$types/workflow';
+import type { Workflow } from '$types/workflow';
+
+// Mock @tauri-apps/api/core
+vi.mock('@tauri-apps/api/core', () => ({
+	invoke: vi.fn()
+}));
+
+// Import invoke after mocking
+import { invoke } from '@tauri-apps/api/core';
 
 describe('Workflow Store', () => {
-	let initialState: WorkflowState;
-
 	const createMockWorkflow = (id: string, name: string): Workflow => ({
 		id,
 		name,
@@ -53,330 +54,345 @@ describe('Workflow Store', () => {
 		current_context_tokens: 0
 	});
 
-	const createMockResult = (): WorkflowResult => ({
-		report: '# Test Report',
-		metrics: {
-			duration_ms: 100,
-			tokens_input: 50,
-			tokens_output: 75,
-			cost_usd: 0.001,
-			provider: 'Test',
-			model: 'test-model'
-		},
-		tools_used: ['tool1'],
-		mcp_calls: [],
-		tool_executions: []
-	});
-
 	beforeEach(() => {
-		initialState = createInitialState();
+		workflowStore.reset();
+		vi.resetAllMocks();
 	});
 
-	describe('createInitialState', () => {
-		it('should create empty initial state', () => {
-			const state = createInitialState();
+	describe('workflowStore.loadWorkflows', () => {
+		it('should load workflows from backend', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test Workflow')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
 
-			expect(state.workflows).toEqual([]);
-			expect(state.selectedId).toBeNull();
-			expect(state.loading).toBe(false);
-			expect(state.error).toBeNull();
-			expect(state.lastResult).toBeNull();
-		});
-	});
+			await workflowStore.loadWorkflows();
 
-	describe('addWorkflow', () => {
-		it('should add a workflow to empty state', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const newState = addWorkflow(initialState, workflow);
-
-			expect(newState.workflows).toHaveLength(1);
-			expect(newState.workflows[0].id).toBe('wf1');
-			expect(newState.error).toBeNull();
+			expect(get(workflows)).toEqual(mockWorkflows);
+			expect(get(workflowsLoading)).toBe(false);
+			expect(get(workflowsError)).toBeNull();
 		});
 
-		it('should add workflow to existing workflows', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = createMockWorkflow('wf2', 'Workflow 2');
+		it('should set loading state during load', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
+			vi.mocked(invoke).mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						expect(get(workflowsLoading)).toBe(true);
+						resolve(mockWorkflows);
+					})
+			);
 
-			let state = addWorkflow(initialState, wf1);
-			state = addWorkflow(state, wf2);
+			await workflowStore.loadWorkflows();
 
-			expect(state.workflows).toHaveLength(2);
-			expect(state.workflows[0].id).toBe('wf1');
-			expect(state.workflows[1].id).toBe('wf2');
+			expect(get(workflowsLoading)).toBe(false);
 		});
 
-		it('should clear error when adding workflow', () => {
-			const stateWithError = setError(initialState, 'Some error');
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const newState = addWorkflow(stateWithError, workflow);
+		it('should handle errors during load', async () => {
+			const errorMessage = 'Network error';
+			vi.mocked(invoke).mockRejectedValue(new Error(errorMessage));
 
-			expect(newState.error).toBeNull();
-		});
-	});
+			await workflowStore.loadWorkflows();
 
-	describe('updateWorkflow', () => {
-		it('should update existing workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Original Name');
-			let state = addWorkflow(initialState, workflow);
-
-			state = updateWorkflow(state, 'wf1', { name: 'Updated Name' });
-
-			expect(state.workflows[0].name).toBe('Updated Name');
-			expect(state.workflows[0].id).toBe('wf1');
+			expect(get(workflowsError)).toBe(errorMessage);
+			expect(get(workflowsLoading)).toBe(false);
 		});
 
-		it('should not modify other workflows', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = createMockWorkflow('wf2', 'Workflow 2');
+		it('should handle non-Error rejections', async () => {
+			vi.mocked(invoke).mockRejectedValue('String error');
 
-			let state = addWorkflow(initialState, wf1);
-			state = addWorkflow(state, wf2);
-			state = updateWorkflow(state, 'wf1', { name: 'Updated' });
+			await workflowStore.loadWorkflows();
 
-			expect(state.workflows[0].name).toBe('Updated');
-			expect(state.workflows[1].name).toBe('Workflow 2');
+			expect(get(workflowsError)).toBe('String error');
+			expect(get(workflowsLoading)).toBe(false);
 		});
 
-		it('should not crash when updating non-existent workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
+		it('should clear previous error on successful load', async () => {
+			// First load fails
+			vi.mocked(invoke).mockRejectedValue(new Error('First error'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('First error');
 
-			state = updateWorkflow(state, 'nonexistent', { name: 'Updated' });
+			// Second load succeeds
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
 
-			expect(state.workflows).toHaveLength(1);
-			expect(state.workflows[0].name).toBe('Workflow 1');
+			expect(get(workflowsError)).toBeNull();
+			expect(get(workflows)).toEqual(mockWorkflows);
 		});
 	});
 
-	describe('removeWorkflow', () => {
-		it('should remove existing workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
+	describe('workflowStore.select', () => {
+		it('should select a workflow by ID', () => {
+			workflowStore.select('wf1');
 
-			state = removeWorkflow(state, 'wf1');
-
-			expect(state.workflows).toHaveLength(0);
-		});
-
-		it('should clear selection if removed workflow was selected', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
-			state = selectWorkflow(state, 'wf1');
-
-			state = removeWorkflow(state, 'wf1');
-
-			expect(state.selectedId).toBeNull();
-		});
-
-		it('should keep selection if different workflow removed', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = createMockWorkflow('wf2', 'Workflow 2');
-
-			let state = addWorkflow(initialState, wf1);
-			state = addWorkflow(state, wf2);
-			state = selectWorkflow(state, 'wf1');
-
-			state = removeWorkflow(state, 'wf2');
-
-			expect(state.selectedId).toBe('wf1');
-			expect(state.workflows).toHaveLength(1);
-		});
-	});
-
-	describe('selectWorkflow', () => {
-		it('should select a workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
-
-			state = selectWorkflow(state, 'wf1');
-
-			expect(state.selectedId).toBe('wf1');
+			expect(get(selectedWorkflowId)).toBe('wf1');
 		});
 
 		it('should allow selecting null to deselect', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
-			state = selectWorkflow(state, 'wf1');
+			workflowStore.select('wf1');
+			expect(get(selectedWorkflowId)).toBe('wf1');
 
-			state = selectWorkflow(state, null);
+			workflowStore.select(null);
+			expect(get(selectedWorkflowId)).toBeNull();
+		});
 
-			expect(state.selectedId).toBeNull();
+		it('should change selection', () => {
+			workflowStore.select('wf1');
+			expect(get(selectedWorkflowId)).toBe('wf1');
+
+			workflowStore.select('wf2');
+			expect(get(selectedWorkflowId)).toBe('wf2');
 		});
 	});
 
-	describe('setLoading', () => {
-		it('should set loading to true', () => {
-			const state = setLoading(initialState, true);
-			expect(state.loading).toBe(true);
+	describe('workflowStore.setSearchFilter', () => {
+		it('should set search filter', () => {
+			workflowStore.setSearchFilter('test query');
+
+			expect(get(workflowSearchFilter)).toBe('test query');
 		});
 
-		it('should set loading to false', () => {
-			let state = setLoading(initialState, true);
-			state = setLoading(state, false);
-			expect(state.loading).toBe(false);
+		it('should update search filter', () => {
+			workflowStore.setSearchFilter('first');
+			expect(get(workflowSearchFilter)).toBe('first');
+
+			workflowStore.setSearchFilter('second');
+			expect(get(workflowSearchFilter)).toBe('second');
 		});
 
-		it('should clear error when setting loading to true', () => {
-			let state = setError(initialState, 'Error');
-			state = setLoading(state, true);
-			expect(state.error).toBeNull();
-		});
-	});
+		it('should clear search filter with empty string', () => {
+			workflowStore.setSearchFilter('test');
+			expect(get(workflowSearchFilter)).toBe('test');
 
-	describe('setError', () => {
-		it('should set error message', () => {
-			const state = setError(initialState, 'Test error');
-			expect(state.error).toBe('Test error');
-			expect(state.loading).toBe(false);
-		});
-
-		it('should clear error with null', () => {
-			let state = setError(initialState, 'Test error');
-			state = setError(state, null);
-			expect(state.error).toBeNull();
+			workflowStore.setSearchFilter('');
+			expect(get(workflowSearchFilter)).toBe('');
 		});
 	});
 
-	describe('setLastResult', () => {
-		it('should set last result', () => {
-			const result = createMockResult();
-			const state = setLastResult(initialState, result);
+	describe('workflowStore.getSelected', () => {
+		it('should return selected workflow', async () => {
+			const mockWorkflows = [
+				createMockWorkflow('wf1', 'Workflow 1'),
+				createMockWorkflow('wf2', 'Workflow 2')
+			];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
 
-			expect(state.lastResult).toEqual(result);
-			expect(state.loading).toBe(false);
-			expect(state.error).toBeNull();
-		});
+			workflowStore.select('wf1');
 
-		it('should clear last result with null', () => {
-			const result = createMockResult();
-			let state = setLastResult(initialState, result);
-			state = setLastResult(state, null);
-
-			expect(state.lastResult).toBeNull();
-		});
-	});
-
-	describe('setWorkflows', () => {
-		it('should replace all workflows', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = createMockWorkflow('wf2', 'Workflow 2');
-
-			const state = setWorkflows(initialState, [wf1, wf2]);
-
-			expect(state.workflows).toHaveLength(2);
-			expect(state.loading).toBe(false);
-			expect(state.error).toBeNull();
-		});
-
-		it('should handle empty array', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, wf1);
-
-			state = setWorkflows(state, []);
-
-			expect(state.workflows).toHaveLength(0);
-		});
-	});
-
-	describe('updateWorkflowStatus', () => {
-		it('should update workflow status', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
-
-			state = updateWorkflowStatus(state, 'wf1', 'running');
-
-			expect(state.workflows[0].status).toBe('running');
-		});
-
-		it('should update workflow updated_at', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const originalDate = workflow.updated_at;
-			let state = addWorkflow(initialState, workflow);
-
-			// Wait a bit to ensure different timestamp
-			state = updateWorkflowStatus(state, 'wf1', 'completed');
-
-			expect(state.workflows[0].updated_at.getTime()).toBeGreaterThanOrEqual(
-				originalDate.getTime()
-			);
-		});
-	});
-
-	describe('getSelectedWorkflow', () => {
-		it('should return selected workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			let state = addWorkflow(initialState, workflow);
-			state = selectWorkflow(state, 'wf1');
-
-			const selected = getSelectedWorkflow(state);
-
+			const selected = workflowStore.getSelected();
 			expect(selected?.id).toBe('wf1');
+			expect(selected?.name).toBe('Workflow 1');
 		});
 
-		it('should return undefined when nothing selected', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const state = addWorkflow(initialState, workflow);
+		it('should return undefined when nothing selected', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Workflow 1')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
 
-			const selected = getSelectedWorkflow(state);
+			const selected = workflowStore.getSelected();
+			expect(selected).toBeUndefined();
+		});
 
+		it('should return undefined when selected workflow does not exist', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Workflow 1')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			workflowStore.select('nonexistent');
+
+			const selected = workflowStore.getSelected();
 			expect(selected).toBeUndefined();
 		});
 	});
 
-	describe('getWorkflowsByStatus', () => {
-		it('should filter workflows by status', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = { ...createMockWorkflow('wf2', 'Workflow 2'), status: 'running' as const };
-			const wf3 = { ...createMockWorkflow('wf3', 'Workflow 3'), status: 'completed' as const };
+	describe('workflowStore.reset', () => {
+		it('should reset to initial state', async () => {
+			// Load some workflows
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
 
-			let state = addWorkflow(initialState, wf1);
-			state = addWorkflow(state, wf2);
-			state = addWorkflow(state, wf3);
+			// Select a workflow and set filter
+			workflowStore.select('wf1');
+			workflowStore.setSearchFilter('test');
 
-			const idleWorkflows = getWorkflowsByStatus(state, 'idle');
-			const runningWorkflows = getWorkflowsByStatus(state, 'running');
+			// Reset
+			workflowStore.reset();
 
-			expect(idleWorkflows).toHaveLength(1);
-			expect(runningWorkflows).toHaveLength(1);
+			expect(get(workflows)).toEqual([]);
+			expect(get(selectedWorkflowId)).toBeNull();
+			expect(get(workflowsLoading)).toBe(false);
+			expect(get(workflowsError)).toBeNull();
+			expect(get(workflowSearchFilter)).toBe('');
 		});
 
-		it('should return empty array for non-matching status', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const state = addWorkflow(initialState, workflow);
+		it('should clear error state', async () => {
+			vi.mocked(invoke).mockRejectedValue(new Error('Test error'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('Test error');
 
-			const errorWorkflows = getWorkflowsByStatus(state, 'error');
+			workflowStore.reset();
 
-			expect(errorWorkflows).toHaveLength(0);
-		});
-	});
-
-	describe('hasWorkflow', () => {
-		it('should return true for existing workflow', () => {
-			const workflow = createMockWorkflow('wf1', 'Workflow 1');
-			const state = addWorkflow(initialState, workflow);
-
-			expect(hasWorkflow(state, 'wf1')).toBe(true);
-		});
-
-		it('should return false for non-existing workflow', () => {
-			expect(hasWorkflow(initialState, 'nonexistent')).toBe(false);
+			expect(get(workflowsError)).toBeNull();
 		});
 	});
 
-	describe('getWorkflowCount', () => {
-		it('should return 0 for empty state', () => {
-			expect(getWorkflowCount(initialState)).toBe(0);
+	describe('derived store: selectedWorkflow', () => {
+		it('should return selected workflow object', async () => {
+			const mockWorkflows = [
+				createMockWorkflow('wf1', 'Workflow 1'),
+				createMockWorkflow('wf2', 'Workflow 2')
+			];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			workflowStore.select('wf2');
+
+			const selected = get(selectedWorkflow);
+			expect(selected?.id).toBe('wf2');
+			expect(selected?.name).toBe('Workflow 2');
 		});
 
-		it('should return correct count', () => {
-			const wf1 = createMockWorkflow('wf1', 'Workflow 1');
-			const wf2 = createMockWorkflow('wf2', 'Workflow 2');
+		it('should return null when nothing selected', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Workflow 1')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
 
-			let state = addWorkflow(initialState, wf1);
-			state = addWorkflow(state, wf2);
+			const selected = get(selectedWorkflow);
+			expect(selected).toBeNull();
+		});
 
-			expect(getWorkflowCount(state)).toBe(2);
+		it('should return null when selected workflow does not exist', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Workflow 1')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			workflowStore.select('nonexistent');
+
+			const selected = get(selectedWorkflow);
+			expect(selected).toBeNull();
+		});
+	});
+
+	describe('derived store: filteredWorkflows', () => {
+		const mockWorkflows = [
+			createMockWorkflow('wf1', 'Database Migration'),
+			createMockWorkflow('wf2', 'API Testing'),
+			createMockWorkflow('wf3', 'Database Backup')
+		];
+
+		beforeEach(async () => {
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+		});
+
+		it('should return all workflows when filter is empty', () => {
+			const filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(3);
+		});
+
+		it('should filter workflows by name (case insensitive)', () => {
+			workflowStore.setSearchFilter('database');
+
+			const filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(2);
+			expect(filtered.map((w) => w.id)).toEqual(['wf1', 'wf3']);
+		});
+
+		it('should filter workflows case insensitively', () => {
+			workflowStore.setSearchFilter('DATABASE');
+
+			const filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(2);
+		});
+
+		it('should return empty array when no matches', () => {
+			workflowStore.setSearchFilter('nonexistent');
+
+			const filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(0);
+		});
+
+		it('should update when filter changes', () => {
+			workflowStore.setSearchFilter('api');
+			let filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(1);
+			expect(filtered[0].id).toBe('wf2');
+
+			workflowStore.setSearchFilter('migration');
+			filtered = get(filteredWorkflows);
+			expect(filtered).toHaveLength(1);
+			expect(filtered[0].id).toBe('wf1');
+		});
+
+		it('should show all workflows when filter is cleared', () => {
+			workflowStore.setSearchFilter('database');
+			expect(get(filteredWorkflows)).toHaveLength(2);
+
+			workflowStore.setSearchFilter('');
+			expect(get(filteredWorkflows)).toHaveLength(3);
+		});
+	});
+
+	describe('derived stores: basic getters', () => {
+		it('should expose workflows array', async () => {
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			expect(get(workflows)).toEqual(mockWorkflows);
+		});
+
+		it('should expose selectedWorkflowId', () => {
+			workflowStore.select('wf1');
+			expect(get(selectedWorkflowId)).toBe('wf1');
+		});
+
+		it('should expose workflowsLoading', async () => {
+			expect(get(workflowsLoading)).toBe(false);
+
+			const promise = workflowStore.loadWorkflows();
+			// Note: Loading state is set synchronously before await
+			await promise;
+
+			expect(get(workflowsLoading)).toBe(false);
+		});
+
+		it('should expose workflowsError', async () => {
+			vi.mocked(invoke).mockRejectedValue(new Error('Test error'));
+			await workflowStore.loadWorkflows();
+
+			expect(get(workflowsError)).toBe('Test error');
+		});
+
+		it('should expose workflowSearchFilter', () => {
+			workflowStore.setSearchFilter('test');
+			expect(get(workflowSearchFilter)).toBe('test');
+		});
+	});
+
+	describe('store subscription', () => {
+		it('should allow subscribing to store changes', async () => {
+			const states: WorkflowState[] = [];
+			const unsubscribe = workflowStore.subscribe((state) => {
+				states.push(state);
+			});
+
+			// Initial state
+			expect(states).toHaveLength(1);
+			expect(states[0].workflows).toEqual([]);
+
+			// Load workflows
+			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
+			vi.mocked(invoke).mockResolvedValue(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			// Should have captured state changes
+			expect(states.length).toBeGreaterThan(1);
+			expect(states[states.length - 1].workflows).toEqual(mockWorkflows);
+
+			unsubscribe();
 		});
 	});
 });
