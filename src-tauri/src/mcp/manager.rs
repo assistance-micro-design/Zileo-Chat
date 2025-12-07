@@ -52,10 +52,13 @@ use crate::models::mcp::{
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Tool cache TTL (1 hour)
+const TOOL_CACHE_TTL: Duration = Duration::from_secs(3600);
 
 /// MCP Manager
 ///
@@ -88,6 +91,8 @@ pub struct MCPManager {
     clients: RwLock<HashMap<String, MCPClient>>,
     /// Database client for persistence
     db: Arc<DBClient>,
+    /// Tool cache with TTL (server_name -> (tools, cached_at))
+    tool_cache: RwLock<HashMap<String, (Vec<MCPTool>, Instant)>>,
 }
 
 impl MCPManager {
@@ -107,6 +112,7 @@ impl MCPManager {
         Ok(Self {
             clients: RwLock::new(HashMap::new()),
             db,
+            tool_cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -195,15 +201,7 @@ impl MCPManager {
             "Spawning MCP server"
         );
 
-        // Check name uniqueness
-        {
-            let clients = self.clients.read().await;
-            if clients.contains_key(&config.name) {
-                return Err(MCPError::ServerAlreadyExists {
-                    server: config.name.clone(),
-                });
-            }
-        }
+        // NOTE: Caller (spawn_server or load_from_db) must verify name uniqueness before calling
 
         let name = config.name.clone();
         let client = MCPClient::connect(config.clone()).await?;
@@ -414,6 +412,11 @@ impl MCPManager {
             Err(e) => (false, serde_json::Value::Null, Some(e.to_string())),
         };
 
+        // Invalidate tool cache on failure
+        if !success {
+            self.invalidate_tool_cache(server_name).await;
+        }
+
         // Log to database (fire and forget)
         // Use MCPCallLogCreate without timestamp - SurrealDB generates via DEFAULT time::now()
         let log_entry = MCPCallLogCreate {
@@ -447,6 +450,9 @@ impl MCPManager {
 
     /// Lists tools available on a specific server by NAME.
     ///
+    /// Uses a cache with 1-hour TTL to avoid redundant calls.
+    /// Cache is automatically invalidated on tool call errors.
+    ///
     /// # Arguments
     ///
     /// * `server_name` - Server NAME (e.g., "Serena", "Context7")
@@ -455,12 +461,41 @@ impl MCPManager {
     ///
     /// Returns the list of tools, or empty list if server not found.
     pub async fn list_server_tools(&self, server_name: &str) -> Vec<MCPTool> {
+        // Check cache first
+        {
+            let cache = self.tool_cache.read().await;
+            if let Some((tools, cached_at)) = cache.get(server_name) {
+                if cached_at.elapsed() < TOOL_CACHE_TTL {
+                    debug!(server = %server_name, "Tool cache hit");
+                    return tools.clone();
+                }
+            }
+        }
+
+        // Cache miss or expired - fetch from client
+        debug!(server = %server_name, "Tool cache miss, fetching from client");
         let clients = self.clients.read().await;
-        // Clients are keyed by NAME
-        clients
+        let tools = clients
             .get(server_name)
             .map(|c| c.tools().to_vec())
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        // Update cache
+        if !tools.is_empty() {
+            let mut cache = self.tool_cache.write().await;
+            cache.insert(server_name.to_string(), (tools.clone(), Instant::now()));
+        }
+
+        tools
+    }
+
+    /// Invalidates the tool cache for a specific server.
+    ///
+    /// Call this when a tool call fails to force a refresh on next access.
+    pub async fn invalidate_tool_cache(&self, server_name: &str) {
+        let mut cache = self.tool_cache.write().await;
+        cache.remove(server_name);
+        debug!(server = %server_name, "Tool cache invalidated");
     }
 
     /// Lists all tools across all connected servers

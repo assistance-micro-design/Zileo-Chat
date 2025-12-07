@@ -30,8 +30,8 @@ use crate::models::{
 };
 use crate::security::Validator;
 use crate::state::AppState;
-use crate::tools::context::AgentToolContext;
 use crate::tools::constants::commands as cmd_const;
+use crate::tools::context::AgentToolContext;
 use crate::tools::registry::TOOL_REGISTRY;
 use std::sync::Arc;
 use tauri::State;
@@ -83,7 +83,8 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
     if !cmd_const::VALID_PROVIDERS.contains(&llm.provider.as_str()) {
         return Err(format!(
             "Invalid provider '{}'. Valid providers: {:?}",
-            llm.provider, cmd_const::VALID_PROVIDERS
+            llm.provider,
+            cmd_const::VALID_PROVIDERS
         ));
     }
 
@@ -97,10 +98,12 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
     }
 
     // Validate temperature
-    if llm.temperature < cmd_const::MIN_TEMPERATURE || llm.temperature > cmd_const::MAX_TEMPERATURE {
+    if llm.temperature < cmd_const::MIN_TEMPERATURE || llm.temperature > cmd_const::MAX_TEMPERATURE
+    {
         return Err(format!(
             "Temperature must be between {} and {}",
-            cmd_const::MIN_TEMPERATURE, cmd_const::MAX_TEMPERATURE
+            cmd_const::MIN_TEMPERATURE,
+            cmd_const::MAX_TEMPERATURE
         ));
     }
 
@@ -108,7 +111,8 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
     if llm.max_tokens < cmd_const::MIN_MAX_TOKENS || llm.max_tokens > cmd_const::MAX_MAX_TOKENS {
         return Err(format!(
             "max_tokens must be between {} and {}",
-            cmd_const::MIN_MAX_TOKENS, cmd_const::MAX_MAX_TOKENS
+            cmd_const::MIN_MAX_TOKENS,
+            cmd_const::MAX_MAX_TOKENS
         ));
     }
 

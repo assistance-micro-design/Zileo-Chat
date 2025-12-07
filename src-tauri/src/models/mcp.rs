@@ -509,3 +509,21 @@ mod tests {
         assert!(create.description.is_none());
     }
 }
+
+/// MCP latency percentile metrics
+///
+/// Provides performance statistics for MCP server tool calls,
+/// including p50, p95, and p99 latency percentiles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MCPLatencyMetrics {
+    /// MCP server name
+    pub server_name: String,
+    /// 50th percentile latency in milliseconds (median)
+    pub p50_ms: f64,
+    /// 95th percentile latency in milliseconds
+    pub p95_ms: f64,
+    /// 99th percentile latency in milliseconds
+    pub p99_ms: f64,
+    /// Total number of tool calls in the time window
+    pub total_calls: i64,
+}

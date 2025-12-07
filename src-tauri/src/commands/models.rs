@@ -70,7 +70,8 @@ fn validate_provider_string(provider: &str) -> Result<ProviderType, String> {
     provider.parse::<ProviderType>().map_err(|_| {
         format!(
             "Invalid provider '{}'. Valid providers: {:?}",
-            provider, cmd_const::VALID_MODEL_PROVIDERS
+            provider,
+            cmd_const::VALID_MODEL_PROVIDERS
         )
     })
 }

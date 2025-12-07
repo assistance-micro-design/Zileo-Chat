@@ -38,6 +38,7 @@ use crate::mcp::{
     MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
 };
 use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
+use lazy_static::lazy_static;
 use reqwest::Client;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
@@ -45,6 +46,22 @@ use tracing::{debug, info, warn};
 
 /// Default timeout for HTTP operations (30 seconds)
 const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
+
+lazy_static! {
+    /// Shared HTTP client for connection pooling
+    ///
+    /// Reuses TCP/TLS connections across all MCPHttpHandle instances.
+    /// Configured with:
+    /// - 5 idle connections per host
+    /// - 90 second idle timeout
+    /// - 30 second request timeout
+    static ref SHARED_HTTP_CLIENT: Client = Client::builder()
+        .pool_max_idle_per_host(5)
+        .pool_idle_timeout(Duration::from_secs(90))
+        .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
+        .build()
+        .expect("Failed to create shared HTTP client");
+}
 
 /// MCP HTTP Transport Handle
 ///
@@ -94,6 +111,8 @@ pub struct MCPHttpHandle {
     server_info: Option<(String, String)>,
     /// Whether the connection is active
     connected: bool,
+    /// Custom headers for this connection (API key, etc.)
+    headers: reqwest::header::HeaderMap,
 }
 
 impl MCPHttpHandle {
@@ -167,14 +186,8 @@ impl MCPHttpHandle {
             }
         }
 
-        let client = Client::builder()
-            .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
-            .default_headers(headers)
-            .build()
-            .map_err(|e| MCPError::ConnectionFailed {
-                server: config.name.clone(),
-                message: format!("Failed to build HTTP client: {}", e),
-            })?;
+        // Use shared client for connection pooling
+        let client = SHARED_HTTP_CLIENT.clone();
 
         let mut handle = Self {
             config,
@@ -186,6 +199,7 @@ impl MCPHttpHandle {
             request_id: AtomicI64::new(1),
             server_info: None,
             connected: false,
+            headers,
         };
 
         // Test connection with a simple request
@@ -211,12 +225,16 @@ impl MCPHttpHandle {
         );
 
         // Try a HEAD request to check if the endpoint is reachable
-        let response = self.client.head(&self.base_url).send().await.map_err(|e| {
-            MCPError::ConnectionFailed {
+        let response = self
+            .client
+            .head(&self.base_url)
+            .headers(self.headers.clone())
+            .send()
+            .await
+            .map_err(|e| MCPError::ConnectionFailed {
                 server: self.config.name.clone(),
                 message: format!("Failed to connect to HTTP endpoint: {}", e),
-            }
-        })?;
+            })?;
 
         // Accept 2xx, 4xx (might require auth), or 405 (method not allowed - means server is there)
         let status = response.status();
@@ -464,6 +482,7 @@ impl MCPHttpHandle {
         let response = self
             .client
             .post(&self.base_url)
+            .headers(self.headers.clone())
             .json(&request)
             .send()
             .await
@@ -534,6 +553,7 @@ impl MCPHttpHandle {
         let response = self
             .client
             .post(&self.base_url)
+            .headers(self.headers.clone())
             .json(&notification)
             .send()
             .await
@@ -624,12 +644,17 @@ impl MCPHttpHandle {
 impl Drop for MCPHttpHandle {
     fn drop(&mut self) {
         if self.connected {
-            // Note: Cannot do async cleanup in drop
-            // Caller should call disconnect() before dropping
-            debug!(
-                server_id = %self.config.id,
-                "MCPHttpHandle dropped while still connected"
+            let server_id = self.config.id.clone();
+
+            // Log that we're dropping without explicit disconnect
+            // The shared HTTP client's connection pool will handle cleanup
+            warn!(
+                server_id = %server_id,
+                "MCPHttpHandle dropped while connected - connection will timeout in pool"
             );
+
+            // Mark as disconnected to prevent double-cleanup
+            self.connected = false;
         }
     }
 }

@@ -288,6 +288,7 @@ async fn main() -> anyhow::Result<()> {
             commands::mcp::stop_mcp_server,
             commands::mcp::list_mcp_tools,
             commands::mcp::call_mcp_tool,
+            commands::mcp::get_mcp_latency_metrics,
             // Migration commands (Memory Tool Phase 2 + MCP HTTP)
             commands::migration::migrate_memory_schema,
             commands::migration::get_memory_schema_status,

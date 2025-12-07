@@ -171,6 +171,23 @@ export interface MCPToolCallResult {
 }
 
 /**
+ * MCP latency percentile metrics.
+ * Provides performance statistics for MCP server tool calls.
+ */
+export interface MCPLatencyMetrics {
+	/** Name of the MCP server */
+	server_name: string;
+	/** 50th percentile latency in milliseconds (median) */
+	p50_ms: number;
+	/** 95th percentile latency in milliseconds */
+	p95_ms: number;
+	/** 99th percentile latency in milliseconds */
+	p99_ms: number;
+	/** Total number of tool calls in the time window */
+	total_calls: number;
+}
+
+/**
  * Default values for MCP server configuration.
  */
 export const MCP_DEFAULTS = {

@@ -36,7 +36,8 @@
 //! - [`call_mcp_tool`] - Execute a tool on an MCP server
 
 use crate::models::mcp::{
-    MCPServer, MCPServerConfig, MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
+    MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPTestResult, MCPTool, MCPToolCallRequest,
+    MCPToolCallResult,
 };
 use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
@@ -142,7 +143,10 @@ fn validate_mcp_description(description: Option<&str>) -> Result<Option<String>,
 /// - No shell metacharacters in arguments (basic protection)
 fn validate_mcp_args(args: &[String]) -> Result<Vec<String>, String> {
     if args.len() > cmd_const::MAX_MCP_ARGS_COUNT {
-        return Err(format!("Too many arguments (max {})", cmd_const::MAX_MCP_ARGS_COUNT));
+        return Err(format!(
+            "Too many arguments (max {})",
+            cmd_const::MAX_MCP_ARGS_COUNT
+        ));
     }
 
     let validated: Vec<String> = args
@@ -152,7 +156,8 @@ fn validate_mcp_args(args: &[String]) -> Result<Vec<String>, String> {
             if arg.len() > cmd_const::MAX_MCP_ARG_LEN {
                 return Err(format!(
                     "Argument {} exceeds maximum length of {} characters",
-                    i, cmd_const::MAX_MCP_ARG_LEN
+                    i,
+                    cmd_const::MAX_MCP_ARG_LEN
                 ));
             }
             // Basic shell metacharacter protection (not comprehensive, defense in depth)
@@ -798,6 +803,87 @@ pub async fn call_mcp_tool(
         "MCP tool call completed"
     );
     Ok(result)
+}
+
+/// Returns latency percentile metrics (p50, p95, p99) for MCP servers.
+///
+/// Queries the `mcp_call_log` table for the last hour of data and
+/// calculates percentile latencies per server. This provides insight
+/// into MCP tool call performance over time.
+///
+/// # Arguments
+///
+/// * `server_name` - Optional filter to a specific server (None = all servers)
+///
+/// # Returns
+///
+/// Vector of [`MCPLatencyMetrics`] with percentile values per server.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The server name is invalid (if provided)
+/// - Database query fails
+#[tauri::command]
+#[instrument(name = "get_mcp_latency_metrics", skip(state))]
+pub async fn get_mcp_latency_metrics(
+    server_name: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<MCPLatencyMetrics>, String> {
+    // Validate server_name if provided
+    let filter = server_name
+        .map(|n| validate_mcp_server_id(&n))
+        .transpose()?;
+
+    info!(server = ?filter, "Fetching MCP latency metrics");
+
+    // Build query using SurrealDB percentile function
+    let query = match &filter {
+        Some(name) => {
+            // Use JSON string encoding for proper escaping
+            let json_name = serde_json::to_string(name).map_err(|e| e.to_string())?;
+            format!(
+                r#"SELECT
+                    server_name,
+                    math::percentile(duration_ms, 0.50) AS p50_ms,
+                    math::percentile(duration_ms, 0.95) AS p95_ms,
+                    math::percentile(duration_ms, 0.99) AS p99_ms,
+                    count() AS total_calls
+                FROM mcp_call_log
+                WHERE timestamp > time::now() - 1h AND server_name = {}
+                GROUP BY server_name"#,
+                json_name
+            )
+        }
+        None => r#"SELECT
+            server_name,
+            math::percentile(duration_ms, 0.50) AS p50_ms,
+            math::percentile(duration_ms, 0.95) AS p95_ms,
+            math::percentile(duration_ms, 0.99) AS p99_ms,
+            count() AS total_calls
+        FROM mcp_call_log
+        WHERE timestamp > time::now() - 1h
+        GROUP BY server_name"#
+            .to_string(),
+    };
+
+    let mut response = state.db.db.query(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to query MCP latency metrics");
+        format!("Failed to query MCP latency metrics: {}", e)
+    })?;
+
+    let metrics: Vec<MCPLatencyMetrics> = response.take(0).map_err(|e| {
+        error!(error = %e, "Failed to parse MCP latency metrics");
+        format!("Failed to parse MCP latency metrics: {}", e)
+    })?;
+
+    info!(
+        server = ?filter,
+        count = metrics.len(),
+        "MCP latency metrics retrieved"
+    );
+
+    Ok(metrics)
 }
 
 #[cfg(test)]
