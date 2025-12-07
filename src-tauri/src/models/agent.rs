@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use serde::{Deserialize, Serialize};
+use crate::tools::registry::TOOL_REGISTRY;
 
 /// Agent lifecycle type
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,21 +93,13 @@ fn default_enable_thinking() -> bool {
 // Allow dead code until Phase 6: Full Agent Integration
 #[allow(dead_code)]
 impl AgentConfig {
-    /// Validates tool names against known tools.
+    /// Validates tool names against known tools in the registry.
     ///
     /// Returns a list of invalid tool names, or empty if all are valid.
-    ///
-    /// # Known Tools
-    /// - `MemoryTool` - Contextual memory with semantic search
-    /// - `TodoTool` - Task management for workflow decomposition
-    /// - `CalculatorTool` - Scientific calculator for mathematical operations
-    /// - `UserQuestionTool` - Ask questions to users via modal interface
     pub fn validate_tools(&self) -> Vec<String> {
-        const KNOWN_TOOLS: [&str; 4] = ["MemoryTool", "TodoTool", "CalculatorTool", "UserQuestionTool"];
-
         self.tools
             .iter()
-            .filter(|t| !KNOWN_TOOLS.contains(&t.as_str()))
+            .filter(|t| !TOOL_REGISTRY.has_tool(t))
             .cloned()
             .collect()
     }
@@ -211,9 +204,6 @@ impl From<&AgentConfig> for AgentSummary {
         }
     }
 }
-
-/// List of known tools that agents can use
-pub const KNOWN_TOOLS: [&str; 4] = ["MemoryTool", "TodoTool", "CalculatorTool", "UserQuestionTool"];
 
 #[cfg(test)]
 mod tests {
@@ -388,6 +378,10 @@ mod tests {
                 "MemoryTool".to_string(),
                 "TodoTool".to_string(),
                 "CalculatorTool".to_string(),
+                "UserQuestionTool".to_string(),
+                "SpawnAgentTool".to_string(),
+                "DelegateTaskTool".to_string(),
+                "ParallelTasksTool".to_string(),
             ],
             mcp_servers: vec![],
             system_prompt: "Test".to_string(),
@@ -396,5 +390,6 @@ mod tests {
         };
 
         assert!(config.has_valid_tools());
+        assert_eq!(config.tools.len(), 7);
     }
 }

@@ -92,3 +92,13 @@ pub struct UserQuestionStreamPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
 }
+
+/// Response from user answering a question
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields read via serde deserialization, used in Tauri commands
+pub struct UserQuestionResponse {
+    pub question_id: String,
+    pub selected_options: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_response: Option<String>,
+}

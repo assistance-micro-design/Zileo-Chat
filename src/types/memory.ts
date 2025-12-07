@@ -41,8 +41,8 @@ export interface Memory {
   type: MemoryType;
   /** Text content of the memory */
   content: string;
-  /** Optional workflow ID for scoped memories (null = general) */
-  workflow_id?: string | null;
+  /** Optional workflow ID for scoped memories (absent = general) */
+  workflow_id?: string;
   /** Additional metadata */
   metadata: Record<string, unknown>;
   /** Creation timestamp (ISO string from backend) */

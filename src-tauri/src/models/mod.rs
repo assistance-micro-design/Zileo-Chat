@@ -33,7 +33,6 @@ pub mod workflow;
 
 pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
-    KNOWN_TOOLS,
 };
 pub use workflow::{
     Workflow, WorkflowCreate, WorkflowFullState, WorkflowMetrics, WorkflowResult, WorkflowStatus,

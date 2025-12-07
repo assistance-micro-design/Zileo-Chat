@@ -147,41 +147,12 @@ export interface AgentSummary {
   mcp_servers_count: number;
 }
 
-/**
- * Available tools that agents can use.
- * These correspond to functional tools implemented in the Rust backend.
- */
-export const AVAILABLE_TOOLS = [
-	'MemoryTool',
-	'TodoTool',
-	'CalculatorTool',
-	'UserQuestionTool',
-	'SpawnAgentTool',
-	'DelegateTaskTool',
-	'ParallelTasksTool'
-] as const;
-
-/**
- * Basic tools for memory and task management
- */
-export const BASIC_TOOLS = ['MemoryTool', 'TodoTool', 'CalculatorTool', 'UserQuestionTool'] as const;
-
-/**
- * Sub-agent orchestration tools
- */
-export const SUB_AGENT_TOOLS = ['SpawnAgentTool', 'DelegateTaskTool', 'ParallelTasksTool'] as const;
-
-/**
- * Type for available tool names
- */
-export type AvailableTool = (typeof AVAILABLE_TOOLS)[number];
-
-/**
- * Type for basic tool names
- */
-export type BasicToolName = (typeof BASIC_TOOLS)[number];
-
-/**
- * Type for sub-agent tool names
- */
-export type SubAgentToolName = (typeof SUB_AGENT_TOOLS)[number];
+// Re-export tool constants from centralized location
+export {
+  AVAILABLE_TOOLS,
+  BASIC_TOOLS,
+  SUB_AGENT_TOOLS,
+  type AvailableTool,
+  type BasicToolName,
+  type SubAgentToolName
+} from '$lib/constants/tools';

@@ -27,12 +27,12 @@
 use crate::agents::LLMAgent;
 use crate::models::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
-    KNOWN_TOOLS,
 };
 use crate::security::Validator;
 use crate::state::AppState;
 use crate::tools::context::AgentToolContext;
 use crate::tools::constants::commands as cmd_const;
+use crate::tools::registry::TOOL_REGISTRY;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -130,10 +130,11 @@ fn validate_tools(tools: &[String]) -> Result<Vec<String>, String> {
             continue;
         }
 
-        if !KNOWN_TOOLS.contains(&trimmed) {
+        if !TOOL_REGISTRY.has_tool(trimmed) {
             return Err(format!(
-                "Unknown tool '{}'. Known tools: {:?}",
-                trimmed, KNOWN_TOOLS
+                "Unknown tool '{}'. Available tools: {:?}",
+                trimmed,
+                TOOL_REGISTRY.available_tools()
             ));
         }
 

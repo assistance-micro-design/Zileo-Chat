@@ -291,6 +291,33 @@ import type { Workflow } from '../types/workflow';     // NO!
 
 The `$types` alias is configured in `svelte.config.js` and points to `src/types/`.
 
+### Nullability Convention
+
+TypeScript optional fields must follow this convention for proper synchronization with Rust `Option<T>`:
+
+| Rust Pattern | TypeScript Pattern | When to Use |
+|--------------|-------------------|-------------|
+| `Option<T>` with `skip_serializing_if` | `field?: T` | DB fields that are omitted when `None` |
+| `Option<T>` without skip | `field: T \| null` | Fields that serialize as explicit `null` |
+| Required field | `field: T` | Always present in JSON |
+
+**Examples**:
+```typescript
+// Rust: Option<String> with #[serde(skip_serializing_if = "Option::is_none")]
+// JSON: field absent when None, present with value when Some
+workflow_id?: string;  // CORRECT - field may be absent
+
+// Rust: Option<String> without skip_serializing_if
+// JSON: field is null when None, value when Some
+error_message: string | null;  // CORRECT - field is always present
+
+// INCORRECT patterns to avoid:
+workflow_id?: string | null;  // WRONG - mixing ? and | null
+workflow_id: string | undefined;  // WRONG - use ? instead
+```
+
+**Rule of thumb**: Check the Rust struct. If it has `#[serde(skip_serializing_if = "Option::is_none")]`, use `?:`. Otherwise, use `| null`.
+
 ## Internationalization (i18n)
 
 The application supports multiple languages (English and French) with a simple JSON-based translation system.
@@ -834,6 +861,38 @@ let env_str = serde_json::to_string(&config.env)?;  // {"API_KEY":"xxx"}
 let env: HashMap<String, String> = serde_json::from_str(env_str)?;
 ```
 This pattern applies to any field with dynamic/user-defined keys: `env`, `metadata`, `custom_fields`, etc.
+
+### Custom Deserializers Reference
+
+The project uses custom serde deserializers to handle SurrealDB's complex serialization formats. These are defined in `src-tauri/src/models/serde_utils.rs`.
+
+**`deserialize_thing_id`** - For record ID fields:
+```rust
+#[derive(Deserialize)]
+struct Record {
+    #[serde(deserialize_with = "deserialize_thing_id", default)]
+    id: String,
+    // other fields...
+}
+```
+Use when: Loading any record with an `id` field from SurrealDB.
+
+**`deserialize_workflow_status`** - For WorkflowStatus enum:
+```rust
+#[derive(Deserialize)]
+struct Workflow {
+    #[serde(deserialize_with = "deserialize_workflow_status")]
+    status: WorkflowStatus,
+}
+```
+Use when: Loading workflow records where status is stored as string.
+
+**When NOT to use custom deserializers**:
+- For structs created in Rust (not loaded from DB)
+- For fields that are not IDs or enums stored as strings
+- For new tables where you control the schema
+
+See `src-tauri/src/models/serde_utils.rs` for detailed documentation and examples.
 
 ## Security Considerations
 

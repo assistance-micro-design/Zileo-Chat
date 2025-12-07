@@ -14,9 +14,78 @@
 
 //! Serde utilities for SurrealDB compatibility.
 //!
-//! SurrealDB returns record IDs as `Thing` objects in format `table:id`,
-//! but our Rust structs expect plain strings. These utilities handle
-//! the conversion transparently during deserialization.
+//! # Overview
+//!
+//! SurrealDB SDK 2.x has serialization quirks that require custom deserializers.
+//! This module provides utilities to handle the various formats SurrealDB might
+//! return for record IDs and enum values.
+//!
+//! # Available Deserializers
+//!
+//! ## `deserialize_thing_id`
+//!
+//! Handles SurrealDB record IDs which can be returned in multiple formats:
+//! - Plain string: `"abc-123"`
+//! - Table-prefixed: `"workflow:abc-123"`
+//! - Thing object: `{ "tb": "workflow", "id": "abc-123" }`
+//! - Nested structures: `{ "id": { "String": "abc-123" } }`
+//!
+//! ### Usage
+//! ```ignore
+//! use crate::models::serde_utils::deserialize_thing_id;
+//!
+//! #[derive(Deserialize)]
+//! struct MyRecord {
+//!     #[serde(deserialize_with = "deserialize_thing_id", default)]
+//!     id: String,
+//!     // other fields...
+//! }
+//! ```
+//!
+//! ### When to Use
+//! - Any struct with an `id` field loaded from SurrealDB
+//! - When using `db.select()` or `db.query()` that returns records
+//! - NOT needed for manually constructed IDs
+//!
+//! ## `deserialize_workflow_status`
+//!
+//! Handles WorkflowStatus enum which SurrealDB may wrap in various formats:
+//! - Plain string: `"idle"`, `"running"`, `"completed"`, `"error"`
+//! - Enum wrapper: internal SurrealDB format
+//!
+//! ### Usage
+//! ```ignore
+//! use crate::models::serde_utils::deserialize_workflow_status;
+//! use crate::models::WorkflowStatus;
+//!
+//! #[derive(Deserialize)]
+//! struct Workflow {
+//!     #[serde(deserialize_with = "deserialize_workflow_status")]
+//!     status: WorkflowStatus,
+//! }
+//! ```
+//!
+//! ### When to Use
+//! - Any struct with WorkflowStatus field loaded from SurrealDB
+//! - When status is stored as string in DB but needs to be enum in Rust
+//!
+//! # Why Not Use Default Serde?
+//!
+//! SurrealDB SDK 2.x has internal types (like `Thing`) that serialize to complex
+//! structures. Standard `#[derive(Deserialize)]` fails because:
+//! 1. IDs come as objects, not strings
+//! 2. Enums are wrapped in internal enum variants
+//! 3. The format varies depending on query type
+//!
+//! These custom deserializers handle all possible formats transparently.
+//!
+//! # Adding New Deserializers
+//!
+//! When adding new custom deserializers:
+//! 1. Implement `de::Visitor` for your type
+//! 2. Handle `visit_str`, `visit_map`, and `visit_enum` at minimum
+//! 3. Add comprehensive tests for all expected formats
+//! 4. Document the formats handled
 
 use serde::{de, Deserialize, Deserializer};
 use std::fmt;
