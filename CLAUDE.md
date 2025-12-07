@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
 | Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
 | Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
-| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 99 Tauri commands) |
+| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 115 Tauri commands) |
 | Phase 6 | Pending | Integration & Polish (E2E tests, accessibility audit) |
 
 ### Functional Agent System (Complete)
@@ -687,6 +687,33 @@ let invalid = mcp_manager.validate_server_names(&names).await;
 - **Context7** [DELEGATE] - Documentation - 8 tools
 
 To assign: {"mcp_servers": ["Serena"]}
+```
+
+### MCP Latency Metrics (Phase 4 Optimization)
+
+Query percentile latency metrics for MCP tool calls:
+
+```typescript
+import type { MCPLatencyMetrics } from '$types/mcp';
+
+// Get metrics for all servers (last hour)
+const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {});
+
+// Get metrics for specific server
+const serenaMetrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {
+  serverName: 'Serena'
+});
+```
+
+**MCPLatencyMetrics Type**:
+```typescript
+interface MCPLatencyMetrics {
+  server_name: string;
+  p50_ms: number;   // 50th percentile latency
+  p95_ms: number;   // 95th percentile latency
+  p99_ms: number;   // 99th percentile latency
+  total_calls: number;
+}
 ```
 
 ## Database Schema (SurrealDB)

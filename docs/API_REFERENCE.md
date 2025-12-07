@@ -1201,6 +1201,43 @@ type MCPConfig = {
 
 ---
 
+### get_mcp_latency_metrics
+
+Retourne les metriques de latence (percentiles) pour les appels MCP.
+
+**Frontend**
+```typescript
+// All servers
+const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {});
+
+// Specific server
+const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {
+  serverName: 'Serena'
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_mcp_latency_metrics(
+    server_name: Option<String>
+) -> Result<Vec<MCPLatencyMetrics>, String>
+```
+
+**MCPLatencyMetrics Type**
+```typescript
+interface MCPLatencyMetrics {
+  server_name: string;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  total_calls: number;
+}
+```
+
+**Data Source** : Table `mcp_call_log`, derniere heure
+
+---
+
 ## Utilities
 
 ### count_tokens
