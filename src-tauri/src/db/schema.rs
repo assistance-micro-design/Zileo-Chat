@@ -48,7 +48,14 @@ DEFINE FIELD cost_usd ON message TYPE option<float>;
 DEFINE FIELD duration_ms ON message TYPE option<int>;
 DEFINE FIELD timestamp ON message TYPE datetime DEFAULT time::now();
 
--- Index for workflow message queries
+-- =============================================
+-- Index Review (OPT-DB-11): Write-Heavy Table Analysis
+-- =============================================
+-- message is a write-heavy table (every LLM response creates a record)
+-- Index trade-off: faster reads vs slower writes
+-- Keep both indexes as they are actively used:
+--   - message_workflow_idx: Required for loading conversation history
+--   - message_timestamp_idx: Required for chronological message display in UI
 DEFINE INDEX message_workflow_idx ON message FIELDS workflow_id;
 DEFINE INDEX message_timestamp_idx ON message FIELDS timestamp;
 
@@ -138,6 +145,14 @@ DEFINE FIELD result ON mcp_call_log TYPE object;
 DEFINE FIELD success ON mcp_call_log TYPE bool;
 DEFINE FIELD duration_ms ON mcp_call_log TYPE int;
 DEFINE FIELD timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();
+-- =============================================
+-- Index Review (OPT-DB-11): Write-Heavy Table Analysis
+-- =============================================
+-- mcp_call_log is write-heavy (every MCP tool call creates a record)
+-- Index trade-off: faster reads vs slower writes
+-- Keep both indexes as they are actively used:
+--   - mcp_call_workflow: Required for workflow-scoped MCP call history
+--   - mcp_call_server: Required for Phase 4 latency metrics (get_mcp_latency_metrics)
 DEFINE INDEX mcp_call_workflow ON mcp_call_log FIELDS workflow_id;
 DEFINE INDEX mcp_call_server ON mcp_call_log FIELDS server_name;
 

@@ -19,6 +19,22 @@ use surrealdb::{
 };
 use tracing::{debug, error, info, instrument, warn};
 
+// =========================================================================
+// OPT-DB-10: Query Statistics (Monitoring/Diagnostic)
+// =========================================================================
+
+/// Statistics returned from a query execution.
+///
+/// Used for monitoring and performance analysis.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct QueryStats {
+    /// Execution time in milliseconds
+    pub execution_time_ms: u64,
+    /// Number of rows returned
+    pub row_count: usize,
+}
+
 /// Database client for SurrealDB embedded operations
 pub struct DBClient {
     pub db: Surreal<Db>,
@@ -437,6 +453,63 @@ impl DBClient {
         info!("Transaction committed successfully");
         Ok(())
     }
+
+    // =========================================================================
+    // OPT-DB-10: Query with Stats (Monitoring/Diagnostic)
+    // =========================================================================
+
+    /// Executes a query with timing statistics for monitoring.
+    ///
+    /// Returns both the results and execution statistics.
+    /// Useful for performance profiling and query optimization analysis.
+    ///
+    /// # Arguments
+    /// * `query` - The SurrealQL query to execute
+    ///
+    /// # Example
+    /// ```ignore
+    /// let (results, stats) = db.query_with_stats::<Workflow>("SELECT * FROM workflow").await?;
+    /// println!("Query returned {} rows in {}ms", stats.row_count, stats.execution_time_ms);
+    /// ```
+    #[allow(dead_code)] // Prepared for monitoring/diagnostic use
+    #[instrument(name = "db_query_with_stats", skip(self), fields(query_len = query.len()))]
+    pub async fn query_with_stats<T>(&self, query: &str) -> Result<(Vec<T>, QueryStats)>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        use std::time::Instant;
+
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing query with stats");
+
+        let start = Instant::now();
+
+        let mut result = self.db.query(query).await.map_err(|e| {
+            error!(error = %e, "Query execution failed");
+            e
+        })?;
+
+        let data: Vec<T> = result.take(0).map_err(|e| {
+            error!(error = %e, "Failed to deserialize query results");
+            e
+        })?;
+
+        let elapsed = start.elapsed();
+        let stats = QueryStats {
+            execution_time_ms: elapsed.as_millis() as u64,
+            row_count: data.len(),
+        };
+
+        debug!(
+            result_count = stats.row_count,
+            execution_time_ms = stats.execution_time_ms,
+            "Query with stats completed"
+        );
+        Ok((data, stats))
+    }
+
+    // =========================================================================
+    // Transaction Support
+    // =========================================================================
 
     /// Executes a series of parameterized operations within a database transaction.
     ///

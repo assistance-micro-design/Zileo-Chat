@@ -165,10 +165,9 @@ impl Default for ToolRegistry {
     }
 }
 
-// Global singleton
-lazy_static::lazy_static! {
-    pub static ref TOOL_REGISTRY: ToolRegistry = ToolRegistry::new();
-}
+// Global singleton (OPT-8: migrated from lazy_static to once_cell)
+use once_cell::sync::Lazy;
+pub static TOOL_REGISTRY: Lazy<ToolRegistry> = Lazy::new(ToolRegistry::new);
 
 #[cfg(test)]
 mod tests {

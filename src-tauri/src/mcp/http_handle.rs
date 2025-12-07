@@ -38,7 +38,7 @@ use crate::mcp::{
     MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
 };
 use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
@@ -47,21 +47,21 @@ use tracing::{debug, info, warn};
 /// Default timeout for HTTP operations (30 seconds)
 const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
 
-lazy_static! {
-    /// Shared HTTP client for connection pooling
-    ///
-    /// Reuses TCP/TLS connections across all MCPHttpHandle instances.
-    /// Configured with:
-    /// - 5 idle connections per host
-    /// - 90 second idle timeout
-    /// - 30 second request timeout
-    static ref SHARED_HTTP_CLIENT: Client = Client::builder()
+/// Shared HTTP client for connection pooling (OPT-8: migrated from lazy_static to once_cell)
+///
+/// Reuses TCP/TLS connections across all MCPHttpHandle instances.
+/// Configured with:
+/// - 5 idle connections per host
+/// - 90 second idle timeout
+/// - 30 second request timeout
+static SHARED_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+    Client::builder()
         .pool_max_idle_per_host(5)
         .pool_idle_timeout(Duration::from_secs(90))
         .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
         .build()
-        .expect("Failed to create shared HTTP client");
-}
+        .expect("Failed to create shared HTTP client")
+});
 
 /// MCP HTTP Transport Handle
 ///

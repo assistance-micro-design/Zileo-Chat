@@ -40,6 +40,10 @@ pub struct AppState {
     #[allow(dead_code)]
     pub tool_factory: Arc<ToolFactory>,
     /// Embedding service for semantic search (configured via Settings UI)
+    ///
+    /// NOTE (OPT-DB-9): This uses a double-Arc pattern `Arc<RwLock<Option<Arc<T>>>>`.
+    /// Could be simplified to `Arc<RwLock<Option<T>>>` if EmbeddingService implements Clone.
+    /// Deferred as Nice-to-Have due to 12+ files affected. See optimization-db.md for details.
     #[allow(dead_code)]
     pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
     /// Cancellation tokens for streaming workflows (workflow_id -> CancellationToken)

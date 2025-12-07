@@ -327,27 +327,38 @@ pub async fn create_agent(
     // Generate UUID for new agent
     let agent_id = uuid::Uuid::new_v4().to_string();
 
-    // Build full AgentConfig
+    // Build full AgentConfig (OPT-7: destructure instead of cloning individual fields)
+    let AgentConfigCreate {
+        name,
+        lifecycle,
+        llm,
+        tools,
+        mcp_servers,
+        system_prompt,
+        max_tool_iterations,
+        enable_thinking,
+    } = validated;
+
+    // Persist to database - get lifecycle string before moving into AgentConfig
+    let lifecycle_str = match lifecycle {
+        Lifecycle::Permanent => "permanent",
+        Lifecycle::Temporary => "temporary",
+    };
+
     let agent_config = AgentConfig {
         id: agent_id.clone(),
-        name: validated.name.clone(),
-        lifecycle: validated.lifecycle.clone(),
-        llm: validated.llm.clone(),
-        tools: validated.tools.clone(),
-        mcp_servers: validated.mcp_servers.clone(),
-        system_prompt: validated.system_prompt.clone(),
-        max_tool_iterations: validated.max_tool_iterations,
-        enable_thinking: validated.enable_thinking,
+        name,
+        lifecycle,
+        llm,
+        tools,
+        mcp_servers,
+        system_prompt,
+        max_tool_iterations,
+        enable_thinking,
     };
 
     // Serialize fields for database (OPT-5 refactoring)
     let fields = serialize_agent_fields(&agent_config)?;
-
-    // Persist to database
-    let lifecycle_str = match validated.lifecycle {
-        Lifecycle::Permanent => "permanent",
-        Lifecycle::Temporary => "temporary",
-    };
 
     let query = format!(
         "CREATE agent:`{}` CONTENT {{
