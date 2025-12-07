@@ -570,7 +570,7 @@ let query = QueryBuilder::new("memory")
 #### `tools/constants.rs` - Centralized Constants
 
 ```rust
-use crate::tools::constants::{memory, todo, user_question, sub_agent, commands};
+use crate::tools::constants::{memory, todo, user_question, sub_agent, commands, query_limits};
 
 // Memory tool constants
 let max = memory::MAX_CONTENT_LENGTH;  // 50_000
@@ -596,6 +596,12 @@ let valid_providers = cmd_const::VALID_PROVIDERS;           // &["Mistral", "Oll
 let max_mcp_name = cmd_const::MAX_MCP_SERVER_NAME_LEN;      // 64
 let max_tool_name = cmd_const::MAX_TOOL_NAME_LEN;           // 128
 let max_message = cmd_const::MAX_MESSAGE_CONTENT_LEN;       // 100_000
+
+// Query limits (OPT-DB-8) - Prevent memory explosion
+let list_limit = query_limits::DEFAULT_LIST_LIMIT;          // 1000
+let models_limit = query_limits::DEFAULT_MODELS_LIMIT;      // 100
+let mcp_logs_limit = query_limits::DEFAULT_MCP_LOGS_LIMIT;  // 500
+let messages_limit = query_limits::DEFAULT_MESSAGES_LIMIT;  // 500
 ```
 
 #### `tools/response.rs` - JSON Response Builder
@@ -922,9 +928,105 @@ Use when: Loading workflow records where status is stored as string.
 
 See `src-tauri/src/models/serde_utils.rs` for detailed documentation and examples.
 
+### Parameterized Queries (Phase 5 Security)
+
+Use parameterized queries to prevent SQL injection. The `DBClient` provides helper methods:
+
+**`query_with_params`** - For SELECT queries with bind parameters:
+```rust
+// Use $param placeholders and bind() for user input
+let params = vec![
+    ("type".to_string(), serde_json::json!("knowledge")),
+    ("workflow_id".to_string(), serde_json::json!(wf_id)),
+];
+let results: Vec<Memory> = db.query_with_params(
+    "SELECT * FROM memory WHERE type = $type AND workflow_id = $workflow_id",
+    params
+).await?;
+```
+
+**`query_json_with_params`** - For JSON results with bind parameters:
+```rust
+let results: Vec<serde_json::Value> = db.query_json_with_params(
+    "SELECT meta::id(id) AS id FROM table WHERE field = $value",
+    vec![("value".to_string(), serde_json::json!(user_input))]
+).await?;
+```
+
+**`execute_with_params`** - For mutations (INSERT/UPDATE/DELETE) with parameters:
+```rust
+// Use for write operations where you don't need the returned data
+db.execute_with_params(
+    "UPDATE task:`uuid` SET status = $status",
+    vec![("status".to_string(), serde_json::json!("completed"))]
+).await?;
+
+db.execute_with_params(
+    "DELETE FROM memory WHERE type = $type",
+    vec![("type".to_string(), serde_json::json!("knowledge"))]
+).await?;
+```
+
+**When to use parameterized queries**:
+- Any WHERE clause with user-provided values
+- UPDATE SET clauses with user data
+- String comparisons (type filters, status filters)
+- Content that may contain special characters (', ", \n)
+
+**When format!() is still safe**:
+- Backtick-escaped UUIDs validated via `Validator::validate_uuid()`
+- Numeric values (LIMIT, OFFSET)
+- Table names controlled by code (not user input)
+
+### Transaction Support (Phase 5)
+
+Use transactions for multi-query atomic operations:
+
+**`transaction`** - For simple multi-query transactions:
+```rust
+db.transaction(vec![
+    "CREATE workflow:`123` CONTENT { name: 'Test' }".to_string(),
+    "CREATE message:`456` CONTENT { workflow_id: '123' }".to_string(),
+]).await?;  // Rolls back on any failure
+```
+
+**`transaction_with_params`** - For parameterized transactions:
+```rust
+db.transaction_with_params(vec![
+    (
+        "CREATE workflow:`123` CONTENT $data".to_string(),
+        vec![("data".to_string(), json!({"name": "Test"}))]
+    ),
+    (
+        "UPDATE agent:`456` SET status = $status".to_string(),
+        vec![("status".to_string(), json!("active"))]
+    ),
+]).await?;  // Rolls back on any failure
+```
+
+### Query Limits (Phase 5 OPT-DB-8)
+
+All list queries must include LIMIT to prevent memory explosion. Use constants from `tools/constants.rs`:
+
+```rust
+use crate::tools::constants::query_limits;
+
+// Default limits
+query_limits::DEFAULT_LIST_LIMIT    // 1000 - for list_memories, list_tasks
+query_limits::DEFAULT_MODELS_LIMIT  // 100  - for list_models
+query_limits::DEFAULT_MCP_LOGS_LIMIT // 500 - for MCP call logs
+query_limits::DEFAULT_MESSAGES_LIMIT // 500 - for message history
+
+// Example usage
+let query = format!(
+    "SELECT * FROM memory ORDER BY created_at DESC LIMIT {}",
+    query_limits::DEFAULT_LIST_LIMIT
+);
+```
+
 ## Security Considerations
 
-**Production-ready from v1** (Phase 0 Security Optimizations applied):
+**Production-ready from v1** (Phase 0 + Phase 5 Security Optimizations applied):
 - API keys stored via Tauri secure storage (OS keychain) + AES-256 encryption
 - API key validation: rejects newlines (HTTP header injection prevention)
 - Input validation on both frontend and backend via `Validator` struct
@@ -933,6 +1035,8 @@ See `src-tauri/src/models/serde_utils.rs` for detailed documentation and example
 - MCP env variable injection prevention (alphanumeric names, no shell metacharacters)
 - Strict CSP in `tauri.conf.json`: `default-src 'self'; script-src 'self'; frame-ancestors 'none'; object-src 'none'`
 - tauri-plugin-opener >= 2.2.1 (security patch)
+- **SQL injection prevention**: Parameterized queries via `query_with_params()`, `execute_with_params()` (Phase 5)
+- **Memory explosion protection**: Query LIMIT enforcement via `query_limits` constants (Phase 5)
 
 ## Code Quality Standards
 
