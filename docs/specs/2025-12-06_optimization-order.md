@@ -230,7 +230,7 @@ Phase 8 (Nice-to-Have) [Optionnel]
 | Phase | Status | % Complete | Notes |
 |-------|--------|------------|-------|
 | 0 | Complete | 100% | 2025-12-06 - SurrealDB 2.4.0, CSP, validations |
-| 1 | Complete | 100% | 2025-12-07 - Memory leaks fixed, Svelte 5.45.6, error utility |
+| 1 | Complete | 100% | 2025-12-07 - Memory leaks fixed, Svelte 5.45.6, SvelteKit 2.49.1, error utility |
 | 2 | Complete | 100% | 2025-12-07 - Cargo release profile, protocol-http, constants centralization, error messages |
 | 3 | Pending | 0% | - |
 | 4 | Pending | 0% | - |

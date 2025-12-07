@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **Zileo-Chat-3** is a desktop multi-agent application with a conversational interface, built using a modern stack:
-- **Frontend**: SvelteKit 2.49.0 + Svelte 5.43.14 + Vite 5.4.0
-- **Backend**: Rust 1.91.1 + Tauri 2.9.4
-- **Database**: SurrealDB 2.4.0 (embedded RocksDB for desktop)
+- **Frontend**: SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 5.4.21
+- **Backend**: Rust 1.91.1 + Tauri 2.9.3
+- **Database**: SurrealDB 2.4.0 (embedded RocksDB for desktop, protocol-http enabled)
 - **LLM Framework**: Rig.rs 0.24.0 (multi-provider abstraction)
 - **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
 - **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
@@ -475,6 +475,36 @@ $isLoading    // boolean
 $hasAgents    // boolean
 ```
 
+### Store Memory Management (Phase 1 Stability)
+
+Stores with Tauri event listeners implement cleanup methods to prevent memory leaks:
+
+```typescript
+// streaming.ts, validation.ts, userQuestion.ts all implement:
+store.cleanup()  // Removes all event listeners, resets state
+store.reset()    // Calls cleanup() + resets to initial state
+
+// Safety features:
+// - isInitialized flag prevents double initialization
+// - Warning logged if init() called twice
+// - Auto-cleanup on re-initialization
+```
+
+### Error Utility
+
+Use the centralized error utility for consistent error handling:
+
+```typescript
+import { getErrorMessage, formatErrorForDisplay } from '$lib/utils/error';
+
+try {
+  await someOperation();
+} catch (e) {
+  const message = getErrorMessage(e);  // Extracts message from any error type
+  console.error(message);
+}
+```
+
 ## Tool Development Patterns
 
 ### New Utility Modules
@@ -807,12 +837,15 @@ This pattern applies to any field with dynamic/user-defined keys: `env`, `metada
 
 ## Security Considerations
 
-**Production-ready from v1**:
+**Production-ready from v1** (Phase 0 Security Optimizations applied):
 - API keys stored via Tauri secure storage (OS keychain) + AES-256 encryption
-- Input validation on both frontend and backend
+- API key validation: rejects newlines (HTTP header injection prevention)
+- Input validation on both frontend and backend via `Validator` struct
 - Tauri allowlist for IPC commands (explicit permission model)
 - MCP servers run in isolated processes (Docker containers for external servers)
-- CSP configured in `tauri.conf.json`
+- MCP env variable injection prevention (alphanumeric names, no shell metacharacters)
+- Strict CSP in `tauri.conf.json`: `default-src 'self'; script-src 'self'; frame-ancestors 'none'; object-src 'none'`
+- tauri-plugin-opener >= 2.2.1 (security patch)
 
 ## Code Quality Standards
 

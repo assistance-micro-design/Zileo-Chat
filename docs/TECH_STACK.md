@@ -1,14 +1,14 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 5 Decembre 2025**
+> **Versions actuelles du projet : 7 Decembre 2025**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.49.0 | Svelte 5.43.14
-Backend   : Rust 1.91.1 + Tauri 2.9.4
-Database  : SurrealDB 2.4.0
+Frontend  : SvelteKit 2.49.1 | Svelte 5.45.6
+Backend   : Rust 1.91.1 + Tauri 2.9.3
+Database  : SurrealDB 2.4.0 (protocol-http enabled)
 Desktop   : Tauri (cross-platform)
 ```
 
@@ -17,11 +17,11 @@ Desktop   : Tauri (cross-platform)
 ### Frontend (package.json)
 
 **Core Framework**:
-- **svelte**: ^5.43.14
-- **@sveltejs/kit**: ^2.49.0
+- **svelte**: 5.45.6
+- **@sveltejs/kit**: 2.49.1
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^4.0.0
-- **vite**: ^5.4.0
+- **vite**: 5.4.21
 
 **TypeScript**:
 - **typescript**: ^5.9.3
@@ -65,7 +65,7 @@ Desktop   : Tauri (cross-platform)
 - **futures-util**: 0.3
 
 **Database**:
-- **surrealdb**: 2.4.0 (features: kv-rocksdb)
+- **surrealdb**: 2.4.0 (features: kv-rocksdb, protocol-http)
 
 **Serialization**:
 - **serde**: 1.0.228 (features: derive)
@@ -160,20 +160,23 @@ Desktop   : Tauri (cross-platform)
 ## Security
 
 ```json
-// Tauri v2 security (tauri.conf.json)
+// Tauri v2 security (tauri.conf.json) - Phase 0 hardened
 {
   "app": {
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     }
   }
 }
 ```
 
 **Security Features**:
-- **CSP**: Content Security Policy restricts resource loading
+- **CSP**: Strict Content Security Policy (frame-ancestors 'none', object-src 'none')
 - **API Key Storage**: OS keychain via `keyring` crate + AES-256 encryption
+- **API Key Validation**: Rejects newlines (HTTP header injection prevention)
+- **MCP Env Validation**: Shell injection prevention (alphanumeric names, no metacharacters)
 - **Tauri v2**: Capability-based permissions (no v1 allowlist)
+- **tauri-plugin-opener**: >= 2.2.1 (security patch)
 
 ## Build Outputs
 
@@ -214,10 +217,17 @@ cargo --version   # >= 1.91.1
 
 ## Version Update Notes
 
-**Dec 2025 - Actual Project Versions**:
-- Vite 5.4.0 used for compatibility with Node.js 20.19
-- Svelte 5.43.14 includes latest runes improvements
-- SvelteKit 2.49.0 stable release
+**7 Dec 2025 - Phase 0-2 Optimization Updates**:
+- Svelte 5.45.6 (upgraded from 5.43.14, Phase 1 stability)
+- SvelteKit 2.49.1 (fixes state_referenced_locally warnings)
+- Vite 5.4.21 for compatibility with Node.js 20.19
+- SurrealDB 2.4.0 with protocol-http feature enabled
+- Strict CSP policy with frame-ancestors 'none'
+- API key validation (newline rejection)
+- MCP env injection prevention
+- Release profile optimizations (lto, strip, codegen-units=1)
+
+**5 Dec 2025 - Initial Production Versions**:
 - Tauri 2.x with plugin-dialog and plugin-opener
 - SurrealDB 2.4.0 with kv-rocksdb for embedded desktop use
 - **rig-core 0.24.0** for multi-provider LLM abstraction (Mistral, Ollama)
