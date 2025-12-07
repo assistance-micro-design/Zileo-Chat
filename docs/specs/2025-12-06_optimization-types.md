@@ -314,14 +314,14 @@ time cargo build --release  # +5-10% pour generation types
 | OPT-3: Centraliser constantes | 1h | Moyen | P1 | Complete (Phase 3) |
 | OPT-4: Documenter deserializers | 1h | Faible | P2 | Complete (Phase 3) |
 | ~~OPT-5: Implementer specta~~ | 8-10h | Haut | - | **DIFFERE** |
-| OPT-6: Specialiser Record<> | 3h | Moyen | P3 | Optionnel (Phase 8) |
-| OPT-7: Validation Zod | 4h | Moyen | P3 | Optionnel (Phase 8) |
+| OPT-6: Specialiser Record<> | 3h | Moyen | P3 | Complete (Phase 8) |
+| OPT-7: Validation Zod | 4h | Moyen | P3 | Complete (Phase 8) |
 
 **Total Quick Wins (P1)**: 4-5h - COMPLETE
 **Total Strategique (P2)**: 1h - COMPLETE (OPT-5 differe)
-**Total Nice to Have (P3)**: 7h - OPTIONNEL
+**Total Nice to Have (P3)**: 7h - COMPLETE
 
-**Total restant**: ~7h (optionnel)
+**Total restant**: 0h (OPT-5 differe)
 
 ## Risques et Mitigations
 
@@ -340,7 +340,7 @@ time cargo build --release  # +5-10% pour generation types
 4. [x] Executer OPT-3 (constantes) - Complete Phase 3
 5. [x] Executer OPT-4 (deserializers docs) - Complete Phase 3
 6. [x] OPT-5 (specta) - **DIFFERE** (tauri-specta incompatible Tauri 2.9.x)
-7. [ ] OPT-6, OPT-7 - Optionnel Phase 8
+7. [x] OPT-6, OPT-7 - Complete Phase 8
 8. [ ] Surveiller sortie tauri-specta 2.0 stable pour reactivation OPT-5
 
 ## References

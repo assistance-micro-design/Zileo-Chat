@@ -32,6 +32,25 @@
 export type MemoryType = 'user_pref' | 'context' | 'knowledge' | 'decision';
 
 /**
+ * Metadata associated with a memory entry.
+ *
+ * These fields are commonly used but the object can contain additional
+ * custom fields as it maps to serde_json::Value in Rust.
+ */
+export interface MemoryMetadata {
+  /** Source of the memory (e.g., agent ID, "settings", "user") */
+  source?: string;
+  /** Classification tags for filtering and organization */
+  tags?: string[];
+  /** Relevance score from vector search (0-1) */
+  relevance_score?: number;
+  /** Embedding model used for vector storage */
+  embedding_model?: string;
+  /** Allow additional custom fields */
+  [key: string]: unknown;
+}
+
+/**
  * Memory entity for persistent context and RAG
  */
 export interface Memory {
@@ -44,7 +63,7 @@ export interface Memory {
   /** Optional workflow ID for scoped memories (absent = general) */
   workflow_id?: string;
   /** Additional metadata */
-  metadata: Record<string, unknown>;
+  metadata: MemoryMetadata;
   /** Creation timestamp (ISO string from backend) */
   created_at: string;
 }
@@ -58,7 +77,7 @@ export interface CreateMemoryParams {
   /** Text content of the memory */
   content: string;
   /** Additional metadata */
-  metadata?: Record<string, unknown>;
+  metadata?: MemoryMetadata;
   /** Optional workflow ID for scoped memories (None = general) */
   workflowId?: string;
 }

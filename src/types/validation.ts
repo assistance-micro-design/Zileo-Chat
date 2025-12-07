@@ -38,6 +38,89 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type ValidationStatus = 'pending' | 'approved' | 'rejected';
 
 /**
+ * Details for spawn sub-agent validation
+ */
+export interface SpawnValidationDetails {
+  /** Name of the sub-agent to spawn */
+  sub_agent_name: string;
+  /** Preview of the prompt (truncated to 200 chars) */
+  prompt_preview: string;
+  /** Full length of the prompt */
+  prompt_length: number;
+  /** Tools assigned to the sub-agent */
+  tools: string[];
+  /** MCP servers assigned to the sub-agent */
+  mcp_servers: string[];
+  /** Allow additional custom fields */
+  [key: string]: unknown;
+}
+
+/**
+ * Details for delegate operation validation
+ */
+export interface DelegateValidationDetails {
+  /** Target agent ID to delegate to */
+  target_agent_id: string;
+  /** Target agent name */
+  target_agent_name: string;
+  /** Preview of the prompt (truncated to 200 chars) */
+  prompt_preview: string;
+  /** Full length of the prompt */
+  prompt_length: number;
+  /** Allow additional custom fields */
+  [key: string]: unknown;
+}
+
+/**
+ * Task information for parallel batch validation
+ */
+export interface ParallelTaskInfo {
+  /** Agent ID for the task */
+  agent_id: string;
+  /** Preview of the prompt (truncated to 100 chars) */
+  prompt_preview: string;
+}
+
+/**
+ * Details for parallel batch operation validation
+ */
+export interface ParallelValidationDetails {
+  /** Number of tasks to execute in parallel */
+  task_count: number;
+  /** List of tasks with agent IDs and prompt previews */
+  tasks: ParallelTaskInfo[];
+  /** Allow additional custom fields */
+  [key: string]: unknown;
+}
+
+/**
+ * Generic validation details for operations without specific structure
+ */
+export interface GenericValidationDetails {
+  /** Optional file path for file operations */
+  path?: string;
+  /** Rejection reason (added when status changes to rejected) */
+  rejection_reason?: string;
+  /** Allow additional custom fields */
+  [key: string]: unknown;
+}
+
+/**
+ * Union type for all validation details.
+ *
+ * The structure depends on the ValidationType:
+ * - sub_agent with Spawn -> SpawnValidationDetails
+ * - sub_agent with Delegate -> DelegateValidationDetails
+ * - sub_agent with ParallelBatch -> ParallelValidationDetails
+ * - Other types -> GenericValidationDetails
+ */
+export type ValidationDetails =
+  | SpawnValidationDetails
+  | DelegateValidationDetails
+  | ParallelValidationDetails
+  | GenericValidationDetails;
+
+/**
  * Validation request entity
  */
 export interface ValidationRequest {
@@ -50,7 +133,7 @@ export interface ValidationRequest {
   /** Operation description */
   operation: string;
   /** Additional details about the operation */
-  details: Record<string, unknown>;
+  details: ValidationDetails;
   /** Risk level assessment */
   risk_level: RiskLevel;
   /** Current validation status */
