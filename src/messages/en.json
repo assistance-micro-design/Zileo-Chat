@@ -294,6 +294,7 @@
   "api_key_configured": "API key already configured",
   "api_key_delete": "Delete Key",
   "api_key_save": "Save API Key",
+  "api_key_confirm_save": "Are you sure you want to save this API key?",
 
   "modal_add_custom_model": "Add Custom Model",
   "modal_edit_model": "Edit Model",

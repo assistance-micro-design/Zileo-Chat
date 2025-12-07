@@ -34,6 +34,26 @@ import type {
 	MCPToolCallResult
 } from '$types/mcp';
 
+// ============================================================================
+// Cache Management (OPT-9)
+// ============================================================================
+
+interface MCPServerCache {
+	servers: MCPServer[] | null;
+	timestamp: number;
+}
+
+let mcpCache: MCPServerCache = { servers: null, timestamp: 0 };
+const MCP_CACHE_TTL = 30000; // 30 seconds
+
+/**
+ * Invalidates the MCP servers cache.
+ * Call this after any mutation (create/update/delete server).
+ */
+export function invalidateMCPCache(): void {
+	mcpCache = { servers: null, timestamp: 0 };
+}
+
 /**
  * State interface for the MCP store
  */
@@ -330,11 +350,25 @@ export function isServerNameTaken(
 // Async actions (Tauri IPC calls)
 
 /**
- * Loads all MCP servers from the backend
+ * Loads all MCP servers from the backend.
+ * Uses cache with 30s TTL to avoid duplicate API calls.
+ * @param forceRefresh - Force reload ignoring cache
  * @returns Promise resolving to array of servers
  */
-export async function loadServers(): Promise<MCPServer[]> {
-	return invoke<MCPServer[]>('list_mcp_servers');
+export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
+	const now = Date.now();
+	if (!forceRefresh && mcpCache.servers && (now - mcpCache.timestamp) < MCP_CACHE_TTL) {
+		return mcpCache.servers;
+	}
+
+	const servers = await invoke<MCPServer[]>('list_mcp_servers');
+
+	mcpCache = {
+		servers,
+		timestamp: now
+	};
+
+	return servers;
 }
 
 /**
@@ -343,7 +377,9 @@ export async function loadServers(): Promise<MCPServer[]> {
  * @returns Promise resolving to created server
  */
 export async function createServer(config: MCPServerConfig): Promise<MCPServer> {
-	return invoke<MCPServer>('create_mcp_server', { config });
+	const server = await invoke<MCPServer>('create_mcp_server', { config });
+	invalidateMCPCache();
+	return server;
 }
 
 /**
@@ -356,7 +392,9 @@ export async function updateServerConfig(
 	id: string,
 	config: MCPServerConfig
 ): Promise<MCPServer> {
-	return invoke<MCPServer>('update_mcp_server', { id, config });
+	const server = await invoke<MCPServer>('update_mcp_server', { id, config });
+	invalidateMCPCache();
+	return server;
 }
 
 /**
@@ -365,7 +403,8 @@ export async function updateServerConfig(
  * @returns Promise resolving when complete
  */
 export async function deleteServer(id: string): Promise<void> {
-	return invoke<void>('delete_mcp_server', { id });
+	await invoke<void>('delete_mcp_server', { id });
+	invalidateMCPCache();
 }
 
 /**

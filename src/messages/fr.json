@@ -294,6 +294,7 @@
   "api_key_configured": "Cle d'API deja configuree",
   "api_key_delete": "Supprimer la cle",
   "api_key_save": "Enregistrer la cle d'API",
+  "api_key_confirm_save": "Voulez-vous vraiment enregistrer cette cle d'API ?",
 
   "modal_add_custom_model": "Ajouter un modele personnalise",
   "modal_edit_model": "Modifier le modele",

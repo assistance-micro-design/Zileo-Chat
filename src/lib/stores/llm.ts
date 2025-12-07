@@ -35,6 +35,26 @@ import type {
 } from '$types/llm';
 
 // ============================================================================
+// Cache Management (OPT-9)
+// ============================================================================
+
+interface LLMDataCache {
+	data: { mistral: ProviderSettings; ollama: ProviderSettings; models: LLMModel[] } | null;
+	timestamp: number;
+}
+
+let llmCache: LLMDataCache = { data: null, timestamp: 0 };
+const LLM_CACHE_TTL = 30000; // 30 seconds
+
+/**
+ * Invalidates the LLM data cache.
+ * Call this after any mutation (create/update/delete model, update provider settings).
+ */
+export function invalidateLLMCache(): void {
+	llmCache = { data: null, timestamp: 0 };
+}
+
+// ============================================================================
 // Initial State
 // ============================================================================
 
@@ -430,7 +450,9 @@ export async function fetchModelByApiName(apiName: string, provider: ProviderTyp
  * @returns Promise resolving to created model
  */
 export async function createModel(data: CreateModelRequest): Promise<LLMModel> {
-	return invoke<LLMModel>('create_model', { data });
+	const model = await invoke<LLMModel>('create_model', { data });
+	invalidateLLMCache();
+	return model;
 }
 
 /**
@@ -440,7 +462,9 @@ export async function createModel(data: CreateModelRequest): Promise<LLMModel> {
  * @returns Promise resolving to updated model
  */
 export async function updateModel(id: string, data: UpdateModelRequest): Promise<LLMModel> {
-	return invoke<LLMModel>('update_model', { id, data });
+	const model = await invoke<LLMModel>('update_model', { id, data });
+	invalidateLLMCache();
+	return model;
 }
 
 /**
@@ -449,7 +473,9 @@ export async function updateModel(id: string, data: UpdateModelRequest): Promise
  * @returns Promise resolving to true if deleted
  */
 export async function deleteModel(id: string): Promise<boolean> {
-	return invoke<boolean>('delete_model', { id });
+	const result = await invoke<boolean>('delete_model', { id });
+	invalidateLLMCache();
+	return result;
 }
 
 /**
@@ -476,12 +502,14 @@ export async function updateProviderSettings(
 	baseUrl?: string
 ): Promise<ProviderSettings> {
 	// Tauri converts snake_case Rust params to camelCase in JS
-	return invoke<ProviderSettings>('update_provider_settings', {
+	const settings = await invoke<ProviderSettings>('update_provider_settings', {
 		provider,
 		enabled: enabled ?? null,
 		defaultModelId: defaultModelId ?? null,
 		baseUrl: baseUrl ?? null
 	});
+	invalidateLLMCache();
+	return settings;
 }
 
 /**
@@ -503,19 +531,32 @@ export async function seedBuiltinModels(): Promise<number> {
 
 /**
  * Loads all provider settings and models.
- * Convenience function to initialize the LLM state.
+ * Uses cache with 30s TTL to avoid duplicate API calls.
+ * @param forceRefresh - Force reload ignoring cache
  * @returns Promise resolving to object with providers and models
  */
-export async function loadAllLLMData(): Promise<{
+export async function loadAllLLMData(forceRefresh = false): Promise<{
 	mistral: ProviderSettings;
 	ollama: ProviderSettings;
 	models: LLMModel[];
 }> {
+	const now = Date.now();
+	if (!forceRefresh && llmCache.data && (now - llmCache.timestamp) < LLM_CACHE_TTL) {
+		return llmCache.data;
+	}
+
 	const [mistral, ollama, models] = await Promise.all([
 		loadProviderSettings('mistral'),
 		loadProviderSettings('ollama'),
 		loadModels()
 	]);
 
-	return { mistral, ollama, models };
+	const data = { mistral, ollama, models };
+
+	llmCache = {
+		data,
+		timestamp: now
+	};
+
+	return data;
 }

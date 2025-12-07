@@ -18,87 +18,52 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-Settings Page - Refactored with Design System Components
-Uses: Sidebar, NavItem, Card, Button, Input, Select, Badge, StatusIndicator
-Includes MCP server configuration section for managing external tool servers.
+Settings Page - Refactored with extracted section components (OPT-6)
+Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 -->
 
 <script lang="ts">
-	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
-	import type { LLMProvider } from '$types/security';
-	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
-	import type {
-		LLMModel,
-		ProviderType,
-		CreateModelRequest,
-		UpdateModelRequest,
-		LLMState
-	} from '$types/llm';
+	import type { ProviderType, ProviderSettings } from '$types/llm';
 	import { Sidebar } from '$lib/components/layout';
-	import { Card, Button, Input, Select, StatusIndicator, Modal, HelpButton } from '$lib/components/ui';
-	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
-	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
-	import { MemorySettings, MemoryList } from '$lib/components/settings/memory';
+	import { Card, HelpButton, StatusIndicator } from '$lib/components/ui';
 
-	/** Reference to MemorySettings for refreshing stats when memories change */
-	let memorySettingsRef: MemorySettings;
-	import { AgentSettings } from '$lib/components/settings/agents';
+	// Static imports for lightweight components
 	import { ValidationSettings } from '$lib/components/settings/validation';
 	import { PromptSettings } from '$lib/components/settings/prompts';
 	import { ImportExportSettings } from '$lib/components/settings/import-export';
-	import type { SelectOption } from '$lib/components/ui/Select.svelte';
+
+	// Extracted section components (OPT-6)
+	import MCPSection from '$lib/components/settings/MCPSection.svelte';
+	import LLMSection from '$lib/components/settings/LLMSection.svelte';
+	import APIKeysSection from '$lib/components/settings/APIKeysSection.svelte';
+
 	import { theme, type Theme } from '$lib/stores/theme';
-	import {
-		createInitialMCPState,
-		setServers,
-		addServer,
-		removeServer,
-		updateServer,
-		setMCPLoading,
-		setMCPError,
-		setTestingServer,
-		loadServers,
-		createServer,
-		updateServerConfig,
-		deleteServer,
-		testServer,
-		startServer,
-		stopServer,
-		type MCPState
-	} from '$lib/stores/mcp';
-	import {
-		createInitialLLMState,
-		setLLMLoading,
-		setLLMError,
-		setModels,
-		setProviderSettings,
-		addModel as addModelToState,
-		updateModelInState,
-		removeModel,
-		getModelsByProvider,
-		getAllModels,
-		getDefaultModel,
-		hasApiKey as hasApiKeyInState,
-		loadAllLLMData,
-		createModel,
-		updateModel,
-		deleteModel,
-		updateProviderSettings
-	} from '$lib/stores/llm';
 	import { agentStore } from '$lib/stores/agents';
 	import { promptStore } from '$lib/stores/prompts';
+
+	// ============================================================================
+	// OPT-8: Lazy Loading for Heavy Components
+	// ============================================================================
+
+	/** Lazy loaded component types */
+	type LazyMemorySettings = typeof import('$lib/components/settings/memory/MemorySettings.svelte').default;
+	type LazyMemoryList = typeof import('$lib/components/settings/memory/MemoryList.svelte').default;
+	type LazyAgentSettings = typeof import('$lib/components/settings/agents/AgentSettings.svelte').default;
+
+	/** Lazy loaded component references */
+	let MemorySettingsComponent = $state<LazyMemorySettings | null>(null);
+	let MemoryListComponent = $state<LazyMemoryList | null>(null);
+	let AgentSettingsComponent = $state<LazyAgentSettings | null>(null);
+
 	import {
 		Globe,
 		Cpu,
 		Palette,
-		Sparkles,
-		Server,
+		Plug,
 		Sun,
 		Moon,
 		ShieldCheck,
-		Plus,
-		Plug,
 		Brain,
 		Bot,
 		Settings,
@@ -106,37 +71,23 @@ Includes MCP server configuration section for managing external tool servers.
 		FolderSync
 	} from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
-	import { createModalController } from '$lib/utils/modal.svelte';
-	import type { ModalController } from '$lib/utils/modal.svelte';
-
-	/** Settings state (for API key input) */
-	let settings = $state({
-		provider: 'Mistral' as LLMProvider,
-		apiKey: ''
-	});
 
 	/** UI state */
-	let saving = $state(false);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let activeSection = $state('providers');
 	let sidebarCollapsed = $state(false);
 
-	/** MCP state */
-	let mcpState = $state<MCPState>(createInitialMCPState());
-	const mcpModal: ModalController<MCPServerConfig> = createModalController<MCPServerConfig>();
-	let mcpSaving = $state(false);
-	let testResult = $state<MCPTestResult | null>(null);
-	let testError = $state<string | null>(null);
-	let showTestModal = $state(false);
-	let testingServerConfig = $state<MCPServerConfig | null>(null);
+	/** Component references for reload */
+	let mcpSectionRef: MCPSection;
+	let llmSectionRef: LLMSection;
 
-	/** LLM state */
-	let llmState = $state<LLMState>(createInitialLLMState());
-	const modelModal: ModalController<LLMModel> = createModalController<LLMModel>();
-	let modelSaving = $state(false);
-	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
+	/** Reference for MemorySettings to refresh stats */
+	let memorySettingsRef = $state<{ refreshStats: () => Promise<void> } | undefined>(undefined);
+
+	/** API Key Modal state */
 	let showApiKeyModal = $state(false);
 	let apiKeyProvider = $state<ProviderType>('mistral');
+	let apiKeyProviderSettings = $state<ProviderSettings | null>(null);
+	let apiKeyHasKey = $state(false);
 
 	/** Agent refresh trigger - increment to force AgentSettings to reload */
 	let agentRefreshKey = $state(0);
@@ -177,19 +128,19 @@ Includes MCP server configuration section for managing external tool servers.
 		theme.setTheme(newTheme);
 	}
 
-	// MCP Functions
+	/**
+	 * Opens API key configuration modal
+	 */
+	function handleConfigureApiKey(provider: ProviderType): void {
+		apiKeyProvider = provider;
+		showApiKeyModal = true;
+	}
 
 	/**
-	 * Loads MCP servers from backend
+	 * Reloads LLM data after API key changes
 	 */
-	async function loadMCPServers(): Promise<void> {
-		mcpState = setMCPLoading(mcpState, true);
-		try {
-			const servers = await loadServers();
-			mcpState = setServers(mcpState, servers);
-		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${err}`);
-		}
+	function handleApiKeyReload(): void {
+		llmSectionRef?.reload();
 	}
 
 	/**
@@ -199,330 +150,14 @@ Includes MCP server configuration section for managing external tool servers.
 	async function handleImportRefresh(): Promise<void> {
 		// Reload all data stores in parallel
 		await Promise.all([
-			loadMCPServers(),
-			loadLLMData(),
+			mcpSectionRef?.reload(),
+			llmSectionRef?.reload(),
 			agentStore.loadAgents(),
 			promptStore.loadPrompts()
 		]);
 		// Increment refresh key to trigger AgentSettings $effect
-		// This ensures the UI updates even if store subscription doesn't propagate
 		agentRefreshKey++;
 	}
-
-	/**
-	 * Opens the edit server modal (create uses mcpModal.openCreate() directly)
-	 */
-	function openEditModal(server: MCPServer): void {
-		mcpModal.openEdit({
-			id: server.id,
-			name: server.name,
-			enabled: server.enabled,
-			command: server.command,
-			args: server.args,
-			env: server.env,
-			description: server.description
-		});
-	}
-
-	/**
-	 * Saves an MCP server (create or update)
-	 */
-	async function handleSaveMCPServer(config: MCPServerConfig): Promise<void> {
-		mcpSaving = true;
-		try {
-			if (mcpModal.mode === 'create') {
-				const server = await createServer(config);
-				mcpState = addServer(mcpState, server);
-			} else {
-				const server = await updateServerConfig(config.id, config);
-				mcpState = updateServer(mcpState, config.id, server);
-			}
-			mcpModal.close();
-		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to save server: ${err}`);
-		} finally {
-			mcpSaving = false;
-		}
-	}
-
-	/**
-	 * Deletes an MCP server
-	 */
-	async function handleDeleteServer(server: MCPServer): Promise<void> {
-		if (!confirm(`Are you sure you want to delete "${server.name}"?`)) {
-			return;
-		}
-
-		try {
-			await deleteServer(server.id);
-			mcpState = removeServer(mcpState, server.id);
-		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to delete server: ${err}`);
-		}
-	}
-
-	/**
-	 * Tests an MCP server connection
-	 */
-	async function handleTestServer(server: MCPServer): Promise<void> {
-		mcpState = setTestingServer(mcpState, server.id);
-		testResult = null;
-		testError = null;
-		testingServerConfig = {
-			id: server.id,
-			name: server.name,
-			enabled: server.enabled,
-			command: server.command,
-			args: server.args,
-			env: server.env,
-			description: server.description
-		};
-		showTestModal = true;
-
-		try {
-			const result = await testServer(testingServerConfig);
-			testResult = result;
-		} catch (err) {
-			testError = `${err}`;
-		} finally {
-			mcpState = setTestingServer(mcpState, null);
-		}
-	}
-
-	/**
-	 * Retries the current test
-	 */
-	async function handleRetryTest(): Promise<void> {
-		if (!testingServerConfig) return;
-
-		mcpState = setTestingServer(mcpState, testingServerConfig.id);
-		testResult = null;
-		testError = null;
-
-		try {
-			const result = await testServer(testingServerConfig);
-			testResult = result;
-		} catch (err) {
-			testError = `${err}`;
-		} finally {
-			mcpState = setTestingServer(mcpState, null);
-		}
-	}
-
-	/**
-	 * Closes the test modal
-	 */
-	function closeTestModal(): void {
-		showTestModal = false;
-		testResult = null;
-		testError = null;
-		testingServerConfig = null;
-	}
-
-	/**
-	 * Toggles server start/stop
-	 */
-	async function handleToggleServer(server: MCPServer): Promise<void> {
-		try {
-			let updatedServer: MCPServer;
-			if (server.status === 'running') {
-				updatedServer = await stopServer(server.id);
-			} else {
-				updatedServer = await startServer(server.id);
-			}
-			mcpState = updateServer(mcpState, server.id, updatedServer);
-		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to toggle server: ${err}`);
-		}
-	}
-
-	// =========================================================================
-	// LLM Functions
-	// =========================================================================
-
-	/**
-	 * Loads all LLM data (providers and models) from the backend
-	 */
-	async function loadLLMData(): Promise<void> {
-		llmState = setLLMLoading(llmState, true);
-		try {
-			const data = await loadAllLLMData();
-			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
-			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
-			llmState = setModels(llmState, data.models);
-		} catch (err) {
-			llmState = setLLMError(llmState, `Failed to load LLM data: ${err}`);
-		}
-	}
-
-	// Model modal uses modelModal.openCreate() and modelModal.openEdit(model) directly
-
-	/**
-	 * Handles model form submission (create or update)
-	 */
-	async function handleSaveModel(data: CreateModelRequest | UpdateModelRequest): Promise<void> {
-		modelSaving = true;
-		try {
-			if (modelModal.mode === 'create') {
-				const model = await createModel(data as CreateModelRequest);
-				llmState = addModelToState(llmState, model);
-				message = { type: 'success', text: `Model "${model.name}" created successfully` };
-			} else if (modelModal.editing) {
-				const model = await updateModel(modelModal.editing.id, data as UpdateModelRequest);
-				llmState = updateModelInState(llmState, modelModal.editing.id, model);
-				message = { type: 'success', text: `Model "${model.name}" updated successfully` };
-			}
-			modelModal.close();
-		} catch (err) {
-			message = { type: 'error', text: `Failed to save model: ${err}` };
-		} finally {
-			modelSaving = false;
-		}
-	}
-
-	/**
-	 * Handles model deletion
-	 */
-	async function handleDeleteModel(model: LLMModel): Promise<void> {
-		if (!confirm(`Are you sure you want to delete "${model.name}"?`)) {
-			return;
-		}
-
-		try {
-			await deleteModel(model.id);
-			llmState = removeModel(llmState, model.id);
-			message = { type: 'success', text: `Model "${model.name}" deleted successfully` };
-		} catch (err) {
-			message = { type: 'error', text: `Failed to delete model: ${err}` };
-		}
-	}
-
-	/**
-	 * Handles setting a model as the default for its provider
-	 */
-	async function handleSetDefaultModel(model: LLMModel): Promise<void> {
-		try {
-			const updatedSettings = await updateProviderSettings(
-				model.provider,
-				undefined,
-				model.id,
-				undefined
-			);
-			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
-			message = { type: 'success', text: `"${model.name}" set as default` };
-		} catch (err) {
-			message = { type: 'error', text: `Failed to set default model: ${err}` };
-		}
-	}
-
-	/**
-	 * Opens the API key configuration modal for a provider
-	 */
-	function openApiKeyModal(provider: ProviderType): void {
-		apiKeyProvider = provider;
-		settings.apiKey = '';
-		showApiKeyModal = true;
-	}
-
-	/**
-	 * Closes the API key modal
-	 */
-	function closeApiKeyModal(): void {
-		showApiKeyModal = false;
-		settings.apiKey = '';
-	}
-
-	/**
-	 * Saves API key for the selected provider
-	 */
-	async function handleSaveApiKey(): Promise<void> {
-		if (!settings.apiKey.trim()) {
-			message = { type: 'error', text: 'API key cannot be empty' };
-			return;
-		}
-
-		saving = true;
-		message = null;
-
-		try {
-			// Map ProviderType to LLMProvider format (capitalize first letter)
-			const providerName = apiKeyProvider.charAt(0).toUpperCase() + apiKeyProvider.slice(1);
-			await invoke('save_api_key', {
-				provider: providerName,
-				apiKey: settings.apiKey
-			});
-			settings.apiKey = '';
-			// Reload provider settings to get updated api_key_configured status
-			await loadLLMData();
-			message = { type: 'success', text: 'API key saved securely' };
-			closeApiKeyModal();
-		} catch (err) {
-			message = { type: 'error', text: `Failed to save: ${err}` };
-		} finally {
-			saving = false;
-		}
-	}
-
-	/**
-	 * Deletes API key for a provider
-	 */
-	async function handleDeleteApiKey(provider: ProviderType): Promise<void> {
-		if (!confirm(`Are you sure you want to delete the API key for ${provider}?`)) {
-			return;
-		}
-
-		saving = true;
-		message = null;
-
-		try {
-			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-			await invoke('delete_api_key', { provider: providerName });
-			// Reload provider settings
-			await loadLLMData();
-			message = { type: 'success', text: 'API key deleted' };
-		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${err}` };
-		} finally {
-			saving = false;
-		}
-	}
-
-	/**
-	 * Handles provider models filter change
-	 */
-	function handleModelsProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		selectedModelsProvider = event.currentTarget.value as ProviderType | 'all';
-	}
-
-	/**
-	 * Gets filtered models for the selected provider (or all if 'all' selected)
-	 */
-	const filteredModels = $derived(
-		selectedModelsProvider === 'all'
-			? getAllModels(llmState)
-			: getModelsByProvider(llmState, selectedModelsProvider)
-	);
-
-	/**
-	 * Gets the default model for a specific provider
-	 */
-	function getProviderDefaultModel(provider: ProviderType): LLMModel | undefined {
-		return getDefaultModel(llmState, provider);
-	}
-
-	/**
-	 * Checks if a provider has an API key configured
-	 */
-	function providerHasApiKey(provider: ProviderType): boolean {
-		return hasApiKeyInState(llmState, provider);
-	}
-
-	/** Provider filter options for models section */
-	const modelsProviderOptions: SelectOption[] = [
-		{ value: 'all', label: 'All Providers' },
-		{ value: 'mistral', label: 'Mistral' },
-		{ value: 'ollama', label: 'Ollama' }
-	];
 
 	/**
 	 * Reference to content area for IntersectionObserver
@@ -531,22 +166,30 @@ Includes MCP server configuration section for managing external tool servers.
 
 	/**
 	 * Initialize on mount:
+	 * - Lazy load heavy components
 	 * - Subscribe to theme store
-	 * - Load MCP servers
-	 * - Load LLM data
 	 * - Setup IntersectionObserver for section detection
 	 */
 	onMount(() => {
+		// OPT-8: Lazy load heavy components in parallel
+		Promise.all([
+			import('$lib/components/settings/memory/MemorySettings.svelte'),
+			import('$lib/components/settings/memory/MemoryList.svelte'),
+			import('$lib/components/settings/agents/AgentSettings.svelte')
+		])
+			.then(([memorySettingsModule, memoryListModule, agentSettingsModule]) => {
+				MemorySettingsComponent = memorySettingsModule.default;
+				MemoryListComponent = memoryListModule.default;
+				AgentSettingsComponent = agentSettingsModule.default;
+			})
+			.catch((err: unknown) => {
+				console.warn('[Settings] Failed to lazy load components:', err);
+			});
+
 		// Subscribe to theme store and sync value
 		const unsubscribeTheme = theme.subscribe((value) => {
 			currentTheme = value;
 		});
-
-		// Load MCP servers on mount
-		loadMCPServers();
-
-		// Load LLM data on mount
-		loadLLMData();
 
 		// Setup IntersectionObserver for automatic section detection
 		let observer: IntersectionObserver | null = null;
@@ -653,210 +296,32 @@ Includes MCP server configuration section for managing external tool servers.
 
 	<!-- Settings Content -->
 	<main class="content-area" bind:this={contentAreaRef}>
-		<!-- Providers Section -->
-		<section id="providers" class="settings-section">
-			<div class="section-title-row">
-				<h2 class="section-title">{$i18n('settings_providers')}</h2>
-				<HelpButton
-					titleKey="help_providers_title"
-					descriptionKey="help_providers_description"
-					tutorialKey="help_providers_tutorial"
-				/>
-			</div>
+		<!-- Providers and Models Sections (LLMSection) -->
+		<LLMSection
+			bind:this={llmSectionRef}
+			onConfigureApiKey={handleConfigureApiKey}
+		/>
 
-			{#if llmState.error}
-				<div class="llm-error">
-					{llmState.error}
-				</div>
-			{/if}
-
-			{#if llmState.loading}
-				<Card>
-					{#snippet body()}
-						<div class="llm-loading">
-							<StatusIndicator status="running" />
-							<span>{$i18n('providers_loading')}</span>
-						</div>
-					{/snippet}
-				</Card>
-			{:else}
-				<div class="provider-grid">
-					<!-- Mistral Provider Card -->
-					<ProviderCard
-						provider="mistral"
-						settings={llmState.providers.mistral}
-						hasApiKey={providerHasApiKey('mistral')}
-						defaultModel={getProviderDefaultModel('mistral')}
-						onConfigure={() => openApiKeyModal('mistral')}
-					>
-						{#snippet icon()}
-							<Sparkles size={24} class="icon-accent" />
-						{/snippet}
-					</ProviderCard>
-
-					<!-- Ollama Provider Card -->
-					<ProviderCard
-						provider="ollama"
-						settings={llmState.providers.ollama}
-						hasApiKey={true}
-						defaultModel={getProviderDefaultModel('ollama')}
-						onConfigure={() => openApiKeyModal('ollama')}
-					>
-						{#snippet icon()}
-							<Server size={24} class="icon-success" />
-						{/snippet}
-					</ProviderCard>
-				</div>
-			{/if}
-
-			{#if message}
-				<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-					{message.text}
-				</div>
-			{/if}
-		</section>
-
-		<!-- Models Section -->
-		<section id="models" class="settings-section">
-			<div class="section-header-row">
-				<div class="section-title-row">
-					<h2 class="section-title">{$i18n('settings_models')}</h2>
-					<HelpButton
-						titleKey="help_models_title"
-						descriptionKey="help_models_description"
-						tutorialKey="help_models_tutorial"
-					/>
-				</div>
-				<div class="models-header-actions">
-					<Select
-						options={modelsProviderOptions}
-						value={selectedModelsProvider}
-						onchange={handleModelsProviderChange}
-					/>
-					<Button variant="primary" size="sm" onclick={() => modelModal.openCreate()}>
-						<Plus size={16} />
-						<span>{$i18n('models_add')}</span>
-					</Button>
-				</div>
-			</div>
-
-			{#if llmState.loading}
-				<Card>
-					{#snippet body()}
-						<div class="llm-loading">
-							<StatusIndicator status="running" />
-							<span>{$i18n('models_loading')}</span>
-						</div>
-					{/snippet}
-				</Card>
-			{:else if filteredModels.length === 0}
-				<Card>
-					{#snippet body()}
-						<div class="models-empty">
-							<Cpu size={48} class="empty-icon" />
-							<h3 class="empty-title">{$i18n('models_not_found')}</h3>
-							<p class="empty-description">
-								{#if selectedModelsProvider === 'all'}
-									{$i18n('models_not_configured_all')}
-								{:else if selectedModelsProvider === 'mistral'}
-									{$i18n('models_not_configured_mistral')}
-								{:else}
-									{$i18n('models_not_configured_ollama')}
-								{/if}
-								{$i18n('models_add_custom')}
-							</p>
-							<Button variant="primary" onclick={() => modelModal.openCreate()}>
-								<Plus size={16} />
-								<span>{$i18n('models_add_first')}</span>
-							</Button>
-						</div>
-					{/snippet}
-				</Card>
-			{:else}
-				<div class="models-grid">
-					{#each filteredModels as model (model.id)}
-						<ModelCard
-							{model}
-							isDefault={llmState.providers[model.provider]?.default_model_id === model.id}
-							onEdit={() => modelModal.openEdit(model)}
-							onDelete={() => handleDeleteModel(model)}
-							onSetDefault={() => handleSetDefaultModel(model)}
-						/>
-					{/each}
-				</div>
-			{/if}
-		</section>
-
-		<!-- Agents Section -->
+		<!-- Agents Section (Lazy Loaded - OPT-8) -->
 		<section id="agents" class="settings-section">
-			<AgentSettings refreshTrigger={agentRefreshKey} />
+			{#if AgentSettingsComponent}
+				<AgentSettingsComponent refreshTrigger={agentRefreshKey} />
+			{:else}
+				<Card>
+					{#snippet body()}
+						<div class="lazy-loading">
+							<StatusIndicator status="running" />
+							<span>{$i18n('common_loading')}</span>
+						</div>
+					{/snippet}
+				</Card>
+			{/if}
 		</section>
 
 		<!-- MCP Servers Section -->
-		<section id="mcp" class="settings-section">
-			<div class="section-header-row">
-				<div class="section-title-row">
-					<h2 class="section-title">{$i18n('settings_mcp_servers')}</h2>
-					<HelpButton
-						titleKey="help_mcp_title"
-						descriptionKey="help_mcp_description"
-						tutorialKey="help_mcp_tutorial"
-					/>
-				</div>
-				<Button variant="primary" size="sm" onclick={() => mcpModal.openCreate()}>
-					<Plus size={16} />
-					<span>{$i18n('mcp_add_server')}</span>
-				</Button>
-			</div>
+		<MCPSection bind:this={mcpSectionRef} />
 
-			{#if mcpState.error}
-				<div class="mcp-error">
-					{mcpState.error}
-				</div>
-			{/if}
-
-			{#if mcpState.loading}
-				<Card>
-					{#snippet body()}
-						<div class="mcp-loading">
-							<StatusIndicator status="running" />
-							<span>{$i18n('mcp_loading')}</span>
-						</div>
-					{/snippet}
-				</Card>
-			{:else if mcpState.servers.length === 0}
-				<Card>
-					{#snippet body()}
-						<div class="mcp-empty">
-							<Plug size={48} class="empty-icon" />
-							<h3 class="empty-title">{$i18n('mcp_not_configured')}</h3>
-							<p class="empty-description">
-								{$i18n('mcp_description')}
-							</p>
-							<Button variant="primary" onclick={() => mcpModal.openCreate()}>
-								<Plus size={16} />
-								<span>{$i18n('mcp_add_first')}</span>
-							</Button>
-						</div>
-					{/snippet}
-				</Card>
-			{:else}
-				<div class="mcp-server-grid">
-					{#each mcpState.servers as server (server.id)}
-						<MCPServerCard
-							{server}
-							testing={mcpState.testingServerId === server.id}
-							onEdit={() => openEditModal(server)}
-							onTest={() => handleTestServer(server)}
-							onToggle={() => handleToggleServer(server)}
-							onDelete={() => handleDeleteServer(server)}
-						/>
-					{/each}
-				</div>
-			{/if}
-		</section>
-
-		<!-- Memory Section -->
+		<!-- Memory Section (Lazy Loaded - OPT-8) -->
 		<section id="memory" class="settings-section">
 			<div class="section-title-row">
 				<h2 class="section-title">{$i18n('settings_memory')}</h2>
@@ -867,19 +332,30 @@ Includes MCP server configuration section for managing external tool servers.
 				/>
 			</div>
 
-			<div class="memory-subsections">
-				<!-- Embedding Configuration -->
-				<div class="memory-subsection">
-					<h3 class="subsection-title">{$i18n('memory_embedding_config')}</h3>
-					<MemorySettings bind:this={memorySettingsRef} />
-				</div>
+			{#if MemorySettingsComponent && MemoryListComponent}
+				<div class="memory-subsections">
+					<!-- Embedding Configuration -->
+					<div class="memory-subsection">
+						<h3 class="subsection-title">{$i18n('memory_embedding_config')}</h3>
+						<MemorySettingsComponent bind:this={memorySettingsRef} />
+					</div>
 
-				<!-- Memory Management -->
-				<div class="memory-subsection">
-					<h3 class="subsection-title">{$i18n('memory_management')}</h3>
-					<MemoryList onchange={() => memorySettingsRef?.refreshStats()} />
+					<!-- Memory Management -->
+					<div class="memory-subsection">
+						<h3 class="subsection-title">{$i18n('memory_management')}</h3>
+						<MemoryListComponent onchange={() => memorySettingsRef?.refreshStats()} />
+					</div>
 				</div>
-			</div>
+			{:else}
+				<Card>
+					{#snippet body()}
+						<div class="lazy-loading">
+							<StatusIndicator status="running" />
+							<span>{$i18n('common_loading')}</span>
+						</div>
+					{/snippet}
+				</Card>
+			{/if}
 		</section>
 
 		<!-- Validation Section -->
@@ -987,136 +463,15 @@ Includes MCP server configuration section for managing external tool servers.
 	</main>
 </div>
 
-<!-- MCP Server Modal (Create/Edit) -->
-<Modal
-	open={mcpModal.show}
-	title={mcpModal.mode === 'create' ? $i18n('mcp_modal_add') : $i18n('mcp_modal_edit')}
-	onclose={() => mcpModal.close()}
->
-	{#snippet body()}
-		<MCPServerForm
-			mode={mcpModal.mode}
-			server={mcpModal.editing}
-			onsave={handleSaveMCPServer}
-			oncancel={() => mcpModal.close()}
-			saving={mcpSaving}
-		/>
-	{/snippet}
-</Modal>
-
-<!-- MCP Server Test Modal -->
-<Modal
-	open={showTestModal}
-	title={`Test: ${testingServerConfig?.name ?? 'Server'}`}
-	onclose={closeTestModal}
->
-	{#snippet body()}
-		<MCPServerTester
-			result={testResult}
-			loading={mcpState.testingServerId !== null}
-			error={testError}
-			onRetry={handleRetryTest}
-		/>
-	{/snippet}
-	{#snippet footer()}
-		<Button variant="ghost" onclick={closeTestModal}>
-			{$i18n('common_close')}
-		</Button>
-	{/snippet}
-</Modal>
-
-<!-- Model Modal (Create/Edit) -->
-<Modal
-	open={modelModal.show}
-	title={modelModal.mode === 'create' ? $i18n('modal_add_custom_model') : $i18n('modal_edit_model')}
-	onclose={() => modelModal.close()}
->
-	{#snippet body()}
-		<ModelForm
-			mode={modelModal.mode}
-			model={modelModal.editing}
-			provider={selectedModelsProvider === 'all' ? 'mistral' : selectedModelsProvider}
-			onsubmit={handleSaveModel}
-			oncancel={() => modelModal.close()}
-			saving={modelSaving}
-		/>
-	{/snippet}
-</Modal>
-
 <!-- API Key Modal -->
-<Modal
+<APIKeysSection
 	open={showApiKeyModal}
-	title={apiKeyProvider === 'mistral' ? $i18n('api_key_modal_mistral') : $i18n('api_key_modal_ollama')}
-	onclose={closeApiKeyModal}
->
-	{#snippet body()}
-		<div class="api-key-modal-content">
-			{#if apiKeyProvider === 'ollama'}
-				<p class="api-key-info">
-					{$i18n('api_key_ollama_info')}
-				</p>
-				<Input
-					type="url"
-					label={$i18n('api_key_server_url')}
-					value={llmState.providers.ollama?.base_url ?? 'http://localhost:11434'}
-					help={$i18n('api_key_server_url_help')}
-					disabled
-				/>
-				<div class="status-row">
-					<StatusIndicator status="completed" size="sm" />
-					<span class="status-text">{$i18n('api_key_not_required')}</span>
-				</div>
-			{:else}
-				<p class="api-key-info">
-					{$i18n('api_key_mistral_info')}
-				</p>
-				<Input
-					type="password"
-					label={$i18n('api_key_label')}
-					placeholder={$i18n('api_key_placeholder')}
-					bind:value={settings.apiKey}
-					disabled={saving}
-					help={$i18n('api_key_help')}
-				/>
-				{#if providerHasApiKey('mistral')}
-					<div class="status-row">
-						<StatusIndicator status="completed" size="sm" />
-						<span class="status-text">{$i18n('api_key_configured')}</span>
-					</div>
-				{/if}
-			{/if}
-		</div>
-	{/snippet}
-	{#snippet footer()}
-		<div class="api-key-modal-actions">
-			<Button variant="ghost" onclick={closeApiKeyModal} disabled={saving}>
-				{$i18n('common_cancel')}
-			</Button>
-			{#if apiKeyProvider === 'mistral'}
-				{#if providerHasApiKey('mistral')}
-					<Button
-						variant="danger"
-						onclick={() => handleDeleteApiKey('mistral')}
-						disabled={saving}
-					>
-						{$i18n('api_key_delete')}
-					</Button>
-				{/if}
-				<Button
-					variant="primary"
-					onclick={handleSaveApiKey}
-					disabled={saving || !settings.apiKey.trim()}
-				>
-					{saving ? $i18n('common_saving') : $i18n('api_key_save')}
-				</Button>
-			{:else}
-				<Button variant="primary" onclick={closeApiKeyModal}>
-					{$i18n('common_done')}
-				</Button>
-			{/if}
-		</div>
-	{/snippet}
-</Modal>
+	provider={apiKeyProvider}
+	providerSettings={apiKeyProviderSettings}
+	hasApiKey={apiKeyHasKey}
+	onclose={() => { showApiKeyModal = false; }}
+	onReload={handleApiKeyReload}
+/>
 
 <style>
 	.settings-page {
@@ -1267,23 +622,6 @@ Includes MCP server configuration section for managing external tool servers.
 		line-height: var(--line-height-relaxed);
 	}
 
-	.section-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-header-row .section-title {
-		margin-bottom: 0;
-	}
-
-	.section-header-row :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
 	/* Memory Section */
 	.memory-subsections {
 		display: flex;
@@ -1303,185 +641,6 @@ Includes MCP server configuration section for managing external tool servers.
 		color: var(--color-text-secondary);
 		padding-bottom: var(--spacing-sm);
 		border-bottom: 1px solid var(--color-border);
-	}
-
-	/* Provider Cards */
-	.provider-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.status-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-md);
-		background: var(--color-success-light);
-		border-radius: var(--border-radius-md);
-	}
-
-	.status-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-success);
-	}
-
-	.message-toast {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-		margin-top: var(--spacing-md);
-	}
-
-	.message-toast.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message-toast.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
-	}
-
-	/* MCP Servers */
-	.mcp-server-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
-	}
-
-	.mcp-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-xl);
-	}
-
-	.mcp-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-		padding: var(--spacing-2xl);
-		gap: var(--spacing-md);
-	}
-
-	.mcp-empty :global(.empty-icon) {
-		color: var(--color-text-secondary);
-		opacity: 0.5;
-	}
-
-	.empty-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-	}
-
-	.empty-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		max-width: 400px;
-	}
-
-	.mcp-empty :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.mcp-error {
-		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
-		border-radius: var(--border-radius-md);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	/* LLM Section */
-	.llm-error {
-		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
-		border-radius: var(--border-radius-md);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.llm-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-xl);
-	}
-
-	/* Models Section */
-	.models-header-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.models-header-actions :global(.form-group) {
-		margin-bottom: 0;
-	}
-
-	.models-header-actions :global(.form-select) {
-		width: auto;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: var(--font-size-xs);
-	}
-
-	.models-header-actions :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.models-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--spacing-lg);
-	}
-
-	.models-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-		padding: var(--spacing-2xl);
-		gap: var(--spacing-md);
-	}
-
-	.models-empty :global(.empty-icon) {
-		color: var(--color-text-secondary);
-		opacity: 0.5;
-	}
-
-	.models-empty :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	/* API Key Modal */
-	.api-key-modal-content {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.api-key-info {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		line-height: var(--line-height-relaxed);
-		margin: 0;
-	}
-
-	.api-key-modal-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--spacing-sm);
 	}
 
 	/* Theme Cards */
@@ -1595,18 +754,19 @@ Includes MCP server configuration section for managing external tool servers.
 		line-height: var(--line-height-relaxed);
 	}
 
+	/* OPT-8: Lazy Loading */
+	.lazy-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-md);
+		padding: var(--spacing-xl);
+	}
+
 	/* Responsive */
 	@media (max-width: 768px) {
-		.provider-grid,
-		.theme-grid,
-		.mcp-server-grid,
-		.models-grid {
+		.theme-grid {
 			grid-template-columns: 1fr;
-		}
-
-		.models-header-actions {
-			flex-direction: column;
-			align-items: stretch;
 		}
 	}
 </style>

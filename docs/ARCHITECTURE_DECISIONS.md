@@ -848,6 +848,47 @@ async cleanup() {
 
 ---
 
+### Question 20bis : Patterns State Management (OPT-7)
+
+**Décision** : **Documentation explicite des 3 patterns acceptés**
+
+**Raison** : Clarifier pour la maintenance quels patterns sont canoniques vs acceptables.
+
+| Pattern | Cas d'usage | Exemples | Status |
+|---------|-------------|----------|--------|
+| **CRUD Factory** | Entités avec persistance DB | agents.ts, prompts.ts | Canonique |
+| **Pure Functions** | Données complexes, selectors | llm.ts, mcp.ts | Acceptable |
+| **Isolated Component** | Sections autonomes | MemorySettings.svelte | Acceptable |
+
+**CRUD Factory** :
+- Utiliser `createCRUDStore` pour nouvelles entités
+- Exports: `items`, `selected`, `isLoading` derived stores
+- Intégration Tauri IPC standardisée
+
+**Pure Functions** :
+- Fonctions async immutables retournant Promise
+- State locale gérée par le composant consommateur
+- Idéal pour: chargement données, selectors
+- Exemple pattern:
+```typescript
+// Pure state updaters
+export function setModels(state: LLMState, models: LLMModel[]): LLMState
+
+// Async actions
+export async function loadAllLLMData(): Promise<LLMData>
+
+// Selectors
+export function getModelsByProvider(state: LLMState, provider: ProviderType): LLMModel[]
+```
+
+**Isolated Component** :
+- Composant Svelte avec son propre state ($state runes)
+- Charge ses données au mount
+- Utilisé pour sections autonomes (MemorySettings, ValidationSettings)
+- Pas de store global nécessaire
+
+---
+
 ### Question 21 : Migration Svelte 5 Runes
 
 **Décision** : **Différée - Migration post-v1 si bénéfice prouvé**

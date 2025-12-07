@@ -144,8 +144,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		try {
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
-		} catch {
-			// Silently fail - MCP servers are optional
+		} catch (err) {
+			console.warn('[AgentForm] Failed to load MCP servers:', err);
+			// MCP servers are optional - form still usable without them
 		}
 
 		// Load LLM models
@@ -154,8 +155,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
 			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
 			llmState = setModels(llmState, data.models);
-		} catch {
-			// Silently fail - will show empty model list
+		} catch (err) {
+			console.warn('[AgentForm] Failed to load LLM models:', err);
+			// Will show empty model list - user will see no-models message
 		}
 	});
 
