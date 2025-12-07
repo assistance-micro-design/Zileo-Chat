@@ -295,6 +295,214 @@ impl DBClient {
         debug!(result_count = data.len(), "Parameterized query completed");
         Ok(data)
     }
+
+    /// Executes a parameterized query as JSON and returns results.
+    ///
+    /// Uses SurrealDB's `.bind()` method to safely bind parameters to the query.
+    /// Returns results as JSON Value to avoid SDK serialization issues.
+    ///
+    /// # Arguments
+    /// * `query` - The SurrealQL query with $param placeholders
+    /// * `params` - Vector of (param_name, param_value) tuples
+    ///
+    /// # Example
+    /// ```ignore
+    /// let results = db.query_json_with_params(
+    ///     "SELECT status FROM user_question:`$id`",
+    ///     vec![("id".to_string(), json!("uuid-here"))]
+    /// ).await?;
+    /// ```
+    #[instrument(name = "db_query_json_with_params", skip(self, params), fields(query_len = query.len()))]
+    pub async fn query_json_with_params(
+        &self,
+        query: &str,
+        params: Vec<(String, serde_json::Value)>,
+    ) -> Result<Vec<serde_json::Value>> {
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing parameterized JSON query");
+
+        let mut query_builder = self.db.query(query);
+
+        for (name, value) in params {
+            query_builder = query_builder.bind((name, value));
+        }
+
+        let mut result = query_builder.await.map_err(|e| {
+            error!(error = %e, "Parameterized query execution failed");
+            e
+        })?;
+
+        let data: Vec<serde_json::Value> = result.take(0).map_err(|e| {
+            error!(error = %e, "Failed to extract parameterized query results");
+            e
+        })?;
+
+        debug!(result_count = data.len(), "Parameterized JSON query completed");
+        Ok(data)
+    }
+
+    /// Executes a parameterized mutation (INSERT/UPDATE/DELETE) without returning results.
+    ///
+    /// Uses SurrealDB's `.bind()` method to safely bind parameters to the query.
+    /// Use this for write operations where you don't need the returned data.
+    ///
+    /// # Arguments
+    /// * `query` - The SurrealQL mutation with $param placeholders
+    /// * `params` - Vector of (param_name, param_value) tuples
+    ///
+    /// # Example
+    /// ```ignore
+    /// db.execute_with_params(
+    ///     "DELETE FROM memory WHERE type = $type",
+    ///     vec![("type".to_string(), json!("knowledge"))]
+    /// ).await?;
+    /// ```
+    #[instrument(name = "db_execute_with_params", skip(self, params), fields(query_len = query.len()))]
+    pub async fn execute_with_params(
+        &self,
+        query: &str,
+        params: Vec<(String, serde_json::Value)>,
+    ) -> Result<()> {
+        debug!(query_preview = %query.chars().take(100).collect::<String>(), "Executing parameterized mutation");
+
+        let mut query_builder = self.db.query(query);
+
+        for (name, value) in params {
+            query_builder = query_builder.bind((name, value));
+        }
+
+        query_builder.await.map_err(|e| {
+            error!(error = %e, "Parameterized mutation execution failed");
+            e
+        })?;
+
+        debug!("Parameterized mutation executed successfully");
+        Ok(())
+    }
+
+    /// Executes a series of operations within a database transaction.
+    ///
+    /// If any operation fails, the transaction is rolled back (CANCEL TRANSACTION).
+    /// If all operations succeed, the transaction is committed (COMMIT TRANSACTION).
+    ///
+    /// # Arguments
+    /// * `queries` - Vector of SurrealQL queries to execute within the transaction
+    ///
+    /// # Example
+    /// ```ignore
+    /// db.transaction(vec![
+    ///     "CREATE workflow:`123` CONTENT { name: 'Test' }".to_string(),
+    ///     "CREATE message:`456` CONTENT { workflow_id: '123', content: 'Hello' }".to_string(),
+    /// ]).await?;
+    /// ```
+    ///
+    /// # Note
+    /// For complex transactions with bind parameters, use `transaction_with_params`.
+    #[allow(dead_code)] // Prepared for future use in complex multi-table operations
+    #[instrument(name = "db_transaction", skip(self, queries), fields(query_count = queries.len()))]
+    pub async fn transaction(&self, queries: Vec<String>) -> Result<()> {
+        debug!("Starting transaction with {} queries", queries.len());
+
+        // Begin transaction
+        if let Err(e) = self.db.query("BEGIN TRANSACTION").await {
+            error!(error = %e, "Failed to begin transaction");
+            return Err(e.into());
+        }
+
+        // Execute all queries
+        for (i, query) in queries.iter().enumerate() {
+            debug!(query_index = i, "Executing transaction query");
+            if let Err(e) = self.db.query(query).await {
+                error!(error = %e, query_index = i, "Transaction query failed, rolling back");
+                // Attempt to cancel the transaction
+                if let Err(cancel_err) = self.db.query("CANCEL TRANSACTION").await {
+                    warn!(error = %cancel_err, "Failed to cancel transaction after error");
+                }
+                return Err(e.into());
+            }
+        }
+
+        // Commit transaction
+        if let Err(e) = self.db.query("COMMIT TRANSACTION").await {
+            error!(error = %e, "Failed to commit transaction");
+            // Attempt to cancel on commit failure
+            if let Err(cancel_err) = self.db.query("CANCEL TRANSACTION").await {
+                warn!(error = %cancel_err, "Failed to cancel transaction after commit failure");
+            }
+            return Err(e.into());
+        }
+
+        info!("Transaction committed successfully");
+        Ok(())
+    }
+
+    /// Executes a series of parameterized operations within a database transaction.
+    ///
+    /// Each operation is a tuple of (query, params) allowing bind parameters.
+    /// If any operation fails, the transaction is rolled back.
+    ///
+    /// # Arguments
+    /// * `operations` - Vector of (query, params) tuples
+    ///
+    /// # Example
+    /// ```ignore
+    /// db.transaction_with_params(vec![
+    ///     (
+    ///         "CREATE workflow:`123` CONTENT $data".to_string(),
+    ///         vec![("data".to_string(), json!({"name": "Test"}))]
+    ///     ),
+    ///     (
+    ///         "CREATE message:`456` CONTENT $data".to_string(),
+    ///         vec![("data".to_string(), json!({"workflow_id": "123"}))]
+    ///     ),
+    /// ]).await?;
+    /// ```
+    #[allow(dead_code)] // Prepared for future use in complex multi-table operations
+    #[instrument(name = "db_transaction_with_params", skip(self, operations), fields(op_count = operations.len()))]
+    pub async fn transaction_with_params(
+        &self,
+        operations: Vec<(String, Vec<(String, serde_json::Value)>)>,
+    ) -> Result<()> {
+        debug!(
+            "Starting parameterized transaction with {} operations",
+            operations.len()
+        );
+
+        // Begin transaction
+        if let Err(e) = self.db.query("BEGIN TRANSACTION").await {
+            error!(error = %e, "Failed to begin transaction");
+            return Err(e.into());
+        }
+
+        // Execute all operations with their parameters
+        for (i, (query, params)) in operations.iter().enumerate() {
+            debug!(op_index = i, "Executing transaction operation");
+
+            let mut query_builder = self.db.query(query);
+            for (name, value) in params {
+                query_builder = query_builder.bind((name.clone(), value.clone()));
+            }
+
+            if let Err(e) = query_builder.await {
+                error!(error = %e, op_index = i, "Transaction operation failed, rolling back");
+                if let Err(cancel_err) = self.db.query("CANCEL TRANSACTION").await {
+                    warn!(error = %cancel_err, "Failed to cancel transaction after error");
+                }
+                return Err(e.into());
+            }
+        }
+
+        // Commit transaction
+        if let Err(e) = self.db.query("COMMIT TRANSACTION").await {
+            error!(error = %e, "Failed to commit transaction");
+            if let Err(cancel_err) = self.db.query("CANCEL TRANSACTION").await {
+                warn!(error = %cancel_err, "Failed to cancel transaction after commit failure");
+            }
+            return Err(e.into());
+        }
+
+        info!("Parameterized transaction committed successfully");
+        Ok(())
+    }
 }
 
 #[cfg(test)]

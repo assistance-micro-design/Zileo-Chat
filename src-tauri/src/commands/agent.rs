@@ -189,6 +189,74 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
     })
 }
 
+// ============================================================================
+// Database Serialization Helpers (OPT-5)
+// ============================================================================
+
+/// Serialized agent configuration fields for database operations
+struct SerializedAgentFields {
+    name_json: String,
+    llm_json: String,
+    tools_json: String,
+    mcp_json: String,
+    prompt_json: String,
+}
+
+/// Serializes agent configuration fields for database storage
+fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields, String> {
+    let name_json = serde_json::to_string(&config.name).map_err(|e| {
+        error!(error = %e, "Failed to serialize name");
+        format!("Failed to serialize name: {}", e)
+    })?;
+
+    let llm_json = serde_json::to_string(&config.llm).map_err(|e| {
+        error!(error = %e, "Failed to serialize LLM config");
+        format!("Failed to serialize LLM config: {}", e)
+    })?;
+
+    let tools_json = serde_json::to_string(&config.tools).map_err(|e| {
+        error!(error = %e, "Failed to serialize tools");
+        format!("Failed to serialize tools: {}", e)
+    })?;
+
+    let mcp_json = serde_json::to_string(&config.mcp_servers).map_err(|e| {
+        error!(error = %e, "Failed to serialize MCP servers");
+        format!("Failed to serialize MCP servers: {}", e)
+    })?;
+
+    let prompt_json = serde_json::to_string(&config.system_prompt).map_err(|e| {
+        error!(error = %e, "Failed to serialize system prompt");
+        format!("Failed to serialize system prompt: {}", e)
+    })?;
+
+    Ok(SerializedAgentFields {
+        name_json,
+        llm_json,
+        tools_json,
+        mcp_json,
+        prompt_json,
+    })
+}
+
+/// Registers an LLMAgent in the registry with proper context
+async fn register_agent_runtime(
+    state: &AppState,
+    agent_id: &str,
+    config: AgentConfig,
+) {
+    let agent_context = AgentToolContext::from_app_state_full(state);
+    let llm_agent = LLMAgent::with_context(
+        config,
+        state.llm_manager.clone(),
+        state.tool_factory.clone(),
+        agent_context,
+    );
+    state
+        .registry
+        .register(agent_id.to_string(), Arc::new(llm_agent))
+        .await;
+}
+
 /// Lists all agents with summary information
 #[tauri::command]
 #[instrument(name = "list_agents", skip(state))]
@@ -276,36 +344,14 @@ pub async fn create_agent(
         enable_thinking: validated.enable_thinking,
     };
 
+    // Serialize fields for database (OPT-5 refactoring)
+    let fields = serialize_agent_fields(&agent_config)?;
+
     // Persist to database
     let lifecycle_str = match validated.lifecycle {
         Lifecycle::Permanent => "permanent",
         Lifecycle::Temporary => "temporary",
     };
-
-    let llm_json = serde_json::to_string(&validated.llm).map_err(|e| {
-        error!(error = %e, "Failed to serialize LLM config");
-        format!("Failed to serialize LLM config: {}", e)
-    })?;
-
-    let tools_json = serde_json::to_string(&validated.tools).map_err(|e| {
-        error!(error = %e, "Failed to serialize tools");
-        format!("Failed to serialize tools: {}", e)
-    })?;
-
-    let mcp_json = serde_json::to_string(&validated.mcp_servers).map_err(|e| {
-        error!(error = %e, "Failed to serialize MCP servers");
-        format!("Failed to serialize MCP servers: {}", e)
-    })?;
-
-    let system_prompt_json = serde_json::to_string(&validated.system_prompt).map_err(|e| {
-        error!(error = %e, "Failed to serialize system prompt");
-        format!("Failed to serialize system prompt: {}", e)
-    })?;
-
-    let name_json = serde_json::to_string(&validated.name).map_err(|e| {
-        error!(error = %e, "Failed to serialize name");
-        format!("Failed to serialize name: {}", e)
-    })?;
 
     let query = format!(
         "CREATE agent:`{}` CONTENT {{
@@ -323,12 +369,12 @@ pub async fn create_agent(
         }}",
         agent_id,
         agent_id,
-        name_json,
+        fields.name_json,
         lifecycle_str,
-        llm_json,
-        tools_json,
-        mcp_json,
-        system_prompt_json,
+        fields.llm_json,
+        fields.tools_json,
+        fields.mcp_json,
+        fields.prompt_json,
         validated.max_tool_iterations,
         validated.enable_thinking
     );
@@ -338,20 +384,8 @@ pub async fn create_agent(
         format!("Failed to persist agent: {}", e)
     })?;
 
-    // Create LLMAgent with AgentToolContext for sub-agent operations
-    // This allows the agent to use SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
-    // when used as the primary workflow agent
-    let agent_context = AgentToolContext::from_app_state_full(state.inner());
-    let llm_agent = LLMAgent::with_context(
-        agent_config,
-        state.llm_manager.clone(),
-        state.tool_factory.clone(),
-        agent_context,
-    );
-    state
-        .registry
-        .register(agent_id.clone(), Arc::new(llm_agent))
-        .await;
+    // Register agent in runtime (OPT-5 refactoring)
+    register_agent_runtime(state.inner(), &agent_id, agent_config).await;
 
     info!(agent_id = %agent_id, "Agent created successfully");
     Ok(agent_id)
@@ -421,41 +455,18 @@ pub async fn update_agent(
 
     let updated_config = AgentConfig {
         id: validated_id.clone(),
-        name: new_name.clone(),
+        name: new_name,
         lifecycle: existing_config.lifecycle.clone(), // Cannot change lifecycle
-        llm: new_llm.clone(),
-        tools: new_tools.clone(),
-        mcp_servers: new_mcp.clone(),
-        system_prompt: new_prompt.clone(),
+        llm: new_llm,
+        tools: new_tools,
+        mcp_servers: new_mcp,
+        system_prompt: new_prompt,
         max_tool_iterations: new_max_iterations,
         enable_thinking: new_enable_thinking,
     };
 
-    // Update database
-    let llm_json = serde_json::to_string(&new_llm).map_err(|e| {
-        error!(error = %e, "Failed to serialize LLM config");
-        format!("Failed to serialize LLM config: {}", e)
-    })?;
-
-    let tools_json = serde_json::to_string(&new_tools).map_err(|e| {
-        error!(error = %e, "Failed to serialize tools");
-        format!("Failed to serialize tools: {}", e)
-    })?;
-
-    let mcp_json = serde_json::to_string(&new_mcp).map_err(|e| {
-        error!(error = %e, "Failed to serialize MCP servers");
-        format!("Failed to serialize MCP servers: {}", e)
-    })?;
-
-    let prompt_json = serde_json::to_string(&new_prompt).map_err(|e| {
-        error!(error = %e, "Failed to serialize system prompt");
-        format!("Failed to serialize system prompt: {}", e)
-    })?;
-
-    let name_json = serde_json::to_string(&new_name).map_err(|e| {
-        error!(error = %e, "Failed to serialize name");
-        format!("Failed to serialize name: {}", e)
-    })?;
+    // Serialize fields for database (OPT-5 refactoring)
+    let fields = serialize_agent_fields(&updated_config)?;
 
     let query = format!(
         "UPDATE agent:`{}` SET
@@ -468,11 +479,11 @@ pub async fn update_agent(
             enable_thinking = {},
             updated_at = time::now()",
         validated_id,
-        name_json,
-        llm_json,
-        tools_json,
-        mcp_json,
-        prompt_json,
+        fields.name_json,
+        fields.llm_json,
+        fields.tools_json,
+        fields.mcp_json,
+        fields.prompt_json,
         new_max_iterations,
         new_enable_thinking
     );
@@ -482,21 +493,9 @@ pub async fn update_agent(
         format!("Failed to update agent: {}", e)
     })?;
 
-    // Unregister old and register new agent
+    // Unregister old and register new agent (OPT-5 refactoring)
     state.registry.unregister_any(&validated_id).await;
-
-    // Create LLMAgent with AgentToolContext for sub-agent operations
-    let agent_context = AgentToolContext::from_app_state_full(state.inner());
-    let llm_agent = LLMAgent::with_context(
-        updated_config.clone(),
-        state.llm_manager.clone(),
-        state.tool_factory.clone(),
-        agent_context,
-    );
-    state
-        .registry
-        .register(validated_id.clone(), Arc::new(llm_agent))
-        .await;
+    register_agent_runtime(state.inner(), &validated_id, updated_config.clone()).await;
 
     info!(agent_id = %validated_id, "Agent updated successfully");
     Ok(updated_config)

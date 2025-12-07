@@ -45,7 +45,7 @@ use crate::models::llm_models::{
     ProviderType, UpdateModelRequest,
 };
 use crate::state::AppState;
-use crate::tools::constants::commands as cmd_const;
+use crate::tools::constants::{commands as cmd_const, query_limits};
 
 // ============================================================================
 // Validation Helpers
@@ -116,6 +116,7 @@ pub async fn list_models(
 
     // Build query based on filter
     // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
+    // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = if let Some(ref pt) = provider_filter {
         format!(
             "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
@@ -123,17 +124,19 @@ pub async fn list_models(
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
              created_at, updated_at \
-             FROM llm_model WHERE provider = '{}'",
-            pt
+             FROM llm_model WHERE provider = '{}' LIMIT {}",
+            pt, query_limits::DEFAULT_MODELS_LIMIT
         )
     } else {
-        "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-         created_at, updated_at \
-         FROM llm_model"
-            .to_string()
+        format!(
+            "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             created_at, updated_at \
+             FROM llm_model LIMIT {}",
+            query_limits::DEFAULT_MODELS_LIMIT
+        )
     };
 
     let result: Vec<LLMModel> = state

@@ -77,6 +77,22 @@ pub mod calculator {
     pub const VALID_CONSTANTS: &[&str] = &["pi", "e", "tau", "sqrt2", "ln2", "ln10"];
 }
 
+// ===== Query Limits (OPT-DB-8) =====
+/// Default limits for database queries to prevent memory explosion.
+#[allow(dead_code)] // Some constants prepared for future use
+pub mod query_limits {
+    /// Default limit for list queries (e.g., list_memories, list_tasks)
+    pub const DEFAULT_LIST_LIMIT: usize = 1000;
+    /// Maximum allowed limit for list queries
+    pub const MAX_LIST_LIMIT: usize = 10_000;
+    /// Default limit for MCP call logs
+    pub const DEFAULT_MCP_LOGS_LIMIT: usize = 500;
+    /// Default limit for message history
+    pub const DEFAULT_MESSAGES_LIMIT: usize = 500;
+    /// Default limit for model list
+    pub const DEFAULT_MODELS_LIMIT: usize = 100;
+}
+
 // ===== Command Validation Constants (OPT-2) =====
 /// Centralized validation constants for Tauri commands.
 /// These constants define limits and valid values across the application.

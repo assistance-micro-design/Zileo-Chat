@@ -347,21 +347,32 @@ pub async fn export_memories(
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
-    let query = match type_filter {
-        Some(ref mtype) => format!(
-            "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
-             FROM memory WHERE type = '{}' ORDER BY created_at DESC",
-            mtype
-        ),
-        None => "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
-                 FROM memory ORDER BY created_at DESC"
-            .to_string(),
+    let memories: Vec<Memory> = match type_filter {
+        Some(ref mtype) => {
+            // Use parameterized query for type filter to prevent injection
+            let query = "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+                         FROM memory WHERE type = $type ORDER BY created_at DESC";
+            state
+                .db
+                .query_with_params(
+                    query,
+                    vec![("type".to_string(), serde_json::json!(mtype))],
+                )
+                .await
+                .map_err(|e| {
+                    error!(error = %e, "Failed to load memories for export");
+                    format!("Failed to export memories: {}", e)
+                })?
+        }
+        None => {
+            let query = "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+                         FROM memory ORDER BY created_at DESC";
+            state.db.query(query).await.map_err(|e| {
+                error!(error = %e, "Failed to load memories for export");
+                format!("Failed to export memories: {}", e)
+            })?
+        }
     };
-
-    let memories: Vec<Memory> = state.db.query(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load memories for export");
-        format!("Failed to export memories: {}", e)
-    })?;
 
     let export_data = match format {
         ExportFormat::Json => serde_json::to_string_pretty(&memories).map_err(|e| {

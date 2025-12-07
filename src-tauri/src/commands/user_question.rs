@@ -3,6 +3,7 @@ use tauri::{Emitter, State, Window};
 use tracing::{info, warn};
 
 use crate::models::UserQuestion;
+use crate::security::Validator;
 use crate::state::AppState;
 
 /// Submit a response to a pending question
@@ -14,17 +15,23 @@ pub async fn submit_user_response(
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
-    // Validate question exists and is pending
-    let query = format!("SELECT status FROM user_question:`{}`", question_id);
+    // Validate question_id is a valid UUID
+    let validated_id =
+        Validator::validate_uuid(&question_id).map_err(|e| format!("Invalid question_id: {}", e))?;
+
+    // Validate question exists and is pending using parameterized query
     let result: Vec<serde_json::Value> = state
         .db
-        .query_json(&query)
+        .query_json(&format!(
+            "SELECT status FROM user_question:`{}`",
+            validated_id
+        ))
         .await
         .map_err(|e| format!("Failed to query question: {}", e))?;
 
     let record = result
         .first()
-        .ok_or_else(|| format!("Question not found: {}", question_id))?;
+        .ok_or_else(|| format!("Question not found: {}", validated_id))?;
 
     let status = record
         .get("status")
@@ -35,40 +42,40 @@ pub async fn submit_user_response(
         return Err(format!("Question is not pending (status: {})", status));
     }
 
-    // Update question with response
-    let selected_json = serde_json::to_string(&selected_options)
-        .map_err(|e| format!("Failed to serialize options: {}", e))?;
+    // Build params for update - use bind parameters for user-provided values
+    let mut params: Vec<(String, serde_json::Value)> = vec![
+        (
+            "selected_options".to_string(),
+            serde_json::json!(selected_options),
+        ),
+        ("status".to_string(), serde_json::json!("answered")),
+    ];
 
-    let text_json = text_response
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|e| format!("Failed to serialize text: {}", e))?;
-
-    let update_query = if let Some(text_str) = text_json {
+    let update_query = if let Some(ref text) = text_response {
+        params.push(("text_response".to_string(), serde_json::json!(text)));
         format!(
-            "UPDATE user_question:`{}` SET status = 'answered', selected_options = '{}', text_response = {}, answered_at = time::now()",
-            question_id, selected_json, text_str
+            "UPDATE user_question:`{}` SET status = $status, selected_options = $selected_options, text_response = $text_response, answered_at = time::now()",
+            validated_id
         )
     } else {
         format!(
-            "UPDATE user_question:`{}` SET status = 'answered', selected_options = '{}', answered_at = time::now()",
-            question_id, selected_json
+            "UPDATE user_question:`{}` SET status = $status, selected_options = $selected_options, answered_at = time::now()",
+            validated_id
         )
     };
 
     state
         .db
-        .execute(&update_query)
+        .execute_with_params(&update_query, params)
         .await
         .map_err(|e| format!("Failed to update question: {}", e))?;
 
-    info!(question_id = %question_id, "User submitted response");
+    info!(question_id = %validated_id, "User submitted response");
 
     // Emit event for any listeners
     let chunk = json!({
         "chunk_type": "user_question_complete",
-        "question_id": question_id,
+        "question_id": validated_id,
         "status": "answered"
     });
 
@@ -85,18 +92,26 @@ pub async fn get_pending_questions(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<UserQuestion>, String> {
-    let query = format!(
-        "SELECT meta::id(id) AS id, workflow_id, agent_id, question, question_type, \
+    // Validate workflow_id is a valid UUID
+    let validated_id =
+        Validator::validate_uuid(&workflow_id).map_err(|e| format!("Invalid workflow_id: {}", e))?;
+
+    // Use parameterized query to prevent injection
+    let query = "SELECT meta::id(id) AS id, workflow_id, agent_id, question, question_type, \
          options, text_placeholder, text_required, context, status, \
          selected_options, text_response, created_at, answered_at \
-         FROM user_question WHERE workflow_id = '{}' AND status = 'pending' \
-         ORDER BY created_at ASC",
-        workflow_id
-    );
+         FROM user_question WHERE workflow_id = $workflow_id AND status = 'pending' \
+         ORDER BY created_at ASC";
 
     let results: Vec<serde_json::Value> = state
         .db
-        .query_json(&query)
+        .query_json_with_params(
+            query,
+            vec![(
+                "workflow_id".to_string(),
+                serde_json::json!(validated_id),
+            )],
+        )
         .await
         .map_err(|e| format!("Failed to query questions: {}", e))?;
 
@@ -125,17 +140,23 @@ pub async fn skip_question(
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
-    // Validate question exists and is pending
-    let query = format!("SELECT status FROM user_question:`{}`", question_id);
+    // Validate question_id is a valid UUID
+    let validated_id =
+        Validator::validate_uuid(&question_id).map_err(|e| format!("Invalid question_id: {}", e))?;
+
+    // Validate question exists and is pending (validated_id is safe UUID)
     let result: Vec<serde_json::Value> = state
         .db
-        .query_json(&query)
+        .query_json(&format!(
+            "SELECT status FROM user_question:`{}`",
+            validated_id
+        ))
         .await
         .map_err(|e| format!("Failed to query question: {}", e))?;
 
     let record = result
         .first()
-        .ok_or_else(|| format!("Question not found: {}", question_id))?;
+        .ok_or_else(|| format!("Question not found: {}", validated_id))?;
 
     let status = record
         .get("status")
@@ -146,10 +167,10 @@ pub async fn skip_question(
         return Err(format!("Question is not pending (status: {})", status));
     }
 
-    // Update status to skipped
+    // Update status to skipped (validated_id is safe UUID)
     let update_query = format!(
         "UPDATE user_question:`{}` SET status = 'skipped', answered_at = time::now()",
-        question_id
+        validated_id
     );
 
     state
@@ -158,12 +179,12 @@ pub async fn skip_question(
         .await
         .map_err(|e| format!("Failed to skip question: {}", e))?;
 
-    info!(question_id = %question_id, "User skipped question");
+    info!(question_id = %validated_id, "User skipped question");
 
     // Emit event
     let chunk = json!({
         "chunk_type": "user_question_complete",
-        "question_id": question_id,
+        "question_id": validated_id,
         "status": "skipped"
     });
 

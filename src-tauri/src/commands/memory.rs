@@ -23,7 +23,7 @@
 use crate::{
     models::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemorySearchResult, MemoryType},
     security::Validator,
-    tools::constants::memory as memory_constants,
+    tools::constants::{memory as memory_constants, query_limits},
     AppState,
 };
 use tauri::State;
@@ -193,17 +193,24 @@ pub async fn list_memories(
 ) -> Result<Vec<Memory>, String> {
     info!("Loading memories");
 
-    // Build WHERE conditions
+    // Build WHERE conditions and parameters
     let mut conditions: Vec<String> = Vec::new();
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-    // Type filter condition
+    // Type filter condition (use bind parameter)
     if let Some(ref mtype) = type_filter {
-        conditions.push(format!("type = '{}'", mtype));
+        let type_str = serde_json::to_string(mtype)
+            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+            .trim_matches('"')
+            .to_string();
+        conditions.push("type = $type".to_string());
+        params.push(("type".to_string(), serde_json::json!(type_str)));
     }
 
-    // Workflow scope condition
+    // Workflow scope condition (use bind parameter)
     if let Some(ref wf_id) = workflow_id {
-        conditions.push(format!("workflow_id = '{}'", wf_id));
+        conditions.push("workflow_id = $workflow_id".to_string());
+        params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
     }
 
     // Build the query
@@ -215,16 +222,25 @@ pub async fn list_memories(
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
+    // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = format!(
         "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
-         FROM memory{} ORDER BY created_at DESC",
-        where_clause
+         FROM memory{} ORDER BY created_at DESC LIMIT {}",
+        where_clause, query_limits::DEFAULT_LIST_LIMIT
     );
 
-    let memories: Vec<Memory> = state.db.query(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load memories");
-        format!("Failed to load memories: {}", e)
-    })?;
+    // Use parameterized query if we have parameters, otherwise standard query
+    let memories: Vec<Memory> = if params.is_empty() {
+        state.db.query(&query).await.map_err(|e| {
+            error!(error = %e, "Failed to load memories");
+            format!("Failed to load memories: {}", e)
+        })?
+    } else {
+        state.db.query_with_params(&query, params).await.map_err(|e| {
+            error!(error = %e, "Failed to load memories");
+            format!("Failed to load memories: {}", e)
+        })?
+    };
 
     debug!(
         count = memories.len(),
@@ -386,15 +402,22 @@ async fn vector_search(
     workflow_id: Option<&String>,
     threshold: f64,
 ) -> Result<Vec<MemorySearchResult>, String> {
-    // Build conditions
+    // Build conditions and parameters
     let mut conditions = vec!["embedding IS NOT NONE".to_string()];
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
     if let Some(wf_id) = workflow_id {
-        conditions.push(format!("workflow_id = '{}'", wf_id));
+        conditions.push("workflow_id = $workflow_id".to_string());
+        params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
     }
 
     if let Some(mem_type) = type_filter {
-        conditions.push(format!("type = '{}'", mem_type));
+        let type_str = serde_json::to_string(mem_type)
+            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+            .trim_matches('"')
+            .to_string();
+        conditions.push("type = $type".to_string());
+        params.push(("type".to_string(), serde_json::json!(type_str)));
     }
 
     let where_clause = conditions.join(" AND ");
@@ -402,13 +425,15 @@ async fn vector_search(
     // Convert threshold to distance (cosine distance = 1 - similarity)
     let distance_threshold = 1.0 - threshold;
 
-    // Format embedding for SurrealQL
+    // Format embedding for SurrealQL (numeric array is safe, not user input)
     let embedding_str: String = query_embedding
         .iter()
         .map(|v| v.to_string())
         .collect::<Vec<_>>()
         .join(", ");
 
+    // Note: embedding_str contains floats generated from the embedding model, not user input
+    // distance_threshold and limit are numeric values, safe to interpolate
     let query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -429,10 +454,18 @@ async fn vector_search(
         limit = limit
     );
 
-    let results: Vec<serde_json::Value> = db.query_json(&query).await.map_err(|e| {
-        error!(error = %e, "Vector search failed");
-        format!("Failed to search memories: {}", e)
-    })?;
+    // Use parameterized query if we have parameters
+    let results: Vec<serde_json::Value> = if params.is_empty() {
+        db.query_json(&query).await.map_err(|e| {
+            error!(error = %e, "Vector search failed");
+            format!("Failed to search memories: {}", e)
+        })?
+    } else {
+        db.query_json_with_params(&query, params).await.map_err(|e| {
+            error!(error = %e, "Vector search failed");
+            format!("Failed to search memories: {}", e)
+        })?
+    };
 
     // Convert to MemorySearchResult
     let search_results: Vec<MemorySearchResult> = results
@@ -487,31 +520,36 @@ async fn text_search(
     workflow_id: Option<&String>,
 ) -> Result<Vec<MemorySearchResult>, String> {
     let mut conditions = Vec::new();
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-    // Text content contains query (case-insensitive)
-    let escaped_query = query_text.replace('\'', "''").replace('%', "\\%");
-    conditions.push(format!(
-        "string::lowercase(content) CONTAINS string::lowercase('{}')",
-        escaped_query
-    ));
+    // Text content contains query (case-insensitive) - use bind parameter
+    conditions.push("string::lowercase(content) CONTAINS string::lowercase($query)".to_string());
+    params.push(("query".to_string(), serde_json::json!(query_text)));
 
     if let Some(wf_id) = workflow_id {
-        conditions.push(format!("workflow_id = '{}'", wf_id));
+        conditions.push("workflow_id = $workflow_id".to_string());
+        params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
     }
 
     if let Some(mem_type) = type_filter {
-        conditions.push(format!("type = '{}'", mem_type));
+        let type_str = serde_json::to_string(mem_type)
+            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+            .trim_matches('"')
+            .to_string();
+        conditions.push("type = $type".to_string());
+        params.push(("type".to_string(), serde_json::json!(type_str)));
     }
 
     let where_clause = conditions.join(" AND ");
 
+    // limit is a numeric value, safe to interpolate
     let search_query = format!(
         "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
          FROM memory WHERE {} ORDER BY created_at DESC LIMIT {}",
         where_clause, limit
     );
 
-    let memories: Vec<Memory> = db.query(&search_query).await.map_err(|e| {
+    let memories: Vec<Memory> = db.query_with_params(&search_query, params).await.map_err(|e| {
         error!(error = %e, "Text search failed");
         format!("Failed to search memories: {}", e)
     })?;
@@ -561,16 +599,24 @@ pub async fn clear_memories_by_type(
 ) -> Result<usize, String> {
     info!("Clearing memories by type");
 
-    // First count how many will be deleted
-    let count_query = format!(
-        "SELECT count() FROM memory WHERE type = '{}' GROUP ALL",
-        memory_type
-    );
+    // Convert MemoryType to string for bind parameter
+    let type_str = serde_json::to_string(&memory_type)
+        .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+        .trim_matches('"')
+        .to_string();
 
-    let count_result: Vec<serde_json::Value> = state.db.query(&count_query).await.map_err(|e| {
-        error!(error = %e, "Failed to count memories");
-        format!("Failed to count memories: {}", e)
-    })?;
+    // First count how many will be deleted using parameterized query
+    let count_result: Vec<serde_json::Value> = state
+        .db
+        .query_json_with_params(
+            "SELECT count() FROM memory WHERE type = $type GROUP ALL",
+            vec![("type".to_string(), serde_json::json!(type_str))],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to count memories");
+            format!("Failed to count memories: {}", e)
+        })?;
 
     let count = count_result
         .first()
@@ -578,14 +624,18 @@ pub async fn clear_memories_by_type(
         .and_then(|c| c.as_u64())
         .unwrap_or(0) as usize;
 
-    // Delete all memories of the specified type
-    // Use execute() for DELETE to avoid SurrealDB SDK serialization issues
-    let delete_query = format!("DELETE FROM memory WHERE type = '{}'", memory_type);
-
-    state.db.execute(&delete_query).await.map_err(|e| {
-        error!(error = %e, "Failed to clear memories");
-        format!("Failed to clear memories: {}", e)
-    })?;
+    // Delete all memories of the specified type using parameterized query
+    state
+        .db
+        .execute_with_params(
+            "DELETE FROM memory WHERE type = $type",
+            vec![("type".to_string(), serde_json::json!(type_str))],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to clear memories");
+            format!("Failed to clear memories: {}", e)
+        })?;
 
     info!(count = count, "Memories cleared successfully");
     Ok(count)

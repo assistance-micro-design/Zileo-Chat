@@ -40,6 +40,7 @@
 use crate::{
     models::task::{Task, TaskCreate, TaskUpdate},
     security::Validator,
+    tools::constants::query_limits,
     AppState,
 };
 use tauri::State;
@@ -214,6 +215,7 @@ pub async fn list_workflow_tasks(
         format!("Invalid workflow_id: {}", e)
     })?;
 
+    // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -229,8 +231,9 @@ pub async fn list_workflow_tasks(
             completed_at
         FROM task
         WHERE workflow_id = '{}'
-        ORDER BY priority ASC, created_at ASC"#,
-        validated_workflow_id
+        ORDER BY priority ASC, created_at ASC
+        LIMIT {}"#,
+        validated_workflow_id, query_limits::DEFAULT_LIST_LIMIT
     );
 
     let tasks: Vec<Task> = state.db.query(&query).await.map_err(|e| {
@@ -268,6 +271,7 @@ pub async fn list_tasks_by_status(
         ));
     }
 
+    // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = if let Some(wf_id) = workflow_id {
         let validated_wf_id =
             Validator::validate_uuid(&wf_id).map_err(|e| format!("Invalid workflow_id: {}", e))?;
@@ -286,8 +290,9 @@ pub async fn list_tasks_by_status(
                 completed_at
             FROM task
             WHERE status = '{}' AND workflow_id = '{}'
-            ORDER BY priority ASC, created_at ASC"#,
-            status, validated_wf_id
+            ORDER BY priority ASC, created_at ASC
+            LIMIT {}"#,
+            status, validated_wf_id, query_limits::DEFAULT_LIST_LIMIT
         )
     } else {
         format!(
@@ -305,8 +310,9 @@ pub async fn list_tasks_by_status(
                 completed_at
             FROM task
             WHERE status = '{}'
-            ORDER BY priority ASC, created_at ASC"#,
-            status
+            ORDER BY priority ASC, created_at ASC
+            LIMIT {}"#,
+            status, query_limits::DEFAULT_LIST_LIMIT
         )
     };
 
@@ -442,13 +448,19 @@ pub async fn update_task_status(
         ));
     }
 
-    let query = format!("UPDATE task:`{}` SET status = '{}'", validated_id, status);
-
-    // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
-    state.db.execute(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to update task status");
-        format!("Database error: {}", e)
-    })?;
+    // Use parameterized query for UPDATE to prevent injection
+    // Note: validated_id is a UUID (safe), but status is validated above
+    state
+        .db
+        .execute_with_params(
+            &format!("UPDATE task:`{}` SET status = $status", validated_id),
+            vec![("status".to_string(), serde_json::json!(status))],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to update task status");
+            format!("Database error: {}", e)
+        })?;
 
     info!(task_id = %validated_id, status = %status, "Task status updated");
     get_task(task_id, state).await

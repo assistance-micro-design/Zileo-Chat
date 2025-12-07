@@ -19,18 +19,24 @@ use crate::tools::{ToolError, ToolResult};
 use std::sync::Arc;
 
 /// Verifies a record exists in the database.
+///
+/// Uses parameterized query for the ID to prevent injection.
 pub async fn ensure_record_exists(
     db: &Arc<DBClient>,
     table: &str,
     id: &str,
     resource_name: &str,
 ) -> ToolResult<()> {
+    // Note: table name is controlled by code (not user input), ID is bound as parameter
     let check_query = format!(
-        "SELECT meta::id(id) AS id FROM {} WHERE meta::id(id) = '{}'",
-        table, id
+        "SELECT meta::id(id) AS id FROM {} WHERE meta::id(id) = $id",
+        table
     );
     let existing: Vec<serde_json::Value> = db
-        .query(&check_query)
+        .query_json_with_params(
+            &check_query,
+            vec![("id".to_string(), serde_json::json!(id))],
+        )
         .await
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
