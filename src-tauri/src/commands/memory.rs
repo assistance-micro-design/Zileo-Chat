@@ -23,14 +23,12 @@
 use crate::{
     models::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemorySearchResult, MemoryType},
     security::Validator,
+    tools::constants::memory as memory_constants,
     AppState,
 };
 use tauri::State;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
-
-/// Maximum allowed length for memory content
-pub const MAX_MEMORY_CONTENT_LEN: usize = 50_000;
 
 /// Adds a new memory entry with automatic embedding generation.
 ///
@@ -67,10 +65,10 @@ pub async fn add_memory(
     if trimmed_content.is_empty() {
         return Err("Memory content cannot be empty".to_string());
     }
-    if trimmed_content.len() > MAX_MEMORY_CONTENT_LEN {
+    if trimmed_content.len() > memory_constants::MAX_CONTENT_LENGTH {
         return Err(format!(
             "Memory content exceeds maximum length of {} characters",
-            MAX_MEMORY_CONTENT_LEN
+            memory_constants::MAX_CONTENT_LENGTH
         ));
     }
 
@@ -251,8 +249,8 @@ pub async fn get_memory(memory_id: String, state: State<'_, AppState>) -> Result
 
     // Validate memory ID
     let validated_id = Validator::validate_uuid(&memory_id).map_err(|e| {
-        warn!(error = %e, "Invalid memory ID");
-        format!("Invalid memory ID: {}", e)
+        warn!(error = %e, "Invalid memory_id");
+        format!("Invalid memory_id: {}", e)
     })?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
@@ -287,8 +285,8 @@ pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Res
 
     // Validate memory ID
     let validated_id = Validator::validate_uuid(&memory_id).map_err(|e| {
-        warn!(error = %e, "Invalid memory ID");
-        format!("Invalid memory ID: {}", e)
+        warn!(error = %e, "Invalid memory_id");
+        format!("Invalid memory_id: {}", e)
     })?;
 
     // Use execute() with DELETE query to avoid SurrealDB SDK issues with delete() method
@@ -697,8 +695,8 @@ mod tests {
         assert!(empty.is_empty());
 
         // Long content check
-        let long_content = "a".repeat(MAX_MEMORY_CONTENT_LEN + 1);
-        assert!(long_content.len() > MAX_MEMORY_CONTENT_LEN);
+        let long_content = "a".repeat(memory_constants::MAX_CONTENT_LENGTH + 1);
+        assert!(long_content.len() > memory_constants::MAX_CONTENT_LENGTH);
     }
 
     #[tokio::test]

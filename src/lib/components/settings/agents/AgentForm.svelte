@@ -59,14 +59,28 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let { mode, agent, oncancel }: Props = $props();
 
 	/** Form state */
-	let name = $state(agent?.name ?? '');
-	let lifecycle = $state<Lifecycle>(agent?.lifecycle ?? 'permanent');
-	let provider = $state(agent?.llm.provider ?? 'Mistral');
-	let model = $state(agent?.llm.model ?? 'mistral-large-latest');
-	let maxToolIterations = $state(agent?.max_tool_iterations ?? 50);
-	let selectedTools = $state<string[]>(agent?.tools ?? []);
-	let selectedMcpServers = $state<string[]>(agent?.mcp_servers ?? []);
-	let systemPrompt = $state(agent?.system_prompt ?? '');
+	let name = $state('');
+	let lifecycle = $state<Lifecycle>('permanent');
+	let provider = $state('Mistral');
+	let model = $state('mistral-large-latest');
+	let maxToolIterations = $state(50);
+	let selectedTools = $state<string[]>([]);
+	let selectedMcpServers = $state<string[]>([]);
+	let systemPrompt = $state('');
+
+	// Sync form state when agent prop changes (e.g., switching between edit targets)
+	$effect(() => {
+		name = agent?.name ?? '';
+		lifecycle = agent?.lifecycle ?? 'permanent';
+		provider = agent?.llm.provider ?? 'Mistral';
+		model = agent?.llm.model ?? 'mistral-large-latest';
+		maxToolIterations = agent?.max_tool_iterations ?? 50;
+		selectedTools = agent?.tools ?? [];
+		selectedMcpServers = agent?.mcp_servers ?? [];
+		systemPrompt = agent?.system_prompt ?? '';
+		// Reset validation state when agent changes
+		errors = {};
+	});
 
 	/** UI state */
 	let saving = $state(false);

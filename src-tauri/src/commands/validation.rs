@@ -61,8 +61,8 @@ pub async fn create_validation_request(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Validate operation description
@@ -151,8 +151,8 @@ pub async fn list_workflow_validations(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     let validations: Vec<ValidationRequest> = state

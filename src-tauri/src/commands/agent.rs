@@ -32,25 +32,10 @@ use crate::models::{
 use crate::security::Validator;
 use crate::state::AppState;
 use crate::tools::context::AgentToolContext;
+use crate::tools::constants::commands as cmd_const;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
-
-/// Maximum length for agent names
-const MAX_AGENT_NAME_LEN: usize = 64;
-/// Maximum length for system prompts
-const MAX_SYSTEM_PROMPT_LEN: usize = 10000;
-/// Minimum temperature value
-const MIN_TEMPERATURE: f32 = 0.0;
-/// Maximum temperature value
-const MAX_TEMPERATURE: f32 = 2.0;
-/// Minimum max_tokens value
-const MIN_MAX_TOKENS: usize = 256;
-/// Maximum max_tokens value
-const MAX_MAX_TOKENS: usize = 128000;
-
-/// Valid LLM providers
-const VALID_PROVIDERS: [&str; 3] = ["Mistral", "Ollama", "Demo"];
 
 /// Validates agent name
 fn validate_agent_name(name: &str) -> Result<String, String> {
@@ -60,10 +45,10 @@ fn validate_agent_name(name: &str) -> Result<String, String> {
         return Err("Agent name cannot be empty".to_string());
     }
 
-    if trimmed.len() > MAX_AGENT_NAME_LEN {
+    if trimmed.len() > cmd_const::MAX_AGENT_NAME_LEN {
         return Err(format!(
             "Agent name exceeds maximum length of {} characters",
-            MAX_AGENT_NAME_LEN
+            cmd_const::MAX_AGENT_NAME_LEN
         ));
     }
 
@@ -82,10 +67,10 @@ fn validate_system_prompt(prompt: &str) -> Result<String, String> {
         return Err("System prompt cannot be empty".to_string());
     }
 
-    if trimmed.len() > MAX_SYSTEM_PROMPT_LEN {
+    if trimmed.len() > cmd_const::MAX_SYSTEM_PROMPT_LEN {
         return Err(format!(
             "System prompt exceeds maximum length of {} characters",
-            MAX_SYSTEM_PROMPT_LEN
+            cmd_const::MAX_SYSTEM_PROMPT_LEN
         ));
     }
 
@@ -95,10 +80,10 @@ fn validate_system_prompt(prompt: &str) -> Result<String, String> {
 /// Validates LLM configuration
 fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
     // Validate provider
-    if !VALID_PROVIDERS.contains(&llm.provider.as_str()) {
+    if !cmd_const::VALID_PROVIDERS.contains(&llm.provider.as_str()) {
         return Err(format!(
             "Invalid provider '{}'. Valid providers: {:?}",
-            llm.provider, VALID_PROVIDERS
+            llm.provider, cmd_const::VALID_PROVIDERS
         ));
     }
 
@@ -112,18 +97,18 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
     }
 
     // Validate temperature
-    if llm.temperature < MIN_TEMPERATURE || llm.temperature > MAX_TEMPERATURE {
+    if llm.temperature < cmd_const::MIN_TEMPERATURE || llm.temperature > cmd_const::MAX_TEMPERATURE {
         return Err(format!(
             "Temperature must be between {} and {}",
-            MIN_TEMPERATURE, MAX_TEMPERATURE
+            cmd_const::MIN_TEMPERATURE, cmd_const::MAX_TEMPERATURE
         ));
     }
 
     // Validate max_tokens
-    if llm.max_tokens < MIN_MAX_TOKENS || llm.max_tokens > MAX_MAX_TOKENS {
+    if llm.max_tokens < cmd_const::MIN_MAX_TOKENS || llm.max_tokens > cmd_const::MAX_MAX_TOKENS {
         return Err(format!(
             "max_tokens must be between {} and {}",
-            MIN_MAX_TOKENS, MAX_MAX_TOKENS
+            cmd_const::MIN_MAX_TOKENS, cmd_const::MAX_MAX_TOKENS
         ));
     }
 
@@ -229,8 +214,8 @@ pub async fn get_agent_config(
 
     // Validate input
     let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     let agent = state
@@ -381,8 +366,8 @@ pub async fn update_agent(
 
     // Validate agent ID
     let validated_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     // Get existing agent
@@ -522,8 +507,8 @@ pub async fn delete_agent(agent_id: String, state: State<'_, AppState>) -> Resul
 
     // Validate agent ID
     let validated_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     // Check agent exists

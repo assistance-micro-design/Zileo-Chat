@@ -23,14 +23,12 @@
 use crate::{
     models::{Message, MessageCreate, PaginatedMessages},
     security::Validator,
+    tools::constants::commands as cmd_const,
     AppState,
 };
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-
-/// Maximum allowed length for message content
-pub const MAX_MESSAGE_CONTENT_LEN: usize = 100_000;
 
 /// Saves a new message to the database.
 ///
@@ -72,8 +70,8 @@ pub async fn save_message(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Validate role
@@ -92,10 +90,10 @@ pub async fn save_message(
     if content.is_empty() {
         return Err("Message content cannot be empty".to_string());
     }
-    if content.len() > MAX_MESSAGE_CONTENT_LEN {
+    if content.len() > cmd_const::MAX_MESSAGE_CONTENT_LEN {
         return Err(format!(
             "Message content exceeds maximum length of {} characters",
-            MAX_MESSAGE_CONTENT_LEN
+            cmd_const::MAX_MESSAGE_CONTENT_LEN
         ));
     }
 
@@ -146,8 +144,8 @@ pub async fn load_workflow_messages(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
@@ -218,8 +216,8 @@ pub async fn load_workflow_messages_paginated(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     let limit = limit.unwrap_or(50).min(200); // Cap at 200 max
@@ -307,8 +305,8 @@ pub async fn delete_message(message_id: String, state: State<'_, AppState>) -> R
 
     // Validate message ID
     let validated_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message ID");
-        format!("Invalid message ID: {}", e)
+        warn!(error = %e, "Invalid message_id");
+        format!("Invalid message_id: {}", e)
     })?;
 
     // Use execute() with DELETE query to avoid SurrealDB SDK serialization issues
@@ -343,8 +341,8 @@ pub async fn clear_workflow_messages(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // First count existing messages
@@ -385,7 +383,7 @@ mod tests {
     #[test]
     fn test_max_message_content_len() {
         // 100KB should be enough for most message content
-        assert_eq!(MAX_MESSAGE_CONTENT_LEN, 100_000);
+        assert_eq!(cmd_const::MAX_MESSAGE_CONTENT_LEN, 100_000);
     }
 
     #[test]

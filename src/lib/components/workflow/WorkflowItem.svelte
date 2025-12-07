@@ -47,8 +47,15 @@
 	let { workflow, active = false, onselect, ondelete, onrename }: Props = $props();
 
 	let editing = $state(false);
-	let editName = $state(workflow.name);
+	let editName = $state('');
 	let nameInputRef = $state<HTMLInputElement | null>(null);
+
+	// Sync editName with workflow.name when workflow changes (e.g., external rename)
+	$effect(() => {
+		if (!editing) {
+			editName = workflow.name;
+		}
+	});
 
 	/**
 	 * Handle workflow selection

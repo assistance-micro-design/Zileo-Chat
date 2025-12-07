@@ -45,16 +45,7 @@ use crate::models::llm_models::{
     ProviderType, UpdateModelRequest,
 };
 use crate::state::AppState;
-
-// ============================================================================
-// Validation Constants
-// ============================================================================
-
-/// Maximum length for model ID
-const MAX_MODEL_ID_LEN: usize = 128;
-
-/// Valid provider strings
-const VALID_PROVIDERS: &[&str] = &["mistral", "ollama"];
+use crate::tools::constants::commands as cmd_const;
 
 // ============================================================================
 // Validation Helpers
@@ -65,10 +56,10 @@ fn validate_model_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("Model ID is required".into());
     }
-    if id.len() > MAX_MODEL_ID_LEN {
+    if id.len() > cmd_const::MAX_MODEL_ID_LEN {
         return Err(format!(
             "Model ID must be {} characters or less",
-            MAX_MODEL_ID_LEN
+            cmd_const::MAX_MODEL_ID_LEN
         ));
     }
     Ok(())
@@ -79,7 +70,7 @@ fn validate_provider_string(provider: &str) -> Result<ProviderType, String> {
     provider.parse::<ProviderType>().map_err(|_| {
         format!(
             "Invalid provider '{}'. Valid providers: {:?}",
-            provider, VALID_PROVIDERS
+            provider, cmd_const::VALID_MODEL_PROVIDERS
         )
     })
 }
@@ -1018,13 +1009,13 @@ mod tests {
 
     #[test]
     fn test_max_model_id_len_constant() {
-        assert_eq!(MAX_MODEL_ID_LEN, 128);
+        assert_eq!(cmd_const::MAX_MODEL_ID_LEN, 128);
     }
 
     #[test]
     fn test_valid_providers_constant() {
-        assert_eq!(VALID_PROVIDERS.len(), 2);
-        assert!(VALID_PROVIDERS.contains(&"mistral"));
-        assert!(VALID_PROVIDERS.contains(&"ollama"));
+        assert_eq!(cmd_const::VALID_MODEL_PROVIDERS.len(), 2);
+        assert!(cmd_const::VALID_MODEL_PROVIDERS.contains(&"mistral"));
+        assert!(cmd_const::VALID_MODEL_PROVIDERS.contains(&"ollama"));
     }
 }

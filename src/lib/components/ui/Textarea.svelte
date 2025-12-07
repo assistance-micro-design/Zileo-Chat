@@ -68,9 +68,11 @@
 	}: Props = $props();
 
 	/**
-	 * Generate unique ID if not provided
+	 * Generate stable ID - uses provided id or generates once on mount
+	 * Using $derived to make the reactive relationship explicit
 	 */
-	const textareaId = id ?? `textarea-${Math.random().toString(36).slice(2, 9)}`;
+	const generatedId = `textarea-${Math.random().toString(36).slice(2, 9)}`;
+	const textareaId = $derived(id ?? generatedId);
 </script>
 
 <div class="form-group">

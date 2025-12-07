@@ -79,9 +79,11 @@
 	}: Props = $props();
 
 	/**
-	 * Generate unique ID if not provided
+	 * Generate stable ID - uses provided id or generates once on mount
+	 * Using $derived to make the reactive relationship explicit
 	 */
-	const selectId = id ?? `select-${Math.random().toString(36).slice(2, 9)}`;
+	const generatedId = `select-${Math.random().toString(36).slice(2, 9)}`;
+	const selectId = $derived(id ?? generatedId);
 </script>
 
 <div class="form-group">

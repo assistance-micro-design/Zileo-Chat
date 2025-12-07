@@ -38,8 +38,8 @@ pub async fn load_workflow_sub_agent_executions(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
@@ -105,8 +105,8 @@ pub async fn clear_workflow_sub_agent_executions(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // First count existing executions

@@ -69,15 +69,33 @@
 
 	/** Form data state */
 	let formData = $state({
-		provider: (model?.provider ?? provider ?? 'mistral') as ProviderType,
-		name: model?.name ?? '',
-		api_name: model?.api_name ?? '',
-		context_window: model?.context_window ?? 32000,
-		max_output_tokens: model?.max_output_tokens ?? 4096,
-		temperature_default: model?.temperature_default ?? 0.7,
-		is_reasoning: model?.is_reasoning ?? false,
-		input_price_per_mtok: model?.input_price_per_mtok ?? 0,
-		output_price_per_mtok: model?.output_price_per_mtok ?? 0
+		provider: 'mistral' as ProviderType,
+		name: '',
+		api_name: '',
+		context_window: 32000,
+		max_output_tokens: 4096,
+		temperature_default: 0.7,
+		is_reasoning: false,
+		input_price_per_mtok: 0,
+		output_price_per_mtok: 0
+	});
+
+	// Sync form data when model or provider props change (e.g., switching between edit targets)
+	$effect(() => {
+		formData = {
+			provider: (model?.provider ?? provider ?? 'mistral') as ProviderType,
+			name: model?.name ?? '',
+			api_name: model?.api_name ?? '',
+			context_window: model?.context_window ?? 32000,
+			max_output_tokens: model?.max_output_tokens ?? 4096,
+			temperature_default: model?.temperature_default ?? 0.7,
+			is_reasoning: model?.is_reasoning ?? false,
+			input_price_per_mtok: model?.input_price_per_mtok ?? 0,
+			output_price_per_mtok: model?.output_price_per_mtok ?? 0
+		};
+		// Reset validation state when model changes
+		errors = {};
+		touched = false;
 	});
 
 	/** Validation errors state */

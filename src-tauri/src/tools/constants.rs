@@ -76,3 +76,63 @@ pub mod calculator {
     /// Valid constant names
     pub const VALID_CONSTANTS: &[&str] = &["pi", "e", "tau", "sqrt2", "ln2", "ln10"];
 }
+
+// ===== Command Validation Constants (OPT-2) =====
+/// Centralized validation constants for Tauri commands.
+/// These constants define limits and valid values across the application.
+#[allow(dead_code)]
+pub mod commands {
+    // ----- Agent -----
+    /// Maximum length for agent names
+    pub const MAX_AGENT_NAME_LEN: usize = 64;
+    /// Maximum length for system prompts
+    pub const MAX_SYSTEM_PROMPT_LEN: usize = 10000;
+    /// Minimum temperature value for LLM
+    pub const MIN_TEMPERATURE: f32 = 0.0;
+    /// Maximum temperature value for LLM
+    pub const MAX_TEMPERATURE: f32 = 2.0;
+    /// Minimum max_tokens value
+    pub const MIN_MAX_TOKENS: usize = 256;
+    /// Maximum max_tokens value
+    pub const MAX_MAX_TOKENS: usize = 128000;
+    /// Valid LLM providers
+    pub const VALID_PROVIDERS: &[&str] = &["Mistral", "Ollama", "Demo"];
+    /// Valid lifecycle values
+    pub const VALID_LIFECYCLES: &[&str] = &["permanent", "temporary"];
+
+    // ----- MCP Server -----
+    /// Maximum length for MCP server names/IDs
+    pub const MAX_MCP_SERVER_NAME_LEN: usize = 64;
+    /// Maximum length for MCP server descriptions
+    pub const MAX_MCP_DESCRIPTION_LEN: usize = 1024;
+    /// Maximum number of command arguments
+    pub const MAX_MCP_ARGS_COUNT: usize = 50;
+    /// Maximum length for each command argument
+    pub const MAX_MCP_ARG_LEN: usize = 512;
+    /// Maximum number of environment variables
+    pub const MAX_MCP_ENV_COUNT: usize = 50;
+    /// Maximum length for environment variable names
+    pub const MAX_MCP_ENV_NAME_LEN: usize = 128;
+    /// Maximum length for environment variable values
+    pub const MAX_MCP_ENV_VALUE_LEN: usize = 4096;
+
+    // ----- Message -----
+    /// Maximum length for message content
+    pub const MAX_MESSAGE_CONTENT_LEN: usize = 100_000;
+
+    // ----- Tool Execution -----
+    /// Maximum length for tool names
+    pub const MAX_TOOL_NAME_LEN: usize = 128;
+    /// Maximum size for tool parameters (50KB)
+    pub const MAX_PARAMS_SIZE: usize = 50 * 1024;
+
+    // ----- Thinking -----
+    /// Maximum length for thinking content (50KB)
+    pub const MAX_THINKING_CONTENT_LEN: usize = 50 * 1024;
+
+    // ----- Models -----
+    /// Maximum length for model IDs
+    pub const MAX_MODEL_ID_LEN: usize = 128;
+    /// Valid model providers (lowercase)
+    pub const VALID_MODEL_PROVIDERS: &[&str] = &["mistral", "ollama"];
+}

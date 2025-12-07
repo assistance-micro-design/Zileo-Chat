@@ -56,8 +56,13 @@
 
 	let { subAgents = [], isStreaming = false, collapsed = true }: Props = $props();
 
-	/** Internal expanded state */
-	let expanded = $state(!collapsed);
+	/** Internal expanded state - syncs with collapsed prop */
+	let expanded = $state(true);
+
+	// Sync expanded state when collapsed prop changes
+	$effect(() => {
+		expanded = !collapsed;
+	});
 
 	/**
 	 * Toggle panel expansion

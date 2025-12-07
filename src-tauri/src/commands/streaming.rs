@@ -70,8 +70,8 @@ pub async fn execute_workflow_streaming(
 
     // Validate inputs
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     let validated_message = Validator::validate_message(&message).map_err(|e| {
@@ -80,8 +80,8 @@ pub async fn execute_workflow_streaming(
     })?;
 
     let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     // Create cancellation token for this workflow (enables real cancel functionality)
@@ -703,8 +703,8 @@ pub async fn cancel_workflow_streaming(
 
     // Validate workflow ID
     let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Request cancellation

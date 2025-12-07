@@ -86,15 +86,30 @@ Includes validation and environment variable editor.
 		env: Array<{ key: string; value: string }>;
 		description: string;
 	}>({
-		id: server?.id ?? generateId(),
-		name: server?.name ?? '',
-		enabled: server?.enabled ?? true,
-		command: server?.command ?? 'docker',
-		args: server?.args?.join('\n') ?? '',
-		env: server?.env
-			? Object.entries(server.env).map(([key, value]) => ({ key, value }))
-			: [],
-		description: server?.description ?? ''
+		id: generateId(),
+		name: '',
+		enabled: true,
+		command: 'docker',
+		args: '',
+		env: [],
+		description: ''
+	});
+
+	// Sync form data when server prop changes (e.g., switching between edit targets)
+	$effect(() => {
+		formData = {
+			id: server?.id ?? generateId(),
+			name: server?.name ?? '',
+			enabled: server?.enabled ?? true,
+			command: server?.command ?? 'docker',
+			args: server?.args?.join('\n') ?? '',
+			env: server?.env
+				? Object.entries(server.env).map(([key, value]) => ({ key, value }))
+				: [],
+			description: server?.description ?? ''
+		};
+		// Reset validation state when server changes
+		errors = {};
 	});
 
 	/**

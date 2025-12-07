@@ -23,14 +23,12 @@
 use crate::{
     models::{ThinkingStep, ThinkingStepCreate},
     security::Validator,
+    tools::constants::commands as cmd_const,
     AppState,
 };
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-
-/// Maximum allowed length for thinking step content (50KB)
-const MAX_CONTENT_LEN: usize = 50 * 1024;
 
 /// Saves a new thinking step to the database.
 ///
@@ -70,30 +68,30 @@ pub async fn save_thinking_step(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Validate message ID
     let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message ID");
-        format!("Invalid message ID: {}", e)
+        warn!(error = %e, "Invalid message_id");
+        format!("Invalid message_id: {}", e)
     })?;
 
     // Validate agent ID
     let validated_agent_id = Validator::validate_uuid(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     // Validate content
     if content.is_empty() {
         return Err("Thinking step content cannot be empty".to_string());
     }
-    if content.len() > MAX_CONTENT_LEN {
+    if content.len() > cmd_const::MAX_THINKING_CONTENT_LEN {
         return Err(format!(
             "Thinking step content exceeds maximum length of {} bytes",
-            MAX_CONTENT_LEN
+            cmd_const::MAX_THINKING_CONTENT_LEN
         ));
     }
 
@@ -141,8 +139,8 @@ pub async fn load_workflow_thinking_steps(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
@@ -202,8 +200,8 @@ pub async fn load_message_thinking_steps(
 
     // Validate message ID
     let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message ID");
-        format!("Invalid message ID: {}", e)
+        warn!(error = %e, "Invalid message_id");
+        format!("Invalid message_id: {}", e)
     })?;
 
     let query = format!(
@@ -335,7 +333,7 @@ mod tests {
     #[test]
     fn test_max_content_len() {
         // 50KB should be enough for most reasoning content
-        assert_eq!(MAX_CONTENT_LEN, 50 * 1024);
+        assert_eq!(cmd_const::MAX_THINKING_CONTENT_LEN, 50 * 1024);
     }
 
     #[test]
@@ -347,9 +345,9 @@ mod tests {
     #[test]
     fn test_content_length_validation() {
         let short_content = "This is a short reasoning step.";
-        assert!(short_content.len() < MAX_CONTENT_LEN);
+        assert!(short_content.len() < cmd_const::MAX_THINKING_CONTENT_LEN);
 
-        let long_content = "x".repeat(MAX_CONTENT_LEN + 1);
-        assert!(long_content.len() > MAX_CONTENT_LEN);
+        let long_content = "x".repeat(cmd_const::MAX_THINKING_CONTENT_LEN + 1);
+        assert!(long_content.len() > cmd_const::MAX_THINKING_CONTENT_LEN);
     }
 }

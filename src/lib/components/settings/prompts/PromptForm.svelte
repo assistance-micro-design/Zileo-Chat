@@ -47,10 +47,18 @@ Displays in a modal with variable detection and preview.
 	let { mode, prompt = null, saving = false, onsave, oncancel }: Props = $props();
 
 	// Form state
-	let name = $state(prompt?.name ?? '');
-	let description = $state(prompt?.description ?? '');
-	let category = $state<PromptCategory>(prompt?.category ?? 'custom');
-	let content = $state(prompt?.content ?? '');
+	let name = $state('');
+	let description = $state('');
+	let category = $state<PromptCategory>('custom');
+	let content = $state('');
+
+	// Sync form state when prompt prop changes (e.g., switching between edit targets)
+	$effect(() => {
+		name = prompt?.name ?? '';
+		description = prompt?.description ?? '';
+		category = prompt?.category ?? 'custom';
+		content = prompt?.content ?? '';
+	});
 
 	// Derived state
 	let detectedVariables = $derived(extractVariables(content));
@@ -97,15 +105,6 @@ Displays in a modal with variable detection and preview.
 		oncancel?.();
 	}
 
-	// Reset form when prompt changes (for edit mode)
-	$effect(() => {
-		if (prompt) {
-			name = prompt.name;
-			description = prompt.description;
-			category = prompt.category;
-			content = prompt.content;
-		}
-	});
 </script>
 
 <form class="prompt-form" onsubmit={handleSubmit}>

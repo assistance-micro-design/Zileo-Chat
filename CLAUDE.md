@@ -512,7 +512,7 @@ let query = QueryBuilder::new("memory")
 #### `tools/constants.rs` - Centralized Constants
 
 ```rust
-use crate::tools::constants::{memory, todo, user_question, sub_agent};
+use crate::tools::constants::{memory, todo, user_question, sub_agent, commands};
 
 // Memory tool constants
 let max = memory::MAX_CONTENT_LENGTH;  // 50_000
@@ -529,6 +529,15 @@ let question_types = user_question::VALID_TYPES;        // &["checkbox", "text",
 
 // Sub-agent limit
 let max_agents = sub_agent::MAX_SUB_AGENTS;  // 3
+
+// Command validation constants (OPT-2)
+use crate::tools::constants::commands as cmd_const;
+let max_agent_name = cmd_const::MAX_AGENT_NAME_LEN;         // 64
+let max_system_prompt = cmd_const::MAX_SYSTEM_PROMPT_LEN;   // 10_000
+let valid_providers = cmd_const::VALID_PROVIDERS;           // &["Mistral", "Ollama", "Demo"]
+let max_mcp_name = cmd_const::MAX_MCP_SERVER_NAME_LEN;      // 64
+let max_tool_name = cmd_const::MAX_TOOL_NAME_LEN;           // 128
+let max_message = cmd_const::MAX_MESSAGE_CONTENT_LEN;       // 100_000
 ```
 
 #### `tools/response.rs` - JSON Response Builder

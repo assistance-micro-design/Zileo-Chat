@@ -23,17 +23,12 @@
 use crate::{
     models::{ToolExecution, ToolExecutionCreate},
     security::Validator,
+    tools::constants::commands as cmd_const,
     AppState,
 };
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-
-/// Maximum allowed length for tool name
-const MAX_TOOL_NAME_LEN: usize = 128;
-
-/// Maximum allowed size for input/output params (50KB)
-const MAX_PARAMS_SIZE: usize = 50 * 1024;
 
 /// Saves a new tool execution to the database.
 ///
@@ -83,20 +78,20 @@ pub async fn save_tool_execution(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Validate message ID
     let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message ID");
-        format!("Invalid message ID: {}", e)
+        warn!(error = %e, "Invalid message_id");
+        format!("Invalid message_id: {}", e)
     })?;
 
     // Validate agent ID
     let validated_agent_id = Validator::validate_uuid(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent ID");
-        format!("Invalid agent ID: {}", e)
+        warn!(error = %e, "Invalid agent_id");
+        format!("Invalid agent_id: {}", e)
     })?;
 
     // Validate tool type
@@ -115,10 +110,10 @@ pub async fn save_tool_execution(
     if tool_name.is_empty() {
         return Err("Tool name cannot be empty".to_string());
     }
-    if tool_name.len() > MAX_TOOL_NAME_LEN {
+    if tool_name.len() > cmd_const::MAX_TOOL_NAME_LEN {
         return Err(format!(
             "Tool name exceeds maximum length of {} characters",
-            MAX_TOOL_NAME_LEN
+            cmd_const::MAX_TOOL_NAME_LEN
         ));
     }
 
@@ -130,16 +125,16 @@ pub async fn save_tool_execution(
         .map(|s| s.len())
         .unwrap_or(0);
 
-    if input_size > MAX_PARAMS_SIZE {
+    if input_size > cmd_const::MAX_PARAMS_SIZE {
         return Err(format!(
             "Input params exceed maximum size of {} bytes",
-            MAX_PARAMS_SIZE
+            cmd_const::MAX_PARAMS_SIZE
         ));
     }
-    if output_size > MAX_PARAMS_SIZE {
+    if output_size > cmd_const::MAX_PARAMS_SIZE {
         return Err(format!(
             "Output result exceeds maximum size of {} bytes",
-            MAX_PARAMS_SIZE
+            cmd_const::MAX_PARAMS_SIZE
         ));
     }
 
@@ -197,8 +192,8 @@ pub async fn load_workflow_tool_executions(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
@@ -263,8 +258,8 @@ pub async fn load_message_tool_executions(
 
     // Validate message ID
     let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message ID");
-        format!("Invalid message ID: {}", e)
+        warn!(error = %e, "Invalid message_id");
+        format!("Invalid message_id: {}", e)
     })?;
 
     let query = format!(
@@ -359,8 +354,8 @@ pub async fn clear_workflow_tool_executions(
 
     // Validate workflow ID
     let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow ID");
-        format!("Invalid workflow ID: {}", e)
+        warn!(error = %e, "Invalid workflow_id");
+        format!("Invalid workflow_id: {}", e)
     })?;
 
     // First count existing executions
@@ -401,7 +396,7 @@ mod tests {
     #[test]
     fn test_max_tool_name_len() {
         // Verify the constant is set to a reasonable value
-        assert_eq!(MAX_TOOL_NAME_LEN, 128);
+        assert_eq!(cmd_const::MAX_TOOL_NAME_LEN, 128);
     }
 
     #[test]
@@ -423,6 +418,6 @@ mod tests {
     #[test]
     fn test_max_params_size() {
         // 50KB should be enough for most tool params
-        assert_eq!(MAX_PARAMS_SIZE, 50 * 1024);
+        assert_eq!(cmd_const::MAX_PARAMS_SIZE, 50 * 1024);
     }
 }

@@ -39,25 +39,9 @@ use crate::models::mcp::{
     MCPServer, MCPServerConfig, MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
 };
 use crate::state::AppState;
+use crate::tools::constants::commands as cmd_const;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
-
-/// Maximum length for MCP server names
-const MAX_MCP_SERVER_NAME_LEN: usize = 64;
-/// Maximum length for MCP server descriptions
-const MAX_MCP_DESCRIPTION_LEN: usize = 1024;
-/// Maximum number of command arguments
-const MAX_MCP_ARGS_COUNT: usize = 50;
-/// Maximum length for each command argument
-const MAX_MCP_ARG_LEN: usize = 512;
-/// Maximum number of environment variables
-const MAX_MCP_ENV_COUNT: usize = 50;
-/// Maximum length for environment variable names
-const MAX_MCP_ENV_NAME_LEN: usize = 128;
-/// Maximum length for environment variable values
-const MAX_MCP_ENV_VALUE_LEN: usize = 4096;
-/// Maximum length for tool names
-const MAX_TOOL_NAME_LEN: usize = 128;
 
 /// Validates an MCP server ID.
 ///
@@ -72,10 +56,10 @@ fn validate_mcp_server_id(id: &str) -> Result<String, String> {
         return Err("Server ID cannot be empty".to_string());
     }
 
-    if trimmed.len() > MAX_MCP_SERVER_NAME_LEN {
+    if trimmed.len() > cmd_const::MAX_MCP_SERVER_NAME_LEN {
         return Err(format!(
             "Server ID exceeds maximum length of {} characters",
-            MAX_MCP_SERVER_NAME_LEN
+            cmd_const::MAX_MCP_SERVER_NAME_LEN
         ));
     }
 
@@ -105,10 +89,10 @@ fn validate_mcp_server_display_name(name: &str) -> Result<String, String> {
         return Err("Server name cannot be empty".to_string());
     }
 
-    if trimmed.len() > MAX_MCP_SERVER_NAME_LEN {
+    if trimmed.len() > cmd_const::MAX_MCP_SERVER_NAME_LEN {
         return Err(format!(
             "Server name exceeds maximum length of {} characters",
-            MAX_MCP_SERVER_NAME_LEN
+            cmd_const::MAX_MCP_SERVER_NAME_LEN
         ));
     }
 
@@ -134,10 +118,10 @@ fn validate_mcp_description(description: Option<&str>) -> Result<Option<String>,
                 return Ok(None);
             }
 
-            if trimmed.len() > MAX_MCP_DESCRIPTION_LEN {
+            if trimmed.len() > cmd_const::MAX_MCP_DESCRIPTION_LEN {
                 return Err(format!(
                     "Description exceeds maximum length of {} characters",
-                    MAX_MCP_DESCRIPTION_LEN
+                    cmd_const::MAX_MCP_DESCRIPTION_LEN
                 ));
             }
 
@@ -157,18 +141,18 @@ fn validate_mcp_description(description: Option<&str>) -> Result<Option<String>,
 /// - Each argument maximum 512 characters
 /// - No shell metacharacters in arguments (basic protection)
 fn validate_mcp_args(args: &[String]) -> Result<Vec<String>, String> {
-    if args.len() > MAX_MCP_ARGS_COUNT {
-        return Err(format!("Too many arguments (max {})", MAX_MCP_ARGS_COUNT));
+    if args.len() > cmd_const::MAX_MCP_ARGS_COUNT {
+        return Err(format!("Too many arguments (max {})", cmd_const::MAX_MCP_ARGS_COUNT));
     }
 
     let validated: Vec<String> = args
         .iter()
         .enumerate()
         .map(|(i, arg)| {
-            if arg.len() > MAX_MCP_ARG_LEN {
+            if arg.len() > cmd_const::MAX_MCP_ARG_LEN {
                 return Err(format!(
                     "Argument {} exceeds maximum length of {} characters",
-                    i, MAX_MCP_ARG_LEN
+                    i, cmd_const::MAX_MCP_ARG_LEN
                 ));
             }
             // Basic shell metacharacter protection (not comprehensive, defense in depth)
@@ -191,10 +175,10 @@ fn validate_mcp_args(args: &[String]) -> Result<Vec<String>, String> {
 fn validate_mcp_env(
     env: &std::collections::HashMap<String, String>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    if env.len() > MAX_MCP_ENV_COUNT {
+    if env.len() > cmd_const::MAX_MCP_ENV_COUNT {
         return Err(format!(
             "Too many environment variables (max {})",
-            MAX_MCP_ENV_COUNT
+            cmd_const::MAX_MCP_ENV_COUNT
         ));
     }
 
@@ -205,10 +189,10 @@ fn validate_mcp_env(
             if name.is_empty() {
                 return Err("Environment variable name cannot be empty".to_string());
             }
-            if name.len() > MAX_MCP_ENV_NAME_LEN {
+            if name.len() > cmd_const::MAX_MCP_ENV_NAME_LEN {
                 return Err(format!(
                     "Environment variable name '{}' exceeds maximum length of {} characters",
-                    name, MAX_MCP_ENV_NAME_LEN
+                    name, cmd_const::MAX_MCP_ENV_NAME_LEN
                 ));
             }
             if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
@@ -219,10 +203,10 @@ fn validate_mcp_env(
             }
 
             // Validate value
-            if value.len() > MAX_MCP_ENV_VALUE_LEN {
+            if value.len() > cmd_const::MAX_MCP_ENV_VALUE_LEN {
                 return Err(format!(
                     "Environment variable '{}' value exceeds maximum length of {} characters",
-                    name, MAX_MCP_ENV_VALUE_LEN
+                    name, cmd_const::MAX_MCP_ENV_VALUE_LEN
                 ));
             }
             if value.contains('\0') {
@@ -276,10 +260,10 @@ fn validate_tool_name(name: &str) -> Result<String, String> {
         return Err("Tool name cannot be empty".to_string());
     }
 
-    if trimmed.len() > MAX_TOOL_NAME_LEN {
+    if trimmed.len() > cmd_const::MAX_TOOL_NAME_LEN {
         return Err(format!(
             "Tool name exceeds maximum length of {} characters",
-            MAX_TOOL_NAME_LEN
+            cmd_const::MAX_TOOL_NAME_LEN
         ));
     }
 
@@ -839,7 +823,7 @@ mod tests {
 
     #[test]
     fn test_validate_mcp_server_id_too_long() {
-        let long_name = "a".repeat(MAX_MCP_SERVER_NAME_LEN + 1);
+        let long_name = "a".repeat(cmd_const::MAX_MCP_SERVER_NAME_LEN + 1);
         let result = validate_mcp_server_id(&long_name);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("maximum length"));
@@ -873,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_validate_mcp_description_too_long() {
-        let long_desc = "a".repeat(MAX_MCP_DESCRIPTION_LEN + 1);
+        let long_desc = "a".repeat(cmd_const::MAX_MCP_DESCRIPTION_LEN + 1);
         let result = validate_mcp_description(Some(&long_desc));
         assert!(result.is_err());
     }
@@ -886,7 +870,7 @@ mod tests {
 
     #[test]
     fn test_validate_mcp_args_too_many() {
-        let args: Vec<String> = (0..MAX_MCP_ARGS_COUNT + 1)
+        let args: Vec<String> = (0..cmd_const::MAX_MCP_ARGS_COUNT + 1)
             .map(|i| format!("arg{}", i))
             .collect();
         let result = validate_mcp_args(&args);
