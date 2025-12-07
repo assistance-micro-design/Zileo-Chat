@@ -31,7 +31,7 @@
   />
 -->
 <script lang="ts">
-	import type { ComponentType } from 'svelte';
+	import type { ComponentType, SvelteComponent } from 'svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 	import { ACTIVITY_FILTERS } from '$types/activity';
 	import { filterActivities, countActivitiesByType } from '$lib/utils/activity';
@@ -66,7 +66,7 @@
 	/**
 	 * Icon component mapping for filters
 	 */
-	const iconMap: Record<string, ComponentType> = {
+	const iconMap: Record<string, ComponentType<SvelteComponent>> = {
 		Activity: Activity,
 		Wrench: Wrench,
 		Bot: Bot,

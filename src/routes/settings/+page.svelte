@@ -106,6 +106,8 @@ Includes MCP server configuration section for managing external tool servers.
 		FolderSync
 	} from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
+	import { createModalController } from '$lib/utils/modal.svelte';
+	import type { ModalController } from '$lib/utils/modal.svelte';
 
 	/** Settings state (for API key input) */
 	let settings = $state({
@@ -121,9 +123,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 	/** MCP state */
 	let mcpState = $state<MCPState>(createInitialMCPState());
-	let showMCPModal = $state(false);
-	let mcpModalMode = $state<'create' | 'edit'>('create');
-	let editingServer = $state<MCPServerConfig | undefined>(undefined);
+	const mcpModal: ModalController<MCPServerConfig> = createModalController<MCPServerConfig>();
 	let mcpSaving = $state(false);
 	let testResult = $state<MCPTestResult | null>(null);
 	let testError = $state<string | null>(null);
@@ -132,9 +132,7 @@ Includes MCP server configuration section for managing external tool servers.
 
 	/** LLM state */
 	let llmState = $state<LLMState>(createInitialLLMState());
-	let showModelModal = $state(false);
-	let modelModalMode = $state<'create' | 'edit'>('create');
-	let editingModel = $state<LLMModel | undefined>(undefined);
+	const modelModal: ModalController<LLMModel> = createModalController<LLMModel>();
 	let modelSaving = $state(false);
 	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
 	let showApiKeyModal = $state(false);
@@ -212,20 +210,10 @@ Includes MCP server configuration section for managing external tool servers.
 	}
 
 	/**
-	 * Opens the create server modal
-	 */
-	function openCreateModal(): void {
-		mcpModalMode = 'create';
-		editingServer = undefined;
-		showMCPModal = true;
-	}
-
-	/**
-	 * Opens the edit server modal
+	 * Opens the edit server modal (create uses mcpModal.openCreate() directly)
 	 */
 	function openEditModal(server: MCPServer): void {
-		mcpModalMode = 'edit';
-		editingServer = {
+		mcpModal.openEdit({
 			id: server.id,
 			name: server.name,
 			enabled: server.enabled,
@@ -233,16 +221,7 @@ Includes MCP server configuration section for managing external tool servers.
 			args: server.args,
 			env: server.env,
 			description: server.description
-		};
-		showMCPModal = true;
-	}
-
-	/**
-	 * Closes the MCP modal
-	 */
-	function closeMCPModal(): void {
-		showMCPModal = false;
-		editingServer = undefined;
+		});
 	}
 
 	/**
@@ -251,14 +230,14 @@ Includes MCP server configuration section for managing external tool servers.
 	async function handleSaveMCPServer(config: MCPServerConfig): Promise<void> {
 		mcpSaving = true;
 		try {
-			if (mcpModalMode === 'create') {
+			if (mcpModal.mode === 'create') {
 				const server = await createServer(config);
 				mcpState = addServer(mcpState, server);
 			} else {
 				const server = await updateServerConfig(config.id, config);
 				mcpState = updateServer(mcpState, config.id, server);
 			}
-			closeMCPModal();
+			mcpModal.close();
 		} catch (err) {
 			mcpState = setMCPError(mcpState, `Failed to save server: ${err}`);
 		} finally {
@@ -376,31 +355,7 @@ Includes MCP server configuration section for managing external tool servers.
 		}
 	}
 
-	/**
-	 * Opens the create model modal
-	 */
-	function openCreateModelModal(): void {
-		modelModalMode = 'create';
-		editingModel = undefined;
-		showModelModal = true;
-	}
-
-	/**
-	 * Opens the edit model modal
-	 */
-	function openEditModelModal(model: LLMModel): void {
-		modelModalMode = 'edit';
-		editingModel = model;
-		showModelModal = true;
-	}
-
-	/**
-	 * Closes the model modal
-	 */
-	function closeModelModal(): void {
-		showModelModal = false;
-		editingModel = undefined;
-	}
+	// Model modal uses modelModal.openCreate() and modelModal.openEdit(model) directly
 
 	/**
 	 * Handles model form submission (create or update)
@@ -408,16 +363,16 @@ Includes MCP server configuration section for managing external tool servers.
 	async function handleSaveModel(data: CreateModelRequest | UpdateModelRequest): Promise<void> {
 		modelSaving = true;
 		try {
-			if (modelModalMode === 'create') {
+			if (modelModal.mode === 'create') {
 				const model = await createModel(data as CreateModelRequest);
 				llmState = addModelToState(llmState, model);
 				message = { type: 'success', text: `Model "${model.name}" created successfully` };
-			} else if (editingModel) {
-				const model = await updateModel(editingModel.id, data as UpdateModelRequest);
-				llmState = updateModelInState(llmState, editingModel.id, model);
+			} else if (modelModal.editing) {
+				const model = await updateModel(modelModal.editing.id, data as UpdateModelRequest);
+				llmState = updateModelInState(llmState, modelModal.editing.id, model);
 				message = { type: 'success', text: `Model "${model.name}" updated successfully` };
 			}
-			closeModelModal();
+			modelModal.close();
 		} catch (err) {
 			message = { type: 'error', text: `Failed to save model: ${err}` };
 		} finally {
@@ -778,7 +733,7 @@ Includes MCP server configuration section for managing external tool servers.
 						value={selectedModelsProvider}
 						onchange={handleModelsProviderChange}
 					/>
-					<Button variant="primary" size="sm" onclick={openCreateModelModal}>
+					<Button variant="primary" size="sm" onclick={() => modelModal.openCreate()}>
 						<Plus size={16} />
 						<span>{$i18n('models_add')}</span>
 					</Button>
@@ -810,7 +765,7 @@ Includes MCP server configuration section for managing external tool servers.
 								{/if}
 								{$i18n('models_add_custom')}
 							</p>
-							<Button variant="primary" onclick={openCreateModelModal}>
+							<Button variant="primary" onclick={() => modelModal.openCreate()}>
 								<Plus size={16} />
 								<span>{$i18n('models_add_first')}</span>
 							</Button>
@@ -823,7 +778,7 @@ Includes MCP server configuration section for managing external tool servers.
 						<ModelCard
 							{model}
 							isDefault={llmState.providers[model.provider]?.default_model_id === model.id}
-							onEdit={() => openEditModelModal(model)}
+							onEdit={() => modelModal.openEdit(model)}
 							onDelete={() => handleDeleteModel(model)}
 							onSetDefault={() => handleSetDefaultModel(model)}
 						/>
@@ -848,7 +803,7 @@ Includes MCP server configuration section for managing external tool servers.
 						tutorialKey="help_mcp_tutorial"
 					/>
 				</div>
-				<Button variant="primary" size="sm" onclick={openCreateModal}>
+				<Button variant="primary" size="sm" onclick={() => mcpModal.openCreate()}>
 					<Plus size={16} />
 					<span>{$i18n('mcp_add_server')}</span>
 				</Button>
@@ -878,7 +833,7 @@ Includes MCP server configuration section for managing external tool servers.
 							<p class="empty-description">
 								{$i18n('mcp_description')}
 							</p>
-							<Button variant="primary" onclick={openCreateModal}>
+							<Button variant="primary" onclick={() => mcpModal.openCreate()}>
 								<Plus size={16} />
 								<span>{$i18n('mcp_add_first')}</span>
 							</Button>
@@ -1034,16 +989,16 @@ Includes MCP server configuration section for managing external tool servers.
 
 <!-- MCP Server Modal (Create/Edit) -->
 <Modal
-	open={showMCPModal}
-	title={mcpModalMode === 'create' ? $i18n('mcp_modal_add') : $i18n('mcp_modal_edit')}
-	onclose={closeMCPModal}
+	open={mcpModal.show}
+	title={mcpModal.mode === 'create' ? $i18n('mcp_modal_add') : $i18n('mcp_modal_edit')}
+	onclose={() => mcpModal.close()}
 >
 	{#snippet body()}
 		<MCPServerForm
-			mode={mcpModalMode}
-			server={editingServer}
+			mode={mcpModal.mode}
+			server={mcpModal.editing}
 			onsave={handleSaveMCPServer}
-			oncancel={closeMCPModal}
+			oncancel={() => mcpModal.close()}
 			saving={mcpSaving}
 		/>
 	{/snippet}
@@ -1072,17 +1027,17 @@ Includes MCP server configuration section for managing external tool servers.
 
 <!-- Model Modal (Create/Edit) -->
 <Modal
-	open={showModelModal}
-	title={modelModalMode === 'create' ? $i18n('modal_add_custom_model') : $i18n('modal_edit_model')}
-	onclose={closeModelModal}
+	open={modelModal.show}
+	title={modelModal.mode === 'create' ? $i18n('modal_add_custom_model') : $i18n('modal_edit_model')}
+	onclose={() => modelModal.close()}
 >
 	{#snippet body()}
 		<ModelForm
-			mode={modelModalMode}
-			model={editingModel}
+			mode={modelModal.mode}
+			model={modelModal.editing}
 			provider={selectedModelsProvider === 'all' ? 'mistral' : selectedModelsProvider}
 			onsubmit={handleSaveModel}
-			oncancel={closeModelModal}
+			oncancel={() => modelModal.close()}
 			saving={modelSaving}
 		/>
 	{/snippet}
