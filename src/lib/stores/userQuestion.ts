@@ -71,6 +71,11 @@ const store = writable<UserQuestionState>(initialState);
 let unlistenStream: UnlistenFn | null = null;
 
 /**
+ * Tracks whether the store has been initialized with event listeners
+ */
+let isInitialized = false;
+
+/**
  * User question store with actions for managing interactive question-answer flows.
  * Automatically listens to streaming events during workflow execution.
  */
@@ -85,6 +90,12 @@ export const userQuestionStore = {
 	 * Should be called once on app initialization.
 	 */
 	async init(): Promise<void> {
+		// Safety check: cleanup existing listener if already initialized
+		if (isInitialized) {
+			console.warn('[userQuestion] Store already initialized, cleaning up first');
+			this.cleanup();
+		}
+
 		// Listen to streaming events for user_question_start
 		unlistenStream = await listen<StreamChunk>('workflow_stream', (event) => {
 			const chunk = event.payload;
@@ -92,6 +103,8 @@ export const userQuestionStore = {
 				this.handleQuestionStart(chunk.user_question);
 			}
 		});
+
+		isInitialized = true;
 	},
 
 	/**
@@ -213,6 +226,7 @@ export const userQuestionStore = {
 			unlistenStream();
 			unlistenStream = null;
 		}
+		isInitialized = false;
 		store.set(initialState);
 	}
 };

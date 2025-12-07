@@ -31,3 +31,4 @@ export {
 	filterActivities,
 	countActivitiesByType
 } from './activity';
+export { getErrorMessage, isTauriError, formatErrorForDisplay } from './error';

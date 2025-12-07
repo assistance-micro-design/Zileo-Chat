@@ -230,7 +230,7 @@ Phase 8 (Nice-to-Have) [Optionnel]
 | Phase | Status | % Complete | Notes |
 |-------|--------|------------|-------|
 | 0 | Complete | 100% | 2025-12-06 - SurrealDB 2.4.0, CSP, validations |
-| 1 | Pending | 0% | - |
+| 1 | Complete | 100% | 2025-12-07 - Memory leaks fixed, Svelte 5.45.6, error utility |
 | 2 | Pending | 0% | - |
 | 3 | Pending | 0% | - |
 | 4 | Pending | 0% | - |

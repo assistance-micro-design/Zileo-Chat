@@ -18,7 +18,7 @@
  * Theme Store
  * Manages application theme (light/dark mode) with persistence
  */
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 /**
  * Theme type definition
@@ -26,64 +26,56 @@ import { writable } from 'svelte/store';
 export type Theme = 'light' | 'dark';
 
 /**
- * Creates a theme store with persistence and system preference detection
- * @returns Theme store with methods for theme management
+ * Internal writable store
  */
-function createThemeStore() {
-	const { subscribe, set } = writable<Theme>('light');
-
-	return {
-		subscribe,
-
-		/**
-		 * Set the theme and persist to localStorage
-		 * @param theme - The theme to apply
-		 */
-		setTheme: (theme: Theme): void => {
-			if (typeof document !== 'undefined') {
-				document.documentElement.setAttribute('data-theme', theme);
-				localStorage.setItem('theme', theme);
-			}
-			set(theme);
-		},
-
-		/**
-		 * Toggle between light and dark themes
-		 */
-		toggle: (): void => {
-			let currentTheme: Theme = 'light';
-
-			const unsubscribe = subscribe((value) => {
-				currentTheme = value;
-			});
-			unsubscribe();
-
-			const nextTheme: Theme = currentTheme === 'light' ? 'dark' : 'light';
-
-			if (typeof document !== 'undefined') {
-				document.documentElement.setAttribute('data-theme', nextTheme);
-				localStorage.setItem('theme', nextTheme);
-			}
-			set(nextTheme);
-		},
-
-		/**
-		 * Initialize theme from localStorage or system preference
-		 */
-		init: (): void => {
-			if (typeof window === 'undefined') return;
-
-			const saved = localStorage.getItem('theme') as Theme | null;
-			const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-			const theme: Theme = saved || (prefersDark ? 'dark' : 'light');
-
-			document.documentElement.setAttribute('data-theme', theme);
-			set(theme);
-		}
-	};
-}
+const store = writable<Theme>('light');
 
 /**
- * Theme store instance
+ * Theme store with persistence and system preference detection
  */
-export const theme = createThemeStore();
+export const theme = {
+	/**
+	 * Subscribe to theme changes
+	 */
+	subscribe: store.subscribe,
+
+	/**
+	 * Set the theme and persist to localStorage
+	 * @param value - The theme to apply
+	 */
+	setTheme: (value: Theme): void => {
+		if (typeof document !== 'undefined') {
+			document.documentElement.setAttribute('data-theme', value);
+			localStorage.setItem('theme', value);
+		}
+		store.set(value);
+	},
+
+	/**
+	 * Toggle between light and dark themes
+	 */
+	toggle: (): void => {
+		const currentTheme = get(store);
+		const nextTheme: Theme = currentTheme === 'light' ? 'dark' : 'light';
+
+		if (typeof document !== 'undefined') {
+			document.documentElement.setAttribute('data-theme', nextTheme);
+			localStorage.setItem('theme', nextTheme);
+		}
+		store.set(nextTheme);
+	},
+
+	/**
+	 * Initialize theme from localStorage or system preference
+	 */
+	init: (): void => {
+		if (typeof window === 'undefined') return;
+
+		const saved = localStorage.getItem('theme') as Theme | null;
+		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+		const value: Theme = saved || (prefersDark ? 'dark' : 'light');
+
+		document.documentElement.setAttribute('data-theme', value);
+		store.set(value);
+	}
+};

@@ -193,6 +193,11 @@ const store = writable<StreamingState>(initialState);
  */
 let unlisteners: UnlistenFn[] = [];
 
+/**
+ * Tracks whether the store has been initialized with event listeners
+ */
+let isInitialized = false;
+
 // ============================================================================
 // Chunk Processing
 // ============================================================================
@@ -411,15 +416,18 @@ export const streamingStore = {
 	 * @param workflowId - The workflow ID to stream
 	 */
 	async start(workflowId: string): Promise<void> {
+		// Safety check: cleanup existing listeners if already initialized
+		if (isInitialized) {
+			console.warn('[streaming] Store already initialized, cleaning up first');
+			await this.cleanup();
+		}
+
 		// Reset state with new workflow
 		store.set({
 			...initialState,
 			workflowId,
 			isStreaming: true
 		});
-
-		// Cleanup any existing listeners
-		await this.cleanup();
 
 		// Setup new listeners
 		const unlistenChunk = await listen<StreamChunk>(STREAM_EVENTS.WORKFLOW_STREAM, (event) => {
@@ -434,6 +442,7 @@ export const streamingStore = {
 		);
 
 		unlisteners = [unlistenChunk, unlistenComplete];
+		isInitialized = true;
 	},
 
 	/**
@@ -562,6 +571,7 @@ export const streamingStore = {
 			unlisten();
 		}
 		unlisteners = [];
+		isInitialized = false;
 	},
 
 	/**

@@ -94,6 +94,11 @@ const store = writable<ValidationState>(initialState);
 let unlistener: UnlistenFn | null = null;
 
 /**
+ * Tracks whether the store has been initialized with event listeners
+ */
+let isInitialized = false;
+
+/**
  * Converts a ValidationRequiredEvent to a ValidationRequest for the modal.
  */
 function convertToValidationRequest(event: ValidationRequiredEvent): ValidationRequest {
@@ -130,8 +135,11 @@ export const validationStore = {
 	 * Call this when the agent page mounts.
 	 */
 	async init(): Promise<void> {
-		// Cleanup any existing listener
-		await this.cleanup();
+		// Safety check: cleanup existing listener if already initialized
+		if (isInitialized) {
+			console.warn('[validation] Store already initialized, cleaning up first');
+			await this.cleanup();
+		}
 
 		// Listen for validation_required events
 		unlistener = await listen<ValidationRequiredEvent>(
@@ -151,6 +159,8 @@ export const validationStore = {
 				}));
 			}
 		);
+
+		isInitialized = true;
 	},
 
 	/**
@@ -246,6 +256,7 @@ export const validationStore = {
 			unlistener();
 			unlistener = null;
 		}
+		isInitialized = false;
 	},
 
 	/**

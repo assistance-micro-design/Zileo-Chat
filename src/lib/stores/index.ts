@@ -34,3 +34,12 @@ export * from './tokens';
 export * from './locale';
 export * from './onboarding';
 export * from './userQuestion';
+export * from './validation';
+export {
+	validationSettingsStore,
+	settings as validationSettings,
+	isLoading as validationSettingsLoading,
+	isSaving as validationSettingsSaving,
+	settingsError as validationSettingsError,
+	hasSettings as hasValidationSettings
+} from './validation-settings';
