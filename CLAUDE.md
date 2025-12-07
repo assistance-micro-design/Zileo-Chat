@@ -12,28 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
 - **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
 
-**Current Status**: Phase 5 Backend Features complete. Functional Agent System operational. Phase 6 Integration pending.
-
-## Implementation Progress
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 0 | Complete | Base implementation (agents, LLM, DB, security, 19 Tauri commands) |
-| Phase 1 | Complete | Design System Foundation (theme, 13 UI components) |
-| Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
-| Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
-| Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
-| **Phase 5** | **Complete** | Backend Features (validation, memory, streaming, agent CRUD - 115 Tauri commands) |
-| Phase 6 | Pending | Integration & Polish (E2E tests, accessibility audit) |
-
-### Functional Agent System (Complete)
-
-**Phases Implemented**:
-1. **Phase 1**: Backend Agent Persistence (SurrealDB table, CRUD commands)
-2. **Phase 2**: Frontend Store & Types (agentStore, AgentSummary, AgentConfigCreate)
-3. **Phase 3**: Agent Settings UI (AgentSettings, AgentList, AgentForm components)
-4. **Phase 4**: Agent Selector Integration (store-based loading, empty state handling)
-5. **Phase 5**: Tool Execution Integration (XML tool calls, ToolFactory, MCPManager loop)
+### Functional Agent System
 
 **Key Features**:
 - Zero agents at startup (user creates all agents via Settings)
@@ -46,25 +25,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Phase 1 Deliverables (Complete)
 
 **Theme System** (`src/lib/stores/theme.ts`):
-- Light/dark mode toggle with localStorage persistence
-- System preference detection on init
 
 **UI Components** (`src/lib/components/ui/`):
-| Component | Description |
-|-----------|-------------|
-| `Button` | 4 variants (primary, secondary, ghost, danger), 4 sizes |
-| `Badge` | Semantic variants (primary, success, warning, error) |
-| `StatusIndicator` | Animated status dots (idle, running, completed, error) |
-| `Spinner` | Loading spinner with configurable size |
-| `ProgressBar` | Progress bar with optional percentage |
-| `Card` | Container with header/body/footer snippets |
-| `Modal` | Accessible dialog (Escape key, backdrop click) |
-| `Input` | Text input with label and help text |
-| `Select` | Dropdown with typed options |
-| `Textarea` | Multi-line input |
-| `Skeleton` | Loading placeholder with text, circular, rectangular variants |
-| `LanguageSelector` | i18n language picker with flag display |
-| `HelpButton` | Contextual help button with tooltip (titleKey, descriptionKey) |
 
 **Usage**:
 ```typescript
@@ -228,7 +190,7 @@ await invoke('update_provider_settings', {
 });
 ```
 
-### Phase 5 Commands (Validation, Memory, Streaming)
+### Commands (Validation, Memory, Streaming)
 
 **Validation** (`src-tauri/src/commands/validation.rs`):
 ```typescript
@@ -395,23 +357,6 @@ $localeInfo   // { id: 'fr', nativeName: 'Francais', flag: 'FR', countryCode: 'F
 2. Use the `$i18n()` store in templates
 3. Follow naming conventions: `section_action_detail`
 
-**Example - Adding a new feature**:
-```json
-// en.json
-{
-  "feature_title": "New Feature",
-  "feature_description": "This is a new feature.",
-  "feature_button_enable": "Enable Feature"
-}
-
-// fr.json
-{
-  "feature_title": "Nouvelle fonctionnalite",
-  "feature_description": "Ceci est une nouvelle fonctionnalite.",
-  "feature_button_enable": "Activer la fonctionnalite"
-}
-```
-
 ### Configuration
 
 The `$messages` alias is configured in:
@@ -425,16 +370,6 @@ alias: {
   '$messages/*': './src/messages/*'
 }
 ```
-
-### French Translation Guidelines
-
-When adding French translations, avoid anglicisms:
-- "Settings" → "Parametres" (not "Settings")
-- "Provider" → "Fournisseur" (not "Provider")
-- "Workflow" → "Flux de travail" (not "Workflow")
-- "Loading" → "Chargement" (not "Loading")
-- "Server" → "Serveur" (not "Serveur")
-- "Theme" → "Theme" (acceptable, same in French)
 
 ### Type Definition Examples
 
@@ -503,7 +438,7 @@ $isLoading    // boolean
 $hasAgents    // boolean
 ```
 
-### Store Memory Management (Phase 1 Stability)
+### Store Memory Management
 
 Stores with Tauri event listeners implement cleanup methods to prevent memory leaks:
 
@@ -722,32 +657,64 @@ interface MCPLatencyMetrics {
 }
 ```
 
+### MCP Circuit Breaker (Phase 6 Optimization)
+
+The MCP system implements the circuit breaker pattern to prevent cascade failures when servers become unhealthy.
+
+**States**:
+- **Closed**: Normal operation, requests pass through
+- **Open**: Server unhealthy (3 failures), requests rejected immediately for 60s cooldown
+- **HalfOpen**: Testing recovery, allows one request through
+
+**Usage in code**:
+```rust
+// Circuit breaker is automatically applied in call_tool()
+// If server has 3 consecutive failures, circuit opens and returns:
+MCPError::CircuitBreakerOpen {
+    server: "Serena".to_string(),
+    cooldown_remaining_secs: 45,
+}
+
+// Manual circuit breaker control (if needed)
+manager.get_circuit_breaker_state("Serena").await; // Returns CircuitState
+manager.reset_circuit_breaker("Serena").await;     // Force reset to Closed
+```
+
+### MCP Health Checks (Phase 6 Optimization)
+
+Periodic health checks detect unhealthy servers proactively.
+
+**Starting health checks**:
+```rust
+// Start with default 5-minute interval
+let manager = Arc::new(MCPManager::new(db).await?);
+let _health_task = MCPManager::start_health_checks(manager.clone(), None);
+
+// Or with custom interval
+let _health_task = MCPManager::start_health_checks(
+    manager.clone(),
+    Some(Duration::from_secs(120))  // 2 minutes
+);
+
+// Stop health checks
+manager.stop_health_checks();
+```
+
+**Health check behavior**:
+- Uses `refresh_tools()` as health probe (real network call)
+- Updates circuit breakers based on results
+- Logs health status at debug level
+
+### MCP ID Lookup Table (Phase 6 Optimization)
+
+Server operations now use O(1) lookup via id_to_name table instead of O(n) scan.
+
+**Affected methods**:
+- `stop_server(id)` - Now O(1) instead of O(n)
+- `get_server(id)` - Now O(1) instead of O(n)
+- `restart_server(id)` - Now O(1) instead of O(n)
+
 ## Database Schema (SurrealDB)
-
-**19 tables** with graph relations. Key entities:
-
-**Core**:
-- **workflow**: Manages agent workflows (relations: agent, messages, tasks, validations)
-- **agent**: User-created agent configurations (id, name, lifecycle, llm, tools, mcp_servers, system_prompt)
-- **agent_state**: Persistent agent runtime state
-- **message**: Conversation messages with role (user/assistant/system)
-- **memory**: Vector embeddings for agent memory (user_pref, context, knowledge, decision types)
-
-**Tracking**:
-- **task**: Todo items with status tracking
-- **validation_request**: Human-in-the-loop validation tracking
-- **user_question**: Interactive questions from agents to users (pending/answered/skipped)
-- **tool_execution**: Tool call persistence with metrics
-- **thinking_step**: Agent reasoning chain-of-thought
-- **sub_agent_execution**: Sub-agent spawn history
-
-**Configuration**:
-- **llm_model**: LLM model registry (builtin + custom)
-- **provider_settings**: Provider configuration (mistral, ollama)
-- **mcp_server**: MCP server configurations
-- **mcp_call_log**: MCP tool audit log
-- **prompt**: Prompt library
-- **settings**: Key-value config storage
 
 See `docs/DATABASE_SCHEMA.md` for full schema details.
 
@@ -928,7 +895,7 @@ Use when: Loading workflow records where status is stored as string.
 
 See `src-tauri/src/models/serde_utils.rs` for detailed documentation and examples.
 
-### Parameterized Queries (Phase 5 Security)
+### Parameterized Queries
 
 Use parameterized queries to prevent SQL injection. The `DBClient` provides helper methods:
 
@@ -978,7 +945,7 @@ db.execute_with_params(
 - Numeric values (LIMIT, OFFSET)
 - Table names controlled by code (not user input)
 
-### Transaction Support (Phase 5)
+### Transaction Support
 
 Use transactions for multi-query atomic operations:
 
@@ -1004,7 +971,7 @@ db.transaction_with_params(vec![
 ]).await?;  // Rolls back on any failure
 ```
 
-### Query Limits (Phase 5 OPT-DB-8)
+### Query Limits
 
 All list queries must include LIMIT to prevent memory explosion. Use constants from `tools/constants.rs`:
 
@@ -1026,7 +993,7 @@ let query = format!(
 
 ## Security Considerations
 
-**Production-ready from v1** (Phase 0 + Phase 5 Security Optimizations applied):
+**Production-ready from v1**:
 - API keys stored via Tauri secure storage (OS keychain) + AES-256 encryption
 - API key validation: rejects newlines (HTTP header injection prevention)
 - Input validation on both frontend and backend via `Validator` struct
@@ -1057,40 +1024,17 @@ let query = format!(
 - ✅ **Testing**: Critical paths coverage (~70% backend)
 - ✅ **Async Patterns**: Tokio for Rust, async/await for TypeScript
 
-## Custom Slash Commands
-
-This project includes specialized workflows:
-
-- `/Plan_Zileo <description>`: Create detailed technical planning spec without implementation
-- `/Build_zileo <description>`: Full implementation workflow with quality validation
-
-Both commands follow a rigorous process including parallel discovery, architectural analysis, and comprehensive validation.
-
 ## LLM Provider Configuration
 
 **Phase 1 Providers**:
 - **Mistral**: Cloud API (mistral-large, mistral-medium)
 - **Ollama**: Local models (llama3, mistral, codellama)
 
-**Future**: Claude, GPT-4, Gemini
-
 Provider selection is user-controlled via Settings UI. The application uses Rig.rs for multi-provider abstraction.
 
 ## MCP Server Configuration
 
 MCP servers are user-configured (not bundled) via Settings UI:
-
-```json
-{
-  "mcpServers": {
-    "server_name": {
-      "command": "docker|npx|uvx",
-      "args": ["array", "of", "arguments"],
-      "env": { "VAR": "value" }
-    }
-  }
-}
-```
 
 Supported deployment methods:
 - **Docker**: Local containers (e.g., Serena for code analysis)
@@ -1188,8 +1132,8 @@ cargo --version   # >= 1.91.1
 ## OS Targets
 
 **Priority**:
-1. **Linux** (Phase 1): AppImage + .deb
-2. **macOS** (Phase 1.5): .dmg
-3. **Windows** (Phase 2): .msi
+1. **Linux** : AppImage + .deb
+2. **macOS** : .dmg
+3. **Windows** : .msi
 
 Build outputs in `src-tauri/target/release/bundle/`

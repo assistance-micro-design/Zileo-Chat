@@ -16,8 +16,8 @@ pub async fn submit_user_response(
     window: Window,
 ) -> Result<(), String> {
     // Validate question_id is a valid UUID
-    let validated_id =
-        Validator::validate_uuid(&question_id).map_err(|e| format!("Invalid question_id: {}", e))?;
+    let validated_id = Validator::validate_uuid(&question_id)
+        .map_err(|e| format!("Invalid question_id: {}", e))?;
 
     // Validate question exists and is pending using parameterized query
     let result: Vec<serde_json::Value> = state
@@ -93,8 +93,8 @@ pub async fn get_pending_questions(
     state: State<'_, AppState>,
 ) -> Result<Vec<UserQuestion>, String> {
     // Validate workflow_id is a valid UUID
-    let validated_id =
-        Validator::validate_uuid(&workflow_id).map_err(|e| format!("Invalid workflow_id: {}", e))?;
+    let validated_id = Validator::validate_uuid(&workflow_id)
+        .map_err(|e| format!("Invalid workflow_id: {}", e))?;
 
     // Use parameterized query to prevent injection
     let query = "SELECT meta::id(id) AS id, workflow_id, agent_id, question, question_type, \
@@ -107,10 +107,7 @@ pub async fn get_pending_questions(
         .db
         .query_json_with_params(
             query,
-            vec![(
-                "workflow_id".to_string(),
-                serde_json::json!(validated_id),
-            )],
+            vec![("workflow_id".to_string(), serde_json::json!(validated_id))],
         )
         .await
         .map_err(|e| format!("Failed to query questions: {}", e))?;
@@ -141,8 +138,8 @@ pub async fn skip_question(
     window: Window,
 ) -> Result<(), String> {
     // Validate question_id is a valid UUID
-    let validated_id =
-        Validator::validate_uuid(&question_id).map_err(|e| format!("Invalid question_id: {}", e))?;
+    let validated_id = Validator::validate_uuid(&question_id)
+        .map_err(|e| format!("Invalid question_id: {}", e))?;
 
     // Validate question exists and is pending (validated_id is safe UUID)
     let result: Vec<serde_json::Value> = state

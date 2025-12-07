@@ -43,6 +43,7 @@
 //! automatically loaded on startup. Tool calls are logged to `mcp_call_log`.
 
 use crate::db::DBClient;
+use crate::mcp::circuit_breaker::CircuitBreaker;
 use crate::mcp::client::MCPClient;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{
@@ -53,12 +54,15 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Tool cache TTL (1 hour)
 const TOOL_CACHE_TTL: Duration = Duration::from_secs(3600);
+
+/// Default health check interval (5 minutes)
+const DEFAULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(300);
 
 /// MCP Manager
 ///
@@ -93,6 +97,12 @@ pub struct MCPManager {
     db: Arc<DBClient>,
     /// Tool cache with TTL (server_name -> (tools, cached_at))
     tool_cache: RwLock<HashMap<String, (Vec<MCPTool>, Instant)>>,
+    /// Circuit breakers per server (server_name -> CircuitBreaker)
+    circuit_breakers: RwLock<HashMap<String, CircuitBreaker>>,
+    /// ID to Name lookup table for O(1) access (server_id -> server_name)
+    id_to_name: RwLock<HashMap<String, String>>,
+    /// Shutdown signal sender for health check task
+    health_check_shutdown: broadcast::Sender<()>,
 }
 
 impl MCPManager {
@@ -109,10 +119,16 @@ impl MCPManager {
     pub async fn new(db: Arc<DBClient>) -> MCPResult<Self> {
         info!("Creating MCP manager");
 
+        // Create shutdown channel for health check task (capacity 1 is enough)
+        let (shutdown_tx, _) = broadcast::channel(1);
+
         Ok(Self {
             clients: RwLock::new(HashMap::new()),
             db,
             tool_cache: RwLock::new(HashMap::new()),
+            circuit_breakers: RwLock::new(HashMap::new()),
+            id_to_name: RwLock::new(HashMap::new()),
+            health_check_shutdown: shutdown_tx,
         })
     }
 
@@ -204,6 +220,7 @@ impl MCPManager {
         // NOTE: Caller (spawn_server or load_from_db) must verify name uniqueness before calling
 
         let name = config.name.clone();
+        let id = config.id.clone();
         let client = MCPClient::connect(config.clone()).await?;
 
         let server = MCPServer {
@@ -221,8 +238,20 @@ impl MCPManager {
             clients.insert(name.clone(), client);
         }
 
+        // Add ID -> Name lookup for O(1) access (OPT-7)
+        {
+            let mut id_lookup = self.id_to_name.write().await;
+            id_lookup.insert(id.clone(), name.clone());
+        }
+
+        // Create circuit breaker for this server (OPT-6)
+        {
+            let mut breakers = self.circuit_breakers.write().await;
+            breakers.insert(name.clone(), CircuitBreaker::with_defaults(name.clone()));
+        }
+
         info!(
-            server_id = %config.id,
+            server_id = %id,
             server_name = %name,
             tools_count = server.tools.len(),
             resources_count = server.resources.len(),
@@ -239,7 +268,7 @@ impl MCPManager {
     ///
     /// # Arguments
     ///
-    /// * `id` - Server ID to stop (will find server by ID in config, HashMap is keyed by NAME)
+    /// * `id` - Server ID to stop (uses O(1) lookup via id_to_name table)
     ///
     /// # Errors
     ///
@@ -247,16 +276,12 @@ impl MCPManager {
     pub async fn stop_server(&self, id: &str) -> MCPResult<()> {
         info!(server_id = %id, "Stopping MCP server");
 
-        // Find the server name that matches this ID (HashMap is keyed by NAME, not ID)
-        let server_name = {
-            let clients = self.clients.read().await;
-            clients
-                .iter()
-                .find(|(_, client)| client.config().id == id)
-                .map(|(name, _)| name.clone())
-        };
-
-        let name = server_name.ok_or_else(|| MCPError::ServerNotFound {
+        // O(1) lookup via id_to_name table (OPT-7)
+        let name = {
+            let id_lookup = self.id_to_name.read().await;
+            id_lookup.get(id).cloned()
+        }
+        .ok_or_else(|| MCPError::ServerNotFound {
             server: id.to_string(),
         })?;
 
@@ -269,6 +294,16 @@ impl MCPManager {
                 })?
         };
 
+        // Cleanup lookup table and circuit breaker
+        {
+            let mut id_lookup = self.id_to_name.write().await;
+            id_lookup.remove(id);
+        }
+        {
+            let mut breakers = self.circuit_breakers.write().await;
+            breakers.remove(&name);
+        }
+
         client.disconnect().await?;
 
         info!(server_id = %id, server_name = %name, "MCP server stopped");
@@ -278,21 +313,26 @@ impl MCPManager {
 
     /// Gets a server by ID
     ///
-    /// Checks both running servers (in HashMap, keyed by NAME) and configured servers (in database).
+    /// Checks both running servers (via O(1) lookup) and configured servers (in database).
     ///
     /// # Arguments
     ///
-    /// * `id` - Server ID to look up (will search by ID in config since HashMap is keyed by NAME)
+    /// * `id` - Server ID to look up (uses O(1) lookup via id_to_name table)
     ///
     /// # Returns
     ///
     /// Returns the server state if found (running or stopped).
     pub async fn get_server(&self, id: &str) -> Option<MCPServer> {
-        // First check running servers (HashMap is keyed by NAME, so search by config.id)
-        {
+        // O(1) lookup via id_to_name table (OPT-7)
+        let name = {
+            let id_lookup = self.id_to_name.read().await;
+            id_lookup.get(id).cloned()
+        };
+
+        // Check running servers first
+        if let Some(name) = name {
             let clients = self.clients.read().await;
-            // Find client whose config.id matches the requested id
-            if let Some(client) = clients.values().find(|c| c.config().id == id) {
+            if let Some(client) = clients.get(&name) {
                 return Some(MCPServer {
                     config: client.config().clone(),
                     status: client.status(),
@@ -365,6 +405,9 @@ impl MCPManager {
 
     /// Calls a tool on a specific server
     ///
+    /// Uses circuit breaker pattern to prevent cascade failures.
+    /// If the circuit is open (server unhealthy), the call will fail fast.
+    ///
     /// # Arguments
     ///
     /// * `server_name` - The NAME of the MCP server (not ID)
@@ -377,7 +420,10 @@ impl MCPManager {
     ///
     /// # Errors
     ///
-    /// Returns an error if the server or tool doesn't exist, or if the call fails.
+    /// Returns an error if:
+    /// - Server or tool doesn't exist
+    /// - Circuit breaker is open (server unhealthy)
+    /// - The call itself fails
     pub async fn call_tool(
         &self,
         server_name: &str,
@@ -389,6 +435,23 @@ impl MCPManager {
             tool_name = %tool_name,
             "Calling MCP tool"
         );
+
+        // Check circuit breaker before making the call (OPT-6)
+        {
+            let mut breakers = self.circuit_breakers.write().await;
+            if let Some(breaker) = breakers.get_mut(server_name) {
+                if !breaker.allow_request() {
+                    let remaining = breaker
+                        .remaining_cooldown()
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    return Err(MCPError::CircuitBreakerOpen {
+                        server: server_name.to_string(),
+                        cooldown_remaining_secs: remaining,
+                    });
+                }
+            }
+        }
 
         let start = Instant::now();
 
@@ -411,6 +474,18 @@ impl MCPManager {
             Ok(r) => (r.success, r.content.clone(), r.error.clone()),
             Err(e) => (false, serde_json::Value::Null, Some(e.to_string())),
         };
+
+        // Update circuit breaker based on result (OPT-6)
+        {
+            let mut breakers = self.circuit_breakers.write().await;
+            if let Some(breaker) = breakers.get_mut(server_name) {
+                if success {
+                    breaker.record_success();
+                } else {
+                    breaker.record_failure();
+                }
+            }
+        }
 
         // Invalidate tool cache on failure
         if !success {
@@ -842,17 +917,26 @@ impl MCPManager {
     /// Restarts a server
     ///
     /// Stops the server if running, then starts it again.
+    /// Also resets the circuit breaker for the server.
     ///
     /// # Arguments
     ///
-    /// * `id` - Server ID to restart
+    /// * `id` - Server ID to restart (uses O(1) lookup via id_to_name table)
     pub async fn restart_server(&self, id: &str) -> MCPResult<MCPServer> {
         info!(server_id = %id, "Restarting MCP server");
 
-        // Get config by ID
-        let config = {
+        // O(1) lookup via id_to_name table (OPT-7)
+        let name = {
+            let id_lookup = self.id_to_name.read().await;
+            id_lookup.get(id).cloned()
+        };
+
+        // Get config using the name if found, or from database
+        let config = if let Some(ref name) = name {
             let clients = self.clients.read().await;
-            clients.get(id).map(|c| c.config().clone())
+            clients.get(name).map(|c| c.config().clone())
+        } else {
+            None
         };
 
         let config = if let Some(c) = config {
@@ -871,8 +955,156 @@ impl MCPManager {
         // Stop if running (by ID)
         let _ = self.stop_server(id).await;
 
-        // Spawn again
+        // Spawn again (this will create fresh circuit breaker and id_to_name entry)
         self.spawn_server_internal(config).await
+    }
+
+    /// Gets the circuit breaker state for a server
+    ///
+    /// Returns None if the server doesn't have a circuit breaker (not running).
+    pub async fn get_circuit_breaker_state(
+        &self,
+        server_name: &str,
+    ) -> Option<crate::mcp::circuit_breaker::CircuitState> {
+        let breakers = self.circuit_breakers.read().await;
+        breakers.get(server_name).map(|b| b.state())
+    }
+
+    /// Resets the circuit breaker for a server
+    ///
+    /// Use with caution - typically only for manual intervention.
+    pub async fn reset_circuit_breaker(&self, server_name: &str) -> bool {
+        let mut breakers = self.circuit_breakers.write().await;
+        if let Some(breaker) = breakers.get_mut(server_name) {
+            breaker.reset();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Starts periodic health checks for all connected servers (OPT-8)
+    ///
+    /// Spawns a background task that periodically checks server health
+    /// using `list_tools()` as a health probe. Unhealthy servers will have
+    /// their circuit breakers updated accordingly.
+    ///
+    /// # Arguments
+    ///
+    /// * `manager` - Arc reference to self (needed for background task)
+    /// * `interval` - How often to check health (default: 5 minutes)
+    ///
+    /// # Returns
+    ///
+    /// Returns a `JoinHandle` for the background task.
+    pub fn start_health_checks(
+        manager: Arc<Self>,
+        interval: Option<Duration>,
+    ) -> tokio::task::JoinHandle<()> {
+        let interval = interval.unwrap_or(DEFAULT_HEALTH_CHECK_INTERVAL);
+        let mut shutdown_rx = manager.health_check_shutdown.subscribe();
+
+        info!(
+            interval_secs = interval.as_secs(),
+            "Starting MCP health check task"
+        );
+
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            // Skip the first immediate tick
+            ticker.tick().await;
+
+            loop {
+                tokio::select! {
+                    _ = ticker.tick() => {
+                        manager.check_all_servers_health().await;
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("Health check task received shutdown signal");
+                        break;
+                    }
+                }
+            }
+
+            info!("Health check task stopped");
+        })
+    }
+
+    /// Checks health of all connected servers
+    ///
+    /// Uses `list_tools()` as a health probe. Updates circuit breakers
+    /// based on results.
+    async fn check_all_servers_health(&self) {
+        let server_names: Vec<String> = {
+            let clients = self.clients.read().await;
+            clients.keys().cloned().collect()
+        };
+
+        if server_names.is_empty() {
+            debug!("No servers to health check");
+            return;
+        }
+
+        debug!(
+            server_count = server_names.len(),
+            "Running health checks for MCP servers"
+        );
+
+        for name in server_names {
+            self.check_server_health(&name).await;
+        }
+    }
+
+    /// Checks health of a single server
+    ///
+    /// Uses `refresh_tools()` as a health probe (makes actual network call)
+    /// and updates circuit breaker.
+    async fn check_server_health(&self, server_name: &str) {
+        let result = {
+            let mut clients = self.clients.write().await;
+            if let Some(client) = clients.get_mut(server_name) {
+                // Use refresh_tools as health probe - it makes a real network call
+                match client.refresh_tools().await {
+                    Ok(tools) => {
+                        debug!(
+                            server = %server_name,
+                            tool_count = tools.len(),
+                            "Health check passed"
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!(
+                            server = %server_name,
+                            error = %e,
+                            "Health check failed"
+                        );
+                        Err(e)
+                    }
+                }
+            } else {
+                // Server was removed during iteration
+                return;
+            }
+        };
+
+        // Update circuit breaker based on result
+        let mut breakers = self.circuit_breakers.write().await;
+        if let Some(breaker) = breakers.get_mut(server_name) {
+            match result {
+                Ok(()) => breaker.record_success(),
+                Err(_) => breaker.record_failure(),
+            }
+        }
+    }
+
+    /// Stops the health check background task
+    ///
+    /// Sends a shutdown signal to the health check task.
+    pub fn stop_health_checks(&self) {
+        info!("Stopping MCP health check task");
+        // Ignore send error if no receivers (task already stopped)
+        let _ = self.health_check_shutdown.send(());
     }
 }
 

@@ -233,7 +233,8 @@ pub async fn list_workflow_tasks(
         WHERE workflow_id = '{}'
         ORDER BY priority ASC, created_at ASC
         LIMIT {}"#,
-        validated_workflow_id, query_limits::DEFAULT_LIST_LIMIT
+        validated_workflow_id,
+        query_limits::DEFAULT_LIST_LIMIT
     );
 
     let tasks: Vec<Task> = state.db.query(&query).await.map_err(|e| {
@@ -292,7 +293,9 @@ pub async fn list_tasks_by_status(
             WHERE status = '{}' AND workflow_id = '{}'
             ORDER BY priority ASC, created_at ASC
             LIMIT {}"#,
-            status, validated_wf_id, query_limits::DEFAULT_LIST_LIMIT
+            status,
+            validated_wf_id,
+            query_limits::DEFAULT_LIST_LIMIT
         )
     } else {
         format!(
@@ -312,7 +315,8 @@ pub async fn list_tasks_by_status(
             WHERE status = '{}'
             ORDER BY priority ASC, created_at ASC
             LIMIT {}"#,
-            status, query_limits::DEFAULT_LIST_LIMIT
+            status,
+            query_limits::DEFAULT_LIST_LIMIT
         )
     };
 

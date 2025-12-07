@@ -111,6 +111,13 @@ pub enum MCPError {
         /// Reason for invalidity
         reason: String,
     },
+    /// Circuit breaker is open (server unhealthy)
+    CircuitBreakerOpen {
+        /// Server name
+        server: String,
+        /// Remaining cooldown in seconds before retry
+        cooldown_remaining_secs: u64,
+    },
 }
 
 impl fmt::Display for MCPError {
@@ -173,6 +180,16 @@ impl fmt::Display for MCPError {
             }
             MCPError::InvalidConfig { field, reason } => {
                 write!(f, "Invalid MCP configuration for '{}': {}", field, reason)
+            }
+            MCPError::CircuitBreakerOpen {
+                server,
+                cooldown_remaining_secs,
+            } => {
+                write!(
+                    f,
+                    "Circuit breaker open for MCP server '{}': retry in {}s",
+                    server, cooldown_remaining_secs
+                )
             }
         }
     }

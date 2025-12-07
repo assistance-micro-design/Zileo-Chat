@@ -350,14 +350,12 @@ pub async fn export_memories(
     let memories: Vec<Memory> = match type_filter {
         Some(ref mtype) => {
             // Use parameterized query for type filter to prevent injection
-            let query = "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+            let query =
+                "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
                          FROM memory WHERE type = $type ORDER BY created_at DESC";
             state
                 .db
-                .query_with_params(
-                    query,
-                    vec![("type".to_string(), serde_json::json!(mtype))],
-                )
+                .query_with_params(query, vec![("type".to_string(), serde_json::json!(mtype))])
                 .await
                 .map_err(|e| {
                     error!(error = %e, "Failed to load memories for export");
@@ -365,7 +363,8 @@ pub async fn export_memories(
                 })?
         }
         None => {
-            let query = "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
+            let query =
+                "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
                          FROM memory ORDER BY created_at DESC";
             state.db.query(query).await.map_err(|e| {
                 error!(error = %e, "Failed to load memories for export");

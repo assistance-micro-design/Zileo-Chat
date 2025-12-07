@@ -125,7 +125,8 @@ pub async fn list_models(
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
              created_at, updated_at \
              FROM llm_model WHERE provider = '{}' LIMIT {}",
-            pt, query_limits::DEFAULT_MODELS_LIMIT
+            pt,
+            query_limits::DEFAULT_MODELS_LIMIT
         )
     } else {
         format!(

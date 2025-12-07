@@ -336,7 +336,10 @@ impl DBClient {
             e
         })?;
 
-        debug!(result_count = data.len(), "Parameterized JSON query completed");
+        debug!(
+            result_count = data.len(),
+            "Parameterized JSON query completed"
+        );
         Ok(data)
     }
 

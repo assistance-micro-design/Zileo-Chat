@@ -72,6 +72,8 @@
 
 // Allow dead_code for Phase 2 - methods will be used in Phase 3 (Tauri Commands)
 #[allow(dead_code)]
+pub mod circuit_breaker;
+#[allow(dead_code)]
 pub mod client;
 pub mod error;
 #[allow(dead_code)]
@@ -95,6 +97,8 @@ pub use protocol::{
 };
 
 // Re-export high-level types for convenience (will be used in Phase 3)
+#[allow(unused_imports)]
+pub use circuit_breaker::{CircuitBreaker, CircuitState};
 #[allow(unused_imports)]
 pub use client::MCPClient;
 #[allow(unused_imports)]

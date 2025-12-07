@@ -226,7 +226,8 @@ pub async fn list_memories(
     let query = format!(
         "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
          FROM memory{} ORDER BY created_at DESC LIMIT {}",
-        where_clause, query_limits::DEFAULT_LIST_LIMIT
+        where_clause,
+        query_limits::DEFAULT_LIST_LIMIT
     );
 
     // Use parameterized query if we have parameters, otherwise standard query
@@ -236,10 +237,14 @@ pub async fn list_memories(
             format!("Failed to load memories: {}", e)
         })?
     } else {
-        state.db.query_with_params(&query, params).await.map_err(|e| {
-            error!(error = %e, "Failed to load memories");
-            format!("Failed to load memories: {}", e)
-        })?
+        state
+            .db
+            .query_with_params(&query, params)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to load memories");
+                format!("Failed to load memories: {}", e)
+            })?
     };
 
     debug!(
@@ -461,10 +466,12 @@ async fn vector_search(
             format!("Failed to search memories: {}", e)
         })?
     } else {
-        db.query_json_with_params(&query, params).await.map_err(|e| {
-            error!(error = %e, "Vector search failed");
-            format!("Failed to search memories: {}", e)
-        })?
+        db.query_json_with_params(&query, params)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Vector search failed");
+                format!("Failed to search memories: {}", e)
+            })?
     };
 
     // Convert to MemorySearchResult
@@ -549,10 +556,13 @@ async fn text_search(
         where_clause, limit
     );
 
-    let memories: Vec<Memory> = db.query_with_params(&search_query, params).await.map_err(|e| {
-        error!(error = %e, "Text search failed");
-        format!("Failed to search memories: {}", e)
-    })?;
+    let memories: Vec<Memory> = db
+        .query_with_params(&search_query, params)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Text search failed");
+            format!("Failed to search memories: {}", e)
+        })?;
 
     // Convert to search results with simple relevance scoring
     let query_lower = query_text.to_lowercase();

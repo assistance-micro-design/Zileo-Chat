@@ -239,11 +239,7 @@ fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields,
 }
 
 /// Registers an LLMAgent in the registry with proper context
-async fn register_agent_runtime(
-    state: &AppState,
-    agent_id: &str,
-    config: AgentConfig,
-) {
+async fn register_agent_runtime(state: &AppState, agent_id: &str, config: AgentConfig) {
     let agent_context = AgentToolContext::from_app_state_full(state);
     let llm_agent = LLMAgent::with_context(
         config,
