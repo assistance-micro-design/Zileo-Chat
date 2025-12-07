@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 0 | Complete | Base implementation (agents, LLM, DB, security, 19 Tauri commands) |
-| Phase 1 | Complete | Design System Foundation (theme, 12 UI components) |
+| Phase 1 | Complete | Design System Foundation (theme, 13 UI components) |
 | Phase 2 | Complete | Layout Components (AppContainer, Sidebar, FloatingMenu, NavItem) |
 | Phase 3 | Complete | Chat & Workflow Components (MessageBubble, ChatInput, WorkflowItem) |
 | Phase 4 | Complete | Pages Refactoring (agent page, settings page with new components) |
@@ -64,6 +64,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `Textarea` | Multi-line input |
 | `Skeleton` | Loading placeholder with text, circular, rectangular variants |
 | `LanguageSelector` | i18n language picker with flag display |
+| `HelpButton` | Contextual help button with tooltip (titleKey, descriptionKey) |
 
 **Usage**:
 ```typescript

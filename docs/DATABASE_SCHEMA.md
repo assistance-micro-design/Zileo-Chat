@@ -6,7 +6,7 @@
 
 ## Vue d'Ensemble
 
-**Total : 18 tables**
+**Total : 19 tables**
 
 ```
 workflow ─────────────┐
@@ -15,6 +15,7 @@ workflow ─────────────┐
                       ├─→ message
                       ├─→ task
                       ├─→ validation_request
+                      ├─→ user_question
                       ├─→ memory (vectoriel)
                       ├─→ tool_execution
                       ├─→ thinking_step
@@ -171,6 +172,39 @@ Demandes validation human-in-the-loop.
 - `type` + `risk_level` (analytics)
 
 **Requête type** : Validations pending workflow actif
+
+---
+
+### user_question
+
+Questions interactives agents vers utilisateurs (human-in-the-loop).
+
+**Champs**
+- `id` : UUID
+- `workflow_id` : string
+- `agent_id` : string
+- `question` : string (texte de la question)
+- `question_type` : enum (checkbox, text, mixed)
+- `options` : array<{id: string, label: string}>? (pour checkbox/mixed)
+- `text_placeholder` : string?
+- `text_required` : boolean (default: false)
+- `context` : string? (contexte additionnel)
+- `status` : enum (pending, answered, skipped)
+- `selected_options` : array<string>?
+- `text_response` : string?
+- `created_at` : datetime
+- `answered_at` : datetime?
+
+**Relations**
+- → `workflow` (contexte)
+- → `agent` (demandeur)
+
+**Indexes**
+- `workflow_id` (questions workflow)
+- `status` (pending pour UI)
+- `agent_id`
+
+**Requête type** : Questions pending workflow actif
 
 ---
 
