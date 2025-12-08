@@ -625,8 +625,7 @@ let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
 
 // List tools by category
 let basic = TOOL_REGISTRY.basic_tools();          // ["MemoryTool", "TodoTool", "CalculatorTool"]
-let interaction = TOOL_REGISTRY.interaction_tools(); // ["UserQuestionTool"]
-let sub_agent = TOOL_REGISTRY.sub_agent_tools();  // ["SpawnAgentTool", ...]
+let sub_agent = TOOL_REGISTRY.sub_agent_tools();  // ["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"]
 
 // Validate with error message
 TOOL_REGISTRY.validate(tool_name)?;
