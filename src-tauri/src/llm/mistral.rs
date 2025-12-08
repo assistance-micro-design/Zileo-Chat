@@ -612,19 +612,10 @@ impl LLMProvider for MistralProvider {
             "Starting Mistral completion"
         );
 
-        // Estimate tokens using word-based approximation
-        // French/English text averages ~1.3 tokens per word, ~4-5 chars per word
-        // Using word count * 1.5 gives better accuracy than char/4
-        let estimate_tokens = |text: &str| -> usize {
-            let word_count = text.split_whitespace().count();
-            // Add a minimum of 1 token for very short inputs
-            let estimate = ((word_count as f64) * 1.5).ceil() as usize;
-            estimate.max(1)
-        };
-
         // Include system prompt in input token count
         let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
-        let tokens_input_estimate = estimate_tokens(prompt) + estimate_tokens(system_text);
+        let tokens_input_estimate = crate::llm::utils::estimate_tokens(prompt)
+            + crate::llm::utils::estimate_tokens(system_text);
 
         // Build agent and execute prompt
         // Use temperature and max_tokens from agent config
@@ -641,7 +632,7 @@ impl LLMProvider for MistralProvider {
             .map_err(|e| LLMError::RequestFailed(e.to_string()))?;
 
         // Estimate output tokens
-        let tokens_output_estimate = estimate_tokens(&response);
+        let tokens_output_estimate = crate::llm::utils::estimate_tokens(&response);
 
         info!(
             tokens_input = tokens_input_estimate,

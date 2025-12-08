@@ -42,6 +42,7 @@ mod ollama;
 pub mod pricing;
 mod provider;
 pub mod tool_adapter;
+pub mod utils;
 
 pub use manager::ProviderManager;
 pub use provider::{LLMError, ProviderType};
