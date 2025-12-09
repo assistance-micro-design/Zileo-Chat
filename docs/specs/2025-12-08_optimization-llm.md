@@ -536,21 +536,21 @@ Aucune nouvelle dependance requise pour ce plan.
 
 ## Estimation
 
-| Optimisation | Effort | Impact | Priorite |
-|--------------|--------|--------|----------|
-| **OPT-LLM-8** | **1-2h** | **Critique** | **P0** |
-| OPT-LLM-1 | 1h | Haut | P1 |
-| OPT-LLM-2 | 2-3h | Haut | P1 |
-| OPT-LLM-3 | 1-2h | Moyen | P1 |
-| OPT-LLM-4 | 3-4h | Haut | P2 |
-| OPT-LLM-5 | 3h | Moyen | P2 |
-| OPT-LLM-6 | 4h | Moyen | P2 |
-| OPT-LLM-7 | 2h | Faible | P3 |
+| Optimisation | Effort | Impact | Priorite | Status |
+|--------------|--------|--------|----------|--------|
+| **OPT-LLM-8** | **1-2h** | **Critique** | **P0** | **DONE** |
+| OPT-LLM-1 | 1h | Haut | P1 | DONE |
+| OPT-LLM-2 | 2-3h | Haut | P1 | DONE |
+| OPT-LLM-3 | 1-2h | Moyen | P1 | DONE |
+| OPT-LLM-4 | 3-4h | Haut | P2 | DONE |
+| OPT-LLM-5 | 3h | Moyen | P2 | DONE |
+| OPT-LLM-6 | 4h | Moyen | P2 | DONE |
+| OPT-LLM-7 | 2h | Faible | P3 | Differe |
 
-**Total Critique (P0)**: 1-2h - Rate Limiter (OBLIGATOIRE)
-**Total Quick Wins (P1)**: 4-6h
-**Total Strategic (P2)**: 10-11h
-**Total Nice to Have (P3)**: 2h
+**Total Critique (P0)**: 1-2h - Rate Limiter - COMPLETE
+**Total Quick Wins (P1)**: 4-6h - COMPLETE
+**Total Strategic (P2)**: 10-11h - COMPLETE
+**Total Nice to Have (P3)**: 2h - Differe (OPT-LLM-7)
 
 ## Risques et Mitigations
 
@@ -563,13 +563,16 @@ Aucune nouvelle dependance requise pour ce plan.
 
 ## Prochaines Etapes
 
-1. [ ] Valider ce plan avec l'utilisateur
-2. [ ] **Executer OPT-LLM-8 (P0 CRITIQUE - Rate Limiter 1 req/s)**
+1. [x] Valider ce plan avec l'utilisateur
+2. [x] **Executer OPT-LLM-8 (P0 CRITIQUE - Rate Limiter 1 req/s)** - commit c6bcc80
 3. [x] Executer OPT-LLM-1 (quick win - estimate_tokens) - commit ad0551a
-4. [x] Executer OPT-LLM-2 (quick win - HTTP client) - commit 9ea8990
-5. [x] Executer OPT-LLM-3 (quick win - streaming dedup) - branch feature/opt-llm-3-dedup-streaming
-6. [ ] Mesurer impact performance
-7. [ ] Planifier OPT-LLM-4 a OPT-LLM-6 (strategic)
+4. [x] Executer OPT-LLM-2 (quick win - HTTP client) - commit ea6541f
+5. [x] Executer OPT-LLM-3 (quick win - streaming dedup) - commit 3f2fcb9
+6. [x] Executer OPT-LLM-4 (retry mechanism) - commit 3a2eb0a
+7. [x] Executer OPT-LLM-5 (token tracking) - commit 81a2225
+8. [x] Executer OPT-LLM-6 (circuit breaker) - commit 1cc4dc2
+9. [ ] Mesurer impact performance
+10. [ ] Executer OPT-LLM-7 (HTTP error handling consolidation) - differe
 
 ## References
 
