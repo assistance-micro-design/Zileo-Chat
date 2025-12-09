@@ -92,6 +92,12 @@ pub struct StreamChunk {
     /// Task priority (for task_* chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_priority: Option<u8>,
+    /// Token count for this chunk (incremental)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens_delta: Option<usize>,
+    /// Cumulative token count (running total)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens_total: Option<usize>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -123,6 +129,36 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
+        }
+    }
+
+    /// Creates a new token chunk with token counts
+    #[allow(dead_code)]
+    pub fn token_with_counts(
+        workflow_id: String,
+        content: String,
+        tokens_delta: usize,
+        tokens_total: usize,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::Token,
+            content: Some(content),
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
+            tokens_delta: Some(tokens_delta),
+            tokens_total: Some(tokens_total),
         }
     }
 
@@ -143,6 +179,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -163,6 +201,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -183,6 +223,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -203,6 +245,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -231,6 +275,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -262,6 +308,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -291,6 +339,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -320,6 +370,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -348,6 +400,8 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some("pending".to_string()),
             task_priority: Some(priority),
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -376,6 +430,8 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some(status.into()),
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 
@@ -404,6 +460,8 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some("completed".to_string()),
             task_priority: None,
+            tokens_delta: None,
+            tokens_total: None,
         }
     }
 }
@@ -758,5 +816,31 @@ mod tests {
         assert!(json.contains("\"duration_ms\":3000"));
         assert!(json.contains("\"tokens_input\":250"));
         assert!(json.contains("\"tokens_output\":800"));
+    }
+
+    #[test]
+    fn test_stream_chunk_with_tokens() {
+        // Test token chunk without counts (default)
+        let chunk = StreamChunk::token("wf_001".to_string(), "Hello".to_string());
+        assert!(chunk.tokens_delta.is_none());
+        assert!(chunk.tokens_total.is_none());
+
+        // Test that optional fields are not serialized when None
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(!json.contains("tokens_delta"));
+        assert!(!json.contains("tokens_total"));
+
+        // Test token chunk with counts
+        let chunk_with_tokens =
+            StreamChunk::token_with_counts("wf_001".to_string(), "Hello".to_string(), 5, 100);
+        assert_eq!(chunk_with_tokens.tokens_delta, Some(5));
+        assert_eq!(chunk_with_tokens.tokens_total, Some(100));
+        assert_eq!(chunk_with_tokens.chunk_type, ChunkType::Token);
+        assert_eq!(chunk_with_tokens.content, Some("Hello".to_string()));
+
+        // Test serialization includes token fields when present
+        let json_with_tokens = serde_json::to_string(&chunk_with_tokens).unwrap();
+        assert!(json_with_tokens.contains("\"tokens_delta\":5"));
+        assert!(json_with_tokens.contains("\"tokens_total\":100"));
     }
 }

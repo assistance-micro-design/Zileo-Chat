@@ -99,6 +99,10 @@ export interface StreamChunk {
   task_priority?: 1 | 2 | 3 | 4 | 5;
   /** User question payload (for user_question_start chunks) */
   user_question?: UserQuestionStreamPayload;
+  /** Token count for this chunk (incremental) */
+  tokens_delta?: number;
+  /** Cumulative token count (running total) */
+  tokens_total?: number;
 }
 
 /**
