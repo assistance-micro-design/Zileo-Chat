@@ -66,6 +66,8 @@
 //! })).await?;
 //! ```
 
+mod helpers;
 mod tool;
 
+pub use helpers::{add_memory_core, AddMemoryParams};
 pub use tool::MemoryTool;

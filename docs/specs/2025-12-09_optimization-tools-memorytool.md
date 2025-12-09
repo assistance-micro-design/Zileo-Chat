@@ -556,7 +556,8 @@ diff benchmark_before.txt benchmark_after.txt
 2. [x] Executer OPT-MEM-5 (securite critique - parametrisation) - COMPLETE 2025-12-09
 3. [x] Executer OPT-MEM-1 a OPT-MEM-4 (quick wins) - COMPLETE 2025-12-09
 4. [x] Mesurer impact via `cargo test` + review duplication - 761 tests OK
-5. [ ] Planifier Phase 2 (OPT-MEM-6 a OPT-MEM-8)
+5. [x] OPT-MEM-6: Consolidate add_memory implementations - COMPLETE 2025-12-09
+6. [ ] Planifier Phase 2 suite (OPT-MEM-7 a OPT-MEM-8)
 
 ## References
 

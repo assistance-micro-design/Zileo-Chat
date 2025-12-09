@@ -21,16 +21,22 @@
 //! Full RAG with embeddings will be implemented in a future phase.
 
 use crate::{
-    models::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemorySearchResult, MemoryType},
+    models::{Memory, MemorySearchResult, MemoryType},
     security::Validator,
     tools::constants::{memory as memory_constants, query_limits},
+    tools::memory::{add_memory_core, AddMemoryParams},
     AppState,
 };
 use tauri::State;
 use tracing::{debug, error, info, instrument, warn};
-use uuid::Uuid;
 
 /// Adds a new memory entry with automatic embedding generation.
+///
+/// Uses the shared `add_memory_core` helper for the core creation logic.
+/// This command handles Tauri-specific concerns:
+/// - Parameter extraction from State
+/// - Content validation (trim, empty check, length check)
+/// - Embedding service access from shared state
 ///
 /// # Arguments
 /// * `memory_type` - Type of memory content
@@ -60,7 +66,7 @@ pub async fn add_memory(
 ) -> Result<String, String> {
     info!("Adding memory entry");
 
-    // Validate content
+    // Validate content (Tauri command specific validation)
     let trimmed_content = content.trim();
     if trimmed_content.is_empty() {
         return Err("Memory content cannot be empty".to_string());
@@ -72,106 +78,29 @@ pub async fn add_memory(
         ));
     }
 
-    let memory_id = Uuid::new_v4().to_string();
-    let meta = metadata.unwrap_or(serde_json::json!({}));
-
-    // Try to get embedding service
+    // Try to get embedding service from shared state
     let service_guard = state.embedding_service.read().await;
     let embedding_service = service_guard.as_ref().cloned();
     drop(service_guard);
 
-    // Try to generate embedding if service is available
-    let embedding_generated = if let Some(ref embed_svc) = embedding_service {
-        match embed_svc.embed(trimmed_content).await {
-            Ok(embedding) => {
-                // Create memory with embedding
-                let memory = if let Some(ref wf_id) = workflow_id {
-                    MemoryCreateWithEmbedding::with_workflow(
-                        memory_type,
-                        trimmed_content.to_string(),
-                        embedding,
-                        meta.clone(),
-                        wf_id.clone(),
-                    )
-                } else {
-                    MemoryCreateWithEmbedding::new(
-                        memory_type,
-                        trimmed_content.to_string(),
-                        embedding,
-                        meta.clone(),
-                    )
-                };
-
-                state
-                    .db
-                    .create("memory", &memory_id, memory)
-                    .await
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to create memory with embedding");
-                        format!("Failed to create memory: {}", e)
-                    })?;
-
-                true
-            }
-            Err(e) => {
-                // Fallback to text-only storage
-                warn!(error = %e, "Embedding generation failed, storing without embedding");
-
-                let memory = if let Some(ref wf_id) = workflow_id {
-                    MemoryCreate::with_workflow(
-                        memory_type,
-                        trimmed_content.to_string(),
-                        meta.clone(),
-                        wf_id.clone(),
-                    )
-                } else {
-                    MemoryCreate::new(memory_type, trimmed_content.to_string(), meta.clone())
-                };
-
-                state
-                    .db
-                    .create("memory", &memory_id, memory)
-                    .await
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to create memory");
-                        format!("Failed to create memory: {}", e)
-                    })?;
-
-                false
-            }
-        }
-    } else {
-        // No embedding service, store text only
-        let memory = if let Some(ref wf_id) = workflow_id {
-            MemoryCreate::with_workflow(
-                memory_type,
-                trimmed_content.to_string(),
-                meta.clone(),
-                wf_id.clone(),
-            )
-        } else {
-            MemoryCreate::new(memory_type, trimmed_content.to_string(), meta.clone())
-        };
-
-        state
-            .db
-            .create("memory", &memory_id, memory)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Failed to create memory");
-                format!("Failed to create memory: {}", e)
-            })?;
-
-        false
+    // Prepare parameters for shared helper
+    let params = AddMemoryParams {
+        memory_type,
+        content: trimmed_content.to_string(),
+        metadata: metadata.unwrap_or(serde_json::json!({})),
+        workflow_id: workflow_id.clone(),
     };
 
+    // Use shared helper for core creation logic
+    let result = add_memory_core(params, &state.db, embedding_service.as_ref()).await?;
+
     info!(
-        memory_id = %memory_id,
-        embedding_generated = embedding_generated,
+        memory_id = %result.memory_id,
+        embedding_generated = result.embedding_generated,
         workflow_id = ?workflow_id,
         "Memory entry created successfully"
     );
-    Ok(memory_id)
+    Ok(result.memory_id)
 }
 
 /// Lists memory entries with optional type and workflow filters.

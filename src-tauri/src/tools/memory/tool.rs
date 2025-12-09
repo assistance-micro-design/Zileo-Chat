@@ -17,9 +17,10 @@
 //! This tool allows agents to manage memories with semantic search capabilities
 //! using vector embeddings and SurrealDB's HNSW index.
 
+use super::helpers::{add_memory_core, AddMemoryParams};
 use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
-use crate::models::memory::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemoryType};
+use crate::models::memory::{Memory, MemoryType};
 use crate::tools::constants::memory::{
     DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD, MAX_CONTENT_LENGTH, MAX_LIMIT, VALID_TYPES,
 };
@@ -33,7 +34,6 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument, warn};
-use uuid::Uuid;
 
 /// Tool for managing agent memories with semantic search.
 ///
@@ -180,6 +180,12 @@ impl MemoryTool {
 
     /// Adds a new memory with optional embedding.
     ///
+    /// Uses the shared `add_memory_core` helper for the core creation logic.
+    /// This method handles Tool-specific concerns:
+    /// - Parameter validation using utils.rs validators
+    /// - Metadata enrichment (agent_source, tags)
+    /// - ResponseBuilder JSON formatting
+    ///
     /// # Arguments
     /// * `memory_type` - Type of memory (user_pref, context, knowledge, decision)
     /// * `content` - Text content of the memory
@@ -201,10 +207,9 @@ impl MemoryTool {
         validate_enum_value(memory_type, VALID_TYPES, "memory_type")?;
         let mem_type = Self::parse_memory_type(memory_type)?;
 
-        let memory_id = Uuid::new_v4().to_string();
         let workflow_id = self.current_workflow_id().await;
 
-        // Build metadata with agent source and tags
+        // Build metadata with agent source and tags (Tool-specific enrichment)
         let mut meta = metadata.unwrap_or(serde_json::json!({}));
         if let Some(obj) = meta.as_object_mut() {
             obj.insert("agent_source".to_string(), serde_json::json!(self.agent_id));
@@ -213,91 +218,30 @@ impl MemoryTool {
             }
         }
 
-        // Try to generate embedding if service is available
-        let embedding_generated = if let Some(ref embed_service) = self.embedding_service {
-            match embed_service.embed(content).await {
-                Ok(embedding) => {
-                    // Create memory with embedding
-                    let memory = if let Some(wf_id) = &workflow_id {
-                        MemoryCreateWithEmbedding::with_workflow(
-                            mem_type,
-                            content.to_string(),
-                            embedding,
-                            meta.clone(),
-                            wf_id.clone(),
-                        )
-                    } else {
-                        MemoryCreateWithEmbedding::new(
-                            mem_type,
-                            content.to_string(),
-                            embedding,
-                            meta.clone(),
-                        )
-                    };
-
-                    self.db
-                        .create("memory", &memory_id, memory)
-                        .await
-                        .map_err(db_error)?;
-
-                    true
-                }
-                Err(e) => {
-                    // Fallback to text-only storage
-                    warn!(error = %e, "Embedding generation failed, storing without embedding");
-
-                    let memory = if let Some(wf_id) = &workflow_id {
-                        MemoryCreate::with_workflow(
-                            mem_type,
-                            content.to_string(),
-                            meta.clone(),
-                            wf_id.clone(),
-                        )
-                    } else {
-                        MemoryCreate::new(mem_type, content.to_string(), meta.clone())
-                    };
-
-                    self.db
-                        .create("memory", &memory_id, memory)
-                        .await
-                        .map_err(db_error)?;
-
-                    false
-                }
-            }
-        } else {
-            // No embedding service, store text only
-            let memory = if let Some(wf_id) = &workflow_id {
-                MemoryCreate::with_workflow(
-                    mem_type,
-                    content.to_string(),
-                    meta.clone(),
-                    wf_id.clone(),
-                )
-            } else {
-                MemoryCreate::new(mem_type, content.to_string(), meta.clone())
-            };
-
-            self.db
-                .create("memory", &memory_id, memory)
-                .await
-                .map_err(db_error)?;
-
-            false
+        // Use shared helper for core creation logic
+        let params = AddMemoryParams {
+            memory_type: mem_type,
+            content: content.to_string(),
+            metadata: meta,
+            workflow_id: workflow_id.clone(),
         };
 
+        let result = add_memory_core(params, &self.db, self.embedding_service.as_ref())
+            .await
+            .map_err(ToolError::DatabaseError)?;
+
         info!(
-            memory_id = %memory_id,
+            memory_id = %result.memory_id,
             memory_type = %memory_type,
-            embedding = embedding_generated,
+            embedding = result.embedding_generated,
             "Memory created"
         );
 
         Ok(ResponseBuilder::new()
             .success(true)
-            .id("memory_id", memory_id)
+            .id("memory_id", result.memory_id)
             .field("type", memory_type)
-            .field("embedding_generated", embedding_generated)
+            .field("embedding_generated", result.embedding_generated)
             .field("workflow_id", workflow_id)
             .message("Memory created successfully")
             .build())
