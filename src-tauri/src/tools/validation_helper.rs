@@ -52,6 +52,32 @@ const DEFAULT_VALIDATION_TIMEOUT_SECS: u64 = 60;
 /// Polling interval for checking validation status (500ms)
 const VALIDATION_POLL_INTERVAL_MS: u64 = 500;
 
+/// Safely truncates a string to a maximum number of characters.
+///
+/// This function handles multi-byte UTF-8 characters correctly by working
+/// with char boundaries instead of byte positions.
+///
+/// # Arguments
+/// * `s` - The string to truncate
+/// * `max_chars` - Maximum number of characters to keep
+/// * `ellipsis` - Whether to append "..." if truncated
+///
+/// # Returns
+/// The truncated string
+pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max_chars {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_chars).collect();
+        if ellipsis {
+            format!("{}...", truncated)
+        } else {
+            truncated
+        }
+    }
+}
+
 /// Validation helper for sub-agent operations.
 ///
 /// Handles the full validation flow:
