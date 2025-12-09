@@ -17,6 +17,7 @@
 use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::retry::{with_retry, RetryConfig};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -59,6 +60,9 @@ const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 ///
 /// The manager maintains a shared HTTP client for all providers to benefit
 /// from connection pooling and avoid repeated TLS handshakes (OPT-LLM-2).
+///
+/// Retry mechanism with exponential backoff (OPT-LLM-4) handles transient
+/// failures automatically.
 #[allow(dead_code)]
 pub struct ProviderManager {
     /// Mistral provider instance
@@ -69,6 +73,8 @@ pub struct ProviderManager {
     config: Arc<RwLock<ProviderConfig>>,
     /// Shared HTTP client for all providers (connection pooling)
     http_client: Arc<reqwest::Client>,
+    /// Retry configuration for API calls (OPT-LLM-4)
+    retry_config: RetryConfig,
 }
 
 #[allow(dead_code)]
@@ -78,6 +84,8 @@ impl ProviderManager {
     /// Initializes a shared HTTP client with connection pooling for all providers.
     /// This improves performance by reusing connections and avoiding TLS handshake
     /// overhead on subsequent requests (OPT-LLM-2).
+    ///
+    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4).
     pub fn new() -> Self {
         // Create shared HTTP client with connection pooling
         let http_client = Arc::new(
@@ -93,6 +101,26 @@ impl ProviderManager {
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
             http_client,
+            retry_config: RetryConfig::default(),
+        }
+    }
+
+    /// Creates a new provider manager with custom retry configuration.
+    pub fn with_retry_config(retry_config: RetryConfig) -> Self {
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+                .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
+                .build()
+                .expect("Failed to create HTTP client"),
+        );
+
+        Self {
+            mistral: Arc::new(MistralProvider::new(http_client.clone())),
+            ollama: Arc::new(OllamaProvider::new(http_client.clone())),
+            config: Arc::new(RwLock::new(ProviderConfig::default())),
+            http_client,
+            retry_config,
         }
     }
 
@@ -202,7 +230,11 @@ impl ProviderManager {
         providers
     }
 
-    /// Completes a prompt using the active provider
+    /// Completes a prompt using the active provider with automatic retry.
+    ///
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4).
+    /// Transient errors (network issues, rate limits) are retried with exponential
+    /// backoff, while non-recoverable errors (auth failures, bad requests) fail immediately.
     #[instrument(
         name = "manager_complete",
         skip(self, prompt, system_prompt),
@@ -234,33 +266,55 @@ impl ProviderManager {
             "Executing completion via manager"
         );
 
+        // Clone values for the retry closure
+        let prompt_owned = prompt.to_string();
+        let system_prompt_owned = system_prompt.map(|s| s.to_string());
+        let model_owned = model_to_use.clone();
+
+        // Execute with retry (OPT-LLM-4)
         match provider_type {
             ProviderType::Mistral => {
-                self.mistral
-                    .complete(
-                        prompt,
-                        system_prompt,
-                        Some(&model_to_use),
-                        temperature,
-                        max_tokens,
-                    )
-                    .await
+                let mistral = self.mistral.clone();
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let provider = mistral.clone();
+                        async move {
+                            provider
+                                .complete(&p, sp.as_deref(), Some(&m), temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
             ProviderType::Ollama => {
-                self.ollama
-                    .complete(
-                        prompt,
-                        system_prompt,
-                        Some(&model_to_use),
-                        temperature,
-                        max_tokens,
-                    )
-                    .await
+                let ollama = self.ollama.clone();
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let provider = ollama.clone();
+                        async move {
+                            provider
+                                .complete(&p, sp.as_deref(), Some(&m), temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
         }
     }
 
-    /// Completes a prompt using a specific provider
+    /// Completes a prompt using a specific provider with automatic retry.
+    ///
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4).
     pub async fn complete_with_provider(
         &self,
         provider: ProviderType,
@@ -270,23 +324,55 @@ impl ProviderManager {
         temperature: f32,
         max_tokens: usize,
     ) -> Result<LLMResponse, LLMError> {
+        // Clone values for the retry closure
+        let prompt_owned = prompt.to_string();
+        let system_prompt_owned = system_prompt.map(|s| s.to_string());
+        let model_owned = model.map(|s| s.to_string());
+
         match provider {
             ProviderType::Mistral => {
-                self.mistral
-                    .complete(prompt, system_prompt, model, temperature, max_tokens)
-                    .await
+                let mistral = self.mistral.clone();
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let provider = mistral.clone();
+                        async move {
+                            provider
+                                .complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
             ProviderType::Ollama => {
-                self.ollama
-                    .complete(prompt, system_prompt, model, temperature, max_tokens)
-                    .await
+                let ollama = self.ollama.clone();
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let provider = ollama.clone();
+                        async move {
+                            provider
+                                .complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
         }
     }
 
-    /// Completes with tools using a specific provider.
+    /// Completes with tools using a specific provider with automatic retry.
     ///
     /// This method is used for JSON function calling with tool definitions.
+    /// Includes retry logic with exponential backoff (OPT-LLM-4).
     ///
     /// # Arguments
     /// * `provider` - Which provider to use
@@ -322,24 +408,45 @@ impl ProviderManager {
             "Executing completion with tools via manager"
         );
 
+        // Clone values for the retry closure
+        let model_owned = model.to_string();
+
         match provider {
             ProviderType::Mistral => {
-                self.mistral
-                    .complete_with_tools(
-                        messages,
-                        tools,
-                        tool_choice,
-                        model,
-                        temperature,
-                        max_tokens,
-                    )
-                    .await
+                let mistral = self.mistral.clone();
+                with_retry(
+                    || {
+                        let msgs = messages.clone();
+                        let tls = tools.clone();
+                        let tc = tool_choice.clone();
+                        let m = model_owned.clone();
+                        let p = mistral.clone();
+                        async move {
+                            p.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
             ProviderType::Ollama => {
+                let ollama = self.ollama.clone();
                 // Ollama doesn't use tool_choice, so we ignore it
-                self.ollama
-                    .complete_with_tools(messages, tools, model, temperature, max_tokens)
-                    .await
+                with_retry(
+                    || {
+                        let msgs = messages.clone();
+                        let tls = tools.clone();
+                        let m = model_owned.clone();
+                        let p = ollama.clone();
+                        async move {
+                            p.complete_with_tools(msgs, tls, &m, temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
             }
         }
     }

@@ -41,11 +41,16 @@ mod mistral;
 mod ollama;
 pub mod pricing;
 mod provider;
+pub mod retry;
 pub mod tool_adapter;
 pub mod utils;
 
 pub use manager::ProviderManager;
 pub use provider::{LLMError, ProviderType};
+
+// Re-export retry utilities for external use (OPT-LLM-4)
+#[allow(unused_imports)]
+pub use retry::{with_retry, RetryConfig};
 
 // Re-export for future use (tools, external integrations)
 #[allow(unused_imports)]
