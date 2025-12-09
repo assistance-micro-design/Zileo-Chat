@@ -24,6 +24,13 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 - **Interaction Tools**: UserQuestionTool (human-in-the-loop interactions)
 - **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
 
+**Sub-Agent Resilience Features (v1.0)**:
+- Inactivity Timeout with Heartbeat: 300s timeout, 30s check interval
+- Retry with Exponential Backoff: 3 attempts, 500ms-2000ms delay
+- Circuit Breaker: 3 failures → open, 60s cooldown
+- CancellationToken: Graceful shutdown support
+- Correlation ID: Hierarchical tracing for batch operations
+
 ### ToolFactory
 
 Les outils sont instancies dynamiquement via `ToolFactory`:
@@ -640,9 +647,13 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.6
-**Derniere mise a jour** : 2025-12-06
-**Phase** : Functional Agent System Phase 5 Complete (7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
+**Version** : 1.7
+**Derniere mise a jour** : 2025-12-09
+**Phase** : Functional Agent System v1.0 Complete
+
+**Features (v1.7)**:
+- 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+- Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
 
 ### Test Coverage
 

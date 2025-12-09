@@ -38,6 +38,12 @@ Sub-agents operate at exactly one level below the primary agent:
 | `MAX_SUB_AGENTS` | 3 | Maximum sub-agents per workflow |
 | `MAX_TASK_DESCRIPTION_LEN` | 10000 | Maximum task description length |
 | `MAX_RESULT_SUMMARY_LEN` | 5000 | Maximum result summary length |
+| `INACTIVITY_TIMEOUT_SECS` | 300 | Timeout after 5 minutes of inactivity |
+| `ACTIVITY_CHECK_INTERVAL_SECS` | 30 | Activity monitoring interval |
+| `MAX_RETRY_ATTEMPTS` | 2 | Maximum retry attempts (3 total) |
+| `INITIAL_RETRY_DELAY_MS` | 500 | Initial delay before retry |
+| `CIRCUIT_FAILURE_THRESHOLD` | 3 | Failures before circuit opens |
+| `CIRCUIT_COOLDOWN_SECS` | 60 | Cooldown before retry after circuit open |
 
 - **3 tasks per parallel batch** (matches MAX_SUB_AGENTS)
 - Sub-agents have restricted tool access by default (sub-agent tools filtered out)
@@ -472,6 +478,98 @@ console.log(`Deleted ${deletedCount} executions`);
 
 ---
 
+## Resilience Features
+
+The sub-agent system includes several resilience mechanisms to handle failures gracefully.
+
+### Inactivity Timeout with Heartbeat (OPT-SA-1)
+
+Sub-agents are monitored for activity to detect true hangs without cutting legitimate long-running operations:
+
+- **Activity Check**: Every 30 seconds, the system checks for recent activity
+- **Timeout Trigger**: If no activity for 300 seconds (5 minutes), execution is aborted
+- **What Counts as Activity**: LLM token received, tool call started/completed, MCP server response
+
+```
+Execution starts
+    |
+    v
+[Activity detected?] --YES--> Reset inactivity counter (300s)
+    |                              |
+    NO                             v
+    |                         Continue execution
+    v                              |
+[Inactivity > 300s?] --YES--> ABORT (truly blocked)
+    |
+    NO
+    v
+Continue monitoring...
+```
+
+### Retry with Exponential Backoff (OPT-SA-10)
+
+Transient failures are automatically retried with exponential backoff:
+
+- **Max Attempts**: 3 (initial + 2 retries)
+- **Backoff Schedule**: 500ms, 1000ms, 2000ms
+- **Total Max Delay**: 1500ms
+
+**Retryable Errors** (automatically retried):
+- Timeout, connection refused, network errors
+- HTTP 502, 503, 429 (rate limit)
+- "Service unavailable", "server busy"
+
+**Non-Retryable Errors** (fail immediately):
+- Cancelled, permission denied, not found
+- Invalid input, authentication errors
+- Circuit breaker open
+
+### Circuit Breaker (OPT-SA-8)
+
+The circuit breaker pattern prevents cascade failures:
+
+| State | Description | Behavior |
+|-------|-------------|----------|
+| **Closed** | Normal operation | Requests allowed |
+| **Open** | System unhealthy (3 failures) | Requests rejected for 60s cooldown |
+| **HalfOpen** | Testing recovery | Allows one request through |
+
+```
+[Closed] --3 failures--> [Open] --60s cooldown--> [HalfOpen]
+    ^                                                   |
+    |                                                   |
+    +------------ success <--- test request ------------+
+    |                                                   |
+    +------------ [Open] <--- test fails ---------------+
+```
+
+### Graceful Cancellation (OPT-SA-7)
+
+Sub-agent executions can be cancelled gracefully via CancellationToken:
+
+- User cancels workflow in UI
+- CancellationToken propagates to all active sub-agents
+- Sub-agents respond immediately instead of waiting for timeout
+- Clean shutdown with proper resource cleanup
+
+### Hierarchical Tracing (OPT-SA-11)
+
+Parallel batch executions use correlation IDs for tracing:
+
+- **batch_id**: Unique ID for the parallel batch operation
+- **parent_execution_id**: Links individual tasks to their batch
+- Enables hierarchical log aggregation and debugging
+
+```typescript
+// Logs show correlation
+[batch_id: "batch_abc123"]
+  └── [execution_id: "exec_001", parent: "batch_abc123"] Task 1
+  └── [execution_id: "exec_002", parent: "batch_abc123"] Task 2
+  └── [execution_id: "exec_003", parent: "batch_abc123"] Task 3
+```
+
+---
+
 ## Troubleshooting
 
 ### "Only the primary workflow agent can spawn sub-agents"
@@ -497,6 +595,30 @@ console.log(`Deleted ${deletedCount} executions`);
 **Cause**: Target agent ID doesn't exist.
 
 **Solution**: Use `list_agents` operation to see available agents.
+
+### "Sub-agent inactive for X seconds"
+
+**Cause**: Sub-agent produced no activity (tokens, tool calls) for the inactivity timeout period.
+
+**Solution**:
+- Check if the LLM provider is responding
+- Verify MCP servers are accessible
+- Consider increasing complexity of task to avoid long idle periods
+
+### "Circuit breaker open"
+
+**Cause**: The sub-agent execution system has detected 3 consecutive failures and entered protective mode.
+
+**Solution**:
+- Wait 60 seconds for automatic recovery
+- Check underlying services (LLM provider, MCP servers)
+- Review error logs for root cause
+
+### "Execution cancelled"
+
+**Cause**: User or system cancelled the workflow while sub-agent was executing.
+
+**Solution**: This is expected behavior when cancellation is requested. Re-run the workflow if needed.
 
 ---
 

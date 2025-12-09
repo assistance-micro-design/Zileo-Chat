@@ -1,9 +1,9 @@
-# Phase Post-v1 - Optimizations Deferred
+# Remaining Tasks - Post-v1 Optimizations
 
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-09
-> **Total Estimated Effort**: ~50-56 hours
-> **Validation**: Code-verified, all prerequisites (Phases 0-8 + LLM optimizations) complete
+> **Total Estimated Effort**: ~46-50 hours
+> **Validation**: Code-verified, all v1.0 phases complete
 
 ## Overview
 
@@ -12,9 +12,9 @@ This document consolidates all optimization items deferred to post-v1 release. T
 - Low priority for initial release
 - Require significant refactoring effort
 
-## Completed (Reference)
+## v1.0 Completed (Reference)
 
-All Phase 0-8 optimizations are **COMPLETE**:
+All optimization phases are **COMPLETE**:
 
 | Phase | Name | Key Deliverables |
 |-------|------|------------------|
@@ -27,8 +27,9 @@ All Phase 0-8 optimizations are **COMPLETE**:
 | 6 | Strategic MCP | Circuit breaker, ID lookup table, health checks |
 | 7 | Strategic Frontend | Settings decomposition, lazy loading, cache TTL |
 | 8 | LLM Optimizations | Rate limiter, retry, circuit breaker, HTTP pooling, utils |
+| SA | Sub-Agent Optimizations | All 11 OPT-SA items (heartbeat, retry, circuit breaker, etc.) |
 
-**Total Tests**: 667+ passing
+**Total Tests**: 760+ passing
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
 
 ---
@@ -167,8 +168,6 @@ When stable release is available:
 
 | Date | Change |
 |------|--------|
-| 2025-12-08 | Initial consolidation from individual spec files |
-| 2025-12-08 | Verified all Phases 0-8 complete via code analysis |
-| 2025-12-09 | Added LLM optimization items (OPT-LLM-7) |
-| 2025-12-09 | Updated test count to 667+ |
-| 2025-12-09 | Consolidated from 2025-12-08_optimization-llm.md and PHASE_9_POST_V1.md |
+| 2025-12-09 | Created from PHASE_POST_V1.md consolidation |
+| 2025-12-09 | Updated test count to 760+ after Sub-Agent optimizations |
+| 2025-12-09 | Confirmed all OPT-SA-1 to OPT-SA-11 complete |

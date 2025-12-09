@@ -770,6 +770,41 @@ Pour garantir la robustesse des workflows, notamment lors d'erreurs passagères 
 
 - **Journal des Tâches**: Un suivi persistant des tâches et de leur statut (ex: dans SurrealDB) permet à l'orchestrateur de ne reprendre que les étapes qui n'ont pas encore été complétées avec succès.
 
+### Patterns de Résilience (v1.0)
+
+Le système sub-agent implémente plusieurs patterns de résilience:
+
+**Inactivity Timeout with Heartbeat (OPT-SA-1)**
+- Monitoring toutes les 30 secondes
+- Timeout après 300s d'inactivité (pas de tokens, tool calls, ou réponses MCP)
+- Évite de couper les exécutions longues légitimes
+
+**Retry with Exponential Backoff (OPT-SA-10)**
+```rust
+// Stratégie de retry
+MAX_RETRY_ATTEMPTS = 2;        // 3 tentatives totales
+INITIAL_RETRY_DELAY_MS = 500;  // 500ms, 1000ms, 2000ms
+```
+- Erreurs retryables: timeout, network, rate limit, 502/503/429
+- Erreurs non-retryables: cancelled, permission denied, invalid
+
+**Circuit Breaker (OPT-SA-8)**
+```rust
+CIRCUIT_FAILURE_THRESHOLD = 3;  // Ouvre après 3 échecs
+CIRCUIT_COOLDOWN_SECS = 60;     // 60s avant recovery
+```
+- États: Closed → Open → HalfOpen → Closed
+- Empêche les cascade failures
+
+**Graceful Cancellation (OPT-SA-7)**
+- CancellationToken propagé aux sub-agents
+- Réponse immédiate à la demande d'annulation
+- Cleanup des ressources
+
+**Hierarchical Tracing (OPT-SA-11)**
+- `parent_execution_id` pour corrélation batch → tasks
+- Logs structurés avec correlation IDs
+
 ## State Management
 
 ### Agent State
@@ -1084,7 +1119,9 @@ zileo-chat-3/
 │  │  ├─ spawn_agent.rs       # SpawnAgentTool
 │  │  ├─ delegate_task.rs     # DelegateTaskTool
 │  │  ├─ parallel_tasks.rs    # ParallelTasksTool
-│  │  └─ sub_agent_executor.rs # Shared sub-agent utilities
+│  │  ├─ sub_agent_executor.rs # Shared utilities (retry, heartbeat, metrics)
+│  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker (OPT-SA-8)
+│  │  └─ validation_helper.rs # Human-in-the-loop validation
 │  │
 │  ├─ commands/               # Tauri IPC commands
 │  │  ├─ agent.rs             # Agent CRUD
