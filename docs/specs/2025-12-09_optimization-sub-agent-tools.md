@@ -644,7 +644,9 @@ cargo test parallel_tasks -- --nocapture
    - Updated SpawnAgentTool to use heartbeat timeout
    - Added 6 new tests for ActivityMonitor
    - Note: DelegateTaskTool and ParallelTasksTool need deeper refactor (OPT-SA-4/5/6)
-3. [ ] Executer OPT-SA-2 (once_cell - 5min) - Quick Win
+3. [x] **OPT-SA-2 (once_cell 1.19 -> 1.20) - COMPLETE** (2025-12-09)
+   - Updated `src-tauri/Cargo.toml`: `once_cell = "1.20"`
+   - Validation: `cargo check` passed
 4. [ ] Executer OPT-SA-3 (magic numbers - 0.5h) - Quick Win (constants added, need to wire them)
 5. [ ] Executer P1.5 (OPT-SA-4, OPT-SA-5, OPT-SA-6) - ~2.5h
 6. [ ] Planifier P2 pour sprint suivant:
