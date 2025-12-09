@@ -39,7 +39,7 @@
 //! - Per-task control allows for future cancellation support (OPT-SA-7)
 //! - Ideal for independent analyses that can run in parallel
 
-use crate::agents::core::agent::Task;
+use crate::agents::core::agent::{Report, Task};
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
@@ -69,6 +69,19 @@ pub struct ParallelTaskSpec {
     pub agent_id: String,
     /// Complete prompt for the agent
     pub prompt: String,
+}
+
+/// Prepared execution context containing all resources needed for parallel execution.
+/// Used to pass data between helper functions during execute_batch() (OPT-SA-9).
+struct PreparedExecution {
+    /// Unified executor for event emission and DB updates
+    executor: SubAgentExecutor,
+    /// Unique identifier for this batch
+    batch_id: String,
+    /// Execution IDs for each task (in order)
+    execution_ids: Vec<String>,
+    /// Tasks prepared for orchestrator execution
+    orchestrator_tasks: Vec<(String, Task)>,
 }
 
 /// Tool for parallel batch execution across multiple agents.
@@ -154,31 +167,19 @@ impl ParallelTasksTool {
         }
     }
 
-    /// Executes multiple tasks in parallel.
-    ///
-    /// # Arguments
-    /// * `tasks` - Vector of (agent_id, prompt) pairs
-    /// * `wait_all` - Whether to wait for all tasks (currently always true)
-    #[instrument(skip(self, tasks), fields(
-        current_agent_id = %self.current_agent_id,
-        workflow_id = %self.workflow_id,
-        task_count = tasks.len()
-    ))]
-    async fn execute_batch(
-        &self,
-        tasks: Vec<ParallelTaskSpec>,
-        wait_all: bool,
-    ) -> ToolResult<Value> {
-        // 1. Check if this agent is the primary (workflow starter)
-        if !self.is_primary_agent {
-            return Err(ToolError::PermissionDenied(
-                "Only the primary workflow agent can execute parallel tasks. \
-                 Sub-agents cannot use parallel execution."
-                    .to_string(),
-            ));
-        }
+    // =========================================================================
+    // Helper functions for execute_batch() - OPT-SA-9: Reduce Cyclomatic Complexity
+    // =========================================================================
 
-        // 2. Validate task count
+    /// Validates task specifications for batch execution.
+    ///
+    /// Checks:
+    /// - Task array is not empty
+    /// - Task count does not exceed MAX_SUB_AGENTS
+    /// - Each task has a non-empty agent_id
+    /// - Each task has a non-empty prompt
+    /// - No task delegates to self
+    fn validate_tasks(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
         if tasks.is_empty() {
             return Err(ToolError::ValidationFailed(
                 "Tasks array cannot be empty. Provide at least one task.".to_string(),
@@ -193,7 +194,6 @@ impl ParallelTasksTool {
             )));
         }
 
-        // 3. Validate each task
         for (i, task) in tasks.iter().enumerate() {
             if task.agent_id.trim().is_empty() {
                 return Err(ToolError::ValidationFailed(format!(
@@ -215,10 +215,16 @@ impl ParallelTasksTool {
             }
         }
 
-        // 3b. Optionally validate MCP server names for each agent
-        // (This is informational - agents use their existing configs)
+        Ok(())
+    }
+
+    /// Validates MCP server configurations for each task's agent.
+    ///
+    /// This is informational only - logs warnings for unknown MCP servers
+    /// but does not fail the execution.
+    async fn validate_mcp_servers(&self, tasks: &[ParallelTaskSpec]) {
         if let Some(ref mcp_mgr) = self.mcp_manager {
-            for task_spec in &tasks {
+            for task_spec in tasks {
                 if let Some(agent) = self.registry.get(&task_spec.agent_id).await {
                     let mcp_servers = agent.mcp_servers();
                     if !mcp_servers.is_empty() {
@@ -233,8 +239,12 @@ impl ParallelTasksTool {
                 }
             }
         }
+    }
 
-        // 4. Request human-in-the-loop validation (High risk for parallel execution)
+    /// Requests human-in-the-loop validation for parallel batch execution.
+    ///
+    /// Blocks until validation is approved or returns error if rejected.
+    async fn request_human_validation(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
         let task_pairs: Vec<(String, String)> = tasks
             .iter()
@@ -252,15 +262,18 @@ impl ParallelTasksTool {
                 details,
                 risk_level,
             )
-            .await?;
+            .await
+    }
 
-        info!(
-            task_count = tasks.len(),
-            wait_all = wait_all,
-            "Starting parallel batch execution"
-        );
-
-        // 4. Create executor for unified event emission (OPT-SA-4)
+    /// Prepares execution context including DB records and orchestrator tasks.
+    ///
+    /// Creates:
+    /// - SubAgentExecutor for unified event emission
+    /// - Execution records in database
+    /// - Task objects for orchestrator
+    /// - Emits start events for each task
+    async fn prepare_execution(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<PreparedExecution> {
+        // Create executor for unified event emission (OPT-SA-4)
         // OPT-SA-7: Use with_cancellation for graceful shutdown support
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
@@ -272,12 +285,11 @@ impl ParallelTasksTool {
             self.cancellation_token.clone(),
         );
 
-        // 5. Create execution records and tasks
         let batch_id = Uuid::new_v4().to_string();
         let mut orchestrator_tasks: Vec<(String, Task)> = Vec::new();
         let mut execution_ids: Vec<String> = Vec::new();
 
-        for task_spec in &tasks {
+        for task_spec in tasks {
             let execution_id = Uuid::new_v4().to_string();
             execution_ids.push(execution_id.clone());
 
@@ -289,10 +301,8 @@ impl ParallelTasksTool {
                 format!("Parallel task for {}", task_spec.agent_id),
                 task_spec.prompt.clone(),
             );
-            // Set status to running (new() defaults to pending)
             execution_create.status = "running".to_string();
 
-            // Use db.create() which handles serialization correctly (avoids SDK enum issues)
             if let Err(e) = self
                 .db
                 .create("sub_agent_execution", &execution_id, execution_create)
@@ -319,15 +329,31 @@ impl ParallelTasksTool {
 
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
 
-            // Emit sub_agent_start event for this parallel task via unified executor (OPT-SA-4)
+            // Emit sub_agent_start event via unified executor (OPT-SA-4)
             let agent_name = format!("Parallel task for {}", task_spec.agent_id);
             executor.emit_start_event(&task_spec.agent_id, &agent_name, &task_spec.prompt);
         }
 
-        // 6. Execute all tasks in parallel using JoinSet for per-task control (OPT-SA-6)
-        // Include task index in return value to preserve order correlation
+        Ok(PreparedExecution {
+            executor,
+            batch_id,
+            execution_ids,
+            orchestrator_tasks,
+        })
+    }
+
+    /// Executes all tasks in parallel using JoinSet (OPT-SA-6).
+    ///
+    /// Returns results in original task order along with total duration.
+    async fn run_parallel_tasks(
+        &self,
+        orchestrator_tasks: Vec<(String, Task)>,
+        task_count: usize,
+    ) -> (Vec<anyhow::Result<Report>>, u64) {
+
         let start_time = std::time::Instant::now();
-        let mut join_set: JoinSet<(usize, anyhow::Result<_>)> = JoinSet::new();
+        let mut join_set: JoinSet<(usize, anyhow::Result<Report>)> = JoinSet::new();
+
         for (idx, (agent_id, task)) in orchestrator_tasks.into_iter().enumerate() {
             let orchestrator = self.orchestrator.clone();
             let mcp_manager = self.mcp_manager.clone();
@@ -338,14 +364,14 @@ impl ParallelTasksTool {
                 (idx, result)
             });
         }
-        // Collect results with their indices, then sort by index to restore original order
-        let mut indexed_results: Vec<(usize, anyhow::Result<_>)> = Vec::with_capacity(tasks.len());
+
+        // Collect results with their indices
+        let mut indexed_results: Vec<(usize, anyhow::Result<Report>)> =
+            Vec::with_capacity(task_count);
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
                 Ok((idx, exec_result)) => indexed_results.push((idx, exec_result)),
                 Err(join_error) => {
-                    // For panicked tasks, we can't know the index, so we'll handle this edge case
-                    // by adding with a placeholder index (this shouldn't happen in practice)
                     warn!("Task panicked during parallel execution: {}", join_error);
                     indexed_results.push((
                         usize::MAX,
@@ -354,12 +380,31 @@ impl ParallelTasksTool {
                 }
             }
         }
+
         // Sort by index to restore original task order
         indexed_results.sort_by_key(|(idx, _)| *idx);
-        let results: Vec<anyhow::Result<_>> = indexed_results.into_iter().map(|(_, r)| r).collect();
+        let results: Vec<anyhow::Result<Report>> =
+            indexed_results.into_iter().map(|(_, r)| r).collect();
         let total_duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // 6. Process results
+        (results, total_duration_ms)
+    }
+
+    /// Processes execution results, updates DB records, and builds aggregated report.
+    ///
+    /// For each result:
+    /// - Updates execution record in database
+    /// - Emits completion event
+    /// - Builds individual and aggregated reports
+    async fn process_results(
+        &self,
+        tasks: &[ParallelTaskSpec],
+        results: Vec<anyhow::Result<Report>>,
+        execution_ids: &[String],
+        executor: &SubAgentExecutor,
+        batch_id: &str,
+        total_duration_ms: u64,
+    ) -> ParallelBatchResult {
         let mut parallel_results: Vec<ParallelTaskResult> = Vec::new();
         let mut completed_count = 0;
         let mut failed_count = 0;
@@ -377,7 +422,6 @@ impl ParallelTasksTool {
                         tokens_output: report.metrics.tokens_output as u64,
                     };
 
-                    // Build ExecutionResult for unified update_execution_record (OPT-SA-5)
                     let exec_result = ExecutionResult {
                         success: true,
                         report: report.content.clone(),
@@ -385,12 +429,10 @@ impl ParallelTasksTool {
                         error_message: None,
                     };
 
-                    // Update execution record via unified executor (OPT-SA-5)
                     executor
                         .update_execution_record(&execution_id, &exec_result)
                         .await;
 
-                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
                     let agent_name = format!("Parallel task for {}", task_spec.agent_id);
                     executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
@@ -417,7 +459,6 @@ impl ParallelTasksTool {
                         "Parallel task failed"
                     );
 
-                    // Build ExecutionResult for unified update_execution_record (OPT-SA-5)
                     let exec_result = ExecutionResult {
                         success: false,
                         report: String::new(),
@@ -429,12 +470,10 @@ impl ParallelTasksTool {
                         error_message: Some(error_msg.clone()),
                     };
 
-                    // Update execution record via unified executor (OPT-SA-5)
                     executor
                         .update_execution_record(&execution_id, &exec_result)
                         .await;
 
-                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
                     let agent_name = format!("Parallel task for {}", task_spec.agent_id);
                     executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
@@ -456,7 +495,6 @@ impl ParallelTasksTool {
             parallel_results.push(task_result);
         }
 
-        // 7. Build aggregated report
         let aggregated_report = format!(
             "# Parallel Execution Report\n\n\
              **Batch ID:** {}\n\
@@ -481,16 +519,84 @@ impl ParallelTasksTool {
             "Parallel batch execution completed"
         );
 
-        // 8. Return result
-        let result = ParallelBatchResult {
+        ParallelBatchResult {
             success: failed_count == 0,
             completed: completed_count,
             failed: failed_count,
             results: parallel_results,
             aggregated_report,
-        };
+        }
+    }
 
-        serde_json::to_value(&result)
+    // =========================================================================
+    // Main execute_batch() - Refactored for CC~6 (OPT-SA-9)
+    // =========================================================================
+
+    /// Executes multiple tasks in parallel.
+    ///
+    /// # Arguments
+    /// * `tasks` - Vector of (agent_id, prompt) pairs
+    /// * `wait_all` - Whether to wait for all tasks (currently always true)
+    ///
+    /// # Refactoring (OPT-SA-9)
+    ///
+    /// This function has been refactored to reduce cyclomatic complexity from ~20 to ~6.
+    /// Logic has been extracted into helper functions:
+    /// - `validate_tasks()` - Input validation
+    /// - `validate_mcp_servers()` - MCP server validation (informational)
+    /// - `request_human_validation()` - Human-in-the-loop approval
+    /// - `prepare_execution()` - DB records and task preparation
+    /// - `run_parallel_tasks()` - JoinSet parallel execution
+    /// - `process_results()` - Result processing and report generation
+    #[instrument(skip(self, tasks), fields(
+        current_agent_id = %self.current_agent_id,
+        workflow_id = %self.workflow_id,
+        task_count = tasks.len()
+    ))]
+    async fn execute_batch(
+        &self,
+        tasks: Vec<ParallelTaskSpec>,
+        _wait_all: bool,
+    ) -> ToolResult<Value> {
+        // 1. Check primary agent permission
+        SubAgentExecutor::check_primary_permission(self.is_primary_agent, "parallel tasks")?;
+
+        // 2. Validate tasks
+        self.validate_tasks(&tasks)?;
+
+        // 3. Validate MCP servers (informational only)
+        self.validate_mcp_servers(&tasks).await;
+
+        // 4. Request human-in-the-loop validation
+        self.request_human_validation(&tasks).await?;
+
+        info!(
+            task_count = tasks.len(),
+            "Starting parallel batch execution"
+        );
+
+        // 5. Prepare execution (DB records, executor, start events)
+        let prepared = self.prepare_execution(&tasks).await?;
+
+        // 6. Execute in parallel
+        let (results, total_duration_ms) = self
+            .run_parallel_tasks(prepared.orchestrator_tasks, tasks.len())
+            .await;
+
+        // 7. Process results and build report
+        let batch_result = self
+            .process_results(
+                &tasks,
+                results,
+                &prepared.execution_ids,
+                &prepared.executor,
+                &prepared.batch_id,
+                total_duration_ms,
+            )
+            .await;
+
+        // 8. Serialize and return
+        serde_json::to_value(&batch_result)
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
 

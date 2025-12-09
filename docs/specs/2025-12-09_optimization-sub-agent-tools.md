@@ -686,16 +686,33 @@ cargo test parallel_tasks -- --nocapture
    - Added 3 new tests: `test_executor_with_cancellation_token`, `test_cancellation_token_immediate_cancellation`, `test_cancellation_token_async_cancellation`
    - All 722 backend tests passing
    - Enables graceful shutdown when user cancels workflow - sub-agents respond immediately
-9. [ ] Planifier suite P2:
-   - OPT-SA-8 (Circuit breaker - 3h)
-   - OPT-SA-9 (Reduire CC - 2h)
+9. [x] **OPT-SA-8 (Circuit Breaker) - COMPLETE** (2025-12-09)
+   - Created `sub_agent_circuit_breaker.rs` module with `SubAgentCircuitBreaker` struct
+   - Implemented circuit states: Closed, Open, HalfOpen
+   - Configurable failure threshold (default: 3) and cooldown (default: 60s)
+   - Integrated into SubAgentExecutor for execution-level resilience
+   - Added 14 unit tests covering all state transitions
+   - All tests passing
+10. [x] **OPT-SA-9 (Reduce Cyclomatic Complexity) - COMPLETE** (2025-12-09)
+   - Refactored `execute_batch()` in `parallel_tasks.rs` from CC~20 to CC~6
+   - Extracted 6 helper functions:
+     - `validate_tasks()` - Input validation (empty, max count, empty fields, self-delegation)
+     - `validate_mcp_servers()` - MCP server validation (informational)
+     - `request_human_validation()` - Human-in-the-loop approval
+     - `prepare_execution()` - DB records and task preparation
+     - `run_parallel_tasks()` - JoinSet parallel execution
+     - `process_results()` - Result processing and report generation
+   - Added `PreparedExecution` struct for data flow between helpers
+   - `execute_batch()` reduced from 328 lines to ~45 lines
+   - All 52 sub-agent unit tests + 17 integration tests passing
+   - Clippy passes with no warnings
 
 ## References
 
 ### Code Analyse
 - `src-tauri/src/tools/spawn_agent.rs` (854 lignes)
 - `src-tauri/src/tools/delegate_task.rs` (765 lignes - was 797, reduced by OPT-SA-4)
-- `src-tauri/src/tools/parallel_tasks.rs` (854 lignes - was 880, modified by OPT-SA-4, OPT-SA-5, OPT-SA-6)
+- `src-tauri/src/tools/parallel_tasks.rs` (977 lignes - refactored by OPT-SA-9, execute_batch() CC reduced from ~20 to ~6)
 - `src-tauri/src/tools/sub_agent_executor.rs` (542 lignes)
 - `src-tauri/src/tools/validation_helper.rs` (516 lignes)
 - `src-tauri/src/tools/constants.rs`
