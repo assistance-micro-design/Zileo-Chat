@@ -141,7 +141,7 @@ DEFINE FIELD workflow_id ON mcp_call_log TYPE option<string>;
 DEFINE FIELD server_name ON mcp_call_log TYPE string;
 DEFINE FIELD tool_name ON mcp_call_log TYPE string;
 DEFINE FIELD params ON mcp_call_log TYPE object;
-DEFINE FIELD result ON mcp_call_log TYPE object;
+DEFINE FIELD result ON mcp_call_log TYPE array | object; -- MCP tool results can be arrays or objects
 DEFINE FIELD success ON mcp_call_log TYPE bool;
 DEFINE FIELD duration_ms ON mcp_call_log TYPE int;
 DEFINE FIELD timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();
