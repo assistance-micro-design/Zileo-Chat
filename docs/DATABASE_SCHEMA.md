@@ -546,6 +546,107 @@ Graph traversal tasks bloquées par dépendances non-complétées
 
 ---
 
+## Query Patterns (Implementation - Phase 5)
+
+### Parameterized Queries
+
+**Safe Pattern** - Use bind parameters for user input:
+```rust
+// src-tauri/src/db/client.rs
+
+// SELECT with parameters
+let results: Vec<Memory> = db.query_with_params(
+    "SELECT * FROM memory WHERE type = $type AND workflow_id = $wf_id",
+    vec![
+        ("type".to_string(), serde_json::json!("knowledge")),
+        ("wf_id".to_string(), serde_json::json!(workflow_id)),
+    ]
+).await?;
+
+// JSON results with parameters
+let results: Vec<serde_json::Value> = db.query_json_with_params(
+    "SELECT meta::id(id) AS id FROM memory WHERE type = $type",
+    vec![("type".to_string(), serde_json::json!(user_input))]
+).await?;
+
+// Mutations with parameters
+db.execute_with_params(
+    "UPDATE task:`uuid` SET status = $status",
+    vec![("status".to_string(), serde_json::json!("completed"))]
+).await?;
+```
+
+**Unsafe Pattern** - DO NOT use string concatenation:
+```rust
+// WRONG - SQL injection risk
+let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
+
+// WRONG - Apostrophes cause parse errors
+format!("content = '{}'", text.replace('\'', "''"))  // l'eau -> parse error
+```
+
+### Transaction Support
+
+For multi-query operations that must succeed or fail together:
+```rust
+// Simple transaction
+db.transaction(vec![
+    "CREATE workflow:`123` CONTENT { name: 'Test' }".to_string(),
+    "CREATE message:`456` CONTENT { workflow_id: '123' }".to_string(),
+]).await?;  // Rolls back on any failure
+
+// Parameterized transaction
+db.transaction_with_params(vec![
+    (
+        "CREATE workflow:`123` CONTENT $data".to_string(),
+        vec![("data".to_string(), json!({"name": "Test"}))]
+    ),
+    (
+        "UPDATE agent:`456` SET status = $status".to_string(),
+        vec![("status".to_string(), json!("active"))]
+    ),
+]).await?;  // Rolls back on any failure
+```
+
+### Query Limits (OPT-DB-8)
+
+All list operations enforce LIMIT to prevent memory explosion:
+```rust
+use crate::tools::constants::query_limits;
+
+let query = format!(
+    "SELECT * FROM memory ORDER BY created_at DESC LIMIT {}",
+    query_limits::DEFAULT_LIST_LIMIT  // 1000
+);
+```
+
+**Constants** (`src-tauri/src/tools/constants.rs`):
+| Constant | Value | Usage |
+|----------|-------|-------|
+| `DEFAULT_LIST_LIMIT` | 1000 | agents, memories, tasks |
+| `DEFAULT_MODELS_LIMIT` | 100 | LLM models |
+| `DEFAULT_MCP_LOGS_LIMIT` | 500 | MCP call logs |
+| `DEFAULT_MESSAGES_LIMIT` | 500 | message history |
+| `MAX_LIST_LIMIT` | 10000 | absolute maximum |
+
+### MCP Latency Metrics Query
+
+The `mcp_call_log` table is used for latency percentile calculations:
+```sql
+-- Command: get_mcp_latency_metrics
+SELECT
+    server_name,
+    math::percentile(duration_ms, 0.50) AS p50_ms,
+    math::percentile(duration_ms, 0.95) AS p95_ms,
+    math::percentile(duration_ms, 0.99) AS p99_ms,
+    count() AS total_calls
+FROM mcp_call_log
+WHERE timestamp > time::now() - 1h
+GROUP BY server_name
+```
+
+---
+
 ## Migration & Évolution
 
 **Versioning Schema**

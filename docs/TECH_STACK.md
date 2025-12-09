@@ -157,6 +157,57 @@ Desktop   : Tauri (cross-platform)
 4. **Implement lazy loading** for large datasets
 5. **Use Svelte stores** for reactive state management
 
+## LLM Resilience (Phase 6 Optimization)
+
+Production-ready resilience patterns for LLM provider calls:
+
+**Rate Limiting**:
+- 1 request per second minimum delay between API calls
+- Compatible with Mistral Free Tier (1 req/s) and Ollama
+- Implementation: `src-tauri/src/llm/rate_limiter.rs`
+
+**Retry Strategy**:
+- Exponential backoff with 3 max retries
+- Initial delay: 1s, max delay: 30s, multiplier: 2x
+- Retryable errors: ConnectionError, RequestFailed, StreamingError
+- Implementation: `src-tauri/src/llm/retry.rs`
+
+**Circuit Breaker**:
+- 3 consecutive failures trigger open state (fail fast)
+- 60-second cooldown before half-open recovery test
+- Prevents cascade failures from unreliable providers
+- Implementation: `src-tauri/src/llm/circuit_breaker.rs`
+
+**HTTP Connection Pooling**:
+- Centralized `reqwest::Client` in ProviderManager
+- Pool: 5 idle connections per host, 300s timeout
+- Shared across Mistral and Ollama providers
+- Implementation: `src-tauri/src/llm/manager.rs`
+
+---
+
+## Database Safety (Phase 5 Optimization)
+
+**Parameterized Queries**:
+- All user input uses bind parameters (SQL injection prevention)
+- Methods: `query_with_params()`, `execute_with_params()`
+- Implementation: `src-tauri/src/db/client.rs`
+
+**Transaction Support**:
+- Atomic multi-query operations with auto-rollback
+- Method: `transaction_with_params()`
+- Implementation: `src-tauri/src/db/client.rs`
+
+**Query Limits**:
+- All list queries enforce LIMIT (memory explosion prevention)
+- Constants in `src-tauri/src/tools/constants.rs`:
+  - `DEFAULT_LIST_LIMIT`: 1000 (agents, memories, tasks)
+  - `DEFAULT_MODELS_LIMIT`: 100 (LLM models)
+  - `DEFAULT_MCP_LOGS_LIMIT`: 500 (MCP call logs)
+  - `DEFAULT_MESSAGES_LIMIT`: 500 (message history)
+
+---
+
 ## Security
 
 ```json
@@ -177,6 +228,8 @@ Desktop   : Tauri (cross-platform)
 - **MCP Env Validation**: Shell injection prevention (alphanumeric names, no metacharacters)
 - **Tauri v2**: Capability-based permissions (no v1 allowlist)
 - **tauri-plugin-opener**: >= 2.2.1 (security patch)
+- **SQL Injection Prevention**: Parameterized queries enforced (Phase 5)
+- **Memory Protection**: Query LIMIT enforcement (Phase 5)
 
 ## Build Outputs
 

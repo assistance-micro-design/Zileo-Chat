@@ -1,8 +1,8 @@
 # Décisions Architecture Projet
 
-> **Date** : 2025-11-23 (décisions initiales) | 2025-12-06 (validation implémentation)
-> **Phase** : Phase 5 Backend Features complète, Phase 6 Integration en cours
-> **Statut** : Décisions validées et implémentées (111 commandes Tauri, 87 fichiers Rust, 77 composants Svelte)
+> **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation)
+> **Phase** : Phase 8 complète, optimisations LLM/MCP/DB terminées
+> **Statut** : Décisions validées et implémentées (111 commandes Tauri, 87 fichiers Rust, 77 composants Svelte, 667+ tests)
 
 ---
 
@@ -693,17 +693,24 @@ zileo-chat-3/
 ## Statut Implémentation (Décembre 2025)
 
 **Phases Complétées** :
-1. ✅ Phase 0 : Base implementation (agents, LLM, DB, security, 19 commandes initiales)
-2. ✅ Phase 1 : Design System Foundation (theme, 12 composants UI)
-3. ✅ Phase 2 : Layout Components (AppContainer, Sidebar, FloatingMenu)
-4. ✅ Phase 3 : Chat & Workflow Components
-5. ✅ Phase 4 : Pages Refactoring (agent page, settings page)
-6. ✅ Phase 5 : Backend Features (validation, memory, streaming - 111 commandes total)
-7. ✅ Phase 6 : Strategic Optimizations (MCP, backend, DB)
-8. ✅ Phase 7 : Quick Wins Frontend (Vite 7, utilities, modal pattern)
+1. ✅ Phase 0 : Security Critical (SurrealDB 2.4.0, CSP, API key validation, MCP env security)
+2. ✅ Phase 1 : Frontend Stability (store cleanup methods, memory leak fixes, error utility)
+3. ✅ Phase 2 : DB/Backend Quick Wins (release profile, constants, response builder)
+4. ✅ Phase 3 : Types & Polish (type sync, nullability convention, AVAILABLE_TOOLS constant)
+5. ✅ Phase 4 : MCP Quick Wins (tool caching, HTTP pooling, latency metrics)
+6. ✅ Phase 5 : Strategic Backend/DB (parameterized queries, transactions, query limits)
+7. ✅ Phase 6 : Strategic MCP (circuit breaker, ID lookup table, health checks)
+8. ✅ Phase 7 : Strategic Frontend (settings decomposition, lazy loading, cache TTL)
+9. ✅ Phase 8 : LLM Optimizations (rate limiter, retry, circuit breaker, HTTP pooling, utils)
 
-**En Cours** :
-- Phase 8 : Strategic Refactoring (settings page decomposition)
+**Total Tests** : 667+ passing
+**Code Quality** : 0 errors across all validations (clippy, eslint, svelte-check)
+
+**Différé Post-v1** :
+- TYPE-OPT-5 : specta + tauri-specta (BLOCKED: incompatible with Tauri 2.9.x)
+- SEC-OPT-7/8 : Rate limiting sensitive ops, prompt injection guard
+- DB-OPT-12/14 : thiserror migration, live query API
+- FE-OPT-12/13 : Superforms integration
 
 **Documentation Technique** :
 - Schéma DB : `docs/DATABASE_SCHEMA.md`
@@ -958,5 +965,129 @@ const handleSave = createAsyncHandler(
 - `mcpModal` : Modal création/édition serveurs MCP
 - `modelModal` : Modal création/édition modèles LLM
 - Réduit ~60 lignes de boilerplate dans +page.svelte
+
+---
+
+## 8. Performance & Resilience Optimizations (Phase 6-8)
+
+### Question 23 : LLM Provider Resilience
+
+**Décision** : **Multi-layer protection avec rate limiting + retry + circuit breaker**
+
+**Raisons** :
+- Mistral Free Tier impose 1 req/s limit (429 errors si dépassé)
+- Transients réseau nécessitent stratégie retry
+- Providers unhealthy doivent fail fast (circuit breaker)
+
+**Stratégie** :
+
+**Rate Limiting** :
+- 1 request per second minimum delay (`MIN_DELAY_BETWEEN_CALLS_MS = 1000`)
+- Applied before every LLM API call
+- Compatible Mistral Free Tier et Ollama
+- Implementation: `src-tauri/src/llm/rate_limiter.rs`
+
+**Retry Mechanism** :
+- 3 max retries avec exponential backoff (1s, 2s, 4s)
+- Max delay capped à 30s
+- Retryable errors: ConnectionError, RequestFailed, StreamingError
+- Non-retryable: NotConfigured, InvalidProvider, MissingApiKey, CircuitOpen
+- Implementation: `src-tauri/src/llm/retry.rs`
+
+**Circuit Breaker** :
+- 3 consecutive failures → open state (60s cooldown)
+- Half-open state permet test request
+- Prevent cascade failures
+- Reuse pattern MCP (unified resilience)
+- Implementation: `src-tauri/src/llm/circuit_breaker.rs`
+
+**HTTP Connection Pooling** :
+- Centralized `reqwest::Client` in ProviderManager
+- Pool: 5 idle connections per host
+- Timeout: 300s (long completions)
+- Shared across Mistral and Ollama providers
+
+---
+
+### Question 24 : Database Query Safety
+
+**Décision** : **Enforce parameterized queries + LIMIT on all list operations**
+
+**Raisons** :
+- SQL injection prevention (Phase 5 security audit)
+- Memory explosion protection from unbounded queries
+- Safe handling special characters (apostrophes, quotes, newlines)
+
+**Stratégie** :
+
+**Parameterized Queries** :
+- All WHERE clauses with user input use bind parameters
+- Methods: `query_with_params()`, `execute_with_params()`, `query_json_with_params()`
+- Replaces string concatenation with `format!()`
+- Implementation: `src-tauri/src/db/client.rs`
+
+```rust
+// Safe Pattern
+db.query_with_params(
+    "SELECT * FROM memory WHERE type = $type AND workflow_id = $wf_id",
+    vec![
+        ("type".to_string(), json!("knowledge")),
+        ("wf_id".to_string(), json!(workflow_id)),
+    ]
+).await?;
+
+// UNSAFE - DO NOT USE
+let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
+```
+
+**Query Limits** (OPT-DB-8):
+- Default 1000 for list operations (agents, memories, tasks)
+- Default 100 for models
+- Default 500 for MCP logs, messages
+- Constants: `src-tauri/src/tools/constants::query_limits`
+
+**Transaction Support** :
+- `transaction_with_params()` for atomic multi-query operations
+- Automatic rollback on any failure
+- Use case: workflow + messages creation atomique
+
+---
+
+### Question 25 : MCP Resilience & Monitoring
+
+**Décision** : **Circuit breaker + health checks + latency metrics**
+
+**Raisons** :
+- MCP servers externes = points de failure potentiels
+- Need proactive health detection
+- Latency monitoring pour SLA
+
+**Stratégie** :
+
+**Circuit Breaker** (Phase 6):
+- 3 failures → 60s cooldown
+- Per-server state tracking
+- Implementation: `src-tauri/src/mcp/circuit_breaker.rs`
+
+**Health Checks** (Phase 6):
+- Background task every 5 minutes (configurable)
+- Uses `refresh_tools()` as health probe
+- Updates circuit breaker state
+- Methods: `start_health_checks()`, `stop_health_checks()`
+
+**Latency Metrics** (Phase 4):
+- P50, P95, P99 percentiles from `mcp_call_log` table
+- Command: `get_mcp_latency_metrics`
+- Time window: last 1 hour
+- Type: `MCPLatencyMetrics { server_name, p50_ms, p95_ms, p99_ms, total_calls }`
+
+**Tool Caching** (Phase 4):
+- TTL: 1 hour
+- Invalidated on tool call errors
+- Reduces network overhead for tool discovery
+
+**ID Lookup Table** (Phase 6):
+- O(1) server operations via `id_to_name` HashMap
+- Replaces O(n) scan for stop/get/restart operations
 
 ---
