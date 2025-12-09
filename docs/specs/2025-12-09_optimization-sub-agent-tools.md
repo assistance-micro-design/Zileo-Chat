@@ -653,8 +653,15 @@ cargo test parallel_tasks -- --nocapture
    - Updated `validation_helper.rs`: Imports from centralized `constants::sub_agent`
    - Removed local constants in validation_helper.rs
    - All tests passed (spawn_agent: 7, validation_helper: 6+7 integration)
-5. [ ] Executer P1.5 (OPT-SA-4, OPT-SA-5, OPT-SA-6) - ~2.5h
-6. [ ] Planifier P2 pour sprint suivant:
+5. [x] **OPT-SA-4 (Unifier Event Emission) - COMPLETE** (2025-12-09)
+   - Removed duplicate `emit_event()` methods from `delegate_task.rs` and `parallel_tasks.rs`
+   - Both tools now use `SubAgentExecutor::emit_start_event()` and `emit_complete_event()`
+   - Updated imports: removed `StreamChunk`, `events`, `SubAgentStreamMetrics`; added `ExecutionResult`, `SubAgentExecutor`
+   - Created `SubAgentExecutor` instance in both tools for event emission
+   - All 33 unit tests + 17 integration tests passing
+   - Reduced code duplication by ~40 lines
+6. [ ] Executer P1.5 restant (OPT-SA-5, OPT-SA-6) - ~1.5h
+7. [ ] Planifier P2 pour sprint suivant:
    - OPT-SA-7 (CancellationToken - 2h)
    - OPT-SA-8 (Circuit breaker - 3h)
    - OPT-SA-9 (Reduire CC - 2h)
@@ -663,8 +670,8 @@ cargo test parallel_tasks -- --nocapture
 
 ### Code Analyse
 - `src-tauri/src/tools/spawn_agent.rs` (854 lignes)
-- `src-tauri/src/tools/delegate_task.rs` (797 lignes)
-- `src-tauri/src/tools/parallel_tasks.rs` (880 lignes)
+- `src-tauri/src/tools/delegate_task.rs` (765 lignes - was 797, reduced by OPT-SA-4)
+- `src-tauri/src/tools/parallel_tasks.rs` (867 lignes - was 880, reduced by OPT-SA-4)
 - `src-tauri/src/tools/sub_agent_executor.rs` (542 lignes)
 - `src-tauri/src/tools/validation_helper.rs` (516 lignes)
 - `src-tauri/src/tools/constants.rs`

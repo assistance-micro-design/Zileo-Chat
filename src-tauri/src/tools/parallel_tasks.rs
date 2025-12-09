@@ -42,19 +42,20 @@ use crate::agents::core::agent::Task;
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
-use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAgentStreamMetrics};
+use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, ParallelBatchResult, ParallelTaskResult, SubAgentExecutionComplete,
     SubAgentExecutionCreate, SubAgentMetrics,
 };
 use crate::tools::context::AgentToolContext;
+use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -138,22 +139,6 @@ impl ParallelTasksTool {
             current_agent_id,
             workflow_id,
             is_primary_agent,
-        }
-    }
-
-    /// Emits a streaming event to the frontend via Tauri.
-    ///
-    /// This is a helper method to emit sub-agent lifecycle events.
-    /// If no app_handle is available, the event is silently skipped.
-    fn emit_event(&self, event_name: &str, chunk: &StreamChunk) {
-        if let Some(ref handle) = self.app_handle {
-            if let Err(e) = handle.emit(event_name, chunk) {
-                warn!(
-                    event = %event_name,
-                    error = %e,
-                    "Failed to emit parallel task event"
-                );
-            }
         }
     }
 
@@ -263,7 +248,17 @@ impl ParallelTasksTool {
             "Starting parallel batch execution"
         );
 
-        // 4. Create execution records and tasks
+        // 4. Create executor for unified event emission (OPT-SA-4)
+        let executor = SubAgentExecutor::new(
+            self.db.clone(),
+            self.orchestrator.clone(),
+            self.mcp_manager.clone(),
+            self.app_handle.clone(),
+            self.workflow_id.clone(),
+            self.current_agent_id.clone(),
+        );
+
+        // 5. Create execution records and tasks
         let batch_id = Uuid::new_v4().to_string();
         let mut orchestrator_tasks: Vec<(String, Task)> = Vec::new();
         let mut execution_ids: Vec<String> = Vec::new();
@@ -310,18 +305,12 @@ impl ParallelTasksTool {
 
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
 
-            // Emit sub_agent_start event for this parallel task
-            let start_chunk = StreamChunk::sub_agent_start(
-                self.workflow_id.clone(),
-                task_spec.agent_id.clone(),
-                format!("Parallel task for {}", task_spec.agent_id),
-                self.current_agent_id.clone(),
-                task_spec.prompt.clone(),
-            );
-            self.emit_event(events::WORKFLOW_STREAM, &start_chunk);
+            // Emit sub_agent_start event for this parallel task via unified executor (OPT-SA-4)
+            let agent_name = format!("Parallel task for {}", task_spec.agent_id);
+            executor.emit_start_event(&task_spec.agent_id, &agent_name, &task_spec.prompt);
         }
 
-        // 5. Execute all tasks in parallel using orchestrator
+        // 6. Execute all tasks in parallel using orchestrator
         let start_time = std::time::Instant::now();
         let results = self.orchestrator.execute_parallel(orchestrator_tasks).await;
         let total_duration_ms = start_time.elapsed().as_millis() as u64;
@@ -355,20 +344,15 @@ impl ParallelTasksTool {
                     self.update_execution_record(&execution_id, &completion)
                         .await;
 
-                    // Emit sub_agent_complete event
-                    let complete_chunk = StreamChunk::sub_agent_complete(
-                        self.workflow_id.clone(),
-                        task_spec.agent_id.clone(),
-                        format!("Parallel task for {}", task_spec.agent_id),
-                        self.current_agent_id.clone(),
-                        report.content.clone(),
-                        SubAgentStreamMetrics {
-                            duration_ms: metrics.duration_ms,
-                            tokens_input: metrics.tokens_input,
-                            tokens_output: metrics.tokens_output,
-                        },
-                    );
-                    self.emit_event(events::WORKFLOW_STREAM, &complete_chunk);
+                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
+                    let exec_result = ExecutionResult {
+                        success: true,
+                        report: report.content.clone(),
+                        metrics: metrics.clone(),
+                        error_message: None,
+                    };
+                    let agent_name = format!("Parallel task for {}", task_spec.agent_id);
+                    executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
                     aggregated_reports.push(format!(
                         "## Agent: {}\n\n{}\n",
@@ -398,16 +382,19 @@ impl ParallelTasksTool {
                     self.update_execution_record(&execution_id, &completion)
                         .await;
 
-                    // Emit sub_agent_error event
-                    let error_chunk = StreamChunk::sub_agent_error(
-                        self.workflow_id.clone(),
-                        task_spec.agent_id.clone(),
-                        format!("Parallel task for {}", task_spec.agent_id),
-                        self.current_agent_id.clone(),
-                        error_msg.clone(),
-                        0,
-                    );
-                    self.emit_event(events::WORKFLOW_STREAM, &error_chunk);
+                    // Emit sub_agent_error event via unified executor (OPT-SA-4)
+                    let exec_result = ExecutionResult {
+                        success: false,
+                        report: String::new(),
+                        metrics: SubAgentMetrics {
+                            duration_ms: 0,
+                            tokens_input: 0,
+                            tokens_output: 0,
+                        },
+                        error_message: Some(error_msg.clone()),
+                    };
+                    let agent_name = format!("Parallel task for {}", task_spec.agent_id);
+                    executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
                     aggregated_reports.push(format!(
                         "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
