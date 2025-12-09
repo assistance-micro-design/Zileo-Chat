@@ -875,7 +875,46 @@ EXAMPLES:
     }
 
     /// Validates input before execution.
+    ///
+    /// Uses `MemoryInput` for structured parsing and validation,
+    /// reducing cyclomatic complexity (OPT-MEM-7).
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
+        let parsed = MemoryInput::from_json(input)?;
+        parsed.validate()
+    }
+
+    /// Returns false - memory operations are reversible, no confirmation needed.
+    fn requires_confirmation(&self) -> bool {
+        false
+    }
+}
+
+// =============================================================================
+// MemoryInput - Structured input parsing and validation (OPT-MEM-7)
+// =============================================================================
+
+/// Parsed and typed memory operation input.
+///
+/// This struct reduces the cyclomatic complexity of `validate_input()` by:
+/// 1. Extracting JSON parsing into `from_json()`
+/// 2. Delegating validation to per-operation methods
+///
+/// CC reduced from ~18 to ~8.
+#[derive(Debug)]
+struct MemoryInput {
+    operation: String,
+    workflow_id: Option<String>,
+    memory_type: Option<String>,
+    content: Option<String>,
+    memory_id: Option<String>,
+    query: Option<String>,
+    type_filter: Option<String>,
+    threshold: Option<f64>,
+}
+
+impl MemoryInput {
+    /// Parses JSON input into typed struct.
+    fn from_json(input: &Value) -> ToolResult<Self> {
         if !input.is_object() {
             return Err(ToolError::InvalidInput(
                 "Input must be an object".to_string(),
@@ -884,112 +923,134 @@ EXAMPLES:
 
         let operation = input["operation"]
             .as_str()
-            .ok_or_else(|| ToolError::InvalidInput("Missing operation field".to_string()))?;
+            .ok_or_else(|| ToolError::InvalidInput("Missing operation field".to_string()))?
+            .to_string();
 
-        match operation {
-            "activate_workflow" => {
-                if input.get("workflow_id").is_none() {
-                    return Err(ToolError::InvalidInput(
-                        "Missing 'workflow_id' for activate_workflow operation".to_string(),
-                    ));
-                }
-            }
-            "activate_general" => {} // No required params
-            "add" => {
-                if input.get("type").is_none() {
-                    return Err(ToolError::InvalidInput(
-                        "Missing 'type' for add operation. Valid types: user_pref, context, knowledge, decision".to_string(),
-                    ));
-                }
-                if input.get("content").is_none() {
-                    return Err(ToolError::InvalidInput(
-                        "Missing 'content' for add operation".to_string(),
-                    ));
-                }
-                // Validate type value
-                if let Some(type_str) = input["type"].as_str() {
-                    if !VALID_TYPES.contains(&type_str) {
-                        return Err(ToolError::ValidationFailed(format!(
-                            "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
-                            type_str
-                        )));
-                    }
-                }
-            }
-            "get" | "delete" => {
-                if input.get("memory_id").is_none() {
-                    return Err(ToolError::InvalidInput(format!(
-                        "Missing 'memory_id' for {} operation",
-                        operation
-                    )));
-                }
-            }
-            "list" => {
-                // Validate type_filter if provided
-                if let Some(type_str) = input["type_filter"].as_str() {
-                    if !VALID_TYPES.contains(&type_str) {
-                        return Err(ToolError::ValidationFailed(format!(
-                            "Invalid type_filter '{}'. Valid types: user_pref, context, knowledge, decision",
-                            type_str
-                        )));
-                    }
-                }
-            }
-            "search" => {
-                if input.get("query").is_none() {
-                    return Err(ToolError::InvalidInput(
-                        "Missing 'query' for search operation".to_string(),
-                    ));
-                }
-                // Validate type_filter if provided
-                if let Some(type_str) = input["type_filter"].as_str() {
-                    if !VALID_TYPES.contains(&type_str) {
-                        return Err(ToolError::ValidationFailed(format!(
-                            "Invalid type_filter '{}'. Valid types: user_pref, context, knowledge, decision",
-                            type_str
-                        )));
-                    }
-                }
-                // Validate threshold if provided
-                if let Some(threshold) = input["threshold"].as_f64() {
-                    if !(0.0..=1.0).contains(&threshold) {
-                        return Err(ToolError::ValidationFailed(format!(
-                            "Threshold {} must be between 0 and 1",
-                            threshold
-                        )));
-                    }
-                }
-            }
-            "clear_by_type" => {
-                if input.get("type").is_none() {
-                    return Err(ToolError::InvalidInput(
-                        "Missing 'type' for clear_by_type operation. Valid types: user_pref, context, knowledge, decision".to_string(),
-                    ));
-                }
-                // Validate type value
-                if let Some(type_str) = input["type"].as_str() {
-                    if !VALID_TYPES.contains(&type_str) {
-                        return Err(ToolError::ValidationFailed(format!(
-                            "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
-                            type_str
-                        )));
-                    }
-                }
-            }
-            _ => {
-                return Err(ToolError::InvalidInput(format!(
-                    "Unknown operation: '{}'. Valid operations: activate_workflow, activate_general, add, get, list, search, delete, clear_by_type",
-                    operation
-                )));
-            }
+        Ok(Self {
+            operation,
+            workflow_id: input["workflow_id"].as_str().map(String::from),
+            memory_type: input["type"].as_str().map(String::from),
+            content: input["content"].as_str().map(String::from),
+            memory_id: input["memory_id"].as_str().map(String::from),
+            query: input["query"].as_str().map(String::from),
+            type_filter: input["type_filter"].as_str().map(String::from),
+            threshold: input["threshold"].as_f64(),
+        })
+    }
+
+    /// Validates input based on operation type.
+    fn validate(&self) -> ToolResult<()> {
+        match self.operation.as_str() {
+            "activate_workflow" => self.validate_activate_workflow(),
+            "activate_general" => Ok(()),
+            "add" => self.validate_add(),
+            "get" | "delete" => self.validate_get_or_delete(),
+            "list" => self.validate_type_filter(),
+            "search" => self.validate_search(),
+            "clear_by_type" => self.validate_clear_by_type(),
+            _ => Err(ToolError::InvalidInput(format!(
+                "Unknown operation: '{}'. Valid operations: activate_workflow, activate_general, add, get, list, search, delete, clear_by_type",
+                self.operation
+            ))),
         }
+    }
 
+    /// Validates activate_workflow operation.
+    fn validate_activate_workflow(&self) -> ToolResult<()> {
+        if self.workflow_id.is_none() {
+            return Err(ToolError::InvalidInput(
+                "Missing 'workflow_id' for activate_workflow operation".to_string(),
+            ));
+        }
         Ok(())
     }
 
-    /// Returns false - memory operations are reversible, no confirmation needed.
-    fn requires_confirmation(&self) -> bool {
-        false
+    /// Validates add operation.
+    fn validate_add(&self) -> ToolResult<()> {
+        if self.memory_type.is_none() {
+            return Err(ToolError::InvalidInput(
+                "Missing 'type' for add operation. Valid types: user_pref, context, knowledge, decision".to_string(),
+            ));
+        }
+        if self.content.is_none() {
+            return Err(ToolError::InvalidInput(
+                "Missing 'content' for add operation".to_string(),
+            ));
+        }
+        // Validate type value
+        if let Some(ref type_str) = self.memory_type {
+            if !VALID_TYPES.contains(&type_str.as_str()) {
+                return Err(ToolError::ValidationFailed(format!(
+                    "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
+                    type_str
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates get or delete operation.
+    fn validate_get_or_delete(&self) -> ToolResult<()> {
+        if self.memory_id.is_none() {
+            return Err(ToolError::InvalidInput(format!(
+                "Missing 'memory_id' for {} operation",
+                self.operation
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validates type_filter if present (shared by list and search).
+    fn validate_type_filter(&self) -> ToolResult<()> {
+        if let Some(ref type_str) = self.type_filter {
+            if !VALID_TYPES.contains(&type_str.as_str()) {
+                return Err(ToolError::ValidationFailed(format!(
+                    "Invalid type_filter '{}'. Valid types: user_pref, context, knowledge, decision",
+                    type_str
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates search operation.
+    fn validate_search(&self) -> ToolResult<()> {
+        if self.query.is_none() {
+            return Err(ToolError::InvalidInput(
+                "Missing 'query' for search operation".to_string(),
+            ));
+        }
+        // Validate type_filter if provided
+        self.validate_type_filter()?;
+        // Validate threshold if provided
+        if let Some(threshold) = self.threshold {
+            if !(0.0..=1.0).contains(&threshold) {
+                return Err(ToolError::ValidationFailed(format!(
+                    "Threshold {} must be between 0 and 1",
+                    threshold
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates clear_by_type operation.
+    fn validate_clear_by_type(&self) -> ToolResult<()> {
+        if self.memory_type.is_none() {
+            return Err(ToolError::InvalidInput(
+                "Missing 'type' for clear_by_type operation. Valid types: user_pref, context, knowledge, decision".to_string(),
+            ));
+        }
+        // Validate type value
+        if let Some(ref type_str) = self.memory_type {
+            if !VALID_TYPES.contains(&type_str.as_str()) {
+                return Err(ToolError::ValidationFailed(format!(
+                    "Invalid type '{}'. Valid types: user_pref, context, knowledge, decision",
+                    type_str
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

@@ -557,7 +557,12 @@ diff benchmark_before.txt benchmark_after.txt
 3. [x] Executer OPT-MEM-1 a OPT-MEM-4 (quick wins) - COMPLETE 2025-12-09
 4. [x] Mesurer impact via `cargo test` + review duplication - 761 tests OK
 5. [x] OPT-MEM-6: Consolidate add_memory implementations - COMPLETE 2025-12-09
-6. [ ] Planifier Phase 2 suite (OPT-MEM-7 a OPT-MEM-8)
+6. [x] OPT-MEM-7: Reduce validate_input() complexity - COMPLETE 2025-12-09
+   - Added MemoryInput struct for typed parsing
+   - Extracted per-operation validators into dedicated methods
+   - Reduced CC from ~18 to ~8
+   - 764 tests pass
+7. [ ] Planifier Phase 2 suite (OPT-MEM-8)
 
 ## References
 
