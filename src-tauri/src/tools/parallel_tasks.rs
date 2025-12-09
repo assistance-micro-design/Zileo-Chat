@@ -15,8 +15,8 @@
 //! ParallelTasksTool - Parallel batch execution across multiple agents
 //!
 //! This tool allows a primary agent to execute multiple tasks in parallel
-//! across different agents. It uses the orchestrator's `execute_parallel()`
-//! method for efficient concurrent execution.
+//! across different agents. It uses `tokio::task::JoinSet` for efficient
+//! concurrent execution with per-task control and cancellation support.
 //!
 //! # Sub-Agent Hierarchy Rules
 //!
@@ -34,8 +34,9 @@
 //!
 //! # Performance Benefits
 //!
-//! - All tasks execute concurrently using `futures::join_all`
+//! - All tasks execute concurrently using `tokio::task::JoinSet`
 //! - Total time is approximately the slowest agent, not sum of all
+//! - Per-task control allows for future cancellation support (OPT-SA-7)
 //! - Ideal for independent analyses that can run in parallel
 
 use crate::agents::core::agent::Task;
@@ -56,6 +57,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
+use tokio::task::JoinSet;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -72,8 +74,8 @@ pub struct ParallelTaskSpec {
 ///
 /// This tool enables efficient concurrent execution of multiple tasks
 /// across different agents. All tasks run in parallel using
-/// `futures::join_all`, making the total execution time approximately
-/// equal to the slowest individual task.
+/// `tokio::task::JoinSet`, providing per-task control and making
+/// the total execution time approximately equal to the slowest individual task.
 ///
 /// # Operations
 ///
@@ -310,9 +312,34 @@ impl ParallelTasksTool {
             executor.emit_start_event(&task_spec.agent_id, &agent_name, &task_spec.prompt);
         }
 
-        // 6. Execute all tasks in parallel using orchestrator
+        // 6. Execute all tasks in parallel using JoinSet for per-task control (OPT-SA-6)
+        // Include task index in return value to preserve order correlation
         let start_time = std::time::Instant::now();
-        let results = self.orchestrator.execute_parallel(orchestrator_tasks).await;
+        let mut join_set: JoinSet<(usize, anyhow::Result<_>)> = JoinSet::new();
+        for (idx, (agent_id, task)) in orchestrator_tasks.into_iter().enumerate() {
+            let orchestrator = self.orchestrator.clone();
+            let mcp_manager = self.mcp_manager.clone();
+            join_set.spawn(async move {
+                let result = orchestrator.execute_with_mcp(&agent_id, task, mcp_manager).await;
+                (idx, result)
+            });
+        }
+        // Collect results with their indices, then sort by index to restore original order
+        let mut indexed_results: Vec<(usize, anyhow::Result<_>)> = Vec::with_capacity(tasks.len());
+        while let Some(join_result) = join_set.join_next().await {
+            match join_result {
+                Ok((idx, exec_result)) => indexed_results.push((idx, exec_result)),
+                Err(join_error) => {
+                    // For panicked tasks, we can't know the index, so we'll handle this edge case
+                    // by adding with a placeholder index (this shouldn't happen in practice)
+                    warn!("Task panicked during parallel execution: {}", join_error);
+                    indexed_results.push((usize::MAX, Err(anyhow::anyhow!("Task panicked: {}", join_error))));
+                }
+            }
+        }
+        // Sort by index to restore original task order
+        indexed_results.sort_by_key(|(idx, _)| *idx);
+        let results: Vec<anyhow::Result<_>> = indexed_results.into_iter().map(|(_, r)| r).collect();
         let total_duration_ms = start_time.elapsed().as_millis() as u64;
 
         // 6. Process results

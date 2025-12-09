@@ -667,7 +667,15 @@ cargo test parallel_tasks -- --nocapture
    - Unified DB update logic: single source of truth in SubAgentExecutor
    - All 50 sub-agent tests passing (33 unit + 17 integration)
    - Reduced code duplication by ~40 lines
-7. [ ] Executer P1.5 restant (OPT-SA-6) - ~0.5h
+7. [x] **OPT-SA-6 (JoinSet Migration) - COMPLETE** (2025-12-09)
+   - Migrated ParallelTasksTool from `orchestrator.execute_parallel()` to `tokio::task::JoinSet`
+   - Added `use tokio::task::JoinSet;` import
+   - Implemented index-preserving pattern: results include task index for order restoration
+   - Used `join_next()` loop instead of `join_all()` for graceful error handling
+   - Added `#[allow(dead_code)]` to `AgentOrchestrator::execute_parallel()` (kept for tests)
+   - Updated docstrings: module header, struct docs, performance benefits
+   - All 50 sub-agent tests passing (33 unit + 17 integration)
+   - Benefits: per-task control, future cancellation support (OPT-SA-7), better memory management
 8. [ ] Planifier P2 pour sprint suivant:
    - OPT-SA-7 (CancellationToken - 2h)
    - OPT-SA-8 (Circuit breaker - 3h)
@@ -678,7 +686,7 @@ cargo test parallel_tasks -- --nocapture
 ### Code Analyse
 - `src-tauri/src/tools/spawn_agent.rs` (854 lignes)
 - `src-tauri/src/tools/delegate_task.rs` (765 lignes - was 797, reduced by OPT-SA-4)
-- `src-tauri/src/tools/parallel_tasks.rs` (827 lignes - was 880, reduced by OPT-SA-4 and OPT-SA-5)
+- `src-tauri/src/tools/parallel_tasks.rs` (854 lignes - was 880, modified by OPT-SA-4, OPT-SA-5, OPT-SA-6)
 - `src-tauri/src/tools/sub_agent_executor.rs` (542 lignes)
 - `src-tauri/src/tools/validation_helper.rs` (516 lignes)
 - `src-tauri/src/tools/constants.rs`

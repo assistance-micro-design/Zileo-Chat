@@ -109,7 +109,9 @@ impl AgentOrchestrator {
 
     /// Executes multiple tasks in parallel (if independent).
     ///
-    /// Used by ParallelTasksTool to run multiple agent tasks concurrently.
+    /// Note: ParallelTasksTool now uses JoinSet directly for better per-task control (OPT-SA-6).
+    /// This method is kept for potential future use and testing.
+    ///
     /// All tasks execute using `futures::join_all`, making total time
     /// approximately equal to the slowest individual task.
     ///
@@ -118,6 +120,7 @@ impl AgentOrchestrator {
     ///
     /// # Returns
     /// Vector of results in the same order as input tasks
+    #[allow(dead_code)] // Method kept for future use; ParallelTasksTool uses JoinSet (OPT-SA-6)
     #[instrument(
         name = "orchestrator_execute_parallel",
         skip(self, tasks),
