@@ -35,6 +35,7 @@
 //! ```
 
 pub mod adapters;
+pub mod circuit_breaker;
 pub mod embedding;
 mod manager;
 mod mistral;
@@ -51,6 +52,10 @@ pub use provider::{LLMError, ProviderType};
 // Re-export retry utilities for external use (OPT-LLM-4)
 #[allow(unused_imports)]
 pub use retry::{with_retry, RetryConfig};
+
+// Re-export circuit breaker utilities for external use (OPT-LLM-6)
+#[allow(unused_imports)]
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 
 // Re-export for future use (tools, external integrations)
 #[allow(unused_imports)]

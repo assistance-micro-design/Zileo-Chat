@@ -14,14 +14,16 @@
 
 //! LLM Provider Manager - orchestrates multiple providers
 
+use super::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use super::retry::{with_retry, RetryConfig};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 
 /// Provider configuration state
 #[derive(Debug, Clone)]
@@ -63,6 +65,9 @@ const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 ///
 /// Retry mechanism with exponential backoff (OPT-LLM-4) handles transient
 /// failures automatically.
+///
+/// Circuit breaker pattern (OPT-LLM-6) protects against cascading failures
+/// when providers are unavailable.
 #[allow(dead_code)]
 pub struct ProviderManager {
     /// Mistral provider instance
@@ -75,6 +80,8 @@ pub struct ProviderManager {
     http_client: Arc<reqwest::Client>,
     /// Retry configuration for API calls (OPT-LLM-4)
     retry_config: RetryConfig,
+    /// Circuit breakers for each provider (OPT-LLM-6)
+    circuit_breakers: Arc<RwLock<HashMap<ProviderType, CircuitBreaker>>>,
 }
 
 #[allow(dead_code)]
@@ -85,7 +92,8 @@ impl ProviderManager {
     /// This improves performance by reusing connections and avoiding TLS handshake
     /// overhead on subsequent requests (OPT-LLM-2).
     ///
-    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4).
+    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4)
+    /// and circuit breakers for each provider (OPT-LLM-6).
     pub fn new() -> Self {
         // Create shared HTTP client with connection pooling
         let http_client = Arc::new(
@@ -96,12 +104,30 @@ impl ProviderManager {
                 .expect("Failed to create HTTP client"),
         );
 
+        // Initialize circuit breakers for each provider
+        let mut circuit_breakers = HashMap::new();
+        circuit_breakers.insert(
+            ProviderType::Mistral,
+            CircuitBreaker::new(
+                CircuitBreakerConfig::for_llm_provider(),
+                "Mistral".to_string(),
+            ),
+        );
+        circuit_breakers.insert(
+            ProviderType::Ollama,
+            CircuitBreaker::new(
+                CircuitBreakerConfig::for_llm_provider(),
+                "Ollama".to_string(),
+            ),
+        );
+
         Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
             http_client,
             retry_config: RetryConfig::default(),
+            circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
         }
     }
 
@@ -115,12 +141,30 @@ impl ProviderManager {
                 .expect("Failed to create HTTP client"),
         );
 
+        // Initialize circuit breakers for each provider
+        let mut circuit_breakers = HashMap::new();
+        circuit_breakers.insert(
+            ProviderType::Mistral,
+            CircuitBreaker::new(
+                CircuitBreakerConfig::for_llm_provider(),
+                "Mistral".to_string(),
+            ),
+        );
+        circuit_breakers.insert(
+            ProviderType::Ollama,
+            CircuitBreaker::new(
+                CircuitBreakerConfig::for_llm_provider(),
+                "Ollama".to_string(),
+            ),
+        );
+
         Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
             http_client,
             retry_config,
+            circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
         }
     }
 
@@ -130,6 +174,67 @@ impl ProviderManager {
     /// while benefiting from the manager's connection pool.
     pub fn http_client(&self) -> &Arc<reqwest::Client> {
         &self.http_client
+    }
+
+    /// Checks if the circuit breaker allows requests to the given provider (OPT-LLM-6).
+    ///
+    /// Returns Ok(()) if the circuit is available, or CircuitOpen error if not.
+    async fn check_circuit_breaker(&self, provider: ProviderType) -> Result<(), LLMError> {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            if breaker.is_available().await {
+                Ok(())
+            } else {
+                warn!(
+                    provider = %provider,
+                    "Circuit breaker is open, rejecting request"
+                );
+                Err(LLMError::CircuitOpen(provider.to_string()))
+            }
+        } else {
+            // No circuit breaker for this provider, allow
+            Ok(())
+        }
+    }
+
+    /// Records a successful request for the circuit breaker (OPT-LLM-6).
+    async fn record_circuit_success(&self, provider: ProviderType) {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            breaker.record_success().await;
+        }
+    }
+
+    /// Records a failed request for the circuit breaker (OPT-LLM-6).
+    async fn record_circuit_failure(&self, provider: ProviderType) {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            breaker.record_failure().await;
+        }
+    }
+
+    /// Gets the circuit breaker status for a provider.
+    ///
+    /// Returns the current state (Closed, Open, HalfOpen) and statistics.
+    pub async fn get_circuit_breaker_status(
+        &self,
+        provider: ProviderType,
+    ) -> Option<super::circuit_breaker::CircuitBreakerStats> {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            Some(breaker.stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Resets the circuit breaker for a provider (for manual intervention).
+    pub async fn reset_circuit_breaker(&self, provider: ProviderType) {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            breaker.reset().await;
+            info!(provider = %provider, "Circuit breaker manually reset");
+        }
     }
 
     /// Gets the current configuration
@@ -232,9 +337,13 @@ impl ProviderManager {
 
     /// Completes a prompt using the active provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4).
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
+    /// and circuit breaker protection (OPT-LLM-6).
+    ///
     /// Transient errors (network issues, rate limits) are retried with exponential
     /// backoff, while non-recoverable errors (auth failures, bad requests) fail immediately.
+    /// If the provider's circuit breaker is open, the request fails immediately with
+    /// CircuitOpen error.
     #[instrument(
         name = "manager_complete",
         skip(self, prompt, system_prompt),
@@ -260,6 +369,9 @@ impl ProviderManager {
             (provider, model_str)
         };
 
+        // Check circuit breaker before making request (OPT-LLM-6)
+        self.check_circuit_breaker(provider_type).await?;
+
         debug!(
             ?provider_type,
             model = %model_to_use,
@@ -272,7 +384,7 @@ impl ProviderManager {
         let model_owned = model_to_use.clone();
 
         // Execute with retry (OPT-LLM-4)
-        match provider_type {
+        let result = match provider_type {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -309,12 +421,21 @@ impl ProviderManager {
                 )
                 .await
             }
+        };
+
+        // Record result for circuit breaker (OPT-LLM-6)
+        match &result {
+            Ok(_) => self.record_circuit_success(provider_type).await,
+            Err(_) => self.record_circuit_failure(provider_type).await,
         }
+
+        result
     }
 
     /// Completes a prompt using a specific provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4).
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
+    /// and circuit breaker protection (OPT-LLM-6).
     pub async fn complete_with_provider(
         &self,
         provider: ProviderType,
@@ -324,12 +445,15 @@ impl ProviderManager {
         temperature: f32,
         max_tokens: usize,
     ) -> Result<LLMResponse, LLMError> {
+        // Check circuit breaker before making request (OPT-LLM-6)
+        self.check_circuit_breaker(provider).await?;
+
         // Clone values for the retry closure
         let prompt_owned = prompt.to_string();
         let system_prompt_owned = system_prompt.map(|s| s.to_string());
         let model_owned = model.map(|s| s.to_string());
 
-        match provider {
+        let result = match provider {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -337,10 +461,9 @@ impl ProviderManager {
                         let p = prompt_owned.clone();
                         let sp = system_prompt_owned.clone();
                         let m = model_owned.clone();
-                        let provider = mistral.clone();
+                        let prov = mistral.clone();
                         async move {
-                            provider
-                                .complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
+                            prov.complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
                                 .await
                         }
                     },
@@ -355,10 +478,9 @@ impl ProviderManager {
                         let p = prompt_owned.clone();
                         let sp = system_prompt_owned.clone();
                         let m = model_owned.clone();
-                        let provider = ollama.clone();
+                        let prov = ollama.clone();
                         async move {
-                            provider
-                                .complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
+                            prov.complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
                                 .await
                         }
                     },
@@ -366,13 +488,22 @@ impl ProviderManager {
                 )
                 .await
             }
+        };
+
+        // Record result for circuit breaker (OPT-LLM-6)
+        match &result {
+            Ok(_) => self.record_circuit_success(provider).await,
+            Err(_) => self.record_circuit_failure(provider).await,
         }
+
+        result
     }
 
     /// Completes with tools using a specific provider with automatic retry.
     ///
     /// This method is used for JSON function calling with tool definitions.
-    /// Includes retry logic with exponential backoff (OPT-LLM-4).
+    /// Includes retry logic with exponential backoff (OPT-LLM-4) and circuit
+    /// breaker protection (OPT-LLM-6).
     ///
     /// # Arguments
     /// * `provider` - Which provider to use
@@ -401,6 +532,9 @@ impl ProviderManager {
         temperature: f32,
         max_tokens: usize,
     ) -> Result<serde_json::Value, LLMError> {
+        // Check circuit breaker before making request (OPT-LLM-6)
+        self.check_circuit_breaker(provider).await?;
+
         debug!(
             ?provider,
             model = model,
@@ -411,7 +545,7 @@ impl ProviderManager {
         // Clone values for the retry closure
         let model_owned = model.to_string();
 
-        match provider {
+        let result = match provider {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -420,9 +554,9 @@ impl ProviderManager {
                         let tls = tools.clone();
                         let tc = tool_choice.clone();
                         let m = model_owned.clone();
-                        let p = mistral.clone();
+                        let prov = mistral.clone();
                         async move {
-                            p.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
+                            prov.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
                                 .await
                         }
                     },
@@ -438,9 +572,9 @@ impl ProviderManager {
                         let msgs = messages.clone();
                         let tls = tools.clone();
                         let m = model_owned.clone();
-                        let p = ollama.clone();
+                        let prov = ollama.clone();
                         async move {
-                            p.complete_with_tools(msgs, tls, &m, temperature, max_tokens)
+                            prov.complete_with_tools(msgs, tls, &m, temperature, max_tokens)
                                 .await
                         }
                     },
@@ -448,10 +582,23 @@ impl ProviderManager {
                 )
                 .await
             }
+        };
+
+        // Record result for circuit breaker (OPT-LLM-6)
+        match &result {
+            Ok(_) => self.record_circuit_success(provider).await,
+            Err(_) => self.record_circuit_failure(provider).await,
         }
+
+        result
     }
 
-    /// Streaming completion using the active provider
+    /// Streaming completion using the active provider.
+    ///
+    /// Includes circuit breaker protection (OPT-LLM-6). Note that streaming
+    /// responses don't update the circuit breaker state because the result
+    /// is returned as a channel receiver. The caller should handle stream
+    /// errors appropriately.
     pub async fn complete_stream(
         &self,
         prompt: &str,
@@ -471,6 +618,9 @@ impl ProviderManager {
                 });
             (provider, model_str)
         };
+
+        // Check circuit breaker before making request (OPT-LLM-6)
+        self.check_circuit_breaker(provider_type).await?;
 
         match provider_type {
             ProviderType::Mistral => {
@@ -657,5 +807,83 @@ mod tests {
         let result = manager.complete("Hello", None, None, 0.7, 1000).await;
 
         assert!(result.is_err());
+    }
+
+    // Circuit breaker tests (OPT-LLM-6)
+
+    #[tokio::test]
+    async fn test_circuit_breaker_initial_status() {
+        use super::super::circuit_breaker::CircuitState;
+
+        let manager = ProviderManager::new();
+
+        // Both providers should start with closed circuit
+        let mistral_status = manager
+            .get_circuit_breaker_status(ProviderType::Mistral)
+            .await;
+        assert!(mistral_status.is_some());
+        assert_eq!(mistral_status.unwrap().state, CircuitState::Closed);
+
+        let ollama_status = manager
+            .get_circuit_breaker_status(ProviderType::Ollama)
+            .await;
+        assert!(ollama_status.is_some());
+        assert_eq!(ollama_status.unwrap().state, CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_reset() {
+        use super::super::circuit_breaker::CircuitState;
+
+        let manager = ProviderManager::new();
+
+        // Manually record some failures to affect state
+        manager.record_circuit_failure(ProviderType::Mistral).await;
+        manager.record_circuit_failure(ProviderType::Mistral).await;
+
+        let status = manager
+            .get_circuit_breaker_status(ProviderType::Mistral)
+            .await
+            .unwrap();
+        assert_eq!(status.consecutive_failures, 2);
+
+        // Reset should clear failures
+        manager.reset_circuit_breaker(ProviderType::Mistral).await;
+
+        let status = manager
+            .get_circuit_breaker_status(ProviderType::Mistral)
+            .await
+            .unwrap();
+        assert_eq!(status.state, CircuitState::Closed);
+        assert_eq!(status.consecutive_failures, 0);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_check_allows_closed() {
+        let manager = ProviderManager::new();
+
+        // With closed circuit, check should pass
+        let result = manager.check_circuit_breaker(ProviderType::Mistral).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_records_success() {
+        let manager = ProviderManager::new();
+
+        // Record a failure then a success
+        manager.record_circuit_failure(ProviderType::Ollama).await;
+        let status = manager
+            .get_circuit_breaker_status(ProviderType::Ollama)
+            .await
+            .unwrap();
+        assert_eq!(status.consecutive_failures, 1);
+
+        manager.record_circuit_success(ProviderType::Ollama).await;
+        let status = manager
+            .get_circuit_breaker_status(ProviderType::Ollama)
+            .await
+            .unwrap();
+        assert_eq!(status.consecutive_failures, 0);
     }
 }

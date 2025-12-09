@@ -95,6 +95,7 @@ impl RetryConfig {
 /// - InvalidProvider: Invalid input, won't fix itself
 /// - MissingApiKey: Auth issue, won't fix itself
 /// - ModelNotFound: Invalid model, won't fix itself
+/// - CircuitOpen: Provider temporarily unavailable, circuit breaker handles recovery
 /// - Internal: Programming error, won't fix itself
 pub fn is_retryable(error: &LLMError) -> bool {
     matches!(
@@ -242,6 +243,7 @@ mod tests {
             "mistral".to_string()
         )));
         assert!(!is_retryable(&LLMError::ModelNotFound("gpt-4".to_string())));
+        assert!(!is_retryable(&LLMError::CircuitOpen("mistral".to_string())));
         assert!(!is_retryable(&LLMError::Internal("bug".to_string())));
     }
 

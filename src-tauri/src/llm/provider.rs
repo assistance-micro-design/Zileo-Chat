@@ -98,6 +98,10 @@ pub enum LLMError {
     #[error("Streaming error: {0}")]
     StreamingError(String),
 
+    /// Circuit breaker is open (provider temporarily unavailable)
+    #[error("Circuit breaker open for provider: {0}")]
+    CircuitOpen(String),
+
     /// Internal error
     #[error("Internal error: {0}")]
     Internal(String),

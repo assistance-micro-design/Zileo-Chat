@@ -42,8 +42,10 @@ use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use crate::tools::{
-    context::AgentToolContext, sub_agent_executor::SubAgentExecutor,
-    validation_helper::ValidationHelper, Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
+    context::AgentToolContext,
+    sub_agent_executor::SubAgentExecutor,
+    validation_helper::{safe_truncate, ValidationHelper},
+    Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -443,11 +445,7 @@ impl SpawnAgentTool {
                 "id": c.id,
                 "name": c.name,
                 "status": c.status.to_string(),
-                "task_description": if c.task_description.len() > 100 {
-                    format!("{}...", &c.task_description[..100])
-                } else {
-                    c.task_description.clone()
-                }
+                "task_description": safe_truncate(&c.task_description, 100, true)
             })).collect::<Vec<_>>()
         }))
     }
