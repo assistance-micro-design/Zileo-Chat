@@ -150,23 +150,31 @@ impl MemoryTool {
         }
     }
 
-    /// Builds scope condition for WHERE clause (OPT-MEM-2: centralized scope filter).
+    /// Builds scope condition for WHERE clause (OPT-MEM-2 + OPT-MEM-5: parameterized).
     ///
     /// Returns `Some(condition)` to add to WHERE clause, or `None` if no condition needed.
+    /// When workflow_id is needed, it adds a parameter to the params vector.
     ///
     /// # Arguments
     /// * `scope` - Scope filter: "workflow", "general", or "both"
     /// * `workflow_id` - Current workflow ID if in workflow mode
-    fn build_scope_condition(scope: &str, workflow_id: &Option<String>) -> Option<String> {
+    /// * `params` - Mutable params vector to add workflow_id param if needed
+    fn build_scope_condition(
+        scope: &str,
+        workflow_id: &Option<String>,
+        params: &mut Vec<(String, serde_json::Value)>,
+    ) -> Option<String> {
         match scope {
-            "workflow" => workflow_id
-                .as_ref()
-                .map(|wf_id| format!("workflow_id = '{}'", wf_id)),
+            "workflow" => workflow_id.as_ref().map(|wf_id| {
+                params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
+                "workflow_id = $workflow_id".to_string()
+            }),
             "general" => Some("workflow_id IS NONE".to_string()),
             // "both" or any other value - include both workflow and general
-            _ => workflow_id
-                .as_ref()
-                .map(|wf_id| format!("(workflow_id = '{}' OR workflow_id IS NONE)", wf_id)),
+            _ => workflow_id.as_ref().map(|wf_id| {
+                params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
+                "(workflow_id = $workflow_id OR workflow_id IS NONE)".to_string()
+            }),
         }
     }
 
@@ -301,8 +309,8 @@ impl MemoryTool {
     /// * `memory_id` - Memory ID to retrieve
     #[instrument(skip(self), fields(memory_id = %memory_id))]
     async fn get_memory(&self, memory_id: &str) -> ToolResult<Value> {
-        let query = format!(
-            r#"SELECT
+        // OPT-MEM-5: Parameterized query for security
+        let query = r#"SELECT
                 meta::id(id) AS id,
                 type,
                 content,
@@ -310,11 +318,14 @@ impl MemoryTool {
                 metadata,
                 created_at
             FROM memory
-            WHERE meta::id(id) = '{}'"#,
-            memory_id
-        );
+            WHERE meta::id(id) = $memory_id"#;
 
-        let results: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
+        let params = vec![("memory_id".to_string(), serde_json::json!(memory_id))];
+        let results: Vec<Memory> = self
+            .db
+            .query_with_params(query, params)
+            .await
+            .map_err(db_error)?;
 
         match results.into_iter().next() {
             Some(memory) => Ok(serde_json::json!({
@@ -345,6 +356,8 @@ impl MemoryTool {
         let limit = limit.min(MAX_LIMIT);
 
         let mut conditions = Vec::new();
+        // OPT-MEM-5: Parameterized query support
+        let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
         // OPT-MEM-2: Use centralized scope filter helper
         // Special case: scope="workflow" with no active workflow returns early
@@ -358,15 +371,17 @@ impl MemoryTool {
                 .message("No active workflow. Use 'activate_workflow' first or scope='both'")
                 .build());
         }
-        if let Some(scope_cond) = Self::build_scope_condition(scope, &workflow_id) {
+        // OPT-MEM-5: build_scope_condition now adds params
+        if let Some(scope_cond) = Self::build_scope_condition(scope, &workflow_id, &mut params) {
             conditions.push(scope_cond);
         }
 
-        // Type filter condition
+        // Type filter condition - OPT-MEM-5: parameterized
         if let Some(mem_type) = type_filter {
             // Validate the type
             Self::parse_memory_type(mem_type)?;
-            conditions.push(format!("type = '{}'", mem_type));
+            conditions.push("type = $type_filter".to_string());
+            params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
         }
 
         let where_clause = if conditions.is_empty() {
@@ -375,6 +390,7 @@ impl MemoryTool {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
+        // OPT-MEM-5: LIMIT is safe as integer, not user input
         let query = format!(
             r#"SELECT
                 meta::id(id) AS id,
@@ -390,7 +406,11 @@ impl MemoryTool {
             where_clause, limit
         );
 
-        let memories: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
+        let memories: Vec<Memory> = self
+            .db
+            .query_with_params(&query, params)
+            .await
+            .map_err(db_error)?;
 
         debug!(count = memories.len(), scope = %scope, "Memories listed");
 
@@ -469,14 +489,18 @@ impl MemoryTool {
     ) -> ToolResult<Value> {
         // Build conditions
         let mut conditions = vec!["embedding IS NOT NONE".to_string()];
+        // OPT-MEM-5: Parameterized query support
+        let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-        // OPT-MEM-2: Use centralized scope filter helper
-        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id) {
+        // OPT-MEM-2 + OPT-MEM-5: Use centralized scope filter helper with params
+        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id, &mut params) {
             conditions.push(scope_cond);
         }
 
+        // OPT-MEM-5: Type filter parameterized
         if let Some(mem_type) = type_filter {
-            conditions.push(format!("type = '{}'", mem_type));
+            conditions.push("type = $type_filter".to_string());
+            params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
         }
 
         let where_clause = conditions.join(" AND ");
@@ -484,13 +508,16 @@ impl MemoryTool {
         // Convert threshold to distance (cosine distance = 1 - similarity)
         let distance_threshold = 1.0 - threshold;
 
-        // Format embedding for SurrealQL
+        // Format embedding for SurrealQL - must be inline array for vector operations
+        // Note: embedding array is generated internally from query_text, not user input
         let embedding_str: String = query_embedding
             .iter()
             .map(|v| v.to_string())
             .collect::<Vec<_>>()
             .join(", ");
 
+        // OPT-MEM-5: LIMIT and distance_threshold are safe (integers/floats, not user strings)
+        // The embedding is also safe (generated from EmbeddingService)
         let query = format!(
             r#"SELECT
                 meta::id(id) AS id,
@@ -511,7 +538,11 @@ impl MemoryTool {
             limit = limit
         );
 
-        let results: Vec<Value> = self.db.query_json(&query).await.map_err(db_error)?;
+        let results: Vec<Value> = self
+            .db
+            .query_json_with_params(&query, params)
+            .await
+            .map_err(db_error)?;
 
         debug!(
             count = results.len(),
@@ -541,25 +572,30 @@ impl MemoryTool {
         scope: &str,
     ) -> ToolResult<Value> {
         let mut conditions = Vec::new();
+        // OPT-MEM-5: Parameterized query support
+        let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-        // Text content contains query (case-insensitive via LIKE)
-        let escaped_query = query_text.replace('\'', "''").replace('%', "\\%");
-        conditions.push(format!(
-            "string::lowercase(content) CONTAINS string::lowercase('{}')",
-            escaped_query
-        ));
+        // OPT-MEM-5: Text content contains query (case-insensitive) - parameterized
+        // No more manual escaping needed - SurrealDB handles it via params
+        conditions.push(
+            "string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string(),
+        );
+        params.push(("query_text".to_string(), serde_json::json!(query_text)));
 
-        // OPT-MEM-2: Use centralized scope filter helper
-        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id) {
+        // OPT-MEM-2 + OPT-MEM-5: Use centralized scope filter helper with params
+        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id, &mut params) {
             conditions.push(scope_cond);
         }
 
+        // OPT-MEM-5: Type filter parameterized
         if let Some(mem_type) = type_filter {
-            conditions.push(format!("type = '{}'", mem_type));
+            conditions.push("type = $type_filter".to_string());
+            params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
         }
 
         let where_clause = conditions.join(" AND ");
 
+        // OPT-MEM-5: LIMIT is safe as integer, not user input
         let query = format!(
             r#"SELECT
                 meta::id(id) AS id,
@@ -575,7 +611,11 @@ impl MemoryTool {
             where_clause, limit
         );
 
-        let results: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
+        let results: Vec<Memory> = self
+            .db
+            .query_with_params(&query, params)
+            .await
+            .map_err(db_error)?;
 
         debug!(count = results.len(), scope = %scope, "Text search completed");
 
@@ -625,17 +665,27 @@ impl MemoryTool {
 
         let workflow_id = self.current_workflow_id().await;
 
-        // Use execute() instead of query() to avoid serialization issues with enums
-        let delete_query = if let Some(ref wf_id) = workflow_id {
-            format!(
-                "DELETE FROM memory WHERE type = '{}' AND workflow_id = '{}'",
-                memory_type, wf_id
+        // OPT-MEM-5: Use execute_with_params() for parameterized DELETE
+        let (delete_query, params) = if let Some(ref wf_id) = workflow_id {
+            (
+                "DELETE FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id"
+                    .to_string(),
+                vec![
+                    ("memory_type".to_string(), serde_json::json!(memory_type)),
+                    ("workflow_id".to_string(), serde_json::json!(wf_id)),
+                ],
             )
         } else {
-            format!("DELETE FROM memory WHERE type = '{}'", memory_type)
+            (
+                "DELETE FROM memory WHERE type = $memory_type".to_string(),
+                vec![("memory_type".to_string(), serde_json::json!(memory_type))],
+            )
         };
 
-        self.db.execute(&delete_query).await.map_err(db_error)?;
+        self.db
+            .execute_with_params(&delete_query, params)
+            .await
+            .map_err(db_error)?;
 
         info!(
             memory_type = %memory_type,
