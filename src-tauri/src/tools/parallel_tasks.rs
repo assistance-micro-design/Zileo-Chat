@@ -293,13 +293,14 @@ impl ParallelTasksTool {
             let execution_id = Uuid::new_v4().to_string();
             execution_ids.push(execution_id.clone());
 
-            // Create execution record
-            let mut execution_create = SubAgentExecutionCreate::new(
+            // Create execution record with batch_id as parent for hierarchical tracing (OPT-SA-11)
+            let mut execution_create = SubAgentExecutionCreate::with_parent(
                 self.workflow_id.clone(),
                 self.current_agent_id.clone(),
                 task_spec.agent_id.clone(),
                 format!("Parallel task for {}", task_spec.agent_id),
                 task_spec.prompt.clone(),
+                Some(batch_id.clone()), // OPT-SA-11: Link parallel tasks to batch
             );
             execution_create.status = "running".to_string();
 
@@ -310,6 +311,7 @@ impl ParallelTasksTool {
             {
                 warn!(
                     execution_id = %execution_id,
+                    batch_id = %batch_id, // OPT-SA-11: Include batch correlation in logs
                     error = %e,
                     "Failed to create execution record"
                 );
@@ -351,7 +353,6 @@ impl ParallelTasksTool {
         orchestrator_tasks: Vec<(String, Task)>,
         task_count: usize,
     ) -> (Vec<ExecutionResult>, u64) {
-
         let start_time = std::time::Instant::now();
         let mut join_set: JoinSet<(usize, ExecutionResult)> = JoinSet::new();
 
@@ -385,8 +386,7 @@ impl ParallelTasksTool {
         }
 
         // Collect results with their indices
-        let mut indexed_results: Vec<(usize, ExecutionResult)> =
-            Vec::with_capacity(task_count);
+        let mut indexed_results: Vec<(usize, ExecutionResult)> = Vec::with_capacity(task_count);
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
                 Ok((idx, exec_result)) => indexed_results.push((idx, exec_result)),
@@ -411,8 +411,7 @@ impl ParallelTasksTool {
 
         // Sort by index to restore original task order
         indexed_results.sort_by_key(|(idx, _)| *idx);
-        let results: Vec<ExecutionResult> =
-            indexed_results.into_iter().map(|(_, r)| r).collect();
+        let results: Vec<ExecutionResult> = indexed_results.into_iter().map(|(_, r)| r).collect();
         let total_duration_ms = start_time.elapsed().as_millis() as u64;
 
         (results, total_duration_ms)
@@ -474,8 +473,10 @@ impl ParallelTasksTool {
                 failed_count += 1;
                 let error_msg = exec_result.error_message.clone().unwrap_or_default();
 
+                // OPT-SA-11: Include batch_id (parent_execution_id) for hierarchical tracing
                 error!(
                     agent_id = %task_spec.agent_id,
+                    batch_id = %batch_id,
                     error = %error_msg,
                     "Parallel task failed"
                 );

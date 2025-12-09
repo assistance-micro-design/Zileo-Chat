@@ -278,12 +278,14 @@ impl DelegateTaskTool {
         let execution_id = Uuid::new_v4().to_string();
 
         // 8. Create execution record in database (status: running)
-        let mut execution_create = SubAgentExecutionCreate::new(
+        // Note: DelegateTaskTool is a top-level execution, so parent_execution_id = None
+        let mut execution_create = SubAgentExecutionCreate::with_parent(
             self.workflow_id.clone(),
             self.current_agent_id.clone(),
             agent_id.to_string(),
             agent_name.clone(),
             prompt.to_string(),
+            None, // OPT-SA-11: No parent for top-level delegations
         );
         // Set status to running (new() defaults to pending)
         execution_create.status = "running".to_string();
@@ -295,6 +297,14 @@ impl DelegateTaskTool {
             .map_err(|e| {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
             })?;
+
+        // OPT-SA-11: Log execution creation with tracing ID
+        debug!(
+            execution_id = %execution_id,
+            agent_id = %agent_id,
+            workflow_id = %self.workflow_id,
+            "Created delegation execution record"
+        );
 
         // 9. Track active delegation
         let delegation = ActiveDelegation {
@@ -407,8 +417,11 @@ impl DelegateTaskTool {
             }
         }
 
+        // OPT-SA-11: Include execution_id for hierarchical tracing
         info!(
             agent_id = %agent_id,
+            execution_id = %execution_id,
+            workflow_id = %self.workflow_id,
             success = success,
             duration_ms = metrics.duration_ms,
             "Delegation completed"

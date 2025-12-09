@@ -584,6 +584,7 @@ info!(
 - [x] Test circuit breaker state transitions (OPT-SA-8) - 14 tests covering all transitions
 - [x] Test JoinSet equivalence avec join_all (OPT-SA-6)
 - [x] Test retry avec backoff (OPT-SA-10) - 13 tests for is_retryable_error patterns
+- [x] Test correlation ID with parent (OPT-SA-11) - 9 tests for parent_execution_id
 
 ### Commandes de Validation
 
@@ -735,6 +736,18 @@ cargo test parallel_tasks -- --nocapture
      - test_is_retryable_error_unknown_errors
      - test_is_retryable_error_standalone_function
    - All 80 sub-agent tests passing (63 unit + 17 integration)
+   - Clippy passes with no warnings
+12. [x] **OPT-SA-11 (Correlation ID) - COMPLETE** (2025-12-09)
+   - Added `parent_execution_id: Option<String>` field to `SubAgentExecution` model
+   - Added `parent_execution_id` field to `SubAgentExecutionCreate` struct
+   - Created `SubAgentExecutionCreate::with_parent()` constructor for hierarchical tracing
+   - Created `create_execution_record_with_parent()` method in SubAgentExecutor
+   - Updated ParallelTasksTool: batch_id used as parent_execution_id for correlation
+   - Enhanced tracing logs in SpawnAgentTool with execution_id and workflow_id
+   - Enhanced tracing logs in DelegateTaskTool with execution_id and workflow_id
+   - Enhanced tracing logs in ParallelTasksTool with batch_id correlation
+   - Added 9 new tests for correlation ID (5 in models, 4 in executor)
+   - All tests passing: 761 unit tests + 26 integration tests
    - Clippy passes with no warnings
 
 ## References

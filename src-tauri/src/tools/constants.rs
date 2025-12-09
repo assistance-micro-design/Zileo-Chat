@@ -82,7 +82,6 @@ pub mod sub_agent {
     /// After this period, one execution is allowed to test if the system recovered.
     pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
 
-
     // OPT-SA-10: Retry with Exponential Backoff
     /// Maximum number of retry attempts for transient errors.
     /// Set to 2 for a total of 3 attempts (initial + 2 retries).

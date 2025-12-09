@@ -161,9 +161,7 @@ impl SubAgentCircuitBreaker {
                     .map(|t| t.elapsed() > self.cooldown)
                     .unwrap_or(true)
                 {
-                    debug!(
-                        "Sub-agent circuit breaker transitioning to half-open"
-                    );
+                    debug!("Sub-agent circuit breaker transitioning to half-open");
                     self.state = CircuitState::HalfOpen;
                     true
                 } else {
@@ -180,9 +178,7 @@ impl SubAgentCircuitBreaker {
     /// Call this after a sub-agent execution completes successfully.
     pub fn record_success(&mut self) {
         if self.state == CircuitState::HalfOpen {
-            debug!(
-                "Sub-agent circuit breaker closing after successful recovery"
-            );
+            debug!("Sub-agent circuit breaker closing after successful recovery");
         }
         self.failure_count = 0;
         self.state = CircuitState::Closed;
@@ -208,9 +204,7 @@ impl SubAgentCircuitBreaker {
             self.state = CircuitState::Open;
         } else if self.state == CircuitState::HalfOpen {
             // Recovery failed, go back to open
-            debug!(
-                "Sub-agent circuit breaker reopening after failed recovery attempt"
-            );
+            debug!("Sub-agent circuit breaker reopening after failed recovery attempt");
             self.state = CircuitState::Open;
         }
     }
@@ -267,9 +261,7 @@ impl SubAgentCircuitBreaker {
     ///
     /// Convenience method for error messages and logging.
     pub fn remaining_cooldown_secs(&self) -> u64 {
-        self.remaining_cooldown()
-            .map(|d| d.as_secs())
-            .unwrap_or(0)
+        self.remaining_cooldown().map(|d| d.as_secs()).unwrap_or(0)
     }
 
     /// Resets the circuit breaker to closed state.

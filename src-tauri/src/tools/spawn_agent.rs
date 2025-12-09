@@ -342,18 +342,22 @@ impl SpawnAgentTool {
             enable_thinking: parent_config.enable_thinking,
         };
 
-        info!(
-            sub_agent_id = %sub_agent_id,
-            name = %name,
-            tools_count = sub_agent_config.tools.len(),
-            mcp_servers_count = sub_agent_config.mcp_servers.len(),
-            "Creating sub-agent"
-        );
-
         // 10. Create execution record in database (status: running)
+        // Note: SpawnAgentTool is a top-level execution, so parent_execution_id = None
         let execution_id = executor
             .create_execution_record(&sub_agent_id, name, prompt)
             .await?;
+
+        // OPT-SA-11: Include execution_id in creation log for hierarchical tracing
+        info!(
+            sub_agent_id = %sub_agent_id,
+            execution_id = %execution_id,
+            workflow_id = %self.workflow_id,
+            name = %name,
+            tools_count = sub_agent_config.tools.len(),
+            mcp_servers_count = sub_agent_config.mcp_servers.len(),
+            "Creating sub-agent with execution tracking"
+        );
 
         // 11. Create LLMAgent instance for sub-agent
         let sub_agent = LLMAgent::with_factory(
@@ -392,9 +396,7 @@ impl SpawnAgentTool {
         };
 
         // 15. Execute sub-agent with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10)
-        let exec_result = executor
-            .execute_with_retry(&sub_agent_id, task, None)
-            .await;
+        let exec_result = executor.execute_with_retry(&sub_agent_id, task, None).await;
 
         // 16. Emit completion or error event
         executor.emit_complete_event(&sub_agent_id, name, &exec_result);
@@ -425,8 +427,11 @@ impl SpawnAgentTool {
             );
         }
 
+        // OPT-SA-11: Include execution_id for hierarchical tracing
         info!(
             sub_agent_id = %sub_agent_id,
+            execution_id = %execution_id,
+            workflow_id = %self.workflow_id,
             success = exec_result.success,
             duration_ms = exec_result.metrics.duration_ms,
             "Sub-agent execution completed"

@@ -105,6 +105,11 @@ pub struct SubAgentExecution {
     pub result_summary: Option<String>,
     /// Error message if status is Error
     pub error_message: Option<String>,
+    /// Parent execution ID for hierarchical tracing (OPT-SA-11).
+    /// Links this execution to a parent execution record (e.g., batch operations).
+    /// None for top-level executions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_execution_id: Option<String>,
     /// When the execution was created
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
@@ -131,6 +136,10 @@ pub struct SubAgentExecutionCreate {
     pub task_description: String,
     /// Initial status (as string for SurrealDB)
     pub status: String,
+    /// Parent execution ID for hierarchical tracing (OPT-SA-11).
+    /// Links to a parent execution record for correlation tracking.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_execution_id: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -157,6 +166,38 @@ impl SubAgentExecutionCreate {
             sub_agent_name,
             task_description,
             status: SubAgentStatus::Pending.to_string(),
+            parent_execution_id: None,
+        }
+    }
+
+    /// Creates a new SubAgentExecutionCreate with a parent execution ID (OPT-SA-11).
+    ///
+    /// Use this method when creating a sub-execution that should be linked
+    /// to a parent execution for hierarchical tracing.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - The workflow where this execution occurs
+    /// * `parent_agent_id` - The primary agent spawning/delegating
+    /// * `sub_agent_id` - The sub-agent being executed
+    /// * `sub_agent_name` - Human-readable name for the sub-agent
+    /// * `task_description` - The task/prompt for the sub-agent
+    /// * `parent_execution_id` - The parent execution ID for tracing
+    pub fn with_parent(
+        workflow_id: String,
+        parent_agent_id: String,
+        sub_agent_id: String,
+        sub_agent_name: String,
+        task_description: String,
+        parent_execution_id: Option<String>,
+    ) -> Self {
+        Self {
+            workflow_id,
+            parent_agent_id,
+            sub_agent_id,
+            sub_agent_name,
+            task_description,
+            status: SubAgentStatus::Pending.to_string(),
+            parent_execution_id,
         }
     }
 }
@@ -453,5 +494,83 @@ mod tests {
     #[test]
     fn test_max_sub_agents_constant() {
         assert_eq!(constants::MAX_SUB_AGENTS, 3);
+    }
+
+    // OPT-SA-11: Tests for parent_execution_id (Correlation ID for Hierarchical Tracing)
+
+    #[test]
+    fn test_sub_agent_execution_create_with_parent() {
+        let parent_id = "parent_exec_001".to_string();
+        let create = SubAgentExecutionCreate::with_parent(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Analyze the database schema".to_string(),
+            Some(parent_id.clone()),
+        );
+
+        assert_eq!(create.workflow_id, "wf_001");
+        assert_eq!(create.parent_agent_id, "parent_agent");
+        assert_eq!(create.sub_agent_id, "sub_agent_001");
+        assert_eq!(create.status, "pending");
+        assert_eq!(create.parent_execution_id, Some(parent_id));
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_with_parent_none() {
+        let create = SubAgentExecutionCreate::with_parent(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Analyze the database schema".to_string(),
+            None,
+        );
+
+        assert_eq!(create.parent_execution_id, None);
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_new_has_no_parent() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Analyze the database schema".to_string(),
+        );
+
+        assert_eq!(create.parent_execution_id, None);
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_with_parent_serialization() {
+        let create = SubAgentExecutionCreate::with_parent(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+            Some("parent_exec_001".to_string()),
+        );
+
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(json.contains("\"parent_execution_id\":\"parent_exec_001\""));
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_without_parent_serialization_skip() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+        );
+
+        let json = serde_json::to_string(&create).unwrap();
+        // parent_execution_id should be skipped when None due to skip_serializing_if
+        assert!(!json.contains("parent_execution_id"));
     }
 }

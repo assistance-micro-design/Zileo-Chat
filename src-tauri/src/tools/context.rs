@@ -173,7 +173,7 @@ impl AgentToolContext {
             tool_factory: app_state.tool_factory.clone(),
             app_handle,
             cancellation_token: None, // Use from_app_state_with_cancellation for token support
-            circuit_breaker: None,    // Use from_app_state_with_resilience for full resilience support
+            circuit_breaker: None, // Use from_app_state_with_resilience for full resilience support
         }
     }
 

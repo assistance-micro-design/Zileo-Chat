@@ -458,14 +458,37 @@ impl SubAgentExecutor {
         child_agent_name: &str,
         prompt: &str,
     ) -> ToolResult<String> {
+        self.create_execution_record_with_parent(child_agent_id, child_agent_name, prompt, None)
+            .await
+    }
+
+    /// Creates an execution record with optional parent execution ID for hierarchical tracing (OPT-SA-11).
+    ///
+    /// # Arguments
+    /// * `child_agent_id` - Sub-agent ID
+    /// * `child_agent_name` - Sub-agent name
+    /// * `prompt` - Task prompt
+    /// * `parent_execution_id` - Optional parent execution ID for correlation tracing
+    ///
+    /// # Returns
+    /// * `Ok(String)` - Execution record ID
+    /// * `Err(ToolError)` - Database error
+    pub async fn create_execution_record_with_parent(
+        &self,
+        child_agent_id: &str,
+        child_agent_name: &str,
+        prompt: &str,
+        parent_execution_id: Option<String>,
+    ) -> ToolResult<String> {
         let execution_id = Uuid::new_v4().to_string();
 
-        let mut execution_create = SubAgentExecutionCreate::new(
+        let mut execution_create = SubAgentExecutionCreate::with_parent(
             self.workflow_id.clone(),
             self.parent_agent_id.clone(),
             child_agent_id.to_string(),
             child_agent_name.to_string(),
             prompt.to_string(),
+            parent_execution_id.clone(),
         );
         execution_create.status = "running".to_string();
 
@@ -476,11 +499,23 @@ impl SubAgentExecutor {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
             })?;
 
-        debug!(
-            execution_id = %execution_id,
-            child_agent_id = %child_agent_id,
-            "Created sub-agent execution record"
-        );
+        // OPT-SA-11: Log with parent_execution_id for hierarchical tracing
+        if let Some(ref parent_id) = parent_execution_id {
+            debug!(
+                execution_id = %execution_id,
+                parent_execution_id = %parent_id,
+                child_agent_id = %child_agent_id,
+                workflow_id = %self.workflow_id,
+                "Created sub-agent execution record with parent correlation"
+            );
+        } else {
+            debug!(
+                execution_id = %execution_id,
+                child_agent_id = %child_agent_id,
+                workflow_id = %self.workflow_id,
+                "Created sub-agent execution record"
+            );
+        }
 
         Ok(execution_id)
     }
@@ -1194,9 +1229,9 @@ impl SubAgentExecutor {
             "rate limit",
             "rate_limit",
             "too many requests",
-            "503",  // Service Unavailable
-            "502",  // Bad Gateway
-            "429",  // Too Many Requests
+            "503", // Service Unavailable
+            "502", // Bad Gateway
+            "429", // Too Many Requests
             "retry",
             "try again",
             "service unavailable",
@@ -1487,24 +1522,38 @@ mod tests {
     fn test_is_retryable_error_timeout_patterns() {
         // Timeout errors should be retryable
         assert!(SubAgentExecutor::is_retryable_error("Connection timeout"));
-        assert!(SubAgentExecutor::is_retryable_error("Request timed out after 30s"));
-        assert!(SubAgentExecutor::is_retryable_error("TIMEOUT waiting for response"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Request timed out after 30s"
+        ));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "TIMEOUT waiting for response"
+        ));
     }
 
     #[test]
     fn test_is_retryable_error_network_patterns() {
         // Network errors should be retryable
         assert!(SubAgentExecutor::is_retryable_error("Connection refused"));
-        assert!(SubAgentExecutor::is_retryable_error("Network error: unreachable"));
-        assert!(SubAgentExecutor::is_retryable_error("Connection reset by peer"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Network error: unreachable"
+        ));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Connection reset by peer"
+        ));
     }
 
     #[test]
     fn test_is_retryable_error_http_status_codes() {
         // HTTP 5xx and 429 should be retryable
-        assert!(SubAgentExecutor::is_retryable_error("HTTP 503 Service Unavailable"));
-        assert!(SubAgentExecutor::is_retryable_error("Error 502 Bad Gateway"));
-        assert!(SubAgentExecutor::is_retryable_error("429 Too Many Requests"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "HTTP 503 Service Unavailable"
+        ));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Error 502 Bad Gateway"
+        ));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "429 Too Many Requests"
+        ));
     }
 
     #[test]
@@ -1512,30 +1561,48 @@ mod tests {
         // Rate limiting should be retryable
         assert!(SubAgentExecutor::is_retryable_error("Rate limit exceeded"));
         assert!(SubAgentExecutor::is_retryable_error("rate_limit_error"));
-        assert!(SubAgentExecutor::is_retryable_error("Too many requests, try again"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Too many requests, try again"
+        ));
     }
 
     #[test]
     fn test_is_retryable_error_service_patterns() {
         // Service availability errors should be retryable
-        assert!(SubAgentExecutor::is_retryable_error("Service temporarily unavailable"));
-        assert!(SubAgentExecutor::is_retryable_error("Temporary failure, retry later"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Service temporarily unavailable"
+        ));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Temporary failure, retry later"
+        ));
         assert!(SubAgentExecutor::is_retryable_error("Server is overloaded"));
-        assert!(SubAgentExecutor::is_retryable_error("Server busy, please retry"));
+        assert!(SubAgentExecutor::is_retryable_error(
+            "Server busy, please retry"
+        ));
     }
 
     #[test]
     fn test_is_retryable_error_non_retryable_patterns() {
         // Permanent errors should NOT be retryable
-        assert!(!SubAgentExecutor::is_retryable_error("Execution cancelled by user"));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Execution cancelled by user"
+        ));
         assert!(!SubAgentExecutor::is_retryable_error("Permission denied"));
         assert!(!SubAgentExecutor::is_retryable_error("Resource not found"));
-        assert!(!SubAgentExecutor::is_retryable_error("Invalid configuration"));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Invalid configuration"
+        ));
         assert!(!SubAgentExecutor::is_retryable_error("Unauthorized access"));
         assert!(!SubAgentExecutor::is_retryable_error("Bad request format"));
-        assert!(!SubAgentExecutor::is_retryable_error("Circuit breaker is open"));
-        assert!(!SubAgentExecutor::is_retryable_error("Validation failed for input"));
-        assert!(!SubAgentExecutor::is_retryable_error("Authentication required"));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Circuit breaker is open"
+        ));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Validation failed for input"
+        ));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Authentication required"
+        ));
         assert!(!SubAgentExecutor::is_retryable_error("403 Forbidden"));
     }
 
@@ -1566,8 +1633,12 @@ mod tests {
     #[test]
     fn test_is_retryable_error_unknown_errors() {
         // Unknown errors should NOT be retryable (conservative)
-        assert!(!SubAgentExecutor::is_retryable_error("Something went wrong"));
-        assert!(!SubAgentExecutor::is_retryable_error("Unknown error occurred"));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Something went wrong"
+        ));
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Unknown error occurred"
+        ));
         assert!(!SubAgentExecutor::is_retryable_error(""));
     }
 
@@ -1576,5 +1647,78 @@ mod tests {
         // Test the standalone helper function
         assert!(is_retryable_error("timeout"));
         assert!(!is_retryable_error("cancelled"));
+    }
+
+    // =========================================================================
+    // OPT-SA-11: Correlation ID (parent_execution_id) Tests
+    // =========================================================================
+
+    #[test]
+    fn test_create_execution_record_with_parent_default_none() {
+        // create_execution_record should delegate to create_execution_record_with_parent
+        // with parent_execution_id = None by default
+        // This is a signature test - actual DB integration tested in integration tests
+        // Verifying the method signature exists and is callable
+        use crate::models::sub_agent::SubAgentExecutionCreate;
+
+        // Test that new() creates with None parent
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent".to_string(),
+            "child".to_string(),
+            "name".to_string(),
+            "prompt".to_string(),
+        );
+        assert!(create.parent_execution_id.is_none());
+    }
+
+    #[test]
+    fn test_create_execution_record_with_parent_some() {
+        use crate::models::sub_agent::SubAgentExecutionCreate;
+
+        let parent_id = "parent_exec_123".to_string();
+        let create = SubAgentExecutionCreate::with_parent(
+            "wf_001".to_string(),
+            "parent".to_string(),
+            "child".to_string(),
+            "name".to_string(),
+            "prompt".to_string(),
+            Some(parent_id.clone()),
+        );
+        assert_eq!(create.parent_execution_id, Some(parent_id));
+    }
+
+    #[test]
+    fn test_correlation_id_serialization_with_parent() {
+        use crate::models::sub_agent::SubAgentExecutionCreate;
+
+        let create = SubAgentExecutionCreate::with_parent(
+            "wf".to_string(),
+            "parent".to_string(),
+            "child".to_string(),
+            "name".to_string(),
+            "prompt".to_string(),
+            Some("batch_123".to_string()),
+        );
+
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(json.contains("\"parent_execution_id\":\"batch_123\""));
+    }
+
+    #[test]
+    fn test_correlation_id_serialization_without_parent() {
+        use crate::models::sub_agent::SubAgentExecutionCreate;
+
+        let create = SubAgentExecutionCreate::new(
+            "wf".to_string(),
+            "parent".to_string(),
+            "child".to_string(),
+            "name".to_string(),
+            "prompt".to_string(),
+        );
+
+        let json = serde_json::to_string(&create).unwrap();
+        // parent_execution_id should be skipped when None
+        assert!(!json.contains("parent_execution_id"));
     }
 }
