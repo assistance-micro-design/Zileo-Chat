@@ -18,6 +18,7 @@ use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
@@ -45,10 +46,19 @@ impl Default for ProviderConfig {
     }
 }
 
+/// Default HTTP timeout for LLM requests (5 minutes for long completions)
+const HTTP_TIMEOUT_SECS: u64 = 300;
+
+/// Maximum idle connections per host for connection pooling
+const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
+
 /// Manager for LLM providers
 ///
 /// Provides a unified interface to manage and use multiple LLM providers.
 /// Handles provider configuration, switching, and completion requests.
+///
+/// The manager maintains a shared HTTP client for all providers to benefit
+/// from connection pooling and avoid repeated TLS handshakes (OPT-LLM-2).
 #[allow(dead_code)]
 pub struct ProviderManager {
     /// Mistral provider instance
@@ -57,17 +67,41 @@ pub struct ProviderManager {
     ollama: Arc<OllamaProvider>,
     /// Configuration state
     config: Arc<RwLock<ProviderConfig>>,
+    /// Shared HTTP client for all providers (connection pooling)
+    http_client: Arc<reqwest::Client>,
 }
 
 #[allow(dead_code)]
 impl ProviderManager {
-    /// Creates a new provider manager with default configuration
+    /// Creates a new provider manager with default configuration.
+    ///
+    /// Initializes a shared HTTP client with connection pooling for all providers.
+    /// This improves performance by reusing connections and avoiding TLS handshake
+    /// overhead on subsequent requests (OPT-LLM-2).
     pub fn new() -> Self {
+        // Create shared HTTP client with connection pooling
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+                .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
+                .build()
+                .expect("Failed to create HTTP client"),
+        );
+
         Self {
-            mistral: Arc::new(MistralProvider::new()),
-            ollama: Arc::new(OllamaProvider::new()),
+            mistral: Arc::new(MistralProvider::new(http_client.clone())),
+            ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
+            http_client,
         }
+    }
+
+    /// Returns a reference to the shared HTTP client.
+    ///
+    /// This can be used by external code that needs to make HTTP requests
+    /// while benefiting from the manager's connection pool.
+    pub fn http_client(&self) -> &Arc<reqwest::Client> {
+        &self.http_client
     }
 
     /// Gets the current configuration

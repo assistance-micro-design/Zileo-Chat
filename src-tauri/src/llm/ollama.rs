@@ -103,25 +103,41 @@ pub struct OllamaProvider {
     server_url: Arc<RwLock<String>>,
     /// Configured flag
     configured: Arc<RwLock<bool>>,
+    /// Shared HTTP client for direct API calls (connection pooling)
+    http_client: Arc<reqwest::Client>,
 }
 
 #[allow(dead_code)]
 impl OllamaProvider {
-    /// Creates a new Ollama provider with default settings
-    pub fn new() -> Self {
+    /// Creates a new Ollama provider with default settings and a shared HTTP client.
+    ///
+    /// The HTTP client is used for direct API calls (thinking models, tool calls)
+    /// and provides connection pooling for better performance (OPT-LLM-2).
+    pub fn new(http_client: Arc<reqwest::Client>) -> Self {
         Self {
             client: Arc::new(RwLock::new(None)),
             server_url: Arc::new(RwLock::new(DEFAULT_OLLAMA_URL.to_string())),
             configured: Arc::new(RwLock::new(false)),
+            http_client,
         }
     }
 
-    /// Creates a new Ollama provider with a custom server URL
+    /// Creates a new Ollama provider with a custom server URL and a default HTTP client.
+    ///
+    /// Note: For production use, prefer using `new()` with a shared HTTP client
+    /// from ProviderManager to benefit from connection pooling.
     pub fn with_url(url: &str) -> Self {
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .expect("Failed to create HTTP client"),
+        );
         Self {
             client: Arc::new(RwLock::new(None)),
             server_url: Arc::new(RwLock::new(url.to_string())),
             configured: Arc::new(RwLock::new(false)),
+            http_client,
         }
     }
 
@@ -161,7 +177,10 @@ impl OllamaProvider {
         let url = self.server_url.read().await.clone();
         let test_url = format!("{}/api/version", url);
 
-        let response = reqwest::get(&test_url)
+        let response = self
+            .http_client
+            .get(&test_url)
+            .send()
             .await
             .map_err(|e| LLMError::ConnectionError(e.to_string()))?;
 
@@ -208,11 +227,10 @@ impl OllamaProvider {
             }
         });
 
-        let client = reqwest::Client::new();
-        let response = client
+        let response = self
+            .http_client
             .post(&url)
             .json(&body)
-            .timeout(std::time::Duration::from_secs(300))
             .send()
             .await
             .map_err(|e| {
@@ -318,11 +336,10 @@ impl OllamaProvider {
             "Making Ollama API request with tools"
         );
 
-        let client = reqwest::Client::new();
-        let response = client
+        let response = self
+            .http_client
             .post(&url)
             .json(&body)
-            .timeout(std::time::Duration::from_secs(300))
             .send()
             .await
             .map_err(|e| {
@@ -375,8 +392,18 @@ impl OllamaProvider {
 }
 
 impl Default for OllamaProvider {
+    /// Creates a default OllamaProvider with a new HTTP client.
+    ///
+    /// Note: For production use, prefer using `new()` with a shared HTTP client
+    /// from ProviderManager to benefit from connection pooling.
     fn default() -> Self {
-        Self::new()
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .expect("Failed to create HTTP client"),
+        );
+        Self::new(http_client)
     }
 }
 
@@ -536,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_ollama_provider_new() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
         assert_eq!(provider.provider_type(), ProviderType::Ollama);
         assert_eq!(provider.default_model(), DEFAULT_OLLAMA_MODEL);
     }
@@ -549,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_ollama_available_models() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
         let models = provider.available_models();
         assert!(!models.is_empty());
         assert!(models.contains(&"llama3.2".to_string()));
@@ -557,7 +584,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ollama_provider_configure() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
 
         // Initially not configured
         assert!(!provider.is_configured());
@@ -579,7 +606,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ollama_provider_custom_url() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
 
         let custom_url = "http://192.168.1.100:11434";
         provider.configure(Some(custom_url)).await.unwrap();
@@ -589,7 +616,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ollama_provider_complete_not_configured() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
 
         let result = provider.complete("Hello", None, None, 0.7, 1000).await;
 
@@ -658,7 +685,7 @@ mod tests {
 
     #[test]
     fn test_is_thinking_model_name_method() {
-        let provider = OllamaProvider::new();
+        let provider = OllamaProvider::default();
 
         assert!(provider.is_thinking_model_name("deepseek-r1"));
         assert!(provider.is_thinking_model_name("qwen3"));

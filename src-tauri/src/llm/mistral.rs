@@ -246,6 +246,8 @@ pub struct MistralProvider {
     client: Arc<RwLock<Option<mistral::Client>>>,
     /// API key (stored for reconfiguration)
     api_key: Arc<RwLock<Option<String>>>,
+    /// Shared HTTP client for direct API calls (connection pooling)
+    http_client: Arc<reqwest::Client>,
 }
 
 /// Mistral API base URL
@@ -256,20 +258,36 @@ const REASONING_MODELS: &[&str] = &["magistral-small-latest", "magistral-medium-
 
 #[allow(dead_code)]
 impl MistralProvider {
-    /// Creates a new unconfigured Mistral provider
-    pub fn new() -> Self {
+    /// Creates a new unconfigured Mistral provider with a shared HTTP client.
+    ///
+    /// The HTTP client is used for direct API calls (reasoning models, tool calls)
+    /// and provides connection pooling for better performance (OPT-LLM-2).
+    pub fn new(http_client: Arc<reqwest::Client>) -> Self {
         Self {
             client: Arc::new(RwLock::new(None)),
             api_key: Arc::new(RwLock::new(None)),
+            http_client,
         }
     }
 
-    /// Creates a new Mistral provider with the given API key
+    /// Creates a new Mistral provider with the given API key and a default HTTP client.
+    ///
+    /// Note: For production use, prefer using `new()` with a shared HTTP client
+    /// from ProviderManager to benefit from connection pooling.
     pub fn with_api_key(api_key: &str) -> Result<Self, LLMError> {
         let client = mistral::Client::new(api_key);
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .map_err(|e| {
+                    LLMError::RequestFailed(format!("Failed to create HTTP client: {}", e))
+                })?,
+        );
         Ok(Self {
             client: Arc::new(RwLock::new(Some(client))),
             api_key: Arc::new(RwLock::new(Some(api_key.to_string()))),
+            http_client,
         })
     }
 
@@ -346,8 +364,8 @@ impl MistralProvider {
             "Making direct HTTP request to Mistral API (reasoning model)"
         );
 
-        let client = reqwest::Client::new();
-        let response = client
+        let response = self
+            .http_client
             .post(MISTRAL_API_URL)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -478,8 +496,8 @@ impl MistralProvider {
             "Making Mistral API request with tools"
         );
 
-        let client = reqwest::Client::new();
-        let response = client
+        let response = self
+            .http_client
             .post(MISTRAL_API_URL)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -541,8 +559,18 @@ impl MistralProvider {
 }
 
 impl Default for MistralProvider {
+    /// Creates a default MistralProvider with a new HTTP client.
+    ///
+    /// Note: For production use, prefer using `new()` with a shared HTTP client
+    /// from ProviderManager to benefit from connection pooling.
     fn default() -> Self {
-        Self::new()
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .expect("Failed to create HTTP client"),
+        );
+        Self::new(http_client)
     }
 }
 
@@ -709,7 +737,7 @@ mod tests {
 
     #[test]
     fn test_mistral_provider_new() {
-        let provider = MistralProvider::new();
+        let provider = MistralProvider::default();
         assert_eq!(provider.provider_type(), ProviderType::Mistral);
         assert_eq!(provider.default_model(), DEFAULT_MISTRAL_MODEL);
     }
@@ -722,7 +750,7 @@ mod tests {
 
     #[test]
     fn test_mistral_available_models() {
-        let provider = MistralProvider::new();
+        let provider = MistralProvider::default();
         let models = provider.available_models();
         assert!(!models.is_empty());
         assert!(models.contains(&"mistral-large-latest".to_string()));
@@ -730,7 +758,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mistral_provider_configure() {
-        let provider = MistralProvider::new();
+        let provider = MistralProvider::default();
 
         // Initially not configured
         assert!(!provider.is_configured());
@@ -749,7 +777,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mistral_provider_get_api_key() {
-        let provider = MistralProvider::new();
+        let provider = MistralProvider::default();
 
         // Initially no key
         assert!(provider.get_api_key().await.is_none());
@@ -764,7 +792,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mistral_provider_complete_not_configured() {
-        let provider = MistralProvider::new();
+        let provider = MistralProvider::default();
 
         let result = provider.complete("Hello", None, None, 0.7, 1000).await;
 
