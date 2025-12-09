@@ -489,6 +489,7 @@ mod agent_tool_context_tests {
             None, // No MCP manager
             tool_factory.clone(),
             None, // No app handle
+            None, // No cancellation token
         );
 
         // Context should have all required components

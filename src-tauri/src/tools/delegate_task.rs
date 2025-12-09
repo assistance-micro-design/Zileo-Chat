@@ -61,6 +61,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -106,6 +107,8 @@ pub struct DelegateTaskTool {
     mcp_manager: Option<Arc<MCPManager>>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
+    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    cancellation_token: Option<CancellationToken>,
     /// Current agent ID (parent agent)
     current_agent_id: String,
     /// Workflow ID
@@ -121,16 +124,22 @@ impl DelegateTaskTool {
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
-    /// * `context` - Agent tool context with system dependencies
+    /// * `context` - Agent tool context with system dependencies (includes cancellation token)
     /// * `current_agent_id` - ID of the agent using this tool
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
+    ///
+    /// # Cancellation Token (OPT-SA-7)
+    ///
+    /// The cancellation token is extracted from the `AgentToolContext`. If provided,
+    /// delegated agents will monitor the token and abort execution when cancellation
+    /// is requested.
     ///
     /// # Example
     /// ```ignore
     /// let tool = DelegateTaskTool::new(
     ///     db.clone(),
-    ///     context,
+    ///     context, // Contains optional cancellation_token
     ///     "primary_agent".to_string(),
     ///     "wf_001".to_string(),
     ///     true,
@@ -149,6 +158,7 @@ impl DelegateTaskTool {
             orchestrator: context.orchestrator,
             mcp_manager: context.mcp_manager,
             app_handle: context.app_handle,
+            cancellation_token: context.cancellation_token,
             current_agent_id,
             workflow_id,
             is_primary_agent,
@@ -297,13 +307,15 @@ impl DelegateTaskTool {
         self.active_delegations.write().await.push(delegation);
 
         // 9b. Create executor for unified event emission (OPT-SA-4)
-        let executor = SubAgentExecutor::new(
+        // OPT-SA-7: Use with_cancellation for graceful shutdown support
+        let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
             self.mcp_manager.clone(),
             self.app_handle.clone(),
             self.workflow_id.clone(),
             self.current_agent_id.clone(),
+            self.cancellation_token.clone(),
         );
 
         // 9c. Emit sub_agent_start event via unified executor

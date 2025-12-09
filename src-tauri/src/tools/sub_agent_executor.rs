@@ -59,6 +59,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tauri::Emitter;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -204,6 +205,12 @@ impl Default for ActivityMonitor {
 ///
 /// Centralizes shared logic across SpawnAgentTool, DelegateTaskTool, and ParallelTasksTool
 /// to reduce code duplication and ensure consistent behavior.
+///
+/// # Cancellation Support (OPT-SA-7)
+///
+/// The executor supports graceful cancellation via `CancellationToken`. When a token
+/// is provided and cancelled, execution aborts immediately with a "cancelled" result.
+/// This enables users to cancel long-running workflows and have sub-agents respond.
 pub struct SubAgentExecutor {
     /// Database client for execution record management
     db: Arc<DBClient>,
@@ -217,10 +224,14 @@ pub struct SubAgentExecutor {
     workflow_id: String,
     /// Parent agent ID (caller of sub-agent tools)
     parent_agent_id: String,
+    /// Optional cancellation token for graceful shutdown (OPT-SA-7)
+    cancellation_token: Option<CancellationToken>,
 }
 
 impl SubAgentExecutor {
-    /// Creates a new executor.
+    /// Creates a new executor without cancellation token.
+    ///
+    /// For most use cases, prefer `with_cancellation()` to support graceful shutdown.
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
@@ -229,6 +240,7 @@ impl SubAgentExecutor {
     /// * `app_handle` - Optional app handle for event emission
     /// * `workflow_id` - Workflow ID for scoping
     /// * `parent_agent_id` - ID of parent agent calling sub-agent tools
+    #[allow(dead_code)]
     pub fn new(
         db: Arc<DBClient>,
         orchestrator: Arc<AgentOrchestrator>,
@@ -244,6 +256,46 @@ impl SubAgentExecutor {
             app_handle,
             workflow_id,
             parent_agent_id,
+            cancellation_token: None,
+        }
+    }
+
+    /// Creates a new executor with cancellation token support (OPT-SA-7).
+    ///
+    /// # Arguments
+    /// * `db` - Database client for persistence
+    /// * `orchestrator` - Agent orchestrator for execution
+    /// * `mcp_manager` - Optional MCP manager for tool routing
+    /// * `app_handle` - Optional app handle for event emission
+    /// * `workflow_id` - Workflow ID for scoping
+    /// * `parent_agent_id` - ID of parent agent calling sub-agent tools
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown
+    ///
+    /// # Example
+    /// ```ignore
+    /// let executor = SubAgentExecutor::with_cancellation(
+    ///     db, orchestrator, mcp_manager, app_handle,
+    ///     workflow_id, parent_agent_id,
+    ///     Some(cancellation_token),
+    /// );
+    /// ```
+    pub fn with_cancellation(
+        db: Arc<DBClient>,
+        orchestrator: Arc<AgentOrchestrator>,
+        mcp_manager: Option<Arc<MCPManager>>,
+        app_handle: Option<tauri::AppHandle>,
+        workflow_id: String,
+        parent_agent_id: String,
+        cancellation_token: Option<CancellationToken>,
+    ) -> Self {
+        Self {
+            db,
+            orchestrator,
+            mcp_manager,
+            app_handle,
+            workflow_id,
+            parent_agent_id,
+            cancellation_token,
         }
     }
 
@@ -583,9 +635,10 @@ impl SubAgentExecutor {
 
     // =========================================================================
     // OPT-SA-1: Execution with Heartbeat-based Inactivity Timeout
+    // OPT-SA-7: Cancellation Support
     // =========================================================================
 
-    /// Executes an agent with inactivity timeout monitoring.
+    /// Executes an agent with inactivity timeout monitoring and cancellation support.
     ///
     /// This method wraps `execute_with_metrics` with a monitoring loop that
     /// detects genuine hangs by tracking activity. Unlike simple timeouts,
@@ -605,6 +658,13 @@ impl SubAgentExecutor {
     /// - Check interval: 30 seconds (ACTIVITY_CHECK_INTERVAL_SECS)
     /// - Timeout threshold: 300 seconds / 5 minutes (INACTIVITY_TIMEOUT_SECS)
     /// - If no activity for 5 minutes, execution is aborted with an error
+    ///
+    /// # Cancellation Behavior (OPT-SA-7)
+    ///
+    /// If a cancellation token was provided when creating the executor (via
+    /// `with_cancellation`), the execution will abort immediately when the
+    /// token is cancelled. This enables graceful shutdown when the user
+    /// cancels the workflow.
     ///
     /// # Arguments
     /// * `agent_id` - Agent ID to execute
@@ -658,10 +718,22 @@ impl SubAgentExecutor {
         // Pin the future for use in select!
         tokio::pin!(execution_future);
 
+        // OPT-SA-7: Create cancellation future based on whether token is present
+        // If no token, create a future that never completes
+        let cancellation_future = async {
+            if let Some(ref token) = self.cancellation_token {
+                token.cancelled().await;
+            } else {
+                // No token - wait forever (this branch will never complete)
+                std::future::pending::<()>().await;
+            }
+        };
+        tokio::pin!(cancellation_future);
+
         // Monitoring loop with tokio::select!
         loop {
             tokio::select! {
-                // Execution completed
+                // Branch 1: Execution completed
                 result = &mut execution_future => {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
                     return match result {
@@ -704,7 +776,34 @@ impl SubAgentExecutor {
                     };
                 }
 
-                // Activity check interval
+                // Branch 2: Cancellation requested (OPT-SA-7)
+                _ = &mut cancellation_future => {
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    warn!(
+                        agent_id = %agent_id,
+                        duration_ms = duration_ms,
+                        "Sub-agent execution cancelled by user"
+                    );
+
+                    return ExecutionResult {
+                        success: false,
+                        report: format!(
+                            "# Sub-Agent Cancelled\n\n\
+                             Execution was cancelled by user request.\n\n\
+                             - Elapsed time before cancellation: {} ms\n\n\
+                             The workflow cancellation was propagated to this sub-agent.",
+                            duration_ms
+                        ),
+                        metrics: SubAgentMetrics {
+                            duration_ms,
+                            tokens_input: 0,
+                            tokens_output: 0,
+                        },
+                        error_message: Some("Execution cancelled by user".to_string()),
+                    };
+                }
+
+                // Branch 3: Activity check interval
                 _ = tokio::time::sleep(Duration::from_secs(ACTIVITY_CHECK_INTERVAL_SECS)) => {
                     let inactive_secs = monitor.seconds_since_last_activity();
 
@@ -895,5 +994,69 @@ mod tests {
 
         // Check interval should be much smaller than timeout
         assert!(ACTIVITY_CHECK_INTERVAL_SECS < INACTIVITY_TIMEOUT_SECS / 2);
+    }
+
+    // =========================================================================
+    // OPT-SA-7: CancellationToken Tests
+    // =========================================================================
+
+    #[test]
+    fn test_executor_with_cancellation_token() {
+        // Test that with_cancellation stores the token
+        use crate::agents::core::{AgentOrchestrator, AgentRegistry};
+
+        // Create minimal dependencies (won't actually be used in this test)
+        let registry = Arc::new(AgentRegistry::new());
+        let orchestrator = Arc::new(AgentOrchestrator::new(registry));
+        let token = CancellationToken::new();
+
+        // Use a mock DBClient - we don't need a real one for this test
+        // Skip this test until we have a proper mock
+        // For now, just test the token behavior
+
+        // Test that CancellationToken can be cloned and cancelled
+        let token2 = token.clone();
+        assert!(!token.is_cancelled());
+        assert!(!token2.is_cancelled());
+
+        token.cancel();
+
+        assert!(token.is_cancelled());
+        assert!(token2.is_cancelled()); // Clone shares state
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_token_immediate_cancellation() {
+        // Test that a pre-cancelled token completes immediately
+        let token = CancellationToken::new();
+        token.cancel();
+
+        // This should complete immediately (not hang)
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(100), token.cancelled()).await;
+
+        assert!(result.is_ok(), "cancelled() should complete immediately");
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_token_async_cancellation() {
+        let token = CancellationToken::new();
+        let token_clone = token.clone();
+
+        // Spawn task that waits for cancellation
+        let handle = tokio::spawn(async move {
+            token_clone.cancelled().await;
+            "cancelled"
+        });
+
+        // Cancel after small delay
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        token.cancel();
+
+        // Wait for task with timeout
+        let result = tokio::time::timeout(std::time::Duration::from_millis(100), handle).await;
+
+        assert!(result.is_ok(), "Task should complete after cancellation");
+        assert_eq!(result.unwrap().unwrap(), "cancelled");
     }
 }

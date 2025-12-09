@@ -54,6 +54,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -116,6 +117,8 @@ pub struct SpawnAgentTool {
     tool_factory: Arc<ToolFactory>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
+    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    cancellation_token: Option<CancellationToken>,
     /// Parent agent ID
     parent_agent_id: String,
     /// Workflow ID
@@ -131,16 +134,22 @@ impl SpawnAgentTool {
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
-    /// * `context` - Agent tool context with system dependencies
+    /// * `context` - Agent tool context with system dependencies (includes cancellation token)
     /// * `parent_agent_id` - ID of the parent agent using this tool
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
+    ///
+    /// # Cancellation Token (OPT-SA-7)
+    ///
+    /// The cancellation token is extracted from the `AgentToolContext`. If provided,
+    /// sub-agents spawned by this tool will monitor the token and abort execution
+    /// when cancellation is requested.
     ///
     /// # Example
     /// ```ignore
     /// let tool = SpawnAgentTool::new(
     ///     db.clone(),
-    ///     context,
+    ///     context, // Contains optional cancellation_token
     ///     "primary_agent".to_string(),
     ///     "wf_001".to_string(),
     ///     true,
@@ -161,6 +170,7 @@ impl SpawnAgentTool {
             mcp_manager: context.mcp_manager,
             tool_factory: context.tool_factory,
             app_handle: context.app_handle,
+            cancellation_token: context.cancellation_token,
             parent_agent_id,
             workflow_id,
             is_primary_agent,
@@ -262,13 +272,15 @@ impl SpawnAgentTool {
         }
 
         // 5. Request human-in-the-loop validation
-        let executor = SubAgentExecutor::new(
+        // OPT-SA-7: Create executor with cancellation token for graceful shutdown
+        let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
             self.mcp_manager.clone(),
             self.app_handle.clone(),
             self.workflow_id.clone(),
             self.parent_agent_id.clone(),
+            self.cancellation_token.clone(),
         );
 
         let details = ValidationHelper::spawn_details(

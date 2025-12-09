@@ -414,6 +414,7 @@ async fn main() -> anyhow::Result<()> {
                     };
 
                     // Create agent context with app_handle
+                    // Note: No cancellation token during startup agent loading
                     let app_handle = app_handle_clone.read().ok().and_then(|guard| guard.clone());
                     let context = crate::tools::AgentToolContext::new(
                         registry.clone(),
@@ -422,6 +423,7 @@ async fn main() -> anyhow::Result<()> {
                         Some(mcp_manager.clone()),
                         tool_factory.clone(),
                         app_handle,
+                        None, // No cancellation token during startup
                     );
 
                     let llm_agent = crate::agents::LLMAgent::with_context(

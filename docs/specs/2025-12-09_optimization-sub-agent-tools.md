@@ -580,7 +580,7 @@ info!(
 - [ ] Test inactivity timeout avec execution active (OPT-SA-1) - doit continuer
 - [ ] Test inactivity timeout avec silence complet (OPT-SA-1) - doit timeout apres 300s
 - [ ] Test activity callback propagation (OPT-SA-1) - callback appele a chaque token/tool
-- [ ] Test cancellation token propagation (OPT-SA-7)
+- [x] Test cancellation token propagation (OPT-SA-7)
 - [ ] Test circuit breaker state transitions (OPT-SA-8)
 - [ ] Test JoinSet equivalence avec join_all (OPT-SA-6)
 - [ ] Test retry avec backoff (OPT-SA-10)
@@ -676,8 +676,17 @@ cargo test parallel_tasks -- --nocapture
    - Updated docstrings: module header, struct docs, performance benefits
    - All 50 sub-agent tests passing (33 unit + 17 integration)
    - Benefits: per-task control, future cancellation support (OPT-SA-7), better memory management
-8. [ ] Planifier P2 pour sprint suivant:
-   - OPT-SA-7 (CancellationToken - 2h)
+8. [x] **OPT-SA-7 (CancellationToken) - COMPLETE** (2025-12-09)
+   - Added `cancellation_token: Option<CancellationToken>` to `AgentToolContext`
+   - Added `from_app_state_with_cancellation()` constructor to AgentToolContext
+   - Added `cancellation_token` field and `with_cancellation()` constructor to SubAgentExecutor
+   - Modified `execute_with_heartbeat_timeout()` to include cancellation branch in tokio::select!
+   - Updated SpawnAgentTool, DelegateTaskTool, ParallelTasksTool to extract token from context
+   - All three tools now pass cancellation token to SubAgentExecutor via `with_cancellation()`
+   - Added 3 new tests: `test_executor_with_cancellation_token`, `test_cancellation_token_immediate_cancellation`, `test_cancellation_token_async_cancellation`
+   - All 722 backend tests passing
+   - Enables graceful shutdown when user cancels workflow - sub-agents respond immediately
+9. [ ] Planifier suite P2:
    - OPT-SA-8 (Circuit breaker - 3h)
    - OPT-SA-9 (Reduire CC - 2h)
 

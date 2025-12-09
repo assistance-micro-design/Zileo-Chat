@@ -58,6 +58,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -97,6 +98,8 @@ pub struct ParallelTasksTool {
     mcp_manager: Option<Arc<MCPManager>>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
+    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    cancellation_token: Option<CancellationToken>,
     /// Current agent ID (parent agent)
     current_agent_id: String,
     /// Workflow ID
@@ -110,16 +113,22 @@ impl ParallelTasksTool {
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
-    /// * `context` - Agent tool context with system dependencies
+    /// * `context` - Agent tool context with system dependencies (includes cancellation token)
     /// * `current_agent_id` - ID of the agent using this tool
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
+    ///
+    /// # Cancellation Token (OPT-SA-7)
+    ///
+    /// The cancellation token is extracted from the `AgentToolContext`. If provided,
+    /// parallel tasks will monitor the token and abort execution when cancellation
+    /// is requested.
     ///
     /// # Example
     /// ```ignore
     /// let tool = ParallelTasksTool::new(
     ///     db.clone(),
-    ///     context,
+    ///     context, // Contains optional cancellation_token
     ///     "primary_agent".to_string(),
     ///     "wf_001".to_string(),
     ///     true,
@@ -138,6 +147,7 @@ impl ParallelTasksTool {
             orchestrator: context.orchestrator,
             mcp_manager: context.mcp_manager,
             app_handle: context.app_handle,
+            cancellation_token: context.cancellation_token,
             current_agent_id,
             workflow_id,
             is_primary_agent,
@@ -251,13 +261,15 @@ impl ParallelTasksTool {
         );
 
         // 4. Create executor for unified event emission (OPT-SA-4)
-        let executor = SubAgentExecutor::new(
+        // OPT-SA-7: Use with_cancellation for graceful shutdown support
+        let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
             self.mcp_manager.clone(),
             self.app_handle.clone(),
             self.workflow_id.clone(),
             self.current_agent_id.clone(),
+            self.cancellation_token.clone(),
         );
 
         // 5. Create execution records and tasks
@@ -320,7 +332,9 @@ impl ParallelTasksTool {
             let orchestrator = self.orchestrator.clone();
             let mcp_manager = self.mcp_manager.clone();
             join_set.spawn(async move {
-                let result = orchestrator.execute_with_mcp(&agent_id, task, mcp_manager).await;
+                let result = orchestrator
+                    .execute_with_mcp(&agent_id, task, mcp_manager)
+                    .await;
                 (idx, result)
             });
         }
@@ -333,7 +347,10 @@ impl ParallelTasksTool {
                     // For panicked tasks, we can't know the index, so we'll handle this edge case
                     // by adding with a placeholder index (this shouldn't happen in practice)
                     warn!("Task panicked during parallel execution: {}", join_error);
-                    indexed_results.push((usize::MAX, Err(anyhow::anyhow!("Task panicked: {}", join_error))));
+                    indexed_results.push((
+                        usize::MAX,
+                        Err(anyhow::anyhow!("Task panicked: {}", join_error)),
+                    ));
                 }
             }
         }

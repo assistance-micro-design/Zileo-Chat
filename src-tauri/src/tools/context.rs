@@ -48,6 +48,7 @@ use crate::state::AppState;
 use crate::tools::ToolFactory;
 use std::sync::Arc;
 use tauri::AppHandle;
+use tokio_util::sync::CancellationToken;
 
 /// Context providing agent-level dependencies to tools.
 ///
@@ -80,6 +81,12 @@ pub struct AgentToolContext {
     pub tool_factory: Arc<ToolFactory>,
     /// Tauri app handle for emitting events (optional, for validation)
     pub app_handle: Option<AppHandle>,
+    /// Cancellation token for graceful shutdown of sub-agent execution (OPT-SA-7)
+    ///
+    /// When provided, sub-agents will monitor this token and abort execution
+    /// if cancellation is requested. This enables the user to cancel long-running
+    /// workflows and have sub-agents respond immediately.
+    pub cancellation_token: Option<CancellationToken>,
 }
 
 #[allow(dead_code)]
@@ -93,6 +100,7 @@ impl AgentToolContext {
     /// * `mcp_manager` - Optional MCP manager for tool routing
     /// * `tool_factory` - Factory for creating tools
     /// * `app_handle` - Optional Tauri app handle for event emission
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
     ///
     /// # Example
     /// ```ignore
@@ -103,6 +111,7 @@ impl AgentToolContext {
     ///     Some(mcp_manager.clone()),
     ///     tool_factory.clone(),
     ///     Some(app_handle),
+    ///     Some(cancellation_token),
     /// );
     /// ```
     pub fn new(
@@ -112,6 +121,7 @@ impl AgentToolContext {
         mcp_manager: Option<Arc<MCPManager>>,
         tool_factory: Arc<ToolFactory>,
         app_handle: Option<AppHandle>,
+        cancellation_token: Option<CancellationToken>,
     ) -> Self {
         Self {
             registry,
@@ -120,6 +130,7 @@ impl AgentToolContext {
             mcp_manager,
             tool_factory,
             app_handle,
+            cancellation_token,
         }
     }
 
@@ -150,6 +161,46 @@ impl AgentToolContext {
             mcp_manager: mcp_manager.or_else(|| Some(app_state.mcp_manager.clone())),
             tool_factory: app_state.tool_factory.clone(),
             app_handle,
+            cancellation_token: None, // Use from_app_state_with_cancellation for token support
+        }
+    }
+
+    /// Creates an AgentToolContext from AppState with cancellation token support (OPT-SA-7).
+    ///
+    /// This constructor should be used when executing workflows that need graceful
+    /// cancellation support for sub-agents.
+    ///
+    /// # Arguments
+    /// * `app_state` - The application state containing all managers
+    /// * `mcp_manager` - Optional MCP manager
+    /// * `app_handle` - Optional Tauri app handle for event emission
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown
+    ///
+    /// # Example
+    /// ```ignore
+    /// // In execute_workflow_streaming
+    /// let token = state.create_cancellation_token(&workflow_id).await;
+    /// let context = AgentToolContext::from_app_state_with_cancellation(
+    ///     &state,
+    ///     Some(state.mcp_manager.clone()),
+    ///     Some(app_handle),
+    ///     Some(token),
+    /// );
+    /// ```
+    pub fn from_app_state_with_cancellation(
+        app_state: &AppState,
+        mcp_manager: Option<Arc<MCPManager>>,
+        app_handle: Option<AppHandle>,
+        cancellation_token: Option<CancellationToken>,
+    ) -> Self {
+        Self {
+            registry: app_state.registry.clone(),
+            orchestrator: app_state.orchestrator.clone(),
+            llm_manager: app_state.llm_manager.clone(),
+            mcp_manager: mcp_manager.or_else(|| Some(app_state.mcp_manager.clone())),
+            tool_factory: app_state.tool_factory.clone(),
+            app_handle,
+            cancellation_token,
         }
     }
 
@@ -157,6 +208,7 @@ impl AgentToolContext {
     ///
     /// Convenience method that always includes the MCP manager from AppState.
     /// Includes app_handle if available in AppState.
+    /// Does NOT include cancellation token - use from_app_state_with_cancellation for that.
     ///
     /// # Arguments
     /// * `app_state` - The application state containing all managers
@@ -271,6 +323,7 @@ mod tests {
             None,
             tool_factory.clone(),
             None,
+            None, // cancellation_token
         );
 
         assert!(Arc::ptr_eq(&context.registry, &registry));
@@ -279,5 +332,44 @@ mod tests {
         assert!(context.mcp_manager.is_none());
         assert!(Arc::ptr_eq(&context.tool_factory, &tool_factory));
         assert!(context.app_handle.is_none());
+        assert!(context.cancellation_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_context_with_cancellation_token() {
+        let state = create_test_state().await;
+        let token = CancellationToken::new();
+
+        let context = AgentToolContext::from_app_state_with_cancellation(
+            &state,
+            Some(state.mcp_manager.clone()),
+            None,
+            Some(token.clone()),
+        );
+
+        // Verify cancellation token is set
+        assert!(context.cancellation_token.is_some());
+
+        // Verify token is not cancelled initially
+        assert!(!context.cancellation_token.as_ref().unwrap().is_cancelled());
+
+        // Cancel the original token
+        token.cancel();
+
+        // Verify the context's token is also cancelled (same token)
+        assert!(context.cancellation_token.as_ref().unwrap().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn test_context_without_cancellation_token() {
+        let state = create_test_state().await;
+
+        // from_app_state_full does not include cancellation token
+        let context = AgentToolContext::from_app_state_full(&state);
+        assert!(context.cancellation_token.is_none());
+
+        // from_app_state does not include cancellation token
+        let context2 = AgentToolContext::from_app_state(&state, None, None);
+        assert!(context2.cancellation_token.is_none());
     }
 }
