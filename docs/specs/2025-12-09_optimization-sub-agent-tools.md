@@ -660,8 +660,15 @@ cargo test parallel_tasks -- --nocapture
    - Created `SubAgentExecutor` instance in both tools for event emission
    - All 33 unit tests + 17 integration tests passing
    - Reduced code duplication by ~40 lines
-6. [ ] Executer P1.5 restant (OPT-SA-5, OPT-SA-6) - ~1.5h
-7. [ ] Planifier P2 pour sprint suivant:
+6. [x] **OPT-SA-5 (Unifier update_execution_record) - COMPLETE** (2025-12-09)
+   - Removed duplicate `update_execution_record()` method from `parallel_tasks.rs`
+   - ParallelTasksTool now uses `SubAgentExecutor::update_execution_record()`
+   - Removed `SubAgentExecutionComplete` import (no longer needed)
+   - Unified DB update logic: single source of truth in SubAgentExecutor
+   - All 50 sub-agent tests passing (33 unit + 17 integration)
+   - Reduced code duplication by ~40 lines
+7. [ ] Executer P1.5 restant (OPT-SA-6) - ~0.5h
+8. [ ] Planifier P2 pour sprint suivant:
    - OPT-SA-7 (CancellationToken - 2h)
    - OPT-SA-8 (Circuit breaker - 3h)
    - OPT-SA-9 (Reduire CC - 2h)
@@ -671,7 +678,7 @@ cargo test parallel_tasks -- --nocapture
 ### Code Analyse
 - `src-tauri/src/tools/spawn_agent.rs` (854 lignes)
 - `src-tauri/src/tools/delegate_task.rs` (765 lignes - was 797, reduced by OPT-SA-4)
-- `src-tauri/src/tools/parallel_tasks.rs` (867 lignes - was 880, reduced by OPT-SA-4)
+- `src-tauri/src/tools/parallel_tasks.rs` (827 lignes - was 880, reduced by OPT-SA-4 and OPT-SA-5)
 - `src-tauri/src/tools/sub_agent_executor.rs` (542 lignes)
 - `src-tauri/src/tools/validation_helper.rs` (516 lignes)
 - `src-tauri/src/tools/constants.rs`

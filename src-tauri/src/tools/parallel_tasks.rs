@@ -44,8 +44,8 @@ use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, ParallelBatchResult, ParallelTaskResult, SubAgentExecutionComplete,
-    SubAgentExecutionCreate, SubAgentMetrics,
+    constants::MAX_SUB_AGENTS, ParallelBatchResult, ParallelTaskResult, SubAgentExecutionCreate,
+    SubAgentMetrics,
 };
 use crate::tools::context::AgentToolContext;
 use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
@@ -333,24 +333,20 @@ impl ParallelTasksTool {
                         tokens_output: report.metrics.tokens_output as u64,
                     };
 
-                    // Update execution record
-                    let completion = SubAgentExecutionComplete::success(
-                        report.metrics.duration_ms,
-                        Some(metrics.tokens_input),
-                        Some(metrics.tokens_output),
-                        report.content.clone(),
-                    );
-
-                    self.update_execution_record(&execution_id, &completion)
-                        .await;
-
-                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
+                    // Build ExecutionResult for unified update_execution_record (OPT-SA-5)
                     let exec_result = ExecutionResult {
                         success: true,
                         report: report.content.clone(),
                         metrics: metrics.clone(),
                         error_message: None,
                     };
+
+                    // Update execution record via unified executor (OPT-SA-5)
+                    executor
+                        .update_execution_record(&execution_id, &exec_result)
+                        .await;
+
+                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
                     let agent_name = format!("Parallel task for {}", task_spec.agent_id);
                     executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
@@ -377,12 +373,7 @@ impl ParallelTasksTool {
                         "Parallel task failed"
                     );
 
-                    // Update execution record
-                    let completion = SubAgentExecutionComplete::error(0, error_msg.clone());
-                    self.update_execution_record(&execution_id, &completion)
-                        .await;
-
-                    // Emit sub_agent_error event via unified executor (OPT-SA-4)
+                    // Build ExecutionResult for unified update_execution_record (OPT-SA-5)
                     let exec_result = ExecutionResult {
                         success: false,
                         report: String::new(),
@@ -393,6 +384,13 @@ impl ParallelTasksTool {
                         },
                         error_message: Some(error_msg.clone()),
                     };
+
+                    // Update execution record via unified executor (OPT-SA-5)
+                    executor
+                        .update_execution_record(&execution_id, &exec_result)
+                        .await;
+
+                    // Emit sub_agent_complete event via unified executor (OPT-SA-4)
                     let agent_name = format!("Parallel task for {}", task_spec.agent_id);
                     executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
@@ -452,46 +450,8 @@ impl ParallelTasksTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
 
-    /// Updates an execution record with completion data
-    async fn update_execution_record(
-        &self,
-        execution_id: &str,
-        completion: &SubAgentExecutionComplete,
-    ) {
-        let update_query = format!(
-            "UPDATE sub_agent_execution:`{}` SET \
-             status = '{}', \
-             duration_ms = {}, \
-             tokens_input = {}, \
-             tokens_output = {}, \
-             result_summary = {}, \
-             error_message = {}, \
-             completed_at = time::now()",
-            execution_id,
-            completion.status,
-            completion.duration_ms,
-            completion.tokens_input.unwrap_or(0),
-            completion.tokens_output.unwrap_or(0),
-            completion
-                .result_summary
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-            completion
-                .error_message
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-        );
-
-        if let Err(e) = self.db.execute(&update_query).await {
-            warn!(
-                execution_id = %execution_id,
-                error = %e,
-                "Failed to update execution record"
-            );
-        }
-    }
+    // NOTE: update_execution_record() removed as part of OPT-SA-5
+    // Now using SubAgentExecutor::update_execution_record() for unified DB updates
 }
 
 #[async_trait]
