@@ -18,6 +18,7 @@ use super::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::rate_limiter::RateLimiter;
 use super::retry::{with_retry, RetryConfig};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,6 +69,8 @@ const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 ///
 /// Circuit breaker pattern (OPT-LLM-6) protects against cascading failures
 /// when providers are unavailable.
+///
+/// Rate limiter (OPT-LLM-8) ensures compliance with provider API rate limits.
 #[allow(dead_code)]
 pub struct ProviderManager {
     /// Mistral provider instance
@@ -82,6 +85,8 @@ pub struct ProviderManager {
     retry_config: RetryConfig,
     /// Circuit breakers for each provider (OPT-LLM-6)
     circuit_breakers: Arc<RwLock<HashMap<ProviderType, CircuitBreaker>>>,
+    /// Rate limiter for API calls (OPT-LLM-8)
+    rate_limiter: RateLimiter,
 }
 
 #[allow(dead_code)]
@@ -92,8 +97,8 @@ impl ProviderManager {
     /// This improves performance by reusing connections and avoiding TLS handshake
     /// overhead on subsequent requests (OPT-LLM-2).
     ///
-    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4)
-    /// and circuit breakers for each provider (OPT-LLM-6).
+    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4),
+    /// circuit breakers for each provider (OPT-LLM-6), and rate limiter (OPT-LLM-8).
     pub fn new() -> Self {
         // Create shared HTTP client with connection pooling
         let http_client = Arc::new(
@@ -128,6 +133,7 @@ impl ProviderManager {
             http_client,
             retry_config: RetryConfig::default(),
             circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
+            rate_limiter: RateLimiter::new(),
         }
     }
 
@@ -165,6 +171,7 @@ impl ProviderManager {
             http_client,
             retry_config,
             circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
+            rate_limiter: RateLimiter::new(),
         }
     }
 
@@ -337,13 +344,16 @@ impl ProviderManager {
 
     /// Completes a prompt using the active provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
-    /// and circuit breaker protection (OPT-LLM-6).
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4),
+    /// circuit breaker protection (OPT-LLM-6), and rate limiting (OPT-LLM-8).
     ///
     /// Transient errors (network issues, rate limits) are retried with exponential
     /// backoff, while non-recoverable errors (auth failures, bad requests) fail immediately.
     /// If the provider's circuit breaker is open, the request fails immediately with
     /// CircuitOpen error.
+    ///
+    /// Rate limiting ensures a minimum delay between API calls to comply with
+    /// provider rate limits (default: 1 second between calls).
     #[instrument(
         name = "manager_complete",
         skip(self, prompt, system_prompt),
@@ -371,6 +381,9 @@ impl ProviderManager {
 
         // Check circuit breaker before making request (OPT-LLM-6)
         self.check_circuit_breaker(provider_type).await?;
+
+        // Apply rate limiting before API call (OPT-LLM-8)
+        self.rate_limiter.wait_if_needed().await;
 
         debug!(
             ?provider_type,
@@ -434,8 +447,8 @@ impl ProviderManager {
 
     /// Completes a prompt using a specific provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
-    /// and circuit breaker protection (OPT-LLM-6).
+    /// This method wraps the provider completion with retry logic (OPT-LLM-4),
+    /// circuit breaker protection (OPT-LLM-6), and rate limiting (OPT-LLM-8).
     pub async fn complete_with_provider(
         &self,
         provider: ProviderType,
@@ -447,6 +460,9 @@ impl ProviderManager {
     ) -> Result<LLMResponse, LLMError> {
         // Check circuit breaker before making request (OPT-LLM-6)
         self.check_circuit_breaker(provider).await?;
+
+        // Apply rate limiting before API call (OPT-LLM-8)
+        self.rate_limiter.wait_if_needed().await;
 
         // Clone values for the retry closure
         let prompt_owned = prompt.to_string();
@@ -535,6 +551,9 @@ impl ProviderManager {
         // Check circuit breaker before making request (OPT-LLM-6)
         self.check_circuit_breaker(provider).await?;
 
+        // Apply rate limiting before API call (OPT-LLM-8)
+        self.rate_limiter.wait_if_needed().await;
+
         debug!(
             ?provider,
             model = model,
@@ -595,9 +614,9 @@ impl ProviderManager {
 
     /// Streaming completion using the active provider.
     ///
-    /// Includes circuit breaker protection (OPT-LLM-6). Note that streaming
-    /// responses don't update the circuit breaker state because the result
-    /// is returned as a channel receiver. The caller should handle stream
+    /// Includes circuit breaker protection (OPT-LLM-6) and rate limiting (OPT-LLM-8).
+    /// Note that streaming responses don't update the circuit breaker state because
+    /// the result is returned as a channel receiver. The caller should handle stream
     /// errors appropriately.
     pub async fn complete_stream(
         &self,
@@ -621,6 +640,9 @@ impl ProviderManager {
 
         // Check circuit breaker before making request (OPT-LLM-6)
         self.check_circuit_breaker(provider_type).await?;
+
+        // Apply rate limiting before API call (OPT-LLM-8)
+        self.rate_limiter.wait_if_needed().await;
 
         match provider_type {
             ProviderType::Mistral => {
