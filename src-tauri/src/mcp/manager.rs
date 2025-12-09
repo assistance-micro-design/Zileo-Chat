@@ -844,10 +844,18 @@ impl MCPManager {
     }
 
     /// Logs a tool call to the database
+    ///
+    /// Uses execute_with_params instead of create() to avoid SurrealDB SDK 2.x
+    /// deserialization issues with union types (array | object) in the result field.
     async fn log_call(&self, log: MCPCallLogCreate) -> MCPResult<()> {
-        let id = log.id.clone();
+        let json_data = serde_json::to_value(&log).map_err(|e| MCPError::DatabaseError {
+            context: "log call serialization".to_string(),
+            message: e.to_string(),
+        })?;
+
+        let query = format!("CREATE mcp_call_log:`{}` CONTENT $data", log.id);
         self.db
-            .create("mcp_call_log", &id, log)
+            .execute_with_params(&query, vec![("data".to_string(), json_data)])
             .await
             .map_err(|e| MCPError::DatabaseError {
                 context: "log call".to_string(),
