@@ -378,8 +378,10 @@ impl SpawnAgentTool {
             }),
         };
 
-        // 15. Execute sub-agent
-        let exec_result = executor.execute_with_metrics(&sub_agent_id, task).await;
+        // 15. Execute sub-agent with heartbeat-based inactivity timeout (OPT-SA-1)
+        let exec_result = executor
+            .execute_with_heartbeat_timeout(&sub_agent_id, task, None)
+            .await;
 
         // 16. Emit completion or error event
         executor.emit_complete_event(&sub_agent_id, name, &exec_result);

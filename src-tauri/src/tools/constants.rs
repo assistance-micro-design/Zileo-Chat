@@ -49,6 +49,24 @@ pub mod user_question {
 #[allow(unused_imports)]
 pub mod sub_agent {
     pub use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
+
+    // OPT-SA-1: Inactivity Timeout with Heartbeat
+    /// Timeout (seconds) without any activity before aborting sub-agent execution.
+    /// Activity includes: LLM tokens received, tool calls started/completed, MCP responses.
+    pub const INACTIVITY_TIMEOUT_SECS: u64 = 300; // 5 minutes
+
+    /// Interval (seconds) between activity checks in the monitoring loop.
+    pub const ACTIVITY_CHECK_INTERVAL_SECS: u64 = 30;
+
+    // OPT-SA-3: Magic Numbers (previously scattered in code)
+    // These constants will be used in future optimization phases (OPT-SA-4, OPT-SA-5)
+    #[allow(dead_code)]
+    /// Maximum characters for result summaries in sub-agent reports.
+    pub const RESULT_SUMMARY_MAX_CHARS: usize = 200;
+
+    #[allow(dead_code)]
+    /// Maximum characters for task description truncation.
+    pub const TASK_DESC_TRUNCATE_CHARS: usize = 100;
 }
 
 // ===== Calculator Tool =====

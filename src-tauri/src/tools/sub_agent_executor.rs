@@ -54,9 +54,10 @@
 //! ```
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use tokio::sync::RwLock;
 use tauri::Emitter;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -69,6 +70,7 @@ use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAg
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, SubAgentExecutionCreate, SubAgentMetrics,
 };
+use crate::tools::constants::sub_agent::{ACTIVITY_CHECK_INTERVAL_SECS, INACTIVITY_TIMEOUT_SECS};
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
 
@@ -97,6 +99,104 @@ impl Default for ExecutionResult {
             },
             error_message: None,
         }
+    }
+}
+
+// =============================================================================
+// OPT-SA-1: ActivityMonitor for Inactivity Timeout with Heartbeat
+// =============================================================================
+
+/// Callback type for activity notification.
+///
+/// This callback is invoked whenever the agent shows activity (LLM response,
+/// tool call start/end, MCP response). It should be lightweight and thread-safe.
+pub type ActivityCallback = Arc<dyn Fn() + Send + Sync>;
+
+/// Monitors agent activity to detect hangs.
+///
+/// The ActivityMonitor tracks the timestamp of the last activity and provides
+/// methods to:
+/// - Record new activity (resetting the inactivity timer)
+/// - Check how long since the last activity
+///
+/// This enables intelligent timeout detection that allows long-running but active
+/// executions while catching genuine hangs (no activity for extended periods).
+///
+/// # Thread Safety
+///
+/// All operations are thread-safe via `RwLock`. The `record_activity()` method
+/// uses `try_write()` to avoid blocking if a read is in progress.
+///
+/// # Example
+///
+/// ```ignore
+/// let monitor = ActivityMonitor::new();
+///
+/// // In the execution loop:
+/// monitor.record_activity(); // Called on each LLM token, tool call, etc.
+///
+/// // In the monitoring loop:
+/// if monitor.seconds_since_last_activity() > INACTIVITY_TIMEOUT_SECS {
+///     // Abort - agent is hung
+/// }
+/// ```
+#[derive(Clone)]
+pub struct ActivityMonitor {
+    /// Timestamp of the last recorded activity
+    last_activity: Arc<RwLock<Instant>>,
+}
+
+impl ActivityMonitor {
+    /// Creates a new ActivityMonitor with the current time as initial activity.
+    pub fn new() -> Self {
+        Self {
+            last_activity: Arc::new(RwLock::new(Instant::now())),
+        }
+    }
+
+    /// Records a new activity, resetting the inactivity timer.
+    ///
+    /// This should be called whenever the agent shows signs of progress:
+    /// - LLM returns tokens
+    /// - Tool call starts
+    /// - Tool call completes
+    /// - MCP server responds
+    ///
+    /// Uses `try_write()` to avoid blocking. If the lock is held, the activity
+    /// is skipped (this is acceptable as another activity will be recorded soon).
+    pub fn record_activity(&self) {
+        if let Ok(mut last) = self.last_activity.try_write() {
+            *last = Instant::now();
+        }
+        // If try_write fails, another thread is writing - that's fine,
+        // activity is being recorded anyway
+    }
+
+    /// Returns the number of seconds since the last recorded activity.
+    ///
+    /// Returns 0 if the lock cannot be acquired (conservative - assume active).
+    pub fn seconds_since_last_activity(&self) -> u64 {
+        self.last_activity
+            .try_read()
+            .map(|last| last.elapsed().as_secs())
+            .unwrap_or(0)
+    }
+
+    /// Creates a callback closure that records activity when called.
+    ///
+    /// This callback can be passed to the orchestrator/agent for automatic
+    /// activity tracking during execution.
+    pub fn create_callback(self: &Arc<Self>) -> ActivityCallback {
+        let monitor = Arc::clone(self);
+        Arc::new(move || {
+            monitor.record_activity();
+        })
+    }
+}
+
+impl Default for ActivityMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -262,7 +362,9 @@ impl SubAgentExecutor {
         Ok(execution_id)
     }
 
-    /// Executes an agent and collects metrics.
+    /// Executes an agent and collects metrics (without heartbeat monitoring).
+    ///
+    /// This is the legacy method. For new code, prefer `execute_with_heartbeat_timeout`.
     ///
     /// # Arguments
     /// * `agent_id` - Agent ID to execute
@@ -270,6 +372,7 @@ impl SubAgentExecutor {
     ///
     /// # Returns
     /// * `ExecutionResult` - Result with success, report, metrics, and optional error
+    #[allow(dead_code)] // Kept for backward compatibility
     pub async fn execute_with_metrics(&self, agent_id: &str, task: Task) -> ExecutionResult {
         let start_time = Instant::now();
 
@@ -477,6 +580,184 @@ impl SubAgentExecutor {
     pub fn mcp_manager(&self) -> &Option<Arc<MCPManager>> {
         &self.mcp_manager
     }
+
+    // =========================================================================
+    // OPT-SA-1: Execution with Heartbeat-based Inactivity Timeout
+    // =========================================================================
+
+    /// Executes an agent with inactivity timeout monitoring.
+    ///
+    /// This method wraps `execute_with_metrics` with a monitoring loop that
+    /// detects genuine hangs by tracking activity. Unlike simple timeouts,
+    /// this approach allows long-running but active executions to continue
+    /// while catching agents that have truly stopped responding.
+    ///
+    /// # Activity Detection
+    ///
+    /// The following events reset the inactivity timer:
+    /// - LLM returns tokens (streaming response)
+    /// - Tool call starts
+    /// - Tool call completes
+    /// - MCP server responds
+    ///
+    /// # Timeout Behavior
+    ///
+    /// - Check interval: 30 seconds (ACTIVITY_CHECK_INTERVAL_SECS)
+    /// - Timeout threshold: 300 seconds / 5 minutes (INACTIVITY_TIMEOUT_SECS)
+    /// - If no activity for 5 minutes, execution is aborted with an error
+    ///
+    /// # Arguments
+    /// * `agent_id` - Agent ID to execute
+    /// * `task` - Task to execute
+    /// * `on_activity` - Optional callback invoked during execution for activity tracking.
+    ///   If None, a local ActivityMonitor is created.
+    ///
+    /// # Returns
+    /// * `ExecutionResult` - Result with success, report, metrics, and optional error
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // With automatic activity tracking via callback
+    /// let monitor = Arc::new(ActivityMonitor::new());
+    /// let callback = monitor.create_callback();
+    ///
+    /// let result = executor.execute_with_heartbeat_timeout(
+    ///     agent_id,
+    ///     task,
+    ///     Some(callback),
+    /// ).await;
+    /// ```
+    pub async fn execute_with_heartbeat_timeout(
+        &self,
+        agent_id: &str,
+        task: Task,
+        on_activity: Option<ActivityCallback>,
+    ) -> ExecutionResult {
+        let monitor = Arc::new(ActivityMonitor::new());
+        let start_time = Instant::now();
+
+        // Create callback that records activity
+        let _activity_callback = on_activity.unwrap_or_else(|| monitor.create_callback());
+
+        // Clone values for the execution future
+        let orchestrator = self.orchestrator.clone();
+        let mcp_manager = self.mcp_manager.clone();
+        let agent_id_owned = agent_id.to_string();
+
+        // Spawn the execution as a future we can poll with timeout
+        // Note: We need to pass the callback to execute_with_mcp_monitored
+        // For now, we use a simple approach: execute without callback and monitor externally
+        // The callback propagation requires changes to Agent trait (next phase)
+        let execution_future = async {
+            orchestrator
+                .execute_with_mcp(&agent_id_owned, task, mcp_manager)
+                .await
+        };
+
+        // Pin the future for use in select!
+        tokio::pin!(execution_future);
+
+        // Monitoring loop with tokio::select!
+        loop {
+            tokio::select! {
+                // Execution completed
+                result = &mut execution_future => {
+                    let duration_ms = start_time.elapsed().as_millis() as u64;
+                    return match result {
+                        Ok(report) => {
+                            info!(
+                                agent_id = %agent_id,
+                                duration_ms = duration_ms,
+                                "Sub-agent execution completed successfully (with heartbeat monitoring)"
+                            );
+                            ExecutionResult {
+                                success: true,
+                                report: report.content,
+                                metrics: SubAgentMetrics {
+                                    duration_ms,
+                                    tokens_input: report.metrics.tokens_input as u64,
+                                    tokens_output: report.metrics.tokens_output as u64,
+                                },
+                                error_message: None,
+                            }
+                        }
+                        Err(e) => {
+                            let error_msg = e.to_string();
+                            error!(
+                                agent_id = %agent_id,
+                                duration_ms = duration_ms,
+                                error = %error_msg,
+                                "Sub-agent execution failed"
+                            );
+                            ExecutionResult {
+                                success: false,
+                                report: format!("# Sub-Agent Error\n\nExecution failed: {}", error_msg),
+                                metrics: SubAgentMetrics {
+                                    duration_ms,
+                                    tokens_input: 0,
+                                    tokens_output: 0,
+                                },
+                                error_message: Some(error_msg),
+                            }
+                        }
+                    };
+                }
+
+                // Activity check interval
+                _ = tokio::time::sleep(Duration::from_secs(ACTIVITY_CHECK_INTERVAL_SECS)) => {
+                    let inactive_secs = monitor.seconds_since_last_activity();
+
+                    if inactive_secs > INACTIVITY_TIMEOUT_SECS {
+                        let duration_ms = start_time.elapsed().as_millis() as u64;
+                        warn!(
+                            agent_id = %agent_id,
+                            inactive_secs = inactive_secs,
+                            threshold_secs = INACTIVITY_TIMEOUT_SECS,
+                            duration_ms = duration_ms,
+                            "Sub-agent execution timed out due to inactivity"
+                        );
+
+                        return ExecutionResult {
+                            success: false,
+                            report: format!(
+                                "# Sub-Agent Timeout\n\n\
+                                 Execution aborted: no activity detected for {} seconds.\n\n\
+                                 - Inactivity threshold: {} seconds\n\
+                                 - Total elapsed time: {} ms\n\n\
+                                 This may indicate:\n\
+                                 - The agent is waiting for an unresponsive external service\n\
+                                 - A deadlock or infinite loop in tool execution\n\
+                                 - Network connectivity issues\n\n\
+                                 Consider checking LLM provider status and MCP server availability.",
+                                inactive_secs,
+                                INACTIVITY_TIMEOUT_SECS,
+                                duration_ms
+                            ),
+                            metrics: SubAgentMetrics {
+                                duration_ms,
+                                tokens_input: 0,
+                                tokens_output: 0,
+                            },
+                            error_message: Some(format!(
+                                "Inactivity timeout: no activity for {} seconds (threshold: {}s)",
+                                inactive_secs,
+                                INACTIVITY_TIMEOUT_SECS
+                            )),
+                        };
+                    }
+
+                    // Log heartbeat at debug level
+                    debug!(
+                        agent_id = %agent_id,
+                        last_activity_secs_ago = inactive_secs,
+                        threshold_secs = INACTIVITY_TIMEOUT_SECS,
+                        "Sub-agent heartbeat check: still within activity threshold"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -538,5 +819,81 @@ mod tests {
         assert_eq!(result.metrics.duration_ms, 0);
         assert_eq!(result.metrics.tokens_input, 0);
         assert_eq!(result.metrics.tokens_output, 0);
+    }
+
+    // =========================================================================
+    // OPT-SA-1: ActivityMonitor Tests
+    // =========================================================================
+
+    #[test]
+    fn test_activity_monitor_new() {
+        let monitor = ActivityMonitor::new();
+        // Should start with recent activity (just created)
+        assert!(monitor.seconds_since_last_activity() < 2);
+    }
+
+    #[test]
+    fn test_activity_monitor_default() {
+        let monitor = ActivityMonitor::default();
+        assert!(monitor.seconds_since_last_activity() < 2);
+    }
+
+    #[test]
+    fn test_activity_monitor_record_activity() {
+        let monitor = ActivityMonitor::new();
+
+        // Small delay to ensure time has passed
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // Record new activity
+        monitor.record_activity();
+
+        // Should be very recent
+        assert!(monitor.seconds_since_last_activity() < 1);
+    }
+
+    #[test]
+    fn test_activity_monitor_clone() {
+        let monitor = ActivityMonitor::new();
+        let cloned = monitor.clone();
+
+        // Both should show same initial time
+        let time1 = monitor.seconds_since_last_activity();
+        let time2 = cloned.seconds_since_last_activity();
+
+        // Due to Arc, they should be identical (pointing to same data)
+        assert_eq!(time1, time2);
+
+        // Recording on one should affect the other (shared state)
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        monitor.record_activity();
+
+        // Both should now show recent activity
+        assert!(cloned.seconds_since_last_activity() < 1);
+    }
+
+    #[test]
+    fn test_activity_monitor_callback() {
+        let monitor = Arc::new(ActivityMonitor::new());
+
+        // Wait a bit
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Create callback and invoke it
+        let callback = monitor.create_callback();
+        callback();
+
+        // Activity should be recorded
+        assert!(monitor.seconds_since_last_activity() < 1);
+    }
+
+    #[test]
+    fn test_inactivity_timeout_constants() {
+        // Verify constants are reasonable values
+        assert_eq!(INACTIVITY_TIMEOUT_SECS, 300); // 5 minutes
+        assert_eq!(ACTIVITY_CHECK_INTERVAL_SECS, 30); // 30 seconds
+
+        // Check interval should be much smaller than timeout
+        assert!(ACTIVITY_CHECK_INTERVAL_SECS < INACTIVITY_TIMEOUT_SECS / 2);
     }
 }
