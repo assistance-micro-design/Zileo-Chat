@@ -62,6 +62,7 @@ pub mod parallel_tasks;
 pub mod registry;
 pub mod response;
 pub mod spawn_agent;
+pub mod sub_agent_circuit_breaker;
 pub mod sub_agent_executor;
 pub mod todo;
 pub mod user_question;
@@ -90,6 +91,8 @@ pub use parallel_tasks::ParallelTasksTool;
 pub use registry::TOOL_REGISTRY;
 #[allow(unused_imports)]
 pub use spawn_agent::SpawnAgentTool;
+#[allow(unused_imports)]
+pub use sub_agent_circuit_breaker::SubAgentCircuitBreaker;
 #[allow(unused_imports)]
 pub use todo::TodoTool;
 #[allow(unused_imports)]

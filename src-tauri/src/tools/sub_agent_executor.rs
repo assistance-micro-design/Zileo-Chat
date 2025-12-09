@@ -58,7 +58,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tauri::Emitter;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -72,6 +72,7 @@ use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, SubAgentExecutionCreate, SubAgentMetrics,
 };
 use crate::tools::constants::sub_agent::{ACTIVITY_CHECK_INTERVAL_SECS, INACTIVITY_TIMEOUT_SECS};
+use crate::tools::sub_agent_circuit_breaker::SubAgentCircuitBreaker;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
 
@@ -211,6 +212,16 @@ impl Default for ActivityMonitor {
 /// The executor supports graceful cancellation via `CancellationToken`. When a token
 /// is provided and cancelled, execution aborts immediately with a "cancelled" result.
 /// This enables users to cancel long-running workflows and have sub-agents respond.
+///
+/// # Circuit Breaker Support (OPT-SA-8)
+///
+/// The executor supports circuit breaker protection via `SubAgentCircuitBreaker`.
+/// When provided, the executor will:
+/// - Check if circuit is open before execution (fail-fast if unhealthy)
+/// - Record success on successful execution (reset failure count)
+/// - Record failure on failed execution (increment failure count, may open circuit)
+///
+/// This prevents cascade failures when the sub-agent system is experiencing issues.
 pub struct SubAgentExecutor {
     /// Database client for execution record management
     db: Arc<DBClient>,
@@ -226,12 +237,15 @@ pub struct SubAgentExecutor {
     parent_agent_id: String,
     /// Optional cancellation token for graceful shutdown (OPT-SA-7)
     cancellation_token: Option<CancellationToken>,
+    /// Optional circuit breaker for execution resilience (OPT-SA-8)
+    circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
 }
 
 impl SubAgentExecutor {
-    /// Creates a new executor without cancellation token.
+    /// Creates a new executor without cancellation token or circuit breaker.
     ///
-    /// For most use cases, prefer `with_cancellation()` to support graceful shutdown.
+    /// For most use cases, prefer `with_resilience()` to support graceful shutdown
+    /// and circuit breaker protection.
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
@@ -257,10 +271,14 @@ impl SubAgentExecutor {
             workflow_id,
             parent_agent_id,
             cancellation_token: None,
+            circuit_breaker: None,
         }
     }
 
     /// Creates a new executor with cancellation token support (OPT-SA-7).
+    ///
+    /// Note: This constructor does not include circuit breaker. Use `with_resilience()`
+    /// for full resilience features including circuit breaker protection.
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
@@ -296,6 +314,56 @@ impl SubAgentExecutor {
             workflow_id,
             parent_agent_id,
             cancellation_token,
+            circuit_breaker: None,
+        }
+    }
+
+    /// Creates a new executor with full resilience features (OPT-SA-7, OPT-SA-8).
+    ///
+    /// This is the recommended constructor for production use as it supports:
+    /// - Graceful cancellation via CancellationToken
+    /// - Circuit breaker protection via SubAgentCircuitBreaker
+    ///
+    /// # Arguments
+    /// * `db` - Database client for persistence
+    /// * `orchestrator` - Agent orchestrator for execution
+    /// * `mcp_manager` - Optional MCP manager for tool routing
+    /// * `app_handle` - Optional app handle for event emission
+    /// * `workflow_id` - Workflow ID for scoping
+    /// * `parent_agent_id` - ID of parent agent calling sub-agent tools
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
+    /// * `circuit_breaker` - Optional circuit breaker for execution resilience (OPT-SA-8)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let executor = SubAgentExecutor::with_resilience(
+    ///     db, orchestrator, mcp_manager, app_handle,
+    ///     workflow_id, parent_agent_id,
+    ///     Some(cancellation_token),
+    ///     Some(circuit_breaker),
+    /// );
+    /// ```
+    #[allow(dead_code)] // Will be used when tools are updated to use resilience
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_resilience(
+        db: Arc<DBClient>,
+        orchestrator: Arc<AgentOrchestrator>,
+        mcp_manager: Option<Arc<MCPManager>>,
+        app_handle: Option<tauri::AppHandle>,
+        workflow_id: String,
+        parent_agent_id: String,
+        cancellation_token: Option<CancellationToken>,
+        circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
+    ) -> Self {
+        Self {
+            db,
+            orchestrator,
+            mcp_manager,
+            app_handle,
+            workflow_id,
+            parent_agent_id,
+            cancellation_token,
+            circuit_breaker,
         }
     }
 
@@ -634,11 +702,59 @@ impl SubAgentExecutor {
     }
 
     // =========================================================================
-    // OPT-SA-1: Execution with Heartbeat-based Inactivity Timeout
-    // OPT-SA-7: Cancellation Support
+    // OPT-SA-8: Circuit Breaker Integration
     // =========================================================================
 
-    /// Executes an agent with inactivity timeout monitoring and cancellation support.
+    /// Checks if the circuit breaker allows execution.
+    ///
+    /// If a circuit breaker is configured and the circuit is open (system unhealthy),
+    /// returns an error with remaining cooldown time. Otherwise returns Ok.
+    ///
+    /// # Returns
+    /// * `Ok(())` - Execution is allowed (circuit closed/half-open or no circuit breaker)
+    /// * `Err(ToolError)` - Execution blocked (circuit open)
+    pub async fn check_circuit(&self) -> ToolResult<()> {
+        if let Some(ref cb) = self.circuit_breaker {
+            let mut guard = cb.lock().await;
+            if !guard.allow_request() {
+                let remaining = guard.remaining_cooldown_secs();
+                return Err(ToolError::ExecutionFailed(format!(
+                    "Sub-agent circuit breaker is open due to consecutive failures. \
+                     System is unhealthy. Retry after {} seconds cooldown.",
+                    remaining
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Records successful execution with the circuit breaker.
+    ///
+    /// Resets failure count and ensures circuit is closed.
+    pub async fn record_success(&self) {
+        if let Some(ref cb) = self.circuit_breaker {
+            let mut guard = cb.lock().await;
+            guard.record_success();
+        }
+    }
+
+    /// Records failed execution with the circuit breaker.
+    ///
+    /// Increments failure count and may open circuit if threshold is reached.
+    pub async fn record_failure(&self) {
+        if let Some(ref cb) = self.circuit_breaker {
+            let mut guard = cb.lock().await;
+            guard.record_failure();
+        }
+    }
+
+    // =========================================================================
+    // OPT-SA-1: Execution with Heartbeat-based Inactivity Timeout
+    // OPT-SA-7: Cancellation Support
+    // OPT-SA-8: Circuit Breaker Protection
+    // =========================================================================
+
+    /// Executes an agent with inactivity timeout monitoring, cancellation, and circuit breaker.
     ///
     /// This method wraps `execute_with_metrics` with a monitoring loop that
     /// detects genuine hangs by tracking activity. Unlike simple timeouts,
@@ -694,6 +810,30 @@ impl SubAgentExecutor {
         task: Task,
         on_activity: Option<ActivityCallback>,
     ) -> ExecutionResult {
+        // OPT-SA-8: Check circuit breaker before execution
+        if let Err(e) = self.check_circuit().await {
+            warn!(
+                agent_id = %agent_id,
+                error = %e,
+                "Sub-agent execution blocked by circuit breaker"
+            );
+            return ExecutionResult {
+                success: false,
+                report: format!(
+                    "# Sub-Agent Blocked\n\n\
+                     Circuit breaker is open - sub-agent system is unhealthy.\n\n\
+                     {}",
+                    e
+                ),
+                metrics: SubAgentMetrics {
+                    duration_ms: 0,
+                    tokens_input: 0,
+                    tokens_output: 0,
+                },
+                error_message: Some(e.to_string()),
+            };
+        }
+
         let monitor = Arc::new(ActivityMonitor::new());
         let start_time = Instant::now();
 
@@ -738,6 +878,9 @@ impl SubAgentExecutor {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
                     return match result {
                         Ok(report) => {
+                            // OPT-SA-8: Record success with circuit breaker
+                            self.record_success().await;
+
                             info!(
                                 agent_id = %agent_id,
                                 duration_ms = duration_ms,
@@ -755,6 +898,9 @@ impl SubAgentExecutor {
                             }
                         }
                         Err(e) => {
+                            // OPT-SA-8: Record failure with circuit breaker
+                            self.record_failure().await;
+
                             let error_msg = e.to_string();
                             error!(
                                 agent_id = %agent_id,
@@ -777,6 +923,7 @@ impl SubAgentExecutor {
                 }
 
                 // Branch 2: Cancellation requested (OPT-SA-7)
+                // Note: Cancellation is user-initiated, not a system failure - don't record as failure
                 _ = &mut cancellation_future => {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
                     warn!(
@@ -808,6 +955,10 @@ impl SubAgentExecutor {
                     let inactive_secs = monitor.seconds_since_last_activity();
 
                     if inactive_secs > INACTIVITY_TIMEOUT_SECS {
+                        // OPT-SA-8: Record timeout as failure with circuit breaker
+                        // Inactivity timeouts indicate system issues, so record as failure
+                        self.record_failure().await;
+
                         let duration_ms = start_time.elapsed().as_millis() as u64;
                         warn!(
                             agent_id = %agent_id,

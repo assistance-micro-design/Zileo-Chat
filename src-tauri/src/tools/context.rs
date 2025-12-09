@@ -45,9 +45,11 @@ use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::state::AppState;
+use crate::tools::sub_agent_circuit_breaker::SubAgentCircuitBreaker;
 use crate::tools::ToolFactory;
 use std::sync::Arc;
 use tauri::AppHandle;
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 /// Context providing agent-level dependencies to tools.
@@ -87,6 +89,14 @@ pub struct AgentToolContext {
     /// if cancellation is requested. This enables the user to cancel long-running
     /// workflows and have sub-agents respond immediately.
     pub cancellation_token: Option<CancellationToken>,
+    /// Circuit breaker for sub-agent execution resilience (OPT-SA-8)
+    ///
+    /// When provided, sub-agent tools will check the circuit state before execution
+    /// and record success/failure after execution. This prevents cascade failures
+    /// when the sub-agent system is experiencing issues.
+    ///
+    /// The circuit breaker is shared across all sub-agent tools in the workflow.
+    pub circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
 }
 
 #[allow(dead_code)]
@@ -131,6 +141,7 @@ impl AgentToolContext {
             tool_factory,
             app_handle,
             cancellation_token,
+            circuit_breaker: None, // OPT-SA-8: Default to None for backward compatibility
         }
     }
 
@@ -162,6 +173,7 @@ impl AgentToolContext {
             tool_factory: app_state.tool_factory.clone(),
             app_handle,
             cancellation_token: None, // Use from_app_state_with_cancellation for token support
+            circuit_breaker: None,    // Use from_app_state_with_resilience for full resilience support
         }
     }
 
@@ -201,6 +213,51 @@ impl AgentToolContext {
             tool_factory: app_state.tool_factory.clone(),
             app_handle,
             cancellation_token,
+            circuit_breaker: None, // Use from_app_state_with_resilience for circuit breaker
+        }
+    }
+
+    /// Creates an AgentToolContext from AppState with full resilience features (OPT-SA-7, OPT-SA-8).
+    ///
+    /// This constructor should be used when executing workflows that need both
+    /// graceful cancellation and circuit breaker protection for sub-agents.
+    ///
+    /// # Arguments
+    /// * `app_state` - The application state containing all managers
+    /// * `mcp_manager` - Optional MCP manager
+    /// * `app_handle` - Optional Tauri app handle for event emission
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
+    /// * `circuit_breaker` - Optional circuit breaker for execution resilience (OPT-SA-8)
+    ///
+    /// # Example
+    /// ```ignore
+    /// // In execute_workflow_streaming
+    /// let token = state.create_cancellation_token(&workflow_id).await;
+    /// let circuit_breaker = Arc::new(Mutex::new(SubAgentCircuitBreaker::with_defaults()));
+    /// let context = AgentToolContext::from_app_state_with_resilience(
+    ///     &state,
+    ///     Some(state.mcp_manager.clone()),
+    ///     Some(app_handle),
+    ///     Some(token),
+    ///     Some(circuit_breaker),
+    /// );
+    /// ```
+    pub fn from_app_state_with_resilience(
+        app_state: &AppState,
+        mcp_manager: Option<Arc<MCPManager>>,
+        app_handle: Option<AppHandle>,
+        cancellation_token: Option<CancellationToken>,
+        circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
+    ) -> Self {
+        Self {
+            registry: app_state.registry.clone(),
+            orchestrator: app_state.orchestrator.clone(),
+            llm_manager: app_state.llm_manager.clone(),
+            mcp_manager: mcp_manager.or_else(|| Some(app_state.mcp_manager.clone())),
+            tool_factory: app_state.tool_factory.clone(),
+            app_handle,
+            cancellation_token,
+            circuit_breaker,
         }
     }
 
@@ -208,7 +265,7 @@ impl AgentToolContext {
     ///
     /// Convenience method that always includes the MCP manager from AppState.
     /// Includes app_handle if available in AppState.
-    /// Does NOT include cancellation token - use from_app_state_with_cancellation for that.
+    /// Does NOT include cancellation token or circuit breaker - use from_app_state_with_resilience for that.
     ///
     /// # Arguments
     /// * `app_state` - The application state containing all managers
@@ -333,6 +390,7 @@ mod tests {
         assert!(Arc::ptr_eq(&context.tool_factory, &tool_factory));
         assert!(context.app_handle.is_none());
         assert!(context.cancellation_token.is_none());
+        assert!(context.circuit_breaker.is_none()); // OPT-SA-8
     }
 
     #[tokio::test]
@@ -371,5 +429,84 @@ mod tests {
         // from_app_state does not include cancellation token
         let context2 = AgentToolContext::from_app_state(&state, None, None);
         assert!(context2.cancellation_token.is_none());
+    }
+
+    // =========================================================================
+    // OPT-SA-8: Circuit Breaker Tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_context_with_circuit_breaker() {
+        let state = create_test_state().await;
+        let token = CancellationToken::new();
+        let circuit_breaker = Arc::new(Mutex::new(SubAgentCircuitBreaker::with_defaults()));
+
+        let context = AgentToolContext::from_app_state_with_resilience(
+            &state,
+            Some(state.mcp_manager.clone()),
+            None,
+            Some(token.clone()),
+            Some(circuit_breaker.clone()),
+        );
+
+        // Verify circuit breaker is set
+        assert!(context.circuit_breaker.is_some());
+
+        // Verify circuit breaker is closed initially
+        let cb = context.circuit_breaker.as_ref().unwrap();
+        let guard = cb.lock().await;
+        assert_eq!(
+            guard.state(),
+            crate::tools::sub_agent_circuit_breaker::CircuitState::Closed
+        );
+        assert_eq!(guard.failure_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_context_circuit_breaker_shared_state() {
+        let state = create_test_state().await;
+        let circuit_breaker = Arc::new(Mutex::new(SubAgentCircuitBreaker::with_defaults()));
+
+        let context = AgentToolContext::from_app_state_with_resilience(
+            &state,
+            Some(state.mcp_manager.clone()),
+            None,
+            None,
+            Some(circuit_breaker.clone()),
+        );
+
+        // Record failures via the original reference
+        {
+            let mut guard = circuit_breaker.lock().await;
+            guard.record_failure();
+            guard.record_failure();
+        }
+
+        // Verify context sees the same state
+        let cb = context.circuit_breaker.as_ref().unwrap();
+        let guard = cb.lock().await;
+        assert_eq!(guard.failure_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_context_without_circuit_breaker() {
+        let state = create_test_state().await;
+
+        // from_app_state_full does not include circuit breaker
+        let context = AgentToolContext::from_app_state_full(&state);
+        assert!(context.circuit_breaker.is_none());
+
+        // from_app_state does not include circuit breaker
+        let context2 = AgentToolContext::from_app_state(&state, None, None);
+        assert!(context2.circuit_breaker.is_none());
+
+        // from_app_state_with_cancellation does not include circuit breaker
+        let context3 = AgentToolContext::from_app_state_with_cancellation(
+            &state,
+            None,
+            None,
+            Some(CancellationToken::new()),
+        );
+        assert!(context3.circuit_breaker.is_none());
     }
 }
