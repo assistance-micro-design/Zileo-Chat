@@ -791,93 +791,80 @@ EXAMPLES:
     /// Executes the tool with JSON input.
     #[instrument(skip(self, input), fields(agent_id = %self.agent_id))]
     async fn execute(&self, input: Value) -> ToolResult<Value> {
-        self.validate_input(&input)?;
+        // Parse and validate input once using MemoryInput (OPT-MEM-8)
+        let params = MemoryInput::from_json(&input)?;
+        params.validate()?;
 
-        let operation = input["operation"]
-            .as_str()
-            .ok_or_else(|| ToolError::InvalidInput("Missing operation".to_string()))?;
+        debug!(operation = %params.operation, "Executing MemoryTool");
 
-        debug!(operation = %operation, "Executing MemoryTool");
-
-        match operation {
+        // Dispatch to operation handlers using pre-parsed params
+        // Fields are guaranteed to be present after validation
+        match params.operation.as_str() {
             "activate_workflow" => {
-                let workflow_id = input["workflow_id"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing workflow_id for activate_workflow".to_string())
-                })?;
-                self.activate_workflow(workflow_id.to_string()).await
+                // SAFETY: validate_activate_workflow() ensures workflow_id is Some
+                self.activate_workflow(params.workflow_id.unwrap()).await
             }
 
             "activate_general" => self.activate_general().await,
 
             "add" => {
-                let memory_type = input["type"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'type' for add operation".to_string())
-                })?;
-                let content = input["content"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'content' for add operation".to_string())
-                })?;
-                let metadata = input.get("metadata").cloned();
-                let tags: Option<Vec<String>> = input["tags"]
-                    .as_array()
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
-
-                self.add_memory(memory_type, content, metadata, tags).await
+                // SAFETY: validate_add() ensures memory_type and content are Some
+                self.add_memory(
+                    &params.memory_type.unwrap(),
+                    &params.content.unwrap(),
+                    params.metadata,
+                    params.tags,
+                )
+                .await
             }
 
             "get" => {
-                let memory_id = input["memory_id"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'memory_id' for get operation".to_string())
-                })?;
-                self.get_memory(memory_id).await
+                // SAFETY: validate_get_or_delete() ensures memory_id is Some
+                self.get_memory(&params.memory_id.unwrap()).await
             }
 
             "list" => {
-                let type_filter = input["type_filter"].as_str();
-                let limit = input["limit"].as_u64().unwrap_or(DEFAULT_LIMIT as u64) as usize;
-                let scope = input["scope"].as_str().unwrap_or("both");
-                self.list_memories(type_filter, limit, scope).await
-            }
-
-            "search" => {
-                let query = input["query"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'query' for search operation".to_string())
-                })?;
-                let limit = input["limit"].as_u64().unwrap_or(DEFAULT_LIMIT as u64) as usize;
-                let type_filter = input["type_filter"].as_str();
-                let threshold = input["threshold"]
-                    .as_f64()
-                    .unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
-                let scope = input["scope"].as_str().unwrap_or("both");
-
-                self.search_memories(query, limit, type_filter, threshold, scope)
+                let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
+                let scope = params.scope.as_deref().unwrap_or("both");
+                self.list_memories(params.type_filter.as_deref(), limit, scope)
                     .await
             }
 
+            "search" => {
+                // SAFETY: validate_search() ensures query is Some
+                let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
+                let threshold = params.threshold.unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
+                let scope = params.scope.as_deref().unwrap_or("both");
+                self.search_memories(
+                    &params.query.unwrap(),
+                    limit,
+                    params.type_filter.as_deref(),
+                    threshold,
+                    scope,
+                )
+                .await
+            }
+
             "delete" => {
-                let memory_id = input["memory_id"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'memory_id' for delete operation".to_string())
-                })?;
-                self.delete_memory(memory_id).await
+                // SAFETY: validate_get_or_delete() ensures memory_id is Some
+                self.delete_memory(&params.memory_id.unwrap()).await
             }
 
             "clear_by_type" => {
-                let memory_type = input["type"].as_str().ok_or_else(|| {
-                    ToolError::InvalidInput("Missing 'type' for clear_by_type operation".to_string())
-                })?;
-                self.clear_by_type(memory_type).await
+                // SAFETY: validate_clear_by_type() ensures memory_type is Some
+                self.clear_by_type(&params.memory_type.unwrap()).await
             }
 
-            _ => Err(ToolError::InvalidInput(format!(
-                "Unknown operation: '{}'. Valid operations: activate_workflow, activate_general, add, get, list, search, delete, clear_by_type",
-                operation
-            ))),
+            // SAFETY: validate() rejects unknown operations, this branch is unreachable
+            _ => unreachable!("Unknown operation should be caught by validate()"),
         }
     }
 
-    /// Validates input before execution.
+    /// Validates input before execution (trait requirement).
     ///
-    /// Uses `MemoryInput` for structured parsing and validation,
-    /// reducing cyclomatic complexity (OPT-MEM-7).
+    /// Note: After OPT-MEM-8, `execute()` performs its own parsing and validation
+    /// using `MemoryInput`. This method is kept for trait compliance and can be
+    /// used for external validation.
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
         let parsed = MemoryInput::from_json(input)?;
         parsed.validate()
@@ -895,11 +882,12 @@ EXAMPLES:
 
 /// Parsed and typed memory operation input.
 ///
-/// This struct reduces the cyclomatic complexity of `validate_input()` by:
+/// This struct reduces the cyclomatic complexity of `validate_input()` and `execute()` by:
 /// 1. Extracting JSON parsing into `from_json()`
 /// 2. Delegating validation to per-operation methods
+/// 3. Providing typed fields for direct use in `execute()` (OPT-MEM-8)
 ///
-/// CC reduced from ~18 to ~8.
+/// CC reduced from ~18 to ~8 in validate_input(), ~15 to ~7 in execute().
 #[derive(Debug)]
 struct MemoryInput {
     operation: String,
@@ -910,6 +898,10 @@ struct MemoryInput {
     query: Option<String>,
     type_filter: Option<String>,
     threshold: Option<f64>,
+    limit: Option<usize>,
+    scope: Option<String>,
+    metadata: Option<Value>,
+    tags: Option<Vec<String>>,
 }
 
 impl MemoryInput {
@@ -926,6 +918,13 @@ impl MemoryInput {
             .ok_or_else(|| ToolError::InvalidInput("Missing operation field".to_string()))?
             .to_string();
 
+        // Parse tags array if present
+        let tags = input["tags"].as_array().map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        });
+
         Ok(Self {
             operation,
             workflow_id: input["workflow_id"].as_str().map(String::from),
@@ -935,6 +934,10 @@ impl MemoryInput {
             query: input["query"].as_str().map(String::from),
             type_filter: input["type_filter"].as_str().map(String::from),
             threshold: input["threshold"].as_f64(),
+            limit: input["limit"].as_u64().map(|v| v as usize),
+            scope: input["scope"].as_str().map(String::from),
+            metadata: input.get("metadata").cloned(),
+            tags,
         })
     }
 

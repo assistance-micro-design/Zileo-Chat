@@ -562,7 +562,12 @@ diff benchmark_before.txt benchmark_after.txt
    - Extracted per-operation validators into dedicated methods
    - Reduced CC from ~18 to ~8
    - 764 tests pass
-7. [ ] Planifier Phase 2 suite (OPT-MEM-8)
+7. [x] OPT-MEM-8: Reduce execute() complexity - COMPLETE 2025-12-09
+   - Extended MemoryInput with limit, scope, metadata, tags fields
+   - Refactored execute() to use MemoryInput instead of inline JSON extraction
+   - Reduced CC from ~15 to ~7 (single parse, dispatch with unwrap())
+   - 764 tests pass
+8. [ ] Planifier Phase 3 (OPT-MEM-9, 10, 11) - Nice to have
 
 ## References
 
