@@ -77,6 +77,10 @@ DEFINE FIELD created_at ON memory TYPE datetime DEFAULT time::now();
 DEFINE INDEX memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
 -- Index for workflow scoping
 DEFINE INDEX memory_workflow_idx ON memory FIELDS workflow_id;
+-- OPT-MEM-4: Composite index for search_memories() with type + workflow_id
+DEFINE INDEX memory_type_workflow_idx ON memory FIELDS type, workflow_id;
+-- OPT-MEM-4: Composite index for TTL cleanup preparation (type + created_at)
+DEFINE INDEX memory_type_created_idx ON memory FIELDS type, created_at;
 
 -- Table: validation_request
 DEFINE TABLE validation_request SCHEMAFULL;

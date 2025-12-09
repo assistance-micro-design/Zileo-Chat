@@ -150,6 +150,26 @@ impl MemoryTool {
         }
     }
 
+    /// Builds scope condition for WHERE clause (OPT-MEM-2: centralized scope filter).
+    ///
+    /// Returns `Some(condition)` to add to WHERE clause, or `None` if no condition needed.
+    ///
+    /// # Arguments
+    /// * `scope` - Scope filter: "workflow", "general", or "both"
+    /// * `workflow_id` - Current workflow ID if in workflow mode
+    fn build_scope_condition(scope: &str, workflow_id: &Option<String>) -> Option<String> {
+        match scope {
+            "workflow" => workflow_id
+                .as_ref()
+                .map(|wf_id| format!("workflow_id = '{}'", wf_id)),
+            "general" => Some("workflow_id IS NONE".to_string()),
+            // "both" or any other value - include both workflow and general
+            _ => workflow_id
+                .as_ref()
+                .map(|wf_id| format!("(workflow_id = '{}' OR workflow_id IS NONE)", wf_id)),
+        }
+    }
+
     /// Adds a new memory with optional embedding.
     ///
     /// # Arguments
@@ -210,7 +230,7 @@ impl MemoryTool {
                     self.db
                         .create("memory", &memory_id, memory)
                         .await
-                        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+                        .map_err(db_error)?;
 
                     true
                 }
@@ -232,7 +252,7 @@ impl MemoryTool {
                     self.db
                         .create("memory", &memory_id, memory)
                         .await
-                        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+                        .map_err(db_error)?;
 
                     false
                 }
@@ -253,7 +273,7 @@ impl MemoryTool {
             self.db
                 .create("memory", &memory_id, memory)
                 .await
-                .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+                .map_err(db_error)?;
 
             false
         };
@@ -294,11 +314,7 @@ impl MemoryTool {
             memory_id
         );
 
-        let results: Vec<Memory> = self
-            .db
-            .query(&query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let results: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
 
         match results.into_iter().next() {
             Some(memory) => Ok(serde_json::json!({
@@ -330,41 +346,20 @@ impl MemoryTool {
 
         let mut conditions = Vec::new();
 
-        // Scope condition based on parameter
-        match scope {
-            "workflow" => {
-                // Only workflow-scoped memories
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!("workflow_id = '{}'", wf_id));
-                } else {
-                    // No active workflow, return empty
-                    return Ok(ResponseBuilder::new()
-                        .success(true)
-                        .count(0)
-                        .field("scope", "workflow")
-                        .field("workflow_id", Option::<String>::None)
-                        .data("memories", Vec::<Memory>::new())
-                        .message(
-                            "No active workflow. Use 'activate_workflow' first or scope='both'",
-                        )
-                        .build());
-                }
-            }
-            "general" => {
-                // Only general memories (no workflow_id)
-                conditions.push("workflow_id IS NONE".to_string());
-            }
-            // "both" or any other value - include both workflow and general
-            _ => {
-                // Both workflow and general - add OR condition if workflow active
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!(
-                        "(workflow_id = '{}' OR workflow_id IS NONE)",
-                        wf_id
-                    ));
-                }
-                // If no workflow active, no scope filter = all memories
-            }
+        // OPT-MEM-2: Use centralized scope filter helper
+        // Special case: scope="workflow" with no active workflow returns early
+        if scope == "workflow" && workflow_id.is_none() {
+            return Ok(ResponseBuilder::new()
+                .success(true)
+                .count(0)
+                .field("scope", "workflow")
+                .field("workflow_id", Option::<String>::None)
+                .data("memories", Vec::<Memory>::new())
+                .message("No active workflow. Use 'activate_workflow' first or scope='both'")
+                .build());
+        }
+        if let Some(scope_cond) = Self::build_scope_condition(scope, &workflow_id) {
+            conditions.push(scope_cond);
         }
 
         // Type filter condition
@@ -475,25 +470,9 @@ impl MemoryTool {
         // Build conditions
         let mut conditions = vec!["embedding IS NOT NONE".to_string()];
 
-        // Scope condition
-        match scope {
-            "workflow" => {
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!("workflow_id = '{}'", wf_id));
-                }
-            }
-            "general" => {
-                conditions.push("workflow_id IS NONE".to_string());
-            }
-            // "both" or any other value - include both workflow and general
-            _ => {
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!(
-                        "(workflow_id = '{}' OR workflow_id IS NONE)",
-                        wf_id
-                    ));
-                }
-            }
+        // OPT-MEM-2: Use centralized scope filter helper
+        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id) {
+            conditions.push(scope_cond);
         }
 
         if let Some(mem_type) = type_filter {
@@ -532,11 +511,7 @@ impl MemoryTool {
             limit = limit
         );
 
-        let results: Vec<Value> = self
-            .db
-            .query_json(&query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let results: Vec<Value> = self.db.query_json(&query).await.map_err(db_error)?;
 
         debug!(
             count = results.len(),
@@ -574,25 +549,9 @@ impl MemoryTool {
             escaped_query
         ));
 
-        // Scope condition
-        match scope {
-            "workflow" => {
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!("workflow_id = '{}'", wf_id));
-                }
-            }
-            "general" => {
-                conditions.push("workflow_id IS NONE".to_string());
-            }
-            // "both" or any other value - include both workflow and general
-            _ => {
-                if let Some(ref wf_id) = workflow_id {
-                    conditions.push(format!(
-                        "(workflow_id = '{}' OR workflow_id IS NONE)",
-                        wf_id
-                    ));
-                }
-            }
+        // OPT-MEM-2: Use centralized scope filter helper
+        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id) {
+            conditions.push(scope_cond);
         }
 
         if let Some(mem_type) = type_filter {
@@ -616,11 +575,7 @@ impl MemoryTool {
             where_clause, limit
         );
 
-        let results: Vec<Memory> = self
-            .db
-            .query(&query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        let results: Vec<Memory> = self.db.query(&query).await.map_err(db_error)?;
 
         debug!(count = results.len(), scope = %scope, "Text search completed");
 
@@ -680,10 +635,7 @@ impl MemoryTool {
             format!("DELETE FROM memory WHERE type = '{}'", memory_type)
         };
 
-        self.db
-            .execute(&delete_query)
-            .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+        self.db.execute(&delete_query).await.map_err(db_error)?;
 
         info!(
             memory_type = %memory_type,
