@@ -15,6 +15,7 @@
 //! Ollama local provider implementation using rig-core
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::utils::simulate_streaming;
 use async_trait::async_trait;
 use rig::completion::Prompt;
 use rig::providers::ollama;
@@ -25,7 +26,7 @@ use rig::client::CompletionClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Available Ollama models (common defaults)
 pub const OLLAMA_MODELS: &[&str] = &[
@@ -526,27 +527,11 @@ impl LLMProvider for OllamaProvider {
         max_tokens: usize,
     ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
         // Simulate streaming by chunking non-streaming response
-        let (tx, rx) = mpsc::channel(100);
-
         let response = self
             .complete(prompt, system_prompt, model, temperature, max_tokens)
             .await?;
 
-        tokio::spawn(async move {
-            let content = response.content;
-            let chunk_size = 20;
-
-            for chunk in content.as_bytes().chunks(chunk_size) {
-                let chunk_str = String::from_utf8_lossy(chunk).to_string();
-                if tx.send(Ok(chunk_str)).await.is_err() {
-                    warn!("Streaming receiver dropped");
-                    break;
-                }
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            }
-        });
-
-        Ok(rx)
+        Ok(simulate_streaming(response.content, None, None))
     }
 }
 

@@ -19,6 +19,7 @@
 //! that requires custom HTTP handling.
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::utils::simulate_streaming;
 use async_trait::async_trait;
 use rig::completion::Prompt;
 use rig::providers::mistral;
@@ -29,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use rig::client::CompletionClient;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 // ============================================================================
 // Mistral API Response Types (supporting both standard and reasoning models)
@@ -697,30 +698,11 @@ impl LLMProvider for MistralProvider {
     ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
         // For now, we'll simulate streaming by chunking the non-streaming response
         // True streaming will require updates to rig-core's streaming API
-        let (tx, rx) = mpsc::channel(100);
-
         let response = self
             .complete(prompt, system_prompt, model, temperature, max_tokens)
             .await?;
 
-        // Spawn task to send chunks
-        tokio::spawn(async move {
-            // Split response into chunks (simulated streaming)
-            let content = response.content;
-            let chunk_size = 20; // characters per chunk
-
-            for chunk in content.as_bytes().chunks(chunk_size) {
-                let chunk_str = String::from_utf8_lossy(chunk).to_string();
-                if tx.send(Ok(chunk_str)).await.is_err() {
-                    warn!("Streaming receiver dropped");
-                    break;
-                }
-                // Small delay to simulate streaming
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            }
-        });
-
-        Ok(rx)
+        Ok(simulate_streaming(response.content, None, None))
     }
 }
 
