@@ -58,15 +58,20 @@ pub mod sub_agent {
     /// Interval (seconds) between activity checks in the monitoring loop.
     pub const ACTIVITY_CHECK_INTERVAL_SECS: u64 = 30;
 
-    // OPT-SA-3: Magic Numbers (previously scattered in code)
-    // These constants will be used in future optimization phases (OPT-SA-4, OPT-SA-5)
-    #[allow(dead_code)]
+    // OPT-SA-3: Centralized Magic Numbers
     /// Maximum characters for result summaries in sub-agent reports.
+    /// (Used in OPT-SA-4/5 when event emission is unified)
+    #[allow(dead_code)]
     pub const RESULT_SUMMARY_MAX_CHARS: usize = 200;
 
-    #[allow(dead_code)]
     /// Maximum characters for task description truncation.
     pub const TASK_DESC_TRUNCATE_CHARS: usize = 100;
+
+    /// Default timeout for validation responses (seconds).
+    pub const VALIDATION_TIMEOUT_SECS: u64 = 60;
+
+    /// Polling interval for checking validation status (milliseconds).
+    pub const VALIDATION_POLL_MS: u64 = 500;
 }
 
 // ===== Calculator Tool =====

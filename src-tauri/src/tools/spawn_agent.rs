@@ -42,6 +42,7 @@ use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use crate::tools::{
+    constants::sub_agent::TASK_DESC_TRUNCATE_CHARS,
     context::AgentToolContext,
     sub_agent_executor::SubAgentExecutor,
     validation_helper::{safe_truncate, ValidationHelper},
@@ -447,7 +448,7 @@ impl SpawnAgentTool {
                 "id": c.id,
                 "name": c.name,
                 "status": c.status.to_string(),
-                "task_description": safe_truncate(&c.task_description, 100, true)
+                "task_description": safe_truncate(&c.task_description, TASK_DESC_TRUNCATE_CHARS, true)
             })).collect::<Vec<_>>()
         }))
     }

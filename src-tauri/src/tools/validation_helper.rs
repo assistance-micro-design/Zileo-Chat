@@ -38,6 +38,7 @@ use crate::models::{
     RiskLevel, ValidationMode, ValidationRequestCreate, ValidationSettings, ValidationStatus,
     ValidationType,
 };
+use crate::tools::constants::sub_agent::{VALIDATION_POLL_MS, VALIDATION_TIMEOUT_SECS};
 use crate::tools::ToolError;
 use serde_json::Value;
 use std::sync::Arc;
@@ -45,12 +46,6 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
-/// Default timeout for validation responses (60 seconds)
-const DEFAULT_VALIDATION_TIMEOUT_SECS: u64 = 60;
-
-/// Polling interval for checking validation status (500ms)
-const VALIDATION_POLL_INTERVAL_MS: u64 = 500;
 
 /// Safely truncates a string to a maximum number of characters.
 ///
@@ -273,10 +268,7 @@ impl ValidationHelper {
 
         // 4. Wait for validation response (polling with timeout)
         let result = self
-            .wait_for_validation(
-                &validation_id,
-                Duration::from_secs(DEFAULT_VALIDATION_TIMEOUT_SECS),
-            )
+            .wait_for_validation(&validation_id, Duration::from_secs(VALIDATION_TIMEOUT_SECS))
             .await;
 
         // 5. Return result
@@ -311,7 +303,7 @@ impl ValidationHelper {
         validation_id: &str,
         timeout: Duration,
     ) -> Result<bool, ToolError> {
-        let poll_interval = Duration::from_millis(VALIDATION_POLL_INTERVAL_MS);
+        let poll_interval = Duration::from_millis(VALIDATION_POLL_MS);
         let start_time = std::time::Instant::now();
 
         loop {
@@ -511,6 +503,7 @@ mod tests {
 
     #[test]
     fn test_validation_timeout_default() {
-        assert_eq!(DEFAULT_VALIDATION_TIMEOUT_SECS, 60);
+        use crate::tools::constants::sub_agent::VALIDATION_TIMEOUT_SECS;
+        assert_eq!(VALIDATION_TIMEOUT_SECS, 60);
     }
 }

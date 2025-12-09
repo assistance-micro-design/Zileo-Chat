@@ -647,7 +647,12 @@ cargo test parallel_tasks -- --nocapture
 3. [x] **OPT-SA-2 (once_cell 1.19 -> 1.20) - COMPLETE** (2025-12-09)
    - Updated `src-tauri/Cargo.toml`: `once_cell = "1.20"`
    - Validation: `cargo check` passed
-4. [ ] Executer OPT-SA-3 (magic numbers - 0.5h) - Quick Win (constants added, need to wire them)
+4. [x] **OPT-SA-3 (Magic Numbers) - COMPLETE** (2025-12-09)
+   - Added to `constants.rs::sub_agent`: `VALIDATION_TIMEOUT_SECS`, `VALIDATION_POLL_MS`
+   - Updated `spawn_agent.rs`: Uses `TASK_DESC_TRUNCATE_CHARS` instead of `100`
+   - Updated `validation_helper.rs`: Imports from centralized `constants::sub_agent`
+   - Removed local constants in validation_helper.rs
+   - All tests passed (spawn_agent: 7, validation_helper: 6+7 integration)
 5. [ ] Executer P1.5 (OPT-SA-4, OPT-SA-5, OPT-SA-6) - ~2.5h
 6. [ ] Planifier P2 pour sprint suivant:
    - OPT-SA-7 (CancellationToken - 2h)
