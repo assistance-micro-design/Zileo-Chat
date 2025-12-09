@@ -48,11 +48,11 @@ use crate::mcp::MCPManager;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionComplete, SubAgentExecutionCreate,
-    SubAgentMetrics, SubAgentStatus,
+    SubAgentStatus,
 };
 use crate::models::Lifecycle;
 use crate::tools::context::AgentToolContext;
-use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
+use crate::tools::sub_agent_executor::SubAgentExecutor;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -62,7 +62,7 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 /// Tracked delegation for this workflow
@@ -332,66 +332,29 @@ impl DelegateTaskTool {
             }),
         };
 
-        // 11. Execute via orchestrator
-        let start_time = std::time::Instant::now();
-        let execution_result = self
-            .orchestrator
-            .execute_with_mcp(agent_id, task, self.mcp_manager.clone())
-            .await;
+        // 11. Execute via unified executor with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10)
+        let exec_result = executor.execute_with_retry(agent_id, task, None).await;
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
-
-        // 12. Process result
-        let (report, metrics, success, error_message) = match execution_result {
-            Ok(report) => {
-                let metrics = SubAgentMetrics {
-                    duration_ms,
-                    tokens_input: report.metrics.tokens_input as u64,
-                    tokens_output: report.metrics.tokens_output as u64,
-                };
-                (report.content, metrics, true, None)
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                error!(
-                    agent_id = %agent_id,
-                    error = %error_msg,
-                    "Delegation execution failed"
-                );
-                let metrics = SubAgentMetrics {
-                    duration_ms,
-                    tokens_input: 0,
-                    tokens_output: 0,
-                };
-                (
-                    format!("# Delegation Error\n\nExecution failed: {}", error_msg),
-                    metrics,
-                    false,
-                    Some(error_msg),
-                )
-            }
-        };
-
-        // 12b. Emit sub_agent_complete or sub_agent_error event via unified executor (OPT-SA-4)
-        let exec_result = ExecutionResult {
-            success,
-            report: report.clone(),
-            metrics: metrics.clone(),
-            error_message: error_message.clone(),
-        };
+        // 12. Emit sub_agent_complete or sub_agent_error event via unified executor (OPT-SA-4)
         executor.emit_complete_event(agent_id, &agent_name, &exec_result);
+
+        // Extract values for subsequent processing
+        let report = exec_result.report.clone();
+        let metrics = exec_result.metrics.clone();
+        let success = exec_result.success;
+        let error_message = exec_result.error_message.clone();
 
         // 13. Update execution record
         let completion = if success {
             SubAgentExecutionComplete::success(
-                duration_ms,
+                metrics.duration_ms,
                 Some(metrics.tokens_input),
                 Some(metrics.tokens_output),
                 report.clone(),
             )
         } else {
             SubAgentExecutionComplete::error(
-                duration_ms,
+                metrics.duration_ms,
                 error_message
                     .clone()
                     .unwrap_or_else(|| "Unknown error".to_string()),
@@ -447,7 +410,7 @@ impl DelegateTaskTool {
         info!(
             agent_id = %agent_id,
             success = success,
-            duration_ms = duration_ms,
+            duration_ms = metrics.duration_ms,
             "Delegation completed"
         );
 
@@ -695,6 +658,7 @@ EXAMPLE - List available agents:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::sub_agent::SubAgentMetrics;
 
     #[test]
     fn test_tool_definition() {

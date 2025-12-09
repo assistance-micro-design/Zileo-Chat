@@ -71,7 +71,10 @@ use crate::models::streaming::{events, StreamChunk, SubAgentOperationType, SubAg
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, SubAgentExecutionCreate, SubAgentMetrics,
 };
-use crate::tools::constants::sub_agent::{ACTIVITY_CHECK_INTERVAL_SECS, INACTIVITY_TIMEOUT_SECS};
+use crate::tools::constants::sub_agent::{
+    ACTIVITY_CHECK_INTERVAL_SECS, INACTIVITY_TIMEOUT_SECS, INITIAL_RETRY_DELAY_MS,
+    MAX_RETRY_ATTEMPTS,
+};
 use crate::tools::sub_agent_circuit_breaker::SubAgentCircuitBreaker;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
@@ -1008,6 +1011,261 @@ impl SubAgentExecutor {
             }
         }
     }
+
+    // =========================================================================
+    // OPT-SA-10: Retry with Exponential Backoff
+    // =========================================================================
+
+    /// Executes with automatic retry on transient errors using exponential backoff.
+    ///
+    /// This method wraps `execute_with_heartbeat_timeout` with retry logic that
+    /// automatically retries on transient failures. The delay doubles between
+    /// each retry attempt (exponential backoff) to avoid overwhelming services.
+    ///
+    /// # Retry Policy
+    ///
+    /// - Maximum attempts: 3 (initial + 2 retries)
+    /// - Initial delay: 500ms
+    /// - Backoff multiplier: 2x (500ms -> 1000ms -> 2000ms)
+    /// - Retryable errors: Network timeouts, temporary service unavailability
+    /// - Non-retryable errors: Validation failures, permission errors, cancellation
+    ///
+    /// # Retryable Error Detection
+    ///
+    /// An error is considered retryable if it matches patterns indicating
+    /// transient issues:
+    /// - "timeout" - Network or execution timeouts
+    /// - "temporarily unavailable" - Service temporarily down
+    /// - "connection refused" - Service not ready
+    /// - "network error" - Network connectivity issues
+    /// - "rate limit" - API rate limiting (wait and retry)
+    /// - "503" or "502" - HTTP service unavailable/bad gateway
+    /// - "retry" - Explicit retry suggestion in error
+    ///
+    /// # Circuit Breaker Integration
+    ///
+    /// The retry logic respects the circuit breaker:
+    /// - If circuit is open, no retry is attempted (fail fast)
+    /// - Each retry checks circuit state before execution
+    /// - Successes and failures are recorded appropriately
+    ///
+    /// # Arguments
+    /// * `agent_id` - Agent ID to execute
+    /// * `task` - Task to execute (will be cloned for retries)
+    /// * `on_activity` - Optional activity callback for heartbeat monitoring
+    ///
+    /// # Returns
+    /// * `ExecutionResult` - Result of the successful attempt or last failure
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let result = executor.execute_with_retry(
+    ///     agent_id,
+    ///     task,
+    ///     Some(activity_callback),
+    /// ).await;
+    ///
+    /// if !result.success {
+    ///     // All retry attempts failed
+    ///     eprintln!("Execution failed after retries: {:?}", result.error_message);
+    /// }
+    /// ```
+    pub async fn execute_with_retry(
+        &self,
+        agent_id: &str,
+        task: Task,
+        on_activity: Option<ActivityCallback>,
+    ) -> ExecutionResult {
+        let mut last_result = ExecutionResult::default();
+
+        for attempt in 0..=MAX_RETRY_ATTEMPTS {
+            // Execute with heartbeat timeout (includes circuit breaker check)
+            let result = self
+                .execute_with_heartbeat_timeout(agent_id, task.clone(), on_activity.clone())
+                .await;
+
+            // Success - return immediately
+            if result.success {
+                if attempt > 0 {
+                    info!(
+                        agent_id = %agent_id,
+                        attempt = attempt + 1,
+                        "Sub-agent execution succeeded on retry"
+                    );
+                }
+                return result;
+            }
+
+            // Check if error is retryable
+            let is_retryable = result
+                .error_message
+                .as_ref()
+                .map(|msg| Self::is_retryable_error(msg))
+                .unwrap_or(false);
+
+            // Non-retryable error - return immediately
+            if !is_retryable {
+                debug!(
+                    agent_id = %agent_id,
+                    error = ?result.error_message,
+                    "Non-retryable error, not attempting retry"
+                );
+                return result;
+            }
+
+            // Store result for potential final return
+            last_result = result;
+
+            // Last attempt - don't sleep, just return
+            if attempt >= MAX_RETRY_ATTEMPTS {
+                break;
+            }
+
+            // Calculate delay with exponential backoff
+            let delay_ms = INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt);
+            warn!(
+                agent_id = %agent_id,
+                attempt = attempt + 1,
+                max_attempts = MAX_RETRY_ATTEMPTS + 1,
+                delay_ms = delay_ms,
+                error = ?last_result.error_message,
+                "Retrying sub-agent execution after transient error"
+            );
+
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+
+        // All retries exhausted - enhance error message
+        if let Some(original_error) = last_result.error_message.take() {
+            last_result.error_message = Some(format!(
+                "{} (after {} retry attempts with exponential backoff)",
+                original_error,
+                MAX_RETRY_ATTEMPTS + 1
+            ));
+            last_result.report = format!(
+                "# Sub-Agent Retry Exhausted\n\n\
+                 All {} attempts failed.\n\n\
+                 - Initial attempt: failed\n\
+                 - Retry attempts: {} (with exponential backoff)\n\
+                 - Total delays: {} ms\n\n\
+                 Last error: {}",
+                MAX_RETRY_ATTEMPTS + 1,
+                MAX_RETRY_ATTEMPTS,
+                Self::total_retry_delay_ms(),
+                original_error
+            );
+        }
+
+        warn!(
+            agent_id = %agent_id,
+            total_attempts = MAX_RETRY_ATTEMPTS + 1,
+            error = ?last_result.error_message,
+            "Sub-agent execution failed after all retry attempts"
+        );
+
+        last_result
+    }
+
+    /// Determines if an error message indicates a retryable transient error.
+    ///
+    /// Checks for patterns that suggest the error is temporary and may succeed
+    /// on retry. Case-insensitive matching.
+    ///
+    /// # Arguments
+    /// * `error_message` - The error message to analyze
+    ///
+    /// # Returns
+    /// * `true` - Error appears to be transient and retryable
+    /// * `false` - Error appears to be permanent (don't retry)
+    pub fn is_retryable_error(error_message: &str) -> bool {
+        let lower = error_message.to_lowercase();
+
+        // Retryable patterns (transient errors)
+        let retryable_patterns = [
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+            "temporary failure",
+            "connection refused",
+            "connection reset",
+            "network error",
+            "network unreachable",
+            "rate limit",
+            "rate_limit",
+            "too many requests",
+            "503",  // Service Unavailable
+            "502",  // Bad Gateway
+            "429",  // Too Many Requests
+            "retry",
+            "try again",
+            "service unavailable",
+            "server busy",
+            "overloaded",
+            "capacity",
+        ];
+
+        // Non-retryable patterns (permanent errors - check first)
+        let non_retryable_patterns = [
+            "cancelled",
+            "permission denied",
+            "not found",
+            "invalid",
+            "unauthorized",
+            "forbidden",
+            "bad request",
+            "circuit breaker",
+            "validation failed",
+            "authentication",
+        ];
+
+        // Check non-retryable first (takes precedence)
+        for pattern in &non_retryable_patterns {
+            if lower.contains(pattern) {
+                return false;
+            }
+        }
+
+        // Check retryable patterns
+        for pattern in &retryable_patterns {
+            if lower.contains(pattern) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Calculates total delay across all retry attempts (for documentation).
+    ///
+    /// With MAX_RETRY_ATTEMPTS=2 and INITIAL_RETRY_DELAY_MS=500:
+    /// - Attempt 0 fails: sleep 500ms
+    /// - Attempt 1 fails: sleep 1000ms
+    /// - Attempt 2 fails: no sleep
+    ///
+    /// Total: 1500ms
+    fn total_retry_delay_ms() -> u64 {
+        let mut total = 0;
+        for i in 0..MAX_RETRY_ATTEMPTS {
+            total += INITIAL_RETRY_DELAY_MS * 2_u64.pow(i);
+        }
+        total
+    }
+}
+
+// =============================================================================
+// OPT-SA-10: Retryable Error Helper (standalone function for external use)
+// =============================================================================
+
+/// Checks if an error message indicates a retryable transient error.
+///
+/// This is a standalone function wrapper for `SubAgentExecutor::is_retryable_error`
+/// for use in contexts where the executor is not available.
+///
+/// See [`SubAgentExecutor::is_retryable_error`] for details on pattern matching.
+#[allow(dead_code)]
+pub fn is_retryable_error(error_message: &str) -> bool {
+    SubAgentExecutor::is_retryable_error(error_message)
 }
 
 #[cfg(test)]
@@ -1209,5 +1467,114 @@ mod tests {
 
         assert!(result.is_ok(), "Task should complete after cancellation");
         assert_eq!(result.unwrap().unwrap(), "cancelled");
+    }
+
+    // =========================================================================
+    // OPT-SA-10: Retry with Exponential Backoff Tests
+    // =========================================================================
+
+    #[test]
+    fn test_retry_constants() {
+        // Verify retry constants are reasonable values
+        assert_eq!(MAX_RETRY_ATTEMPTS, 2); // 3 total attempts
+        assert_eq!(INITIAL_RETRY_DELAY_MS, 500); // 500ms initial delay
+
+        // Total delay should be 500 + 1000 = 1500ms
+        assert_eq!(SubAgentExecutor::total_retry_delay_ms(), 1500);
+    }
+
+    #[test]
+    fn test_is_retryable_error_timeout_patterns() {
+        // Timeout errors should be retryable
+        assert!(SubAgentExecutor::is_retryable_error("Connection timeout"));
+        assert!(SubAgentExecutor::is_retryable_error("Request timed out after 30s"));
+        assert!(SubAgentExecutor::is_retryable_error("TIMEOUT waiting for response"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_network_patterns() {
+        // Network errors should be retryable
+        assert!(SubAgentExecutor::is_retryable_error("Connection refused"));
+        assert!(SubAgentExecutor::is_retryable_error("Network error: unreachable"));
+        assert!(SubAgentExecutor::is_retryable_error("Connection reset by peer"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_http_status_codes() {
+        // HTTP 5xx and 429 should be retryable
+        assert!(SubAgentExecutor::is_retryable_error("HTTP 503 Service Unavailable"));
+        assert!(SubAgentExecutor::is_retryable_error("Error 502 Bad Gateway"));
+        assert!(SubAgentExecutor::is_retryable_error("429 Too Many Requests"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_rate_limit_patterns() {
+        // Rate limiting should be retryable
+        assert!(SubAgentExecutor::is_retryable_error("Rate limit exceeded"));
+        assert!(SubAgentExecutor::is_retryable_error("rate_limit_error"));
+        assert!(SubAgentExecutor::is_retryable_error("Too many requests, try again"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_service_patterns() {
+        // Service availability errors should be retryable
+        assert!(SubAgentExecutor::is_retryable_error("Service temporarily unavailable"));
+        assert!(SubAgentExecutor::is_retryable_error("Temporary failure, retry later"));
+        assert!(SubAgentExecutor::is_retryable_error("Server is overloaded"));
+        assert!(SubAgentExecutor::is_retryable_error("Server busy, please retry"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_non_retryable_patterns() {
+        // Permanent errors should NOT be retryable
+        assert!(!SubAgentExecutor::is_retryable_error("Execution cancelled by user"));
+        assert!(!SubAgentExecutor::is_retryable_error("Permission denied"));
+        assert!(!SubAgentExecutor::is_retryable_error("Resource not found"));
+        assert!(!SubAgentExecutor::is_retryable_error("Invalid configuration"));
+        assert!(!SubAgentExecutor::is_retryable_error("Unauthorized access"));
+        assert!(!SubAgentExecutor::is_retryable_error("Bad request format"));
+        assert!(!SubAgentExecutor::is_retryable_error("Circuit breaker is open"));
+        assert!(!SubAgentExecutor::is_retryable_error("Validation failed for input"));
+        assert!(!SubAgentExecutor::is_retryable_error("Authentication required"));
+        assert!(!SubAgentExecutor::is_retryable_error("403 Forbidden"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_non_retryable_takes_precedence() {
+        // Non-retryable patterns should take precedence
+        // "timeout" is retryable but "cancelled" is not
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Operation cancelled due to timeout validation failed"
+        ));
+
+        // Contains both "retry" and "invalid"
+        assert!(!SubAgentExecutor::is_retryable_error(
+            "Invalid request, do not retry"
+        ));
+    }
+
+    #[test]
+    fn test_is_retryable_error_case_insensitive() {
+        // Should be case insensitive
+        assert!(SubAgentExecutor::is_retryable_error("TIMEOUT"));
+        assert!(SubAgentExecutor::is_retryable_error("TimeOut"));
+        assert!(SubAgentExecutor::is_retryable_error("CONNECTION REFUSED"));
+        assert!(!SubAgentExecutor::is_retryable_error("CANCELLED"));
+        assert!(!SubAgentExecutor::is_retryable_error("Invalid"));
+    }
+
+    #[test]
+    fn test_is_retryable_error_unknown_errors() {
+        // Unknown errors should NOT be retryable (conservative)
+        assert!(!SubAgentExecutor::is_retryable_error("Something went wrong"));
+        assert!(!SubAgentExecutor::is_retryable_error("Unknown error occurred"));
+        assert!(!SubAgentExecutor::is_retryable_error(""));
+    }
+
+    #[test]
+    fn test_is_retryable_error_standalone_function() {
+        // Test the standalone helper function
+        assert!(is_retryable_error("timeout"));
+        assert!(!is_retryable_error("cancelled"));
     }
 }

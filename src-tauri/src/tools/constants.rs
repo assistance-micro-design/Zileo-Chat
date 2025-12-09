@@ -81,6 +81,16 @@ pub mod sub_agent {
     /// Cooldown period (seconds) before circuit breaker transitions to half-open.
     /// After this period, one execution is allowed to test if the system recovered.
     pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
+
+
+    // OPT-SA-10: Retry with Exponential Backoff
+    /// Maximum number of retry attempts for transient errors.
+    /// Set to 2 for a total of 3 attempts (initial + 2 retries).
+    pub const MAX_RETRY_ATTEMPTS: u32 = 2;
+
+    /// Initial delay (milliseconds) before first retry.
+    /// Subsequent delays are doubled: 500ms -> 1000ms -> 2000ms.
+    pub const INITIAL_RETRY_DELAY_MS: u64 = 500;
 }
 
 // ===== Calculator Tool =====

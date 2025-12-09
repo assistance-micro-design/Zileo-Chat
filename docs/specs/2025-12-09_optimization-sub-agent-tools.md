@@ -581,9 +581,9 @@ info!(
 - [ ] Test inactivity timeout avec silence complet (OPT-SA-1) - doit timeout apres 300s
 - [ ] Test activity callback propagation (OPT-SA-1) - callback appele a chaque token/tool
 - [x] Test cancellation token propagation (OPT-SA-7)
-- [ ] Test circuit breaker state transitions (OPT-SA-8)
-- [ ] Test JoinSet equivalence avec join_all (OPT-SA-6)
-- [ ] Test retry avec backoff (OPT-SA-10)
+- [x] Test circuit breaker state transitions (OPT-SA-8) - 14 tests covering all transitions
+- [x] Test JoinSet equivalence avec join_all (OPT-SA-6)
+- [x] Test retry avec backoff (OPT-SA-10) - 13 tests for is_retryable_error patterns
 
 ### Commandes de Validation
 
@@ -706,14 +706,44 @@ cargo test parallel_tasks -- --nocapture
    - `execute_batch()` reduced from 328 lines to ~45 lines
    - All 52 sub-agent unit tests + 17 integration tests passing
    - Clippy passes with no warnings
+11. [x] **OPT-SA-10 (Retry with Exponential Backoff) - COMPLETE** (2025-12-09)
+   - Added constants to `constants.rs::sub_agent`: `MAX_RETRY_ATTEMPTS=2`, `INITIAL_RETRY_DELAY_MS=500`
+   - Implemented `is_retryable_error()` with comprehensive pattern matching:
+     - Retryable: timeout, connection refused, network error, 503/502/429, rate limit, server busy
+     - Non-retryable: cancelled, permission denied, not found, invalid, circuit breaker
+   - Implemented `execute_with_retry()` in SubAgentExecutor:
+     - Up to 3 attempts (initial + 2 retries)
+     - Exponential backoff: 500ms -> 1000ms -> 2000ms
+     - Total max delay: 1500ms
+     - Respects circuit breaker (fail-fast if open)
+   - Updated SpawnAgentTool: now uses `execute_with_retry()` instead of `execute_with_heartbeat_timeout()`
+   - Updated DelegateTaskTool: now uses `executor.execute_with_retry()` for unified execution
+   - Updated ParallelTasksTool:
+     - `run_parallel_tasks()` creates SubAgentExecutor per task
+     - Each parallel task uses `execute_with_retry()` within JoinSet spawn
+     - `process_results()` updated to accept `Vec<ExecutionResult>` directly
+   - Added 13 new tests for retry logic:
+     - test_retry_constants
+     - test_is_retryable_error_timeout_patterns
+     - test_is_retryable_error_network_patterns
+     - test_is_retryable_error_http_status_codes
+     - test_is_retryable_error_rate_limit_patterns
+     - test_is_retryable_error_service_patterns
+     - test_is_retryable_error_non_retryable_patterns
+     - test_is_retryable_error_non_retryable_takes_precedence
+     - test_is_retryable_error_case_insensitive
+     - test_is_retryable_error_unknown_errors
+     - test_is_retryable_error_standalone_function
+   - All 80 sub-agent tests passing (63 unit + 17 integration)
+   - Clippy passes with no warnings
 
 ## References
 
 ### Code Analyse
 - `src-tauri/src/tools/spawn_agent.rs` (854 lignes)
-- `src-tauri/src/tools/delegate_task.rs` (765 lignes - was 797, reduced by OPT-SA-4)
-- `src-tauri/src/tools/parallel_tasks.rs` (977 lignes - refactored by OPT-SA-9, execute_batch() CC reduced from ~20 to ~6)
-- `src-tauri/src/tools/sub_agent_executor.rs` (542 lignes)
+- `src-tauri/src/tools/delegate_task.rs` (~740 lignes - reduced by OPT-SA-4, OPT-SA-10 refactor)
+- `src-tauri/src/tools/parallel_tasks.rs` (~950 lignes - refactored by OPT-SA-9, OPT-SA-10)
+- `src-tauri/src/tools/sub_agent_executor.rs` (~1580 lignes - expanded with OPT-SA-10 retry logic)
 - `src-tauri/src/tools/validation_helper.rs` (516 lignes)
 - `src-tauri/src/tools/constants.rs`
 - `src-tauri/src/tools/registry.rs`

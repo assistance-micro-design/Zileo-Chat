@@ -391,9 +391,9 @@ impl SpawnAgentTool {
             }),
         };
 
-        // 15. Execute sub-agent with heartbeat-based inactivity timeout (OPT-SA-1)
+        // 15. Execute sub-agent with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10)
         let exec_result = executor
-            .execute_with_heartbeat_timeout(&sub_agent_id, task, None)
+            .execute_with_retry(&sub_agent_id, task, None)
             .await;
 
         // 16. Emit completion or error event

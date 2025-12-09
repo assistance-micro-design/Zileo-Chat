@@ -39,7 +39,7 @@
 //! - Per-task control allows for future cancellation support (OPT-SA-7)
 //! - Ideal for independent analyses that can run in parallel
 
-use crate::agents::core::agent::{Report, Task};
+use crate::agents::core::agent::Task;
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
@@ -344,29 +344,48 @@ impl ParallelTasksTool {
 
     /// Executes all tasks in parallel using JoinSet (OPT-SA-6).
     ///
+    /// Each task is executed with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10).
     /// Returns results in original task order along with total duration.
     async fn run_parallel_tasks(
         &self,
         orchestrator_tasks: Vec<(String, Task)>,
         task_count: usize,
-    ) -> (Vec<anyhow::Result<Report>>, u64) {
+    ) -> (Vec<ExecutionResult>, u64) {
 
         let start_time = std::time::Instant::now();
-        let mut join_set: JoinSet<(usize, anyhow::Result<Report>)> = JoinSet::new();
+        let mut join_set: JoinSet<(usize, ExecutionResult)> = JoinSet::new();
 
+        // Clone dependencies for each spawn
         for (idx, (agent_id, task)) in orchestrator_tasks.into_iter().enumerate() {
+            // Clone all dependencies needed for SubAgentExecutor in spawn
+            let db = self.db.clone();
             let orchestrator = self.orchestrator.clone();
             let mcp_manager = self.mcp_manager.clone();
+            let app_handle = self.app_handle.clone();
+            let workflow_id = self.workflow_id.clone();
+            let current_agent_id = self.current_agent_id.clone();
+            let cancellation_token = self.cancellation_token.clone();
+
             join_set.spawn(async move {
-                let result = orchestrator
-                    .execute_with_mcp(&agent_id, task, mcp_manager)
-                    .await;
+                // Create executor for this task with retry support (OPT-SA-10)
+                let executor = SubAgentExecutor::with_cancellation(
+                    db,
+                    orchestrator,
+                    mcp_manager,
+                    app_handle,
+                    workflow_id,
+                    current_agent_id,
+                    cancellation_token,
+                );
+
+                // Execute with retry and heartbeat monitoring
+                let result = executor.execute_with_retry(&agent_id, task, None).await;
                 (idx, result)
             });
         }
 
         // Collect results with their indices
-        let mut indexed_results: Vec<(usize, anyhow::Result<Report>)> =
+        let mut indexed_results: Vec<(usize, ExecutionResult)> =
             Vec::with_capacity(task_count);
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
@@ -375,7 +394,16 @@ impl ParallelTasksTool {
                     warn!("Task panicked during parallel execution: {}", join_error);
                     indexed_results.push((
                         usize::MAX,
-                        Err(anyhow::anyhow!("Task panicked: {}", join_error)),
+                        ExecutionResult {
+                            success: false,
+                            report: format!("# Task Panic\n\nTask panicked: {}", join_error),
+                            metrics: SubAgentMetrics {
+                                duration_ms: 0,
+                                tokens_input: 0,
+                                tokens_output: 0,
+                            },
+                            error_message: Some(format!("Task panicked: {}", join_error)),
+                        },
                     ));
                 }
             }
@@ -383,7 +411,7 @@ impl ParallelTasksTool {
 
         // Sort by index to restore original task order
         indexed_results.sort_by_key(|(idx, _)| *idx);
-        let results: Vec<anyhow::Result<Report>> =
+        let results: Vec<ExecutionResult> =
             indexed_results.into_iter().map(|(_, r)| r).collect();
         let total_duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -396,10 +424,14 @@ impl ParallelTasksTool {
     /// - Updates execution record in database
     /// - Emits completion event
     /// - Builds individual and aggregated reports
+    ///
+    /// # OPT-SA-10 Update
+    /// Now accepts `Vec<ExecutionResult>` directly from `run_parallel_tasks` which uses
+    /// `execute_with_retry` for each task with exponential backoff on transient errors.
     async fn process_results(
         &self,
         tasks: &[ParallelTaskSpec],
-        results: Vec<anyhow::Result<Report>>,
+        results: Vec<ExecutionResult>,
         execution_ids: &[String],
         executor: &SubAgentExecutor,
         batch_id: &str,
@@ -410,85 +442,55 @@ impl ParallelTasksTool {
         let mut failed_count = 0;
         let mut aggregated_reports: Vec<String> = Vec::new();
 
-        for (i, (result, task_spec)) in results.into_iter().zip(tasks.iter()).enumerate() {
+        for (i, (exec_result, task_spec)) in results.into_iter().zip(tasks.iter()).enumerate() {
             let execution_id = execution_ids.get(i).cloned().unwrap_or_default();
 
-            let task_result = match result {
-                Ok(report) => {
-                    completed_count += 1;
-                    let metrics = SubAgentMetrics {
-                        duration_ms: report.metrics.duration_ms,
-                        tokens_input: report.metrics.tokens_input as u64,
-                        tokens_output: report.metrics.tokens_output as u64,
-                    };
+            // Update execution record in database
+            executor
+                .update_execution_record(&execution_id, &exec_result)
+                .await;
 
-                    let exec_result = ExecutionResult {
-                        success: true,
-                        report: report.content.clone(),
-                        metrics: metrics.clone(),
-                        error_message: None,
-                    };
+            // Emit completion event
+            let agent_name = format!("Parallel task for {}", task_spec.agent_id);
+            executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
 
-                    executor
-                        .update_execution_record(&execution_id, &exec_result)
-                        .await;
+            // Build task result
+            let task_result = if exec_result.success {
+                completed_count += 1;
 
-                    let agent_name = format!("Parallel task for {}", task_spec.agent_id);
-                    executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
+                aggregated_reports.push(format!(
+                    "## Agent: {}\n\n{}\n",
+                    task_spec.agent_id, exec_result.report
+                ));
 
-                    aggregated_reports.push(format!(
-                        "## Agent: {}\n\n{}\n",
-                        task_spec.agent_id, report.content
-                    ));
-
-                    ParallelTaskResult {
-                        agent_id: task_spec.agent_id.clone(),
-                        success: true,
-                        report: Some(report.content),
-                        error: None,
-                        metrics: Some(metrics),
-                    }
+                ParallelTaskResult {
+                    agent_id: task_spec.agent_id.clone(),
+                    success: true,
+                    report: Some(exec_result.report),
+                    error: None,
+                    metrics: Some(exec_result.metrics),
                 }
-                Err(e) => {
-                    failed_count += 1;
-                    let error_msg = e.to_string();
+            } else {
+                failed_count += 1;
+                let error_msg = exec_result.error_message.clone().unwrap_or_default();
 
-                    error!(
-                        agent_id = %task_spec.agent_id,
-                        error = %error_msg,
-                        "Parallel task failed"
-                    );
+                error!(
+                    agent_id = %task_spec.agent_id,
+                    error = %error_msg,
+                    "Parallel task failed"
+                );
 
-                    let exec_result = ExecutionResult {
-                        success: false,
-                        report: String::new(),
-                        metrics: SubAgentMetrics {
-                            duration_ms: 0,
-                            tokens_input: 0,
-                            tokens_output: 0,
-                        },
-                        error_message: Some(error_msg.clone()),
-                    };
+                aggregated_reports.push(format!(
+                    "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
+                    task_spec.agent_id, error_msg
+                ));
 
-                    executor
-                        .update_execution_record(&execution_id, &exec_result)
-                        .await;
-
-                    let agent_name = format!("Parallel task for {}", task_spec.agent_id);
-                    executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
-
-                    aggregated_reports.push(format!(
-                        "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
-                        task_spec.agent_id, error_msg
-                    ));
-
-                    ParallelTaskResult {
-                        agent_id: task_spec.agent_id.clone(),
-                        success: false,
-                        report: None,
-                        error: Some(error_msg),
-                        metrics: None,
-                    }
+                ParallelTaskResult {
+                    agent_id: task_spec.agent_id.clone(),
+                    success: false,
+                    report: None,
+                    error: Some(error_msg),
+                    metrics: Some(exec_result.metrics),
                 }
             };
 
