@@ -180,10 +180,7 @@ impl TodoTool {
             .map_err(db_error)?;
 
         if result.is_empty() {
-            return Err(ToolError::NotFound(format!(
-                "Task '{}' not found",
-                task_id
-            )));
+            return Err(ToolError::NotFound(format!("Task '{}' not found", task_id)));
         }
 
         let task_name = result
@@ -720,5 +717,690 @@ mod tests {
         assert!(valid_statuses.contains(&"blocked"));
         assert!(!valid_statuses.contains(&"done"));
         assert!(!valid_statuses.contains(&"started"));
+    }
+}
+
+/// Integration tests with real database (OPT-TODO-11).
+///
+/// These tests validate the complete TodoTool behavior with a real temporary database.
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// Creates a test TodoTool with a temporary database.
+    async fn create_test_tool() -> (TodoTool, tempfile::TempDir) {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_todo_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        let tool = TodoTool::new(db, "wf_test".to_string(), "test_agent".to_string(), None);
+
+        (tool, temp_dir)
+    }
+
+    // =========================================================================
+    // OPT-TODO-11: Integration tests with real DB
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_create_task_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let input = serde_json::json!({
+            "operation": "create",
+            "name": "Integration test task",
+            "description": "Testing task creation with real DB",
+            "priority": 2
+        });
+
+        let result = tool.execute(input).await;
+        assert!(result.is_ok(), "Create task should succeed: {:?}", result);
+
+        let response = result.unwrap();
+        assert_eq!(response["success"], true);
+        assert!(response["task_id"].is_string());
+        assert!(!response["task_id"].as_str().unwrap().is_empty());
+        assert!(response["message"]
+            .as_str()
+            .unwrap()
+            .contains("created successfully"));
+    }
+
+    #[tokio::test]
+    async fn test_update_status_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // First create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Task to update",
+            "description": "Will update status",
+            "priority": 3
+        });
+
+        let create_result = tool
+            .execute(create_input)
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap();
+
+        // Update status to in_progress
+        let update_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": task_id,
+            "status": "in_progress"
+        });
+
+        let update_result = tool.execute(update_input).await;
+        assert!(
+            update_result.is_ok(),
+            "Update status should succeed: {:?}",
+            update_result
+        );
+
+        let response = update_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["task_id"], task_id);
+        assert_eq!(response["new_status"], "in_progress");
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create multiple tasks
+        for i in 1..=3 {
+            let input = serde_json::json!({
+                "operation": "create",
+                "name": format!("List test task {}", i),
+                "description": "For list testing",
+                "priority": i
+            });
+            tool.execute(input).await.expect("Create should work");
+        }
+
+        // List all tasks
+        let list_input = serde_json::json!({
+            "operation": "list"
+        });
+
+        let list_result = tool.execute(list_input).await;
+        assert!(
+            list_result.is_ok(),
+            "List tasks should succeed: {:?}",
+            list_result
+        );
+
+        let response = list_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["count"], 3);
+        assert!(response["tasks"].is_array());
+        assert_eq!(response["tasks"].as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_with_filter_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create a task and update one to in_progress
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Pending task",
+            "description": "Stays pending",
+            "priority": 1
+        });
+        tool.execute(create_input)
+            .await
+            .expect("Create should work");
+
+        let create_input2 = serde_json::json!({
+            "operation": "create",
+            "name": "In progress task",
+            "description": "Will be in progress",
+            "priority": 2
+        });
+        let result = tool
+            .execute(create_input2)
+            .await
+            .expect("Create should work");
+        let task_id = result["task_id"].as_str().unwrap();
+
+        // Update to in_progress
+        let update_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": task_id,
+            "status": "in_progress"
+        });
+        tool.execute(update_input)
+            .await
+            .expect("Update should work");
+
+        // List only pending tasks
+        let list_pending = serde_json::json!({
+            "operation": "list",
+            "status_filter": "pending"
+        });
+
+        let result = tool.execute(list_pending).await.expect("List should work");
+        assert_eq!(result["count"], 1);
+
+        // List only in_progress tasks
+        let list_in_progress = serde_json::json!({
+            "operation": "list",
+            "status_filter": "in_progress"
+        });
+
+        let result = tool
+            .execute(list_in_progress)
+            .await
+            .expect("List should work");
+        assert_eq!(result["count"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_complete_task_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Task to complete",
+            "description": "Will be completed",
+            "priority": 1
+        });
+
+        let create_result = tool
+            .execute(create_input)
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap();
+
+        // Complete the task with duration
+        let complete_input = serde_json::json!({
+            "operation": "complete",
+            "task_id": task_id,
+            "duration_ms": 5000
+        });
+
+        let complete_result = tool.execute(complete_input).await;
+        assert!(
+            complete_result.is_ok(),
+            "Complete task should succeed: {:?}",
+            complete_result
+        );
+
+        let response = complete_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["task_id"], task_id);
+        assert_eq!(response["status"], "completed");
+        assert_eq!(response["duration_ms"], 5000);
+    }
+
+    #[tokio::test]
+    async fn test_complete_task_without_duration_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Task to complete no duration",
+            "description": "Completed without duration",
+            "priority": 2
+        });
+
+        let create_result = tool
+            .execute(create_input)
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap();
+
+        // Complete the task without duration
+        let complete_input = serde_json::json!({
+            "operation": "complete",
+            "task_id": task_id
+        });
+
+        let complete_result = tool.execute(complete_input).await;
+        assert!(
+            complete_result.is_ok(),
+            "Complete task should succeed: {:?}",
+            complete_result
+        );
+
+        let response = complete_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["status"], "completed");
+        assert!(response["duration_ms"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_delete_task_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Task to delete",
+            "description": "Will be deleted",
+            "priority": 3
+        });
+
+        let create_result = tool
+            .execute(create_input)
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap();
+
+        // Delete the task
+        let delete_input = serde_json::json!({
+            "operation": "delete",
+            "task_id": task_id
+        });
+
+        let delete_result = tool.execute(delete_input).await;
+        assert!(
+            delete_result.is_ok(),
+            "Delete task should succeed: {:?}",
+            delete_result
+        );
+
+        let response = delete_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert!(response["message"]
+            .as_str()
+            .unwrap()
+            .contains("deleted successfully"));
+
+        // Verify task is gone
+        let get_input = serde_json::json!({
+            "operation": "get",
+            "task_id": task_id
+        });
+
+        let get_result = tool.execute(get_input).await;
+        assert!(get_result.is_err(), "Get deleted task should fail");
+        match get_result {
+            Err(ToolError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_task_not_found() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let get_input = serde_json::json!({
+            "operation": "get",
+            "task_id": "non-existent-task-id-12345"
+        });
+
+        let result = tool.execute(get_input).await;
+        assert!(result.is_err(), "Get non-existent task should fail");
+
+        match result {
+            Err(ToolError::NotFound(msg)) => {
+                assert!(msg.contains("non-existent-task-id-12345"));
+                assert!(msg.contains("does not exist"));
+            }
+            other => panic!("Expected NotFound error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_task_success_integration() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Task to retrieve",
+            "description": "Testing get operation",
+            "priority": 2
+        });
+
+        let create_result = tool
+            .execute(create_input)
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap();
+
+        // Get the task
+        let get_input = serde_json::json!({
+            "operation": "get",
+            "task_id": task_id
+        });
+
+        let get_result = tool.execute(get_input).await;
+        assert!(
+            get_result.is_ok(),
+            "Get task should succeed: {:?}",
+            get_result
+        );
+
+        let response = get_result.unwrap();
+        assert_eq!(response["success"], true);
+        assert!(response["task"].is_object());
+        assert_eq!(response["task"]["name"], "Task to retrieve");
+        assert_eq!(response["task"]["status"], "pending");
+        assert_eq!(response["task"]["priority"], 2);
+    }
+
+    #[tokio::test]
+    async fn test_update_status_not_found() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let update_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": "non-existent-task-456",
+            "status": "in_progress"
+        });
+
+        let result = tool.execute(update_input).await;
+        assert!(result.is_err(), "Update non-existent task should fail");
+
+        match result {
+            Err(ToolError::NotFound(msg)) => {
+                assert!(msg.contains("non-existent-task-456"));
+                assert!(msg.contains("not found"));
+            }
+            other => panic!("Expected NotFound error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_complete_task_not_found() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let complete_input = serde_json::json!({
+            "operation": "complete",
+            "task_id": "non-existent-task-789"
+        });
+
+        let result = tool.execute(complete_input).await;
+        assert!(result.is_err(), "Complete non-existent task should fail");
+
+        match result {
+            Err(ToolError::NotFound(msg)) => {
+                assert!(msg.contains("non-existent-task-789"));
+                assert!(msg.contains("not found"));
+            }
+            other => panic!("Expected NotFound error, got: {:?}", other),
+        }
+    }
+}
+
+/// SQL injection prevention tests (OPT-TODO-12).
+///
+/// These tests verify that parameterized queries properly prevent SQL injection attacks.
+#[cfg(test)]
+mod sql_injection_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// Creates a test TodoTool with a temporary database.
+    async fn create_test_tool() -> (TodoTool, tempfile::TempDir) {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_injection_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        let tool = TodoTool::new(db, "wf_test".to_string(), "test_agent".to_string(), None);
+
+        (tool, temp_dir)
+    }
+
+    // =========================================================================
+    // OPT-TODO-12: SQL injection prevention tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_task_id_get() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via task_id in get operation
+        let malicious_input = serde_json::json!({
+            "operation": "get",
+            "task_id": "'; DROP TABLE task; --"
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should return NotFound, not execute the DROP
+        assert!(result.is_err(), "Injection should not succeed");
+        match result {
+            Err(ToolError::NotFound(_)) => {
+                // Expected: the malicious task_id is treated as a literal string
+                // and simply not found in the database
+            }
+            other => panic!(
+                "Expected NotFound error for injection attempt, got: {:?}",
+                other
+            ),
+        }
+
+        // Verify the table still exists by creating a legitimate task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "After injection attempt",
+            "description": "Table should still exist",
+            "priority": 1
+        });
+
+        let create_result = tool.execute(create_input).await;
+        assert!(
+            create_result.is_ok(),
+            "Table should still exist after injection attempt"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_task_id_update() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via task_id in update_status
+        let malicious_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": "' OR '1'='1",
+            "status": "completed"
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should return NotFound (task doesn't exist), not update all tasks
+        assert!(result.is_err(), "Injection should not succeed");
+        match result {
+            Err(ToolError::NotFound(_)) => {}
+            other => panic!(
+                "Expected NotFound error for injection attempt, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_task_id_complete() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via task_id in complete operation
+        let malicious_input = serde_json::json!({
+            "operation": "complete",
+            "task_id": "1; UPDATE task SET status = 'hacked';"
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should return NotFound, not execute additional SQL
+        assert!(result.is_err(), "Injection should not succeed");
+        match result {
+            Err(ToolError::NotFound(_)) => {}
+            other => panic!(
+                "Expected NotFound error for injection attempt, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_status() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via status field
+        // Note: validate_enum_value() rejects invalid statuses BEFORE the DB query
+        let malicious_input = serde_json::json!({
+            "operation": "update_status",
+            "task_id": "some-task-id",
+            "status": "pending' OR '1'='1"
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should fail validation, not execute the injection
+        assert!(result.is_err(), "Injection should not succeed");
+        match result {
+            Err(ToolError::ValidationFailed(msg)) => {
+                // Expected: status is validated against VALID_STATUSES
+                assert!(msg.contains("Invalid"));
+            }
+            other => panic!(
+                "Expected ValidationFailed error for injection attempt, got: {:?}",
+                other
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_status_filter() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // First create a legitimate task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Legitimate task",
+            "description": "For filter test",
+            "priority": 2
+        });
+        tool.execute(create_input)
+            .await
+            .expect("Create should work");
+
+        // Attempt SQL injection via status_filter in list
+        let malicious_input = serde_json::json!({
+            "operation": "list",
+            "status_filter": "pending' OR '1'='1"
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // ParamQueryBuilder uses parameterized queries, so the malicious
+        // string is treated as a literal value and won't match any status
+        assert!(result.is_ok(), "Query should succeed but return 0 results");
+        let response = result.unwrap();
+        assert_eq!(
+            response["count"], 0,
+            "Injection should not return all tasks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_name() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via name field during create
+        let malicious_input = serde_json::json!({
+            "operation": "create",
+            "name": "Test'; DROP TABLE task; --",
+            "description": "Malicious description",
+            "priority": 1
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should create task with the literal name (injection is sanitized)
+        assert!(
+            result.is_ok(),
+            "Create should succeed with escaped name: {:?}",
+            result
+        );
+
+        // Verify table still exists
+        let list_input = serde_json::json!({
+            "operation": "list"
+        });
+        let list_result = tool.execute(list_input).await;
+        assert!(list_result.is_ok(), "Table should still exist");
+        assert_eq!(list_result.unwrap()["count"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_description() {
+        let (tool, _temp) = create_test_tool().await;
+
+        // Attempt SQL injection via description field
+        let malicious_input = serde_json::json!({
+            "operation": "create",
+            "name": "Normal task name",
+            "description": "'; DELETE FROM task; SELECT '",
+            "priority": 1
+        });
+
+        let result = tool.execute(malicious_input).await;
+
+        // Should create task with the literal description
+        assert!(result.is_ok(), "Create should succeed: {:?}", result);
+
+        // Verify no data was deleted
+        let list_input = serde_json::json!({
+            "operation": "list"
+        });
+        let list_result = tool.execute(list_input).await.unwrap();
+        assert_eq!(
+            list_result["count"], 1,
+            "Task should exist, no deletion occurred"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sql_injection_prevention_workflow_id() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_wf_injection_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        // Create tool with malicious workflow_id
+        let tool = TodoTool::new(
+            db,
+            "wf_test' OR '1'='1".to_string(),
+            "test_agent".to_string(),
+            None,
+        );
+
+        // Create a task
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Test with malicious workflow",
+            "description": "Should be isolated",
+            "priority": 1
+        });
+
+        let result = tool.execute(create_input).await;
+        assert!(result.is_ok(), "Create should succeed");
+
+        // List tasks - should only see tasks from this workflow_id
+        let list_input = serde_json::json!({
+            "operation": "list"
+        });
+
+        let list_result = tool.execute(list_input).await.unwrap();
+        // The workflow_id is treated as a literal string parameter
+        // So it should return 1 task (the one we just created)
+        assert_eq!(list_result["count"], 1);
     }
 }
