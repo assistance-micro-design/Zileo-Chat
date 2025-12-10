@@ -9,9 +9,10 @@ Documentation complete des tools disponibles pour les agents dans Zileo-Chat-3.
 - [MemoryTool](#1-memorytool)
 - [TodoTool](#2-todotool)
 - [CalculatorTool](#3-calculatortool)
-- [SpawnAgentTool](#4-spawnagentool)
-- [DelegateTaskTool](#5-delegatetasktool)
-- [ParallelTasksTool](#6-paralleltaskstool)
+- [UserQuestionTool](#4-userquestiontool)
+- [SpawnAgentTool](#5-spawnagentool)
+- [DelegateTaskTool](#6-delegatetasktool)
+- [ParallelTasksTool](#7-paralleltaskstool)
 - [Utility Modules](#utility-modules)
 - [ToolError Types](#toolerror-types)
 - [Fichiers source](#fichiers-source)
@@ -29,13 +30,16 @@ ToolFactory
 │   ├── TodoTool        - Gestion des taches de workflow
 │   └── CalculatorTool  - Operations mathematiques (stateless)
 │
+├── Interaction Tools (human-in-the-loop)
+│   └── UserQuestionTool - Questions interactives avec timeout et circuit breaker
+│
 └── Sub-Agent Tools (Primary Agent uniquement)
     ├── SpawnAgentTool      - Creation de sous-agents temporaires
     ├── DelegateTaskTool    - Delegation a agents permanents
     └── ParallelTasksTool   - Execution parallele multi-agents
 ```
 
-**Total**: 6 tools (3 basic + 3 sub-agent)
+**Total**: 7 tools (3 basic + 1 interaction + 3 sub-agent)
 
 ### Trait Tool
 
@@ -82,6 +86,7 @@ Le `TOOL_REGISTRY` est un singleton global (lazy_static) pour la decouverte et v
 | MemoryTool | Basic | false |
 | TodoTool | Basic | false |
 | CalculatorTool | Basic | false |
+| UserQuestionTool | Interaction | false |
 | SpawnAgentTool | SubAgent | true |
 | DelegateTaskTool | SubAgent | true |
 | ParallelTasksTool | SubAgent | true |
@@ -895,7 +900,151 @@ Recupere la valeur d'une constante mathematique.
 
 ---
 
-## 4. SpawnAgentTool
+## 4. UserQuestionTool
+
+**Fichier**: `src-tauri/src/tools/user_question/tool.rs`
+
+Questions interactives human-in-the-loop avec timeout configurable et circuit breaker.
+
+### Cas d'usage
+
+- Clarification de requirements pendant execution
+- Choix d'implementation (proposer options)
+- Validation avant operations critiques
+- Collecte de parametres manquants
+
+### Types de questions
+
+| Type | Description | Options requises | Texte disponible |
+|------|-------------|------------------|------------------|
+| `checkbox` | Choix multiple | Oui | Non |
+| `text` | Champ texte libre | Non | Oui |
+| `mixed` | Checkbox + texte | Oui | Oui |
+
+### Operations
+
+#### `ask` - Poser une question
+
+**Parametres:**
+
+| Parametre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `question` | string | Oui | La question (max 2000 chars) |
+| `questionType` | string | Oui | `"checkbox"`, `"text"`, ou `"mixed"` |
+| `options` | array | Conditionnel | Requis pour checkbox/mixed (max 20) |
+| `textPlaceholder` | string | Non | Placeholder pour champ texte |
+| `textRequired` | boolean | Non | Texte obligatoire (mixed) |
+| `context` | string | Non | Contexte additionnel (max 5000 chars) |
+
+**Exemple checkbox:**
+```json
+{
+  "operation": "ask",
+  "question": "Quelles fonctionnalites implementer ?",
+  "questionType": "checkbox",
+  "options": [
+    {"id": "auth", "label": "Authentification"},
+    {"id": "api", "label": "API REST"}
+  ]
+}
+```
+
+**Exemple texte:**
+```json
+{
+  "operation": "ask",
+  "question": "Nom du projet ?",
+  "questionType": "text",
+  "textPlaceholder": "Entrez le nom..."
+}
+```
+
+**Reponse succes:**
+```json
+{
+  "success": true,
+  "selectedOptions": ["auth", "api"],
+  "textResponse": "Details...",
+  "message": "User response received"
+}
+```
+
+**Reponse skip:**
+```json
+{
+  "success": false,
+  "error": "Question skipped by user"
+}
+```
+
+**Reponse timeout:**
+```json
+{
+  "success": false,
+  "error": "Timeout waiting for user response after 300 seconds"
+}
+```
+
+### Timeout (OPT-UQ-7)
+
+- **Duree**: 5 minutes (300 secondes, configurable)
+- **Comportement**: Status DB devient "timeout", erreur retournee
+- **Circuit breaker**: Timeout incremente le compteur
+
+### Circuit Breaker (OPT-UQ-12)
+
+Previent le spam de questions quand utilisateur non-responsif.
+
+**Etats:**
+
+| Etat | Comportement |
+|------|--------------|
+| **Closed** | Questions autorisees |
+| **Open** | Questions rejetees (apres 3 timeouts) |
+| **HalfOpen** | Une question de test (apres 60s) |
+
+**Transitions:**
+```
+Closed → [3 timeouts] → Open → [60s] → HalfOpen → [success] → Closed
+                                                 → [timeout] → Open
+```
+
+**Erreur circuit ouvert:**
+```json
+{
+  "success": false,
+  "error": "User appears unresponsive (3 consecutive timeouts). Question rejected. Retry in 45 seconds."
+}
+```
+
+### Constantes
+
+```rust
+pub const MAX_QUESTION_LENGTH: usize = 2000;
+pub const MAX_OPTION_ID_LENGTH: usize = 64;
+pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
+pub const MAX_OPTIONS: usize = 20;
+pub const MAX_CONTEXT_LENGTH: usize = 5000;
+pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
+pub const DEFAULT_TIMEOUT_SECS: u64 = 300;           // 5 min
+pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;        // Opens after 3 timeouts
+pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;           // 60s recovery
+pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
+```
+
+### Securite et Performance (OPT-UQ)
+
+- **OPT-UQ-1**: Validation `MAX_TEXT_RESPONSE_LENGTH` (10000 chars)
+- **OPT-UQ-2**: Validation `MAX_OPTION_ID_LENGTH` (64 chars)
+- **OPT-UQ-3**: Error handling strict (no `unwrap_or_default`)
+- **OPT-UQ-4**: Queue limit frontend (50 questions max)
+- **OPT-UQ-5**: Logger unifie (no console.log en prod)
+- **OPT-UQ-6**: Tests SQL injection (queries parametrees)
+- **Tests**: 58 tests (25 unit + 21 integration + 12 circuit breaker)
+
+---
+
+## 5. SpawnAgentTool
 
 **Fichier**: `src-tauri/src/tools/spawn_agent.rs`
 
@@ -1044,7 +1193,7 @@ Force l'arret d'un sous-agent en cours.
 
 ---
 
-## 5. DelegateTaskTool
+## 6. DelegateTaskTool
 
 **Fichier**: `src-tauri/src/tools/delegate_task.rs`
 
@@ -1141,7 +1290,7 @@ Liste les agents LLM disponibles pour delegation (exclut soi-meme et les tempora
 
 ---
 
-## 6. ParallelTasksTool
+## 7. ParallelTasksTool
 
 **Fichier**: `src-tauri/src/tools/parallel_tasks.rs`
 
@@ -1424,6 +1573,9 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 | `src-tauri/src/tools/todo/tool.rs` | Implementation TodoTool |
 | `src-tauri/src/tools/todo/mod.rs` | Module todo exports |
 | `src-tauri/src/tools/calculator/tool.rs` | Implementation CalculatorTool |
+| `src-tauri/src/tools/user_question/tool.rs` | Implementation UserQuestionTool |
+| `src-tauri/src/tools/user_question/circuit_breaker.rs` | Circuit breaker pour UserQuestionTool |
+| `src-tauri/src/tools/user_question/mod.rs` | Module user_question exports |
 | `src-tauri/src/tools/spawn_agent.rs` | Implementation SpawnAgentTool |
 | `src-tauri/src/tools/delegate_task.rs` | Implementation DelegateTaskTool |
 | `src-tauri/src/tools/parallel_tasks.rs` | Implementation ParallelTasksTool |

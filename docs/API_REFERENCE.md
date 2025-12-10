@@ -560,7 +560,7 @@ interface UserQuestion {
   text_placeholder?: string;
   text_required: boolean;
   context?: string;
-  status: 'pending' | 'answered' | 'skipped';
+  status: 'pending' | 'answered' | 'skipped' | 'timeout';  // OPT-UQ-7: timeout after 5 min
   selected_options?: string[];
   text_response?: string;
   created_at: string;
@@ -572,6 +572,12 @@ interface QuestionOption {
   label: string;
 }
 ```
+
+**Timeout Behavior (OPT-UQ-7)**:
+- Questions timeout after 5 minutes (300 seconds) without response
+- Status automatically updated to "timeout" in database
+- Circuit breaker (OPT-UQ-12) tracks consecutive timeouts
+- After 3 consecutive timeouts, new questions are rejected for 60 seconds
 
 **Returns**: Array of pending questions sorted by created_at ASC
 

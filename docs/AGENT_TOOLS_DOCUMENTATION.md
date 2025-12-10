@@ -450,16 +450,16 @@ Le tool utilise un pattern de polling progressif pour attendre la reponse utilis
 | 1-2 | 500ms |
 | 3-4 | 1000ms |
 | 5-6 | 2000ms |
-| 7+ | 5000ms (repete indefiniment) |
+| 7+ | 5000ms (jusqu'au timeout) |
 
-**Note** : Pas de timeout - le tool attend indefiniment jusqu'a ce que l'utilisateur reponde ou ignore la question.
+**Timeout (OPT-UQ-7)** : Apres 5 minutes (300 secondes) sans reponse, le statut devient "timeout" et une erreur est retournee. Le circuit breaker enregistre ce timeout (voir section Circuit Breaker ci-dessous).
 
 ### Events Emis
 
 | Event | Type | Description |
 |-------|------|-------------|
 | `workflow_stream` | `user_question_start` | Question envoyee, en attente de reponse |
-| `workflow_stream` | `user_question_complete` | Reponse recue ou question ignoree |
+| `workflow_stream` | `user_question_complete` | Reponse recue, question ignoree, ou timeout |
 
 ### Commandes Tauri IPC (Frontend)
 
@@ -489,12 +489,56 @@ Pour activer le UserQuestionTool sur un agent:
 
 ```rust
 pub const MAX_QUESTION_LENGTH: usize = 2000;
+pub const MAX_OPTION_ID_LENGTH: usize = 64;        // OPT-UQ-2
 pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
 pub const MAX_OPTIONS: usize = 20;
 pub const MAX_CONTEXT_LENGTH: usize = 5000;
+pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000; // OPT-UQ-1
 pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
-pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped"];
+pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
+
+// Timeout (OPT-UQ-7)
+pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
+
+// Circuit Breaker (OPT-UQ-12)
+pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;  // Opens after 3 consecutive timeouts
+pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;     // 60s cooldown before recovery attempt
 ```
+
+### Circuit Breaker (OPT-UQ-12)
+
+Le UserQuestionTool implemente un circuit breaker pour prevenir le spam de questions quand l'utilisateur ne repond pas.
+
+**Etats du Circuit**:
+
+| Etat | Description | Comportement |
+|------|-------------|--------------|
+| **Closed** | Fonctionnement normal | Questions autorisees |
+| **Open** | Trop de timeouts (3 consecutifs) | Questions rejetees immediatement |
+| **HalfOpen** | Test de recuperation (apres 60s) | Une question autorisee pour tester |
+
+**Transitions**:
+```
+Closed → [3 timeouts] → Open → [60s cooldown] → HalfOpen
+                                                    ↓
+                                            [success] → Closed
+                                            [timeout] → Open
+```
+
+**Reponse si circuit ouvert**:
+```json
+{
+  "success": false,
+  "error": "User appears unresponsive (3 consecutive timeouts). Question rejected. Retry in 45 seconds."
+}
+```
+
+**Reset Conditions**:
+- **Success** : Utilisateur repond → reset compteur, ferme circuit
+- **Skip** : Utilisateur ignore → traite comme success (reponse active)
+- **Autres erreurs** : Pas d'effet sur le circuit breaker
+
+**Implementation** : `src-tauri/src/tools/user_question/circuit_breaker.rs`
 
 ---
 
@@ -680,15 +724,16 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.9
+**Version** : 2.0
 **Derniere mise a jour** : 2025-12-10
-**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO Optimizations
+**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO + OPT-UQ Optimizations
 
-**Features (v1.9)**:
+**Features (v2.0)**:
 - 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
 - Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
 - MemoryTool Optimizations: Parameterized queries (OPT-MEM-5), MemoryInput struct (OPT-MEM-7), helpers.rs consolidation (OPT-MEM-6), composite indexes (OPT-MEM-4)
 - TodoTool Optimizations: Parameterized queries (OPT-TODO-1 to 4), N+1 reduction (OPT-TODO-5,6), db_error uniformization (OPT-TODO-7), TASK_SELECT_FIELDS (OPT-TODO-9), query limits (OPT-TODO-10)
+- UserQuestionTool Optimizations (OPT-UQ-1 to 12): Text response validation (OPT-UQ-1), Option ID length (OPT-UQ-2), Strict error handling (OPT-UQ-3), Queue limit 50 (OPT-UQ-4), Logger unified (OPT-UQ-5), SQL injection tests (OPT-UQ-6), Configurable timeout 5min (OPT-UQ-7), Unit tests (OPT-UQ-8), Integration tests (OPT-UQ-9), Refactor ask_question (OPT-UQ-10), Refactor submit_response (OPT-UQ-11), Circuit breaker (OPT-UQ-12)
 
 ### Test Coverage
 
@@ -699,6 +744,9 @@ activate_workflow("code_review")
 | **TodoTool Unit** | 6 tests | validate_input, definition |
 | **TodoTool Integration** | 11 tests | CRUD operations, status transitions |
 | **TodoTool SQL Injection** | 8 tests | SQL injection prevention |
+| **UserQuestionTool Unit** | 25 tests | validate_input, definition, constants |
+| **UserQuestionTool Integration** | 21 tests | commands, SQL injection, validation |
+| **UserQuestionTool Circuit Breaker** | 12 tests | state transitions, recovery |
 | **LLMAgent Tool Execution** | 10+ tests | parse_tool_calls, execute, format_results |
 | **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
 | **Memory Types (TS)** | 15+ tests | Type structure, compatibility |

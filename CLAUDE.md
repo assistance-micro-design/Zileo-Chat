@@ -599,6 +599,11 @@ let max_question = user_question::MAX_QUESTION_LENGTH;  // 2000
 let max_options = user_question::MAX_OPTIONS;           // 20
 let question_types = user_question::VALID_TYPES;        // &["checkbox", "text", "mixed"]
 
+// User question timeout and circuit breaker (OPT-UQ-7, OPT-UQ-12)
+let timeout_secs = user_question::DEFAULT_TIMEOUT_SECS;        // 300 (5 minutes)
+let circuit_threshold = user_question::CIRCUIT_FAILURE_THRESHOLD; // 3 timeouts → open
+let circuit_cooldown = user_question::CIRCUIT_COOLDOWN_SECS;    // 60s recovery
+
 // Sub-agent limit
 let max_agents = sub_agent::MAX_SUB_AGENTS;  // 3
 

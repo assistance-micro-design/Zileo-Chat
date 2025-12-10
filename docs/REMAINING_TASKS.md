@@ -2,8 +2,8 @@
 
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-10
-> **Total Estimated Effort**: ~44-48 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11)
+> **Total Estimated Effort**: ~50-54 hours
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12)
 
 ## Overview
 
@@ -30,8 +30,9 @@ All optimization phases are **COMPLETE**:
 | SA | Sub-Agent Optimizations | All 11 OPT-SA items (heartbeat, retry, circuit breaker, etc.) |
 | MEM | MemoryTool Optimizations | All 11 OPT-MEM items (parameterized queries, helpers.rs, MemoryInput, indexes) |
 | TODO | TodoTool Optimizations | All 11 OPT-TODO items (parameterized queries, N+1 reduction, integration tests) |
+| UQ | UserQuestionTool Optimizations | All 12 OPT-UQ items (timeout 5min, circuit breaker, validation, tests, refactoring) |
 
-**Total Tests**: 786+ passing (backend unit)
+**Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
 
 ---
@@ -119,6 +120,25 @@ All optimization phases are **COMPLETE**:
 
 ---
 
+### 6. UserQuestionTool Optimizations (Deferred)
+
+| ID | Item | Description | Effort | Reason for Deferral |
+|----|------|-------------|--------|---------------------|
+| OPT-UQ-13 | oneshot::channel (zero polling) | Replace polling with channel-based wait | 8-10h | Major refactor, current polling works well |
+| OPT-UQ-14 | Svelte 5 runes ($state) | Migrate store to $state runes | 4-6h | Store works well, defer to global refactoring |
+| OPT-UQ-15 | Native async traits | Remove async-trait crate | 2h | Micro-optimization, affects all tools |
+| OPT-UQ-16 | Auto-cleanup questions > 7 days | Background job to clean old questions | 3h | DB size not critical yet |
+
+**Prerequisites**: None
+
+**Implementation Notes**:
+- OPT-UQ-13: Use `tokio::sync::oneshot` to eliminate DB polling entirely
+- OPT-UQ-14: Migrate when global frontend refactoring happens
+- OPT-UQ-15: Apply when Rust MSRV allows native async in traits (1.75+)
+- OPT-UQ-16: Implement when question table grows significantly
+
+---
+
 ## Priority Order
 
 When implementing post-v1, follow this order:
@@ -177,3 +197,6 @@ When stable release is available:
 | 2025-12-09 | Confirmed all OPT-SA-1 to OPT-SA-11 complete |
 | 2025-12-10 | Confirmed all OPT-TODO-1 to OPT-TODO-12 complete (except OPT-TODO-8 deferred) |
 | 2025-12-10 | Updated test count to 786+ after TodoTool optimizations |
+| 2025-12-10 | Confirmed all OPT-UQ-1 to OPT-UQ-12 complete (OPT-UQ-13 to OPT-UQ-16 deferred) |
+| 2025-12-10 | Updated test count to 844+ after UserQuestionTool optimizations |
+| 2025-12-10 | Added Section 6: UserQuestionTool Optimizations (Deferred) |
