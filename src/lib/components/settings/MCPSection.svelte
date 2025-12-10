@@ -354,6 +354,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
+		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
 	}
 
 	.mcp-loading {

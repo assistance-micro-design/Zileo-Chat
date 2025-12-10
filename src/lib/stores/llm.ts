@@ -47,11 +47,23 @@ let llmCache: LLMDataCache = { data: null, timestamp: 0 };
 const LLM_CACHE_TTL = 30000; // 30 seconds
 
 /**
+ * Cache for filtered models to avoid recalculation during scroll (OPT-SCROLL-6).
+ * Moved to top for access by invalidateLLMCache.
+ */
+interface FilteredModelsCache {
+	key: string;
+	result: LLMModel[];
+}
+let filteredModelsCache: FilteredModelsCache | null = null;
+
+/**
  * Invalidates the LLM data cache.
  * Call this after any mutation (create/update/delete model, update provider settings).
+ * Also clears the filtered models memoization cache (OPT-SCROLL-6).
  */
 export function invalidateLLMCache(): void {
 	llmCache = { data: null, timestamp: 0 };
+	filteredModelsCache = null; // OPT-SCROLL-6: Clear memoized cache
 }
 
 // ============================================================================
@@ -242,6 +254,53 @@ export function getModelsByProvider(state: LLMState, provider: ProviderType): LL
  */
 export function getAllModels(state: LLMState): LLMModel[] {
 	return state.models;
+}
+
+// ============================================================================
+// Memoized Selectors (OPT-SCROLL-6)
+// ============================================================================
+
+/**
+ * Computes a simple hash from the models array for cache invalidation.
+ * Uses model IDs and count to detect changes.
+ */
+function computeModelsHash(models: LLMModel[]): string {
+	if (models.length === 0) return 'empty';
+	return `${models.length}:${models[0]?.id ?? ''}:${models[models.length - 1]?.id ?? ''}`;
+}
+
+/**
+ * Gets filtered models with memoization to prevent recalculation during scroll.
+ * Returns cached result if state hasn't changed.
+ * @param state - Current LLM state
+ * @param provider - Provider filter ('all' for no filter, or specific provider)
+ * @returns Array of models (possibly cached)
+ */
+export function getFilteredModelsMemoized(
+	state: LLMState,
+	provider: ProviderType | 'all'
+): LLMModel[] {
+	const modelsHash = computeModelsHash(state.models);
+	const cacheKey = `${modelsHash}:${provider}`;
+
+	if (filteredModelsCache?.key === cacheKey) {
+		return filteredModelsCache.result;
+	}
+
+	const result = provider === 'all'
+		? getAllModels(state)
+		: getModelsByProvider(state, provider);
+
+	filteredModelsCache = { key: cacheKey, result };
+	return result;
+}
+
+/**
+ * Clears the filtered models cache.
+ * Called automatically when LLM cache is invalidated.
+ */
+export function clearFilteredModelsCache(): void {
+	filteredModelsCache = null;
 }
 
 /**

@@ -41,8 +41,7 @@ Combines Providers and Models sections.
 		addModel as addModelToState,
 		updateModelInState,
 		removeModel,
-		getModelsByProvider,
-		getAllModels,
+		getFilteredModelsMemoized,
 		getDefaultModel,
 		hasApiKey as hasApiKeyInState,
 		loadAllLLMData,
@@ -159,12 +158,11 @@ Combines Providers and Models sections.
 	}
 
 	/**
-	 * Gets filtered models for the selected provider (or all if 'all' selected)
+	 * Gets filtered models for the selected provider (or all if 'all' selected).
+	 * Uses memoized selector to prevent recalculation during scroll (OPT-SCROLL-6).
 	 */
 	const filteredModels = $derived(
-		selectedModelsProvider === 'all'
-			? getAllModels(llmState)
-			: getModelsByProvider(llmState, selectedModelsProvider)
+		getFilteredModelsMemoized(llmState, selectedModelsProvider)
 	);
 
 	/**
@@ -398,6 +396,7 @@ Combines Providers and Models sections.
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
 		margin-bottom: var(--spacing-lg);
+		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
 	}
 
 	.message-toast {
@@ -461,6 +460,7 @@ Combines Providers and Models sections.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
+		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
 	}
 
 	.models-empty {

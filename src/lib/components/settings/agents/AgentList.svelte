@@ -200,6 +200,7 @@ Shows agent summary with actions for edit and delete.
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 		gap: var(--spacing-lg);
+		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
 	}
 
 	.agent-card {
