@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::{
+    db::queries::workflow as wf_queries,
     models::{
         Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
         WorkflowMetrics, WorkflowResult, WorkflowStatus, WorkflowToolExecution,
@@ -110,19 +111,10 @@ pub async fn execute_workflow(
         format!("Invalid agent_id: {}", e)
     })?;
 
-    // 1. Load workflow with explicit ID conversion to avoid SurrealDB Thing enum issues
-    // Use meta::id() to extract the UUID without SurrealDB's angle brackets
+    // 1. Load workflow (OPT-WF-1: Use centralized query constant)
     let query = format!(
-        r#"SELECT
-            meta::id(id) AS id,
-            name,
-            agent_id,
-            status,
-            created_at,
-            updated_at,
-            completed_at
-        FROM workflow
-        WHERE meta::id(id) = '{}'"#,
+        "{} WHERE meta::id(id) = '{}'",
+        wf_queries::SELECT_BASIC,
         validated_workflow_id
     );
 
@@ -232,24 +224,8 @@ pub async fn execute_workflow(
 pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>, String> {
     info!("Loading workflows");
 
-    // Query with explicit ID conversion to avoid SurrealDB Thing enum serialization issues
-    // Use meta::id() to extract the UUID without SurrealDB's angle brackets
-    let query = r#"
-        SELECT
-            meta::id(id) AS id,
-            name,
-            agent_id,
-            status,
-            created_at,
-            updated_at,
-            completed_at,
-            (total_tokens_input ?? 0) AS total_tokens_input,
-            (total_tokens_output ?? 0) AS total_tokens_output,
-            (total_cost_usd ?? 0.0) AS total_cost_usd,
-            model_id
-        FROM workflow
-        ORDER BY updated_at DESC
-    "#;
+    // OPT-WF-1: Use centralized query constant
+    let query = wf_queries::SELECT_LIST;
 
     let json_results = state.db.query_json(query).await.map_err(|e| {
         error!(error = %e, "Failed to load workflows");
@@ -452,23 +428,11 @@ pub async fn load_workflow_full_state(
 
     // Execute all queries in parallel using tokio::try_join!
     let (workflow_result, messages_result, tools_result, thinking_result) = tokio::try_join!(
-        // Query 1: Load workflow
+        // Query 1: Load workflow (OPT-WF-1: Use centralized query constant)
         async move {
             let query = format!(
-                r#"SELECT
-                    meta::id(id) AS id,
-                    name,
-                    agent_id,
-                    status,
-                    created_at,
-                    updated_at,
-                    completed_at,
-                    (total_tokens_input ?? 0) AS total_tokens_input,
-                    (total_tokens_output ?? 0) AS total_tokens_output,
-                    (total_cost_usd ?? 0.0) AS total_cost_usd,
-                    model_id
-                FROM workflow
-                WHERE meta::id(id) = '{}'"#,
+                "{} WHERE meta::id(id) = '{}'",
+                wf_queries::SELECT_BASE,
                 id1
             );
 

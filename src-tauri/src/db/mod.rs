@@ -39,6 +39,7 @@
 //! - `task` - Task decomposition tracking
 
 pub mod client;
+pub mod queries;
 pub mod schema;
 
 pub use client::DBClient;

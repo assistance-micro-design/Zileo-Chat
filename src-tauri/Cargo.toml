@@ -9,6 +9,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# OPT-WF-5: Verified >= 2.2.1 (CVE-2025-31477 patched, current: 2.5.2)
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -33,7 +34,8 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 async-trait = "0.1"
-futures = "0.3"
+# OPT-WF-4: Lock futures version (earlier versions yanked)
+futures = "0.3.31"
 regex = "1.10"
 # OPT-8: Migrated from lazy_static to once_cell (better performance, maintained)
 once_cell = "1.20"
@@ -47,8 +49,8 @@ rig-core = { version = "0.24.0", features = ["all"] }
 # HTTP client for provider connectivity tests and MCP HTTP transport
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 
-# Async stream utilities for SSE
-futures-util = "0.3"
+# Async stream utilities for SSE (OPT-WF-4: Lock version)
+futures-util = "0.3.31"
 
 # Tauri Secure Storage
 keyring = "2.0"

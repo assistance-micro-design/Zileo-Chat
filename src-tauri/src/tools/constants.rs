@@ -137,6 +137,15 @@ pub mod calculator {
     pub const VALID_CONSTANTS: &[&str] = &["pi", "e", "tau", "sqrt2", "ln2", "ln10"];
 }
 
+// ===== Workflow Constants (OPT-WF-3) =====
+/// Constants for workflow execution and streaming.
+#[allow(dead_code)]
+pub mod workflow {
+    /// Maximum number of messages to include in LLM context (OPT-WF-3).
+    /// Prevents context overflow while maintaining conversation coherence.
+    pub const MESSAGE_HISTORY_LIMIT: usize = 50;
+}
+
 // ===== Query Limits (OPT-DB-8) =====
 /// Default limits for database queries to prevent memory explosion.
 #[allow(dead_code)] // Some constants prepared for future use

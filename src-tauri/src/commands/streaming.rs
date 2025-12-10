@@ -19,6 +19,7 @@
 
 use crate::{
     agents::core::agent::Task,
+    db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
         llm_models::LLMModel, streaming::events, Message, StreamChunk, ThinkingStepCreate,
@@ -26,6 +27,7 @@ use crate::{
         WorkflowToolExecution,
     },
     security::Validator,
+    tools::constants::workflow as wf_const,
     AppState,
 };
 use tauri::{Emitter, State, Window};
@@ -89,19 +91,10 @@ pub async fn execute_workflow_streaming(
         .create_cancellation_token(&validated_workflow_id)
         .await;
 
-    // Load workflow with explicit ID conversion to avoid SurrealDB Thing enum issues
-    // Use meta::id() to extract the UUID without SurrealDB's angle brackets
+    // OPT-WF-1: Use centralized query constant
     let query = format!(
-        r#"SELECT
-            meta::id(id) AS id,
-            name,
-            agent_id,
-            status,
-            created_at,
-            updated_at,
-            completed_at
-        FROM workflow
-        WHERE meta::id(id) = '{}'"#,
+        "{} WHERE meta::id(id) = '{}'",
+        wf_queries::SELECT_BASIC,
         validated_workflow_id
     );
 
@@ -197,8 +190,9 @@ pub async fn execute_workflow_streaming(
         FROM message
         WHERE workflow_id = '{}'
         ORDER BY timestamp ASC
-        LIMIT 50"#, // Limit to last 50 messages for context window
-        validated_workflow_id
+        LIMIT {}"#, // OPT-WF-3: Use centralized constant
+        validated_workflow_id,
+        wf_const::MESSAGE_HISTORY_LIMIT
     );
 
     let history_json = state
@@ -407,12 +401,9 @@ pub async fn execute_workflow_streaming(
     let chunk_size = 50; // Characters per chunk for simulated streaming
     let mut cancelled = false;
 
-    for (i, chunk) in content
-        .chars()
-        .collect::<Vec<_>>()
-        .chunks(chunk_size)
-        .enumerate()
-    {
+    // OPT-WF-6: Single allocation outside loop instead of per-iteration
+    let chars: Vec<char> = content.chars().collect();
+    for (i, chunk) in chars.chunks(chunk_size).enumerate() {
         // Check for cancellation before each chunk (still useful for post-execution streaming)
         if state.is_cancelled(&validated_workflow_id).await {
             warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user during response display");
@@ -440,7 +431,7 @@ pub async fn execute_workflow_streaming(
         );
 
         // Small delay between chunks to simulate streaming
-        if i < content.len() / chunk_size {
+        if i < chars.len() / chunk_size {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
     }
@@ -529,23 +520,20 @@ pub async fn execute_workflow_streaming(
     );
 
     // Update workflow with cumulative tokens, cost, model_id, and current context size
-    // Use IF/THEN/ELSE for robust null handling in SurrealDB
+    // OPT-WF-2: Use ?? (null coalescing) instead of IF/THEN/ELSE to eliminate param duplication
     // Use explicit float formatting to avoid scientific notation (e.g., 1.6e-5)
     // current_context_tokens = tokens_input (actual context size at last API call)
     let update_query = format!(
         "UPDATE workflow:`{}` SET \
-            total_tokens_input = IF total_tokens_input IS NOT NONE THEN total_tokens_input + {} ELSE {} END, \
-            total_tokens_output = IF total_tokens_output IS NOT NONE THEN total_tokens_output + {} ELSE {} END, \
-            total_cost_usd = IF total_cost_usd IS NOT NONE THEN total_cost_usd + {:.10} ELSE {:.10} END, \
+            total_tokens_input = (total_tokens_input ?? 0) + {}, \
+            total_tokens_output = (total_tokens_output ?? 0) + {}, \
+            total_cost_usd = (total_cost_usd ?? 0.0) + {:.10}, \
             model_id = '{}', \
             current_context_tokens = {}, \
             updated_at = time::now()",
         validated_workflow_id,
         report.metrics.tokens_input,
-        report.metrics.tokens_input,
         report.metrics.tokens_output,
-        report.metrics.tokens_output,
-        cost_usd,
         cost_usd,
         model_id,  // Use real model UUID, not api_name
         report.metrics.tokens_input  // Current context size (last API call)
