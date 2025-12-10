@@ -137,13 +137,26 @@ pub mod calculator {
     pub const VALID_CONSTANTS: &[&str] = &["pi", "e", "tau", "sqrt2", "ln2", "ln10"];
 }
 
-// ===== Workflow Constants (OPT-WF-3) =====
+// ===== Workflow Constants (OPT-WF-3, OPT-WF-9) =====
 /// Constants for workflow execution and streaming.
 #[allow(dead_code)]
 pub mod workflow {
     /// Maximum number of messages to include in LLM context (OPT-WF-3).
     /// Prevents context overflow while maintaining conversation coherence.
     pub const MESSAGE_HISTORY_LIMIT: usize = 50;
+
+    // OPT-WF-9: Tokio Timeout Constants
+    /// Timeout (seconds) for LLM execution operations.
+    /// Default: 5 minutes - generous for complex reasoning tasks.
+    pub const LLM_EXECUTION_TIMEOUT_SECS: u64 = 300;
+
+    /// Timeout (seconds) for database operations (queries, updates).
+    /// Default: 30 seconds - should be sufficient for most queries.
+    pub const DB_OPERATION_TIMEOUT_SECS: u64 = 30;
+
+    /// Timeout (seconds) for loading workflow full state (multiple parallel queries).
+    /// Default: 60 seconds - accounts for multiple parallel queries.
+    pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
 }
 
 // ===== Query Limits (OPT-DB-8) =====

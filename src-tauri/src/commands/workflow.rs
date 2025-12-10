@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    db::queries::workflow as wf_queries,
+    db::queries::{cascade, workflow as wf_queries},
     models::{
         Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
         WorkflowMetrics, WorkflowResult, WorkflowStatus, WorkflowToolExecution,
@@ -91,6 +91,8 @@ pub async fn execute_workflow(
     state: State<'_, AppState>,
 ) -> Result<WorkflowResult, String> {
     use crate::agents::core::agent::Task;
+    use crate::tools::constants::workflow as wf_const;
+    use tokio::time::{timeout, Duration};
     use uuid::Uuid;
 
     info!("Starting workflow execution");
@@ -147,15 +149,27 @@ pub async fn execute_workflow(
         context: serde_json::json!({}),
     };
 
-    // 3. Execute via orchestrator with MCP support
-    let report = state
+    // 3. Execute via orchestrator with MCP support (OPT-WF-9: with timeout)
+    let execution_future = state
         .orchestrator
-        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()))
-        .await
-        .map_err(|e| {
-            error!(error = %e, task_id = %task_id, "Workflow execution failed");
-            format!("Execution failed: {}", e)
-        })?;
+        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()));
+
+    let report = timeout(
+        Duration::from_secs(wf_const::LLM_EXECUTION_TIMEOUT_SECS),
+        execution_future,
+    )
+    .await
+    .map_err(|_| {
+        error!(task_id = %task_id, timeout_secs = wf_const::LLM_EXECUTION_TIMEOUT_SECS, "Workflow execution timed out");
+        format!(
+            "Workflow execution timed out after {} seconds",
+            wf_const::LLM_EXECUTION_TIMEOUT_SECS
+        )
+    })?
+    .map_err(|e| {
+        error!(error = %e, task_id = %task_id, "Workflow execution failed");
+        format!("Execution failed: {}", e)
+    })?;
 
     // 4. Get agent config for accurate provider/model info
     let (provider, model) = match state.registry.get(&validated_agent_id).await {
@@ -271,106 +285,9 @@ pub async fn delete_workflow(
         format!("Invalid workflow_id: {}", e)
     })?;
 
-    // Delete related entities in parallel (order doesn't matter for independent tables)
-    let db = Arc::clone(&state.db);
-    let db2 = Arc::clone(&state.db);
-    let db3 = Arc::clone(&state.db);
-    let db4 = Arc::clone(&state.db);
-    let db5 = Arc::clone(&state.db);
-    let db6 = Arc::clone(&state.db);
-    let db7 = Arc::clone(&state.db);
-    let db8 = Arc::clone(&state.db);
-
-    let id1 = validated_id.clone();
-    let id2 = validated_id.clone();
-    let id3 = validated_id.clone();
-    let id4 = validated_id.clone();
-    let id5 = validated_id.clone();
-    let id6 = validated_id.clone();
-    let id7 = validated_id.clone();
-    let id8 = validated_id.clone();
-
-    // Execute cascade deletes in parallel
-    let (tasks, messages, tools, thinking, sub_agents, validations, memories, questions) = tokio::join!(
-        // Delete tasks
-        async move {
-            let query = format!("DELETE task WHERE workflow_id = '{}'", id1);
-            match db.execute(&query).await {
-                Ok(_) => info!("Deleted tasks for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete tasks (may not exist)"),
-            }
-        },
-        // Delete messages
-        async move {
-            let query = format!("DELETE message WHERE workflow_id = '{}'", id2);
-            match db2.execute(&query).await {
-                Ok(_) => info!("Deleted messages for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete messages (may not exist)"),
-            }
-        },
-        // Delete tool executions
-        async move {
-            let query = format!("DELETE tool_execution WHERE workflow_id = '{}'", id3);
-            match db3.execute(&query).await {
-                Ok(_) => info!("Deleted tool executions for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete tool executions (may not exist)"),
-            }
-        },
-        // Delete thinking steps
-        async move {
-            let query = format!("DELETE thinking_step WHERE workflow_id = '{}'", id4);
-            match db4.execute(&query).await {
-                Ok(_) => info!("Deleted thinking steps for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete thinking steps (may not exist)"),
-            }
-        },
-        // Delete sub-agent executions
-        async move {
-            let query = format!("DELETE sub_agent_execution WHERE workflow_id = '{}'", id5);
-            match db5.execute(&query).await {
-                Ok(_) => info!("Deleted sub-agent executions for workflow"),
-                Err(e) => {
-                    warn!(error = %e, "Failed to delete sub-agent executions (may not exist)")
-                }
-            }
-        },
-        // Delete validation requests
-        async move {
-            let query = format!("DELETE validation_request WHERE workflow_id = '{}'", id6);
-            match db6.execute(&query).await {
-                Ok(_) => info!("Deleted validation requests for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete validation requests (may not exist)"),
-            }
-        },
-        // Delete workflow-scoped memories
-        async move {
-            let query = format!("DELETE memory WHERE workflow_id = '{}'", id7);
-            match db7.execute(&query).await {
-                Ok(_) => info!("Deleted memories for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete memories (may not exist)"),
-            }
-        },
-        // Delete user questions
-        async move {
-            let query = format!("DELETE user_question WHERE workflow_id = '{}'", id8);
-            match db8.execute(&query).await {
-                Ok(_) => info!("Deleted user questions for workflow"),
-                Err(e) => warn!(error = %e, "Failed to delete user questions (may not exist)"),
-            }
-        }
-    );
-
-    // Consume the unit values to avoid warnings
-    let _ = (
-        tasks,
-        messages,
-        tools,
-        thinking,
-        sub_agents,
-        validations,
-        memories,
-        questions,
-    );
+    // OPT-WF-8: Use centralized cascade delete helper
+    // This eliminates 8 Arc clones + 8 ID clones by using a single helper function
+    cascade::delete_workflow_related(&state.db, &validated_id).await;
 
     // Finally delete the workflow itself
     state
@@ -407,6 +324,9 @@ pub async fn load_workflow_full_state(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkflowFullState, String> {
+    use crate::tools::constants::workflow as wf_const;
+    use tokio::time::{timeout, Duration};
+
     info!("Loading complete workflow state for recovery");
 
     // Validate workflow ID
@@ -426,8 +346,9 @@ pub async fn load_workflow_full_state(
     let id3 = validated_id.clone();
     let id4 = validated_id.clone();
 
-    // Execute all queries in parallel using tokio::try_join!
-    let (workflow_result, messages_result, tools_result, thinking_result) = tokio::try_join!(
+    // Execute all queries in parallel using tokio::try_join! (OPT-WF-9: with timeout)
+    let parallel_queries = async {
+        tokio::try_join!(
         // Query 1: Load workflow (OPT-WF-1: Use centralized query constant)
         async move {
             let query = format!(
@@ -568,7 +489,25 @@ pub async fn load_workflow_full_state(
 
             Ok::<Vec<ThinkingStep>, String>(steps)
         }
-    )?;
+        )
+    };
+
+    let (workflow_result, messages_result, tools_result, thinking_result) = timeout(
+        Duration::from_secs(wf_const::FULL_STATE_LOAD_TIMEOUT_SECS),
+        parallel_queries,
+    )
+    .await
+    .map_err(|_| {
+        error!(
+            workflow_id = %validated_id,
+            timeout_secs = wf_const::FULL_STATE_LOAD_TIMEOUT_SECS,
+            "Full state load timed out"
+        );
+        format!(
+            "Full state load timed out after {} seconds",
+            wf_const::FULL_STATE_LOAD_TIMEOUT_SECS
+        )
+    })??;
 
     let full_state = WorkflowFullState {
         workflow: workflow_result,
