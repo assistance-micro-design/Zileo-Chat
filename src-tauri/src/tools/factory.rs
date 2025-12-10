@@ -63,8 +63,9 @@ use tracing::{debug, info, warn};
 pub struct ToolFactory {
     /// Database client shared by all tools
     db: Arc<DBClient>,
-    /// Embedding service for MemoryTool (optional)
-    embedding_service: Option<Arc<EmbeddingService>>,
+    /// Dynamic embedding service reference for MemoryTool
+    /// Uses RwLock to allow runtime configuration via Settings UI
+    embedding_service: Arc<tokio::sync::RwLock<Option<Arc<EmbeddingService>>>>,
 }
 
 impl ToolFactory {
@@ -72,21 +73,28 @@ impl ToolFactory {
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
-    /// * `embedding_service` - Optional embedding service for semantic search
+    /// * `embedding_service` - Dynamic embedding service reference (reads current state)
     ///
     /// # Example
     /// ```ignore
-    /// let factory = ToolFactory::new(db.clone(), Some(embed_svc.clone()));
+    /// let embedding_ref = Arc::new(RwLock::new(None));
+    /// let factory = ToolFactory::new(db.clone(), embedding_ref);
+    /// // Later: *embedding_ref.write().await = Some(embed_svc);
     /// ```
-    pub fn new(db: Arc<DBClient>, embedding_service: Option<Arc<EmbeddingService>>) -> Self {
-        info!(
-            has_embedding = embedding_service.is_some(),
-            "ToolFactory initialized"
-        );
+    pub fn new(
+        db: Arc<DBClient>,
+        embedding_service: Arc<tokio::sync::RwLock<Option<Arc<EmbeddingService>>>>,
+    ) -> Self {
+        info!("ToolFactory initialized with dynamic embedding service");
         Self {
             db,
             embedding_service,
         }
+    }
+
+    /// Gets the current embedding service (reads from dynamic reference)
+    async fn get_embedding_service(&self) -> Option<Arc<EmbeddingService>> {
+        self.embedding_service.read().await.clone()
     }
 
     /// Creates a tool instance by name.
@@ -112,9 +120,9 @@ impl ToolFactory {
     ///     Some("wf_001".into()),
     ///     "db_agent".into(),
     ///     None
-    /// )?;
+    /// ).await?;
     /// ```
-    pub fn create_tool(
+    pub async fn create_tool(
         &self,
         tool_name: &str,
         workflow_id: Option<String>,
@@ -132,13 +140,23 @@ impl ToolFactory {
 
         match tool_name {
             "MemoryTool" => {
+                // Read current embedding service state (configured via Settings)
+                let embedding_service = self.get_embedding_service().await;
+                let has_embedding = embedding_service.is_some();
+                debug!(
+                    has_embedding = has_embedding,
+                    "Creating MemoryTool with current embedding state"
+                );
                 let tool = MemoryTool::new(
                     self.db.clone(),
-                    self.embedding_service.clone(),
+                    embedding_service,
                     workflow_id,
                     agent_id,
                 );
-                info!("MemoryTool instance created");
+                info!(
+                    has_embedding = has_embedding,
+                    "MemoryTool instance created"
+                );
                 Ok(Arc::new(tool))
             }
 
@@ -182,7 +200,7 @@ impl ToolFactory {
     ///
     /// # Returns
     /// Vector of successfully created tools. Failed tools are logged but skipped.
-    pub fn create_tools(
+    pub async fn create_tools(
         &self,
         tool_names: &[String],
         workflow_id: Option<String>,
@@ -192,12 +210,15 @@ impl ToolFactory {
         let mut tools = Vec::new();
 
         for name in tool_names {
-            match self.create_tool(
-                name,
-                workflow_id.clone(),
-                agent_id.clone(),
-                app_handle.clone(),
-            ) {
+            match self
+                .create_tool(
+                    name,
+                    workflow_id.clone(),
+                    agent_id.clone(),
+                    app_handle.clone(),
+                )
+                .await
+            {
                 Ok(tool) => {
                     tools.push(tool);
                 }
@@ -284,9 +305,9 @@ impl ToolFactory {
     ///     "primary_agent".into(),
     ///     context,
     ///     true, // is_primary_agent
-    /// )?;
+    /// ).await?;
     /// ```
-    pub fn create_tool_with_context(
+    pub async fn create_tool_with_context(
         &self,
         tool_name: &str,
         workflow_id: Option<String>,
@@ -322,6 +343,7 @@ impl ToolFactory {
                 // Extract app_handle from context for basic tools
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
+                    .await
             }
 
             // Sub-agent tools (require context)
@@ -393,7 +415,7 @@ impl ToolFactory {
     /// AUTOMATICALLY adds sub-agent tools (SpawnAgentTool, DelegateTaskTool,
     /// ParallelTasksTool) even if they are not in `tool_names`. This ensures
     /// the primary workflow agent always has access to orchestration capabilities.
-    pub fn create_tools_with_context(
+    pub async fn create_tools_with_context(
         &self,
         tool_names: &[String],
         workflow_id: Option<String>,
@@ -417,6 +439,7 @@ impl ToolFactory {
                         ctx.clone(),
                         is_primary_agent,
                     )
+                    .await
                 } else {
                     warn!(
                         tool_name = %name,
@@ -431,6 +454,7 @@ impl ToolFactory {
                     agent_id.clone(),
                     app_handle.clone(),
                 )
+                .await
             };
 
             match result {
@@ -458,13 +482,16 @@ impl ToolFactory {
                         continue;
                     }
 
-                    match self.create_tool_with_context(
-                        sub_tool_name,
-                        workflow_id.clone(),
-                        agent_id.clone(),
-                        ctx.clone(),
-                        true, // is_primary_agent
-                    ) {
+                    match self
+                        .create_tool_with_context(
+                            sub_tool_name,
+                            workflow_id.clone(),
+                            agent_id.clone(),
+                            ctx.clone(),
+                            true, // is_primary_agent
+                        )
+                        .await
+                    {
                         Ok(tool) => {
                             info!(
                                 tool_name = %sub_tool_name,
@@ -510,7 +537,8 @@ mod tests {
                 .expect("Failed to create DB"),
         );
         db.initialize_schema().await.expect("Failed to init schema");
-        ToolFactory::new(db, None)
+        let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
+        ToolFactory::new(db, embedding_service)
     }
 
     #[test]
@@ -573,12 +601,14 @@ mod tests {
     async fn test_create_memory_tool() {
         let factory = create_test_factory().await;
 
-        let result = factory.create_tool(
-            "MemoryTool",
-            Some("wf_test".to_string()),
-            "test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "MemoryTool",
+                Some("wf_test".to_string()),
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok());
         let tool = result.unwrap();
@@ -590,12 +620,14 @@ mod tests {
     async fn test_create_todo_tool() {
         let factory = create_test_factory().await;
 
-        let result = factory.create_tool(
-            "TodoTool",
-            Some("wf_test".to_string()),
-            "test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "TodoTool",
+                Some("wf_test".to_string()),
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok());
         let tool = result.unwrap();
@@ -606,12 +638,14 @@ mod tests {
     async fn test_create_calculator_tool() {
         let factory = create_test_factory().await;
 
-        let result = factory.create_tool(
-            "CalculatorTool",
-            None, // CalculatorTool doesn't need workflow_id
-            "test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "CalculatorTool",
+                None, // CalculatorTool doesn't need workflow_id
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok());
         let tool = result.unwrap();
@@ -623,7 +657,9 @@ mod tests {
     async fn test_create_unknown_tool() {
         let factory = create_test_factory().await;
 
-        let result = factory.create_tool("UnknownTool", None, "test_agent".to_string(), None);
+        let result = factory
+            .create_tool("UnknownTool", None, "test_agent".to_string(), None)
+            .await;
 
         assert!(result.is_err());
         match result {
@@ -642,12 +678,14 @@ mod tests {
             "InvalidTool".to_string(), // Should be skipped
         ];
 
-        let tools = factory.create_tools(
-            &tool_names,
-            Some("wf_batch".to_string()),
-            "batch_agent".to_string(),
-            None,
-        );
+        let tools = factory
+            .create_tools(
+                &tool_names,
+                Some("wf_batch".to_string()),
+                "batch_agent".to_string(),
+                None,
+            )
+            .await;
 
         // Should create 2 valid tools, skip 1 invalid
         assert_eq!(tools.len(), 2);
@@ -658,7 +696,9 @@ mod tests {
         let factory = create_test_factory().await;
 
         // MemoryTool should still work without embedding service
-        let result = factory.create_tool("MemoryTool", None, "test_agent".to_string(), None);
+        let result = factory
+            .create_tool("MemoryTool", None, "test_agent".to_string(), None)
+            .await;
         assert!(result.is_ok());
     }
 }

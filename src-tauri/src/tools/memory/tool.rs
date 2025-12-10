@@ -452,13 +452,18 @@ impl MemoryTool {
         // Convert threshold to distance (cosine distance = 1 - similarity)
         let distance_threshold = 1.0 - threshold;
 
+        // OPT-MEM-11: Pre-allocate String to avoid intermediate Vec allocation
         // Format embedding for SurrealQL - must be inline array for vector operations
         // Note: embedding array is generated internally from query_text, not user input
-        let embedding_str: String = query_embedding
-            .iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
+        // Estimate ~12 chars per float (sign + digits + decimal + separator)
+        let mut embedding_str = String::with_capacity(query_embedding.len() * 12);
+        for (i, v) in query_embedding.iter().enumerate() {
+            if i > 0 {
+                embedding_str.push_str(", ");
+            }
+            use std::fmt::Write;
+            let _ = write!(embedding_str, "{}", v);
+        }
 
         // OPT-MEM-5: LIMIT and distance_threshold are safe (integers/floats, not user strings)
         // The embedding is also safe (generated from EmbeddingService)

@@ -681,14 +681,17 @@ mod tests {
         // Leak temp_dir to keep it alive during test
         std::mem::forget(temp_dir);
 
+        // Create shared embedding service reference
+        let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
+
         AppState {
             db: db.clone(),
             registry,
             orchestrator,
             llm_manager,
             mcp_manager,
-            tool_factory: Arc::new(crate::tools::ToolFactory::new(db, None)),
-            embedding_service: Arc::new(tokio::sync::RwLock::new(None)),
+            tool_factory: Arc::new(crate::tools::ToolFactory::new(db, embedding_service.clone())),
+            embedding_service,
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),

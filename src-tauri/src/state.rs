@@ -78,8 +78,9 @@ impl AppState {
         let embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>> =
             Arc::new(RwLock::new(None));
 
-        // Initialize tool factory (will use embedding_service when configured)
-        let tool_factory = Arc::new(ToolFactory::new(db.clone(), None));
+        // Initialize tool factory with dynamic embedding service reference
+        // ToolFactory reads current embedding state when creating tools
+        let tool_factory = Arc::new(ToolFactory::new(db.clone(), embedding_service.clone()));
 
         // Initialize streaming cancellation token map
         let streaming_cancellations = Arc::new(Mutex::new(HashMap::new()));
@@ -462,13 +463,16 @@ mod tests {
         assert!(available.contains(&"MemoryTool"));
         assert!(available.contains(&"TodoTool"));
 
-        // Can create tools via factory
-        let tool_result = state.tool_factory.create_tool(
-            "MemoryTool",
-            Some("wf_test".to_string()),
-            "test_agent".to_string(),
-            None, // app_handle not needed in tests
-        );
+        // Can create tools via factory (async now)
+        let tool_result = state
+            .tool_factory
+            .create_tool(
+                "MemoryTool",
+                Some("wf_test".to_string()),
+                "test_agent".to_string(),
+                None, // app_handle not needed in tests
+            )
+            .await;
         assert!(tool_result.is_ok(), "Should create MemoryTool");
     }
 

@@ -86,25 +86,18 @@ pub async fn add_memory_core(
 ) -> Result<AddMemoryResult, String> {
     let memory_id = Uuid::new_v4().to_string();
 
+    // OPT-MEM-10: Simplified branching using unified build() method
     let embedding_generated = if let Some(embed_svc) = embedding_service {
         match embed_svc.embed(&params.content).await {
             Ok(embedding) => {
-                // Create memory with embedding
-                let memory = match &params.workflow_id {
-                    Some(wf_id) => MemoryCreateWithEmbedding::with_workflow(
-                        params.memory_type.clone(),
-                        params.content.clone(),
-                        embedding,
-                        params.metadata.clone(),
-                        wf_id.clone(),
-                    ),
-                    None => MemoryCreateWithEmbedding::new(
-                        params.memory_type.clone(),
-                        params.content.clone(),
-                        embedding,
-                        params.metadata.clone(),
-                    ),
-                };
+                // Create memory with embedding using unified builder
+                let memory = MemoryCreateWithEmbedding::build(
+                    params.memory_type.clone(),
+                    params.content.clone(),
+                    embedding,
+                    params.metadata.clone(),
+                    params.workflow_id.clone(),
+                );
 
                 db.create("memory", &memory_id, memory)
                     .await
@@ -141,24 +134,18 @@ pub async fn add_memory_core(
 }
 
 /// Helper to create a memory record without embedding.
+/// OPT-MEM-10: Simplified using unified build() method
 async fn create_memory_without_embedding(
     db: &DBClient,
     memory_id: &str,
     params: &AddMemoryParams,
 ) -> Result<(), String> {
-    let memory = match &params.workflow_id {
-        Some(wf_id) => MemoryCreate::with_workflow(
-            params.memory_type.clone(),
-            params.content.clone(),
-            params.metadata.clone(),
-            wf_id.clone(),
-        ),
-        None => MemoryCreate::new(
-            params.memory_type.clone(),
-            params.content.clone(),
-            params.metadata.clone(),
-        ),
-    };
+    let memory = MemoryCreate::build(
+        params.memory_type.clone(),
+        params.content.clone(),
+        params.metadata.clone(),
+        params.workflow_id.clone(),
+    );
 
     db.create("memory", memory_id, memory)
         .await

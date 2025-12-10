@@ -112,7 +112,9 @@ impl LLMAgent {
         provider_manager: Arc<ProviderManager>,
         db: Arc<DBClient>,
     ) -> Self {
-        let tool_factory = Arc::new(ToolFactory::new(db, None));
+        // Create a new empty embedding service reference (no embedding by default)
+        let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
+        let tool_factory = Arc::new(ToolFactory::new(db, embedding_service));
         Self {
             config,
             provider_manager,
@@ -392,7 +394,7 @@ impl LLMAgent {
     /// # Arguments
     /// * `workflow_id` - Optional workflow ID for scoping tool operations
     /// * `is_primary_agent` - Whether this is the primary workflow agent
-    fn create_local_tools(
+    async fn create_local_tools(
         &self,
         workflow_id: Option<String>,
         is_primary_agent: bool,
@@ -415,13 +417,15 @@ impl LLMAgent {
                     agent_id = %self.config.id,
                     "Creating tools with context for primary agent (sub-agent tools available)"
                 );
-                return factory.create_tools_with_context(
-                    &self.config.tools,
-                    workflow_id,
-                    self.config.id.clone(),
-                    Some(context.clone()),
-                    true, // is_primary_agent
-                );
+                return factory
+                    .create_tools_with_context(
+                        &self.config.tools,
+                        workflow_id,
+                        self.config.id.clone(),
+                        Some(context.clone()),
+                        true, // is_primary_agent
+                    )
+                    .await;
             }
         }
 
@@ -432,12 +436,14 @@ impl LLMAgent {
             has_context = self.agent_context.is_some(),
             "Creating basic tools (sub-agent tools NOT available)"
         );
-        factory.create_tools(
-            &self.config.tools,
-            workflow_id,
-            self.config.id.clone(),
-            app_handle,
-        )
+        factory
+            .create_tools(
+                &self.config.tools,
+                workflow_id,
+                self.config.id.clone(),
+                app_handle,
+            )
+            .await
     }
 
     /// Builds enhanced system prompt for JSON function calling
@@ -1001,7 +1007,7 @@ impl Agent for LLMAgent {
             .and_then(|v| v.as_str())
             .map(String::from);
 
-        let local_tools = self.create_local_tools(workflow_id, is_primary_agent);
+        let local_tools = self.create_local_tools(workflow_id, is_primary_agent).await;
 
         // Discover MCP tools and server summaries if manager is available
         let (mcp_tools, mcp_server_summaries) = if let Some(ref mcp) = mcp_manager {

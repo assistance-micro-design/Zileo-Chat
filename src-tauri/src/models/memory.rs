@@ -87,6 +87,7 @@ pub struct MemoryCreate {
 
 impl MemoryCreate {
     /// Creates a new MemoryCreate with the given parameters (general scope)
+    #[allow(dead_code)] // Convenience method for simple cases
     pub fn new(memory_type: MemoryType, content: String, metadata: serde_json::Value) -> Self {
         Self {
             memory_type: memory_type.to_string(),
@@ -108,6 +109,22 @@ impl MemoryCreate {
             memory_type: memory_type.to_string(),
             content,
             workflow_id: Some(workflow_id),
+            metadata,
+        }
+    }
+
+    /// OPT-MEM-10: Unified builder accepting optional workflow_id
+    /// Eliminates the match branches in callers
+    pub fn build(
+        memory_type: MemoryType,
+        content: String,
+        metadata: serde_json::Value,
+        workflow_id: Option<String>,
+    ) -> Self {
+        Self {
+            memory_type: memory_type.to_string(),
+            content,
+            workflow_id,
             metadata,
         }
     }
@@ -163,6 +180,24 @@ impl MemoryCreateWithEmbedding {
             content,
             embedding,
             workflow_id: Some(workflow_id),
+            metadata,
+        }
+    }
+
+    /// OPT-MEM-10: Unified builder accepting optional workflow_id
+    /// Eliminates the match branches in callers
+    pub fn build(
+        memory_type: MemoryType,
+        content: String,
+        embedding: Vec<f32>,
+        metadata: serde_json::Value,
+        workflow_id: Option<String>,
+    ) -> Self {
+        Self {
+            memory_type: memory_type.to_string(),
+            content,
+            embedding,
+            workflow_id,
             metadata,
         }
     }

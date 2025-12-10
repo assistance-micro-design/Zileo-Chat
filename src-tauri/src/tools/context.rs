@@ -371,7 +371,8 @@ mod tests {
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
         let llm_manager = Arc::new(ProviderManager::new());
-        let tool_factory = Arc::new(ToolFactory::new(db.clone(), None));
+        let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
+        let tool_factory = Arc::new(ToolFactory::new(db.clone(), embedding_service));
 
         let context = AgentToolContext::new(
             registry.clone(),
