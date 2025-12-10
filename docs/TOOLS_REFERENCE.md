@@ -1584,6 +1584,45 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 
 ## Bonnes pratiques
 
+### Pour les descriptions de tools (OPT-TD)
+
+Les descriptions de tools suivent un pattern standardise pour optimiser la comprehension LLM:
+
+**Structure obligatoire**:
+```
+Brief one-line summary.
+
+USE THIS TOOL WHEN:
+- Use case 1
+- Use case 2
+
+IMPORTANT CONSTRAINTS:
+- Limit: {injected from constants}
+
+OPERATIONS:
+- operation: Description
+
+BEST PRACTICES:
+- Guidance
+
+EXAMPLES:
+1. {"operation": "...", ...}
+```
+
+**Principes cles**:
+1. **Injection dynamique**: Utiliser `format!()` avec constantes de `tools/constants.rs`
+2. **Sections action-oriented**: "USE THIS TOOL WHEN" pas "This tool can..."
+3. **Exemples JSON**: 2-4 exemples concrets par tool
+4. **Longueur optimale**: 300-800 chars (basic), 800-1500 (sub-agent)
+
+**Helper sub-agent** (`tools/utils.rs`):
+```rust
+let description = sub_agent_description_template("Tool-specific text...");
+// Ajoute automatiquement PRIMARY_AGENT_ONLY et RESPONSE_FORMAT
+```
+
+Voir `CLAUDE.md` section "Tool Description Guidelines" pour details complets.
+
 ### Pour les prompts de sub-agents
 
 1. **Inclure tout le contexte necessaire** - Le sous-agent n'a acces a rien d'autre

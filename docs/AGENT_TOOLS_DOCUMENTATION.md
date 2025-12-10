@@ -724,16 +724,17 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.0
+**Version** : 2.1
 **Derniere mise a jour** : 2025-12-10
-**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO + OPT-UQ Optimizations
+**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO + OPT-UQ + OPT-TD Optimizations
 
-**Features (v2.0)**:
+**Features (v2.1)**:
 - 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
 - Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
 - MemoryTool Optimizations: Parameterized queries (OPT-MEM-5), MemoryInput struct (OPT-MEM-7), helpers.rs consolidation (OPT-MEM-6), composite indexes (OPT-MEM-4)
 - TodoTool Optimizations: Parameterized queries (OPT-TODO-1 to 4), N+1 reduction (OPT-TODO-5,6), db_error uniformization (OPT-TODO-7), TASK_SELECT_FIELDS (OPT-TODO-9), query limits (OPT-TODO-10)
 - UserQuestionTool Optimizations (OPT-UQ-1 to 12): Text response validation (OPT-UQ-1), Option ID length (OPT-UQ-2), Strict error handling (OPT-UQ-3), Queue limit 50 (OPT-UQ-4), Logger unified (OPT-UQ-5), SQL injection tests (OPT-UQ-6), Configurable timeout 5min (OPT-UQ-7), Unit tests (OPT-UQ-8), Integration tests (OPT-UQ-9), Refactor ask_question (OPT-UQ-10), Refactor submit_response (OPT-UQ-11), Circuit breaker (OPT-UQ-12)
+- Tool Description Optimizations (OPT-TD-1 to 8): Enriched descriptions with structured sections, dynamic constant injection, sub-agent template helper, CLAUDE.md guidelines
 
 ### Test Coverage
 
