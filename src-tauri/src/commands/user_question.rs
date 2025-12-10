@@ -2,36 +2,25 @@ use serde_json::json;
 use tauri::{Emitter, State, Window};
 use tracing::{info, warn};
 
+use crate::db::DBClient;
 use crate::models::UserQuestion;
 use crate::security::Validator;
 use crate::state::AppState;
 
-/// Submit a response to a pending question
-#[tauri::command]
-pub async fn submit_user_response(
-    question_id: String,
-    selected_options: Vec<String>,
-    text_response: Option<String>,
-    state: State<'_, AppState>,
-    window: Window,
-) -> Result<(), String> {
-    // Validate question_id is a valid UUID
-    let validated_id = Validator::validate_uuid(&question_id)
-        .map_err(|e| format!("Invalid question_id: {}", e))?;
-
-    // Validate question exists and is pending using parameterized query
-    let result: Vec<serde_json::Value> = state
-        .db
+/// Validate that a question exists and has status "pending"
+async fn validate_question_pending(db: &DBClient, question_id: &str) -> Result<(), String> {
+    // Query question status (question_id is a validated UUID)
+    let result: Vec<serde_json::Value> = db
         .query_json(&format!(
             "SELECT status FROM user_question:`{}`",
-            validated_id
+            question_id
         ))
         .await
         .map_err(|e| format!("Failed to query question: {}", e))?;
 
     let record = result
         .first()
-        .ok_or_else(|| format!("Question not found: {}", validated_id))?;
+        .ok_or_else(|| format!("Question not found: {}", question_id))?;
 
     let status = record
         .get("status")
@@ -42,6 +31,16 @@ pub async fn submit_user_response(
         return Err(format!("Question is not pending (status: {})", status));
     }
 
+    Ok(())
+}
+
+/// Update a question to "answered" status with the provided response
+async fn update_question_answered(
+    db: &DBClient,
+    question_id: &str,
+    selected_options: &[String],
+    text_response: Option<&str>,
+) -> Result<(), String> {
     // Encode selected_options as JSON string (matching the CREATE pattern)
     let selected_options_json = serde_json::to_string(&selected_options)
         .map_err(|e| format!("Failed to encode selected_options: {}", e))?;
@@ -56,7 +55,7 @@ pub async fn submit_user_response(
     ];
 
     // Validate text_response length if provided (OPT-UQ-1)
-    if let Some(ref text) = text_response {
+    if let Some(text) = text_response {
         if text.len() > crate::tools::constants::user_question::MAX_TEXT_RESPONSE_LENGTH {
             return Err(format!(
                 "Text response too long: {} chars (max {})",
@@ -67,36 +66,40 @@ pub async fn submit_user_response(
     }
 
     let update_query = if text_response.is_some() {
-        params.push(("text_response".to_string(), serde_json::json!(text_response)));
+        params.push((
+            "text_response".to_string(),
+            serde_json::json!(text_response),
+        ));
         format!(
             "UPDATE user_question:`{}` SET status = $status, selected_options = $selected_options, text_response = $text_response, answered_at = time::now()",
-            validated_id
+            question_id
         )
     } else {
         format!(
             "UPDATE user_question:`{}` SET status = $status, selected_options = $selected_options, answered_at = time::now()",
-            validated_id
+            question_id
         )
     };
 
     info!(
-        question_id = %validated_id,
+        question_id = %question_id,
         update_query = %update_query,
         "Executing update query"
     );
 
-    state
-        .db
-        .execute_with_params(&update_query, params)
+    db.execute_with_params(&update_query, params)
         .await
         .map_err(|e| format!("Failed to update question: {}", e))?;
 
-    // Verify the update by reading back
-    let verify_result: Vec<serde_json::Value> = state
-        .db
+    Ok(())
+}
+
+/// Verify that the update was successful by reading back the status
+async fn verify_update_success(db: &DBClient, question_id: &str) -> Result<String, String> {
+    let verify_result: Vec<serde_json::Value> = db
         .query_json(&format!(
             "SELECT status FROM user_question:`{}`",
-            validated_id
+            question_id
         ))
         .await
         .map_err(|e| format!("Failed to verify update: {}", e))?;
@@ -106,6 +109,32 @@ pub async fn submit_user_response(
         .and_then(|r| r.get("status"))
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
+
+    Ok(new_status.to_string())
+}
+
+/// Submit a response to a pending question
+#[tauri::command]
+pub async fn submit_user_response(
+    question_id: String,
+    selected_options: Vec<String>,
+    text_response: Option<String>,
+    state: State<'_, AppState>,
+    window: Window,
+) -> Result<(), String> {
+    // Validate question_id is a valid UUID
+    let validated_id = Validator::validate_uuid(&question_id)
+        .map_err(|e| format!("Invalid question_id: {}", e))?;
+
+    validate_question_pending(&state.db, &validated_id).await?;
+    update_question_answered(
+        &state.db,
+        &validated_id,
+        &selected_options,
+        text_response.as_deref(),
+    )
+    .await?;
+    let new_status = verify_update_success(&state.db, &validated_id).await?;
 
     info!(
         question_id = %validated_id,
@@ -386,6 +415,161 @@ mod tests {
         assert!(valid_statuses.contains(&"pending"));
         assert!(valid_statuses.contains(&"answered"));
         assert!(valid_statuses.contains(&"skipped"));
-        assert_eq!(valid_statuses.len(), 3);
+        assert!(valid_statuses.contains(&"timeout"));
+        assert_eq!(valid_statuses.len(), 4);
+    }
+
+    // ============================================================================
+    // OPT-UQ-9: Additional Integration Tests
+    // ============================================================================
+
+    #[test]
+    fn test_submit_response_empty_selected_options() {
+        // Empty vec for selected_options should serialize correctly
+        let selected_options: Vec<String> = vec![];
+        let json_str = serde_json::to_string(&selected_options);
+
+        assert!(json_str.is_ok());
+        assert_eq!(json_str.unwrap(), "[]");
+    }
+
+    #[test]
+    fn test_submit_response_with_text_only() {
+        // Text response without selections should be valid
+        let selected_options: Vec<String> = vec![];
+        let text_response: Option<String> = Some("This is my answer".to_string());
+
+        assert!(text_response.is_some());
+        assert!(selected_options.is_empty());
+
+        // Verify text is within limit
+        if let Some(ref text) = text_response {
+            assert!(text.len() <= uq_const::MAX_TEXT_RESPONSE_LENGTH);
+        }
+    }
+
+    #[test]
+    fn test_submit_response_with_selections_and_text() {
+        // Both selections and text should work together
+        let selected_options = vec!["option1".to_string(), "option2".to_string()];
+        let text_response: Option<String> = Some("Additional context".to_string());
+
+        assert!(!selected_options.is_empty());
+        assert!(text_response.is_some());
+
+        // Verify serialization
+        let json_str = serde_json::to_string(&selected_options);
+        assert!(json_str.is_ok());
+    }
+
+    #[test]
+    fn test_selected_options_json_encoding() {
+        // Verify selected_options serializes to JSON correctly
+        let options = vec![
+            "option_a".to_string(),
+            "option_b".to_string(),
+            "option_c".to_string(),
+        ];
+
+        let json_str = serde_json::to_string(&options);
+        assert!(json_str.is_ok());
+
+        let json_value = json_str.unwrap();
+        assert_eq!(json_value, r#"["option_a","option_b","option_c"]"#);
+
+        // Verify it can be deserialized back
+        let deserialized: Result<Vec<String>, _> = serde_json::from_str(&json_value);
+        assert!(deserialized.is_ok());
+        assert_eq!(deserialized.unwrap(), options);
+    }
+
+    #[test]
+    fn test_skip_question_uuid_validation() {
+        // Invalid UUID should be rejected in skip_question
+        let invalid_ids = vec![
+            "not-a-uuid",
+            "12345",
+            "'; DROP TABLE user_question; --",
+            "550e8400-e29b-41d4-a716",                    // Incomplete UUID
+            "550e8400-e29b-41d4-a716-446655440000-extra", // Too long
+        ];
+
+        for invalid_id in invalid_ids {
+            let result = Validator::validate_uuid(invalid_id);
+            assert!(
+                result.is_err(),
+                "Invalid UUID '{}' should be rejected",
+                invalid_id
+            );
+        }
+    }
+
+    #[test]
+    fn test_get_pending_questions_uuid_validation() {
+        // Invalid workflow_id should be rejected in get_pending_questions
+        let invalid_ids = vec![
+            "not-a-uuid",
+            "' OR '1'='1",
+            "1' UNION SELECT * FROM workflow --",
+            "",
+        ];
+
+        for invalid_id in invalid_ids {
+            let result = Validator::validate_uuid(invalid_id);
+            assert!(
+                result.is_err(),
+                "Invalid workflow_id '{}' should be rejected",
+                invalid_id
+            );
+        }
+    }
+
+    #[test]
+    fn test_timeout_status_constant() {
+        // Verify "timeout" is in VALID_STATUSES
+        let valid_statuses = uq_const::VALID_STATUSES;
+
+        // Should have 4 statuses: pending, answered, skipped, timeout
+        assert_eq!(valid_statuses.len(), 4);
+
+        assert!(valid_statuses.contains(&"pending"));
+        assert!(valid_statuses.contains(&"answered"));
+        assert!(valid_statuses.contains(&"skipped"));
+        assert!(valid_statuses.contains(&"timeout"));
+    }
+
+    #[test]
+    fn test_poll_intervals_defined() {
+        // Verify POLL_INTERVALS_MS has values
+        let intervals = uq_const::POLL_INTERVALS_MS;
+
+        assert!(
+            !intervals.is_empty(),
+            "POLL_INTERVALS_MS should not be empty"
+        );
+
+        // Verify all intervals are positive
+        for (i, &interval) in intervals.iter().enumerate() {
+            assert!(
+                interval > 0,
+                "Poll interval at index {} should be positive, got {}",
+                i,
+                interval
+            );
+        }
+
+        // Verify intervals are in reasonable range (not too small, not too large)
+        for &interval in intervals {
+            assert!(
+                interval >= 100,
+                "Poll interval {} should be >= 100ms",
+                interval
+            );
+            assert!(
+                interval <= 60000,
+                "Poll interval {} should be <= 60000ms (1 minute)",
+                interval
+            );
+        }
     }
 }

@@ -48,7 +48,7 @@ struct AskInput {
 ///
 /// This tool allows agents to:
 /// - Ask users questions with multiple response types
-/// - Wait for responses with progressive polling (no timeout)
+/// - Wait for responses with progressive polling (5-minute timeout)
 /// - Receive checkbox selections, text input, or both
 ///
 /// # Scope
@@ -98,13 +98,14 @@ impl UserQuestionTool {
         }
     }
 
-    /// Asks a question to the user and waits for response.
+    /// Validates input for ask operation.
     ///
     /// # Arguments
-    /// * `input` - Question details including type, options, and context
-    #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
-    async fn ask_question(&self, input: AskInput) -> ToolResult<Value> {
-        // Validate input
+    /// * `input` - Question input to validate
+    ///
+    /// # Errors
+    /// Returns `ToolError::ValidationFailed` if validation fails
+    fn validate_ask_input(&self, input: &AskInput) -> ToolResult<()> {
         validate_not_empty(&input.question, "question")?;
         validate_length(&input.question, uq_const::MAX_QUESTION_LENGTH, "question")?;
 
@@ -153,7 +154,18 @@ impl UserQuestionTool {
             validate_length(ctx, uq_const::MAX_CONTEXT_LENGTH, "context")?;
         }
 
-        let question_id = Uuid::new_v4().to_string();
+        Ok(())
+    }
+
+    /// Creates a question record in the database.
+    ///
+    /// # Arguments
+    /// * `question_id` - UUID of the question
+    /// * `input` - Question details
+    ///
+    /// # Errors
+    /// Returns `ToolError::ExecutionFailed` if DB operation fails
+    async fn create_question_record(&self, question_id: &str, input: &AskInput) -> ToolResult<()> {
         let options_json = serde_json::to_string(
             &input.options.as_ref().cloned().unwrap_or_default(),
         )
@@ -200,10 +212,18 @@ impl UserQuestionTool {
 
         info!(question_id = %question_id, verify_result = ?verify_result, "Created and verified user question");
 
-        // Emit streaming event
+        Ok(())
+    }
+
+    /// Emits a question start event to the frontend.
+    ///
+    /// # Arguments
+    /// * `question_id` - UUID of the question
+    /// * `input` - Question details
+    fn emit_question_event(&self, question_id: &str, input: &AskInput) {
         if let Some(ref handle) = self.app_handle {
             let payload = UserQuestionStreamPayload {
-                question_id: question_id.clone(),
+                question_id: question_id.to_string(),
                 question: input.question.clone(),
                 question_type: input.question_type.clone(),
                 options: input.options.clone(),
@@ -222,11 +242,13 @@ impl UserQuestionTool {
                 warn!(error = %e, "Failed to emit user_question_start event");
             }
         }
+    }
 
-        // Wait for response (progressive polling, no timeout)
-        let response = self.wait_for_response(&question_id).await?;
-
-        // Emit completion event
+    /// Emits a question completion event to the frontend.
+    ///
+    /// # Arguments
+    /// * `question_id` - UUID of the question
+    fn emit_completion_event(&self, question_id: &str) {
         if let Some(ref handle) = self.app_handle {
             let chunk = json!({
                 "workflow_id": self.workflow_id,
@@ -238,19 +260,61 @@ impl UserQuestionTool {
                 warn!(error = %e, "Failed to emit user_question_complete event");
             }
         }
+    }
+
+    /// Asks a question to the user and waits for response.
+    ///
+    /// # Arguments
+    /// * `input` - Question details including type, options, and context
+    #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
+    async fn ask_question(&self, input: AskInput) -> ToolResult<Value> {
+        self.validate_ask_input(&input)?;
+
+        let question_id = Uuid::new_v4().to_string();
+        self.create_question_record(&question_id, &input).await?;
+        self.emit_question_event(&question_id, &input);
+
+        let response = self.wait_for_response(&question_id).await?;
+        self.emit_completion_event(&question_id);
 
         Ok(response)
     }
 
-    /// Waits for user response with progressive polling.
+    /// Waits for user response with progressive polling and configurable timeout.
     ///
     /// Starts with 500ms intervals and gradually increases to 5s.
-    /// No timeout - waits indefinitely until user responds or skips.
+    /// Times out after `DEFAULT_TIMEOUT_SECS` (5 minutes) and updates DB status to "timeout".
     #[instrument(skip(self))]
     async fn wait_for_response(&self, question_id: &str) -> ToolResult<Value> {
+        let timeout = Duration::from_secs(uq_const::DEFAULT_TIMEOUT_SECS);
+        let start = std::time::Instant::now();
         let mut interval_idx = 0;
 
         loop {
+            // Check timeout first (OPT-UQ-7)
+            if start.elapsed() > timeout {
+                warn!(
+                    question_id = %question_id,
+                    elapsed_secs = start.elapsed().as_secs(),
+                    timeout_secs = uq_const::DEFAULT_TIMEOUT_SECS,
+                    "User question timeout"
+                );
+
+                // Update DB status to timeout
+                let update_query = format!(
+                    "UPDATE user_question:`{}` SET status = 'timeout'",
+                    question_id
+                );
+                if let Err(e) = self.db.execute(&update_query).await {
+                    warn!(error = %e, "Failed to update question status to timeout");
+                }
+
+                return Err(ToolError::ExecutionFailed(format!(
+                    "Timeout waiting for user response after {} seconds",
+                    uq_const::DEFAULT_TIMEOUT_SECS
+                )));
+            }
+
             // Query question status
             let query = format!(
                 "SELECT status, selected_options, text_response FROM user_question:`{}`",
@@ -279,10 +343,13 @@ impl UserQuestionTool {
                             .get("selected_options")
                             .and_then(|v| v.as_str())
                             .unwrap_or("[]");
-                        let selected: Vec<String> = serde_json::from_str(selected_json)
-                            .map_err(|e| ToolError::ExecutionFailed(format!(
-                                "Failed to parse selected_options JSON: {}", e
-                            )))?;
+                        let selected: Vec<String> =
+                            serde_json::from_str(selected_json).map_err(|e| {
+                                ToolError::ExecutionFailed(format!(
+                                    "Failed to parse selected_options JSON: {}",
+                                    e
+                                ))
+                            })?;
 
                         let text = record
                             .get("text_response")
@@ -303,6 +370,10 @@ impl UserQuestionTool {
                         return Err(ToolError::ExecutionFailed(
                             "Question skipped by user".into(),
                         ));
+                    }
+                    "timeout" => {
+                        // Status was already set to timeout (possibly by another process)
+                        return Err(ToolError::ExecutionFailed("Question timed out".into()));
                     }
                     "pending" => {
                         // Continue polling
@@ -325,6 +396,7 @@ impl UserQuestionTool {
             debug!(
                 question_id = %question_id,
                 delay_ms = delay,
+                elapsed_secs = start.elapsed().as_secs(),
                 "Waiting for user response"
             );
 
@@ -343,7 +415,7 @@ impl Tool for UserQuestionTool {
         ToolDefinition {
             id: "UserQuestionTool".to_string(),
             name: "User Question Tool".to_string(),
-            description: "Ask the user a question and wait for their response. Supports checkbox (multiple choice), text input, or mixed (both). No timeout - waits indefinitely for user response.".to_string(),
+            description: "Ask the user a question and wait for their response. Supports checkbox (multiple choice), text input, or mixed (both). Timeout: 5 minutes (returns error if user doesn't respond).".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

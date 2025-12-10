@@ -47,7 +47,12 @@ pub mod user_question {
     pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
     pub const POLL_INTERVALS_MS: &[u64] = &[500, 500, 1000, 1000, 2000, 2000, 5000];
     pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
-    pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped"];
+    pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
+
+    // OPT-UQ-7: Configurable timeout for wait_for_response
+    /// Default timeout (seconds) for waiting for user response.
+    /// After this duration, the question status is set to "timeout" and an error is returned.
+    pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
 }
 
 // ===== Sub-Agent Tools =====

@@ -1,5 +1,5 @@
 export type QuestionType = 'checkbox' | 'text' | 'mixed';
-export type QuestionStatus = 'pending' | 'answered' | 'skipped';
+export type QuestionStatus = 'pending' | 'answered' | 'skipped' | 'timeout';
 
 export interface QuestionOption {
   id: string;

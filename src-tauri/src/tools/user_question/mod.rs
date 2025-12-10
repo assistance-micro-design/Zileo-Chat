@@ -20,9 +20,10 @@
 //! ## Features
 //!
 //! - Ask users questions with multiple response types (checkbox, text, mixed)
-//! - Progressive polling with no timeout
+//! - Progressive polling with 5-minute timeout (OPT-UQ-7)
 //! - Tauri event-based communication
 //! - Workflow-scoped question tracking
+//! - Circuit breaker for consecutive timeouts (OPT-UQ-12)
 //!
 //! ## Usage
 //!
@@ -47,6 +48,14 @@
 //! })).await?;
 //! ```
 
+pub mod circuit_breaker;
 mod tool;
 
+// Circuit breaker is available but not yet integrated into the tool.
+// Will be used when agent orchestration needs circuit breaker protection.
+#[allow(unused_imports)]
+pub use circuit_breaker::UserQuestionCircuitBreaker;
 pub use tool::UserQuestionTool;
+
+#[cfg(test)]
+mod tests;
