@@ -53,6 +53,15 @@ pub mod user_question {
     /// Default timeout (seconds) for waiting for user response.
     /// After this duration, the question status is set to "timeout" and an error is returned.
     pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
+
+    // OPT-UQ-12: Circuit Breaker for UserQuestionTool
+    /// Number of consecutive timeouts before opening the circuit breaker.
+    /// When reached, new questions are rejected until cooldown expires.
+    pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;
+
+    /// Cooldown period (seconds) before circuit breaker transitions to half-open.
+    /// After this period, one question is allowed to test if user is responsive.
+    pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
 }
 
 // ===== Sub-Agent Tools =====

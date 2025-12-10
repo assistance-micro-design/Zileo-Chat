@@ -19,12 +19,13 @@
 use crate::db::DBClient;
 use crate::models::{QuestionOption, UserQuestionCreate, UserQuestionStreamPayload};
 use crate::tools::constants::user_question as uq_const;
+use crate::tools::user_question::circuit_breaker::UserQuestionCircuitBreaker;
 use crate::tools::utils::{validate_length, validate_not_empty};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, info, instrument, warn};
@@ -50,11 +51,18 @@ struct AskInput {
 /// - Ask users questions with multiple response types
 /// - Wait for responses with progressive polling (5-minute timeout)
 /// - Receive checkbox selections, text input, or both
+/// - Circuit breaker protection against repeated timeouts (OPT-UQ-12)
 ///
 /// # Scope
 ///
 /// Each UserQuestionTool instance is scoped to a specific workflow and agent.
 /// Questions created will be associated with the workflow_id provided at construction.
+///
+/// # Circuit Breaker (OPT-UQ-12)
+///
+/// The tool tracks consecutive timeouts per workflow. After 3 consecutive timeouts,
+/// the circuit opens and new questions are rejected immediately for 60 seconds.
+/// This prevents spamming questions when users are unresponsive.
 pub struct UserQuestionTool {
     /// Database client for persistence
     db: Arc<DBClient>,
@@ -64,6 +72,8 @@ pub struct UserQuestionTool {
     agent_id: String,
     /// Tauri app handle for emitting streaming events
     app_handle: Option<AppHandle>,
+    /// Circuit breaker for timeout resilience (OPT-UQ-12)
+    circuit_breaker: RwLock<UserQuestionCircuitBreaker>,
 }
 
 impl UserQuestionTool {
@@ -74,6 +84,12 @@ impl UserQuestionTool {
     /// * `workflow_id` - Workflow ID to scope questions to
     /// * `agent_id` - Agent ID using this tool
     /// * `app_handle` - Optional Tauri app handle for emitting events
+    ///
+    /// # Circuit Breaker
+    ///
+    /// Initializes with a circuit breaker configured from constants:
+    /// - Threshold: 3 consecutive timeouts
+    /// - Cooldown: 60 seconds
     ///
     /// # Example
     /// ```ignore
@@ -90,11 +106,18 @@ impl UserQuestionTool {
         agent_id: String,
         app_handle: Option<AppHandle>,
     ) -> Self {
+        let circuit_breaker = UserQuestionCircuitBreaker::new(
+            workflow_id.clone(),
+            uq_const::CIRCUIT_FAILURE_THRESHOLD,
+            Duration::from_secs(uq_const::CIRCUIT_COOLDOWN_SECS),
+        );
+
         Self {
             db,
             workflow_id,
             agent_id,
             app_handle,
+            circuit_breaker: RwLock::new(circuit_breaker),
         }
     }
 
@@ -266,18 +289,86 @@ impl UserQuestionTool {
     ///
     /// # Arguments
     /// * `input` - Question details including type, options, and context
+    ///
+    /// # Circuit Breaker (OPT-UQ-12)
+    ///
+    /// Before asking, checks if the circuit breaker allows new questions.
+    /// If the circuit is open (too many recent timeouts), returns an error immediately.
+    /// After receiving a response, updates the circuit breaker state:
+    /// - Success: resets timeout count
+    /// - Timeout: increments count, may open circuit
+    /// - Skip: treated as success (user actively responded)
     #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
     async fn ask_question(&self, input: AskInput) -> ToolResult<Value> {
+        // OPT-UQ-12: Check circuit breaker before asking
+        {
+            let mut cb = self.circuit_breaker.write().map_err(|e| {
+                ToolError::ExecutionFailed(format!("Circuit breaker lock poisoned: {}", e))
+            })?;
+            if !cb.allow_question() {
+                let remaining = cb
+                    .remaining_cooldown()
+                    .map(|d| d.as_secs())
+                    .unwrap_or(uq_const::CIRCUIT_COOLDOWN_SECS);
+                warn!(
+                    workflow_id = %self.workflow_id,
+                    circuit_state = ?cb.state(),
+                    timeout_count = cb.timeout_count(),
+                    remaining_cooldown_secs = remaining,
+                    "Circuit breaker open - rejecting question"
+                );
+                return Err(ToolError::ExecutionFailed(format!(
+                    "User appears unresponsive ({} consecutive timeouts). \
+                     Question rejected. Retry in {} seconds.",
+                    cb.timeout_count(),
+                    remaining
+                )));
+            }
+        }
+
         self.validate_ask_input(&input)?;
 
         let question_id = Uuid::new_v4().to_string();
         self.create_question_record(&question_id, &input).await?;
         self.emit_question_event(&question_id, &input);
 
-        let response = self.wait_for_response(&question_id).await?;
+        // Wait for response and update circuit breaker based on result
+        let response = self.wait_for_response(&question_id).await;
+
+        // OPT-UQ-12: Update circuit breaker based on response
+        match &response {
+            Ok(_) => {
+                if let Ok(mut cb) = self.circuit_breaker.write() {
+                    cb.record_success();
+                    debug!(workflow_id = %self.workflow_id, "Circuit breaker: recorded success");
+                }
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("Timeout") || error_msg.contains("timed out") {
+                    if let Ok(mut cb) = self.circuit_breaker.write() {
+                        cb.record_timeout();
+                        warn!(
+                            workflow_id = %self.workflow_id,
+                            circuit_state = ?cb.state(),
+                            timeout_count = cb.timeout_count(),
+                            "Circuit breaker: recorded timeout"
+                        );
+                    }
+                } else if error_msg.contains("skipped") {
+                    // Skip is an active user choice, treat like success
+                    if let Ok(mut cb) = self.circuit_breaker.write() {
+                        cb.record_skip();
+                        debug!(workflow_id = %self.workflow_id, "Circuit breaker: recorded skip");
+                    }
+                }
+                // Other errors don't affect circuit breaker
+            }
+        }
+
         self.emit_completion_event(&question_id);
 
-        Ok(response)
+        response
     }
 
     /// Waits for user response with progressive polling and configurable timeout.

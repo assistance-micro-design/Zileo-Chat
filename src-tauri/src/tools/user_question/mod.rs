@@ -51,8 +51,7 @@
 pub mod circuit_breaker;
 mod tool;
 
-// Circuit breaker is available but not yet integrated into the tool.
-// Will be used when agent orchestration needs circuit breaker protection.
+// Re-export for external use (e.g., orchestrator-level circuit breaker management)
 #[allow(unused_imports)]
 pub use circuit_breaker::UserQuestionCircuitBreaker;
 pub use tool::UserQuestionTool;
