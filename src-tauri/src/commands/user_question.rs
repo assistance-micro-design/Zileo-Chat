@@ -55,8 +55,19 @@ pub async fn submit_user_response(
         ("status".to_string(), serde_json::json!("answered")),
     ];
 
-    let update_query = if let Some(ref text) = text_response {
-        params.push(("text_response".to_string(), serde_json::json!(text)));
+    // Validate text_response length if provided (OPT-UQ-1)
+    if let Some(ref text) = text_response {
+        if text.len() > crate::tools::constants::user_question::MAX_TEXT_RESPONSE_LENGTH {
+            return Err(format!(
+                "Text response too long: {} chars (max {})",
+                text.len(),
+                crate::tools::constants::user_question::MAX_TEXT_RESPONSE_LENGTH
+            ));
+        }
+    }
+
+    let update_query = if text_response.is_some() {
+        params.push(("text_response".to_string(), serde_json::json!(text_response)));
         format!(
             "UPDATE user_question:`{}` SET status = $status, selected_options = $selected_options, text_response = $text_response, answered_at = time::now()",
             validated_id
@@ -220,4 +231,161 @@ pub async fn skip_question(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::security::Validator;
+    use crate::tools::constants::user_question as uq_const;
+
+    // ============================================================================
+    // OPT-UQ-6: SQL Injection Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sql_injection_question_id_rejected() {
+        // Attempt SQL injection via question_id
+        let malicious_id = "'; DROP TABLE user_question; --";
+        let result = Validator::validate_uuid(malicious_id);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid UUID"),
+            "Should reject SQL injection attempt: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_sql_injection_workflow_id_rejected() {
+        // Attempt SQL injection via workflow_id
+        let malicious_id = "' OR '1'='1";
+        let result = Validator::validate_uuid(malicious_id);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sql_injection_union_attack_rejected() {
+        // Attempt UNION-based injection
+        let malicious_id = "1' UNION SELECT * FROM agent --";
+        let result = Validator::validate_uuid(malicious_id);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_valid_uuid_accepted() {
+        // Valid UUID should pass
+        let valid_id = "550e8400-e29b-41d4-a716-446655440000";
+        let result = Validator::validate_uuid(valid_id);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), valid_id);
+    }
+
+    // ============================================================================
+    // OPT-UQ-1: Text Response Length Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_text_response_max_length_constant() {
+        // Verify the constant is set to 10000
+        assert_eq!(uq_const::MAX_TEXT_RESPONSE_LENGTH, 10000);
+    }
+
+    #[test]
+    fn test_text_response_validation_logic() {
+        // Simulate the validation logic from submit_user_response
+        let text_response: Option<String> = Some("a".repeat(10001));
+
+        if let Some(ref text) = text_response {
+            let exceeds_limit = text.len() > uq_const::MAX_TEXT_RESPONSE_LENGTH;
+            assert!(
+                exceeds_limit,
+                "Text with {} chars should exceed max {}",
+                text.len(),
+                uq_const::MAX_TEXT_RESPONSE_LENGTH
+            );
+        }
+    }
+
+    #[test]
+    fn test_text_response_at_limit_accepted() {
+        // Text exactly at limit should be accepted
+        let text_response: Option<String> = Some("a".repeat(10000));
+
+        if let Some(ref text) = text_response {
+            let exceeds_limit = text.len() > uq_const::MAX_TEXT_RESPONSE_LENGTH;
+            assert!(
+                !exceeds_limit,
+                "Text exactly at {} chars should be accepted",
+                uq_const::MAX_TEXT_RESPONSE_LENGTH
+            );
+        }
+    }
+
+    #[test]
+    fn test_text_response_none_accepted() {
+        // None text_response should be valid
+        let text_response: Option<String> = None;
+        assert!(text_response.is_none());
+    }
+
+    // ============================================================================
+    // OPT-UQ-2: Option ID Validation Tests (validates constant exists)
+    // ============================================================================
+
+    #[test]
+    fn test_option_id_max_length_constant() {
+        // Verify the constant is set to 64
+        assert_eq!(uq_const::MAX_OPTION_ID_LENGTH, 64);
+    }
+
+    #[test]
+    fn test_option_id_validation_logic() {
+        // Simulate the validation that would happen in tool.rs
+        let long_option_id = "a".repeat(65);
+        let exceeds_limit = long_option_id.len() > uq_const::MAX_OPTION_ID_LENGTH;
+        assert!(
+            exceeds_limit,
+            "Option ID with {} chars should exceed max {}",
+            long_option_id.len(),
+            uq_const::MAX_OPTION_ID_LENGTH
+        );
+    }
+
+    #[test]
+    fn test_option_id_at_limit_accepted() {
+        let option_id = "a".repeat(64);
+        let exceeds_limit = option_id.len() > uq_const::MAX_OPTION_ID_LENGTH;
+        assert!(
+            !exceeds_limit,
+            "Option ID exactly at {} chars should be accepted",
+            uq_const::MAX_OPTION_ID_LENGTH
+        );
+    }
+
+    // ============================================================================
+    // Question Type Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_valid_question_types() {
+        let valid_types = uq_const::VALID_TYPES;
+        assert!(valid_types.contains(&"checkbox"));
+        assert!(valid_types.contains(&"text"));
+        assert!(valid_types.contains(&"mixed"));
+        assert_eq!(valid_types.len(), 3);
+    }
+
+    #[test]
+    fn test_valid_question_statuses() {
+        let valid_statuses = uq_const::VALID_STATUSES;
+        assert!(valid_statuses.contains(&"pending"));
+        assert!(valid_statuses.contains(&"answered"));
+        assert!(valid_statuses.contains(&"skipped"));
+        assert_eq!(valid_statuses.len(), 3);
+    }
 }

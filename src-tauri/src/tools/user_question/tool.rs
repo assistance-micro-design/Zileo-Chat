@@ -138,6 +138,7 @@ impl UserQuestionTool {
 
             for opt in options {
                 validate_not_empty(&opt.id, "option.id")?;
+                validate_length(&opt.id, uq_const::MAX_OPTION_ID_LENGTH, "option.id")?;
                 validate_not_empty(&opt.label, "option.label")?;
                 validate_length(
                     &opt.label,
@@ -278,8 +279,10 @@ impl UserQuestionTool {
                             .get("selected_options")
                             .and_then(|v| v.as_str())
                             .unwrap_or("[]");
-                        let selected: Vec<String> =
-                            serde_json::from_str(selected_json).unwrap_or_default();
+                        let selected: Vec<String> = serde_json::from_str(selected_json)
+                            .map_err(|e| ToolError::ExecutionFailed(format!(
+                                "Failed to parse selected_options JSON: {}", e
+                            )))?;
 
                         let text = record
                             .get("text_response")

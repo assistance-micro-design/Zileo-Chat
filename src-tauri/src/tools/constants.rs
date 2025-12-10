@@ -40,6 +40,7 @@ pub mod todo {
 #[allow(dead_code)]
 pub mod user_question {
     pub const MAX_QUESTION_LENGTH: usize = 2000;
+    pub const MAX_OPTION_ID_LENGTH: usize = 64;
     pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
     pub const MAX_OPTIONS: usize = 20;
     pub const MAX_CONTEXT_LENGTH: usize = 5000;

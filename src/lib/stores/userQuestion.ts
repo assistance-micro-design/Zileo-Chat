@@ -34,6 +34,11 @@ import type {
 import type { StreamChunk } from '$types/streaming';
 
 /**
+ * Maximum number of pending questions to prevent memory issues (OPT-UQ-4)
+ */
+const MAX_PENDING_QUESTIONS = 50;
+
+/**
  * State interface for the user question store
  */
 export interface UserQuestionState {
@@ -127,13 +132,17 @@ export const userQuestionStore = {
 			createdAt: new Date().toISOString()
 		};
 
-		store.update((s) => ({
-			...s,
-			pendingQuestions: [...s.pendingQuestions, question],
-			currentQuestion: s.currentQuestion ?? question,
-			isModalOpen: true,
-			error: null
-		}));
+		store.update((s) => {
+			// Limit queue size to prevent memory issues (OPT-UQ-4)
+			const newPending = [...s.pendingQuestions, question].slice(-MAX_PENDING_QUESTIONS);
+			return {
+				...s,
+				pendingQuestions: newPending,
+				currentQuestion: s.currentQuestion ?? question,
+				isModalOpen: true,
+				error: null
+			};
+		});
 	},
 
 	/**
@@ -143,21 +152,17 @@ export const userQuestionStore = {
 	 * @throws Error if submission fails
 	 */
 	async submitResponse(response: UserQuestionResponse): Promise<void> {
-		console.log('[userQuestionStore] submitResponse called:', response);
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		try {
-			console.log('[userQuestionStore] Invoking submit_user_response...');
 			await invoke('submit_user_response', {
 				questionId: response.questionId,
 				selectedOptions: response.selectedOptions,
 				textResponse: response.textResponse
 			});
-			console.log('[userQuestionStore] submit_user_response success');
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== response.questionId);
-				console.log('[userQuestionStore] Updated state, remaining questions:', remaining.length);
 				return {
 					...s,
 					pendingQuestions: remaining,
@@ -183,17 +188,13 @@ export const userQuestionStore = {
 	 * @throws Error if skip operation fails
 	 */
 	async skipQuestion(questionId: string): Promise<void> {
-		console.log('[userQuestionStore] skipQuestion called:', questionId);
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		try {
-			console.log('[userQuestionStore] Invoking skip_question...');
 			await invoke('skip_question', { questionId });
-			console.log('[userQuestionStore] skip_question success');
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== questionId);
-				console.log('[userQuestionStore] Updated state, remaining questions:', remaining.length);
 				return {
 					...s,
 					pendingQuestions: remaining,

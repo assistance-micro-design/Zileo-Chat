@@ -84,13 +84,6 @@
 	 * Handle form submission
 	 */
 	async function handleSubmit(): Promise<void> {
-		console.log('[UserQuestionModal] handleSubmit called', {
-			currentQuestion: $currentQuestion,
-			isValid: isValid(),
-			selectedOptions,
-			textResponse
-		});
-
 		if (!$currentQuestion || !isValid()) {
 			console.warn('[UserQuestionModal] Submit blocked - invalid state');
 			return;
@@ -102,25 +95,19 @@
 			textResponse: textResponse.trim() || undefined
 		};
 
-		console.log('[UserQuestionModal] Submitting response:', response);
 		await userQuestionStore.submitResponse(response);
-		console.log('[UserQuestionModal] Response submitted');
 	}
 
 	/**
 	 * Handle skipping the question
 	 */
 	async function handleSkip(): Promise<void> {
-		console.log('[UserQuestionModal] handleSkip called', { currentQuestion: $currentQuestion });
-
 		if (!$currentQuestion) {
 			console.warn('[UserQuestionModal] Skip blocked - no current question');
 			return;
 		}
 
-		console.log('[UserQuestionModal] Skipping question:', $currentQuestion.id);
 		await userQuestionStore.skipQuestion($currentQuestion.id);
-		console.log('[UserQuestionModal] Question skipped');
 	}
 
 </script>
