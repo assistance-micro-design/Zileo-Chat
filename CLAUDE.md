@@ -546,13 +546,39 @@ validate_enum_value(&status, &["pending", "done"], "status")?;
 ensure_record_exists(&db, "memory", id, "Memory").await?;
 delete_with_check(&db, "task", id, "Task").await?;
 
-// Query building
+// Query building (non-parameterized - use ParamQueryBuilder for user input)
 let query = QueryBuilder::new("memory")
     .select(&["content", "memory_type"])
     .where_eq("memory_type", "knowledge")
     .order_by("created_at", true)
     .limit(10)
     .build();
+
+// Parameterized query building (OPT-MEM-9) - SQL injection safe
+let (query, params) = ParamQueryBuilder::new("memory")
+    .select(&["meta::id(id) AS id", "content", "type"])
+    .where_eq_param("type", "type_filter", json!("knowledge"))
+    .where_eq_param("workflow_id", "wf_id", json!(workflow_id))
+    .order_by("created_at", true)
+    .limit(100)
+    .build();
+let results = db.query_with_params(&query, params).await?;
+```
+
+#### `tools/memory/helpers.rs` - Shared Memory Logic (OPT-MEM-6)
+
+```rust
+use crate::tools::memory::helpers::{AddMemoryParams, AddMemoryResult, add_memory_core};
+
+// Shared logic for add_memory between tool and commands
+let params = AddMemoryParams {
+    memory_type: MemoryType::Knowledge,
+    content: "Content to store".to_string(),
+    metadata: json!({"agent_source": "agent_id"}),
+    workflow_id: Some("wf_123".to_string()),
+};
+let result = add_memory_core(params, &db, embedding_service.as_ref()).await?;
+// result.memory_id, result.embedding_generated
 ```
 
 #### `tools/constants.rs` - Centralized Constants

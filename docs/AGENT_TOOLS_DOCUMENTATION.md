@@ -245,15 +245,48 @@ enabled = ["TodoTool", "SurrealDBTool"]
 - **Base de connaissances** : Accumulation expertise projet-specific
 - **Décisions architecturales** : Historique choix techniques et justifications
 
+### Securite et Performance (OPT-MEM)
+
+**Requetes Parametrees** (OPT-MEM-5):
+Toutes les requetes DB utilisent des bind parameters pour prevenir l'injection SQL:
+```rust
+let params = vec![
+    ("type".to_string(), serde_json::json!(memory_type)),
+    ("workflow_id".to_string(), serde_json::json!(wf_id)),
+];
+let results: Vec<Memory> = db.query_with_params(&query, params).await?;
+```
+
+**Validation Typee** (OPT-MEM-7):
+L'outil utilise `MemoryInput` struct pour parsing et validation typee:
+```rust
+struct MemoryInput {
+    operation: String,
+    memory_type: Option<String>,
+    content: Option<String>,
+    // ... valide tous les inputs avant execution
+}
+```
+
+**Logique Partagee** (OPT-MEM-6):
+La logique add_memory est consolidee dans `tools/memory/helpers.rs` pour eliminer la duplication entre tool et commands.
+
+**Index Composites** (OPT-MEM-4):
+- `memory_type_workflow_idx` - Optimise les recherches avec type + workflow_id
+- `memory_type_created_idx` - Optimise les requetes de nettoyage par type + created_at
+
+**Service d'Embedding Dynamique**:
+L'embedding service est optionnel (`Option<EmbeddingService>`). Si absent, les memoires sont stockees sans embeddings vectoriels (text search uniquement).
+
 ### Bonnes Pratiques
-- **Dimensionnalité** : Utiliser embeddings selon provider
-  - 768D : Ollama (nomic-embed-text), BERT léger
+- **Dimensionnalite** : Utiliser embeddings selon provider
+  - 768D : Ollama (nomic-embed-text), BERT leger
   - 1024D : Mistral (mistral-embed), Ollama (mxbai-embed-large)
   - 1536D : OpenAI (text-embedding-3-small)
   - 3072D : OpenAI (text-embedding-3-large)
-- **Indexation** : Créer index HNSW pour >1000 entrées (optimisation requêtes)
-- **Scope** : Séparer mémoires workflow-specific et générales pour isolation
-- **Nettoyage** : Purger mémoires temporaires post-workflow avec `delete_memory`
+- **Indexation** : Creer index HNSW pour >1000 entrees (optimisation requetes)
+- **Scope** : Separer memoires workflow-specific et generales pour isolation
+- **Nettoyage** : Purger memoires temporaires post-workflow avec `delete_memory`
 
 ---
 
@@ -647,13 +680,14 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.7
+**Version** : 1.8
 **Derniere mise a jour** : 2025-12-09
-**Phase** : Functional Agent System v1.0 Complete
+**Phase** : Functional Agent System v1.0 Complete + OPT-MEM Optimizations
 
-**Features (v1.7)**:
+**Features (v1.8)**:
 - 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
 - Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
+- MemoryTool Optimizations: Parameterized queries (OPT-MEM-5), MemoryInput struct (OPT-MEM-7), helpers.rs consolidation (OPT-MEM-6), composite indexes (OPT-MEM-4)
 
 ### Test Coverage
 

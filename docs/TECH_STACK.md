@@ -1,6 +1,6 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 7 Decembre 2025**
+> **Versions actuelles du projet : 9 Decembre 2025**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
@@ -84,8 +84,8 @@ Desktop   : Tauri (cross-platform)
 - **tracing-subscriber**: 0.3 (features: json, env-filter)
 
 **Utilities**:
-- **uuid**: 1.0 (features: v4, serde)
-- **chrono**: 0.4 (features: serde)
+- **uuid**: 1.18 (features: v4, serde) - Updated OPT-MEM-3
+- **chrono**: 0.4.42 (features: serde) - Updated OPT-MEM-3
 - **regex**: 1.10
 - **lazy_static**: 1.5
 

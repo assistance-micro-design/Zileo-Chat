@@ -3,7 +3,7 @@
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-09
 > **Total Estimated Effort**: ~46-50 hours
-> **Validation**: Code-verified, all v1.0 phases complete
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11 complete)
 
 ## Overview
 
@@ -28,8 +28,9 @@ All optimization phases are **COMPLETE**:
 | 7 | Strategic Frontend | Settings decomposition, lazy loading, cache TTL |
 | 8 | LLM Optimizations | Rate limiter, retry, circuit breaker, HTTP pooling, utils |
 | SA | Sub-Agent Optimizations | All 11 OPT-SA items (heartbeat, retry, circuit breaker, etc.) |
+| MEM | MemoryTool Optimizations | All 11 OPT-MEM items (parameterized queries, helpers.rs, MemoryInput, indexes) |
 
-**Total Tests**: 760+ passing
+**Total Tests**: 767+ passing
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
 
 ---

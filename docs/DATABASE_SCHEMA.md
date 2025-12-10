@@ -108,11 +108,15 @@ Stockage vectoriel pour RAG et contexte agent.
 - ↔ `memory[]` (relations sémantiques)
 
 **Indexes**
-- `type` (filtrage catégorie)
+- `type` (filtrage categorie)
 - `embedding` (HNSW vectoriel, KNN search)
-- `metadata.agent_source` (mémoires par agent)
+- `metadata.agent_source` (memoires par agent)
 - `metadata.workflow_id` (scope workflow)
 - `metadata.timestamp` (retention policy)
+
+**Index Composites (OPT-MEM-4)**:
+- `memory_type_workflow_idx` ON (type, workflow_id) - Optimise search_memories() avec type + workflow
+- `memory_type_created_idx` ON (type, created_at) - Optimise requetes TTL/cleanup
 
 **Requête type** : Recherche sémantique similarité cosinus top_k=5
 
