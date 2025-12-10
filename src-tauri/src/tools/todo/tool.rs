@@ -19,13 +19,14 @@
 use crate::db::DBClient;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::task::{Task, TaskCreate};
+use crate::tools::constants::query_limits;
 use crate::tools::constants::todo::{
     MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, PRIORITY_MAX, PRIORITY_MIN, VALID_STATUSES,
 };
 use crate::tools::response::ResponseBuilder;
 use crate::tools::utils::{
     db_error, delete_with_check, ensure_record_exists, validate_enum_value, validate_length,
-    validate_not_empty, validate_range,
+    validate_not_empty, validate_range, ParamQueryBuilder,
 };
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -130,10 +131,11 @@ impl TodoTool {
         .with_agent(self.agent_id.clone())
         .with_dependencies(dependencies);
 
+        // OPT-TODO-7: Use db_error() for consistency
         self.db
             .create("task", &task_id, task)
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
 
         info!(task_id = %task_id, name = %name, "Task created");
 
@@ -164,25 +166,34 @@ impl TodoTool {
         // First check if task exists
         ensure_record_exists(&self.db, "task", task_id, "Task").await?;
 
-        // Get task name before update for event emission
-        let task_query = format!("SELECT name FROM task WHERE meta::id(id) = '{}'", task_id);
+        // OPT-TODO-1: Get task name with parameterized query
+        let task_params = vec![("task_id".to_string(), serde_json::json!(task_id))];
         let task_data: Vec<Value> = self
             .db
-            .query(&task_query)
+            .query_with_params(
+                "SELECT name FROM task WHERE meta::id(id) = $task_id",
+                task_params,
+            )
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
         let task_name = task_data
             .first()
             .and_then(|v| v.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown Task");
 
-        // Use execute() instead of query() to avoid serialization issues with enums
-        let update_query = format!("UPDATE task:`{}` SET status = '{}'", task_id, status);
+        // OPT-TODO-1: Update with parameterized query
+        // Note: SurrealDB backtick record ID syntax doesn't support $param, so we validate task_id
+        // via ensure_record_exists above, then use format!() for the UPDATE target only.
+        // The status value IS parameterized to prevent injection.
+        let update_params = vec![("status".to_string(), serde_json::json!(status))];
         self.db
-            .execute(&update_query)
+            .execute_with_params(
+                &format!("UPDATE task:`{}` SET status = $status", task_id),
+                update_params,
+            )
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
 
         info!(task_id = %task_id, status = %status, "Task status updated");
 
@@ -208,23 +219,37 @@ impl TodoTool {
     /// * `status_filter` - Optional status to filter by
     #[instrument(skip(self))]
     async fn list_tasks(&self, status_filter: Option<&str>) -> ToolResult<Value> {
-        // Note: SurrealDB requires ORDER BY fields to be in SELECT
-        let query = match status_filter {
-            Some(status) => format!(
-                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned, created_at
-                FROM task WHERE workflow_id = '{}' AND status = '{}'
-                ORDER BY priority ASC, created_at ASC"#,
-                self.workflow_id, status
-            ),
-            None => format!(
-                r#"SELECT meta::id(id) AS id, name, description, status, priority, agent_assigned, created_at
-                FROM task WHERE workflow_id = '{}'
-                ORDER BY priority ASC, created_at ASC"#,
-                self.workflow_id
-            ),
-        };
+        // OPT-TODO-2: Use ParamQueryBuilder for SQL injection safety
+        // OPT-TODO-10: Add LIMIT to prevent memory explosion
+        let mut builder = ParamQueryBuilder::new("task")
+            .select(&[
+                "name",
+                "description",
+                "status",
+                "priority",
+                "agent_assigned",
+                "created_at",
+            ])
+            .where_eq_param(
+                "workflow_id",
+                "wf_id",
+                serde_json::json!(self.workflow_id.clone()),
+            );
 
-        let tasks: Vec<Value> = self.db.query(&query).await.map_err(db_error)?;
+        if let Some(status) = status_filter {
+            builder = builder.where_eq_param("status", "status_filter", serde_json::json!(status));
+        }
+
+        let (query, params) = builder
+            .order_by("priority", false) // ASC
+            .limit(query_limits::DEFAULT_LIST_LIMIT)
+            .build();
+
+        let tasks: Vec<Value> = self
+            .db
+            .query_with_params(&query, params)
+            .await
+            .map_err(db_error)?;
 
         debug!(count = tasks.len(), "Tasks listed");
 
@@ -242,29 +267,29 @@ impl TodoTool {
     /// * `task_id` - Task ID to retrieve
     #[instrument(skip(self))]
     async fn get_task(&self, task_id: &str) -> ToolResult<Value> {
-        let query = format!(
-            r#"SELECT
-                meta::id(id) AS id,
-                workflow_id,
-                name,
-                description,
-                agent_assigned,
-                priority,
-                status,
-                dependencies,
-                duration_ms,
-                created_at,
-                completed_at
-            FROM task
-            WHERE meta::id(id) = '{}'"#,
-            task_id
-        );
-
+        // OPT-TODO-4: Parameterized query for SQL injection safety
+        let params = vec![("task_id".to_string(), serde_json::json!(task_id))];
         let results: Vec<Task> = self
             .db
-            .query(&query)
+            .query_with_params(
+                r#"SELECT
+                    meta::id(id) AS id,
+                    workflow_id,
+                    name,
+                    description,
+                    agent_assigned,
+                    priority,
+                    status,
+                    dependencies,
+                    duration_ms,
+                    created_at,
+                    completed_at
+                FROM task
+                WHERE meta::id(id) = $task_id"#,
+                params,
+            )
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
 
         match results.into_iter().next() {
             Some(task) => Ok(serde_json::json!({
@@ -285,16 +310,16 @@ impl TodoTool {
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
     async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
-        // Get task name before update for event emission
-        let check_query = format!(
-            "SELECT meta::id(id) AS id, name FROM task WHERE meta::id(id) = '{}'",
-            task_id
-        );
+        // OPT-TODO-3: Parameterized query for SQL injection safety
+        let check_params = vec![("task_id".to_string(), serde_json::json!(task_id))];
         let existing: Vec<Value> = self
             .db
-            .query(&check_query)
+            .query_with_params(
+                "SELECT meta::id(id) AS id, name FROM task WHERE meta::id(id) = $task_id",
+                check_params,
+            )
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
 
         if existing.is_empty() {
             return Err(ToolError::NotFound(format!(
@@ -309,19 +334,34 @@ impl TodoTool {
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown Task");
 
-        let duration_part = duration_ms
-            .map(|d| format!(", duration_ms = {}", d))
-            .unwrap_or_default();
+        // OPT-TODO-3: Build parameterized UPDATE query
+        // Note: SurrealDB backtick syntax for record ID doesn't support $param directly,
+        // so we validate task_id existence above, then use format!() only for the ID.
+        // Values (status, duration_ms) ARE parameterized.
+        let (update_query, update_params) = match duration_ms {
+            Some(duration) => (
+                format!(
+                    "UPDATE task:`{}` SET status = $status, completed_at = time::now(), duration_ms = $duration",
+                    task_id
+                ),
+                vec![
+                    ("status".to_string(), serde_json::json!("completed")),
+                    ("duration".to_string(), serde_json::json!(duration)),
+                ],
+            ),
+            None => (
+                format!(
+                    "UPDATE task:`{}` SET status = $status, completed_at = time::now()",
+                    task_id
+                ),
+                vec![("status".to_string(), serde_json::json!("completed"))],
+            ),
+        };
 
-        // Use execute() instead of query() to avoid serialization issues with enums
-        let update_query = format!(
-            "UPDATE task:`{}` SET status = 'completed', completed_at = time::now(){}",
-            task_id, duration_part
-        );
         self.db
-            .execute(&update_query)
+            .execute_with_params(&update_query, update_params)
             .await
-            .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            .map_err(db_error)?;
 
         info!(task_id = %task_id, duration_ms = ?duration_ms, "Task completed");
 
