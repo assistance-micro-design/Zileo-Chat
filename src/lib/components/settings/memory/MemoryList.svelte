@@ -31,6 +31,8 @@ Displays memories with filtering, search, and action buttons.
 	import MemoryForm from './MemoryForm.svelte';
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from 'lucide-svelte';
 	import { i18n, t } from '$lib/i18n';
+	// OPT-SCROLL-7: Virtual scrolling for large memory lists
+	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 	/** Props */
 	interface Props {
@@ -429,37 +431,47 @@ Displays memories with filtering, search, and action buttons.
 			{/snippet}
 		</Card>
 	{:else}
-		<div class="table-container">
-			<table class="memory-table">
-				<thead>
-					<tr>
-						<th>{$i18n('memory_table_type')}</th>
-						<th>{$i18n('memory_table_scope')}</th>
-						<th>{$i18n('memory_table_content')}</th>
-						<th>{$i18n('memory_table_date')}</th>
-						<th>{$i18n('memory_table_actions')}</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each memories as memory (memory.id)}
-						<tr>
-							<td>
+		<!-- OPT-SCROLL-7: Virtual scrolling for large memory lists -->
+		<div class="virtual-table-container">
+			<!-- Sticky header row (outside virtual list) -->
+			<div class="virtual-table-header">
+				<div class="virtual-cell header-type">{$i18n('memory_table_type')}</div>
+				<div class="virtual-cell header-scope">{$i18n('memory_table_scope')}</div>
+				<div class="virtual-cell header-content">{$i18n('memory_table_content')}</div>
+				<div class="virtual-cell header-date">{$i18n('memory_table_date')}</div>
+				<div class="virtual-cell header-actions">{$i18n('memory_table_actions')}</div>
+			</div>
+
+			<!-- Virtualized rows -->
+			<div class="virtual-table-body">
+				<SvelteVirtualList
+					items={memories}
+					containerClass="virtual-list-wrapper"
+					viewportClass="virtual-list-viewport"
+					contentClass="virtual-list-content"
+					itemsClass="virtual-list-items"
+					defaultEstimatedItemHeight={48}
+					bufferSize={10}
+				>
+					{#snippet renderItem(memory: Memory)}
+						<div class="virtual-row" role="row">
+							<div class="virtual-cell cell-type">
 								<Badge variant={getTypeVariant(memory.type as MemoryType)}>
 									{memory.type}
 								</Badge>
-							</td>
-							<td class="scope-cell" title={memory.workflow_id || $i18n('memory_scope_general')}>
+							</div>
+							<div class="virtual-cell cell-scope" title={memory.workflow_id || $i18n('memory_scope_general')}>
 								<span class="scope-badge" class:workflow={memory.workflow_id}>
 									{formatScope(memory.workflow_id)}
 								</span>
-							</td>
-							<td class="content-cell">
+							</div>
+							<div class="virtual-cell cell-content">
 								{truncate(memory.content, 100)}
-							</td>
-							<td class="date-cell">
+							</div>
+							<div class="virtual-cell cell-date">
 								{formatDate(memory.created_at)}
-							</td>
-							<td class="actions-cell">
+							</div>
+							<div class="virtual-cell cell-actions">
 								<button
 									type="button"
 									class="action-btn"
@@ -484,11 +496,11 @@ Displays memories with filtering, search, and action buttons.
 								>
 									<Trash2 size={16} />
 								</button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+							</div>
+						</div>
+					{/snippet}
+				</SvelteVirtualList>
+			</div>
 		</div>
 	{/if}
 </div>
@@ -621,48 +633,7 @@ Displays memories with filtering, search, and action buttons.
 		margin: 0;
 	}
 
-	.table-container {
-		overflow-x: auto;
-	}
-
-	.memory-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: var(--font-size-sm);
-	}
-
-	.memory-table th,
-	.memory-table td {
-		padding: var(--spacing-md);
-		text-align: left;
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.memory-table th {
-		font-weight: var(--font-weight-semibold);
-		background: var(--color-bg-secondary);
-		color: var(--color-text-secondary);
-	}
-
-	.memory-table tbody tr:hover {
-		background: var(--color-bg-hover);
-	}
-
-	.content-cell {
-		max-width: 400px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.date-cell {
-		white-space: nowrap;
-		color: var(--color-text-secondary);
-	}
-
-	.scope-cell {
-		white-space: nowrap;
-	}
+	/* Note: Old table styles removed (OPT-SCROLL-7) - replaced by virtual table */
 
 	.scope-badge {
 		display: inline-block;
@@ -679,10 +650,7 @@ Displays memories with filtering, search, and action buttons.
 		color: var(--color-accent);
 	}
 
-	.actions-cell {
-		display: flex;
-		gap: var(--spacing-xs);
-	}
+	/* Note: .actions-cell removed (OPT-SCROLL-7) - replaced by .cell-actions */
 
 	.action-btn {
 		display: flex;
@@ -734,6 +702,109 @@ Displays memories with filtering, search, and action buttons.
 		margin: 0;
 	}
 
+	/* ============================================
+	   OPT-SCROLL-7: Virtual Table Styles
+	   Uses CSS Grid to simulate table layout with virtual scrolling
+	   ============================================ */
+
+	.virtual-table-container {
+		display: flex;
+		flex-direction: column;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		overflow: hidden;
+		background: var(--color-bg-primary);
+	}
+
+	.virtual-table-header {
+		display: grid;
+		grid-template-columns: 100px 100px 1fr 140px 100px;
+		gap: 0;
+		background: var(--color-bg-secondary);
+		border-bottom: 2px solid var(--color-border);
+		font-weight: var(--font-weight-semibold);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		position: sticky;
+		top: 0;
+		z-index: 1;
+	}
+
+	.virtual-table-header .virtual-cell {
+		padding: var(--spacing-md);
+		border-right: 1px solid var(--color-border-light);
+	}
+
+	.virtual-table-header .virtual-cell:last-child {
+		border-right: none;
+	}
+
+	.virtual-table-body {
+		height: 400px;
+		overflow: hidden;
+	}
+
+	/* Virtual list wrapper styles - applied via containerClass prop */
+	.virtual-table-body :global(.virtual-list-wrapper) {
+		height: 100%;
+	}
+
+	.virtual-table-body :global(.virtual-list-viewport) {
+		height: 100%;
+	}
+
+	.virtual-row {
+		display: grid;
+		grid-template-columns: 100px 100px 1fr 140px 100px;
+		gap: 0;
+		border-bottom: 1px solid var(--color-border-light);
+		font-size: var(--font-size-sm);
+		transition: background-color 0.15s ease;
+	}
+
+	.virtual-row:hover {
+		background: var(--color-bg-hover);
+	}
+
+	.virtual-cell {
+		padding: var(--spacing-md);
+		display: flex;
+		align-items: center;
+		min-height: 48px;
+		border-right: 1px solid var(--color-border-light);
+	}
+
+	.virtual-cell:last-child {
+		border-right: none;
+	}
+
+	.cell-type {
+		justify-content: flex-start;
+	}
+
+	.cell-scope {
+		justify-content: flex-start;
+	}
+
+	.cell-content {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		display: block;
+		line-height: 48px;
+	}
+
+	.cell-date {
+		color: var(--color-text-secondary);
+		white-space: nowrap;
+	}
+
+	.cell-actions {
+		display: flex;
+		gap: var(--spacing-xs);
+		justify-content: flex-start;
+	}
+
 	@media (max-width: 768px) {
 		.header-actions {
 			flex-direction: column;
@@ -746,6 +817,16 @@ Displays memories with filtering, search, and action buttons.
 
 		.actions {
 			justify-content: center;
+		}
+
+		/* OPT-SCROLL-7: Responsive virtual table */
+		.virtual-table-header,
+		.virtual-row {
+			grid-template-columns: 80px 80px 1fr 100px 80px;
+		}
+
+		.virtual-table-body {
+			height: 300px;
 		}
 	}
 </style>

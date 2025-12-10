@@ -886,6 +886,17 @@ a:focus-visible {
   top: 0;
 }
 
+/* ===================================
+   OPT-SCROLL-8: Pause Animations During Scroll
+   Reduces GPU load and improves scroll performance
+   =================================== */
+
+.is-scrolling .spinner,
+.is-scrolling .status-running,
+.is-scrolling [class*="loading"] {
+  animation-play-state: paused !important;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *,

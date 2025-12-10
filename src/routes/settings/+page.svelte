@@ -165,6 +165,31 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 	let contentAreaRef: HTMLElement | null = $state(null);
 
 	/**
+	 * OPT-SCROLL-8: Track scrolling state to pause animations
+	 */
+	let isScrolling = $state(false);
+	let scrollTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	/**
+	 * OPT-SCROLL-8: Handle scroll events with debounce
+	 * Adds .is-scrolling class during active scrolling to pause animations
+	 */
+	function handleScrollStart(): void {
+		if (!isScrolling) {
+			isScrolling = true;
+		}
+		// Clear existing timeout
+		if (scrollTimeout !== null) {
+			clearTimeout(scrollTimeout);
+		}
+		// Remove scrolling state after 150ms of no scroll events
+		scrollTimeout = setTimeout(() => {
+			isScrolling = false;
+			scrollTimeout = null;
+		}, 150);
+	}
+
+	/**
 	 * Initialize on mount:
 	 * - Lazy load heavy components
 	 * - Subscribe to theme store
@@ -240,6 +265,10 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 			if (rafId !== null) {
 				cancelAnimationFrame(rafId);
 			}
+			// OPT-SCROLL-8: Cleanup scroll timeout
+			if (scrollTimeout !== null) {
+				clearTimeout(scrollTimeout);
+			}
 		};
 	});
 </script>
@@ -306,7 +335,13 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 	</Sidebar>
 
 	<!-- Settings Content -->
-	<main class="content-area" bind:this={contentAreaRef}>
+	<!-- OPT-SCROLL-8: Add is-scrolling class during scroll to pause animations -->
+	<main
+		class="content-area"
+		class:is-scrolling={isScrolling}
+		bind:this={contentAreaRef}
+		onscroll={handleScrollStart}
+	>
 		<!-- Providers and Models Sections (LLMSection) -->
 		<LLMSection
 			bind:this={llmSectionRef}
