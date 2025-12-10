@@ -547,7 +547,7 @@ EXAMPLE - List available agents:
                     "operation": {
                         "type": "string",
                         "enum": ["delegate", "list_agents"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'delegate' executes task via permanent agent, 'list_agents' shows available LLM agents for delegation"
                     },
                     "agent_id": {
                         "type": "string",

@@ -389,7 +389,7 @@ USE THIS TOOL TO:
 OPERATIONS:
 - create: Create a new task with name, description, priority (1-5)
 - get: Retrieve a single task by ID
-- update_status: Change task status (pending/in_progress/completed/blocked)
+- update_status: Change task status. Valid values: pending, in_progress, completed, blocked
 - list: View all tasks or filter by status
 - complete: Mark task done with optional duration
 - delete: Remove a task
@@ -420,7 +420,7 @@ EXAMPLES:
                     "operation": {
                         "type": "string",
                         "enum": ["create", "get", "update_status", "list", "complete", "delete"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'create' new task, 'get' by ID, 'update_status' (pending/in_progress/completed/blocked), 'list' with optional filter, 'complete' with duration, 'delete' by ID"
                     },
                     "name": {
                         "type": "string",

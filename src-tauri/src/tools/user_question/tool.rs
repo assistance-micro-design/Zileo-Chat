@@ -506,14 +506,49 @@ impl Tool for UserQuestionTool {
         ToolDefinition {
             id: "UserQuestionTool".to_string(),
             name: "User Question Tool".to_string(),
-            description: "Ask the user a question and wait for their response. Supports checkbox (multiple choice), text input, or mixed (both). Timeout: 5 minutes (returns error if user doesn't respond).".to_string(),
+            description: r#"Asks the user a question and waits for their response with configurable input types.
+
+USE THIS TOOL WHEN:
+- You need user input to proceed (clarification, choice, confirmation)
+- A decision cannot be made autonomously
+- User preferences or validation is required
+
+IMPORTANT CONSTRAINTS:
+- Timeout: 5 minutes (returns error if no response)
+- Circuit breaker: After 3 consecutive timeouts, tool blocks for 60 seconds
+- Maximum 20 options for checkbox type
+- Question length: max 2000 characters
+
+QUESTION TYPES:
+- checkbox: Multiple choice with predefined options (user selects one or more)
+- text: Free-form text input with optional placeholder
+- mixed: Both options AND text input available
+
+OPERATIONS:
+- ask: Present question to user and wait for response
+
+BEST PRACTICES:
+- Keep questions clear and concise
+- Provide meaningful option labels for checkbox type
+- Use context parameter to explain why you're asking
+- Handle timeout errors gracefully (circuit may be open)
+
+EXAMPLES:
+1. Checkbox question:
+   {"operation": "ask", "question": "Which database should we use?", "questionType": "checkbox", "options": [{"id": "pg", "label": "PostgreSQL"}, {"id": "mysql", "label": "MySQL"}]}
+
+2. Text input:
+   {"operation": "ask", "question": "What should be the API endpoint name?", "questionType": "text", "textPlaceholder": "e.g., /api/v1/users"}
+
+3. Mixed (options + text):
+   {"operation": "ask", "question": "Select a template or describe custom:", "questionType": "mixed", "options": [{"id": "basic", "label": "Basic template"}], "textPlaceholder": "Custom description..."}"#.to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "operation": {
                         "type": "string",
                         "enum": ["ask"],
-                        "description": "Operation to perform"
+                        "description": "Operation: 'ask' presents question to user and waits for response"
                     },
                     "question": {
                         "type": "string",

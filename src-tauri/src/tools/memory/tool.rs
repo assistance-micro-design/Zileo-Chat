@@ -710,7 +710,7 @@ EXAMPLES:
                     "operation": {
                         "type": "string",
                         "enum": ["activate_workflow", "activate_general", "add", "get", "list", "search", "delete", "clear_by_type"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'activate_workflow'/'activate_general' set scope, 'add' stores memory, 'get' retrieves by ID, 'list' shows memories, 'search' finds similar, 'delete' removes, 'clear_by_type' bulk deletes"
                     },
                     "workflow_id": {
                         "type": "string",

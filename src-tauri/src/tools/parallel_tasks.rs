@@ -659,7 +659,7 @@ RESULT FORMAT:
                     "operation": {
                         "type": "string",
                         "enum": ["execute_batch"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'execute_batch' runs multiple tasks concurrently across different agents"
                     },
                     "tasks": {
                         "type": "array",

@@ -608,7 +608,7 @@ EXAMPLE - Spawn for analysis:
                     "operation": {
                         "type": "string",
                         "enum": ["spawn", "list_children", "terminate"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'spawn' creates temporary sub-agent, 'list_children' shows spawned agents and slots, 'terminate' cancels running sub-agent"
                     },
                     "name": {
                         "type": "string",
