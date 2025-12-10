@@ -21,7 +21,8 @@ use crate::models::streaming::{events, StreamChunk};
 use crate::models::task::{Task, TaskCreate};
 use crate::tools::constants::query_limits;
 use crate::tools::constants::todo::{
-    MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, PRIORITY_MAX, PRIORITY_MIN, VALID_STATUSES,
+    MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH, PRIORITY_MAX, PRIORITY_MIN, TASK_SELECT_FIELDS,
+    VALID_STATUSES,
 };
 use crate::tools::response::ResponseBuilder;
 use crate::tools::utils::{
@@ -262,26 +263,15 @@ impl TodoTool {
     #[instrument(skip(self))]
     async fn get_task(&self, task_id: &str) -> ToolResult<Value> {
         // OPT-TODO-4: Parameterized query for SQL injection safety
+        // OPT-TODO-9: Use TASK_SELECT_FIELDS constant for DRY
         let params = vec![("task_id".to_string(), serde_json::json!(task_id))];
+        let query = format!(
+            "SELECT {} FROM task WHERE meta::id(id) = $task_id",
+            TASK_SELECT_FIELDS
+        );
         let results: Vec<Task> = self
             .db
-            .query_with_params(
-                r#"SELECT
-                    meta::id(id) AS id,
-                    workflow_id,
-                    name,
-                    description,
-                    agent_assigned,
-                    priority,
-                    status,
-                    dependencies,
-                    duration_ms,
-                    created_at,
-                    completed_at
-                FROM task
-                WHERE meta::id(id) = $task_id"#,
-                params,
-            )
+            .query_with_params(&query, params)
             .await
             .map_err(db_error)?;
 

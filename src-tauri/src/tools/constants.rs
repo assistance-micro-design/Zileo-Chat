@@ -30,6 +30,10 @@ pub mod todo {
     pub const PRIORITY_MIN: u8 = 1;
     pub const PRIORITY_MAX: u8 = 5;
     pub const VALID_STATUSES: &[&str] = &["pending", "in_progress", "completed", "blocked"];
+
+    /// Standard SELECT fields for Task queries (OPT-TODO-9).
+    /// Use this constant for consistent field selection in get_task() and similar queries.
+    pub const TASK_SELECT_FIELDS: &str = "meta::id(id) AS id, workflow_id, name, description, agent_assigned, priority, status, dependencies, duration_ms, created_at, completed_at";
 }
 
 // ===== User Question Tool =====
