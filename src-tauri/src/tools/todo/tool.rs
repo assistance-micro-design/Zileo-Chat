@@ -25,8 +25,8 @@ use crate::tools::constants::todo::{
 };
 use crate::tools::response::ResponseBuilder;
 use crate::tools::utils::{
-    db_error, delete_with_check, ensure_record_exists, validate_enum_value, validate_length,
-    validate_not_empty, validate_range, ParamQueryBuilder,
+    db_error, delete_with_check, validate_enum_value, validate_length, validate_not_empty,
+    validate_range, ParamQueryBuilder,
 };
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -163,37 +163,34 @@ impl TodoTool {
     async fn update_status(&self, task_id: &str, status: &str) -> ToolResult<Value> {
         validate_enum_value(status, VALID_STATUSES, "status")?;
 
-        // First check if task exists
-        ensure_record_exists(&self.db, "task", task_id, "Task").await?;
-
-        // OPT-TODO-1: Get task name with parameterized query
-        let task_params = vec![("task_id".to_string(), serde_json::json!(task_id))];
-        let task_data: Vec<Value> = self
+        // OPT-TODO-5: Reduce N+1 queries (3->1) using UPDATE ... RETURN
+        // Single query: updates status AND returns name for event emission
+        // If result is empty, task doesn't exist (handles existence check)
+        let params = vec![
+            ("task_id".to_string(), serde_json::json!(task_id)),
+            ("status".to_string(), serde_json::json!(status)),
+        ];
+        let result: Vec<Value> = self
             .db
             .query_with_params(
-                "SELECT name FROM task WHERE meta::id(id) = $task_id",
-                task_params,
+                "UPDATE task SET status = $status WHERE meta::id(id) = $task_id RETURN name",
+                params,
             )
             .await
             .map_err(db_error)?;
-        let task_name = task_data
+
+        if result.is_empty() {
+            return Err(ToolError::NotFound(format!(
+                "Task '{}' not found",
+                task_id
+            )));
+        }
+
+        let task_name = result
             .first()
             .and_then(|v| v.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown Task");
-
-        // OPT-TODO-1: Update with parameterized query
-        // Note: SurrealDB backtick record ID syntax doesn't support $param, so we validate task_id
-        // via ensure_record_exists above, then use format!() for the UPDATE target only.
-        // The status value IS parameterized to prevent injection.
-        let update_params = vec![("status".to_string(), serde_json::json!(status))];
-        self.db
-            .execute_with_params(
-                &format!("UPDATE task:`{}` SET status = $status", task_id),
-                update_params,
-            )
-            .await
-            .map_err(db_error)?;
 
         info!(task_id = %task_id, status = %status, "Task status updated");
 
@@ -310,58 +307,45 @@ impl TodoTool {
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
     async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
-        // OPT-TODO-3: Parameterized query for SQL injection safety
-        let check_params = vec![("task_id".to_string(), serde_json::json!(task_id))];
-        let existing: Vec<Value> = self
+        // OPT-TODO-6: Reduce N+1 queries (2->1) using UPDATE ... RETURN
+        // Single query: updates status/completed_at/duration AND returns name for event
+        // If result is empty, task doesn't exist (handles existence check)
+        let (update_query, update_params) = match duration_ms {
+            Some(duration) => (
+                "UPDATE task SET status = $status, completed_at = time::now(), duration_ms = $duration WHERE meta::id(id) = $task_id RETURN name".to_string(),
+                vec![
+                    ("task_id".to_string(), serde_json::json!(task_id)),
+                    ("status".to_string(), serde_json::json!("completed")),
+                    ("duration".to_string(), serde_json::json!(duration)),
+                ],
+            ),
+            None => (
+                "UPDATE task SET status = $status, completed_at = time::now() WHERE meta::id(id) = $task_id RETURN name".to_string(),
+                vec![
+                    ("task_id".to_string(), serde_json::json!(task_id)),
+                    ("status".to_string(), serde_json::json!("completed")),
+                ],
+            ),
+        };
+
+        let result: Vec<Value> = self
             .db
-            .query_with_params(
-                "SELECT meta::id(id) AS id, name FROM task WHERE meta::id(id) = $task_id",
-                check_params,
-            )
+            .query_with_params(&update_query, update_params)
             .await
             .map_err(db_error)?;
 
-        if existing.is_empty() {
+        if result.is_empty() {
             return Err(ToolError::NotFound(format!(
                 "Task '{}' not found. Cannot mark as completed",
                 task_id
             )));
         }
 
-        let task_name = existing
+        let task_name = result
             .first()
             .and_then(|v| v.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown Task");
-
-        // OPT-TODO-3: Build parameterized UPDATE query
-        // Note: SurrealDB backtick syntax for record ID doesn't support $param directly,
-        // so we validate task_id existence above, then use format!() only for the ID.
-        // Values (status, duration_ms) ARE parameterized.
-        let (update_query, update_params) = match duration_ms {
-            Some(duration) => (
-                format!(
-                    "UPDATE task:`{}` SET status = $status, completed_at = time::now(), duration_ms = $duration",
-                    task_id
-                ),
-                vec![
-                    ("status".to_string(), serde_json::json!("completed")),
-                    ("duration".to_string(), serde_json::json!(duration)),
-                ],
-            ),
-            None => (
-                format!(
-                    "UPDATE task:`{}` SET status = $status, completed_at = time::now()",
-                    task_id
-                ),
-                vec![("status".to_string(), serde_json::json!("completed"))],
-            ),
-        };
-
-        self.db
-            .execute_with_params(&update_query, update_params)
-            .await
-            .map_err(db_error)?;
 
         info!(task_id = %task_id, duration_ms = ?duration_ms, "Task completed");
 
