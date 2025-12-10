@@ -526,9 +526,8 @@ impl MemoryTool {
 
         // OPT-MEM-5: Text content contains query (case-insensitive) - parameterized
         // No more manual escaping needed - SurrealDB handles it via params
-        conditions.push(
-            "string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string(),
-        );
+        conditions
+            .push("string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string());
         params.push(("query_text".to_string(), serde_json::json!(query_text)));
 
         // OPT-MEM-2 + OPT-MEM-5: Use centralized scope filter helper with params

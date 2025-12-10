@@ -623,7 +623,10 @@ mod tests {
             orchestrator,
             llm_manager,
             mcp_manager,
-            tool_factory: Arc::new(crate::tools::ToolFactory::new(db, embedding_service.clone())),
+            tool_factory: Arc::new(crate::tools::ToolFactory::new(
+                db,
+                embedding_service.clone(),
+            )),
             embedding_service,
             streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashMap::new(),

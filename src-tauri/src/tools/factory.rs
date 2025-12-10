@@ -147,16 +147,9 @@ impl ToolFactory {
                     has_embedding = has_embedding,
                     "Creating MemoryTool with current embedding state"
                 );
-                let tool = MemoryTool::new(
-                    self.db.clone(),
-                    embedding_service,
-                    workflow_id,
-                    agent_id,
-                );
-                info!(
-                    has_embedding = has_embedding,
-                    "MemoryTool instance created"
-                );
+                let tool =
+                    MemoryTool::new(self.db.clone(), embedding_service, workflow_id, agent_id);
+                info!(has_embedding = has_embedding, "MemoryTool instance created");
                 Ok(Arc::new(tool))
             }
 

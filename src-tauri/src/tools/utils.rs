@@ -233,7 +233,12 @@ impl ParamQueryBuilder {
 
     /// Add a parameterized equality condition.
     /// Creates `field = $param_name` and stores the value.
-    pub fn where_eq_param(mut self, field: &str, param_name: &str, value: serde_json::Value) -> Self {
+    pub fn where_eq_param(
+        mut self,
+        field: &str,
+        param_name: &str,
+        value: serde_json::Value,
+    ) -> Self {
         self.conditions.push(format!("{} = ${}", field, param_name));
         self.params.push((param_name.to_string(), value));
         self
@@ -254,7 +259,11 @@ impl ParamQueryBuilder {
     }
 
     /// Add multiple conditions and params at once.
-    pub fn where_conditions(mut self, conditions: Vec<String>, params: Vec<(String, serde_json::Value)>) -> Self {
+    pub fn where_conditions(
+        mut self,
+        conditions: Vec<String>,
+        params: Vec<(String, serde_json::Value)>,
+    ) -> Self {
         self.conditions.extend(conditions);
         self.params.extend(params);
         self
@@ -379,7 +388,10 @@ mod tests {
         let (query, params) = ParamQueryBuilder::new("memory")
             .select(&["content", "type"])
             .build();
-        assert_eq!(query, "SELECT meta::id(id) AS id, content, type FROM memory");
+        assert_eq!(
+            query,
+            "SELECT meta::id(id) AS id, content, type FROM memory"
+        );
         assert!(params.is_empty());
     }
 
