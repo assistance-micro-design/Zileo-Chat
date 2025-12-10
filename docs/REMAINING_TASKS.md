@@ -1,9 +1,9 @@
 # Remaining Tasks - Post-v1 Optimizations
 
 > **Status**: DEFERRED - To be implemented after v1 release
-> **Last Updated**: 2025-12-09
-> **Total Estimated Effort**: ~46-50 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11 complete)
+> **Last Updated**: 2025-12-10
+> **Total Estimated Effort**: ~44-48 hours
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11)
 
 ## Overview
 
@@ -29,8 +29,9 @@ All optimization phases are **COMPLETE**:
 | 8 | LLM Optimizations | Rate limiter, retry, circuit breaker, HTTP pooling, utils |
 | SA | Sub-Agent Optimizations | All 11 OPT-SA items (heartbeat, retry, circuit breaker, etc.) |
 | MEM | MemoryTool Optimizations | All 11 OPT-MEM items (parameterized queries, helpers.rs, MemoryInput, indexes) |
+| TODO | TodoTool Optimizations | All 11 OPT-TODO items (parameterized queries, N+1 reduction, integration tests) |
 
-**Total Tests**: 767+ passing
+**Total Tests**: 786+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
 
 ---
@@ -77,6 +78,7 @@ All optimization phases are **COMPLETE**:
 | DB-OPT-12 | thiserror Migration | Replace anyhow with thiserror for typed errors | 6h | Large refactoring, low impact on functionality |
 | DB-OPT-13 | Query Caching | SurrealDB SDK query result caching | - | SDK limitation - not currently supported |
 | DB-OPT-14 | Live Query API | Real-time state updates via SurrealDB live queries | 4h | Requires architecture changes for reactivity |
+| OPT-TODO-8 | TodoTool helpers.rs | Create tools/todo/helpers.rs for shared logic | 2h | Waiting for MemoryTool pattern validation in production |
 
 **Prerequisites**: None
 
@@ -84,6 +86,7 @@ All optimization phases are **COMPLETE**:
 - DB-OPT-12: Migrate module by module (db/, llm/, mcp/, tools/)
 - DB-OPT-14: Requires Svelte stores integration for reactivity, websocket connection
 - DB-OPT-13: Monitor SurrealDB SDK releases for caching support
+- OPT-TODO-8: Follow `tools/memory/helpers.rs` pattern (OPT-MEM-6) once validated
 
 ---
 
@@ -172,3 +175,5 @@ When stable release is available:
 | 2025-12-09 | Created from PHASE_POST_V1.md consolidation |
 | 2025-12-09 | Updated test count to 760+ after Sub-Agent optimizations |
 | 2025-12-09 | Confirmed all OPT-SA-1 to OPT-SA-11 complete |
+| 2025-12-10 | Confirmed all OPT-TODO-1 to OPT-TODO-12 complete (except OPT-TODO-8 deferred) |
+| 2025-12-10 | Updated test count to 786+ after TodoTool optimizations |

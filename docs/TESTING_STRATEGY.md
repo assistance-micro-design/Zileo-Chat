@@ -14,11 +14,13 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| **Backend Unit** | 73 | 635 |
+| **Backend Unit** | 75 | 786 |
 | **Backend Integration** | 2 | 46 |
 | **Frontend Unit** | 7 | 165 |
 | **Frontend E2E** | 10 | 112 |
-| **Total** | **92** | **958** |
+| **Total** | **94** | **1109** |
+
+> **Last Updated**: 2025-12-10 (post OPT-TODO optimizations)
 
 ---
 
@@ -91,7 +93,7 @@ cargo test -- --nocapture # With logs
 
 | Module | Files | Tests | Key Areas |
 |--------|-------|-------|-----------|
-| tools | 14 | 191 | CalculatorTool (63), MemoryTool (42), TodoTool (6) |
+| tools | 14 | 210 | CalculatorTool (63), MemoryTool (55+), TodoTool (26) |
 | models | 18 | 144 | Data structures, serialization |
 | llm | 9 | 95 | Provider adapters, embedding, pricing |
 | commands | 16 | 75 | Tauri command validation |

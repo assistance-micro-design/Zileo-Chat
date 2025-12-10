@@ -680,14 +680,15 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 1.8
-**Derniere mise a jour** : 2025-12-09
-**Phase** : Functional Agent System v1.0 Complete + OPT-MEM Optimizations
+**Version** : 1.9
+**Derniere mise a jour** : 2025-12-10
+**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO Optimizations
 
-**Features (v1.8)**:
+**Features (v1.9)**:
 - 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
 - Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
 - MemoryTool Optimizations: Parameterized queries (OPT-MEM-5), MemoryInput struct (OPT-MEM-7), helpers.rs consolidation (OPT-MEM-6), composite indexes (OPT-MEM-4)
+- TodoTool Optimizations: Parameterized queries (OPT-TODO-1 to 4), N+1 reduction (OPT-TODO-5,6), db_error uniformization (OPT-TODO-7), TASK_SELECT_FIELDS (OPT-TODO-9), query limits (OPT-TODO-10)
 
 ### Test Coverage
 
@@ -695,7 +696,9 @@ activate_workflow("code_review")
 |-----------|-------|----------|
 | **MemoryTool Unit** | 40+ tests | validate_input, operations |
 | **MemoryTool Integration** | 15+ tests | CRUD, workflow isolation, search |
-| **TodoTool Unit** | 25+ tests | CRUD operations, status transitions |
+| **TodoTool Unit** | 6 tests | validate_input, definition |
+| **TodoTool Integration** | 11 tests | CRUD operations, status transitions |
+| **TodoTool SQL Injection** | 8 tests | SQL injection prevention |
 | **LLMAgent Tool Execution** | 10+ tests | parse_tool_calls, execute, format_results |
 | **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
 | **Memory Types (TS)** | 15+ tests | Type structure, compatibility |

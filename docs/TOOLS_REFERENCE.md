@@ -708,6 +708,41 @@ Supprime une tache du workflow.
 
 ---
 
+### Securite et Performance (OPT-TODO)
+
+**Requetes Parametrees** (OPT-TODO-1 a OPT-TODO-4):
+Toutes les requetes DB utilisent des bind parameters pour prevenir l'injection SQL:
+```rust
+// ParamQueryBuilder pour queries SELECT
+let mut builder = ParamQueryBuilder::new("task")
+    .select(&["name", "status", "priority"])
+    .where_eq_param("workflow_id", "wf_id", json!(self.workflow_id));
+let (query, params) = builder.build();
+let tasks: Vec<Value> = db.query_with_params(&query, params).await?;
+
+// execute_with_params pour UPDATE
+let params = vec![("status".to_string(), json!(status))];
+db.execute_with_params(&format!("UPDATE task:`{}` SET status = $status", task_id), params).await?;
+```
+
+**Reduction N+1** (OPT-TODO-5, OPT-TODO-6):
+Les operations `update_status()` et `complete_task()` utilisent `UPDATE ... RETURN` pour combiner existence check + update en une seule requete:
+```rust
+let query = "UPDATE task SET status = $status WHERE meta::id(id) = $task_id RETURN name";
+```
+
+**Query Limits** (OPT-TODO-10):
+`list_tasks()` inclut une limite pour prevenir l'explosion memoire:
+```rust
+builder = builder.limit(query_limits::DEFAULT_LIST_LIMIT); // 1000
+```
+
+**Test Coverage** (OPT-TODO-11, OPT-TODO-12):
+- 26 tests au total (6 unit + 11 integration + 8 SQL injection prevention)
+- Tests d'injection SQL verifient que les payloads malicieux sont rejetes
+
+---
+
 ## 3. CalculatorTool
 
 **Fichier**: `src-tauri/src/tools/calculator/tool.rs`

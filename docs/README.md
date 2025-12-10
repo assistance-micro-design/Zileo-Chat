@@ -46,18 +46,15 @@ Système hiérarchique agents (Principal, Spécialisés, Temporaires), communica
 Orchestration intra-workflow : exécution parallèle vs séquentielle des sous-agents/tools/MCP selon dépendances
 
 **[AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md)**
-Outils natifs agents : Todo, Memory (vectorielle), Internal Reports
+Outils natifs agents : Todo, Memory (vectorielle), UserQuestion, Sub-Agent tools
 
-**[LLM_INTEGRATION_RECOMMENDATIONS.md](LLM_INTEGRATION_RECOMMENDATIONS.md)**
-Recommandations intégration LLM : abstraction Rig.rs, MCP protocol, architecture layers
+**[TOOLS_REFERENCE.md](TOOLS_REFERENCE.md)**
+Reference complete des 7 tools avec exemples JSON et patterns de securite
 
-**[MULTI_PROVIDER_SPECIFICATIONS.md](MULTI_PROVIDER_SPECIFICATIONS.md)**
-Spécifications multi-provider : paramètres, streaming, tokens, capacités spécifiques (Phase 1: Mistral, Ollama | Future: Claude, GPT, Gemini)
+**[SUB_AGENT_GUIDE.md](SUB_AGENT_GUIDE.md)**
+Guide sous-agents : SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
 
 ### 🔌 MCP (Model Context Protocol)
-
-**[MCP_ARCHITECTURE_DECISION.md](MCP_ARCHITECTURE_DECISION.md)**
-Choix SDK officiel Anthropic, double rôle (Client + Server), intégration Rig.rs
 
 **[MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md)**
 Guide configuration MCP servers : npx, uvx, docker, transports, sécurité
@@ -84,10 +81,10 @@ Build et packaging : Linux (AppImage, .deb), macOS (.dmg), Windows (.msi)
 **[TESTING_STRATEGY.md](TESTING_STRATEGY.md)**
 Stratégie tests : unitaires, intégration, E2E, CI/CD
 
-### 📋 Audit & Conformité
+### 📋 Tâches Restantes & Roadmap
 
-**[DOCUMENTATION_AUDIT.md](DOCUMENTATION_AUDIT.md)**
-Audit cohérence documentation, vérification interdépendances, status corrections
+**[REMAINING_TASKS.md](REMAINING_TASKS.md)**
+Tâches post-v1 différées : TYPE-OPT-5 (specta), SEC-OPT-7/8, DB-OPT-12/14, FE-OPT-12/13
 
 ## Workflows Documentation
 
@@ -104,10 +101,10 @@ Audit cohérence documentation, vérification interdépendances, status correcti
 4. [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md) → Configuration MCP
 5. [API_REFERENCE.md](API_REFERENCE.md) → Tauri commands
 
-### Intégration LLM
-1. [LLM_INTEGRATION_RECOMMENDATIONS.md](LLM_INTEGRATION_RECOMMENDATIONS.md) → Architecture
-2. [MULTI_PROVIDER_SPECIFICATIONS.md](MULTI_PROVIDER_SPECIFICATIONS.md) → Providers
-3. [MCP_ARCHITECTURE_DECISION.md](MCP_ARCHITECTURE_DECISION.md) → MCP integration
+### Intégration LLM & MCP
+1. [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md) → Configuration serveurs MCP
+2. [TOOLS_REFERENCE.md](TOOLS_REFERENCE.md) → Tools disponibles
+3. [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) → Documentation outils
 
 ### Deployment
 1. [TESTING_STRATEGY.md](TESTING_STRATEGY.md) → Tests validation
@@ -149,6 +146,7 @@ Audit cohérence documentation, vérification interdépendances, status correcti
 ✅ **Cohérente** : Interdépendances vérifiées
 ✅ **Complète** : Toutes sections couvertes
 ✅ **À jour** : Versions confirmées Dec 2025
-✅ **Phases 0-8** : COMPLETES (code-verified)
+✅ **Phases 0-8 + SA + MEM + TODO** : COMPLETES (code-verified)
+✅ **Tests** : 786+ backend unit, 1109+ total
 
-Dernière validation : 2025-12-08
+Dernière validation : 2025-12-10
