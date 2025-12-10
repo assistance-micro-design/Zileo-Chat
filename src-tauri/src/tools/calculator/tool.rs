@@ -370,7 +370,7 @@ EXAMPLES:
                 "properties": {
                     "operation": {
                         "type": "string",
-                        "description": "The operation to perform"
+                        "description": "Operation: unary (sin/cos/tan/sqrt/exp/ln/abs/floor/ceil/round/degrees/radians), binary (add/subtract/multiply/divide/pow/log/min/max), or 'constant' (pi/e/tau)"
                     },
                     "value": {
                         "type": "number",

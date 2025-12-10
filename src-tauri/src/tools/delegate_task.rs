@@ -53,6 +53,7 @@ use crate::models::sub_agent::{
 use crate::models::Lifecycle;
 use crate::tools::context::AgentToolContext;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
+use crate::tools::utils::sub_agent_description_template;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -493,10 +494,7 @@ impl DelegateTaskTool {
 #[async_trait]
 impl Tool for DelegateTaskTool {
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "DelegateTaskTool".to_string(),
-            name: "Delegate Task".to_string(),
-            description: r#"Delegates tasks to existing permanent LLM agents.
+        let tool_specific_desc = r#"Delegates tasks to existing permanent LLM agents.
 
 IMPORTANT: This tool is for LLM AGENTS, NOT for MCP servers!
 - agent_id must be an LLM agent ID (e.g., "db_agent", "analytics_agent")
@@ -509,7 +507,6 @@ USE THIS TOOL WHEN:
 - Use list_agents first to see available agents
 
 IMPORTANT CONSTRAINTS:
-- Maximum 3 sub-agent operations per workflow (shared with spawn)
 - Can only delegate to permanent agents (not temporary)
 - Delegated agents only receive the prompt string - NO shared context/memory/state
 - You must include ALL necessary information in the prompt
@@ -538,8 +535,12 @@ EXAMPLE - Delegate database analysis:
 {"operation": "delegate", "agent_id": "db_agent", "prompt": "Analyze the users table..."}
 
 EXAMPLE - List available agents:
-{"operation": "list_agents"}"#
-                .to_string(),
+{"operation": "list_agents"}"#;
+
+        ToolDefinition {
+            id: "DelegateTaskTool".to_string(),
+            name: "Delegate Task".to_string(),
+            description: sub_agent_description_template(tool_specific_desc),
 
             input_schema: serde_json::json!({
                 "type": "object",
@@ -547,7 +548,7 @@ EXAMPLE - List available agents:
                     "operation": {
                         "type": "string",
                         "enum": ["delegate", "list_agents"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'delegate' executes task via permanent agent, 'list_agents' shows available LLM agents for delegation"
                     },
                     "agent_id": {
                         "type": "string",

@@ -45,6 +45,7 @@ use crate::tools::{
     constants::sub_agent::TASK_DESC_TRUNCATE_CHARS,
     context::AgentToolContext,
     sub_agent_executor::SubAgentExecutor,
+    utils::sub_agent_description_template,
     validation_helper::{safe_truncate, ValidationHelper},
     Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
@@ -552,11 +553,8 @@ impl Tool for SpawnAgentTool {
         let available_tools: Vec<&str> = ToolFactory::basic_tools();
         let available_tools_str = available_tools.join(", ");
 
-        ToolDefinition {
-            id: "SpawnAgentTool".to_string(),
-            name: "Spawn Sub-Agent".to_string(),
-            description: format!(
-                r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
+        let tool_specific_desc = format!(
+            r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
 
 USE THIS TOOL WHEN:
 - You need to parallelize work across multiple specialized tasks
@@ -564,8 +562,6 @@ USE THIS TOOL WHEN:
 - You want to delegate a specific analysis or research task
 
 IMPORTANT CONSTRAINTS:
-- Maximum 3 sub-agents per workflow
-- Sub-agents CANNOT spawn other sub-agents (single level only)
 - Sub-agents only receive the prompt string - NO shared context/memory/state
 - You must include ALL necessary information in the prompt
 - Sub-agents are TEMPORARY and are automatically cleaned up after execution
@@ -599,8 +595,13 @@ PROMPT BEST PRACTICES:
 
 EXAMPLE - Spawn for analysis:
 {{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes.", "tools": ["MemoryTool"]}}"#,
-                available_tools_str = available_tools_str
-            ),
+            available_tools_str = available_tools_str
+        );
+
+        ToolDefinition {
+            id: "SpawnAgentTool".to_string(),
+            name: "Spawn Sub-Agent".to_string(),
+            description: sub_agent_description_template(&tool_specific_desc),
 
             input_schema: serde_json::json!({
                 "type": "object",
@@ -608,7 +609,7 @@ EXAMPLE - Spawn for analysis:
                     "operation": {
                         "type": "string",
                         "enum": ["spawn", "list_children", "terminate"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'spawn' creates temporary sub-agent, 'list_children' shows spawned agents and slots, 'terminate' cancels running sub-agent"
                     },
                     "name": {
                         "type": "string",

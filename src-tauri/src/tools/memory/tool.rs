@@ -658,7 +658,7 @@ impl Tool for MemoryTool {
         ToolDefinition {
             id: "MemoryTool".to_string(),
             name: "Memory Manager".to_string(),
-            description:
+            description: format!(
                 r#"Manages persistent memory for contextual awareness and knowledge retrieval.
 
 USE THIS TOOL TO:
@@ -682,6 +682,11 @@ SCOPE PARAMETER (for list/search):
 - "workflow": Only memories from current workflow
 - "general": Only global memories (not tied to any workflow)
 
+CONSTRAINTS:
+- Content length: max {} characters
+- List/search default limit: {} results (max {})
+- Similarity threshold: {:.1} (0-1 scale)
+
 BEST PRACTICES:
 - Use 'knowledge' type for facts and domain expertise
 - Use 'decision' type for rationale behind choices
@@ -692,17 +697,18 @@ BEST PRACTICES:
 
 EXAMPLES:
 1. List all memories (workflow + general):
-   {"operation": "list"}
+   {{"operation": "list"}}
 
 2. List only workflow memories:
-   {"operation": "list", "scope": "workflow"}
+   {{"operation": "list", "scope": "workflow"}}
 
 3. Search all memories:
-   {"operation": "search", "query": "vector database indexing", "limit": 5}
+   {{"operation": "search", "query": "vector database indexing", "limit": 5}}
 
 4. Store knowledge:
-   {"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}"#
-                    .to_string(),
+   {{"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}}"#,
+                MAX_CONTENT_LENGTH, DEFAULT_LIMIT, MAX_LIMIT, DEFAULT_SIMILARITY_THRESHOLD
+            ),
 
             input_schema: serde_json::json!({
                 "type": "object",
@@ -710,7 +716,7 @@ EXAMPLES:
                     "operation": {
                         "type": "string",
                         "enum": ["activate_workflow", "activate_general", "add", "get", "list", "search", "delete", "clear_by_type"],
-                        "description": "The operation to perform"
+                        "description": "Operation: 'activate_workflow'/'activate_general' set scope, 'add' stores memory, 'get' retrieves by ID, 'list' shows memories, 'search' finds similar, 'delete' removes, 'clear_by_type' bulk deletes"
                     },
                     "workflow_id": {
                         "type": "string",
