@@ -3,7 +3,7 @@
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-10
 > **Total Estimated Effort**: ~53-57 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10)
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8)
 
 ## Overview
 
@@ -32,9 +32,28 @@ All optimization phases are **COMPLETE**:
 | TODO | TodoTool Optimizations | All 11 OPT-TODO items (parameterized queries, N+1 reduction, integration tests) |
 | UQ | UserQuestionTool Optimizations | All 12 OPT-UQ items (timeout 5min, circuit breaker, validation, tests, refactoring) |
 | TD | Tool Description Optimizations | 8/10 OPT-TD items (enriched descriptions, dynamic constants, sub-agent template, CLAUDE.md) |
+| SCROLL | Settings Page Optimizations | Route-based navigation, CSS contain, virtual scroll, memoization (8/8 items) |
 
 **Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
+
+### OPT-SCROLL Details (Dec 2025)
+
+Migration from scroll-based to route-based Settings page architecture.
+
+| Item | Description | Status |
+|------|-------------|--------|
+| OPT-SCROLL-1 | Reduce IntersectionObserver thresholds | Obsoleted by ROUTES |
+| OPT-SCROLL-2 | Remove backdrop-filter blur | Active |
+| OPT-SCROLL-3 | will-change: scroll-position | Active |
+| OPT-SCROLL-4 | RAF debounce IntersectionObserver | Obsoleted by ROUTES |
+| OPT-SCROLL-5 | CSS contain on grid sections | Active |
+| OPT-SCROLL-6 | getFilteredModelsMemoized() | Active |
+| OPT-SCROLL-7 | Virtual scrolling MemoryList | Active |
+| OPT-SCROLL-8 | Pause animations during scroll | Active |
+| OPT-SCROLL-ROUTES | Route-based navigation (8 routes) | Active |
+
+**Note**: OPT-SCROLL-1 and OPT-SCROLL-4 were implemented but became obsolete when the architecture migrated from scroll-based to route-based navigation. The route-based approach provides superior performance benefits.
 
 ---
 

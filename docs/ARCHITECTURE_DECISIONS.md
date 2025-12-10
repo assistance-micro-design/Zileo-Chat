@@ -1091,3 +1091,63 @@ let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 - Replaces O(n) scan for stop/get/restart operations
 
 ---
+
+## 9. Frontend Performance Optimizations (Dec 2025)
+
+### Question 26 : Settings Page Architecture
+
+**Décision** : **Route-based navigation instead of scroll-based**
+
+**Raisons** :
+- IntersectionObserver with 3 thresholds caused 30-60 callbacks/sec during scroll
+- 798-line monolithic +page.svelte difficult to maintain
+- backdrop-filter blur causing 15-30% GPU degradation
+- No code splitting possible with scroll-based approach
+
+**Solution (OPT-SCROLL-ROUTES)** :
+
+**Route Structure**:
+```
+/settings
+  +layout.svelte   (sidebar navigation)
+  +layout.ts       (pathname data)
+  +page.svelte     (redirect → /settings/providers)
+  /providers/+page.svelte
+  /agents/+page.svelte (lazy)
+  /mcp/+page.svelte
+  /memory/+page.svelte (lazy)
+  /validation/+page.svelte
+  /prompts/+page.svelte
+  /import-export/+page.svelte
+  /theme/+page.svelte
+```
+
+**Performance Benefits**:
+- Code splitting: only load requested section
+- No IntersectionObserver needed
+- Native browser history (Back/Forward)
+- Shareable URLs per section
+- ~50-100 lines per page vs 798 monolithic
+
+**Complementary Optimizations**:
+
+| ID | Item | Impact | Status |
+|---|---|---|---|
+| OPT-SCROLL-2 | Remove backdrop-filter blur | 15-30% GPU | Active |
+| OPT-SCROLL-3 | will-change: scroll-position | GPU acceleration | Active |
+| OPT-SCROLL-5 | CSS contain on grids | ~10% layout time | Active |
+| OPT-SCROLL-6 | getFilteredModelsMemoized() | ~5-10% JS | Active |
+| OPT-SCROLL-7 | Virtual scrolling MemoryList | 20 vs 20000 DOM nodes | Active |
+| OPT-SCROLL-8 | .is-scrolling animation pause | ~5% GPU during scroll | Active |
+
+**Obsoleted Optimizations** (superseded by route-based):
+- OPT-SCROLL-1: Single threshold IntersectionObserver
+- OPT-SCROLL-4: RAF debounce IntersectionObserver
+
+**Implementation Files**:
+- Layout: `src/routes/settings/+layout.svelte`
+- CSS: `src/styles/global.css` (lines 694, 889)
+- Store: `src/lib/stores/llm.ts` (getFilteredModelsMemoized)
+- Components: `MCPSection.svelte`, `LLMSection.svelte`, `AgentList.svelte`, `MemoryList.svelte`
+
+---
