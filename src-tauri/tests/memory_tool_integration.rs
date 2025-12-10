@@ -1,4 +1,4 @@
-// Copyright 2025 Zileo-Chat-3 Contributors
+// Copyright 2025 Assistance Micro Design
 // SPDX-License-Identifier: Apache-2.0
 
 //! Integration tests for MemoryTool Phase 4 Integration.
@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 use tempfile::tempdir;
+use tokio::sync::RwLock;
 
 // Note: Integration tests run as separate crates, so we need to import from the main crate
 // The crate name is "zileo_chat" as defined in Cargo.toml (hyphens become underscores)
@@ -33,15 +34,19 @@ mod tool_factory_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let factory = ToolFactory::new(db, None);
+        // Create embedding service reference (None = no embedding service)
+        let embedding_service = Arc::new(RwLock::new(None));
+        let factory = ToolFactory::new(db, embedding_service);
 
         // Create MemoryTool via factory
-        let result = factory.create_tool(
-            "MemoryTool",
-            Some("wf_integration_test".to_string()),
-            "integration_test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "MemoryTool",
+                Some("wf_integration_test".to_string()),
+                "integration_test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok(), "Should create MemoryTool");
 
@@ -60,15 +65,18 @@ mod tool_factory_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let factory = ToolFactory::new(db, None);
+        let embedding_service = Arc::new(RwLock::new(None));
+        let factory = ToolFactory::new(db, embedding_service);
 
         // Create TodoTool via factory
-        let result = factory.create_tool(
-            "TodoTool",
-            Some("wf_integration_test".to_string()),
-            "integration_test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "TodoTool",
+                Some("wf_integration_test".to_string()),
+                "integration_test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok(), "Should create TodoTool");
 
@@ -85,7 +93,8 @@ mod tool_factory_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let factory = ToolFactory::new(db, None);
+        let embedding_service = Arc::new(RwLock::new(None));
+        let factory = ToolFactory::new(db, embedding_service);
 
         let tool_names = vec![
             "MemoryTool".to_string(),
@@ -93,12 +102,14 @@ mod tool_factory_tests {
             "UnknownTool".to_string(), // Should be skipped
         ];
 
-        let tools = factory.create_tools(
-            &tool_names,
-            Some("wf_batch".to_string()),
-            "batch_agent".to_string(),
-            None, // app_handle not needed in tests
-        );
+        let tools = factory
+            .create_tools(
+                &tool_names,
+                Some("wf_batch".to_string()),
+                "batch_agent".to_string(),
+                None, // app_handle not needed in tests
+            )
+            .await;
 
         // Should create 2 valid tools, skip 1 invalid
         assert_eq!(tools.len(), 2);

@@ -1,4 +1,4 @@
-// Copyright 2025 Zileo-Chat-3 Contributors
+// Copyright 2025 Assistance Micro Design
 // SPDX-License-Identifier: Apache-2.0
 
 //! Integration tests for Sub-Agent Tools (Phase F).
@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 use tempfile::tempdir;
+use tokio::sync::RwLock;
 
 /// Helper to create test database path
 fn create_test_db_path() -> (tempfile::TempDir, String) {
@@ -93,26 +94,31 @@ mod tool_factory_sub_agent_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let factory = ToolFactory::new(db, None);
+        let embedding_service = Arc::new(RwLock::new(None));
+        let factory = ToolFactory::new(db, embedding_service);
 
         // Trying to create sub-agent tools without context should fail
-        let result = factory.create_tool(
-            "SpawnAgentTool",
-            Some("wf_test".to_string()),
-            "test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "SpawnAgentTool",
+                Some("wf_test".to_string()),
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         // Result is Err but we can't format it because dyn Tool doesn't impl Debug
         // Just verify it's an error
 
-        let result = factory.create_tool(
-            "DelegateTaskTool",
-            Some("wf_test".to_string()),
-            "test_agent".to_string(),
-            None,
-        );
+        let result = factory
+            .create_tool(
+                "DelegateTaskTool",
+                Some("wf_test".to_string()),
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
     }
@@ -480,7 +486,8 @@ mod agent_tool_context_tests {
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
         let llm_manager = Arc::new(ProviderManager::new());
-        let tool_factory = Arc::new(ToolFactory::new(db.clone(), None));
+        let embedding_service = Arc::new(RwLock::new(None));
+        let tool_factory = Arc::new(ToolFactory::new(db.clone(), embedding_service));
 
         let context = AgentToolContext::new(
             registry.clone(),
