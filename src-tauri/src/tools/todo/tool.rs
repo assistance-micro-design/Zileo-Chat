@@ -378,7 +378,8 @@ impl Tool for TodoTool {
         ToolDefinition {
             id: "TodoTool".to_string(),
             name: "Todo Task Manager".to_string(),
-            description: r#"Manages workflow tasks for structured execution tracking.
+            description: format!(
+                r#"Manages workflow tasks for structured execution tracking.
 
 USE THIS TOOL TO:
 - Break down complex work into trackable tasks
@@ -387,32 +388,47 @@ USE THIS TOOL TO:
 - Track task completion with timing metrics
 
 OPERATIONS:
-- create: Create a new task with name, description, priority (1-5)
+- create: Create a new task with name, description, priority ({}-{})
 - get: Retrieve a single task by ID
 - update_status: Change task status. Valid values: pending, in_progress, completed, blocked
 - list: View all tasks or filter by status
 - complete: Mark task done with optional duration
 - delete: Remove a task
 
+CONSTRAINTS:
+- Name length: max {} characters
+- Description length: max {} characters
+- Priority range: {}-{} ({}=critical, {}=low)
+
 BEST PRACTICES:
 - Create tasks BEFORE starting complex multi-step work
 - Update status to 'in_progress' when starting a task
-- Use priority 1 for critical/blocking tasks, 5 for low priority
+- Use priority {} for critical/blocking tasks, {} for low priority
 - Mark completed with duration_ms for metrics tracking
 
 EXAMPLES:
 1. Create a task:
-   {"operation": "create", "name": "Analyze code", "description": "Deep analysis", "priority": 1}
+   {{"operation": "create", "name": "Analyze code", "description": "Deep analysis", "priority": 1}}
 
 2. Start working on it:
-   {"operation": "update_status", "task_id": "abc123", "status": "in_progress"}
+   {{"operation": "update_status", "task_id": "abc123", "status": "in_progress"}}
 
 3. Mark complete:
-   {"operation": "complete", "task_id": "abc123", "duration_ms": 5000}
+   {{"operation": "complete", "task_id": "abc123", "duration_ms": 5000}}
 
 4. List pending tasks:
-   {"operation": "list", "status_filter": "pending"}"#
-                .to_string(),
+   {{"operation": "list", "status_filter": "pending"}}"#,
+                PRIORITY_MIN,
+                PRIORITY_MAX,
+                MAX_NAME_LENGTH,
+                MAX_DESCRIPTION_LENGTH,
+                PRIORITY_MIN,
+                PRIORITY_MAX,
+                PRIORITY_MIN,
+                PRIORITY_MAX,
+                PRIORITY_MIN,
+                PRIORITY_MAX
+            ),
 
             input_schema: serde_json::json!({
                 "type": "object",

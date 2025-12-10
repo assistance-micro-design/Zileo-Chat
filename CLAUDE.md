@@ -685,6 +685,74 @@ executor.update_execution_record(&exec_id, &result).await;
 executor.emit_complete_event(agent_id, name, &result);
 ```
 
+### Tool Description Guidelines
+
+When writing tool descriptions for `ToolDefinition::description`, follow these patterns to optimize LLM understanding and tool selection:
+
+**Structure Template**:
+```rust
+description: format!(
+    r#"Brief one-line summary of what this tool does.
+
+USE THIS TOOL WHEN:
+- Specific use case 1
+- Specific use case 2
+- Decision criteria for when to use this tool
+
+IMPORTANT CONSTRAINTS:
+- Limit 1: {} (inject from constants)
+- Limit 2: {} (inject from constants)
+- Any restrictions or prerequisites
+
+OPERATIONS:
+- operation1: Brief description
+- operation2: Brief description
+
+BEST PRACTICES:
+- Actionable guidance 1
+- Actionable guidance 2
+
+EXAMPLES:
+1. Example name:
+   {{"operation": "op1", "param": "value"}}
+
+2. Another example:
+   {{"operation": "op2", "param": "value"}}"#,
+    crate::tools::constants::module::CONSTANT_1,
+    crate::tools::constants::module::CONSTANT_2
+),
+```
+
+**Key Principles**:
+
+1. **Inject constants dynamically**: Never hardcode limits in descriptions
+   ```rust
+   // CORRECT - uses constants
+   format!("Max {} characters", uq_const::MAX_QUESTION_LENGTH)
+
+   // WRONG - hardcoded value becomes stale
+   "Max 2000 characters"
+   ```
+
+2. **Action-oriented sections**: Use "USE THIS TOOL WHEN" not "This tool can..."
+
+3. **Include constraints**: LLMs need to know limits before attempting operations
+
+4. **Provide JSON examples**: Show exact schema for common operations
+
+5. **Keep descriptions concise**: ~500-800 chars optimal for token efficiency
+
+**Helper for Sub-Agent Tools**:
+```rust
+use crate::tools::utils::sub_agent_description_template;
+
+// Wraps tool-specific text with common sub-agent sections
+let description = sub_agent_description_template(
+    "Spawns a new sub-agent for specialized tasks..."
+);
+// Automatically adds PRIMARY_AGENT_ONLY and RESPONSE_FORMAT sections
+```
+
 ### MCP Server Identification
 
 **IMPORTANT**: MCP servers are identified by **NAME** (not ID) throughout the system.

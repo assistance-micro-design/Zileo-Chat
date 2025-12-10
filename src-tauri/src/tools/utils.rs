@@ -307,6 +307,42 @@ impl ParamQueryBuilder {
     }
 }
 
+/// Generates common sub-agent tool description sections.
+///
+/// Returns a formatted string containing:
+/// - PRIMARY_AGENT_ONLY restriction notice
+/// - Sub-agent limit from constants
+/// - Response format specification
+///
+/// # Arguments
+/// * `tool_specific_text` - The tool-specific description to wrap
+///
+/// # Usage
+/// ```rust
+/// let description = sub_agent_description_template(
+///     "Spawns temporary sub-agents to execute tasks in parallel or sequence."
+/// );
+/// ```
+pub fn sub_agent_description_template(tool_specific_text: &str) -> String {
+    use crate::tools::constants::sub_agent::MAX_SUB_AGENTS;
+
+    format!(
+        r#"{}
+
+PRIMARY AGENT ONLY:
+- Only the primary/root agent can use this tool
+- Sub-agents cannot use sub-agent tools (max depth: 1)
+- Maximum {} sub-agent operations per workflow
+
+RESPONSE FORMAT:
+Sub-agents return structured JSON with:
+- success: boolean
+- result: string (summary or error message)
+- metrics: execution time, tokens used"#,
+        tool_specific_text, MAX_SUB_AGENTS
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

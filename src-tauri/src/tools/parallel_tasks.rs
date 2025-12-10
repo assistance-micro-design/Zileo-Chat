@@ -50,6 +50,7 @@ use crate::models::sub_agent::{
 };
 use crate::tools::context::AgentToolContext;
 use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
+use crate::tools::utils::sub_agent_description_template;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -610,10 +611,7 @@ impl ParallelTasksTool {
 #[async_trait]
 impl Tool for ParallelTasksTool {
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "ParallelTasksTool".to_string(),
-            name: "Parallel Tasks".to_string(),
-            description: r#"Executes multiple tasks in parallel across different agents.
+        let tool_specific_desc = r#"Executes multiple tasks in parallel across different agents.
 
 USE THIS TOOL WHEN:
 - You need to run multiple independent analyses simultaneously
@@ -621,7 +619,6 @@ USE THIS TOOL WHEN:
 - You want to gather information from multiple specialized agents at once
 
 IMPORTANT CONSTRAINTS:
-- Maximum 3 tasks per batch
 - All tasks execute concurrently (total time ≈ slowest task, not sum)
 - Each agent only receives its prompt - NO shared context/memory/state
 - You must include ALL necessary information in each prompt
@@ -651,7 +648,12 @@ RESULT FORMAT:
 - completed: number of successful tasks
 - failed: number of failed tasks
 - results: array with each task's result (report or error)
-- aggregated_report: combined markdown report from all tasks"#.to_string(),
+- aggregated_report: combined markdown report from all tasks"#;
+
+        ToolDefinition {
+            id: "ParallelTasksTool".to_string(),
+            name: "Parallel Tasks".to_string(),
+            description: sub_agent_description_template(tool_specific_desc),
 
             input_schema: serde_json::json!({
                 "type": "object",
