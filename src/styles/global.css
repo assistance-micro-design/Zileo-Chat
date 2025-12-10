@@ -691,8 +691,8 @@ body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  /* OPT-SCROLL-2: Remove expensive blur for better scroll performance */
+  background: rgba(0, 0, 0, 0.6);
   z-index: var(--z-index-modal-backdrop);
   display: flex;
   align-items: center;

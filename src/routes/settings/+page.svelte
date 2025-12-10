@@ -193,25 +193,33 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 
 		// Setup IntersectionObserver for automatic section detection
 		let observer: IntersectionObserver | null = null;
+		let rafId: number | null = null;
 
 		if (contentAreaRef) {
 			observer = new IntersectionObserver(
 				(entries) => {
-					// Find the entry with the highest intersection ratio
-					const visibleEntry = entries.reduce((best, entry) => {
-						if (entry.isIntersecting && entry.intersectionRatio > (best?.intersectionRatio || 0)) {
-							return entry;
-						}
-						return best;
-					}, null as IntersectionObserverEntry | null);
-
-					if (visibleEntry?.target?.id) {
-						activeSection = visibleEntry.target.id;
+					// OPT-SCROLL-4: Debounce with RAF to reduce callback frequency
+					if (rafId !== null) {
+						cancelAnimationFrame(rafId);
 					}
+					rafId = requestAnimationFrame(() => {
+						// Find the entry with the highest intersection ratio
+						const visibleEntry = entries.reduce((best, entry) => {
+							if (entry.isIntersecting && entry.intersectionRatio > (best?.intersectionRatio || 0)) {
+								return entry;
+							}
+							return best;
+						}, null as IntersectionObserverEntry | null);
+
+						if (visibleEntry?.target?.id && visibleEntry.target.id !== activeSection) {
+							activeSection = visibleEntry.target.id;
+						}
+						rafId = null;
+					});
 				},
 				{
 					root: contentAreaRef,
-					threshold: [0.3, 0.5, 0.7],
+					threshold: [0.5], // OPT-SCROLL-1: Reduce thresholds for better performance
 					rootMargin: '-10% 0px -10% 0px'
 				}
 			);
@@ -229,6 +237,9 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 		return () => {
 			unsubscribeTheme();
 			observer?.disconnect();
+			if (rafId !== null) {
+				cancelAnimationFrame(rafId);
+			}
 		};
 	});
 </script>
@@ -591,6 +602,7 @@ Uses: MCPSection, LLMSection, APIKeysSection and other section components.
 		padding: var(--spacing-xl);
 		/* NOTE: Removed contain: content - it breaks position:fixed modals inside */
 		-webkit-overflow-scrolling: touch;
+		will-change: scroll-position; /* OPT-SCROLL-3: GPU acceleration */
 	}
 
 	.settings-section {
