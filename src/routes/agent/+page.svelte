@@ -26,7 +26,6 @@ Uses extracted components, services, and stores for clean architecture.
 	import { onDestroy, onMount } from 'svelte';
 	import type { Message } from '$types/message';
 	import type { ModalState } from '$types/services';
-	import type { WorkflowResult } from '$types/workflow';
 	import type { ValidationRequest } from '$types/validation';
 
 	// Component imports
@@ -42,7 +41,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { i18n } from '$lib/i18n';
 
 	// Service imports
-	import { WorkflowService, MessageService, LocalStorage, STORAGE_KEYS } from '$lib/services';
+	import { WorkflowService, MessageService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
 
 	// Store imports
 	import {
@@ -93,57 +92,6 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Messages (local state, could move to store later) */
 	let messages = $state<Message[]>([]);
 	let messagesLoading = $state(false);
-
-	// ============================================================================
-	// Helper Functions
-	// ============================================================================
-
-	/**
-	 * Create a local user message for immediate UI feedback.
-	 */
-	function createLocalUserMessage(content: string): Message {
-		return {
-			id: crypto.randomUUID(),
-			workflow_id: selectedWorkflowId!,
-			role: 'user',
-			content,
-			tokens: 0,
-			timestamp: new Date()
-		};
-	}
-
-	/**
-	 * Create a local assistant message from workflow result.
-	 */
-	function createLocalAssistantMessage(result: WorkflowResult): Message {
-		return {
-			id: crypto.randomUUID(),
-			workflow_id: selectedWorkflowId!,
-			role: 'assistant',
-			content: result.report,
-			tokens: result.metrics.tokens_output,
-			tokens_input: result.metrics.tokens_input,
-			tokens_output: result.metrics.tokens_output,
-			model: result.metrics.model,
-			provider: result.metrics.provider,
-			duration_ms: result.metrics.duration_ms,
-			timestamp: new Date()
-		};
-	}
-
-	/**
-	 * Create a local system message for errors.
-	 */
-	function createLocalSystemMessage(error: string): Message {
-		return {
-			id: crypto.randomUUID(),
-			workflow_id: selectedWorkflowId!,
-			role: 'system',
-			content: `Error: ${error}`,
-			tokens: 0,
-			timestamp: new Date()
-		};
-	}
 
 	// ============================================================================
 	// Data Loading Functions (simplified using services)
@@ -310,60 +258,35 @@ Uses extracted components, services, and stores for clean architecture.
 	}
 
 	// ============================================================================
-	// Message Handling (simplified from 114 lines to ~40 lines)
+	// Message Handling (delegated to WorkflowExecutorService)
 	// ============================================================================
 
 	/**
 	 * Handle sending a message with streaming.
+	 * Delegates orchestration to WorkflowExecutorService.
 	 */
 	async function handleSend(message: string): Promise<void> {
 		if (!selectedWorkflowId || !selectedAgentId || !message.trim()) return;
 
-		try {
-			// 1. Save user message
-			await MessageService.saveUser(selectedWorkflowId, message);
-			messages = [...messages, createLocalUserMessage(message)];
-
-			// 2. Start streaming
-			tokenStore.startStreaming();
-			await streamingStore.start(selectedWorkflowId);
-
-			// 3. Execute workflow with user's selected locale
-			const result = await WorkflowService.executeStreaming(
-				selectedWorkflowId,
+		await WorkflowExecutorService.execute(
+			{
+				workflowId: selectedWorkflowId,
 				message,
-				selectedAgentId,
-				$locale
-			);
-
-			// 4. Update streaming tokens and cost with final result
-			tokenStore.setInputTokens(result.metrics.tokens_input);
-			tokenStore.updateStreamingTokens(result.metrics.tokens_output);
-			tokenStore.setSessionCost(result.metrics.cost_usd);
-
-			// 5. Save and display assistant response
-			await MessageService.saveAssistant(selectedWorkflowId, result.report, result.metrics);
-			messages = [...messages, createLocalAssistantMessage(result)];
-
-			// 6. Capture streaming activities to historical
-			activityStore.captureStreamingActivities();
-
-			// 7. Refresh workflows and update cumulative tokens
-			await workflowStore.loadWorkflows();
-			const workflow = workflowStore.getSelected();
-			if (workflow) {
-				tokenStore.updateFromWorkflow(workflow);
+				agentId: selectedAgentId,
+				locale: $locale
+			},
+			{
+				onUserMessage: (msg) => {
+					messages = [...messages, msg];
+				},
+				onAssistantMessage: (msg) => {
+					messages = [...messages, msg];
+				},
+				onError: (msg) => {
+					messages = [...messages, msg];
+				}
 			}
-
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			await MessageService.saveSystem(selectedWorkflowId, `Error: ${errorMsg}`);
-			messages = [...messages, createLocalSystemMessage(errorMsg)];
-
-		} finally {
-			await streamingStore.reset();
-			tokenStore.stopStreaming();
-		}
+		);
 	}
 
 	/**
