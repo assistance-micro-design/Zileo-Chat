@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Zileo-Chat-3 Backend Library
+//! # Zileo Chat Backend Library
 //!
-//! This crate provides the backend functionality for Zileo-Chat-3,
+//! This crate provides the backend functionality for Zileo Chat,
 //! a multi-agent desktop application built with Tauri.
 //!
 //! ## Modules

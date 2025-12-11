@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Security module for Zileo-Chat-3.
+//! Security module for Zileo Chat.
 //!
 //! Provides:
 //! - Input validation utilities for sanitizing and validating user input

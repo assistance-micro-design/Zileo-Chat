@@ -24,7 +24,7 @@ use serde_json::Value;
 pub const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// Application name used in MCP client info
-pub const MCP_CLIENT_NAME: &str = "Zileo-Chat-3";
+pub const MCP_CLIENT_NAME: &str = "Zileo Chat";
 
 /// Application version used in MCP client info
 pub const MCP_CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");

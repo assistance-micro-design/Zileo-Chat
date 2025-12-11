@@ -14,7 +14,7 @@
 
 //! MCP (Model Context Protocol) Module
 //!
-//! This module provides MCP client functionality for Zileo-Chat-3,
+//! This module provides MCP client functionality for Zileo Chat,
 //! enabling agents to use tools from external MCP servers.
 //!
 //! ## Architecture

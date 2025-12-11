@@ -1,12 +1,13 @@
-Zileo-Chat-3
+Zileo Chat
 Copyright 2025 Assistance Micro Design
+https://www.assistancemicrodesign.net/
 https://github.com/assistance-micro-design
 
 This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file for the full license text.
 
 This product includes software developed by:
-- Assistance Micro Design (https://github.com/assistance-micro-design)
+- Assistance Micro Design (https://www.assistancemicrodesign.net/)
 
 Third-party libraries and their licenses are documented in:
 - package.json (Node.js dependencies)

@@ -14,7 +14,7 @@
 
 //! # Database Module
 //!
-//! Provides SurrealDB embedded database functionality for Zileo-Chat-3.
+//! Provides SurrealDB embedded database functionality for Zileo Chat.
 //!
 //! ## Overview
 //!

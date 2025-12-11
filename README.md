@@ -1,8 +1,10 @@
-# Zileo-Chat-3
+# Zileo Chat
 
 > Application desktop multi-agent avec interface conversationnelle
 
-**Developed by**: [Assistance Micro Design](https://github.com/assistance-micro-design)
+**Version**: 0.9.0-beta
+
+**Developed by**: [Assistance Micro Design](https://www.assistancemicrodesign.net/) | [GitHub](https://github.com/assistance-micro-design)
 
 **Stack**: SvelteKit 2.49.0 + Svelte 5.43.14 | Rust 1.91.1 + Tauri 2.9.4 | SurrealDB 2.3.10
 
@@ -20,7 +22,7 @@
 
 ## Description
 
-Zileo-Chat-3 est une application desktop sophistiquée construite sur une architecture multi-agent, permettant l'orchestration intelligente de tâches via une interface conversationnelle.
+Zileo Chat est une application desktop sophistiquée construite sur une architecture multi-agent, permettant l'orchestration intelligente de tâches via une interface conversationnelle.
 
 ### Caracteristiques Principales
 
@@ -83,8 +85,8 @@ cargo --version   # >= 1.91.1
 
 ```bash
 # Clone du repository
-git clone https://github.com/assistance-micro-design/zileo-chat-3.git
-cd zileo-chat-3
+git clone https://github.com/assistance-micro-design/zileo-chat.git
+cd zileo-chat
 
 # Installation des dépendances
 npm install
@@ -207,7 +209,7 @@ Les contributions sont les bienvenues ! Consultez [CONTRIBUTORS.md](CONTRIBUTORS
 - Tauri allowlist explicite (no wildcard)
 - Audit trail avec structured logging
 
-Pour signaler une vulnerabilite, ouvrez une issue privee sur [GitHub](https://github.com/assistance-micro-design/zileo-chat-3/security).
+Pour signaler une vulnerabilite, ouvrez une issue privee sur [GitHub](https://github.com/assistance-micro-design/zileo-chat/security).
 
 ## Licence
 
@@ -248,7 +250,7 @@ limitations under the License.
 ## Support
 
 - Documentation complete dans `/docs`
-- Issues GitHub pour bugs et features requests: [GitHub Issues](https://github.com/assistance-micro-design/zileo-chat-3/issues)
+- Issues GitHub pour bugs et features requests: [GitHub Issues](https://github.com/assistance-micro-design/zileo-chat/issues)
 - Discussions pour questions et support communautaire
 
 ---
