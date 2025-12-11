@@ -37,7 +37,7 @@ Desktop   : Tauri (cross-platform)
 
 **Testing**:
 - **vitest**: ^2.0.0 (unit tests)
-- **@playwright/test**: ^1.47.0 (E2E tests)
+- **@playwright/test**: ^1.57.0 (E2E tests)
 - **jsdom**: ^27.2.0 (DOM testing)
 
 **Linting**:
@@ -55,7 +55,7 @@ Desktop   : Tauri (cross-platform)
 - **Rust**: 1.91.1 (stable, edition 2021)
 - **tauri**: 2 (framework)
 - **tauri-build**: 2 (build dependencies)
-- **tauri-plugin-opener**: 2
+- **tauri-plugin-opener**: 2.5.2
 - **tauri-plugin-dialog**: 2
 
 **LLM & Multi-Agent**:
@@ -205,6 +205,7 @@ Production-ready resilience patterns for LLM provider calls:
   - `DEFAULT_MODELS_LIMIT`: 100 (LLM models)
   - `DEFAULT_MCP_LOGS_LIMIT`: 500 (MCP call logs)
   - `DEFAULT_MESSAGES_LIMIT`: 500 (message history)
+  - `MAX_LIST_LIMIT`: 10000 (maximum allowed limit)
 
 ---
 

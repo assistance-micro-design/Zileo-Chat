@@ -414,6 +414,71 @@ const result = await invoke('call_mcp_tool', {
 });
 ```
 
+## Timeout, Retry & Resilience (Phase 6)
+
+### Request Timeout
+
+All MCP tool calls have a **30 second timeout** (`DEFAULT_HTTP_TIMEOUT_MS: 30_000`). If a server doesn't respond within this window, the request fails with a timeout error.
+
+**Configuration** (not user-configurable in v1):
+- HTTP requests: 30s timeout via `tokio::time::timeout`
+- Pool idle timeout: 90s
+
+### Retry Logic
+
+Failed requests are automatically retried with exponential backoff:
+
+| Attempt | Delay Before Retry |
+|---------|-------------------|
+| 1st retry | 500ms |
+| 2nd retry | 1000ms |
+
+**Retryable Errors**:
+- Network timeouts
+- Connection refused
+- HTTP 502, 503, 429 (rate limit)
+
+**Non-Retryable Errors** (fail immediately):
+- HTTP 400 (bad request)
+- HTTP 401/403 (auth errors)
+- JSON-RPC protocol errors
+
+### Health Checks
+
+The MCPManager performs periodic health checks on all running servers:
+
+**Default Interval**: 5 minutes (`DEFAULT_HEALTH_CHECK_INTERVAL: 300s`)
+
+**Health Probe**: Calls `refresh_tools()` which makes a real `tools/list` JSON-RPC request to verify server responsiveness.
+
+**Behavior**:
+- Success: Circuit breaker reset to closed state
+- Failure: Failure count incremented, may trigger circuit open
+
+**Startup**:
+```rust
+let manager = Arc::new(MCPManager::new(db).await?);
+let _health_task = MCPManager::start_health_checks(manager.clone(), None);
+```
+
+### Circuit Breaker Updates
+
+When combined with the existing circuit breaker (Section "Gestion des Erreurs"):
+
+| Config | Value | Description |
+|--------|-------|-------------|
+| Failure Threshold | 3 | Failures before circuit opens |
+| Cooldown Period | 60s | Time in open state before testing recovery |
+| Health Check Recovery | Auto | Health checks can reset circuit to closed |
+
+**Recovery Flow**:
+```
+Closed → 3 failures → Open → 60s cooldown → HalfOpen
+                                              ↓
+                              Health check success → Closed
+                              Health check fail → Open (restart cooldown)
+```
+
 ## Références
 
 - **Spec MCP**: https://modelcontextprotocol.io
