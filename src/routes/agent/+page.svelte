@@ -69,29 +69,45 @@ Uses extracted components, services, and stores for clean architecture.
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
-	// State Variables (reduced from 27 to 8)
+	// PageState Interface (OPT-FA-9: Aggregate UI state)
+	// ============================================================================
+
+	/**
+	 * Aggregated page state interface for cleaner state management.
+	 * Groups 8 related UI/data variables into single reactive object.
+	 */
+	interface PageState {
+		leftSidebarCollapsed: boolean;
+		rightSidebarCollapsed: boolean;
+		selectedWorkflowId: string | null;
+		selectedAgentId: string | null;
+		currentMaxIterations: number;
+		currentContextWindow: number;
+		messages: Message[];
+		messagesLoading: boolean;
+	}
+
+	/** Initial page state with localStorage restoration */
+	const initialPageState: PageState = {
+		leftSidebarCollapsed: false,
+		rightSidebarCollapsed: LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false),
+		selectedWorkflowId: null,
+		selectedAgentId: null,
+		currentMaxIterations: 50,
+		currentContextWindow: 128000,
+		messages: [],
+		messagesLoading: false
+	};
+
+	// ============================================================================
+	// State Variables
 	// ============================================================================
 
 	/** Modal state - single union type instead of 3 booleans */
 	let modalState = $state<ModalState>({ type: 'none' });
 
-	/** UI state */
-	let leftSidebarCollapsed = $state(false);
-	let rightSidebarCollapsed = $state(
-		LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false)
-	);
-
-	/** Selection state (stores handle the rest) */
-	let selectedWorkflowId = $state<string | null>(null);
-	let selectedAgentId = $state<string | null>(null);
-
-	/** Agent config (loaded on demand) */
-	let currentMaxIterations = $state(50);
-	let _currentContextWindow = $state(128000);
-
-	/** Messages (local state, could move to store later) */
-	let messages = $state<Message[]>([]);
-	let messagesLoading = $state(false);
+	/** Aggregated page state (OPT-FA-9) */
+	let pageState = $state<PageState>(initialPageState);
 
 	// ============================================================================
 	// Data Loading Functions (simplified using services)
@@ -101,12 +117,12 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Load workflow data (messages and historical activities).
 	 */
 	async function loadWorkflowData(workflowId: string): Promise<void> {
-		messagesLoading = true;
+		pageState.messagesLoading = true;
 
 		try {
 			// Load messages
 			const result = await MessageService.load(workflowId);
-			messages = result.messages;
+			pageState.messages = result.messages;
 			if (result.error) {
 				console.error('Error loading messages:', result.error);
 				// Optionally show UI notification here
@@ -115,7 +131,7 @@ Uses extracted components, services, and stores for clean architecture.
 			// Load historical activities (store handles internally)
 			await activityStore.loadHistorical(workflowId);
 		} finally {
-			messagesLoading = false;
+			pageState.messagesLoading = false;
 		}
 	}
 
@@ -131,9 +147,9 @@ Uses extracted components, services, and stores for clean architecture.
 			const id = await WorkflowService.create(name, agentId);
 
 			// Update selection
-			selectedAgentId = agentId;
-			selectedWorkflowId = id;
-			messages = [];
+			pageState.selectedAgentId = agentId;
+			pageState.selectedWorkflowId = id;
+			pageState.messages = [];
 
 			// Reload workflows and select the new one
 			await workflowStore.loadWorkflows();
@@ -151,7 +167,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Select a workflow and load its data.
 	 */
 	async function selectWorkflow(workflowId: string): Promise<void> {
-		selectedWorkflowId = workflowId;
+		pageState.selectedWorkflowId = workflowId;
 		workflowStore.select(workflowId);
 		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
 
@@ -166,7 +182,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 		// Auto-select agent if workflow has one
 		const agentId = workflow?.agent_id;
-		if (agentId && agentId !== selectedAgentId) {
+		if (agentId && agentId !== pageState.selectedAgentId) {
 			await handleAgentChange(agentId);
 		}
 	}
@@ -180,9 +196,9 @@ Uses extracted components, services, and stores for clean architecture.
 			await workflowStore.loadWorkflows();
 
 			// Clear selection if deleted workflow was selected
-			if (selectedWorkflowId === workflowId) {
-				selectedWorkflowId = null;
-				messages = [];
+			if (pageState.selectedWorkflowId === workflowId) {
+				pageState.selectedWorkflowId = null;
+				pageState.messages = [];
 				activityStore.reset();
 			}
 
@@ -213,7 +229,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle agent selection change.
 	 */
 	function handleAgentChange(agentId: string): void {
-		selectedAgentId = agentId;
+		pageState.selectedAgentId = agentId;
 		loadAgentConfig(agentId);
 	}
 
@@ -224,7 +240,7 @@ Uses extracted components, services, and stores for clean architecture.
 	async function loadAgentConfig(agentId: string): Promise<void> {
 		try {
 			const config = await agentStore.getAgentConfig(agentId);
-			currentMaxIterations = config.max_tool_iterations ?? 50;
+			pageState.currentMaxIterations = config.max_tool_iterations ?? 50;
 
 			// Load full model data to get context_window and pricing
 			if (config.llm?.model && config.llm?.provider) {
@@ -235,18 +251,18 @@ Uses extracted components, services, and stores for clean architecture.
 					);
 					// Update token store with model context window and pricing
 					tokenStore.updateFromModel(model);
-					_currentContextWindow = model.context_window;
+					pageState.currentContextWindow = model.context_window;
 				} catch (modelErr) {
 					console.warn('Failed to load model for token metrics, using defaults:', modelErr);
-					_currentContextWindow = 128000;
+					pageState.currentContextWindow = 128000;
 				}
 			} else {
-				_currentContextWindow = 128000;
+				pageState.currentContextWindow = 128000;
 			}
 		} catch (e) {
 			console.error('Failed to load agent config:', e);
-			currentMaxIterations = 50;
-			_currentContextWindow = 128000;
+			pageState.currentMaxIterations = 50;
+			pageState.currentContextWindow = 128000;
 		}
 	}
 
@@ -254,7 +270,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle max iterations change.
 	 */
 	function handleIterationsChange(value: number): void {
-		currentMaxIterations = value;
+		pageState.currentMaxIterations = value;
 	}
 
 	// ============================================================================
@@ -266,24 +282,24 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Delegates orchestration to WorkflowExecutorService.
 	 */
 	async function handleSend(message: string): Promise<void> {
-		if (!selectedWorkflowId || !selectedAgentId || !message.trim()) return;
+		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
 
 		await WorkflowExecutorService.execute(
 			{
-				workflowId: selectedWorkflowId,
+				workflowId: pageState.selectedWorkflowId,
 				message,
-				agentId: selectedAgentId,
+				agentId: pageState.selectedAgentId,
 				locale: $locale
 			},
 			{
 				onUserMessage: (msg) => {
-					messages = [...messages, msg];
+					pageState.messages = [...pageState.messages, msg];
 				},
 				onAssistantMessage: (msg) => {
-					messages = [...messages, msg];
+					pageState.messages = [...pageState.messages, msg];
 				},
 				onError: (msg) => {
-					messages = [...messages, msg];
+					pageState.messages = [...pageState.messages, msg];
 				}
 			}
 		);
@@ -293,8 +309,8 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle canceling streaming workflow.
 	 */
 	function handleCancel(): void {
-		if (selectedWorkflowId) {
-			WorkflowService.cancel(selectedWorkflowId);
+		if (pageState.selectedWorkflowId) {
+			WorkflowService.cancel(pageState.selectedWorkflowId);
 			streamingStore.reset();
 			tokenStore.stopStreaming();
 		}
@@ -356,16 +372,16 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Persist right sidebar state to localStorage.
 	 */
 	$effect(() => {
-		LocalStorage.set(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, rightSidebarCollapsed);
+		LocalStorage.set(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, pageState.rightSidebarCollapsed);
 	});
 </script>
 
 <div class="agent-page">
 	<!-- Left Sidebar - Workflows -->
 	<WorkflowSidebar
-		bind:collapsed={leftSidebarCollapsed}
+		bind:collapsed={pageState.leftSidebarCollapsed}
 		workflows={$filteredWorkflows}
-		{selectedWorkflowId}
+		selectedWorkflowId={pageState.selectedWorkflowId}
 		searchFilter={$workflowSearchFilter}
 		onsearchchange={(v) => workflowStore.setSearchFilter(v)}
 		onselect={(w) => selectWorkflow(w.id)}
@@ -376,26 +392,26 @@ Uses extracted components, services, and stores for clean architecture.
 
 	<!-- Main Content -->
 	<main class="agent-main">
-		{#if selectedWorkflowId && $selectedWorkflow}
+		{#if pageState.selectedWorkflowId && $selectedWorkflow}
 			<!-- Agent Header -->
 			<AgentHeader
 				workflow={$selectedWorkflow}
 				agents={$agents}
-				{selectedAgentId}
-				maxIterations={currentMaxIterations}
+				selectedAgentId={pageState.selectedAgentId}
+				maxIterations={pageState.currentMaxIterations}
 				agentsLoading={$agentsLoading}
-				{messagesLoading}
+				messagesLoading={pageState.messagesLoading}
 				onagentchange={handleAgentChange}
 				oniterationschange={handleIterationsChange}
 			/>
 
 			<!-- Chat Container -->
 			<ChatContainer
-				{messages}
-				{messagesLoading}
+				messages={pageState.messages}
+				messagesLoading={pageState.messagesLoading}
 				streamContent={$streamContent}
 				isStreaming={$isStreaming}
-				disabled={!selectedAgentId}
+				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
 				oncancel={handleCancel}
 			/>
@@ -439,7 +455,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 	<!-- Right Sidebar - Activity Feed -->
 	<ActivitySidebar
-		bind:collapsed={rightSidebarCollapsed}
+		bind:collapsed={pageState.rightSidebarCollapsed}
 		activities={$filteredActivities}
 		isStreaming={$isStreaming}
 		filter={$activityFilter}
@@ -451,7 +467,7 @@ Uses extracted components, services, and stores for clean architecture.
 		<NewWorkflowModal
 			open={true}
 			agents={$agents}
-			selectedAgentId={selectedAgentId}
+			selectedAgentId={pageState.selectedAgentId}
 			oncreate={handleCreateWorkflow}
 			onclose={() => modalState = { type: 'none' }}
 		/>
