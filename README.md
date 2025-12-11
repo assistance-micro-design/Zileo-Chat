@@ -1,260 +1,162 @@
 # Zileo Chat
 
-> Application desktop multi-agent avec interface conversationnelle
+[![Version](https://img.shields.io/badge/version-0.9.0--beta-orange)](https://github.com/assistance-micro-design/zileo-chat)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Status](https://img.shields.io/badge/status-beta-yellow)](https://github.com/assistance-micro-design/zileo-chat)
 
-**Version**: 0.9.0-beta
+> Application desktop multi-agent avec interface conversationnelle intelligente.
 
-**Developed by**: [Assistance Micro Design](https://www.assistancemicrodesign.net/) | [GitHub](https://github.com/assistance-micro-design)
+**Developed by** [Assistance Micro Design](https://www.assistancemicrodesign.net/)
 
-**Stack**: SvelteKit 2.49.0 + Svelte 5.43.14 | Rust 1.91.1 + Tauri 2.9.4 | SurrealDB 2.3.10
-
-## Statut du Projet
-
-**Phase actuelle**: Phase 5 Backend Features complete
-**Prochaine etape**: Phase 6 Integration & Polish
-
-### Metriques du Code
-- **99 commandes Tauri** (agent, workflow, memory, validation, streaming, MCP, LLM, prompts, etc.)
-- **6 outils** (MemoryTool, TodoTool, CalculatorTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
-- **18 tables SurrealDB** (workflow, agent, message, memory, task, validation_request, etc.)
-- **12 composants UI** (Button, Card, Modal, Input, Select, Badge, StatusIndicator, etc.)
-- **14 stores Svelte** (agentStore, workflowStore, streamingStore, tokenStore, etc.)
-
-## Description
-
-Zileo Chat est une application desktop sophistiquée construite sur une architecture multi-agent, permettant l'orchestration intelligente de tâches via une interface conversationnelle.
-
-### Caracteristiques Principales
-
-- **Systeme Multi-Agent**: Orchestration avec sub-agents (spawn, delegate, parallel tasks)
-- **Interface Conversationnelle**: Streaming temps-reel avec affichage tokens
-- **Base de Donnees Hybride**: SurrealDB avec support relationnel, graph et vectoriel (HNSW)
-- **Securite Production**: API keys chiffrees (OS keychain + AES-256), validation stricte, CSP
-- **Interface Moderne**: SvelteKit + Svelte 5 (runes) avec 12 composants UI
-- **Backend Performant**: Rust avec Tauri, 99 commandes IPC
-- **Extensibilite MCP**: Model Context Protocol avec gestion serveurs dynamique
-- **Observabilite**: Logging structure avec tracing, spans workflow/agent
-- **i18n**: Support multilingue (EN/FR) avec detection systeme
-- **Validation Human-in-the-loop**: Approbation des operations critiques
-- **Bibliotheque de Prompts**: Gestion et reutilisation de prompts systeme
-- **Import/Export**: Sauvegarde et restauration des configurations
-
-## Architecture
-
-```
-Frontend (SvelteKit + Svelte 5)
-         ↕ IPC (Tauri)
-Backend (Rust + Tokio)
-    ├─ Multi-Agent System (Registry + Orchestrator)
-    ├─ LLM Integration (Rig.rs: Mistral + Ollama)
-    ├─ MCP Protocol (Client/Server)
-    └─ Database (SurrealDB embedded)
-```
-
-## Documentation
-
-Toute la documentation technique est disponible dans le repertoire `docs/`:
-
-| Document | Description |
-|----------|-------------|
-| **[TECH_STACK.md](docs/TECH_STACK.md)** | Versions exactes et requirements |
-| **[ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)** | Decisions techniques justifiees |
-| **[MULTI_AGENT_ARCHITECTURE.md](docs/MULTI_AGENT_ARCHITECTURE.md)** | Systeme multi-agent detaille |
-| **[DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md)** | Schema SurrealDB (18 tables) |
-| **[FRONTEND_SPECIFICATIONS.md](docs/FRONTEND_SPECIFICATIONS.md)** | Composants et stores frontend |
-| **[TOOLS_REFERENCE.md](docs/TOOLS_REFERENCE.md)** | Reference des 6 outils |
-| **[MCP_CONFIGURATION_GUIDE.md](docs/MCP_CONFIGURATION_GUIDE.md)** | Configuration serveurs MCP |
-| **[DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)** | Systeme de design UI |
-| **[CLAUDE.md](CLAUDE.md)** | Guidelines pour developpement avec Claude Code |
-
-## Requirements
-
-### Minimum
-- **Node.js**: 20.19+ ou 22.12+ (requis par Vite 7)
-- **Rust**: 1.80.1+ (requis par SurrealDB SDK)
-- **npm/pnpm/yarn**: Latest stable
-
-### Vérification
-```bash
-node --version    # >= 20.19
-rustc --version   # >= 1.91.1
-cargo --version   # >= 1.91.1
-```
-
-## Installation (Future)
-
-```bash
-# Clone du repository
-git clone https://github.com/assistance-micro-design/zileo-chat.git
-cd zileo-chat
-
-# Installation des dépendances
-npm install
-
-# Développement
-npm run tauri:dev
-
-# Build production
-npm run tauri:build
-```
-
-## Roadmap
-
-### Phases Completees
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| Phase 0 | Base implementation (agents, LLM, DB, security, 19 commands) | Complete |
-| Phase 1 | Design System Foundation (theme, 12 UI components) | Complete |
-| Phase 2 | Layout Components (AppContainer, Sidebar, FloatingMenu) | Complete |
-| Phase 3 | Chat & Workflow Components (MessageBubble, ChatInput) | Complete |
-| Phase 4 | Pages Refactoring (agent page, settings page) | Complete |
-| **Phase 5** | **Backend Features (validation, memory, streaming, 99 commands)** | **Complete** |
-
-### Phase Actuelle
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| Phase 6 | Integration & Polish (E2E tests, accessibility audit) | En cours |
-
-### Fonctionnalites Implementees
-
-- Integration LLM (Mistral + Ollama via Rig.rs)
-- Streaming responses avec affichage tokens
-- Systeme multi-agent complet (6 outils)
-- Sub-agents (spawn, delegate, parallel tasks)
-- Human-in-the-loop validation UI
-- Bibliotheque de prompts
-- Import/Export configurations
-- i18n (EN/FR)
-- Onboarding wizard
-
-### Prochaines Etapes
-
-- Tests E2E complets (Playwright)
-- Audit accessibilite
-- macOS builds
-- Windows builds
-
-## Développement
-
-### Structure du Projet
-
-```
-zileo-chat-3/
-├── src/                    # Frontend SvelteKit
-│   ├── routes/             # File-based routing (3 pages)
-│   │   ├── agent/          # Page agent (chat, workflows)
-│   │   └── settings/       # Page parametres
-│   ├── lib/
-│   │   ├── components/ui/  # 12 composants UI atomiques
-│   │   ├── stores/         # 14 stores Svelte
-│   │   └── i18n/           # Internationalisation
-│   ├── types/              # TypeScript interfaces
-│   └── messages/           # Traductions (en.json, fr.json)
-├── src-tauri/              # Backend Rust
-│   └── src/
-│       ├── commands/       # 99 commandes Tauri (18 fichiers)
-│       ├── tools/          # 6 outils (memory, todo, calculator, sub-agent)
-│       ├── agents/         # Systeme multi-agent
-│       ├── db/             # SurrealDB (18 tables)
-│       ├── llm/            # Rig.rs (Mistral, Ollama)
-│       ├── mcp/            # MCP protocol client
-│       └── models/         # Types Rust
-├── docs/                   # Documentation technique
-└── LICENSE                 # Apache 2.0
-```
-
-### Validation
-
-```bash
-# Frontend
-npm run check      # Svelte + TypeScript
-npm run lint       # ESLint
-npm run test       # Vitest
-npm run build      # Production build
-
-# Backend
-cd src-tauri
-cargo fmt --check         # Format
-cargo clippy -- -D warnings  # Linting strict
-cargo test                # Tests
-cargo build --release     # Release build
-```
-
-## Contribuer
-
-Les contributions sont les bienvenues ! Consultez [CONTRIBUTORS.md](CONTRIBUTORS.md) et [CLAUDE.md](CLAUDE.md) pour les guidelines de développement.
-
-### Workflow
-1. Fork le projet
-2. Créer une branche feature (`git checkout -b feature/amazing-feature`)
-3. Commit les changements (`git commit -m 'Add amazing feature'`)
-4. Push vers la branche (`git push origin feature/amazing-feature`)
-5. Ouvrir une Pull Request
-
-### Standards de Code
-- ✅ TypeScript strict mode (no `any`)
-- ✅ Rust clippy warnings as errors
-- ✅ Tests pour critical paths (~70% coverage)
-- ✅ JSDoc/Rustdoc pour API publiques
-- ✅ Commits conventionnels (feat/fix/docs/refactor)
-
-## Sécurité
-
-**Production-ready dès v1.0**:
-- API keys stockées via OS keychain + AES-256
-- Validation inputs stricte (frontend + backend)
-- Content Security Policy (CSP) configurée
-- Tauri allowlist explicite (no wildcard)
-- Audit trail avec structured logging
-
-Pour signaler une vulnerabilite, ouvrez une issue privee sur [GitHub](https://github.com/assistance-micro-design/zileo-chat/security).
-
-## Licence
-
-Ce projet est distribué sous **licence Apache 2.0**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
-
-```
-Copyright 2025 Assistance Micro Design
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
-
-### Permissions Apache 2.0
-- ✅ Usage commercial
-- ✅ Modification
-- ✅ Distribution
-- ✅ Usage privé
-- ✅ Utilisation de brevets
-
-## Ressources
-
-- **Documentation**: [docs/](docs/)
-- **Specifications**: [docs/specs/](docs/specs/)
-- **Tauri**: https://v2.tauri.app
-- **SvelteKit**: https://kit.svelte.dev
-- **SurrealDB**: https://surrealdb.com
-- **Rig.rs**: https://docs.rs/rig-core
-
-## Support
-
-- Documentation complete dans `/docs`
-- Issues GitHub pour bugs et features requests: [GitHub Issues](https://github.com/assistance-micro-design/zileo-chat/issues)
-- Discussions pour questions et support communautaire
+**Built with** [Claude Code](https://claude.ai/code) by Anthropic
 
 ---
 
-**Project Owner**: [Assistance Micro Design](https://github.com/assistance-micro-design)
+## Beta Warning
 
-**Status**: En developpement actif - Phase 5 complete (99 commands, 6 tools, 18 tables), Phase 6 Integration en cours
+**This software is currently in beta (v0.9.0-beta).**
+
+Before using Zileo Chat, please be aware of the following risks:
+
+| Risk | Description |
+|------|-------------|
+| **Data Loss** | Database schema may change between versions, potentially requiring data migration or reset |
+| **API Costs** | LLM API calls to Mistral AI incur costs based on token usage - monitor your usage |
+| **Instability** | Features may be incomplete, contain bugs, or change without notice |
+| **Security** | While security measures are implemented, the software has not undergone formal security audit |
+| **Breaking Changes** | Updates may introduce breaking changes to configurations or workflows |
+
+**Recommendation**: Back up your data regularly and avoid using for critical production tasks until v1.0 release.
+
+---
+
+## Description
+
+Zileo Chat is a desktop application for orchestrating AI agents through a conversational interface. It supports multi-agent workflows with tool execution, memory persistence, and human-in-the-loop validation.
+
+### Key Features
+
+- **Multi-Agent System** - Create and orchestrate multiple AI agents with specialized tools
+- **Real-time Streaming** - Token-by-token response display with usage metrics
+- **Tool Execution** - Memory, Todo, Calculator, and sub-agent delegation tools
+- **Human-in-the-Loop** - Approve critical operations before execution
+- **MCP Protocol** - Extend agents with Model Context Protocol servers
+- **Bilingual UI** - English and French interface
+
+---
+
+## Supported LLM Providers
+
+Zileo Chat currently supports two LLM providers:
+
+| Provider | Type | Link |
+|----------|------|------|
+| **Mistral AI** | Cloud API | [https://mistral.ai](https://mistral.ai) |
+| **Ollama** | Local | [https://ollama.com](https://ollama.com) |
+
+### Mistral AI (Cloud)
+
+- Requires API key from [console.mistral.ai](https://console.mistral.ai)
+- Supports all Mistral models (Mistral Large, Codestral, etc.)
+- Pay-per-use pricing based on token consumption
+
+### Ollama (Local)
+
+- Free and runs locally on your machine or cloud locally
+- Requires [Ollama](https://ollama.com/download) installed and running
+- Supports open-source models (Llama, Mistral, CodeLlama, etc.)
+
+---
+
+## Requirements
+
+- **Node.js** 20.19+ or 22.12+
+- **Rust** 1.80.1+
+
+```bash
+node --version    # >= 20.19
+rustc --version   # >= 1.80.1
+```
+
+---
+
+## Installation
+
+```bash
+# Clone repository
+git clone https://github.com/assistance-micro-design/zileo-chat.git
+cd zileo-chat
+
+# Install dependencies
+npm install
+
+# Development
+npm run tauri:dev
+
+# Production build
+npm run tauri:build
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | SvelteKit 2.49 + Svelte 5 |
+| Backend | Rust + Tauri 2.9 |
+| Database | SurrealDB 2.4 (embedded) |
+| LLM | Rig.rs 0.24 |
+
+---
+
+## Documentation
+
+Full documentation is available in the [`docs/`](docs/) directory:
+
+- [Getting Started](docs/GETTING_STARTED.md)
+- [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md)
+- [Database Schema](docs/DATABASE_SCHEMA.md)
+- [MCP Configuration](docs/MCP_CONFIGURATION_GUIDE.md)
+- [Tools Reference](docs/TOOLS_REFERENCE.md)
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit changes (`git commit -m 'Add feature'`)
+4. Push to branch (`git push origin feature/your-feature`)
+5. Open a Pull Request
+
+---
+
+## Security
+
+To report a vulnerability, please open a private issue on [GitHub Security](https://github.com/assistance-micro-design/zileo-chat/security).
+
+---
+
+## License
+
+This project is licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) for details.
+
+Third-party licenses are documented in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+```
+Copyright 2025 Assistance Micro Design
+Licensed under the Apache License, Version 2.0
+```
+
+---
+
+## Acknowledgments
+
+- Built with [Claude Code](https://claude.ai/code) by [Anthropic](https://anthropic.com)
+- Powered by [Tauri](https://tauri.app), [SvelteKit](https://kit.svelte.dev), [SurrealDB](https://surrealdb.com)
+- LLM integration via [Rig.rs](https://github.com/0xPlaygrounds/rig)
+
+---
+
+[Assistance Micro Design](https://www.assistancemicrodesign.net/) | [GitHub](https://github.com/assistance-micro-design)
