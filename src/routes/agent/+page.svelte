@@ -35,7 +35,7 @@ Uses extracted components, services, and stores for clean architecture.
 		ActivitySidebar,
 		ChatContainer
 	} from '$lib/components/agent';
-	import { NewWorkflowModal, ConfirmDeleteModal, ValidationModal, TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
+	import { TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from 'lucide-svelte';
 	import { i18n } from '$lib/i18n';
@@ -462,32 +462,38 @@ Uses extracted components, services, and stores for clean architecture.
 		onfilterchange={(f) => activityStore.setFilter(f)}
 	/>
 
-	<!-- Modals -->
+	<!-- Modals (lazy-loaded for bundle optimization - OPT-FA-11) -->
 	{#if modalState.type === 'new-workflow'}
-		<NewWorkflowModal
-			open={true}
-			agents={$agents}
-			selectedAgentId={pageState.selectedAgentId}
-			oncreate={handleCreateWorkflow}
-			onclose={() => modalState = { type: 'none' }}
-		/>
+		{#await import('$lib/components/workflow/NewWorkflowModal.svelte') then { default: NewWorkflowModal }}
+			<NewWorkflowModal
+				open={true}
+				agents={$agents}
+				selectedAgentId={pageState.selectedAgentId}
+				oncreate={handleCreateWorkflow}
+				onclose={() => modalState = { type: 'none' }}
+			/>
+		{/await}
 	{:else if modalState.type === 'delete-workflow'}
 		{@const workflowId = modalState.workflowId}
 		{@const workflow = $workflows.find(w => w.id === workflowId)}
-		<ConfirmDeleteModal
-			open={true}
-			workflowName={workflow?.name ?? ''}
-			onconfirm={() => handleDeleteWorkflow(workflowId)}
-			oncancel={() => modalState = { type: 'none' }}
-		/>
+		{#await import('$lib/components/workflow/ConfirmDeleteModal.svelte') then { default: ConfirmDeleteModal }}
+			<ConfirmDeleteModal
+				open={true}
+				workflowName={workflow?.name ?? ''}
+				onconfirm={() => handleDeleteWorkflow(workflowId)}
+				oncancel={() => modalState = { type: 'none' }}
+			/>
+		{/await}
 	{:else if modalState.type === 'validation'}
-		<ValidationModal
-			request={modalState.request}
-			open={true}
-			onapprove={handleApproveValidation}
-			onreject={handleRejectValidation}
-			onclose={() => modalState = { type: 'none' }}
-		/>
+		{#await import('$lib/components/workflow/ValidationModal.svelte') then { default: ValidationModal }}
+			<ValidationModal
+				request={modalState.request}
+				open={true}
+				onapprove={handleApproveValidation}
+				onreject={handleRejectValidation}
+				onclose={() => modalState = { type: 'none' }}
+			/>
+		{/await}
 	{/if}
 
 	<!-- User Question Modal -->
