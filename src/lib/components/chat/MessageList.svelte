@@ -103,7 +103,6 @@
 	/* Performance mode: enable CSS containment for long lists */
 	.message-list.performance-mode {
 		contain: strict;
-		will-change: scroll-position;
 	}
 
 	.message-wrapper {

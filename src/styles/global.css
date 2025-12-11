@@ -322,7 +322,8 @@ body {
   border-radius: var(--border-radius-md);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  /* OPT-SCROLL-FIX: Remove box-shadow from transition - expensive repaint */
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -424,7 +425,8 @@ body {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  /* OPT-SCROLL-FIX: Only transition border-color, box-shadow on focus is instant */
+  transition: border-color var(--transition-fast);
 }
 
 .form-select {
@@ -446,7 +448,8 @@ body {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  /* OPT-SCROLL-FIX: Only transition border-color */
+  transition: border-color var(--transition-fast);
 }
 
 /* Dark theme arrow color */
@@ -675,7 +678,8 @@ body {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  /* OPT-SCROLL-FIX: Only transition border-color */
+  transition: border-color var(--transition-fast);
 }
 
 .search-input:focus {

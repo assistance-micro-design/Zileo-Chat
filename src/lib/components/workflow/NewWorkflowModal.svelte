@@ -338,7 +338,7 @@
 		background: var(--color-bg-primary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-md);
-		transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+		transition: border-color var(--transition-fast);
 	}
 
 	.form-input:focus {

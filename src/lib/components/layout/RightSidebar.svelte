@@ -163,7 +163,7 @@
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+		transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 		color: var(--color-text-tertiary);
 		z-index: 10;
 		box-shadow: var(--shadow-sm);
