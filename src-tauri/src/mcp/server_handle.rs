@@ -42,11 +42,12 @@ use crate::models::mcp::{
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 /// Default timeout for MCP operations (30 seconds)
-#[allow(dead_code)]
 const DEFAULT_TIMEOUT_MS: u64 = 30000;
 
 /// MCP Server Handle
@@ -80,8 +81,8 @@ pub struct MCPServerHandle {
     child: Option<Child>,
     /// Process stdin for writing requests
     stdin: Option<Mutex<ChildStdin>>,
-    /// Process stdout reader for reading responses
-    stdout_reader: Option<Mutex<BufReader<ChildStdout>>>,
+    /// Process stdout reader for reading responses (Arc for spawn_blocking)
+    stdout_reader: Option<Arc<std::sync::Mutex<BufReader<ChildStdout>>>>,
     /// Current server status
     status: MCPServerStatus,
     /// Discovered tools after initialization
@@ -169,7 +170,7 @@ impl MCPServerHandle {
             config,
             child: Some(child),
             stdin: Some(Mutex::new(stdin)),
-            stdout_reader: Some(Mutex::new(BufReader::new(stdout))),
+            stdout_reader: Some(Arc::new(std::sync::Mutex::new(BufReader::new(stdout)))),
             status: MCPServerStatus::Starting,
             tools: Vec::new(),
             resources: Vec::new(),
@@ -474,7 +475,10 @@ impl MCPServerHandle {
             .join("\n")
     }
 
-    /// Sends a JSON-RPC request and waits for response
+    /// Sends a JSON-RPC request and waits for response with timeout.
+    ///
+    /// The read operation uses `spawn_blocking` with a timeout to prevent
+    /// indefinite blocking if the MCP server doesn't respond.
     async fn send_request(&mut self, request: JsonRpcRequest) -> MCPResult<JsonRpcResponse> {
         let stdin = self.stdin.as_ref().ok_or(MCPError::ConnectionFailed {
             server: self.config.name.clone(),
@@ -487,7 +491,8 @@ impl MCPServerHandle {
             .ok_or(MCPError::ConnectionFailed {
                 server: self.config.name.clone(),
                 message: "Process stdout not available".to_string(),
-            })?;
+            })?
+            .clone();
 
         // Serialize request
         let mut request_json = serde_json::to_string(&request)?;
@@ -515,17 +520,51 @@ impl MCPServerHandle {
             })?;
         }
 
-        // Read response from stdout
-        let mut response_line = String::new();
-        {
-            let mut stdout_guard = stdout_reader.lock().await;
-            stdout_guard
-                .read_line(&mut response_line)
-                .map_err(|e| MCPError::IoError {
-                    context: "reading response".to_string(),
-                    message: e.to_string(),
-                })?;
-        }
+        // Read response from stdout with timeout
+        // We use spawn_blocking because read_line is a blocking I/O operation
+        let server_name = self.config.name.clone();
+        let server_id = self.config.id.clone();
+        let timeout_duration = Duration::from_millis(DEFAULT_TIMEOUT_MS);
+
+        let read_result = tokio::time::timeout(timeout_duration, async {
+            tokio::task::spawn_blocking(move || {
+                let mut stdout_guard = stdout_reader
+                    .lock()
+                    .map_err(|e| MCPError::IoError {
+                        context: "locking stdout".to_string(),
+                        message: e.to_string(),
+                    })?;
+                let mut response_line = String::new();
+                stdout_guard
+                    .read_line(&mut response_line)
+                    .map_err(|e| MCPError::IoError {
+                        context: "reading response".to_string(),
+                        message: e.to_string(),
+                    })?;
+                Ok::<String, MCPError>(response_line)
+            })
+            .await
+            .map_err(|e| MCPError::IoError {
+                context: "spawn_blocking join".to_string(),
+                message: e.to_string(),
+            })?
+        })
+        .await;
+
+        let response_line = match read_result {
+            Ok(inner_result) => inner_result?,
+            Err(_) => {
+                warn!(
+                    server_id = %server_id,
+                    timeout_ms = DEFAULT_TIMEOUT_MS,
+                    "MCP request timed out"
+                );
+                return Err(MCPError::Timeout {
+                    operation: format!("waiting for response from server '{}'", server_name),
+                    timeout_ms: DEFAULT_TIMEOUT_MS,
+                });
+            }
+        };
 
         if response_line.is_empty() {
             return Err(MCPError::ConnectionFailed {

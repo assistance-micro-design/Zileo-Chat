@@ -157,6 +157,8 @@ impl AppState {
     }
 
     /// Checks if a workflow has been requested to cancel
+    /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly (OPT-WF-7)
+    #[allow(dead_code)]
     pub async fn is_cancelled(&self, workflow_id: &str) -> bool {
         self.streaming_cancellations
             .lock()

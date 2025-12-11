@@ -2,8 +2,8 @@
 
 > **Objectif** : Definir comment l'agent principal determine l'execution parallele ou sequentielle des operations au sein d'un workflow
 
-**Status** : Implementation Complete (Phase 5)
-**Version** : 2.0 | **Derniere mise a jour** : 2025-12-05
+**Status** : Implementation Complete (Phase 5 + OPT-WF)
+**Version** : 2.1 | **Derniere mise a jour** : 2025-12-10
 
 ---
 
@@ -604,19 +604,36 @@ let result = mcp_client.call("context7::get_library_docs", library).await?;
 cache.insert(cache_key, result.clone(), Duration::from_secs(3600));
 ```
 
-### Timeouts Adaptatifs
+### Timeouts (OPT-WF-9)
 
-**Ajuste timeouts** selon type operation et historique
+**Timeouts configures** via constantes dans `tools/constants.rs`:
 
 ```rust
-struct OperationStats {
-    avg_duration: Duration,
-    p95_duration: Duration,
+// src-tauri/src/tools/constants.rs
+pub mod workflow {
+    pub const LLM_EXECUTION_TIMEOUT_SECS: u64 = 300;       // 5 minutes pour execution LLM
+    pub const DB_OPERATION_TIMEOUT_SECS: u64 = 30;         // 30 secondes pour DB ops
+    pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;      // 60 secondes pour chargement etat complet
+    pub const MESSAGE_HISTORY_LIMIT: usize = 50;           // Max messages dans contexte
 }
+```
 
-fn adaptive_timeout(op_type: &str, stats: &OperationStats) -> Duration {
-    stats.p95_duration * 1.5  // Timeout = P95 + 50% marge
-}
+**Utilisation**:
+```rust
+use tokio::time::timeout;
+use crate::tools::constants::workflow as wf_const;
+
+// execute_workflow() - timeout sur execution LLM
+let report = timeout(
+    Duration::from_secs(wf_const::LLM_EXECUTION_TIMEOUT_SECS),
+    execution_future,
+).await.map_err(|_| "Workflow execution timed out")?;
+
+// load_workflow_full_state() - timeout sur chargement parallele
+let results = timeout(
+    Duration::from_secs(wf_const::FULL_STATE_LOAD_TIMEOUT_SECS),
+    parallel_queries,
+).await?;
 ```
 
 ---
@@ -689,6 +706,8 @@ Time ->
 **File Locations**:
 - Backend Commands: `src-tauri/src/commands/workflow.rs`, `src-tauri/src/commands/streaming.rs`
 - Orchestrator: `src-tauri/src/agents/core/orchestrator.rs`
+- Query Constants: `src-tauri/src/db/queries.rs` (OPT-WF-1: centralized queries + cascade module)
+- Timeout Constants: `src-tauri/src/tools/constants.rs` (workflow module, OPT-WF-3/9)
 - Models: `src-tauri/src/models/workflow.rs`, `src-tauri/src/models/streaming.rs`
 - Frontend Stores: `src/lib/stores/workflows.ts`, `src/lib/stores/streaming.ts`, `src/lib/stores/activity.ts`
 - Frontend Types: `src/types/workflow.ts`, `src/types/streaming.ts`, `src/types/activity.ts`

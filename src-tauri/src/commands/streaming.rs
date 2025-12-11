@@ -404,8 +404,9 @@ pub async fn execute_workflow_streaming(
     // OPT-WF-6: Single allocation outside loop instead of per-iteration
     let chars: Vec<char> = content.chars().collect();
     for (i, chunk) in chars.chunks(chunk_size).enumerate() {
-        // Check for cancellation before each chunk (still useful for post-execution streaming)
-        if state.is_cancelled(&validated_workflow_id).await {
+        // OPT-WF-7: Use sync is_cancelled() instead of async state.is_cancelled()
+        // CancellationToken::is_cancelled() is synchronous (no Mutex lock per iteration)
+        if cancellation_token.is_cancelled() {
             warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user during response display");
             cancelled = true;
             emit_chunk(

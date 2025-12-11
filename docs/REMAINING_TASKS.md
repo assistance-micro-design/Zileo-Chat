@@ -3,7 +3,7 @@
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-10
 > **Total Estimated Effort**: ~53-57 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8)
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11)
 
 ## Overview
 
@@ -33,6 +33,7 @@ All optimization phases are **COMPLETE**:
 | UQ | UserQuestionTool Optimizations | All 12 OPT-UQ items (timeout 5min, circuit breaker, validation, tests, refactoring) |
 | TD | Tool Description Optimizations | 8/10 OPT-TD items (enriched descriptions, dynamic constants, sub-agent template, CLAUDE.md) |
 | SCROLL | Settings Page Optimizations | Route-based navigation, CSS contain, virtual scroll, memoization (8/8 items) |
+| WF | Workflow Optimizations | 9/11 OPT-WF items (query constants, cascade delete, timeouts, cancellation sync, futures lock, security patch) |
 
 **Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
@@ -54,6 +55,31 @@ Migration from scroll-based to route-based Settings page architecture.
 | OPT-SCROLL-ROUTES | Route-based navigation (8 routes) | Active |
 
 **Note**: OPT-SCROLL-1 and OPT-SCROLL-4 were implemented but became obsolete when the architecture migrated from scroll-based to route-based navigation. The route-based approach provides superior performance benefits.
+
+### OPT-WF Details (Dec 2025)
+
+Workflow domain optimizations targeting performance, maintainability, and security.
+
+| Item | Description | Status |
+|------|-------------|--------|
+| OPT-WF-1 | Extract query constants to db/queries.rs | DONE |
+| OPT-WF-2 | Fix UPDATE query params duplication | DONE |
+| OPT-WF-3 | MESSAGE_HISTORY_LIMIT constant | DONE |
+| OPT-WF-4 | Lock futures version 0.3.31 | DONE |
+| OPT-WF-5 | tauri-plugin-opener >= 2.2.1 (CVE-2025-31477) | DONE (v2.5.2) |
+| OPT-WF-6 | Remove Vec allocation in char loop | DONE |
+| OPT-WF-7 | Cache is_cancelled() flag | DONE |
+| OPT-WF-8 | Reduce Arc cloning boilerplate (cascade module) | DONE |
+| OPT-WF-9 | Add Tokio timeouts on long operations | DONE |
+| OPT-WF-10 | Migrate Events to Channels | DEFER |
+| OPT-WF-11 | Error message centralization | DEFER |
+
+**Key Deliverables**:
+- `src-tauri/src/db/queries.rs`: Centralized workflow queries + cascade delete module
+- `tools/constants.rs`: workflow module with MESSAGE_HISTORY_LIMIT, timeout constants
+- Tokio timeouts on execute_workflow() (5min) and load_workflow_full_state() (60s)
+- futures/futures-util locked to 0.3.31 (prevents yanked version issues)
+- Security: tauri-plugin-opener 2.5.2 (CVE-2025-31477 patched)
 
 ---
 
@@ -178,6 +204,21 @@ Migration from scroll-based to route-based Settings page architecture.
 
 ---
 
+### 8. Workflow Optimizations (Deferred)
+
+| ID | Item | Description | Effort | Reason for Deferral |
+|----|------|-------------|--------|---------------------|
+| OPT-WF-10 | Migrate Events to Channels | Use tauri::ipc::Channel for streaming (higher performance) | 4-6h | Major architectural change, current Events adequate for volume |
+| OPT-WF-11 | Error message centralization | Consolidate 15+ error message patterns | 3h | ROI insufficient, current handling works |
+
+**Prerequisites**: None
+
+**Implementation Notes**:
+- OPT-WF-10: Tauri Channels are more efficient for high-frequency streaming but require significant refactoring of both backend emitters and frontend listeners.
+- OPT-WF-11: Error messages are currently duplicated across workflow commands but functional.
+
+---
+
 ## Priority Order
 
 When implementing post-v1, follow this order:
@@ -241,3 +282,7 @@ When stable release is available:
 | 2025-12-10 | Added Section 6: UserQuestionTool Optimizations (Deferred) |
 | 2025-12-10 | Confirmed OPT-TD-1 to OPT-TD-8 complete (OPT-TD-9 to OPT-TD-13 deferred) |
 | 2025-12-10 | Added Section 6: Tool Description Optimizations (Deferred), renumbered sections |
+| 2025-12-10 | Confirmed OPT-WF-1 to OPT-WF-6 (Quick Wins) complete, OPT-WF-8/9 complete |
+| 2025-12-10 | Added OPT-WF Details section and Section 8: Workflow Optimizations (Deferred) |
+| 2025-12-10 | OPT-WF-7 PARTIAL (streaming loop only), OPT-WF-10/11 deferred |
+| 2025-12-10 | OPT-WF-7 DONE: Replaced async is_cancelled() with sync CancellationToken.is_cancelled() in streaming loop |

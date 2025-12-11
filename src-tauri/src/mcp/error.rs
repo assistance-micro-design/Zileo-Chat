@@ -155,6 +155,15 @@ pub enum MCPError {
         /// Remaining cooldown in seconds before retry
         cooldown_remaining_secs: u64,
     },
+    /// All retry attempts exhausted
+    RetryExhausted {
+        /// Server name
+        server: String,
+        /// Number of attempts made
+        attempts: u32,
+        /// Last error message
+        last_error: String,
+    },
 }
 
 impl fmt::Display for MCPError {
@@ -228,6 +237,17 @@ impl fmt::Display for MCPError {
                     server, cooldown_remaining_secs
                 )
             }
+            MCPError::RetryExhausted {
+                server,
+                attempts,
+                last_error,
+            } => {
+                write!(
+                    f,
+                    "MCP server '{}' failed after {} retry attempts: {}",
+                    server, attempts, last_error
+                )
+            }
         }
     }
 }
@@ -271,6 +291,7 @@ impl MCPError {
 
             // Resilience category
             MCPError::CircuitBreakerOpen { .. } => MCPErrorCategory::Resilience,
+            MCPError::RetryExhausted { .. } => MCPErrorCategory::Resilience,
         }
     }
 

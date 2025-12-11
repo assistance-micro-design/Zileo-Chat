@@ -64,6 +64,12 @@ const TOOL_CACHE_TTL: Duration = Duration::from_secs(3600);
 /// Default health check interval (5 minutes)
 const DEFAULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(300);
 
+/// Maximum retry attempts for transient MCP errors
+const MCP_MAX_RETRY_ATTEMPTS: u32 = 2;
+
+/// Initial retry delay in milliseconds (doubles with each attempt)
+const MCP_INITIAL_RETRY_DELAY_MS: u64 = 500;
+
 /// MCP Manager
 ///
 /// Manages the lifecycle of multiple MCP servers and provides
@@ -423,7 +429,7 @@ impl MCPManager {
     /// Returns an error if:
     /// - Server or tool doesn't exist
     /// - Circuit breaker is open (server unhealthy)
-    /// - The call itself fails
+    /// - The call itself fails after all retry attempts
     pub async fn call_tool(
         &self,
         server_name: &str,
@@ -454,62 +460,151 @@ impl MCPManager {
         }
 
         let start = Instant::now();
+        let mut last_error: Option<MCPError> = None;
 
-        let result = {
-            let mut clients = self.clients.write().await;
-            // Clients are keyed by server NAME
-            let client = clients
-                .get_mut(server_name)
-                .ok_or(MCPError::ServerNotFound {
-                    server: server_name.to_string(),
-                })?;
+        // Retry loop with exponential backoff
+        for attempt in 0..=MCP_MAX_RETRY_ATTEMPTS {
+            let result = {
+                let mut clients = self.clients.write().await;
+                // Clients are keyed by server NAME
+                let client = clients
+                    .get_mut(server_name)
+                    .ok_or(MCPError::ServerNotFound {
+                        server: server_name.to_string(),
+                    })?;
 
-            client.call_tool(tool_name, arguments.clone()).await
-        };
+                client.call_tool(tool_name, arguments.clone()).await
+            };
 
-        let duration_ms = start.elapsed().as_millis() as u64;
+            match result {
+                Ok(call_result) => {
+                    let duration_ms = start.elapsed().as_millis() as u64;
 
-        // Log the call regardless of success/failure
-        let (success, result_value, _error_msg) = match &result {
-            Ok(r) => (r.success, r.content.clone(), r.error.clone()),
-            Err(e) => (false, serde_json::Value::Null, Some(e.to_string())),
-        };
+                    // Update circuit breaker on success
+                    {
+                        let mut breakers = self.circuit_breakers.write().await;
+                        if let Some(breaker) = breakers.get_mut(server_name) {
+                            breaker.record_success();
+                        }
+                    }
 
-        // Update circuit breaker based on result (OPT-6)
-        {
-            let mut breakers = self.circuit_breakers.write().await;
-            if let Some(breaker) = breakers.get_mut(server_name) {
-                if success {
-                    breaker.record_success();
-                } else {
-                    breaker.record_failure();
+                    // Log successful call
+                    let log_entry = MCPCallLogCreate {
+                        id: Uuid::new_v4().to_string(),
+                        workflow_id: None,
+                        server_name: server_name.to_string(),
+                        tool_name: tool_name.to_string(),
+                        params: arguments.clone(),
+                        result: call_result.content.clone(),
+                        success: call_result.success,
+                        duration_ms,
+                    };
+
+                    if let Err(e) = self.log_call(log_entry).await {
+                        warn!(error = %e, "Failed to log MCP call to database");
+                    }
+
+                    if attempt > 0 {
+                        info!(
+                            server_name = %server_name,
+                            tool_name = %tool_name,
+                            attempt = attempt + 1,
+                            "MCP tool call succeeded on retry"
+                        );
+                    }
+
+                    return Ok(call_result);
+                }
+                Err(e) => {
+                    // Check if error is retryable
+                    let is_retryable = Self::is_retryable_error(&e);
+
+                    if !is_retryable || attempt >= MCP_MAX_RETRY_ATTEMPTS {
+                        // Non-retryable error or exhausted retries
+                        let duration_ms = start.elapsed().as_millis() as u64;
+
+                        // Update circuit breaker on failure
+                        {
+                            let mut breakers = self.circuit_breakers.write().await;
+                            if let Some(breaker) = breakers.get_mut(server_name) {
+                                breaker.record_failure();
+                            }
+                        }
+
+                        // Invalidate tool cache on failure
+                        self.invalidate_tool_cache(server_name).await;
+
+                        // Log failed call
+                        let log_entry = MCPCallLogCreate {
+                            id: Uuid::new_v4().to_string(),
+                            workflow_id: None,
+                            server_name: server_name.to_string(),
+                            tool_name: tool_name.to_string(),
+                            params: arguments.clone(),
+                            result: serde_json::Value::Null,
+                            success: false,
+                            duration_ms,
+                        };
+
+                        if let Err(log_err) = self.log_call(log_entry).await {
+                            warn!(error = %log_err, "Failed to log MCP call to database");
+                        }
+
+                        if attempt > 0 {
+                            return Err(MCPError::RetryExhausted {
+                                server: server_name.to_string(),
+                                attempts: attempt + 1,
+                                last_error: e.to_string(),
+                            });
+                        }
+
+                        return Err(e);
+                    }
+
+                    // Retryable error - wait and retry
+                    let delay_ms = MCP_INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt);
+                    warn!(
+                        server_name = %server_name,
+                        tool_name = %tool_name,
+                        attempt = attempt + 1,
+                        max_attempts = MCP_MAX_RETRY_ATTEMPTS + 1,
+                        delay_ms = delay_ms,
+                        error = %e,
+                        "Retrying MCP tool call after transient error"
+                    );
+
+                    last_error = Some(e);
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
             }
         }
 
-        // Invalidate tool cache on failure
-        if !success {
-            self.invalidate_tool_cache(server_name).await;
-        }
+        // Should not reach here, but just in case
+        Err(last_error.unwrap_or_else(|| MCPError::IoError {
+            context: "unexpected retry state".to_string(),
+            message: "No error recorded during retry loop".to_string(),
+        }))
+    }
 
-        // Log to database (fire and forget)
-        // Use MCPCallLogCreate without timestamp - SurrealDB generates via DEFAULT time::now()
-        let log_entry = MCPCallLogCreate {
-            id: Uuid::new_v4().to_string(),
-            workflow_id: None, // Set by caller if in workflow context
-            server_name: server_name.to_string(),
-            tool_name: tool_name.to_string(),
-            params: arguments,
-            result: result_value.clone(),
-            success,
-            duration_ms,
-        };
-
-        if let Err(e) = self.log_call(log_entry).await {
-            warn!(error = %e, "Failed to log MCP call to database");
-        }
-
-        result
+    /// Determines if an MCP error is retryable.
+    ///
+    /// Retryable errors are transient issues that might succeed on retry:
+    /// - Timeout errors
+    /// - Connection errors (temporary network issues)
+    /// - IO errors
+    ///
+    /// Non-retryable errors should fail immediately:
+    /// - Server not found
+    /// - Invalid configuration
+    /// - Protocol errors (malformed responses)
+    /// - Circuit breaker open
+    fn is_retryable_error(error: &MCPError) -> bool {
+        matches!(
+            error,
+            MCPError::Timeout { .. }
+                | MCPError::ConnectionFailed { .. }
+                | MCPError::IoError { .. }
+        )
     }
 
     /// Calls a tool using a request object

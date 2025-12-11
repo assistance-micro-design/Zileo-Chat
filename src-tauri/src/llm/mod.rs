@@ -42,7 +42,6 @@ mod mistral;
 mod ollama;
 pub mod pricing;
 mod provider;
-pub mod rate_limiter;
 pub mod retry;
 pub mod tool_adapter;
 pub mod utils;
@@ -57,10 +56,6 @@ pub use retry::{with_retry, RetryConfig};
 // Re-export circuit breaker utilities for external use (OPT-LLM-6)
 #[allow(unused_imports)]
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
-
-// Re-export rate limiter utilities for external use (OPT-LLM-8)
-#[allow(unused_imports)]
-pub use rate_limiter::{RateLimiter, MIN_DELAY_BETWEEN_CALLS_MS};
 
 // Re-export for future use (tools, external integrations)
 #[allow(unused_imports)]

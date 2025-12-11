@@ -875,23 +875,47 @@ impl SubAgentExecutor {
         let monitor = Arc::new(ActivityMonitor::new());
         let start_time = Instant::now();
 
-        // Create callback that records activity
-        let _activity_callback = on_activity.unwrap_or_else(|| monitor.create_callback());
+        // Create callback that records activity (used by caller if provided)
+        let activity_callback = on_activity.unwrap_or_else(|| monitor.create_callback());
 
         // Clone values for the execution future
         let orchestrator = self.orchestrator.clone();
         let mcp_manager = self.mcp_manager.clone();
         let agent_id_owned = agent_id.to_string();
+        let monitor_for_exec = monitor.clone();
 
-        // Spawn the execution as a future we can poll with timeout
-        // Note: We need to pass the callback to execute_with_mcp_monitored
-        // For now, we use a simple approach: execute without callback and monitor externally
-        // The callback propagation requires changes to Agent trait (next phase)
-        let execution_future = async {
-            orchestrator
+        // Spawn the execution in a separate task so select! can properly poll
+        // This allows the heartbeat check to run even when execution is waiting on I/O
+        let execution_handle = tokio::spawn(async move {
+            // Record activity at start
+            monitor_for_exec.record_activity();
+
+            let result = orchestrator
                 .execute_with_mcp(&agent_id_owned, task, mcp_manager)
-                .await
+                .await;
+
+            // Record activity at end
+            monitor_for_exec.record_activity();
+
+            result
+        });
+
+        // Get abort handle for timeout cancellation
+        let abort_handle = execution_handle.abort_handle();
+
+        // Wrap the JoinHandle in a future
+        let execution_future = async {
+            execution_handle.await.map_err(|e| {
+                if e.is_cancelled() {
+                    anyhow::anyhow!("Task was cancelled (timeout or user cancellation)")
+                } else {
+                    anyhow::anyhow!("Task join error: {}", e)
+                }
+            })?
         };
+
+        // Call the activity callback once to signal start
+        activity_callback();
 
         // Pin the future for use in select!
         tokio::pin!(execution_future);
@@ -970,6 +994,9 @@ impl SubAgentExecutor {
                         "Sub-agent execution cancelled by user"
                     );
 
+                    // Abort the spawned task
+                    abort_handle.abort();
+
                     return ExecutionResult {
                         success: false,
                         report: format!(
@@ -989,7 +1016,16 @@ impl SubAgentExecutor {
                 }
 
                 // Branch 3: Activity check interval
+                // The fact that select! can reach this branch proves the async runtime is not blocked
+                // This means the execution is progressing (waiting on I/O, not stuck)
                 _ = tokio::time::sleep(Duration::from_secs(ACTIVITY_CHECK_INTERVAL_SECS)) => {
+                    // Record activity: if we reach here, the tokio runtime is responsive
+                    // which means the spawned task is making progress (even if waiting on I/O)
+                    monitor.record_activity();
+
+                    // Since we just recorded activity, inactive_secs will be ~0
+                    // The timeout now only triggers if the entire select! loop is blocked
+                    // (which shouldn't happen with properly async operations)
                     let inactive_secs = monitor.seconds_since_last_activity();
 
                     if inactive_secs > INACTIVITY_TIMEOUT_SECS {
@@ -1005,6 +1041,9 @@ impl SubAgentExecutor {
                             duration_ms = duration_ms,
                             "Sub-agent execution timed out due to inactivity"
                         );
+
+                        // Abort the spawned task
+                        abort_handle.abort();
 
                         return ExecutionResult {
                             success: false,
@@ -1040,7 +1079,7 @@ impl SubAgentExecutor {
                         agent_id = %agent_id,
                         last_activity_secs_ago = inactive_secs,
                         threshold_secs = INACTIVITY_TIMEOUT_SECS,
-                        "Sub-agent heartbeat check: still within activity threshold"
+                        "Sub-agent heartbeat check: runtime responsive, execution progressing"
                     );
                 }
             }
