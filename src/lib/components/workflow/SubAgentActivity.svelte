@@ -41,6 +41,7 @@
 		Cpu
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { formatDuration } from '$lib/utils/duration';
 
 	/**
 	 * SubAgentActivity props
@@ -85,16 +86,6 @@
 			default:
 				return 'status-pending';
 		}
-	}
-
-	/**
-	 * Format duration in human-readable format
-	 */
-	function formatDuration(ms: number | undefined): string {
-		if (ms === undefined) return '-';
-		if (ms < 1000) return `${ms}ms`;
-		if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-		return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 	}
 
 	/**

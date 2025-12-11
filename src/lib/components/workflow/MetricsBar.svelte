@@ -26,6 +26,7 @@
 	import type { WorkflowMetrics } from '$types/workflow';
 	import { Clock, Hash, Server, DollarSign } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { formatDuration } from '$lib/utils/duration';
 
 	/**
 	 * MetricsBar props
@@ -38,15 +39,6 @@
 	}
 
 	let { metrics, compact = false }: Props = $props();
-
-	/**
-	 * Format duration from milliseconds
-	 */
-	function formatDuration(ms: number): string {
-		if (ms < 1000) return `${ms}ms`;
-		if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-		return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
-	}
 
 	/**
 	 * Format cost in USD

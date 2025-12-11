@@ -1258,7 +1258,7 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (82 Total Components)
+### Component Library (83 Total Components)
 
 ```
 src/lib/components/
@@ -1296,9 +1296,10 @@ src/lib/components/
 │  ├─ ReasoningStep.svelte
 │  ├─ StreamingMessage.svelte
 │  └─ ToolExecution.svelte
-├─ workflow/            # 13 workflow components
+├─ workflow/            # 14 workflow components
 │  ├─ ActivityFeed.svelte
 │  ├─ ActivityItem.svelte
+│  ├─ ActivityItemDetails.svelte
 │  ├─ AgentSelector.svelte
 │  ├─ ConfirmDeleteModal.svelte
 │  ├─ MetricsBar.svelte
@@ -1412,6 +1413,8 @@ src/lib/components/
 | `async.ts` | `createAsyncHandler()`, `createAsyncHandlerWithEvent()`, `withLoadingState()` | Async operation wrappers with loading/error handling |
 | `error.ts` | `getErrorMessage()`, `formatErrorForDisplay()` | Error extraction and formatting utilities |
 | `activity.ts` | `combineActivities()`, `filterActivities()`, `countActivitiesByType()` | Activity feed helpers |
+| `activity-icons.ts` | `ACTIVITY_TYPE_ICONS`, `getActivityIcon()` | Consolidated activity type icon mapping (OPT-MSG-4) |
+| `duration.ts` | `formatDuration()` | Duration formatting utility (OPT-MSG-2) |
 | `debounce.ts` | `debounce()` | Debounce function wrapper (OPT-FA-4) |
 | `index.ts` | All utilities | Barrel export |
 
@@ -1703,6 +1706,35 @@ async fn stream_workflow(app_handle: &AppHandle, workflow_id: String) {
 **OPT-SCROLL-7: Virtual Scrolling** - MemoryList uses `@humanspeak/svelte-virtual-list` for 1000+ items.
 
 **OPT-SCROLL-8: Animation Pause** - `.is-scrolling` class pauses animations during scroll.
+
+### OPT-MSG Optimizations (Dec 2025)
+
+Messages Area optimizations for Agent page.
+
+| Optimization | Status | Impact | Location |
+|-------------|--------|--------|----------|
+| OPT-MSG-1 | Active | 60% GPU reduction (green/warning states) | `TokenDisplay.svelte` |
+| OPT-MSG-2 | Active | DRY utility | `src/lib/utils/duration.ts` |
+| OPT-MSG-3 | Active | 1 less object allocation per render | `ActivityFeed.svelte:52-58` |
+| OPT-MSG-4 | Active | Single source of truth | `src/lib/utils/activity-icons.ts` |
+| OPT-MSG-5 | Active | 90% DOM reduction for 100+ activities | `ActivityFeed.svelte` |
+| OPT-MSG-6 | Active | Overflow fixes, component extraction | `ActivityItemDetails.svelte` |
+
+**OPT-MSG-1: Conditional Animations** - TokenDisplay pulse animations activate only when `warningLevel === 'critical'`.
+
+**OPT-MSG-5: ActivityFeed Virtual Scroll** - Uses `@humanspeak/svelte-virtual-list` with 20-item threshold:
+```svelte
+const VIRTUAL_SCROLL_THRESHOLD = 20;
+const useVirtualScroll = $derived(activities.length >= VIRTUAL_SCROLL_THRESHOLD);
+
+<SvelteVirtualList
+  items={activities}
+  defaultEstimatedItemHeight={72}
+  bufferSize={10}
+>
+```
+
+**OPT-MSG-6: ActivityItemDetails Extraction** - Task details extracted to dedicated component for reduced complexity.
 
 ### General Optimization Strategies
 

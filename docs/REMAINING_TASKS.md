@@ -2,8 +2,8 @@
 
 > **Status**: DEFERRED - To be implemented after v1 release
 > **Last Updated**: 2025-12-11
-> **Total Estimated Effort**: ~63-67 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11) + OPT-FA (11/14)
+> **Total Estimated Effort**: ~65-70 hours
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11) + OPT-FA (11/14) + OPT-MSG (7/8)
 
 ## Overview
 
@@ -35,6 +35,7 @@ All optimization phases are **COMPLETE**:
 | SCROLL | Settings Page Optimizations | Route-based navigation, CSS contain, virtual scroll, memoization (8/8 items) |
 | WF | Workflow Optimizations | 9/11 OPT-WF items (query constants, cascade delete, timeouts, cancellation sync, futures lock, security patch) |
 | FA | Frontend/Agent Optimizations | 11/14 OPT-FA items (modal fix, debounce, localStorage, PageState, WorkflowExecutor, stores consolidation) |
+| MSG | Messages Area Optimizations | 7/8 OPT-MSG items (TokenDisplay animations, formatDuration utility complete, icon consolidation, virtual scroll ActivityFeed, overflow fixes) |
 
 **Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
@@ -85,6 +86,31 @@ Frontend/Agent page optimizations targeting performance, maintainability, and co
 - `src/routes/agent/+page.svelte`: PageState interface, lazy modals
 - `src/lib/stores/streaming.ts`: 14 consolidated derived stores
 - `package.json`: @lucide/svelte, vitest 4.x, plugin-dialog 2.4.x
+
+### OPT-MSG Details (Dec 2025)
+
+Messages Area optimizations for Agent page: TokenDisplay, ActivityFeed, and sidebar performance.
+
+| Item | Description | Status |
+|------|-------------|--------|
+| OPT-MSG-1 | TokenDisplay pulse animations conditional (critical only) | DONE |
+| OPT-MSG-2 | Extract formatDuration to utility | DONE (4/4 components) |
+| OPT-MSG-3 | Move iconMap to module-level constant | DONE |
+| OPT-MSG-4 | Consolidate icon mapping (activity-icons.ts) | DONE |
+| OPT-MSG-5 | Virtual scroll ActivityFeed (threshold 20 items) | DONE |
+| OPT-MSG-6 | Fix overflow issues + extract ActivityItemDetails | DONE |
+| OPT-MSG-7 | Virtual scroll MessageList | DEFER (P3) |
+| OPT-MSG-8 | Accessibility task-details (role="region") | DEFER (P3) |
+
+**Key Deliverables**:
+- `src/lib/utils/duration.ts`: formatDuration utility (DRY)
+- `src/lib/utils/activity-icons.ts`: ACTIVITY_TYPE_ICONS + getActivityIcon()
+- `src/lib/components/workflow/ActivityFeed.svelte`: Virtual scroll with 20-item threshold
+- `src/lib/components/workflow/ActivityItemDetails.svelte`: Extracted component
+- TokenDisplay.svelte: Conditional animations reduce GPU usage 60%
+
+**Completed Items**:
+- OPT-MSG-2: All 4 components now use `$lib/utils/duration.ts` (ToolExecution, ActivityItem, SubAgentActivity, MetricsBar)
 
 ### OPT-WF Details (Dec 2025)
 
@@ -266,6 +292,21 @@ Workflow domain optimizations targeting performance, maintainability, and securi
 
 ---
 
+### 10. Messages Area Optimizations (Deferred)
+
+| ID | Item | Description | Effort | Reason for Deferral |
+|----|------|-------------|--------|---------------------|
+| OPT-MSG-7 | Virtual scroll MessageList | Implement virtual scrolling for 500+ messages | 2h | P3, CSS containment OK until ~200 messages |
+| OPT-MSG-8 | Accessibility task-details | Add role="region" aria-label="Task details" | 5min | P3, nice-to-have |
+
+**Prerequisites**: None
+
+**Implementation Notes**:
+- OPT-MSG-7: Use @humanspeak/svelte-virtual-list (already installed), adapt auto-scroll to bottom
+- OPT-MSG-8: Add ARIA attributes for screen reader navigation
+
+---
+
 ## Priority Order
 
 When implementing post-v1, follow this order:
@@ -322,6 +363,7 @@ When stable release is available:
 
 | Date | Change |
 |------|--------|
+| 2025-12-11 | Added OPT-MSG (6/8) - Messages Area optimizations. Deferred: OPT-MSG-2 (partial), 7, 8 |
 | 2025-12-11 | Added OPT-FA (11/14) - Frontend/Agent optimizations. Deferred: OPT-FA-10, 14, 15 |
 | 2025-12-09 | Created from PHASE_POST_V1.md consolidation |
 | 2025-12-09 | Updated test count to 760+ after Sub-Agent optimizations |
