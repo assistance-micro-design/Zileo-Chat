@@ -692,6 +692,7 @@ export const activeTools = derived(store, (s) => s.tools);
 
 /**
  * Derived store: tools currently running
+ * Use direct check for boolean: runningTools.length > 0 (replaces hasRunningTools)
  */
 export const runningTools = derived(store, (s) => s.tools.filter((t) => t.status === 'running'));
 
@@ -741,64 +742,20 @@ export const tokensReceived = derived(store, (s) => s.tokensReceived);
  */
 export const currentWorkflowId = derived(store, (s) => s.workflowId);
 
-/**
- * Derived store: whether there are any running tools
- * @deprecated Use `runningTools.length > 0` instead for better readability
- */
-export const hasRunningTools = derived(store, (s) => s.tools.some((t) => t.status === 'running'));
-
 // ============================================================================
 // Sub-Agent Derived Stores
 // ============================================================================
 
 /**
  * Derived store: all active sub-agents
+ * Use direct checks for filtering/counting:
+ * - Running: activeSubAgents.filter(a => a.status === 'running')
+ * - Completed: activeSubAgents.filter(a => a.status === 'completed')
+ * - Errored: activeSubAgents.filter(a => a.status === 'error')
+ * - Has any: activeSubAgents.length > 0
+ * - Count: activeSubAgents.length
  */
 export const activeSubAgents = derived(store, (s) => s.subAgents);
-
-/**
- * Derived store: sub-agents currently running
- * @deprecated Use `activeSubAgents.filter(a => a.status === 'running')` instead
- */
-export const runningSubAgents = derived(store, (s) =>
-	s.subAgents.filter((a) => a.status === 'running')
-);
-
-/**
- * Derived store: sub-agents that have completed
- * @deprecated Use `activeSubAgents.filter(a => a.status === 'completed')` instead
- */
-export const completedSubAgents = derived(store, (s) =>
-	s.subAgents.filter((a) => a.status === 'completed')
-);
-
-/**
- * Derived store: sub-agents that have errored
- * @deprecated Use `activeSubAgents.filter(a => a.status === 'error')` instead
- */
-export const erroredSubAgents = derived(store, (s) =>
-	s.subAgents.filter((a) => a.status === 'error')
-);
-
-/**
- * Derived store: whether there are any running sub-agents
- * @deprecated Use `runningSubAgents.length > 0` instead for better readability
- */
-export const hasRunningSubAgents = derived(store, (s) =>
-	s.subAgents.some((a) => a.status === 'running')
-);
-
-/**
- * Derived store: total count of sub-agents
- * @deprecated Use `activeSubAgents.length` instead
- */
-export const subAgentCount = derived(store, (s) => s.subAgents.length);
-
-/**
- * Derived store: whether there are any active sub-agents
- * @deprecated Use `activeSubAgents.length > 0` instead for better readability
- */
-export const hasActiveSubAgents = derived(store, (s) => s.subAgents.length > 0);
 
 // ============================================================================
 // Task Derived Stores
@@ -806,35 +763,11 @@ export const hasActiveSubAgents = derived(store, (s) => s.subAgents.length > 0);
 
 /**
  * Derived store: all active tasks
+ * Use direct checks for filtering/counting:
+ * - Pending: activeTasks.filter(t => t.status === 'pending')
+ * - In progress: activeTasks.filter(t => t.status === 'in_progress')
+ * - Completed: activeTasks.filter(t => t.status === 'completed')
+ * - Has any: activeTasks.length > 0
+ * - Count: activeTasks.length
  */
 export const activeTasks = derived(store, (s) => s.tasks);
-
-/**
- * Derived store: tasks with pending status
- * @deprecated Use `activeTasks.filter(t => t.status === 'pending')` instead
- */
-export const pendingTasks = derived(store, (s) =>
-	s.tasks.filter((t) => t.status === 'pending')
-);
-
-/**
- * Derived store: tasks currently in progress
- * @deprecated Use `activeTasks.filter(t => t.status === 'in_progress')` instead
- */
-export const runningTasks = derived(store, (s) =>
-	s.tasks.filter((t) => t.status === 'in_progress')
-);
-
-/**
- * Derived store: tasks that have completed
- * @deprecated Use `activeTasks.filter(t => t.status === 'completed')` instead
- */
-export const completedTasks = derived(store, (s) =>
-	s.tasks.filter((t) => t.status === 'completed')
-);
-
-/**
- * Derived store: whether there are any active tasks
- * @deprecated Use `activeTasks.length > 0` instead for better readability
- */
-export const hasActiveTasks = derived(store, (s) => s.tasks.length > 0);

@@ -43,13 +43,7 @@ import {
 	tokensReceived,
 	runningTools,
 	completedTools,
-	activeSubAgents,
-	runningSubAgents,
-	completedSubAgents,
-	erroredSubAgents,
-	hasRunningSubAgents,
-	subAgentCount,
-	hasActiveSubAgents
+	activeSubAgents
 } from '../streaming';
 
 describe('streamingStore', () => {
@@ -235,13 +229,14 @@ describe('streamingStore', () => {
 
 	describe('sub-agent initial state', () => {
 		it('should have empty sub-agents initially', () => {
-			expect(get(activeSubAgents)).toEqual([]);
-			expect(get(runningSubAgents)).toEqual([]);
-			expect(get(completedSubAgents)).toEqual([]);
-			expect(get(erroredSubAgents)).toEqual([]);
-			expect(get(hasRunningSubAgents)).toBe(false);
-			expect(get(subAgentCount)).toBe(0);
-			expect(get(hasActiveSubAgents)).toBe(false);
+			const subAgents = get(activeSubAgents);
+			expect(subAgents).toEqual([]);
+			// Use direct checks instead of deprecated helper stores
+			expect(subAgents.filter((a) => a.status === 'running')).toEqual([]);
+			expect(subAgents.filter((a) => a.status === 'completed')).toEqual([]);
+			expect(subAgents.filter((a) => a.status === 'error')).toEqual([]);
+			expect(subAgents.some((a) => a.status === 'running')).toBe(false);
+			expect(subAgents.length).toBe(0);
 		});
 	});
 
@@ -256,8 +251,9 @@ describe('streamingStore', () => {
 	describe('reset should clear sub-agents', () => {
 		it('should reset sub-agents to empty array', async () => {
 			await streamingStore.reset();
-			expect(get(activeSubAgents)).toEqual([]);
-			expect(get(hasActiveSubAgents)).toBe(false);
+			const subAgents = get(activeSubAgents);
+			expect(subAgents).toEqual([]);
+			expect(subAgents.length > 0).toBe(false);
 		});
 	});
 });
