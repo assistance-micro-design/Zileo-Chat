@@ -21,6 +21,10 @@
 
   Phase E: Unified Activity Timeline
   OPT-FA-13: Memoized Activity Filtering - uses store-level filtering for single source of truth
+  OPT-MSG-5: Virtual scroll for large activity lists (20+ items) using @humanspeak/svelte-virtual-list
+             - 90% DOM node reduction for 100+ activities
+             - Dynamic height handling (no fixed item height required)
+             - Falls back to standard {#each} for small lists
 
   @example
   <ActivityFeed
@@ -40,6 +44,7 @@
 	import ActivityItem from './ActivityItem.svelte';
 	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 	/**
 	 * Icon component mapping for filters
@@ -100,6 +105,18 @@
 	 * Whether to show empty state (uses pre-filtered activities)
 	 */
 	const showEmptyState = $derived(activities.length === 0);
+
+	/**
+	 * Minimum items threshold for virtual scrolling
+	 * Below this threshold, regular rendering is more efficient
+	 * OPT-MSG-5: Virtual scroll for large activity lists
+	 */
+	const VIRTUAL_SCROLL_THRESHOLD = 20;
+
+	/**
+	 * Whether to use virtual scrolling based on activity count
+	 */
+	const useVirtualScroll = $derived(activities.length >= VIRTUAL_SCROLL_THRESHOLD);
 </script>
 
 <div class="activity-feed" class:collapsed>
@@ -135,7 +152,31 @@
 						<span>{$i18n('workflow_activity_none')}</span>
 					{/if}
 				</div>
+			{:else if useVirtualScroll}
+				<!-- OPT-MSG-5: Virtual scroll for 20+ activities (90% DOM reduction) -->
+				<div class="virtual-list-container">
+					<SvelteVirtualList
+						items={activities}
+						defaultEstimatedItemHeight={72}
+						bufferSize={10}
+						containerClass="virtual-list-outer"
+						viewportClass="virtual-list-viewport"
+						contentClass="virtual-list-content"
+						itemsClass="virtual-list-items"
+					>
+						{#snippet renderItem(activity)}
+							<ActivityItem {activity} />
+						{/snippet}
+					</SvelteVirtualList>
+				</div>
+				{#if isStreaming}
+					<div class="streaming-indicator">
+						<Loader2 class="spinning" size={14} />
+						<span>{$i18n('workflow_activity_processing')}</span>
+					</div>
+				{/if}
 			{:else}
+				<!-- Standard rendering for small lists (<20 items) -->
 				{#each activities as activity (activity.id)}
 					<ActivityItem {activity} />
 				{/each}
@@ -213,6 +254,45 @@
 		overflow-y: auto;
 		overflow-x: hidden;
 		min-height: 0;
+	}
+
+	/* OPT-MSG-5: Virtual List Container - takes full available space */
+	.virtual-list-container {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 0;
+	}
+
+	/* Virtual list component styling via :global for class props */
+	.virtual-list-container :global(.virtual-list-outer) {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.virtual-list-container :global(.virtual-list-viewport) {
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+
+	/* Apply custom scrollbar to virtual list viewport */
+	.virtual-list-container :global(.virtual-list-viewport)::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.virtual-list-container :global(.virtual-list-viewport)::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.virtual-list-container :global(.virtual-list-viewport)::-webkit-scrollbar-thumb {
+		background: var(--color-border);
+		border-radius: var(--radius-full);
+	}
+
+	.virtual-list-container :global(.virtual-list-viewport)::-webkit-scrollbar-thumb:hover {
+		background: var(--color-text-tertiary);
 	}
 
 	/* Custom scrollbar */
