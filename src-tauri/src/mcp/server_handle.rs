@@ -528,12 +528,10 @@ impl MCPServerHandle {
 
         let read_result = tokio::time::timeout(timeout_duration, async {
             tokio::task::spawn_blocking(move || {
-                let mut stdout_guard = stdout_reader
-                    .lock()
-                    .map_err(|e| MCPError::IoError {
-                        context: "locking stdout".to_string(),
-                        message: e.to_string(),
-                    })?;
+                let mut stdout_guard = stdout_reader.lock().map_err(|e| MCPError::IoError {
+                    context: "locking stdout".to_string(),
+                    message: e.to_string(),
+                })?;
                 let mut response_line = String::new();
                 stdout_guard
                     .read_line(&mut response_line)

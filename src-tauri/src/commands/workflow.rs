@@ -150,9 +150,11 @@ pub async fn execute_workflow(
     };
 
     // 3. Execute via orchestrator with MCP support (OPT-WF-9: with timeout)
-    let execution_future = state
-        .orchestrator
-        .execute_with_mcp(&validated_agent_id, task, Some(state.mcp_manager.clone()));
+    let execution_future = state.orchestrator.execute_with_mcp(
+        &validated_agent_id,
+        task,
+        Some(state.mcp_manager.clone()),
+    );
 
     let report = timeout(
         Duration::from_secs(wf_const::LLM_EXECUTION_TIMEOUT_SECS),
@@ -349,37 +351,33 @@ pub async fn load_workflow_full_state(
     // Execute all queries in parallel using tokio::try_join! (OPT-WF-9: with timeout)
     let parallel_queries = async {
         tokio::try_join!(
-        // Query 1: Load workflow (OPT-WF-1: Use centralized query constant)
-        async move {
-            let query = format!(
-                "{} WHERE meta::id(id) = '{}'",
-                wf_queries::SELECT_BASE,
-                id1
-            );
+            // Query 1: Load workflow (OPT-WF-1: Use centralized query constant)
+            async move {
+                let query = format!("{} WHERE meta::id(id) = '{}'", wf_queries::SELECT_BASE, id1);
 
-            let json_results = db.query_json(&query).await.map_err(|e| {
-                error!(error = %e, "Failed to load workflow");
-                format!("Failed to load workflow: {}", e)
-            })?;
-
-            let workflows: Vec<Workflow> = json_results
-                .into_iter()
-                .map(serde_json::from_value)
-                .collect::<std::result::Result<Vec<Workflow>, _>>()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to deserialize workflow");
-                    format!("Failed to deserialize workflow: {}", e)
+                let json_results = db.query_json(&query).await.map_err(|e| {
+                    error!(error = %e, "Failed to load workflow");
+                    format!("Failed to load workflow: {}", e)
                 })?;
 
-            workflows.into_iter().next().ok_or_else(|| {
-                warn!(workflow_id = %id1, "Workflow not found");
-                "Workflow not found".to_string()
-            })
-        },
-        // Query 2: Load messages
-        async move {
-            let query = format!(
-                r#"SELECT
+                let workflows: Vec<Workflow> = json_results
+                    .into_iter()
+                    .map(serde_json::from_value)
+                    .collect::<std::result::Result<Vec<Workflow>, _>>()
+                    .map_err(|e| {
+                        error!(error = %e, "Failed to deserialize workflow");
+                        format!("Failed to deserialize workflow: {}", e)
+                    })?;
+
+                workflows.into_iter().next().ok_or_else(|| {
+                    warn!(workflow_id = %id1, "Workflow not found");
+                    "Workflow not found".to_string()
+                })
+            },
+            // Query 2: Load messages
+            async move {
+                let query = format!(
+                    r#"SELECT
                     meta::id(id) AS id,
                     workflow_id,
                     role,
@@ -395,29 +393,29 @@ pub async fn load_workflow_full_state(
                 FROM message
                 WHERE workflow_id = '{}'
                 ORDER BY timestamp ASC"#,
-                id2
-            );
+                    id2
+                );
 
-            let json_results = db2.query_json(&query).await.map_err(|e| {
-                error!(error = %e, "Failed to load messages");
-                format!("Failed to load messages: {}", e)
-            })?;
-
-            let messages: Vec<Message> = json_results
-                .into_iter()
-                .map(serde_json::from_value)
-                .collect::<std::result::Result<Vec<Message>, _>>()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to deserialize messages");
-                    format!("Failed to deserialize messages: {}", e)
+                let json_results = db2.query_json(&query).await.map_err(|e| {
+                    error!(error = %e, "Failed to load messages");
+                    format!("Failed to load messages: {}", e)
                 })?;
 
-            Ok::<Vec<Message>, String>(messages)
-        },
-        // Query 3: Load tool executions
-        async move {
-            let query = format!(
-                r#"SELECT
+                let messages: Vec<Message> = json_results
+                    .into_iter()
+                    .map(serde_json::from_value)
+                    .collect::<std::result::Result<Vec<Message>, _>>()
+                    .map_err(|e| {
+                        error!(error = %e, "Failed to deserialize messages");
+                        format!("Failed to deserialize messages: {}", e)
+                    })?;
+
+                Ok::<Vec<Message>, String>(messages)
+            },
+            // Query 3: Load tool executions
+            async move {
+                let query = format!(
+                    r#"SELECT
                     meta::id(id) AS id,
                     workflow_id,
                     message_id,
@@ -435,29 +433,29 @@ pub async fn load_workflow_full_state(
                 FROM tool_execution
                 WHERE workflow_id = '{}'
                 ORDER BY created_at ASC"#,
-                id3
-            );
+                    id3
+                );
 
-            let json_results = db3.query_json(&query).await.map_err(|e| {
-                error!(error = %e, "Failed to load tool executions");
-                format!("Failed to load tool executions: {}", e)
-            })?;
-
-            let tools: Vec<ToolExecution> = json_results
-                .into_iter()
-                .map(serde_json::from_value)
-                .collect::<std::result::Result<Vec<ToolExecution>, _>>()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to deserialize tool executions");
-                    format!("Failed to deserialize tool executions: {}", e)
+                let json_results = db3.query_json(&query).await.map_err(|e| {
+                    error!(error = %e, "Failed to load tool executions");
+                    format!("Failed to load tool executions: {}", e)
                 })?;
 
-            Ok::<Vec<ToolExecution>, String>(tools)
-        },
-        // Query 4: Load thinking steps
-        async move {
-            let query = format!(
-                r#"SELECT
+                let tools: Vec<ToolExecution> = json_results
+                    .into_iter()
+                    .map(serde_json::from_value)
+                    .collect::<std::result::Result<Vec<ToolExecution>, _>>()
+                    .map_err(|e| {
+                        error!(error = %e, "Failed to deserialize tool executions");
+                        format!("Failed to deserialize tool executions: {}", e)
+                    })?;
+
+                Ok::<Vec<ToolExecution>, String>(tools)
+            },
+            // Query 4: Load thinking steps
+            async move {
+                let query = format!(
+                    r#"SELECT
                     meta::id(id) AS id,
                     workflow_id,
                     message_id,
@@ -470,25 +468,25 @@ pub async fn load_workflow_full_state(
                 FROM thinking_step
                 WHERE workflow_id = '{}'
                 ORDER BY created_at ASC, step_number ASC"#,
-                id4
-            );
+                    id4
+                );
 
-            let json_results = db4.query_json(&query).await.map_err(|e| {
-                error!(error = %e, "Failed to load thinking steps");
-                format!("Failed to load thinking steps: {}", e)
-            })?;
-
-            let steps: Vec<ThinkingStep> = json_results
-                .into_iter()
-                .map(serde_json::from_value)
-                .collect::<std::result::Result<Vec<ThinkingStep>, _>>()
-                .map_err(|e| {
-                    error!(error = %e, "Failed to deserialize thinking steps");
-                    format!("Failed to deserialize thinking steps: {}", e)
+                let json_results = db4.query_json(&query).await.map_err(|e| {
+                    error!(error = %e, "Failed to load thinking steps");
+                    format!("Failed to load thinking steps: {}", e)
                 })?;
 
-            Ok::<Vec<ThinkingStep>, String>(steps)
-        }
+                let steps: Vec<ThinkingStep> = json_results
+                    .into_iter()
+                    .map(serde_json::from_value)
+                    .collect::<std::result::Result<Vec<ThinkingStep>, _>>()
+                    .map_err(|e| {
+                        error!(error = %e, "Failed to deserialize thinking steps");
+                        format!("Failed to deserialize thinking steps: {}", e)
+                    })?;
+
+                Ok::<Vec<ThinkingStep>, String>(steps)
+            }
         )
     };
 

@@ -536,7 +536,7 @@ pub async fn execute_workflow_streaming(
         report.metrics.tokens_input,
         report.metrics.tokens_output,
         cost_usd,
-        model_id,  // Use real model UUID, not api_name
+        model_id,                    // Use real model UUID, not api_name
         report.metrics.tokens_input  // Current context size (last API call)
     );
 

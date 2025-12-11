@@ -42,7 +42,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { i18n } from '$lib/i18n';
 
 	// Service imports
-	import { WorkflowService, MessageService } from '$lib/services';
+	import { WorkflowService, MessageService, LocalStorage, STORAGE_KEYS } from '$lib/services';
 
 	// Store imports
 	import {
@@ -63,16 +63,11 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
-	import { validationStore, hasPendingValidation, pendingValidation } from '$lib/stores/validation';
+	import { validationStore } from '$lib/stores/validation';
 	import { userQuestionStore } from '$lib/stores/userQuestion';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
 	import type { ProviderType } from '$types/llm';
-
-	/** LocalStorage key for persisting selected workflow */
-	const LAST_WORKFLOW_KEY = 'zileo_last_workflow_id';
-	/** LocalStorage key for persisting right sidebar collapsed state */
-	const RIGHT_SIDEBAR_COLLAPSED_KEY = 'zileo_right_sidebar_collapsed';
 
 	// ============================================================================
 	// State Variables (reduced from 27 to 8)
@@ -84,7 +79,7 @@ Uses extracted components, services, and stores for clean architecture.
 	/** UI state */
 	let leftSidebarCollapsed = $state(false);
 	let rightSidebarCollapsed = $state(
-		typeof window !== 'undefined' ? localStorage.getItem(RIGHT_SIDEBAR_COLLAPSED_KEY) === 'true' : false
+		LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false)
 	);
 
 	/** Selection state (stores handle the rest) */
@@ -162,7 +157,12 @@ Uses extracted components, services, and stores for clean architecture.
 
 		try {
 			// Load messages
-			messages = await MessageService.load(workflowId);
+			const result = await MessageService.load(workflowId);
+			messages = result.messages;
+			if (result.error) {
+				console.error('Error loading messages:', result.error);
+				// Optionally show UI notification here
+			}
 
 			// Load historical activities (store handles internally)
 			await activityStore.loadHistorical(workflowId);
@@ -205,9 +205,7 @@ Uses extracted components, services, and stores for clean architecture.
 	async function selectWorkflow(workflowId: string): Promise<void> {
 		selectedWorkflowId = workflowId;
 		workflowStore.select(workflowId);
-		if (typeof window !== 'undefined') {
-			localStorage.setItem(LAST_WORKFLOW_KEY, workflowId);
-		}
+		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
 
 		// Load workflow data
 		await loadWorkflowData(workflowId);
@@ -412,7 +410,7 @@ Uses extracted components, services, and stores for clean architecture.
 		await agentStore.loadAgents();
 
 		// Restore last selected workflow from localStorage
-		const lastWorkflowId = localStorage.getItem(LAST_WORKFLOW_KEY);
+		const lastWorkflowId = LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
 		if (lastWorkflowId && $workflows.find(w => w.id === lastWorkflowId)) {
 			await selectWorkflow(lastWorkflowId);
 		}
@@ -435,9 +433,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Persist right sidebar state to localStorage.
 	 */
 	$effect(() => {
-		if (typeof window !== 'undefined') {
-			localStorage.setItem(RIGHT_SIDEBAR_COLLAPSED_KEY, String(rightSidebarCollapsed));
-		}
+		LocalStorage.set(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, rightSidebarCollapsed);
 	});
 </script>
 
@@ -548,17 +544,6 @@ Uses extracted components, services, and stores for clean architecture.
 	{:else if modalState.type === 'validation'}
 		<ValidationModal
 			request={modalState.request}
-			open={true}
-			onapprove={handleApproveValidation}
-			onreject={handleRejectValidation}
-			onclose={() => modalState = { type: 'none' }}
-		/>
-	{/if}
-
-	<!-- Validation Modal (separate from union modals) -->
-	{#if $hasPendingValidation && $pendingValidation}
-		<ValidationModal
-			request={$pendingValidation}
 			open={true}
 			onapprove={handleApproveValidation}
 			onreject={handleRejectValidation}

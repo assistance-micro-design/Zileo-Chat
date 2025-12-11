@@ -26,6 +26,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Message } from '$types/message';
 import type { WorkflowMetrics } from '$types/workflow';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * Parameters for creating a message via save_message command.
@@ -47,14 +48,15 @@ export const MessageService = {
 	 * Load all messages for a workflow.
 	 *
 	 * @param workflowId - Workflow ID to load messages for
-	 * @returns Array of messages in chronological order
+	 * @returns Object containing messages array and optional error message
 	 */
-	async load(workflowId: string): Promise<Message[]> {
+	async load(workflowId: string): Promise<{ messages: Message[]; error?: string }> {
 		try {
-			return await invoke<Message[]>('load_workflow_messages', { workflowId });
+			const messages = await invoke<Message[]>('load_workflow_messages', { workflowId });
+			return { messages };
 		} catch (e) {
 			console.error('Failed to load messages:', e);
-			return [];
+			return { messages: [], error: getErrorMessage(e) };
 		}
 	},
 

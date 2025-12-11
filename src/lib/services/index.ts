@@ -26,3 +26,4 @@
 export * from './workflow.service';
 export * from './message.service';
 export * from './activity.service';
+export * from './localStorage.service';

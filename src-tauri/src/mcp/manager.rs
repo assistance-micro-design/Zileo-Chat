@@ -601,9 +601,7 @@ impl MCPManager {
     fn is_retryable_error(error: &MCPError) -> bool {
         matches!(
             error,
-            MCPError::Timeout { .. }
-                | MCPError::ConnectionFailed { .. }
-                | MCPError::IoError { .. }
+            MCPError::Timeout { .. } | MCPError::ConnectionFailed { .. } | MCPError::IoError { .. }
         )
     }
 

@@ -28,6 +28,7 @@ Left sidebar for workflow management with search and CRUD operations.
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';
 	import { i18n } from '$lib/i18n';
+	import { debounce } from '$lib/utils/debounce';
 	import type { Workflow } from '$types/workflow';
 
 	interface Props {
@@ -57,8 +58,12 @@ Left sidebar for workflow management with search and CRUD operations.
 	function handleSearchInput(e: Event) {
 		const target = e.target as HTMLInputElement;
 		searchFilter = target.value;
-		onsearchchange?.(target.value);
+		debouncedSearchChange(target.value);
 	}
+
+	const debouncedSearchChange = debounce((value: string) => {
+		onsearchchange?.(value);
+	}, 300);
 
 	// Filter workflows locally for display
 	const filteredWorkflows = $derived.by(() => {
