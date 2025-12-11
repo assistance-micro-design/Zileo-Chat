@@ -1,1290 +1,272 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working with Zileo-Chat-3. See `docs/` for detailed documentation.
 
 ## Project Overview
 
-**Zileo-Chat-3** is a desktop multi-agent application with a conversational interface, built using a modern stack:
-- **Frontend**: SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 7.2.6
-- **Backend**: Rust 1.91.1 + Tauri 2.9.3
-- **Database**: SurrealDB 2.4.0 (embedded RocksDB for desktop, protocol-http enabled)
-- **LLM Framework**: Rig.rs 0.24.0 (multi-provider abstraction)
-- **Protocol**: MCP 2025-06-18 (official Anthropic SDK)
-- **Additional**: async-trait 0.1, futures 0.3 (multi-agent async patterns)
+**Stack**: SvelteKit 2.49 + Svelte 5.45 + Vite 7.2 | Rust 1.91 + Tauri 2.9 | SurrealDB 2.4 | Rig.rs 0.24 | MCP 2025-06-18
 
-### Functional Agent System
-
-**Key Features**:
-- Zero agents at startup (user creates all agents via Settings)
-- Full CRUD via UI (create, read, update, delete)
-- Agents persist in SurrealDB (table `agent`)
-- Tool execution loop with MemoryTool, TodoTool, UserQuestionTool
-- Human-in-the-loop via UserQuestionTool (interactive prompts)
-- MCP server integration per agent
-
-### Phase 1 Deliverables (Complete)
-
-**Theme System** (`src/lib/stores/theme.ts`):
-
-**UI Components** (`src/lib/components/ui/`):
-
-**Usage**:
-```typescript
-import { Button, Card, Modal } from '$lib/components/ui';
-import { theme } from '$lib/stores/theme';
-```
-
-## Essential Commands
-
-### Development
-
-```bash
-# Start dev mode (frontend + backend with HMR)
-npm run tauri dev
-
-# Frontend only (UI development)
-npm run dev
-
-# Backend only (Rust command testing)
-cd src-tauri && cargo run
-```
-
-### Quality & Validation
-
-```bash
-# Frontend validation
-npm run lint              # ESLint
-npm run check             # svelte-check + TypeScript strict mode
-npm run test              # Vitest unit tests
-npm run build             # Production build test
-
-# Backend validation
-cd src-tauri
-cargo fmt --check         # Format verification
-cargo clippy -- -D warnings  # Linting with warnings as errors
-cargo test                # Unit tests
-cargo test --lib          # Library tests only
-cargo build --release     # Release build
-```
-
-### Testing
-
-```bash
-# Frontend tests
-npm run test              # Vitest
-npm run test:e2e          # Playwright E2E tests
-
-# Backend tests
-cd src-tauri
-cargo test                # All tests
-cargo test -- --nocapture # With debug output
-```
-
-## Architecture Overview
-
-### Multi-Agent System Hierarchy
-
-```
-Agent Principal (Orchestrator)
-├─ Agents Spécialisés (permanent) - DB, API, Analytics, UI
-└─ Agents Temporaires (lifecycle limité)
-```
-
-**Communication Protocol**: Markdown reports (standardized, human-readable, machine-parsable)
-
-### Project Structure
+**Agent System**: Zero agents at startup, full CRUD via Settings UI, persisted in SurrealDB (`agent` table), tool execution loop with human-in-the-loop via UserQuestionTool.
 
 ```
 zileo-chat-3/
 ├─ src/                     # Frontend (SvelteKit)
-│  ├─ routes/               # File-based routing
-│  │  ├─ settings/          # Settings page
-│  │  └─ agent/             # Agent interaction page
-│  ├─ lib/
-│  │  ├─ components/        # Reusable Svelte components
-│  │  │  └─ ui/             # Atomic UI components (Button, Card, Modal, etc.)
-│  │  └─ stores/            # Svelte state management (theme, workflows, agents)
-│  ├─ styles/               # Global CSS (variables, reset, utilities)
-│  └─ types/                # TypeScript interfaces (alias: $types)
-│
-├─ src-tauri/               # Backend (Rust)
-│  ├─ src/
-│  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # Tauri IPC commands
-│  │  ├─ agents/            # Multi-agent system
-│  │  │  ├─ core/           # Orchestrator, registry, agent trait
-│  │  │  ├─ llm_agent.rs    # LLM-backed agent implementation
-│  │  │  └─ simple_agent.rs # Basic agent implementation
-│  │  ├─ llm/               # Rig.rs integration, providers
-│  │  ├─ mcp/               # MCP client/server
-│  │  ├─ tools/             # Custom MCP tools
-│  │  ├─ db/                # SurrealDB client
-│  │  └─ models/            # Rust structs (sync with TS types)
-│  ├─ Cargo.toml
-│  └─ tauri.conf.json       # Tauri configuration
-│
+│  ├─ routes/               # File-based routing (settings/, agent/)
+│  ├─ lib/components/ui/    # Atomic UI components
+│  ├─ lib/stores/           # Svelte state (theme, agents, workflows)
+│  └─ types/                # TypeScript interfaces ($types alias)
+├─ src-tauri/src/           # Backend (Rust)
+│  ├─ commands/             # Tauri IPC commands
+│  ├─ agents/               # Multi-agent system (core/, llm_agent.rs)
+│  ├─ tools/                # MCP tools (constants.rs, utils.rs, registry.rs)
+│  ├─ mcp/                  # MCP client/server
+│  └─ models/               # Rust structs (sync with TS types)
 └─ docs/                    # Comprehensive documentation
 ```
 
-### IPC Communication Pattern
+## Quick Commands
 
-Frontend → Backend communication uses Tauri's `invoke()`:
+| Task | Command |
+|------|---------|
+| Dev (full) | `npm run tauri dev` |
+| Frontend only | `npm run dev` |
+| Frontend lint | `npm run lint && npm run check` |
+| Frontend test | `npm run test` |
+| Backend lint | `cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings` |
+| Backend test | `cd src-tauri && cargo test` |
+| Build release | `npm run build && cd src-tauri && cargo build --release` |
 
-```typescript
-// Frontend (TypeScript)
-const result = await invoke<WorkflowResult>('execute_workflow', {
-  workflowId: string,
-  message: string,
-  agentId: string
-});
-```
+## Critical Patterns
 
-```rust
-// Backend (Rust)
-#[tauri::command]
-async fn execute_workflow(
-    workflow_id: String,
-    message: String,
-    agent_id: String
-) -> Result<WorkflowResult, String> {
-    // Implementation
-}
-```
+### Tauri IPC Naming Convention
 
-**Critical**: All Tauri commands must be registered in `src-tauri/src/main.rs` using `tauri::generate_handler![]`.
+**Tauri auto-converts** `snake_case` (Rust) ↔ `camelCase` (TypeScript).
 
-### Tauri Parameter Naming Convention
-
-**IMPORTANT**: Tauri automatically converts parameter names between Rust (`snake_case`) and JavaScript (`camelCase`).
-
-| Rust Parameter | JavaScript Parameter |
-|----------------|---------------------|
-| `workflow_id`  | `workflowId`        |
-| `agent_id`     | `agentId`           |
-| `api_key`      | `apiKey`            |
+| Rust | TypeScript |
+|------|------------|
+| `workflow_id` | `workflowId` |
+| `agent_id` | `agentId` |
+| `api_key` | `apiKey` |
 | `default_model_id` | `defaultModelId` |
-| `base_url`     | `baseUrl`           |
-| `server_name`  | `serverName`        |
-| `type_filter`  | `typeFilter`        |
-| `memory_type`  | `memoryType`        |
-
-**Rules**:
-- Rust commands use `snake_case` for parameters
-- TypeScript `invoke()` calls use `camelCase` for parameters
-- Tauri handles the conversion automatically
-- Single-word parameters (e.g., `id`, `name`, `provider`) remain unchanged
 
 ```typescript
-// CORRECT - camelCase in TypeScript
-await invoke('update_provider_settings', {
-  provider: 'mistral',
-  defaultModelId: 'mistral-small-latest',  // NOT default_model_id
-  baseUrl: null                             // NOT base_url
-});
+// CORRECT
+await invoke('update_provider_settings', { defaultModelId: 'model', baseUrl: null });
 
-// INCORRECT - snake_case will NOT work
-await invoke('update_provider_settings', {
-  provider: 'mistral',
-  default_model_id: 'mistral-small-latest', // WRONG!
-  base_url: null                             // WRONG!
-});
+// WRONG - snake_case won't work in TS
+await invoke('update_provider_settings', { default_model_id: 'model' }); // FAILS!
 ```
-
-### Commands (Validation, Memory, Streaming)
-
-**Validation** (`src-tauri/src/commands/validation.rs`):
-```typescript
-// Human-in-the-loop validation for critical operations
-await invoke('create_validation_request', { workflowId, validationType, operation, details, riskLevel });
-await invoke<ValidationRequest[]>('list_pending_validations');
-await invoke<ValidationRequest[]>('list_workflow_validations', { workflowId });
-await invoke('approve_validation', { validationId });
-await invoke('reject_validation', { validationId, reason });
-await invoke('delete_validation', { validationId });
-```
-
-**Memory** (`src-tauri/src/commands/memory.rs`):
-```typescript
-// RAG and context persistence (stub without vector embeddings)
-await invoke<string>('add_memory', { memoryType, content, metadata });
-await invoke<Memory[]>('list_memories', { typeFilter? });
-await invoke<Memory>('get_memory', { memoryId });
-await invoke('delete_memory', { memoryId });
-await invoke<MemorySearchResult[]>('search_memories', { query, limit?, typeFilter? });
-await invoke<number>('clear_memories_by_type', { memoryType });
-```
-
-**Streaming** (`src-tauri/src/commands/streaming.rs`):
-```typescript
-// Real-time workflow execution with Tauri events
-import { listen } from '@tauri-apps/api/event';
-import type { StreamChunk, WorkflowComplete } from '$types/streaming';
-
-// Listen to streaming events
-const unlistenChunk = await listen<StreamChunk>('workflow_stream', (event) => {
-  // Handle token, tool_start, tool_end, reasoning, error chunks
-});
-const unlistenComplete = await listen<WorkflowComplete>('workflow_complete', (event) => {
-  // Handle completion (status: completed | error)
-});
-
-// Start streaming execution
-await invoke<WorkflowResult>('execute_workflow_streaming', { workflowId, message, agentId });
-await invoke('cancel_workflow_streaming', { workflowId }); // Stub
-```
-
-## Type Synchronization
-
-TypeScript and Rust types **must be kept in sync** for IPC communication.
 
 ### TypeScript Import Pattern
 
-**IMPORTANT**: Always use the `$types` alias for imports. Never use `$lib/types`.
+**Always use `$types` alias** (configured in `svelte.config.js`):
 
 ```typescript
-// CORRECT - use $types alias
-import type { Workflow, WorkflowResult } from '$types/workflow';
-import type { AgentConfig, Lifecycle } from '$types/agent';
-import type { LLMConfigResponse, ProviderStatus } from '$types/llm';
+// CORRECT
+import type { Workflow } from '$types/workflow';
+import type { AgentConfig } from '$types/agent';
 
-// INCORRECT - do not use
+// WRONG
 import type { Workflow } from '$lib/types/workflow';  // NO!
 import type { Workflow } from '../types/workflow';     // NO!
 ```
 
-The `$types` alias is configured in `svelte.config.js` and points to `src/types/`.
+### Nullability Convention (TS ↔ Rust)
 
-### Nullability Convention
+| Rust | TypeScript | JSON |
+|------|------------|------|
+| `Option<T>` + `skip_serializing_if` | `field?: T` | Absent when None |
+| `Option<T>` (no skip) | `field: T \| null` | Explicit `null` |
+| `T` (required) | `field: T` | Always present |
 
-TypeScript optional fields must follow this convention for proper synchronization with Rust `Option<T>`:
-
-| Rust Pattern | TypeScript Pattern | When to Use |
-|--------------|-------------------|-------------|
-| `Option<T>` with `skip_serializing_if` | `field?: T` | DB fields that are omitted when `None` |
-| `Option<T>` without skip | `field: T \| null` | Fields that serialize as explicit `null` |
-| Required field | `field: T` | Always present in JSON |
-
-**Examples**:
 ```typescript
-// Rust: Option<String> with #[serde(skip_serializing_if = "Option::is_none")]
-// JSON: field absent when None, present with value when Some
-workflow_id?: string;  // CORRECT - field may be absent
+// Check Rust struct: if skip_serializing_if exists, use ?:
+workflow_id?: string;          // Option<String> with skip_serializing_if
+error_message: string | null;  // Option<String> without skip
 
-// Rust: Option<String> without skip_serializing_if
-// JSON: field is null when None, value when Some
-error_message: string | null;  // CORRECT - field is always present
-
-// INCORRECT patterns to avoid:
-workflow_id?: string | null;  // WRONG - mixing ? and | null
-workflow_id: string | undefined;  // WRONG - use ? instead
+// WRONG patterns
+workflow_id?: string | null;   // Never mix ? and | null
 ```
 
-**Rule of thumb**: Check the Rust struct. If it has `#[serde(skip_serializing_if = "Option::is_none")]`, use `?:`. Otherwise, use `| null`.
+### SurrealDB SDK 2.x Patterns
 
-## Internationalization (i18n)
+The SDK has serialization quirks. Follow these patterns strictly:
 
-The application supports multiple languages (English and French) with a simple JSON-based translation system.
+**Record Creation** - Use raw queries, not `.create().content()`:
+```rust
+// CORRECT
+let json_data = serde_json::to_value(&data)?;
+db.query(&format!("CREATE {}:`{}` CONTENT $data", table, id))
+    .bind(("data", json_data)).await?;
 
-### Translation Files
-
-Translation files are located in `src/messages/`:
-- `src/messages/en.json` - English translations
-- `src/messages/fr.json` - French translations (no anglicisms)
-
-**File Structure**:
-```json
-{
-  "$schema": "https://inlang.com/schema/inlang-message-format",
-  "common_save": "Save",
-  "common_cancel": "Cancel",
-  "settings_title": "Settings",
-  "agent_loading": "Loading agents..."
-}
+// WRONG - SDK serialization issues
+db.create((table, id)).content(data).await?;
 ```
 
-**Key Naming Convention**:
-- Use `snake_case` for keys
-- Prefix with section name: `common_`, `settings_`, `agent_`, `mcp_`, `theme_`, etc.
-- Be descriptive: `agent_no_agents_description` not `agent_desc`
+**Clean UUIDs** - Use `meta::id(id)`:
+```rust
+// CORRECT - Returns clean UUID
+"SELECT meta::id(id) AS id, name FROM agent"
 
-### Using Translations in Components
-
-**Import Pattern**:
-```typescript
-import { i18n } from '$lib/i18n';
+// WRONG - Returns ⟨uuid⟩ with brackets
+"SELECT * FROM agent"
 ```
 
-**In Templates** (reactive):
+**Write Operations** - Use `execute()` to avoid deserialization:
+```rust
+// CORRECT
+db.execute("UPDATE memory:`uuid` SET content = $c").await?;
+db.execute(&format!("DELETE memory:`{}`", uuid)).await?;
+
+// WRONG - query() tries to deserialize Thing type
+db.query("UPDATE memory:`uuid` SET ...").await?;
+```
+
+**String Escaping** - Use JSON encoding:
+```rust
+// CORRECT - Handles apostrophes, quotes, etc.
+let json_str = serde_json::to_string(&text)?;
+format!("content = {}", json_str)
+
+// WRONG - Fails on "l'eau", quotes, etc.
+format!("content = '{}'", text.replace('\'', "''"))
+```
+
+**Parameterized Queries** - Prevent SQL injection:
+```rust
+// CORRECT
+db.query_with_params(
+    "SELECT * FROM memory WHERE type = $type",
+    vec![("type".to_string(), json!("knowledge"))]
+).await?;
+
+// Use format!() only for validated UUIDs and table names
+```
+
+**Dynamic Keys in SCHEMAFULL** - Store as JSON string:
+```rust
+// WRONG - Dynamic keys silently dropped
+DEFINE FIELD env ON mcp_server TYPE object;  // {API_KEY: "x"} -> {}
+
+// CORRECT - Store as JSON string, parse on read
+DEFINE FIELD env ON mcp_server TYPE string DEFAULT '{}';
+let env_str = serde_json::to_string(&config.env)?;
+```
+
+**ORDER BY** - Include field in SELECT:
+```rust
+// CORRECT
+"SELECT meta::id(id) AS id, content, created_at FROM memory ORDER BY created_at DESC"
+
+// WRONG - ORDER BY field not in SELECT
+"SELECT meta::id(id) AS id, content FROM memory ORDER BY created_at DESC"
+```
+
+**Settings Queries** - Avoid `SELECT *` (Thing enum issues):
+```rust
+// CORRECT
+"SELECT config FROM settings:`settings:embedding_config`"
+
+// WRONG - id field causes serialization error
+"SELECT * FROM settings:`settings:embedding_config`"
+```
+
+### Query Limits
+
+Always use LIMIT to prevent memory explosion:
+```rust
+use crate::tools::constants::query_limits;
+// DEFAULT_LIST_LIMIT: 1000, DEFAULT_MODELS_LIMIT: 100, DEFAULT_MESSAGES_LIMIT: 500
+```
+
+### i18n Pattern
+
+Translation files: `src/messages/{en,fr}.json`
+
 ```svelte
 <script lang="ts">
   import { i18n } from '$lib/i18n';
 </script>
 
 <h1>{$i18n('settings_title')}</h1>
-<p>{$i18n('agent_loading_description')}</p>
 <button>{$i18n('common_save')}</button>
 ```
 
-**In Script** (non-reactive):
+Key naming: `section_action_detail` (e.g., `agent_no_agents_description`)
+
+### Store Cleanup Pattern
+
+Stores with Tauri listeners must implement cleanup:
 ```typescript
-import { t } from '$lib/i18n';
-
-// For one-time use (not reactive to locale changes)
-const message = t('common_error');
+store.cleanup();  // Remove listeners, reset state
+store.reset();    // cleanup() + initial state
 ```
 
-### Locale Store
-
-The locale is managed via `$lib/stores/locale.ts`:
-
-```typescript
-import { localeStore, locale, localeInfo } from '$lib/stores/locale';
-
-// Initialize on app start (in +layout.svelte)
-localeStore.init();
-
-// Change locale
-localeStore.setLocale('fr');
-
-// Access current locale (reactive)
-$locale       // 'en' | 'fr'
-$localeInfo   // { id: 'fr', nativeName: 'Francais', flag: 'FR', countryCode: 'FR' }
-```
-
-### Adding New Translations
-
-1. Add keys to both `src/messages/en.json` and `src/messages/fr.json`
-2. Use the `$i18n()` store in templates
-3. Follow naming conventions: `section_action_detail`
-
-### Configuration
-
-The `$messages` alias is configured in:
-- `svelte.config.js` (SvelteKit alias)
-- `tsconfig.json` (TypeScript paths)
-
-```javascript
-// svelte.config.js
-alias: {
-  $messages: './src/messages',
-  '$messages/*': './src/messages/*'
-}
-```
-
-### Type Definition Examples
-
-**TypeScript** (`src/types/`):
-```typescript
-export interface FeatureData {
-  id: string;
-  name: string;
-  metadata: Record<string, unknown>;
-}
-```
-
-**Rust** (`src-tauri/src/models/`):
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeatureData {
-    pub id: String,
-    pub name: String,
-    pub metadata: serde_json::Value,
-}
-```
-
-## Multi-Agent Configuration
-
-**Agents are created dynamically via Settings UI** (no hardcoded agents).
-
-### Agent CRUD Commands
+### Utility Imports
 
 ```typescript
-// List all agents (returns lightweight summaries)
-const agents = await invoke<AgentSummary[]>('list_agents');
-
-// Get full agent configuration
-const config = await invoke<AgentConfig>('get_agent_config', { agentId });
-
-// Create new agent
-const agentId = await invoke<string>('create_agent', {
-  config: {
-    name: 'My Agent',
-    lifecycle: 'permanent',
-    llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
-    tools: ['MemoryTool', 'TodoTool', 'UserQuestionTool'],
-    mcp_servers: ['serena'],
-    system_prompt: 'You are a helpful assistant...'
-  }
-});
-
-// Update agent (partial update)
-const updated = await invoke<AgentConfig>('update_agent', { agentId, config: { name: 'New Name' } });
-
-// Delete agent
-await invoke('delete_agent', { agentId });
-```
-
-### Frontend Store Pattern
-
-```typescript
-import { agentStore, agents, isLoading, hasAgents } from '$lib/stores/agents';
-
-// Load agents from backend
-await agentStore.loadAgents();
-
-// Access reactive derived stores
-$agents       // AgentSummary[]
-$isLoading    // boolean
-$hasAgents    // boolean
-```
-
-### Store Memory Management
-
-Stores with Tauri event listeners implement cleanup methods to prevent memory leaks:
-
-```typescript
-// streaming.ts, validation.ts, userQuestion.ts all implement:
-store.cleanup()  // Removes all event listeners, resets state
-store.reset()    // Calls cleanup() + resets to initial state
-
-// Safety features:
-// - isInitialized flag prevents double initialization
-// - Warning logged if init() called twice
-// - Auto-cleanup on re-initialization
-```
-
-### Error Utility
-
-Use the centralized error utility for consistent error handling:
-
-```typescript
-import { getErrorMessage, formatErrorForDisplay } from '$lib/utils/error';
-
-try {
-  await someOperation();
-} catch (e) {
-  const message = getErrorMessage(e);  // Extracts message from any error type
-  console.error(message);
-}
-```
-
-### Modal Controller Utility
-
-Use `createModalController` for modals with create/edit modes (requires `.svelte.ts` extension for runes):
-
-```typescript
+import { getErrorMessage } from '$lib/utils/error';
 import { createModalController } from '$lib/utils/modal.svelte';
-import type { MCPServerConfig } from '$types/mcp';
-
-// Create controller with type
-const mcpModal = createModalController<MCPServerConfig>();
-
-// Usage
-mcpModal.openCreate();           // Opens in create mode
-mcpModal.openEdit(server);       // Opens in edit mode with item
-mcpModal.close();                // Closes and clears state
-
-// Reactive properties
-mcpModal.show     // boolean - whether modal is visible
-mcpModal.mode     // 'create' | 'edit'
-mcpModal.editing  // T | undefined - item being edited
-
-// In template
-{#if mcpModal.show}
-  <Modal title={mcpModal.mode === 'create' ? 'Add' : 'Edit'}>
-    <Form data={mcpModal.editing} mode={mcpModal.mode} />
-  </Modal>
-{/if}
-```
-
-### Async Handler Utility
-
-Use `createAsyncHandler` for async operations with loading/error handling:
-
-```typescript
 import { createAsyncHandler } from '$lib/utils/async';
-
-const handleSave = createAsyncHandler(
-  () => invoke('save_data', { data }),
-  {
-    setLoading: (loading) => saving = loading,
-    onSuccess: (result) => {
-      message = { type: 'success', text: 'Saved successfully' };
-    },
-    onError: (error) => {
-      message = { type: 'error', text: getErrorMessage(error) };
-    }
-  }
-);
-
-// Use directly as event handler
-<button onclick={handleSave}>Save</button>
 ```
 
-## Tool Development Patterns
+## Code Standards
 
-### New Utility Modules
+**Prohibited**:
+- `any` type in TypeScript
+- Mock data in production
+- TODO comments for core functionality
+- Incomplete implementations
+- Emojis in code/comments
 
-The tools system has been refactored to reduce code duplication. Use these utilities when developing new tools:
+**Required**:
+- Strict TypeScript + Rust types synchronized
+- JSDoc/Rustdoc documentation
+- `Result<T, E>` in Rust, try/catch in TypeScript
+- Critical paths test coverage (~70% backend)
 
-#### `tools/utils.rs` - Database and Validation Utilities
+## MCP Server Identification
 
+Servers identified by **NAME** (not ID):
 ```rust
-use crate::tools::utils::{
-    ensure_record_exists, delete_with_check, db_error,
-    validate_not_empty, validate_length, validate_range, validate_enum_value,
-    QueryBuilder
-};
-
-// Validate inputs
-validate_not_empty(name, "name")?;
-validate_length(content, 50000, "content")?;
-validate_range(priority, 1, 5, "priority")?;
-validate_enum_value(&status, &["pending", "done"], "status")?;
-
-// Database operations
-ensure_record_exists(&db, "memory", id, "Memory").await?;
-delete_with_check(&db, "task", id, "Task").await?;
-
-// Query building (non-parameterized - use ParamQueryBuilder for user input)
-let query = QueryBuilder::new("memory")
-    .select(&["content", "memory_type"])
-    .where_eq("memory_type", "knowledge")
-    .order_by("created_at", true)
-    .limit(10)
-    .build();
-
-// Parameterized query building (OPT-MEM-9) - SQL injection safe
-let (query, params) = ParamQueryBuilder::new("memory")
-    .select(&["meta::id(id) AS id", "content", "type"])
-    .where_eq_param("type", "type_filter", json!("knowledge"))
-    .where_eq_param("workflow_id", "wf_id", json!(workflow_id))
-    .order_by("created_at", true)
-    .limit(100)
-    .build();
-let results = db.query_with_params(&query, params).await?;
-```
-
-#### `tools/memory/helpers.rs` - Shared Memory Logic (OPT-MEM-6)
-
-```rust
-use crate::tools::memory::helpers::{AddMemoryParams, AddMemoryResult, add_memory_core};
-
-// Shared logic for add_memory between tool and commands
-let params = AddMemoryParams {
-    memory_type: MemoryType::Knowledge,
-    content: "Content to store".to_string(),
-    metadata: json!({"agent_source": "agent_id"}),
-    workflow_id: Some("wf_123".to_string()),
-};
-let result = add_memory_core(params, &db, embedding_service.as_ref()).await?;
-// result.memory_id, result.embedding_generated
-```
-
-#### `tools/constants.rs` - Centralized Constants
-
-```rust
-use crate::tools::constants::{memory, todo, user_question, sub_agent, commands, query_limits};
-
-// Memory tool constants
-let max = memory::MAX_CONTENT_LENGTH;  // 50_000
-let types = memory::VALID_TYPES;       // &["user_pref", "context", "knowledge", "decision"]
-
-// Todo tool constants
-let max_name = todo::MAX_NAME_LENGTH;  // 128
-let statuses = todo::VALID_STATUSES;   // &["pending", "in_progress", "completed", "blocked"]
-
-// User question tool constants
-let max_question = user_question::MAX_QUESTION_LENGTH;  // 2000
-let max_options = user_question::MAX_OPTIONS;           // 20
-let question_types = user_question::VALID_TYPES;        // &["checkbox", "text", "mixed"]
-
-// User question timeout and circuit breaker (OPT-UQ-7, OPT-UQ-12)
-let timeout_secs = user_question::DEFAULT_TIMEOUT_SECS;        // 300 (5 minutes)
-let circuit_threshold = user_question::CIRCUIT_FAILURE_THRESHOLD; // 3 timeouts → open
-let circuit_cooldown = user_question::CIRCUIT_COOLDOWN_SECS;    // 60s recovery
-
-// Sub-agent limit
-let max_agents = sub_agent::MAX_SUB_AGENTS;  // 3
-
-// Command validation constants (OPT-2)
-use crate::tools::constants::commands as cmd_const;
-let max_agent_name = cmd_const::MAX_AGENT_NAME_LEN;         // 64
-let max_system_prompt = cmd_const::MAX_SYSTEM_PROMPT_LEN;   // 10_000
-let valid_providers = cmd_const::VALID_PROVIDERS;           // &["Mistral", "Ollama", "Demo"]
-let max_mcp_name = cmd_const::MAX_MCP_SERVER_NAME_LEN;      // 64
-let max_tool_name = cmd_const::MAX_TOOL_NAME_LEN;           // 128
-let max_message = cmd_const::MAX_MESSAGE_CONTENT_LEN;       // 100_000
-
-// Query limits (OPT-DB-8) - Prevent memory explosion
-let list_limit = query_limits::DEFAULT_LIST_LIMIT;          // 1000
-let models_limit = query_limits::DEFAULT_MODELS_LIMIT;      // 100
-let mcp_logs_limit = query_limits::DEFAULT_MCP_LOGS_LIMIT;  // 500
-let messages_limit = query_limits::DEFAULT_MESSAGES_LIMIT;  // 500
-```
-
-#### `tools/response.rs` - JSON Response Builder
-
-```rust
-use crate::tools::response::ResponseBuilder;
-
-// Standard success response
-ResponseBuilder::ok("memory_id", id, "Memory created successfully")
-
-// List response
-ResponseBuilder::list(&items, items.len())
-
-// Custom response with builder
-ResponseBuilder::new()
-    .success(true)
-    .id("task_id", task_id)
-    .message("Task updated")
-    .metrics(duration_ms, tokens_in, tokens_out)
-    .build()
-```
-
-#### `tools/registry.rs` - Tool Discovery
-
-```rust
-use crate::tools::registry::TOOL_REGISTRY;
-
-// Check if tool exists
-if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
-
-// Get tool metadata
-let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
-
-// List tools by category
-let basic = TOOL_REGISTRY.basic_tools();          // ["MemoryTool", "TodoTool", "CalculatorTool"]
-let sub_agent = TOOL_REGISTRY.sub_agent_tools();  // ["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"]
-
-// Validate with error message
-TOOL_REGISTRY.validate(tool_name)?;
-```
-
-#### `tools/sub_agent_executor.rs` - Sub-Agent Operations
-
-```rust
-use crate::tools::sub_agent_executor::{SubAgentExecutor, ExecutionResult};
-
-// Permission and limit checks (static methods)
-SubAgentExecutor::check_primary_permission(is_primary, "spawn")?;
-SubAgentExecutor::check_limit(current_count, "spawn")?;
-
-// Create executor instance
-let executor = SubAgentExecutor::new(
-    db, orchestrator, mcp_manager, app_handle,
-    workflow_id, parent_agent_id
-);
-
-// Execution lifecycle
-let exec_id = executor.create_execution_record(agent_id, name, prompt).await?;
-executor.emit_start_event(agent_id, name, prompt);
-let result = executor.execute_with_metrics(agent_id, task).await;
-executor.update_execution_record(&exec_id, &result).await;
-executor.emit_complete_event(agent_id, name, &result);
-```
-
-### Tool Description Guidelines
-
-When writing tool descriptions for `ToolDefinition::description`, follow these patterns to optimize LLM understanding and tool selection:
-
-**Structure Template**:
-```rust
-description: format!(
-    r#"Brief one-line summary of what this tool does.
-
-USE THIS TOOL WHEN:
-- Specific use case 1
-- Specific use case 2
-- Decision criteria for when to use this tool
-
-IMPORTANT CONSTRAINTS:
-- Limit 1: {} (inject from constants)
-- Limit 2: {} (inject from constants)
-- Any restrictions or prerequisites
-
-OPERATIONS:
-- operation1: Brief description
-- operation2: Brief description
-
-BEST PRACTICES:
-- Actionable guidance 1
-- Actionable guidance 2
-
-EXAMPLES:
-1. Example name:
-   {{"operation": "op1", "param": "value"}}
-
-2. Another example:
-   {{"operation": "op2", "param": "value"}}"#,
-    crate::tools::constants::module::CONSTANT_1,
-    crate::tools::constants::module::CONSTANT_2
-),
-```
-
-**Key Principles**:
-
-1. **Inject constants dynamically**: Never hardcode limits in descriptions
-   ```rust
-   // CORRECT - uses constants
-   format!("Max {} characters", uq_const::MAX_QUESTION_LENGTH)
-
-   // WRONG - hardcoded value becomes stale
-   "Max 2000 characters"
-   ```
-
-2. **Action-oriented sections**: Use "USE THIS TOOL WHEN" not "This tool can..."
-
-3. **Include constraints**: LLMs need to know limits before attempting operations
-
-4. **Provide JSON examples**: Show exact schema for common operations
-
-5. **Keep descriptions concise**: ~500-800 chars optimal for token efficiency
-
-**Helper for Sub-Agent Tools**:
-```rust
-use crate::tools::utils::sub_agent_description_template;
-
-// Wraps tool-specific text with common sub-agent sections
-let description = sub_agent_description_template(
-    "Spawns a new sub-agent for specialized tasks..."
-);
-// Automatically adds PRIMARY_AGENT_ONLY and RESPONSE_FORMAT sections
-```
-
-### MCP Server Identification
-
-**IMPORTANT**: MCP servers are identified by **NAME** (not ID) throughout the system.
-
-```rust
-// MCPManager is keyed by server NAME
-let tools = mcp_manager.list_server_tools("Serena").await?;
 mcp_manager.call_tool("Serena", "tool_name", args).await?;
-
-// Agent configuration uses names
-AgentConfig {
-    mcp_servers: vec!["Serena".to_string(), "Context7".to_string()],
-    // ...
-}
-
-// Validate server names
-let invalid = mcp_manager.validate_server_names(&names).await;
+AgentConfig { mcp_servers: vec!["Serena".to_string()], ... }
 ```
 
-**System prompt format:**
-```
-### Available MCP Servers
-- **Serena** [DIRECT] - Code analysis - 15 tools
-- **Context7** [DELEGATE] - Documentation - 8 tools
-
-To assign: {"mcp_servers": ["Serena"]}
-```
-
-### MCP Latency Metrics (Phase 4 Optimization)
-
-Query percentile latency metrics for MCP tool calls:
-
-```typescript
-import type { MCPLatencyMetrics } from '$types/mcp';
-
-// Get metrics for all servers (last hour)
-const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {});
-
-// Get metrics for specific server
-const serenaMetrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {
-  serverName: 'Serena'
-});
-```
-
-**MCPLatencyMetrics Type**:
-```typescript
-interface MCPLatencyMetrics {
-  server_name: string;
-  p50_ms: number;   // 50th percentile latency
-  p95_ms: number;   // 95th percentile latency
-  p99_ms: number;   // 99th percentile latency
-  total_calls: number;
-}
-```
-
-### MCP Circuit Breaker (Phase 6 Optimization)
-
-The MCP system implements the circuit breaker pattern to prevent cascade failures when servers become unhealthy.
-
-**States**:
-- **Closed**: Normal operation, requests pass through
-- **Open**: Server unhealthy (3 failures), requests rejected immediately for 60s cooldown
-- **HalfOpen**: Testing recovery, allows one request through
-
-**Usage in code**:
-```rust
-// Circuit breaker is automatically applied in call_tool()
-// If server has 3 consecutive failures, circuit opens and returns:
-MCPError::CircuitBreakerOpen {
-    server: "Serena".to_string(),
-    cooldown_remaining_secs: 45,
-}
-
-// Manual circuit breaker control (if needed)
-manager.get_circuit_breaker_state("Serena").await; // Returns CircuitState
-manager.reset_circuit_breaker("Serena").await;     // Force reset to Closed
-```
-
-### MCP Health Checks (Phase 6 Optimization)
-
-Periodic health checks detect unhealthy servers proactively.
-
-**Starting health checks**:
-```rust
-// Start with default 5-minute interval
-let manager = Arc::new(MCPManager::new(db).await?);
-let _health_task = MCPManager::start_health_checks(manager.clone(), None);
-
-// Or with custom interval
-let _health_task = MCPManager::start_health_checks(
-    manager.clone(),
-    Some(Duration::from_secs(120))  // 2 minutes
-);
-
-// Stop health checks
-manager.stop_health_checks();
-```
-
-**Health check behavior**:
-- Uses `refresh_tools()` as health probe (real network call)
-- Updates circuit breakers based on results
-- Logs health status at debug level
-
-### MCP ID Lookup Table (Phase 6 Optimization)
-
-Server operations now use O(1) lookup via id_to_name table instead of O(n) scan.
-
-**Affected methods**:
-- `stop_server(id)` - Now O(1) instead of O(n)
-- `get_server(id)` - Now O(1) instead of O(n)
-- `restart_server(id)` - Now O(1) instead of O(n)
-
-## Database Schema (SurrealDB)
-
-See `docs/DATABASE_SCHEMA.md` for full schema details.
-
-### Agent Table Schema
-
-```surql
-DEFINE TABLE agent SCHEMAFULL;
-DEFINE FIELD id ON agent TYPE string;
-DEFINE FIELD name ON agent TYPE string;
-DEFINE FIELD lifecycle ON agent TYPE string;  -- 'permanent' | 'temporary'
-DEFINE FIELD llm ON agent TYPE object;
-DEFINE FIELD llm.provider ON agent TYPE string;
-DEFINE FIELD llm.model ON agent TYPE string;
-DEFINE FIELD llm.temperature ON agent TYPE float;
-DEFINE FIELD llm.max_tokens ON agent TYPE int;
-DEFINE FIELD tools ON agent TYPE array<string>;
-DEFINE FIELD mcp_servers ON agent TYPE array<string>;
-DEFINE FIELD system_prompt ON agent TYPE string;
-DEFINE FIELD created_at ON agent TYPE datetime DEFAULT time::now();
-DEFINE FIELD updated_at ON agent TYPE datetime DEFAULT time::now();
-```
-
-### SurrealDB SDK 2.x Patterns
-
-The SurrealDB Rust SDK 2.x has serialization issues with internal enum types. Use these patterns:
-
-**Record Creation** - Use raw SurrealQL queries instead of `.create().content()`:
-```rust
-// WRONG - SDK has internal enum serialization issues
-let _: Option<T> = db.create((table, id)).content(data).await?;
-
-// CORRECT - Use raw query with bind()
-let json_data = serde_json::to_value(&data)?;
-let query = format!("CREATE {}:`{}` CONTENT $data", table, id);
-db.query(&query).bind(("data", json_data)).await?;
-```
-
-**Record Queries** - Use `meta::id(id)` to extract clean UUIDs:
-```rust
-// WRONG - Returns ID with angle brackets: ⟨uuid⟩
-"SELECT * FROM workflow"
-"SELECT string::concat('', id) AS id FROM workflow"
-
-// CORRECT - Returns clean UUID string
-"SELECT meta::id(id) AS id, name, status FROM workflow"
-```
-
-**Custom Deserializers** - For enum fields stored as strings:
-```rust
-// In models/serde_utils.rs - handle SurrealDB's internal enum format
-pub fn deserialize_workflow_status<'de, D>(deserializer: D) -> Result<WorkflowStatus, D::Error>
-
-// Apply on struct field
-#[serde(deserialize_with = "deserialize_workflow_status")]
-pub status: WorkflowStatus,
-```
-
-**Query Results** - Extract as JSON first for custom deserializer support:
-```rust
-// Use query_json() then deserialize with serde_json
-let json_results: Vec<serde_json::Value> = db.query_json(query).await?;
-let data: Vec<T> = json_results
-    .into_iter()
-    .map(serde_json::from_value)
-    .collect::<Result<Vec<T>, _>>()?;
-```
-
-**Write Operations (UPSERT/UPDATE/DELETE)** - Use `execute()` to avoid result deserialization:
-```rust
-// WRONG - query() tries to deserialize the returned record (Thing type issues)
-let _: Vec<serde_json::Value> = db.query("UPSERT settings:`key` CONTENT {...}").await?;
-
-// CORRECT - execute() runs query without deserializing result
-db.execute("UPSERT settings:`key` CONTENT {...}").await?;
-db.execute("UPDATE memory:`uuid` SET content = \"value\"").await?;
-db.execute("DELETE memory:`uuid`").await?;
-```
-
-**String Values** - Use JSON encoding for proper escaping (apostrophes, quotes, etc.):
-```rust
-// WRONG - Single quote escaping doesn't work in SurrealDB
-format!("content = '{}'", text.replace('\'', "''"))  // l'eau -> l''eau (parse error)
-
-// CORRECT - JSON string encoding handles all special characters
-let json_str = serde_json::to_string(&text)?;  // l'eau -> "l'eau"
-format!("content = {}", json_str)
-```
-
-**Delete Records** - Use `execute()` with DELETE query, not `db.delete()`:
-```rust
-// WRONG - db.delete() has issues with table:id format
-db.delete("memory:uuid").await?;  // Error: table name contains colon
-
-// CORRECT - Use raw DELETE query with backtick-escaped ID
-db.execute(&format!("DELETE memory:`{}`", uuid)).await?;
-```
-
-**ORDER BY with Explicit Fields** - Include ORDER BY fields in SELECT:
-```rust
-// WRONG - ORDER BY field must be in SELECT when using explicit field selection
-"SELECT meta::id(id) AS id, content FROM memory ORDER BY created_at DESC"
-
-// CORRECT - Either include the field or remove ORDER BY
-"SELECT meta::id(id) AS id, content, created_at FROM memory ORDER BY created_at DESC"
-// OR if order doesn't matter:
-"SELECT meta::id(id) AS id, content FROM memory"
-```
-
-**Settings/Config Queries** - Use `SELECT field` instead of `SELECT *` to avoid Thing enum:
-```rust
-// WRONG - SELECT * returns id field which is Thing type (enum), causes serialization error
-let query = "SELECT * FROM settings:`settings:embedding_config`";
-let results: Vec<Value> = db.query_json(query).await?;  // Error: invalid type: enum
-
-// CORRECT - Select only the fields you need, avoiding the id field
-let query = "SELECT config FROM settings:`settings:embedding_config`";
-let results: Vec<Value> = db.query_json(query).await?;  // Works!
-```
-
-**Direct Record Access** - Use backtick-escaped ID instead of WHERE clause:
-```rust
-// WRONG - WHERE id comparison may not match correctly
-let query = "SELECT config FROM settings WHERE id = 'settings:embedding_config'";
-
-// CORRECT - Direct record access with backtick-escaped ID
-let query = "SELECT config FROM settings:`settings:embedding_config`";
-```
-
-**Dynamic Keys in SCHEMAFULL** - Store as JSON string for fields with user-defined keys:
-```rust
-// PROBLEM - SCHEMAFULL tables filter nested object keys not explicitly defined in schema
-// If you define `DEFINE FIELD env ON table TYPE object`, SurrealDB will silently
-// drop any nested keys that aren't pre-defined (e.g., env.API_KEY, env.SECRET)
-
-// WRONG - Dynamic keys are lost after save/reload
-DEFINE FIELD env ON mcp_server TYPE object;  // User adds {"API_KEY": "xxx"} -> returns {}
-
-// CORRECT - Store as JSON string, parse on read
-DEFINE FIELD env ON mcp_server TYPE string DEFAULT '{}';
-
-// Rust: Serialize HashMap to JSON string on save
-let env_str = serde_json::to_string(&config.env)?;  // {"API_KEY":"xxx"}
-
-// Rust: Parse JSON string back to HashMap on load
-let env: HashMap<String, String> = serde_json::from_str(env_str)?;
-```
-This pattern applies to any field with dynamic/user-defined keys: `env`, `metadata`, `custom_fields`, etc.
-
-### Custom Deserializers Reference
-
-The project uses custom serde deserializers to handle SurrealDB's complex serialization formats. These are defined in `src-tauri/src/models/serde_utils.rs`.
-
-**`deserialize_thing_id`** - For record ID fields:
-```rust
-#[derive(Deserialize)]
-struct Record {
-    #[serde(deserialize_with = "deserialize_thing_id", default)]
-    id: String,
-    // other fields...
-}
-```
-Use when: Loading any record with an `id` field from SurrealDB.
-
-**`deserialize_workflow_status`** - For WorkflowStatus enum:
-```rust
-#[derive(Deserialize)]
-struct Workflow {
-    #[serde(deserialize_with = "deserialize_workflow_status")]
-    status: WorkflowStatus,
-}
-```
-Use when: Loading workflow records where status is stored as string.
-
-**When NOT to use custom deserializers**:
-- For structs created in Rust (not loaded from DB)
-- For fields that are not IDs or enums stored as strings
-- For new tables where you control the schema
-
-See `src-tauri/src/models/serde_utils.rs` for detailed documentation and examples.
-
-### Parameterized Queries
-
-Use parameterized queries to prevent SQL injection. The `DBClient` provides helper methods:
-
-**`query_with_params`** - For SELECT queries with bind parameters:
-```rust
-// Use $param placeholders and bind() for user input
-let params = vec![
-    ("type".to_string(), serde_json::json!("knowledge")),
-    ("workflow_id".to_string(), serde_json::json!(wf_id)),
-];
-let results: Vec<Memory> = db.query_with_params(
-    "SELECT * FROM memory WHERE type = $type AND workflow_id = $workflow_id",
-    params
-).await?;
-```
-
-**`query_json_with_params`** - For JSON results with bind parameters:
-```rust
-let results: Vec<serde_json::Value> = db.query_json_with_params(
-    "SELECT meta::id(id) AS id FROM table WHERE field = $value",
-    vec![("value".to_string(), serde_json::json!(user_input))]
-).await?;
-```
-
-**`execute_with_params`** - For mutations (INSERT/UPDATE/DELETE) with parameters:
-```rust
-// Use for write operations where you don't need the returned data
-db.execute_with_params(
-    "UPDATE task:`uuid` SET status = $status",
-    vec![("status".to_string(), serde_json::json!("completed"))]
-).await?;
-
-db.execute_with_params(
-    "DELETE FROM memory WHERE type = $type",
-    vec![("type".to_string(), serde_json::json!("knowledge"))]
-).await?;
-```
-
-**When to use parameterized queries**:
-- Any WHERE clause with user-provided values
-- UPDATE SET clauses with user data
-- String comparisons (type filters, status filters)
-- Content that may contain special characters (', ", \n)
-
-**When format!() is still safe**:
-- Backtick-escaped UUIDs validated via `Validator::validate_uuid()`
-- Numeric values (LIMIT, OFFSET)
-- Table names controlled by code (not user input)
-
-### Transaction Support
-
-Use transactions for multi-query atomic operations:
-
-**`transaction`** - For simple multi-query transactions:
-```rust
-db.transaction(vec![
-    "CREATE workflow:`123` CONTENT { name: 'Test' }".to_string(),
-    "CREATE message:`456` CONTENT { workflow_id: '123' }".to_string(),
-]).await?;  // Rolls back on any failure
-```
-
-**`transaction_with_params`** - For parameterized transactions:
-```rust
-db.transaction_with_params(vec![
-    (
-        "CREATE workflow:`123` CONTENT $data".to_string(),
-        vec![("data".to_string(), json!({"name": "Test"}))]
-    ),
-    (
-        "UPDATE agent:`456` SET status = $status".to_string(),
-        vec![("status".to_string(), json!("active"))]
-    ),
-]).await?;  // Rolls back on any failure
-```
-
-### Query Limits
-
-All list queries must include LIMIT to prevent memory explosion. Use constants from `tools/constants.rs`:
-
-```rust
-use crate::tools::constants::query_limits;
-
-// Default limits
-query_limits::DEFAULT_LIST_LIMIT    // 1000 - for list_memories, list_tasks
-query_limits::DEFAULT_MODELS_LIMIT  // 100  - for list_models
-query_limits::DEFAULT_MCP_LOGS_LIMIT // 500 - for MCP call logs
-query_limits::DEFAULT_MESSAGES_LIMIT // 500 - for message history
-
-// Example usage
-let query = format!(
-    "SELECT * FROM memory ORDER BY created_at DESC LIMIT {}",
-    query_limits::DEFAULT_LIST_LIMIT
-);
-```
-
-## Security Considerations
-
-**Production-ready from v1**:
-- API keys stored via Tauri secure storage (OS keychain) + AES-256 encryption
-- API key validation: rejects newlines (HTTP header injection prevention)
-- Input validation on both frontend and backend via `Validator` struct
-- Tauri allowlist for IPC commands (explicit permission model)
-- MCP servers run in isolated processes (Docker containers for external servers)
-- MCP env variable injection prevention (alphanumeric names, no shell metacharacters)
-- Strict CSP in `tauri.conf.json`: `default-src 'self'; script-src 'self'; frame-ancestors 'none'; object-src 'none'`
-- tauri-plugin-opener >= 2.2.1 (security patch)
-- **SQL injection prevention**: Parameterized queries via `query_with_params()`, `execute_with_params()` (Phase 5)
-- **Memory explosion protection**: Query LIMIT enforcement via `query_limits` constants (Phase 5)
-
-## Code Quality Standards
-
-### Strict Prohibitions
-
-**Never include in code**:
-- ❌ `any` type in TypeScript - strict typing required
-- ❌ Mock data or placeholders in production code
-- ❌ `TODO` comments for core functionality
-- ❌ Incomplete implementations (`throw new Error("Not implemented")`)
-- ❌ Emojis in code or comments
-
-### Required Practices
-
-- ✅ **Type Safety**: Strict TypeScript + Rust types synchronized
-- ✅ **Documentation**: JSDoc/TSDoc for TypeScript, Rustdoc for Rust
-- ✅ **Error Handling**: `Result<T, E>` in Rust, proper try/catch in TypeScript
-- ✅ **Testing**: Critical paths coverage (~70% backend)
-- ✅ **Async Patterns**: Tokio for Rust, async/await for TypeScript
-
-## LLM Provider Configuration
-
-**Phase 1 Providers**:
-- **Mistral**: Cloud API (mistral-large, mistral-medium)
-- **Ollama**: Local models (llama3, mistral, codellama)
-
-Provider selection is user-controlled via Settings UI. The application uses Rig.rs for multi-provider abstraction.
-
-## MCP Server Configuration
-
-MCP servers are user-configured (not bundled) via Settings UI:
-
-Supported deployment methods:
-- **Docker**: Local containers (e.g., Serena for code analysis)
-- **NPX**: Node.js-based servers (e.g., Context7 for docs)
-- **UVX**: Python servers with isolated environments
-- **SaaS**: Remote managed services
-
-## Workflow Execution Pattern
-
-1. User sends message in Agent page
-2. Frontend invokes Tauri command with workflow_id and agent_id
-3. Backend orchestrator:
-   - Loads agent configuration
-   - Initializes LLM provider (Rig.rs)
-   - Executes agent with available tools and MCP servers
-   - Streams response back to frontend
-4. Human-in-the-loop validation if required (critical operations)
-5. Agent generates markdown report with metrics
-6. State persisted to SurrealDB
-
-## Key Documentation Files
-
-Essential reading for context:
-
-- `docs/TECH_STACK.md`: Exact versions and requirements (Node 20.19+, Rust 1.91.1+)
-- `docs/ARCHITECTURE_DECISIONS.md`: All architectural decisions with justifications
-- `docs/MULTI_AGENT_ARCHITECTURE.md`: Agent hierarchy, communication, factory patterns
-- `docs/API_REFERENCE.md`: Tauri command signatures and types
-- `docs/AGENT_TOOLS_DOCUMENTATION.md`: Tool system documentation (7 tools)
-- `docs/GETTING_STARTED.md`: Development setup and first workflow
-- `docs/TESTING_STRATEGY.md`: Testing approach and coverage targets
-- `docs/MCP_CONFIGURATION_GUIDE.md`: MCP server setup and configuration
-- `docs/DESIGN_SYSTEM.md`: Complete UI design specifications (colors, typography, components)
-- `docs/specs/2025-11-25_spec-complete-implementation-plan.md`: Full implementation plan (6 phases)
-
-## Development Workflow Best Practices
-
-### For New Features
-
-1. **Discovery**: Read relevant docs, explore existing patterns
-2. **Types First**: Define TypeScript and Rust types (synchronized)
-3. **Backend**: Implement Rust command with proper error handling
-4. **Frontend**: Create Svelte component with strict props
-5. **Validation**: Lint, typecheck, tests - zero errors required
-6. **Documentation**: JSDoc/Rustdoc with clear descriptions
-
-### Agent Development
-
-Agents are created dynamically via Settings UI and stored in SurrealDB:
-
-1. **UI Creation**: Settings → Agents → Create new agent
-2. **Configuration**: Name, lifecycle, LLM settings, tools, MCP servers, system prompt
-3. **Persistence**: Agent stored in SurrealDB `agent` table
-4. **Runtime**: LLMAgent loads config from DB and executes with Orchestrator
-
-### For Bug Fixes
-
-1. Reproduce issue with tests
-2. Root cause analysis (never skip)
-3. Fix systematically
-4. Verify with full validation suite
-5. Update tests to prevent regression
+## Documentation Index
+
+| Document | Content |
+|----------|---------|
+| `TECH_STACK.md` | Exact versions, requirements (Node 20.19+, Rust 1.91+) |
+| `ARCHITECTURE_DECISIONS.md` | ADRs with justifications |
+| `MULTI_AGENT_ARCHITECTURE.md` | Agent hierarchy, communication, factory patterns |
+| `API_REFERENCE.md` | Tauri command signatures and types |
+| `AGENT_TOOLS_DOCUMENTATION.md` | Tool system (7 tools), development patterns |
+| `TOOLS_REFERENCE.md` | Tool utilities (constants.rs, utils.rs, registry.rs) |
+| `DATABASE_SCHEMA.md` | Full SurrealDB schema |
+| `MCP_CONFIGURATION_GUIDE.md` | MCP server setup (Docker, NPX, UVX) |
+| `FRONTEND_SPECIFICATIONS.md` | Component specs, stores, routing |
+| `WORKFLOW_ORCHESTRATION.md` | Execution flow, streaming, validation |
+| `DESIGN_SYSTEM.md` | UI specs (colors, typography, components) |
+| `TESTING_STRATEGY.md` | Testing approach, coverage targets |
+| `GETTING_STARTED.md` | Development setup guide |
+| `DEPLOYMENT_GUIDE.md` | Build and release process |
+| `SUB_AGENT_GUIDE.md` | Sub-agent spawning and delegation |
+
+## Security
+
+- API keys: Tauri secure storage + AES-256
+- Input validation: `Validator` struct (frontend + backend)
+- SQL injection: Parameterized queries (`query_with_params()`)
+- CSP: `default-src 'self'; script-src 'self'`
+- MCP: Isolated processes, env injection prevention
 
 ## Version Requirements
 
-**Minimum**:
-- Node.js: 20.19+ or 22.12+ (Vite 7 requirement)
-- Rust: 1.80.1+ (SurrealDB SDK requirement)
-- npm/pnpm/yarn: Latest stable
+- **Node.js**: 20.19+ or 22.12+ (Vite 7)
+- **Rust**: 1.80.1+ (SurrealDB SDK)
 
-**Check versions**:
 ```bash
-node --version    # >= 20.19
-rustc --version   # >= 1.91.1
-cargo --version   # >= 1.91.1
+node --version  # >= 20.19
+rustc --version # >= 1.91.1
 ```
-
-## CI/CD
-
-**On Push** (feature branches):
-- Linting (clippy + eslint)
-- Unit tests
-- Build verification
-
-**On PR** (to main):
-- Integration tests
-- Security audit (`cargo audit`)
-- Coverage report
-
-**On Merge** (main):
-- Release builds (Linux, macOS, Windows planned)
-- E2E tests
-- Artifact packaging
-
-## OS Targets
-
-**Priority**:
-1. **Linux** : AppImage + .deb
-2. **macOS** : .dmg
-3. **Windows** : .msi
-
-Build outputs in `src-tauri/target/release/bundle/`

@@ -30,13 +30,13 @@ Desktop   : Tauri (cross-platform)
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.9.0
 - **@tauri-apps/cli**: ^2.9.4
-- **@tauri-apps/plugin-dialog**: ^2.2.0
+- **@tauri-apps/plugin-dialog**: ^2.4.2 (updated OPT-FA-2)
 
 **UI Components**:
-- **lucide-svelte**: ^0.556.0 (icon library)
+- **@lucide/svelte**: ^0.560.0 (official Lucide icon library - migrated OPT-FA-12)
 
 **Testing**:
-- **vitest**: ^2.0.0 (unit tests)
+- **vitest**: ^4.0.15 (unit tests - updated OPT-FA-6)
 - **@playwright/test**: ^1.57.0 (E2E tests)
 - **jsdom**: ^27.2.0 (DOM testing)
 
@@ -271,10 +271,23 @@ cargo --version   # >= 1.91.1
 
 ## Version Update Notes
 
+**11 Dec 2025 - OPT-FA Frontend/Agent Optimizations**:
+- **@lucide/svelte 0.560.0** (migrated from lucide-svelte - OPT-FA-12)
+- **vitest 4.0.15** (upgraded from 2.1.9 - OPT-FA-6)
+- **@tauri-apps/plugin-dialog 2.4.2** (upgraded from 2.2.0 - OPT-FA-2)
+- OPT-FA-1: Modal duplication fix (single ValidationModal)
+- OPT-FA-3: Error handling with `{ messages, error? }` return type
+- OPT-FA-4: Debounced search input (300ms)
+- OPT-FA-5: Typed localStorage service with STORAGE_KEYS
+- OPT-FA-7: Consolidated derived stores (28→14)
+- OPT-FA-8: WorkflowExecutorService extracted (8-step orchestration)
+- OPT-FA-9: PageState interface aggregation
+- OPT-FA-11: Lazy-loaded modals via dynamic imports
+- OPT-FA-13: Memoized activity filtering at store level
+
 **7 Dec 2025 - Phase 7 Quick Wins (Frontend Optimization)**:
 - **Vite 7.2.6** (upgraded from 5.4.21 - performance improvement)
 - **@sveltejs/vite-plugin-svelte 6.2.1** (required for Vite 7 compatibility)
-- **lucide-svelte 0.556.0** (minor update)
 - New utilities: `createModalController` (modal.svelte.ts), `createAsyncHandler` (async.ts)
 - Modal controller pattern reduces ~30 lines per modal in Settings page
 - ComponentType fix for Svelte 5 compatibility with lucide icons

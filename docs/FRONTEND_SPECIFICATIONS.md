@@ -139,7 +139,7 @@ User Input
 <!-- src/routes/settings/+layout.svelte -->
 <script lang="ts">
   import { Sidebar } from '$lib/components/layout';
-  import { Globe, Bot, Plug, Brain, ShieldCheck, BookOpen, FolderSync, Palette } from 'lucide-svelte';
+  import { Globe, Bot, Plug, Brain, ShieldCheck, BookOpen, FolderSync, Palette } from '@lucide/svelte';
 
   let { data, children } = $props();
 
@@ -1412,7 +1412,86 @@ src/lib/components/
 | `async.ts` | `createAsyncHandler()`, `createAsyncHandlerWithEvent()`, `withLoadingState()` | Async operation wrappers with loading/error handling |
 | `error.ts` | `getErrorMessage()`, `formatErrorForDisplay()` | Error extraction and formatting utilities |
 | `activity.ts` | `combineActivities()`, `filterActivities()`, `countActivitiesByType()` | Activity feed helpers |
+| `debounce.ts` | `debounce()` | Debounce function wrapper (OPT-FA-4) |
 | `index.ts` | All utilities | Barrel export |
+
+### Services (src/lib/services/)
+
+| Module | Key Exports | Description |
+|--------|-------------|-------------|
+| `message.service.ts` | `MessageService.load()`, `MessageService.save()` | Message CRUD with error handling (returns `{ messages, error? }` - OPT-FA-3) |
+| `workflow.service.ts` | `WorkflowService.execute()`, `WorkflowService.cancel()` | Workflow execution management |
+| `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration (OPT-FA-8) |
+| `localStorage.service.ts` | `LocalStorage.get()`, `LocalStorage.set()`, `STORAGE_KEYS` | Typed localStorage access (OPT-FA-5) |
+| `index.ts` | All services | Barrel export |
+
+**WorkflowExecutorService Pattern** (OPT-FA-8):
+```typescript
+// Extracted 8-step orchestration from handleSend
+await WorkflowExecutorService.execute(
+  {
+    workflowId: 'wf-123',
+    message: 'User message',
+    agentId: 'agent-456',
+    locale: 'en'
+  },
+  {
+    onUserMessage: (msg) => pageState.messages.push(msg),
+    onAssistantMessage: (msg) => pageState.messages.push(msg),
+    onError: (msg) => pageState.messages.push(msg)
+  }
+);
+```
+
+**localStorage Service Pattern** (OPT-FA-5):
+```typescript
+import { LocalStorage, STORAGE_KEYS } from '$lib/services';
+
+// Type-safe access with defaults
+const collapsed = LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false);
+LocalStorage.set(STORAGE_KEYS.SELECTED_AGENT_ID, agentId);
+```
+
+### PageState Pattern (OPT-FA-9)
+
+Aggregate page state into a single reactive object instead of multiple `$state()` variables:
+
+```typescript
+interface PageState {
+  leftSidebarCollapsed: boolean;
+  rightSidebarCollapsed: boolean;
+  selectedWorkflowId: string | null;
+  selectedAgentId: string | null;
+  currentMaxIterations: number;
+  currentContextWindow: number;
+  messages: Message[];
+  messagesLoading: boolean;
+}
+
+const initialPageState: PageState = { /* defaults */ };
+let pageState = $state<PageState>(initialPageState);
+
+// Usage
+pageState.messages = [...pageState.messages, newMessage];
+pageState.selectedWorkflowId = workflow.id;
+```
+
+### Streaming Store Consolidation (OPT-FA-7)
+
+Derived stores reduced from 28 to 14. Use direct filtering instead of deprecated helpers:
+
+```typescript
+// DEPRECATED (removed)
+// import { hasRunningTools, subAgentCount } from '$lib/stores/streaming';
+
+// RECOMMENDED
+import { runningTools, activeSubAgents } from '$lib/stores/streaming';
+
+// In component
+const hasRunning = $runningTools.length > 0;
+const count = $activeSubAgents.length;
+const running = $activeSubAgents.filter(a => a.status === 'running');
+```
 
 **Modal Controller Pattern** (Phase 7 Quick Win):
 ```typescript

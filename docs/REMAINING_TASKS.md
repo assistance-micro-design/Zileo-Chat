@@ -1,9 +1,9 @@
 # Remaining Tasks - Post-v1 Optimizations
 
 > **Status**: DEFERRED - To be implemented after v1 release
-> **Last Updated**: 2025-12-10
-> **Total Estimated Effort**: ~53-57 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11)
+> **Last Updated**: 2025-12-11
+> **Total Estimated Effort**: ~63-67 hours
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11) + OPT-FA (11/14)
 
 ## Overview
 
@@ -34,6 +34,7 @@ All optimization phases are **COMPLETE**:
 | TD | Tool Description Optimizations | 8/10 OPT-TD items (enriched descriptions, dynamic constants, sub-agent template, CLAUDE.md) |
 | SCROLL | Settings Page Optimizations | Route-based navigation, CSS contain, virtual scroll, memoization (8/8 items) |
 | WF | Workflow Optimizations | 9/11 OPT-WF items (query constants, cascade delete, timeouts, cancellation sync, futures lock, security patch) |
+| FA | Frontend/Agent Optimizations | 11/14 OPT-FA items (modal fix, debounce, localStorage, PageState, WorkflowExecutor, stores consolidation) |
 
 **Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
@@ -55,6 +56,35 @@ Migration from scroll-based to route-based Settings page architecture.
 | OPT-SCROLL-ROUTES | Route-based navigation (8 routes) | Active |
 
 **Note**: OPT-SCROLL-1 and OPT-SCROLL-4 were implemented but became obsolete when the architecture migrated from scroll-based to route-based navigation. The route-based approach provides superior performance benefits.
+
+### OPT-FA Details (Dec 2025)
+
+Frontend/Agent page optimizations targeting performance, maintainability, and code organization.
+
+| Item | Description | Status |
+|------|-------------|--------|
+| OPT-FA-1 | Fix modal duplication (single ValidationModal) | DONE |
+| OPT-FA-2 | Update @tauri-apps/plugin-dialog to ^2.4.2 | DONE |
+| OPT-FA-3 | Fix silent error handling in message.service | DONE |
+| OPT-FA-4 | Add debounce to search input (300ms) | DONE |
+| OPT-FA-5 | Create typed localStorage service | DONE |
+| OPT-FA-6 | Update Vitest to ^4.0.15 | DONE |
+| OPT-FA-7 | Consolidate derived stores (28→14) | DONE |
+| OPT-FA-8 | Extract WorkflowExecutor service | DONE |
+| OPT-FA-9 | Aggregate PageState interface | DONE |
+| OPT-FA-10 | Migrate streaming to class runes | DEFER (optional) |
+| OPT-FA-11 | Lazy load modals | DONE |
+| OPT-FA-12 | Migrate lucide-svelte to @lucide/svelte | DONE |
+| OPT-FA-13 | Memoize activity filtering | DONE |
+| OPT-FA-14 | Add $inspect debug helpers | DEFER |
+| OPT-FA-15 | Implement retry logic | DEFER |
+
+**Key Deliverables**:
+- `src/lib/services/localStorage.service.ts`: Typed localStorage with STORAGE_KEYS
+- `src/lib/services/workflowExecutor.service.ts`: 8-step orchestration service
+- `src/routes/agent/+page.svelte`: PageState interface, lazy modals
+- `src/lib/stores/streaming.ts`: 14 consolidated derived stores
+- `package.json`: @lucide/svelte, vitest 4.x, plugin-dialog 2.4.x
 
 ### OPT-WF Details (Dec 2025)
 
@@ -219,6 +249,23 @@ Workflow domain optimizations targeting performance, maintainability, and securi
 
 ---
 
+### 9. Frontend/Agent Optimizations (Deferred)
+
+| ID | Item | Description | Effort | Reason for Deferral |
+|----|------|-------------|--------|---------------------|
+| OPT-FA-10 | Migrate Streaming to Class Runes | Convert streaming.ts to class-based .svelte.ts with $state/$derived | 6h | Optional, major refactor, current store pattern works well |
+| OPT-FA-14 | Add $inspect Debug Helpers | Add development-only $inspect() for streaming state debugging | 0.25h | Nice-to-have, low priority |
+| OPT-FA-15 | Implement Retry Logic | Add retry wrapper for critical operations (save message, execute workflow) | 4h | Complex (backoff, circuit breaker), gain moderate, current error handling sufficient |
+
+**Prerequisites**: None
+
+**Implementation Notes**:
+- OPT-FA-10: Requires migrating all streaming.ts consumers, creates `.svelte.ts` file with class using Svelte 5 runes
+- OPT-FA-14: Simple addition of `$inspect()` calls in dev mode for state debugging
+- OPT-FA-15: Requires integration with existing circuit breaker patterns from LLM module
+
+---
+
 ## Priority Order
 
 When implementing post-v1, follow this order:
@@ -230,8 +277,11 @@ When implementing post-v1, follow this order:
 | 3 | DB-OPT-14 | Live Query API | 4h | UX - real-time updates |
 | 4 | SEC-OPT-8 | Prompt injection guard | 6h | Security - LLM hardening |
 | 5 | DB-OPT-12 | thiserror migration | 6h | Code quality |
-| 6 | OPT-LLM-7 | HTTP error consolidation | 2h | Maintenance |
-| 7 | FE-OPT-12/13 | Superforms | 16h | Nice-to-have |
+| 6 | OPT-FA-10 | Streaming class runes migration | 6h | Performance - fine-grained reactivity |
+| 7 | OPT-LLM-7 | HTTP error consolidation | 2h | Maintenance |
+| 8 | OPT-FA-15 | Retry logic for critical ops | 4h | Reliability |
+| 9 | FE-OPT-12/13 | Superforms | 16h | Nice-to-have |
+| 10 | OPT-FA-14 | $inspect debug helpers | 0.25h | Developer experience |
 
 ---
 
@@ -272,6 +322,7 @@ When stable release is available:
 
 | Date | Change |
 |------|--------|
+| 2025-12-11 | Added OPT-FA (11/14) - Frontend/Agent optimizations. Deferred: OPT-FA-10, 14, 15 |
 | 2025-12-09 | Created from PHASE_POST_V1.md consolidation |
 | 2025-12-09 | Updated test count to 760+ after Sub-Agent optimizations |
 | 2025-12-09 | Confirmed all OPT-SA-1 to OPT-SA-11 complete |

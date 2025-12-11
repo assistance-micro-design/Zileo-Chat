@@ -84,7 +84,10 @@ Stratégie tests : unitaires, intégration, E2E, CI/CD
 ### 📋 Tâches Restantes & Roadmap
 
 **[REMAINING_TASKS.md](REMAINING_TASKS.md)**
-Tâches post-v1 différées : TYPE-OPT-5 (specta), SEC-OPT-7/8, DB-OPT-12/14, FE-OPT-12/13
+Tâches post-v1 différées : TYPE-OPT-5 (specta), SEC-OPT-7/8, DB-OPT-12/14, FE-OPT-12/13, OPT-FA-10/14/15
+
+**[SPECS_REMAINING.md](SPECS_REMAINING.md)**
+Spécifications OPT-FA restantes : migration streaming class runes, $inspect helpers, retry logic
 
 ## Workflows Documentation
 
@@ -146,7 +149,8 @@ Tâches post-v1 différées : TYPE-OPT-5 (specta), SEC-OPT-7/8, DB-OPT-12/14, FE
 ✅ **Cohérente** : Interdépendances vérifiées
 ✅ **Complète** : Toutes sections couvertes
 ✅ **À jour** : Versions confirmées Dec 2025
-✅ **Phases 0-8 + SA + MEM + TODO** : COMPLETES (code-verified)
-✅ **Tests** : 786+ backend unit, 1109+ total
+✅ **Phases 0-8 + SA + MEM + TODO + FA** : COMPLETES (code-verified)
+✅ **OPT-FA** : 11/14 items implemented (modal fix, debounce, PageState, WorkflowExecutor, stores consolidation, lazy modals, lucide migration)
+✅ **Tests** : 844+ backend unit, 1109+ total
 
-Dernière validation : 2025-12-10
+Dernière validation : 2025-12-11
