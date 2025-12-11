@@ -37,7 +37,7 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/components/agent';
 	import { TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
-	import { MessageSquare, Settings, Bot } from 'lucide-svelte';
+	import { MessageSquare, Settings, Bot } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	// Service imports

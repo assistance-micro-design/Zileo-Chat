@@ -31,7 +31,7 @@
 <script lang="ts">
 	import type { ToolExecution, WorkflowToolExecution, ToolExecutionStatus } from '$types/tool';
 	import { formatToolDuration, getToolTypeDisplay, getToolIdentifier } from '$types/tool';
-	import { Wrench, Clock, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-svelte';
+	import { Wrench, Clock, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

@@ -25,7 +25,7 @@ Shows prompt summary with actions for edit and delete.
 <script lang="ts">
 	import type { PromptSummary, PromptCategory } from '$types/prompt';
 	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
-	import { FileText, Edit, Trash2, Variable } from 'lucide-svelte';
+	import { FileText, Edit, Trash2, Variable } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**

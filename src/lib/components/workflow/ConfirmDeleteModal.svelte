@@ -27,7 +27,7 @@
   />
 -->
 <script lang="ts">
-	import { AlertTriangle, X } from 'lucide-svelte';
+	import { AlertTriangle, X } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 

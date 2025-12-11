@@ -31,7 +31,7 @@
 	import ToolExecution from './ToolExecution.svelte';
 	import ReasoningStep from './ReasoningStep.svelte';
 	import { Spinner } from '$lib/components/ui';
-	import { Bot } from 'lucide-svelte';
+	import { Bot } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

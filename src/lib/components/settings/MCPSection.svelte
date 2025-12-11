@@ -42,7 +42,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		stopServer,
 		type MCPState
 	} from '$lib/stores/mcp';
-	import { Plus, Plug } from 'lucide-svelte';
+	import { Plus, Plug } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';

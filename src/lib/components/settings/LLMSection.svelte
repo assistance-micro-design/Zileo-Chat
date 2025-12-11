@@ -50,7 +50,7 @@ Combines Providers and Models sections.
 		deleteModel,
 		updateProviderSettings
 	} from '$lib/stores/llm';
-	import { Plus, Cpu, Sparkles, Server } from 'lucide-svelte';
+	import { Plus, Cpu, Sparkles, Server } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';

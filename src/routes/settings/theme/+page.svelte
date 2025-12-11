@@ -23,7 +23,7 @@ Manages theme selection (light/dark).
 	import { onMount } from 'svelte';
 	import { Card, HelpButton } from '$lib/components/ui';
 	import { theme, type Theme } from '$lib/stores/theme';
-	import { Sun, Moon, ShieldCheck } from 'lucide-svelte';
+	import { Sun, Moon, ShieldCheck } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/** Current theme value - synced with theme store */

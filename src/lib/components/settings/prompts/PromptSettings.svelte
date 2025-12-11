@@ -35,7 +35,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	import PromptList from './PromptList.svelte';
 	import PromptForm from './PromptForm.svelte';
 	import { Button, Modal, HelpButton } from '$lib/components/ui';
-	import { Plus } from 'lucide-svelte';
+	import { Plus } from '@lucide/svelte';
 	import type { PromptCreate } from '$types/prompt';
 	import { i18n } from '$lib/i18n';
 

@@ -31,7 +31,7 @@
 <script lang="ts">
 	import type { ThinkingStep, ActiveThinkingStep } from '$types/thinking';
 	import { formatThinkingDuration, truncateThinkingContent } from '$types/thinking';
-	import { Brain, Clock, ChevronDown, ChevronUp, Loader2 } from 'lucide-svelte';
+	import { Brain, Clock, ChevronDown, ChevronUp, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

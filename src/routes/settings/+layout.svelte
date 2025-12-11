@@ -32,7 +32,7 @@ Each section is now a separate route for better performance and UX.
 		Settings,
 		BookOpen,
 		FolderSync
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/** Props from +layout.ts */

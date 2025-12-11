@@ -23,7 +23,7 @@ Main chat area with message display, streaming content, and input controls.
 -->
 
 <script lang="ts">
-	import { StopCircle, Bot } from 'lucide-svelte';
+	import { StopCircle, Bot } from '@lucide/svelte';
 	import { Button, Spinner, HelpButton } from '$lib/components/ui';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';

@@ -36,7 +36,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { PanelRightClose, PanelRightOpen } from 'lucide-svelte';
+	import { PanelRightClose, PanelRightOpen } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

@@ -35,7 +35,7 @@ Provides CRUD operations for agents with list view and form modal.
 	import AgentList from './AgentList.svelte';
 	import AgentForm from './AgentForm.svelte';
 	import { Button, Modal, HelpButton } from '$lib/components/ui';
-	import { Plus } from 'lucide-svelte';
+	import { Plus } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

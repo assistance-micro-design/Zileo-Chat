@@ -23,7 +23,7 @@
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
 <script lang="ts">
-	import { Send, BookOpen } from 'lucide-svelte';
+	import { Send, BookOpen } from '@lucide/svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
 	import { i18n } from '$lib/i18n';

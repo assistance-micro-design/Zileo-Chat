@@ -26,7 +26,7 @@
   />
 -->
 <script lang="ts">
-	import { HelpCircle } from 'lucide-svelte';
+	import { HelpCircle } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import Modal from './Modal.svelte';
 	import Button from './Button.svelte';

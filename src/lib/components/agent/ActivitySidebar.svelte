@@ -23,7 +23,7 @@ Right sidebar for displaying workflow activity feed with filtering.
 -->
 
 <script lang="ts">
-	import { Activity } from 'lucide-svelte';
+	import { Activity } from '@lucide/svelte';
 	import RightSidebar from '$lib/components/layout/RightSidebar.svelte';
 	import ActivityFeed from '$lib/components/workflow/ActivityFeed.svelte';
 	import { HelpButton } from '$lib/components/ui';

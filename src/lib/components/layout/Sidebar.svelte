@@ -39,7 +39,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { PanelLeftClose, PanelLeftOpen } from 'lucide-svelte';
+	import { PanelLeftClose, PanelLeftOpen } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

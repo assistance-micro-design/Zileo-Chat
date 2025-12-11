@@ -29,7 +29,7 @@ Displays memories with filtering, search, and action buttons.
 	import type { Memory, MemoryType, MemorySearchResult } from '$types/memory';
 	import type { ExportFormat, ImportResult, RegenerateResult } from '$types/embedding';
 	import MemoryForm from './MemoryForm.svelte';
-	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from 'lucide-svelte';
+	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	// OPT-SCROLL-7: Virtual scrolling for large memory lists
 	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';

@@ -27,7 +27,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { AlertTriangle, ShieldCheck, Info } from 'lucide-svelte';
+	import { AlertTriangle, ShieldCheck, Info } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

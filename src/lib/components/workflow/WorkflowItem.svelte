@@ -25,7 +25,7 @@
 <script lang="ts">
 	import type { Workflow } from '$types/workflow';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

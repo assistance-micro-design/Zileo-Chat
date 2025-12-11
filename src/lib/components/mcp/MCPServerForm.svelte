@@ -40,7 +40,7 @@ Includes validation and environment variable editor.
 	import type { MCPServerConfig, MCPDeploymentMethod } from '$types/mcp';
 	import { Button, Input, Select, Textarea } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
-	import { Plus, X } from 'lucide-svelte';
+	import { Plus, X } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**

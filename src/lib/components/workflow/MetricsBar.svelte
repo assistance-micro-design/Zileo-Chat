@@ -24,7 +24,7 @@
 -->
 <script lang="ts">
 	import type { WorkflowMetrics } from '$types/workflow';
-	import { Clock, Hash, Server, DollarSign } from 'lucide-svelte';
+	import { Clock, Hash, Server, DollarSign } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

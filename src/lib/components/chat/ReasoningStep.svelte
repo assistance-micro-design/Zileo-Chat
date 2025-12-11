@@ -24,7 +24,7 @@
   <ReasoningStep step="Planning workflow execution..." expanded={true} />
 -->
 <script lang="ts">
-	import { ChevronDown, ChevronRight, Brain } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, Brain } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

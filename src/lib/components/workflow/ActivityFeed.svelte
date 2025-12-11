@@ -31,12 +31,12 @@
   />
 -->
 <script lang="ts">
-	import type { ComponentType, SvelteComponent } from 'svelte';
+	import type { Component } from 'svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 	import { ACTIVITY_FILTERS } from '$types/activity';
 	import { filterActivities, countActivitiesByType } from '$lib/utils/activity';
 	import ActivityItem from './ActivityItem.svelte';
-	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from 'lucide-svelte';
+	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -66,7 +66,7 @@
 	/**
 	 * Icon component mapping for filters
 	 */
-	const iconMap: Record<string, ComponentType<SvelteComponent>> = {
+	const iconMap: Record<string, Component<{ size?: number; class?: string }>> = {
 		Activity: Activity,
 		Wrench: Wrench,
 		Bot: Bot,

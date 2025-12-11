@@ -26,7 +26,7 @@
 
 	import { ExportPanel } from './index';
 	import { ImportPanel } from './index';
-	import { Download, Upload } from 'lucide-svelte';
+	import { Download, Upload } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { HelpButton } from '$lib/components/ui';
 

@@ -31,7 +31,7 @@ Displays MCP server connection test results including tools, resources, and late
 <script lang="ts">
 	import type { MCPTestResult } from '$types/mcp';
 	import { Button, Badge, Spinner } from '$lib/components/ui';
-	import { CheckCircle2, XCircle, RefreshCw, Wrench, FileText, Clock } from 'lucide-svelte';
+	import { CheckCircle2, XCircle, RefreshCw, Wrench, FileText, Clock } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

@@ -26,7 +26,7 @@
 <script lang="ts">
 	import type { Status } from '$lib/components/ui/StatusIndicator.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
-	import { Wrench, Clock } from 'lucide-svelte';
+	import { Wrench, Clock } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

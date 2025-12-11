@@ -23,7 +23,7 @@ Left sidebar for workflow management with search and CRUD operations.
 -->
 
 <script lang="ts">
-	import { Plus, Search } from 'lucide-svelte';
+	import { Plus, Search } from '@lucide/svelte';
 	import { Button, HelpButton } from '$lib/components/ui';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';

@@ -28,7 +28,7 @@
 	import Select from '$lib/components/ui/Select.svelte';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
-	import { Bot } from 'lucide-svelte';
+	import { Bot } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

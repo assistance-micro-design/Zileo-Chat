@@ -23,7 +23,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 -->
 
 <script lang="ts">
-	import { Bot } from 'lucide-svelte';
+	import { Bot } from '@lucide/svelte';
 	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
 	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';

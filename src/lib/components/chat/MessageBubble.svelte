@@ -24,7 +24,7 @@
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Hash } from 'lucide-svelte';
+	import { Clock, Hash } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

@@ -33,7 +33,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		EmbeddingTestResult,
 		MemoryTokenStats
 	} from '$types/embedding';
-	import { Settings, Pencil, Trash2, Plus } from 'lucide-svelte';
+	import { Settings, Pencil, Trash2, Plus } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/** Props */

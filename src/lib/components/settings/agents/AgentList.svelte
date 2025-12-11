@@ -25,7 +25,7 @@ Shows agent summary with actions for edit and delete.
 <script lang="ts">
 	import type { AgentSummary } from '$types/agent';
 	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
-	import { Bot, Wrench, Plug, Edit, Trash2 } from 'lucide-svelte';
+	import { Bot, Wrench, Plug, Edit, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**

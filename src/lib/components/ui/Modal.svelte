@@ -32,7 +32,7 @@
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { X } from 'lucide-svelte';
+	import { X } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
 
 	/**

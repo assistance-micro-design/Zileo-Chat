@@ -25,7 +25,7 @@
   <FloatingMenu />
 -->
 <script lang="ts">
-	import { Sun, Moon, Settings, Bot } from 'lucide-svelte';
+	import { Sun, Moon, Settings, Bot } from '@lucide/svelte';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';

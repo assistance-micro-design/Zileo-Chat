@@ -44,7 +44,7 @@ Orchestrates the multi-step import process:
 		ExportPackage
 	} from '$types/importExport';
 	import { MAX_IMPORT_FILE_SIZE } from '$types/importExport';
-	import { Upload, CheckCircle, AlertCircle } from 'lucide-svelte';
+	import { Upload, CheckCircle, AlertCircle } from '@lucide/svelte';
 
 	/** Props */
 	interface Props {

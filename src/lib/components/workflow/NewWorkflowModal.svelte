@@ -28,7 +28,7 @@
   />
 -->
 <script lang="ts">
-	import { X, Workflow, Bot } from 'lucide-svelte';
+	import { X, Workflow, Bot } from '@lucide/svelte';
 	import type { AgentSummary } from '$types/agent';
 	import { Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';

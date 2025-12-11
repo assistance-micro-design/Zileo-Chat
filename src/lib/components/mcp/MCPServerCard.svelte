@@ -34,7 +34,7 @@ Displays an MCP server with status, command info, and action buttons.
 <script lang="ts">
 	import type { MCPServer, MCPServerStatus } from '$types/mcp';
 	import { Card, Button, Badge } from '$lib/components/ui';
-	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal, Globe } from 'lucide-svelte';
+	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal, Globe } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
