@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Allow dead code - these functions will be used by streaming.rs in future integration
-#![allow(dead_code)]
-
 //! # Token Pricing Module
 //!
 //! This module provides cost calculation functionality based on token counts
@@ -80,6 +77,7 @@ pub fn calculate_cost(
 ///
 /// Note: Prices are subject to change. Users should verify current pricing
 /// at https://mistral.ai/technology/#pricing
+#[allow(dead_code)] // Reference constants for cost calculations
 pub mod mistral_pricing {
     /// Mistral Large pricing
     pub const LARGE_INPUT_PER_MTOK: f64 = 2.0;

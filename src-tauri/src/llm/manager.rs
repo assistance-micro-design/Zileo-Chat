@@ -68,7 +68,6 @@ const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 ///
 /// Circuit breaker pattern (OPT-LLM-6) protects against cascading failures
 /// when providers are unavailable.
-#[allow(dead_code)]
 pub struct ProviderManager {
     /// Mistral provider instance
     mistral: Arc<MistralProvider>,
@@ -77,6 +76,7 @@ pub struct ProviderManager {
     /// Configuration state
     config: Arc<RwLock<ProviderConfig>>,
     /// Shared HTTP client for all providers (connection pooling)
+    #[allow(dead_code)] // Stored for http_client() accessor
     http_client: Arc<reqwest::Client>,
     /// Retry configuration for API calls (OPT-LLM-4)
     retry_config: RetryConfig,
@@ -84,7 +84,6 @@ pub struct ProviderManager {
     circuit_breakers: Arc<RwLock<HashMap<ProviderType, CircuitBreaker>>>,
 }
 
-#[allow(dead_code)]
 impl ProviderManager {
     /// Creates a new provider manager with default configuration.
     ///
@@ -132,6 +131,7 @@ impl ProviderManager {
     }
 
     /// Creates a new provider manager with custom retry configuration.
+    #[allow(dead_code)] // API completeness - custom configuration builder
     pub fn with_retry_config(retry_config: RetryConfig) -> Self {
         let http_client = Arc::new(
             reqwest::Client::builder()
@@ -172,6 +172,7 @@ impl ProviderManager {
     ///
     /// This can be used by external code that needs to make HTTP requests
     /// while benefiting from the manager's connection pool.
+    #[allow(dead_code)] // API for external HTTP client sharing
     pub fn http_client(&self) -> &Arc<reqwest::Client> {
         &self.http_client
     }
@@ -216,6 +217,7 @@ impl ProviderManager {
     /// Gets the circuit breaker status for a provider.
     ///
     /// Returns the current state (Closed, Open, HalfOpen) and statistics.
+    #[allow(dead_code)] // API completeness - status monitoring
     pub async fn get_circuit_breaker_status(
         &self,
         provider: ProviderType,
@@ -229,6 +231,7 @@ impl ProviderManager {
     }
 
     /// Resets the circuit breaker for a provider (for manual intervention).
+    #[allow(dead_code)] // Manual intervention API
     pub async fn reset_circuit_breaker(&self, provider: ProviderType) {
         let breakers = self.circuit_breakers.read().await;
         if let Some(breaker) = breakers.get(&provider) {
@@ -260,6 +263,7 @@ impl ProviderManager {
     }
 
     /// Gets the active provider type
+    #[allow(dead_code)] // API completeness - provider inspection
     pub async fn get_active_provider(&self) -> ProviderType {
         self.config.read().await.active_provider
     }
@@ -299,6 +303,7 @@ impl ProviderManager {
     }
 
     /// Gets the default model for a provider
+    #[allow(dead_code)] // API completeness - configuration access
     pub async fn get_default_model(&self, provider: ProviderType) -> String {
         let config = self.config.read().await;
         match provider {
@@ -324,6 +329,7 @@ impl ProviderManager {
     }
 
     /// Gets all configured providers
+    #[allow(dead_code)] // API completeness - provider inspection
     pub fn get_configured_providers(&self) -> Vec<ProviderType> {
         let mut providers = Vec::new();
         if self.mistral.is_configured() {
@@ -599,6 +605,7 @@ impl ProviderManager {
     /// responses don't update the circuit breaker state because the result
     /// is returned as a channel receiver. The caller should handle stream
     /// errors appropriately.
+    #[allow(dead_code)] // API completeness - streaming variant
     pub async fn complete_stream(
         &self,
         prompt: &str,
