@@ -320,10 +320,13 @@
 		color: white;
 	}
 
-	.critical .warning-badge,
-	.full .warning-badge {
+	.critical .warning-badge {
 		background: var(--color-error);
 		animation: pulse-badge 1s ease-in-out infinite;
+	}
+
+	.full .warning-badge {
+		background: var(--color-error);
 	}
 
 	/* Metric base */

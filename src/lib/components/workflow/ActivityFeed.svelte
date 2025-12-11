@@ -42,6 +42,17 @@
 	import { i18n } from '$lib/i18n';
 
 	/**
+	 * Icon component mapping for filters
+	 */
+	const FILTER_ICONS: Record<string, Component<{ size?: number; class?: string }>> = {
+		Activity: Activity,
+		Wrench: Wrench,
+		Bot: Bot,
+		Brain: Brain,
+		ListTodo: ListTodo
+	};
+
+	/**
 	 * ActivityFeed props
 	 *
 	 * OPT-FA-13: Memoized activity filtering
@@ -73,17 +84,6 @@
 	}: Props = $props();
 
 	/**
-	 * Icon component mapping for filters
-	 */
-	const iconMap: Record<string, Component<{ size?: number; class?: string }>> = {
-		Activity: Activity,
-		Wrench: Wrench,
-		Bot: Bot,
-		Brain: Brain,
-		ListTodo: ListTodo
-	};
-
-	/**
 	 * Handle filter change
 	 */
 	function handleFilterChange(newFilter: ActivityFilter): void {
@@ -106,7 +106,7 @@
 	<!-- Filter Tabs -->
 	<div class="filter-tabs" role="tablist" aria-label="Activity filters">
 		{#each ACTIVITY_FILTERS as f}
-			{@const IconComponent = iconMap[f.icon]}
+			{@const IconComponent = FILTER_ICONS[f.icon]}
 			<button
 				role="tab"
 				class="filter-tab"

@@ -33,6 +33,7 @@ import type { ToolExecution } from '$types/tool';
 import type { ThinkingStep } from '$types/thinking';
 import type { SubAgentExecution } from '$types/sub-agent';
 import type { Task } from '$types/task';
+import { formatDuration as formatDurationUtil } from '$lib/utils/duration';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
@@ -246,12 +247,10 @@ export function formatActivityTime(timestamp: number): string {
 
 /**
  * Format duration in human-readable format.
+ * @deprecated Use formatDuration from $lib/utils/duration instead
  */
 export function formatActivityDuration(ms: number | undefined): string {
-	if (ms === undefined) return '-';
-	if (ms < 1000) return `${ms}ms`;
-	if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-	return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+	return formatDurationUtil(ms);
 }
 
 /**

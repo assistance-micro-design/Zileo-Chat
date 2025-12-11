@@ -29,12 +29,9 @@
 -->
 <script lang="ts">
 	import type { WorkflowActivityEvent, ActivityStatus } from '$types/activity';
+	import { getActivityIcon } from '$lib/utils/activity-icons';
+	import { formatDuration } from '$lib/utils/duration';
 	import {
-		Wrench,
-		Brain,
-		Bot,
-		ShieldCheck,
-		Activity,
 		Loader2,
 		CheckCircle2,
 		XCircle,
@@ -92,18 +89,6 @@
 	}
 
 	/**
-	 * Get icon component based on activity type
-	 */
-	function getIconComponent(type: string) {
-		if (type.startsWith('tool_')) return Wrench;
-		if (type === 'reasoning') return Brain;
-		if (type.startsWith('sub_agent_')) return Bot;
-		if (type === 'validation') return ShieldCheck;
-		if (type.startsWith('task_')) return ListTodo;
-		return Activity;
-	}
-
-	/**
 	 * Get status icon component
 	 */
 	function getStatusIcon(status: ActivityStatus) {
@@ -120,19 +105,9 @@
 	}
 
 	/**
-	 * Format duration in human-readable format
-	 */
-	function formatDuration(ms: number | undefined): string {
-		if (ms === undefined) return '-';
-		if (ms < 1000) return `${ms}ms`;
-		if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-		return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
-	}
-
-	/**
 	 * Derived icon component based on activity type
 	 */
-	const IconComponent = $derived(getIconComponent(activity.type));
+	const IconComponent = $derived(getActivityIcon(activity.type));
 
 	/**
 	 * Derived status icon based on activity status

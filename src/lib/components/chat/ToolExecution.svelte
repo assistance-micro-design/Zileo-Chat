@@ -26,6 +26,7 @@
 <script lang="ts">
 	import type { Status } from '$lib/components/ui/StatusIndicator.svelte';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
+	import { formatDuration } from '$lib/utils/duration';
 	import { Wrench, Clock } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -56,14 +57,6 @@
 	const indicatorStatus = $derived(
 		status === 'pending' ? 'idle' : status
 	) as Status;
-
-	/**
-	 * Format duration for display
-	 */
-	function formatDuration(ms: number): string {
-		if (ms < 1000) return `${ms}ms`;
-		return `${(ms / 1000).toFixed(2)}s`;
-	}
 
 	/**
 	 * Get status label for accessibility (i18n)
