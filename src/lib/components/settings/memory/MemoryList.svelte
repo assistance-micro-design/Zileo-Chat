@@ -744,13 +744,54 @@ Displays memories with filtering, search, and action buttons.
 		overflow: hidden;
 	}
 
-	/* Virtual list wrapper styles - applied via containerClass prop */
+	/* Virtual list wrapper styles - replicate library's positioning logic */
 	.virtual-table-body :global(.virtual-list-wrapper) {
+		position: relative;
+		width: 100%;
 		height: 100%;
+		overflow: hidden;
 	}
 
 	.virtual-table-body :global(.virtual-list-viewport) {
-		height: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		overflow-y: scroll;
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.virtual-table-body :global(.virtual-list-content) {
+		position: relative;
+		width: 100%;
+		min-height: 100%;
+	}
+
+	.virtual-table-body :global(.virtual-list-items) {
+		position: absolute;
+		width: 100%;
+		left: 0;
+		top: 0;
+	}
+
+	/* Custom scrollbar for virtual list viewport */
+	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-thumb {
+		background: var(--color-border);
+		border-radius: var(--border-radius-full);
+	}
+
+	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-thumb:hover {
+		background: var(--color-text-tertiary);
 	}
 
 	.virtual-row {

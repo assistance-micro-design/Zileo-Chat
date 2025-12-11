@@ -125,10 +125,8 @@
 
 	.right-sidebar-content {
 		flex: 1;
-		overflow-y: auto;
-		padding: var(--spacing-md);
-		scrollbar-width: thin;
-		scrollbar-color: var(--color-border) transparent;
+		overflow: hidden;
+		min-height: 0;
 	}
 
 	.right-sidebar-content::-webkit-scrollbar {
@@ -149,7 +147,6 @@
 	}
 
 	.right-sidebar.collapsed .right-sidebar-content {
-		padding: var(--spacing-sm);
 		overflow-x: hidden;
 	}
 

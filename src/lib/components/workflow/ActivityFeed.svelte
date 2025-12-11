@@ -177,9 +177,11 @@
 				{/if}
 			{:else}
 				<!-- Standard rendering for small lists (<20 items) -->
-				{#each activities as activity (activity.id)}
-					<ActivityItem {activity} />
-				{/each}
+				<div class="standard-list-container">
+					{#each activities as activity (activity.id)}
+						<ActivityItem {activity} />
+					{/each}
+				</div>
 
 				{#if isStreaming}
 					<div class="streaming-indicator">
@@ -197,6 +199,8 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
+		min-height: 0;
+		overflow: hidden;
 		background: var(--color-bg-secondary);
 		border-left: 1px solid var(--color-border);
 	}
@@ -251,30 +255,75 @@
 	/* Activity List */
 	.activity-list {
 		flex: 1;
+		overflow: hidden;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* Standard list container for non-virtual rendering */
+	.standard-list-container {
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
 		overflow-x: hidden;
-		min-height: 0;
+	}
+
+	/* Apply custom scrollbar to standard list */
+	.standard-list-container::-webkit-scrollbar {
+		width: 6px;
+	}
+
+	.standard-list-container::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.standard-list-container::-webkit-scrollbar-thumb {
+		background: var(--color-border);
+		border-radius: var(--radius-full);
+	}
+
+	.standard-list-container::-webkit-scrollbar-thumb:hover {
+		background: var(--color-text-tertiary);
 	}
 
 	/* OPT-MSG-5: Virtual List Container - takes full available space */
 	.virtual-list-container {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
+		flex: 1;
 		min-height: 0;
+		overflow: hidden;
 	}
 
-	/* Virtual list component styling via :global for class props */
+	/* Virtual list component styling - replicate library's positioning logic */
 	.virtual-list-container :global(.virtual-list-outer) {
+		position: relative;
+		width: 100%;
 		height: 100%;
-		display: flex;
-		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.virtual-list-container :global(.virtual-list-viewport) {
-		flex: 1;
-		overflow-y: auto;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		overflow-y: scroll;
 		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.virtual-list-container :global(.virtual-list-content) {
+		position: relative;
+		width: 100%;
+		min-height: 100%;
+	}
+
+	.virtual-list-container :global(.virtual-list-items) {
+		position: absolute;
+		width: 100%;
+		left: 0;
+		top: 0;
 	}
 
 	/* Apply custom scrollbar to virtual list viewport */
@@ -292,24 +341,6 @@
 	}
 
 	.virtual-list-container :global(.virtual-list-viewport)::-webkit-scrollbar-thumb:hover {
-		background: var(--color-text-tertiary);
-	}
-
-	/* Custom scrollbar */
-	.activity-list::-webkit-scrollbar {
-		width: 6px;
-	}
-
-	.activity-list::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.activity-list::-webkit-scrollbar-thumb {
-		background: var(--color-border);
-		border-radius: var(--radius-full);
-	}
-
-	.activity-list::-webkit-scrollbar-thumb:hover {
 		background: var(--color-text-tertiary);
 	}
 
