@@ -53,6 +53,7 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/stores/workflows';
 	import {
 		activityStore,
+		allActivities,
 		filteredActivities,
 		activityFilter
 	} from '$lib/stores/activity';
@@ -453,10 +454,11 @@ Uses extracted components, services, and stores for clean architecture.
 		{/if}
 	</main>
 
-	<!-- Right Sidebar - Activity Feed -->
+	<!-- Right Sidebar - Activity Feed (OPT-FA-13: Memoized filtering via store) -->
 	<ActivitySidebar
 		bind:collapsed={pageState.rightSidebarCollapsed}
 		activities={$filteredActivities}
+		allActivities={$allActivities}
 		isStreaming={$isStreaming}
 		filter={$activityFilter}
 		onfilterchange={(f) => activityStore.setFilter(f)}

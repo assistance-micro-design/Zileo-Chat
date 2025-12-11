@@ -30,9 +30,16 @@ Right sidebar for displaying workflow activity feed with filtering.
 	import { i18n } from '$lib/i18n';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 
+	/**
+	 * ActivitySidebar props
+	 * OPT-FA-13: Added allActivities for accurate filter counts
+	 */
 	interface Props {
 		collapsed?: boolean;
+		/** Pre-filtered activities for display */
 		activities: WorkflowActivityEvent[];
+		/** All activities for counts (unfiltered) */
+		allActivities?: WorkflowActivityEvent[];
 		isStreaming?: boolean;
 		filter?: ActivityFilter;
 		onfilterchange?: (filter: ActivityFilter) => void;
@@ -41,6 +48,7 @@ Right sidebar for displaying workflow activity feed with filtering.
 	let {
 		collapsed = $bindable(false),
 		activities,
+		allActivities = [],
 		isStreaming = false,
 		filter = $bindable<ActivityFilter>('all'),
 		onfilterchange
@@ -73,6 +81,7 @@ Right sidebar for displaying workflow activity feed with filtering.
 	{#snippet content(isCollapsed)}
 		<ActivityFeed
 			{activities}
+			{allActivities}
 			{isStreaming}
 			filter={filter}
 			onFilterChange={handleFilterChange}

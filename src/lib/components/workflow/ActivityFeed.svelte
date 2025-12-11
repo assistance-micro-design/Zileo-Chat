@@ -20,13 +20,15 @@
   Shows tool executions, sub-agent activity, and reasoning steps with status filters.
 
   Phase E: Unified Activity Timeline
+  OPT-FA-13: Memoized Activity Filtering - uses store-level filtering for single source of truth
 
   @example
   <ActivityFeed
-    activities={activityEvents}
+    activities={$filteredActivities}
+    allActivities={$allActivities}
     isStreaming={true}
     filter="all"
-    onFilterChange={(f) => handleFilter(f)}
+    onFilterChange={(f) => activityStore.setFilter(f)}
     collapsed={false}
   />
 -->
@@ -34,17 +36,23 @@
 	import type { Component } from 'svelte';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 	import { ACTIVITY_FILTERS } from '$types/activity';
-	import { filterActivities, countActivitiesByType } from '$lib/utils/activity';
+	import { countActivitiesByType } from '$lib/utils/activity';
 	import ActivityItem from './ActivityItem.svelte';
 	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
 	 * ActivityFeed props
+	 *
+	 * OPT-FA-13: Memoized activity filtering
+	 * - `activities`: Pre-filtered activities for display (from store's filteredActivities)
+	 * - `allActivities`: Unfiltered activities for counts (from store's allActivities)
 	 */
 	interface Props {
-		/** All activity events for current workflow */
+		/** Pre-filtered activity events for display */
 		activities?: WorkflowActivityEvent[];
+		/** All activity events for counts (unfiltered) */
+		allActivities?: WorkflowActivityEvent[];
 		/** Whether streaming is currently active */
 		isStreaming?: boolean;
 		/** Current activity filter */
@@ -57,6 +65,7 @@
 
 	let {
 		activities = [],
+		allActivities = [],
 		isStreaming = false,
 		filter = 'all',
 		onFilterChange,
@@ -82,19 +91,15 @@
 	}
 
 	/**
-	 * Filtered activities based on current filter
+	 * Activity counts by type (uses unfiltered allActivities for accurate counts)
+	 * OPT-FA-13: Centralized filtering means counts always reflect total activities
 	 */
-	const filteredActivities = $derived(filterActivities(activities, filter));
+	const counts = $derived(countActivitiesByType(allActivities));
 
 	/**
-	 * Activity counts by type
+	 * Whether to show empty state (uses pre-filtered activities)
 	 */
-	const counts = $derived(countActivitiesByType(activities));
-
-	/**
-	 * Whether to show empty state
-	 */
-	const showEmptyState = $derived(filteredActivities.length === 0);
+	const showEmptyState = $derived(activities.length === 0);
 </script>
 
 <div class="activity-feed" class:collapsed>
@@ -131,7 +136,7 @@
 					{/if}
 				</div>
 			{:else}
-				{#each filteredActivities as activity (activity.id)}
+				{#each activities as activity (activity.id)}
 					<ActivityItem {activity} />
 				{/each}
 
