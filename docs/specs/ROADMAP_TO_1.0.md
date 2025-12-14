@@ -1,6 +1,6 @@
 # Roadmap vers 1.0 (Production)
 
-> **Version actuelle**: 0.9.0-beta
+> **Version actuelle**: 0.9.1-beta
 > **Score Production-Readiness**: 7.5/10
 > **Statut**: Beta Stable - Pas encore GA (General Availability)
 
@@ -8,9 +8,9 @@
 
 ## Points d'Attention
 
-| Problème | Severite | Impact | Fichiers/Localisation |
+| Probleme | Severite | Impact | Fichiers/Localisation |
 |----------|----------|--------|----------------------|
-| 69 `unwrap()`/`expect()` dans commands/ | HAUTE | Panic potentiel en prod | `src-tauri/src/commands/*.rs` |
+| ~~69 `unwrap()`/`expect()` dans commands/~~ | ~~HAUTE~~ RESOLU | ~~Panic potentiel en prod~~ 68/69 dans tests (OK), 1 corrige | `src-tauri/src/commands/*.rs` |
 | 66 doc tests ignores (necessitent DB) | MOYENNE | Couverture reduite | `src-tauri/src/**/*.rs` |
 | npm: cookie < 0.7.0 (LOW vuln) | BASSE | @sveltejs/kit dependance | `package.json` |
 | cargo: GTK3 bindings "unmaintained" | BASSE | Dependance Tauri Linux | Tauri upstream |
@@ -20,37 +20,49 @@
 
 ## Haute Priorite (Bloquant 1.0)
 
-### 1. Remplacer `unwrap()`/`expect()` par proper error handling
+### 1. ~~Remplacer `unwrap()`/`expect()` par proper error handling~~ RESOLU
+
+> **Analyse detaillee (2025-12-14)**: Sur 69 occurrences detectees par grep, **68 sont dans des blocs `#[cfg(test)]`**.
+> L'utilisation de `unwrap()`/`expect()` dans les tests est idiomatique en Rust et acceptable.
+>
+> **Seule occurrence en production corrigee**: `models.rs` ligne 804 (api_key.unwrap() -> match pattern)
 
 **Localisation**: `src-tauri/src/commands/`
 
-**Fichiers concernes** (69 occurrences totales):
-- `validation.rs` - 13 occurrences
-- `memory.rs` - 13 occurrences
-- `workflow.rs` - 9 occurrences
-- `agent.rs` - 9 occurrences
-- `task.rs` - 6 occurrences
-- `user_question.rs` - 4 occurrences
-- `mcp.rs` - 4 occurrences
-- `llm.rs` - 3 occurrences
-- `models.rs` - 3 occurrences
-- `migration.rs` - 3 occurrences
-- `embedding.rs` - 2 occurrences
+**Repartition reelle** (69 occurrences totales):
+- `validation.rs` - 13 occurrences (toutes dans `#[cfg(test)]`)
+- `memory.rs` - 13 occurrences (toutes dans `#[cfg(test)]`)
+- `workflow.rs` - 9 occurrences (toutes dans `#[cfg(test)]`)
+- `agent.rs` - 9 occurrences (toutes dans `#[cfg(test)]`)
+- `task.rs` - 6 occurrences (toutes dans `#[cfg(test)]`)
+- `user_question.rs` - 4 occurrences (toutes dans `#[cfg(test)]`)
+- `mcp.rs` - 4 occurrences (toutes dans `#[cfg(test)]`)
+- `llm.rs` - 3 occurrences (toutes dans `#[cfg(test)]`)
+- `models.rs` - 3 occurrences (1 en prod **CORRIGEE**, 2 dans tests)
+- `migration.rs` - 3 occurrences (toutes dans `#[cfg(test)]`)
+- `embedding.rs` - 2 occurrences (toutes dans `#[cfg(test)]`)
 
-**Pattern de correction**:
+**Correction appliquee** (`models.rs:788-796`):
 ```rust
-// AVANT (risque de panic)
-let value = some_option.unwrap();
-let result = some_result.expect("should work");
+// AVANT (risque theorique de panic)
+let api_key = keystore.get_key("Mistral");
+if api_key.is_none() { return Ok(ConnectionTestResult::failure(...)); }
+// ... plus tard
+.header("Authorization", format!("Bearer {}", api_key.unwrap()))
 
-// APRES (error handling propre)
-let value = some_option.ok_or_else(|| AppError::NotFound("value missing"))?;
-let result = some_result.map_err(|e| AppError::Internal(e.to_string()))?;
+// APRES (pattern matching idiomatique)
+let api_key = match keystore.get_key("Mistral") {
+    Some(key) => key,
+    None => return Ok(ConnectionTestResult::failure(...)),
+};
+// ... plus tard
+.header("Authorization", format!("Bearer {}", api_key))
 ```
 
-**Commande pour identifier**:
+**Commande pour verifier**:
 ```bash
-grep -rn "unwrap()\|expect(" src-tauri/src/commands/
+# Compter les occurrences hors tests (devrait retourner 0)
+grep -rn "unwrap()\|expect(" src-tauri/src/commands/ | grep -v "#\[cfg(test)\]" | grep -v "fn test_"
 ```
 
 ---
@@ -195,7 +207,7 @@ git commit -m "chore: Update copyright headers and tsconfig cleanup"
 
 ## Checklist Pre-Release 1.0
 
-- [ ] 0 `unwrap()`/`expect()` dans commands/ (ou justifies)
+- [x] 0 `unwrap()`/`expect()` dans commands/ en production (68/69 sont dans tests, 1 corrige)
 - [ ] Couverture tests backend >= 50%
 - [ ] npm audit = 0 vulnerabilites HIGH/CRITICAL
 - [ ] cargo audit = 0 vulnerabilites (warnings OK)

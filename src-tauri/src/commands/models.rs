@@ -785,13 +785,15 @@ pub async fn test_provider_connection(
         },
         ProviderType::Mistral => {
             // Check if API key is configured (from OS keychain)
-            let api_key = keystore.get_key("Mistral");
-            if api_key.is_none() {
-                return Ok(ConnectionTestResult::failure(
-                    provider_type,
-                    "API key not configured".into(),
-                ));
-            }
+            let api_key = match keystore.get_key("Mistral") {
+                Some(key) => key,
+                None => {
+                    return Ok(ConnectionTestResult::failure(
+                        provider_type,
+                        "API key not configured".into(),
+                    ));
+                }
+            };
 
             // Test Mistral by making a models list request
             let client = reqwest::Client::builder()
@@ -801,7 +803,7 @@ pub async fn test_provider_connection(
 
             let response = client
                 .get("https://api.mistral.ai/v1/models")
-                .header("Authorization", format!("Bearer {}", api_key.unwrap()))
+                .header("Authorization", format!("Bearer {}", api_key))
                 .send()
                 .await;
 

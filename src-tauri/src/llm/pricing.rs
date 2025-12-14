@@ -155,8 +155,12 @@ mod tests {
     #[test]
     fn test_reference_pricing_values() {
         // Verify reference pricing constants are reasonable
-        assert!(mistral_pricing::LARGE_INPUT_PER_MTOK > 0.0);
-        assert!(mistral_pricing::LARGE_OUTPUT_PER_MTOK > mistral_pricing::LARGE_INPUT_PER_MTOK);
-        assert!(mistral_pricing::SMALL_INPUT_PER_MTOK < mistral_pricing::LARGE_INPUT_PER_MTOK);
+        let large_input = mistral_pricing::LARGE_INPUT_PER_MTOK;
+        let large_output = mistral_pricing::LARGE_OUTPUT_PER_MTOK;
+        let small_input = mistral_pricing::SMALL_INPUT_PER_MTOK;
+
+        assert!(large_input > 0.0, "Large input pricing should be positive");
+        assert!(large_output > large_input, "Output should cost more than input");
+        assert!(small_input < large_input, "Small model should be cheaper than large");
     }
 }

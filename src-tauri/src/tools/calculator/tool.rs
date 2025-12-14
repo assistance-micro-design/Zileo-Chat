@@ -1186,7 +1186,7 @@ mod tests {
 
     #[test]
     fn test_default_impl() {
-        let tool = CalculatorTool::default();
+        let tool = CalculatorTool;
         let def = tool.definition();
         assert_eq!(def.id, "CalculatorTool");
     }

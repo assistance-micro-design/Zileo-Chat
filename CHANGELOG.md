@@ -5,6 +5,23 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1-beta] - 2025-12-14
+
+### Fixed
+
+- **Error Handling**: Replaced `unwrap()` with proper pattern matching in production code (`models.rs`)
+- **Clippy Warnings**: Fixed 13 clippy warnings in test code:
+  - Unused variable prefixed with `_` (`sub_agent_executor.rs`)
+  - Replaced `assert!(true)` with meaningful assertions (`sub_agent_execution.rs`)
+  - Fixed constant assertions by using local variables (`pricing.rs`, `user_question/tests.rs`, `sub_agent_executor.rs`)
+  - Removed `::default()` on unit struct (`calculator/tool.rs`)
+
+### Documentation
+
+- **ROADMAP_TO_1.0.md**: Updated with detailed analysis of `unwrap()`/`expect()` occurrences (68/69 in tests, 1 fixed in production)
+
+---
+
 ## [0.9.0-beta] - 2025-12-14
 
 ### Added

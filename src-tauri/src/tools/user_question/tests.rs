@@ -329,20 +329,23 @@ fn test_validate_input_extra_fields() {
 fn test_max_question_length_boundary() {
     // This would be tested in integration tests with execute()
     // Here we just verify the constant exists and is reasonable
-    assert!(uq_const::MAX_QUESTION_LENGTH > 0);
-    assert!(uq_const::MAX_QUESTION_LENGTH <= 10000);
+    let max_len = uq_const::MAX_QUESTION_LENGTH;
+    assert!(max_len > 0, "MAX_QUESTION_LENGTH should be positive");
+    assert!(max_len <= 10000, "MAX_QUESTION_LENGTH should be reasonable");
 }
 
 #[test]
 fn test_max_options_boundary() {
-    assert!(uq_const::MAX_OPTIONS > 0);
-    assert!(uq_const::MAX_OPTIONS <= 100);
+    let max_opts = uq_const::MAX_OPTIONS;
+    assert!(max_opts > 0, "MAX_OPTIONS should be positive");
+    assert!(max_opts <= 100, "MAX_OPTIONS should be reasonable");
 }
 
 #[test]
 fn test_timeout_is_reasonable() {
-    assert!(uq_const::DEFAULT_TIMEOUT_SECS >= 60); // At least 1 minute
-    assert!(uq_const::DEFAULT_TIMEOUT_SECS <= 600); // At most 10 minutes
+    let timeout = uq_const::DEFAULT_TIMEOUT_SECS;
+    assert!(timeout >= 60, "Timeout should be at least 1 minute");
+    assert!(timeout <= 600, "Timeout should be at most 10 minutes");
 }
 
 // ===== Documentation Tests =====

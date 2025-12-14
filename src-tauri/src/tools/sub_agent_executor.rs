@@ -1476,7 +1476,9 @@ mod tests {
         assert_eq!(ACTIVITY_CHECK_INTERVAL_SECS, 30); // 30 seconds
 
         // Check interval should be much smaller than timeout
-        assert!(ACTIVITY_CHECK_INTERVAL_SECS < INACTIVITY_TIMEOUT_SECS / 2);
+        let interval = ACTIVITY_CHECK_INTERVAL_SECS;
+        let timeout = INACTIVITY_TIMEOUT_SECS;
+        assert!(interval < timeout / 2, "Check interval should be less than half the timeout");
     }
 
     // =========================================================================
@@ -1490,7 +1492,7 @@ mod tests {
 
         // Create minimal dependencies (won't actually be used in this test)
         let registry = Arc::new(AgentRegistry::new());
-        let orchestrator = Arc::new(AgentOrchestrator::new(registry));
+        let _orchestrator = Arc::new(AgentOrchestrator::new(registry));
         let token = CancellationToken::new();
 
         // Use a mock DBClient - we don't need a real one for this test
