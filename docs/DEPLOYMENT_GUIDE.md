@@ -4,7 +4,7 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.1.0
+**Version actuelle** : 0.9.0-beta
 **Strategie** : Linux → macOS → Windows (progressif)
 **Format** : AppImage, .deb (Linux), .dmg (macOS prevu), .msi (Windows prevu)
 **CI/CD** : Non configure (prevu)
@@ -48,7 +48,7 @@ xcode-select --install
 ```json
 {
   "productName": "Zileo Chat",
-  "version": "0.1.0",
+  "version": "0.9.0-beta",
   "identifier": "com.zileo.chat",
   "build": {
     "frontendDist": "../build",
@@ -117,17 +117,17 @@ npm run tauri:build
 ```
 
 **Avantages** : Pas installation, portable, compatible toutes distros
-**Output** : `zileo-chat_0.1.0_amd64.AppImage`
+**Output** : `zileo-chat_0.9.0-beta_amd64.AppImage`
 
 #### .deb (Debian/Ubuntu)
 Build produit automatiquement les deux formats.
 
 **Installation** :
 ```bash
-sudo dpkg -i zileo-chat_0.1.0_amd64.deb
+sudo dpkg -i zileo-chat_0.9.0-beta_amd64.deb
 ```
 
-**Output** : `zileo-chat_0.1.0_amd64.deb`
+**Output** : `zileo-chat_0.9.0-beta_amd64.deb`
 
 ---
 
@@ -147,7 +147,7 @@ codesign --sign "Developer ID Application: Your Name" \
   src-tauri/target/release/bundle/macos/Zileo\ Chat.app
 ```
 
-**Output prevu** : `zileo-chat_0.1.0_x64.dmg`
+**Output prevu** : `zileo-chat_0.9.0-beta_x64.dmg`
 
 ---
 
@@ -225,9 +225,9 @@ explorer "src-tauri\target\release\bundle\msi"
 ```
 src-tauri/target/release/bundle/
 ├── msi/
-│   └── zileo-chat_0.1.0_x64-setup.msi    # Installer MSI
+│   └── zileo-chat_0.9.0-beta_x64-setup.msi    # Installer MSI
 └── nsis/
-    └── zileo-chat_0.1.0_x64-setup.exe    # Installer NSIS (alternative)
+    └── zileo-chat_0.9.0-beta_x64-setup.exe    # Installer NSIS (alternative)
 ```
 
 #### Script Automatise Windows
@@ -332,7 +332,7 @@ npm run tauri dev
 npm run tauri build
 
 # Installer pour tester
-Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.1.0_x64-setup.msi"
+Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.9.0-beta_x64-setup.msi"
 ```
 
 #### Checklist Pre-Build Windows
@@ -507,8 +507,8 @@ Modifier `bundle.targets` pour supporter tous les OS :
 # package.json, tauri.conf.json, Cargo.toml doivent avoir la meme version
 
 # Creer et pousser le tag
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.9.0-beta
+git push origin v0.9.0-beta
 ```
 
 GitHub Actions va automatiquement :
@@ -633,17 +633,17 @@ npm run tauri build -- --target universal-apple-darwin
 ### GitHub Releases (Manuel)
 
 **Creation Release** :
-1. Tag version : `git tag v0.1.0`
-2. Push tag : `git push origin v0.1.0`
+1. Tag version : `git tag v0.9.0-beta`
+2. Push tag : `git push origin v0.9.0-beta`
 3. Build local : `npm run tauri:build`
 4. Creer release manuellement sur GitHub
 5. Upload artifacts
 
 **Assets attendus** :
-- `zileo-chat_0.1.0_amd64.AppImage` (Linux)
-- `zileo-chat_0.1.0_amd64.deb` (Linux)
-- `zileo-chat_0.1.0_x64.dmg` (macOS - prevu)
-- `zileo-chat_0.1.0_x64.msi` (Windows - prevu)
+- `zileo-chat_0.9.0-beta_amd64.AppImage` (Linux)
+- `zileo-chat_0.9.0-beta_amd64.deb` (Linux)
+- `zileo-chat_0.9.0-beta_x64.dmg` (macOS - prevu)
+- `zileo-chat_0.9.0-beta_x64.msi` (Windows - prevu)
 
 ### Checksums
 
@@ -686,7 +686,7 @@ Ajouter dans `tauri.conf.json` :
 npx tauri signer generate
 
 # Signer release
-npx tauri signer sign zileo-chat_0.1.0_amd64.AppImage
+npx tauri signer sign zileo-chat_0.9.0-beta_amd64.AppImage
 ```
 
 Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
@@ -787,8 +787,8 @@ git push origin :refs/tags/v0.1.1
 
 **3. Republier version stable** (exemple)
 ```bash
-git tag v0.1.0-hotfix
-git push origin v0.1.0-hotfix
+git tag v0.9.0-beta-hotfix
+git push origin v0.9.0-beta-hotfix
 ```
 
 **4. Communiquer** : Release notes + notification utilisateurs

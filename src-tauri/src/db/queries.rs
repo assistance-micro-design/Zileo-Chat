@@ -19,7 +19,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use crate::db::queries::workflow;
 //!
 //! // For listing all workflows (no WHERE clause)

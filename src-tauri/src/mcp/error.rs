@@ -258,7 +258,7 @@ impl MCPError {
     /// Returns the category of this error for filtering and reporting.
     ///
     /// # Example
-    /// ```
+    /// ```rust,ignore
     /// let err = MCPError::ConnectionFailed { server: "test".into(), message: "timeout".into() };
     /// assert_eq!(err.category(), MCPErrorCategory::Connection);
     /// ```

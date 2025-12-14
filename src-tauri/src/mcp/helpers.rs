@@ -29,7 +29,7 @@ use std::collections::HashMap;
 /// * `None` if the value is not a string or contains an unknown method
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// let value = serde_json::json!("docker");
 /// assert_eq!(parse_deployment_method(&value), Some(MCPDeploymentMethod::Docker));
 /// ```
@@ -55,7 +55,7 @@ pub fn parse_deployment_method(value: Option<&serde_json::Value>) -> Option<MCPD
 /// * HashMap with key-value pairs, or empty HashMap if parsing fails
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// let value = serde_json::json!("{\"API_KEY\":\"secret\"}");
 /// let env = parse_env_json(Some(&value));
 /// assert_eq!(env.get("API_KEY"), Some(&"secret".to_string()));

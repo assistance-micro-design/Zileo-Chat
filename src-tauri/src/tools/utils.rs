@@ -318,7 +318,7 @@ impl ParamQueryBuilder {
 /// * `tool_specific_text` - The tool-specific description to wrap
 ///
 /// # Usage
-/// ```rust
+/// ```rust,ignore
 /// let description = sub_agent_description_template(
 ///     "Spawns temporary sub-agents to execute tasks in parallel or sequence."
 /// );

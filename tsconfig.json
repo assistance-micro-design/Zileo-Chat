@@ -7,16 +7,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowJs": true,
-    "checkJs": true,
-    "baseUrl": ".",
-    "paths": {
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"],
-      "$types": ["./src/types"],
-      "$types/*": ["./src/types/*"],
-      "$messages": ["./src/messages"],
-      "$messages/*": ["./src/messages/*"]
-    }
+    "checkJs": true
   },
   "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte", "src/**/*.json"],
   "exclude": ["node_modules", "build", ".svelte-kit"]
