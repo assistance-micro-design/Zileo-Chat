@@ -68,7 +68,42 @@ Zileo Chat currently supports two LLM providers:
 
 ---
 
-## Requirements
+## Prerequisites
+
+### Required for First Launch
+
+| Dependency | Purpose | Installation |
+|------------|---------|--------------|
+| **Docker Desktop** | MCP servers execution | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+| **Mistral API Key** | Cloud LLM provider | [console.mistral.ai](https://console.mistral.ai) |
+
+> **Mistral API vs Le Chat Pro**: The [Le Chat subscription](https://mistral.ai/pricing) ($14.99/month) is for the web chat interface only. Zileo Chat requires a **separate API key** from [La Plateforme](https://docs.mistral.ai/deployment/laplateforme/pricing/) with pay-per-token billing.
+
+### MCP Servers Configuration
+
+Use [Docker MCP Toolkit](https://docs.docker.com/ai/mcp-catalog-and-toolkit/toolkit/) for MCP server management:
+
+1. Enable MCP Toolkit: Docker Desktop > Settings > Beta features > **Enable Docker MCP Toolkit**
+2. Open **MCP Toolkit** tab in Docker Desktop
+3. Browse the [MCP Catalog](https://docs.docker.com/ai/mcp-catalog-and-toolkit/catalog/) (200+ servers available)
+4. Select and install desired MCP servers
+5. In server **Overview** > "Use this MCP Server" > copy the Docker configuration
+
+> **Recommended**: Always prefer Docker configurations over NPX/UVX for better isolation and zero dependency management.
+
+### Optional: Ollama (Local + Cloud Models)
+
+| Step | Command |
+|------|---------|
+| Install Ollama | [ollama.com/download](https://ollama.com/download) |
+| Run cloud model | `ollama run kimi-k2-thinking:cloud` |
+| List available models | `ollama list` |
+
+> **Ollama Cloud**: For large models like [Kimi K2 (1T params)](https://ollama.com/library/kimi-k2:1t-cloud), use `ollama run <model>:cloud`. No local GPU required.
+
+---
+
+## Build Requirements
 
 - **Node.js** 20.19+ or 22.12+
 - **Rust** 1.80.1+
