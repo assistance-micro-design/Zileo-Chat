@@ -559,6 +559,7 @@ impl std::fmt::Display for SubAgentOperationType {
 }
 
 /// Validation response event (approval or rejection)
+#[allow(dead_code)] // API type for Tauri event streaming
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResponseEvent {
     /// Validation request ID

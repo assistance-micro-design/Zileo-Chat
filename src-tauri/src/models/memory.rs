@@ -204,6 +204,7 @@ impl MemoryCreateWithEmbedding {
 }
 
 /// Memory entity with embedding vector (for DB storage)
+#[allow(dead_code)] // API type for semantic search/RAG operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryWithEmbedding {
     /// Unique identifier (deserialized from SurrealDB Thing type)

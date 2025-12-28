@@ -24,6 +24,7 @@ pub enum Lifecycle {
 }
 
 /// Agent status
+#[allow(dead_code)] // API type for frontend-backend serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentStatus {
@@ -32,6 +33,7 @@ pub enum AgentStatus {
 }
 
 /// Agent entity
+#[allow(dead_code)] // API type for frontend-backend serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     /// Unique identifier

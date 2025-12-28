@@ -215,6 +215,7 @@ pub struct MCPToolCallResult {
 /// MCP tool call log entry
 ///
 /// Stored in the database for auditing and debugging purposes.
+#[allow(dead_code)] // API type for MCP call logging/auditing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPCallLog {
     /// Unique log entry ID

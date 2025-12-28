@@ -250,6 +250,7 @@ impl Default for AuditConfig {
 }
 
 /// Main validation settings configuration
+#[allow(dead_code)] // API type for validation settings creation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidationSettingsConfig {
