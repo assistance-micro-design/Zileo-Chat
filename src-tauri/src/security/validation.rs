@@ -261,10 +261,12 @@ impl Validator {
     /// This does NOT sanitize for database queries - use parameterized queries instead.
     #[allow(dead_code)]
     pub fn sanitize_for_logging(input: &str) -> String {
-        // Truncate long strings for logging
-        const MAX_LOG_LEN: usize = 500;
-        if input.len() > MAX_LOG_LEN {
-            format!("{}...[truncated]", &input[..MAX_LOG_LEN])
+        // Truncate long strings for logging (UTF-8 safe: count chars, not bytes)
+        const MAX_LOG_CHARS: usize = 500;
+        let char_count = input.chars().count();
+        if char_count > MAX_LOG_CHARS {
+            let truncated: String = input.chars().take(MAX_LOG_CHARS).collect();
+            format!("{}...[truncated]", truncated)
         } else {
             input.to_string()
         }

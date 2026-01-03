@@ -384,11 +384,7 @@ impl ValidationHelper {
     ) -> Value {
         serde_json::json!({
             "sub_agent_name": name,
-            "prompt_preview": if prompt.len() > 200 {
-                format!("{}...", &prompt[..200])
-            } else {
-                prompt.to_string()
-            },
+            "prompt_preview": safe_truncate(prompt, 200, true),
             "prompt_length": prompt.len(),
             "tools": tools,
             "mcp_servers": mcp_servers
@@ -400,11 +396,7 @@ impl ValidationHelper {
         serde_json::json!({
             "target_agent_id": target_agent_id,
             "target_agent_name": target_agent_name,
-            "prompt_preview": if prompt.len() > 200 {
-                format!("{}...", &prompt[..200])
-            } else {
-                prompt.to_string()
-            },
+            "prompt_preview": safe_truncate(prompt, 200, true),
             "prompt_length": prompt.len()
         })
     }
@@ -416,11 +408,7 @@ impl ValidationHelper {
             .map(|(agent_id, prompt)| {
                 serde_json::json!({
                     "agent_id": agent_id,
-                    "prompt_preview": if prompt.len() > 100 {
-                        format!("{}...", &prompt[..100])
-                    } else {
-                        prompt.to_string()
-                    }
+                    "prompt_preview": safe_truncate(prompt, 100, true)
                 })
             })
             .collect();
@@ -505,5 +493,59 @@ mod tests {
     fn test_validation_timeout_default() {
         use crate::tools::constants::sub_agent::VALIDATION_TIMEOUT_SECS;
         assert_eq!(VALIDATION_TIMEOUT_SECS, 60);
+    }
+
+    #[test]
+    fn test_safe_truncate_utf8_multibyte() {
+        // Test with French accented characters
+        let text = "Ceci est un texte en francais avec des accents: e, a, o, i, u";
+        let truncated = safe_truncate(text, 50, true);
+        assert!(truncated.ends_with("..."));
+        assert!(!truncated.contains("\\u")); // No escaped unicode
+
+        // Test with text where byte 100 is inside a multi-byte char
+        // This is the exact scenario that caused the panic
+        let mission_text = "# MISSION\nRechercher sources fiables sur ACTUALITE pour: Mistral AI nouveautes 2025 actualites recentes lancements produits";
+        let truncated = safe_truncate(mission_text, 100, true);
+        assert!(truncated.ends_with("..."));
+
+        // Test with emojis (4-byte UTF-8)
+        let emoji_text = "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
+        let truncated = safe_truncate(emoji_text, 30, true);
+        assert!(truncated.ends_with("..."));
+
+        // Test short text (no truncation needed)
+        let short_text = "Court";
+        let not_truncated = safe_truncate(short_text, 100, false);
+        assert_eq!(not_truncated, "Court");
+    }
+
+    #[test]
+    fn test_parallel_details_utf8_prompt() {
+        // Regression test for panic at line 420
+        let tasks = vec![
+            ("agent_1".to_string(), "Rechercher sources fiables sur ACTUALITE pour: Mistral AI nouveautes 2025 actualites recentes lancements produits avec accents francais".to_string()),
+        ];
+        // This should not panic
+        let details = ValidationHelper::parallel_details(&tasks);
+        assert_eq!(details["task_count"], 1);
+        let task = &details["tasks"].as_array().unwrap()[0];
+        let preview = task["prompt_preview"].as_str().unwrap();
+        assert!(preview.ends_with("..."));
+    }
+
+    #[test]
+    fn test_spawn_details_utf8_prompt() {
+        // Test spawn_details with UTF-8 text (must be > 200 chars to trigger truncation)
+        let prompt = "Analyser le code pour trouver les problemes de securite. Verifier les entrees utilisateur et les acces a la base de donnees. Ceci est un texte long avec des accents francais pour tester la troncature UTF-8. Nous ajoutons encore plus de texte pour depasser la limite de 200 caracteres.";
+        assert!(prompt.chars().count() > 200, "Test prompt must be > 200 chars");
+        let details = ValidationHelper::spawn_details(
+            "SecurityAgent",
+            prompt,
+            &["MemoryTool".to_string()],
+            &["serena".to_string()],
+        );
+        let preview = details["prompt_preview"].as_str().unwrap();
+        assert!(preview.ends_with("..."), "Preview should end with ellipsis");
     }
 }

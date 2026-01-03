@@ -76,7 +76,7 @@ use crate::tools::constants::sub_agent::{
     MAX_RETRY_ATTEMPTS,
 };
 use crate::tools::sub_agent_circuit_breaker::SubAgentCircuitBreaker;
-use crate::tools::validation_helper::ValidationHelper;
+use crate::tools::validation_helper::{safe_truncate, ValidationHelper};
 use crate::tools::{ToolError, ToolResult};
 
 /// Result of sub-agent execution with metrics.
@@ -592,11 +592,7 @@ impl SubAgentExecutor {
         } else {
             "failed"
         };
-        let result_summary = if result.report.len() > 200 {
-            format!("{}...", &result.report[..200])
-        } else {
-            result.report.clone()
-        };
+        let result_summary = safe_truncate(&result.report, 200, true);
 
         let result_summary_json =
             serde_json::to_string(&result_summary).unwrap_or_else(|_| "null".to_string());
