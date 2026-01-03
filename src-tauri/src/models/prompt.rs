@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 // ===== Enums =====
 
 /// Category for organizing prompts
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PromptCategory {
     System,
@@ -33,13 +33,8 @@ pub enum PromptCategory {
     Analysis,
     Generation,
     Coding,
+    #[default]
     Custom,
-}
-
-impl Default for PromptCategory {
-    fn default() -> Self {
-        Self::Custom
-    }
 }
 
 impl std::fmt::Display for PromptCategory {

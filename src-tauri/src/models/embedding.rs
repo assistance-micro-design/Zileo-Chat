@@ -143,19 +143,14 @@ pub struct CategoryTokenStats {
 }
 
 /// Memory export format
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ExportFormat {
     /// JSON format
+    #[default]
     Json,
     /// CSV format
     Csv,
-}
-
-impl Default for ExportFormat {
-    fn default() -> Self {
-        Self::Json
-    }
 }
 
 #[cfg(test)]

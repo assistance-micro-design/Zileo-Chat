@@ -53,20 +53,15 @@ pub const DEFAULT_FAILURE_THRESHOLD: u32 = 3;
 pub const DEFAULT_COOLDOWN_SECS: u64 = 60;
 
 /// Circuit breaker state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CircuitState {
     /// Normal operation, requests pass through
+    #[default]
     Closed,
     /// Server unhealthy, requests rejected immediately
     Open,
     /// Testing recovery, allows one request through
     HalfOpen,
-}
-
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 /// Circuit breaker for MCP server resilience

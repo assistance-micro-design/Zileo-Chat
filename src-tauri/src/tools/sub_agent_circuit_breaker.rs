@@ -67,20 +67,15 @@ use tracing::debug;
 use super::constants::sub_agent::{CIRCUIT_COOLDOWN_SECS, CIRCUIT_FAILURE_THRESHOLD};
 
 /// Circuit breaker state for sub-agent executions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CircuitState {
     /// Normal operation, executions proceed
+    #[default]
     Closed,
     /// System unhealthy, executions rejected immediately
     Open,
     /// Testing recovery, allows one execution through
     HalfOpen,
-}
-
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 impl std::fmt::Display for CircuitState {

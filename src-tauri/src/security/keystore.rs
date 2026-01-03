@@ -354,7 +354,7 @@ impl Base64Decoder {
         }
 
         let bytes = s.as_bytes();
-        if bytes.len() % 4 != 0 {
+        if !bytes.len().is_multiple_of(4) {
             return Err("Invalid base64 length".to_string());
         }
 

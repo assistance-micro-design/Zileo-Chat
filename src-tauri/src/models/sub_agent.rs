@@ -40,10 +40,11 @@ use serde::{Deserialize, Serialize};
 /// Status of a sub-agent execution.
 ///
 /// Tracks the lifecycle of a sub-agent from creation to completion.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SubAgentStatus {
     /// Sub-agent created, awaiting validation or start
+    #[default]
     Pending,
     /// Sub-agent is currently executing its task
     Running,
@@ -53,12 +54,6 @@ pub enum SubAgentStatus {
     Error,
     /// Sub-agent was cancelled (by user or parent agent)
     Cancelled,
-}
-
-impl Default for SubAgentStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 impl std::fmt::Display for SubAgentStatus {

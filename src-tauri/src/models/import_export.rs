@@ -351,21 +351,16 @@ pub struct ImportConflict {
 }
 
 /// How to resolve an import conflict.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ConflictResolution {
     /// Skip importing this entity
+    #[default]
     Skip,
     /// Overwrite the existing entity
     Overwrite,
     /// Rename the imported entity (new ID generated)
     Rename,
-}
-
-impl Default for ConflictResolution {
-    fn default() -> Self {
-        Self::Skip
-    }
 }
 
 /// Additional env vars/args for MCP import.

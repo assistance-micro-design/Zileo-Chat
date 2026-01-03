@@ -16,32 +16,22 @@ use crate::models::serde_utils::deserialize_thing_id;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum QuestionType {
     Checkbox,
+    #[default]
     Text,
     Mixed,
 }
 
-impl Default for QuestionType {
-    fn default() -> Self {
-        Self::Text
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum QuestionStatus {
+    #[default]
     Pending,
     Answered,
     Skipped,
-}
-
-impl Default for QuestionStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

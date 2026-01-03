@@ -61,21 +61,16 @@ pub const DEFAULT_TIMEOUT_THRESHOLD: u32 = 3;
 pub const DEFAULT_COOLDOWN_SECS: u64 = 60;
 
 /// Circuit breaker state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)]
 pub enum CircuitState {
     /// Normal operation, questions can be asked
+    #[default]
     Closed,
     /// Too many timeouts, questions rejected immediately
     Open,
     /// Testing recovery, allows one question through
     HalfOpen,
-}
-
-impl Default for CircuitState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 /// Circuit breaker for UserQuestionTool timeout resilience.

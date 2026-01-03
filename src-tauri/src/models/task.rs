@@ -28,10 +28,11 @@ use serde::{Deserialize, Serialize};
 /// Task status for workflow decomposition.
 ///
 /// Represents the current state of a task in its lifecycle.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     /// Task is waiting to be started
+    #[default]
     Pending,
     /// Task is currently being worked on
     InProgress,
@@ -39,12 +40,6 @@ pub enum TaskStatus {
     Completed,
     /// Task is blocked by dependencies or external factors
     Blocked,
-}
-
-impl Default for TaskStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 impl std::fmt::Display for TaskStatus {

@@ -79,10 +79,11 @@ pub struct MCPServerConfig {
 /// MCP server status
 ///
 /// Represents the current lifecycle state of an MCP server.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MCPServerStatus {
     /// Server is not running
+    #[default]
     Stopped,
     /// Server is in the process of starting
     Starting,
@@ -103,12 +104,6 @@ impl std::fmt::Display for MCPServerStatus {
             MCPServerStatus::Error => write!(f, "error"),
             MCPServerStatus::Disconnected => write!(f, "disconnected"),
         }
-    }
-}
-
-impl Default for MCPServerStatus {
-    fn default() -> Self {
-        Self::Stopped
     }
 }
 

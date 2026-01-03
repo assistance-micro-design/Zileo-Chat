@@ -46,18 +46,13 @@ pub enum RiskLevel {
 }
 
 /// Validation status for human-in-the-loop requests
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationStatus {
+    #[default]
     Pending,
     Approved,
     Rejected,
-}
-
-impl Default for ValidationStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// Validation request entity

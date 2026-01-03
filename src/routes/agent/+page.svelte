@@ -63,7 +63,7 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
-	import { validationStore } from '$lib/stores/validation';
+	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { userQuestionStore } from '$lib/stores/userQuestion';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
@@ -374,6 +374,17 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	$effect(() => {
 		LocalStorage.set(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, pageState.rightSidebarCollapsed);
+	});
+
+	/**
+	 * React to pending validation requests.
+	 * Opens the validation modal when a new validation request arrives.
+	 */
+	$effect(() => {
+		const request = $pendingValidation;
+		if (request) {
+			modalState = { type: 'validation', request };
+		}
 	});
 </script>
 
