@@ -15,7 +15,8 @@
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import '../styles/global.css';
 	import { theme } from '$lib/stores/theme';
 	import { localeStore } from '$lib/stores/locale';
@@ -23,17 +24,40 @@
 	import { i18n } from '$lib/i18n';
 	import { AppContainer, FloatingMenu } from '$lib/components/layout';
 	import { OnboardingModal } from '$lib/components/onboarding';
+	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 
 	let { children } = $props();
 
 	let showOnboarding = $state(false);
 
-	onMount(() => {
+	// Legal modal state
+	let legalModalOpen = $state(false);
+	let legalModalType = $state<'legal-notice' | 'privacy-policy'>('legal-notice');
+	let unlistenLegal: UnlistenFn | null = null;
+	let unlistenPrivacy: UnlistenFn | null = null;
+
+	onMount(async () => {
 		theme.init();
 		localeStore.init();
 
 		// Check if onboarding should be shown (first launch)
 		showOnboarding = onboardingStore.shouldShow();
+
+		// Listen for legal menu events from Tauri
+		unlistenLegal = await listen('open-legal-notice', () => {
+			legalModalType = 'legal-notice';
+			legalModalOpen = true;
+		});
+
+		unlistenPrivacy = await listen('open-privacy-policy', () => {
+			legalModalType = 'privacy-policy';
+			legalModalOpen = true;
+		});
+	});
+
+	onDestroy(() => {
+		unlistenLegal?.();
+		unlistenPrivacy?.();
 	});
 
 	function handleOnboardingComplete(): void {
@@ -61,3 +85,6 @@
 		</div>
 	</AppContainer>
 {/if}
+
+<!-- Legal modals accessible from Tauri Help menu -->
+<LegalModal type={legalModalType} open={legalModalOpen} onclose={() => (legalModalOpen = false)} />

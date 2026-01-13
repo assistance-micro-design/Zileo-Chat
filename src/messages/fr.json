@@ -861,5 +861,64 @@
   "user_question_text_placeholder": "Saisissez votre reponse ici...",
   "user_question_text_required": "Une reponse textuelle est requise",
   "user_question_skip": "Passer",
-  "user_question_submit": "Soumettre"
+  "user_question_submit": "Soumettre",
+
+  "legal_notice_title": "Mentions legales",
+  "legal_editor_title": "Editeur de l'application",
+  "legal_editor_intro": "L'application Zileo Chat est editee par :",
+  "legal_company_name": "Raison sociale",
+  "legal_company_type": "Forme juridique",
+  "legal_entrepreneur_individuel": "Entrepreneur individuel",
+  "legal_headquarters": "Siege social",
+  "legal_siret": "Numero SIRET",
+  "legal_publication_director": "Directeur de la publication",
+  "legal_contact": "Contact",
+
+  "privacy_policy_title": "Politique de confidentialite & RGPD",
+
+  "privacy_controller_title": "Responsable du traitement",
+  "privacy_controller_content": "Le responsable du traitement de vos donnees personnelles est Assistance Micro Design, entrepreneur individuel, dont le siege social est situe en Guadeloupe (SIRET : 47857738000049).",
+
+  "privacy_data_collected_title": "Donnees collectees",
+  "privacy_data_collected_content": "Zileo Chat collecte et traite localement sur votre appareil : vos conversations avec les agents IA, vos configurations d'agents et preferences, vos cles API (stockees de maniere chiffree), et vos memoires et contextes de travail.",
+
+  "privacy_purpose_title": "Finalites du traitement",
+  "privacy_purpose_content": "Vos donnees sont traitees pour : permettre les conversations avec les modeles de langage (LLM), sauvegarder vos preferences et configurations, et ameliorer votre experience utilisateur via le systeme de memoire.",
+
+  "privacy_legal_basis_title": "Base legale",
+  "privacy_legal_basis_content": "Le traitement de vos donnees repose sur l'execution du contrat d'utilisation de l'application (article 6.1.b du RGPD).",
+
+  "privacy_storage_title": "Stockage et securite",
+  "privacy_storage_content": "Toutes vos donnees sont stockees localement sur votre ordinateur dans une base de donnees SurrealDB. Les cles API sont chiffrees avec l'algorithme AES-256-GCM et stockees dans le trousseau de cles securise de votre systeme d'exploitation. Aucune donnee n'est transmise a nos serveurs.",
+
+  "privacy_retention_title": "Duree de conservation",
+  "privacy_retention_content": "Vos donnees sont conservees jusqu'a leur suppression manuelle par vos soins via l'interface de l'application, ou jusqu'a la desinstallation de l'application.",
+
+  "privacy_recipients_title": "Destinataires des donnees",
+  "privacy_recipients_content": "Vos prompts et conversations sont transmis aux fournisseurs LLM que vous configurez (Mistral AI, Ollama, ou serveurs MCP). Mistral AI est base en France (UE). Ollama fonctionne localement sur votre appareil.",
+
+  "privacy_transfers_title": "Transferts hors UE",
+  "privacy_transfers_content": "Selon le fournisseur LLM choisi, vos donnees peuvent etre transferees hors de l'Union Europeenne. Mistral AI traite les donnees en France. Pour les autres fournisseurs, veuillez consulter leur politique de confidentialite respective.",
+
+  "privacy_rights_title": "Vos droits",
+  "privacy_rights_intro": "Conformement au RGPD, vous disposez des droits suivants :",
+  "privacy_right_access": "Droit d'acces : consulter toutes vos donnees via l'interface de l'application",
+  "privacy_right_rectification": "Droit de rectification : modifier vos donnees via les parametres",
+  "privacy_right_erasure": "Droit a l'effacement : supprimer vos conversations, memoires et configurations",
+  "privacy_right_restriction": "Droit a la limitation : desactiver certaines fonctionnalites via les parametres",
+  "privacy_right_portability": "Droit a la portabilite : exporter vos donnees au format JSON (Parametres > Import/Export)",
+  "privacy_right_opposition": "Droit d'opposition : cesser d'utiliser l'application et supprimer vos donnees",
+
+  "privacy_automated_title": "Decisions automatisees et IA",
+  "privacy_automated_content": "Zileo Chat utilise des modeles d'intelligence artificielle generative pour produire des reponses. Ces reponses sont generees automatiquement mais vous gardez le controle total : vous pouvez activer la validation humaine des actions, modifier ou supprimer les reponses, et choisir les modeles utilises.",
+
+  "privacy_complaint_title": "Reclamation",
+  "privacy_complaint_content": "Si vous estimez que le traitement de vos donnees ne respecte pas la reglementation, vous pouvez introduire une reclamation aupres de la CNIL (Commission Nationale de l'Informatique et des Libertes) : www.cnil.fr",
+
+  "privacy_contact_title": "Contact DPO",
+  "privacy_contact_content": "Pour toute question concernant vos donnees personnelles ou pour exercer vos droits, contactez-nous a : assistance-micro-design@pm.me",
+
+  "privacy_update_title": "Mise a jour",
+  "privacy_update_content": "Cette politique de confidentialite peut etre mise a jour. La date de derniere modification est indiquee ci-dessous.",
+  "privacy_last_updated": "Derniere mise a jour : janvier 2026"
 }

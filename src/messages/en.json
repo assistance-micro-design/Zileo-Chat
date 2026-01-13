@@ -861,5 +861,64 @@
   "user_question_text_placeholder": "Type your answer here...",
   "user_question_text_required": "Text response is required",
   "user_question_skip": "Skip",
-  "user_question_submit": "Submit"
+  "user_question_submit": "Submit",
+
+  "legal_notice_title": "Legal Notice",
+  "legal_editor_title": "Application Publisher",
+  "legal_editor_intro": "The Zileo Chat application is published by:",
+  "legal_company_name": "Company name",
+  "legal_company_type": "Legal form",
+  "legal_entrepreneur_individuel": "Sole proprietor",
+  "legal_headquarters": "Headquarters",
+  "legal_siret": "SIRET number",
+  "legal_publication_director": "Publication Director",
+  "legal_contact": "Contact",
+
+  "privacy_policy_title": "Privacy Policy & GDPR",
+
+  "privacy_controller_title": "Data Controller",
+  "privacy_controller_content": "The data controller for your personal data is Assistance Micro Design, sole proprietor, headquartered in Guadeloupe (SIRET: 47857738000049).",
+
+  "privacy_data_collected_title": "Data Collected",
+  "privacy_data_collected_content": "Zileo Chat collects and processes locally on your device: your conversations with AI agents, your agent configurations and preferences, your API keys (stored encrypted), and your memories and work contexts.",
+
+  "privacy_purpose_title": "Processing Purposes",
+  "privacy_purpose_content": "Your data is processed to: enable conversations with language models (LLM), save your preferences and configurations, and improve your user experience through the memory system.",
+
+  "privacy_legal_basis_title": "Legal Basis",
+  "privacy_legal_basis_content": "The processing of your data is based on the execution of the application usage contract (Article 6.1.b of GDPR).",
+
+  "privacy_storage_title": "Storage and Security",
+  "privacy_storage_content": "All your data is stored locally on your computer in a SurrealDB database. API keys are encrypted with AES-256-GCM algorithm and stored in your operating system's secure keychain. No data is transmitted to our servers.",
+
+  "privacy_retention_title": "Retention Period",
+  "privacy_retention_content": "Your data is retained until you manually delete it through the application interface, or until the application is uninstalled.",
+
+  "privacy_recipients_title": "Data Recipients",
+  "privacy_recipients_content": "Your prompts and conversations are transmitted to the LLM providers you configure (Mistral AI, Ollama, or MCP servers). Mistral AI is based in France (EU). Ollama runs locally on your device.",
+
+  "privacy_transfers_title": "Transfers Outside EU",
+  "privacy_transfers_content": "Depending on the LLM provider chosen, your data may be transferred outside the European Union. Mistral AI processes data in France. For other providers, please consult their respective privacy policies.",
+
+  "privacy_rights_title": "Your Rights",
+  "privacy_rights_intro": "Under GDPR, you have the following rights:",
+  "privacy_right_access": "Right of access: view all your data through the application interface",
+  "privacy_right_rectification": "Right to rectification: modify your data through settings",
+  "privacy_right_erasure": "Right to erasure: delete your conversations, memories and configurations",
+  "privacy_right_restriction": "Right to restriction: disable certain features through settings",
+  "privacy_right_portability": "Right to data portability: export your data in JSON format (Settings > Import/Export)",
+  "privacy_right_opposition": "Right to object: stop using the application and delete your data",
+
+  "privacy_automated_title": "Automated Decisions and AI",
+  "privacy_automated_content": "Zileo Chat uses generative artificial intelligence models to produce responses. These responses are generated automatically but you maintain full control: you can enable human validation of actions, modify or delete responses, and choose which models are used.",
+
+  "privacy_complaint_title": "Complaint",
+  "privacy_complaint_content": "If you believe that the processing of your data does not comply with regulations, you can file a complaint with the CNIL (French Data Protection Authority): www.cnil.fr",
+
+  "privacy_contact_title": "DPO Contact",
+  "privacy_contact_content": "For any questions regarding your personal data or to exercise your rights, contact us at: assistance-micro-design@pm.me",
+
+  "privacy_update_title": "Updates",
+  "privacy_update_content": "This privacy policy may be updated. The last modification date is indicated below.",
+  "privacy_last_updated": "Last updated: January 2026"
 }

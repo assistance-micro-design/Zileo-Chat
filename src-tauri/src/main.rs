@@ -25,7 +25,8 @@ mod state;
 mod tools;
 
 use state::AppState;
-use tauri::Manager;
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::{Emitter, Manager};
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
@@ -324,6 +325,61 @@ async fn main() -> anyhow::Result<()> {
             commands::user_question::skip_question,
         ])
         .setup(|app| {
+            // === Create native Help menu with legal notices ===
+            let legal_notice = MenuItemBuilder::with_id("legal-notice", "Mentions l\u{00e9}gales")
+                .build(app)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let privacy_policy =
+                MenuItemBuilder::with_id("privacy-policy", "Politique de confidentialit\u{00e9} & RGPD")
+                    .build(app)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let separator = PredefinedMenuItem::separator(app)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let about = PredefinedMenuItem::about(
+                app,
+                Some("À propos de Zileo Chat"),
+                Some(AboutMetadata {
+                    name: Some("Zileo Chat".into()),
+                    version: Some(env!("CARGO_PKG_VERSION").into()),
+                    copyright: Some("© 2025 Assistance Micro Design".into()),
+                    ..Default::default()
+                }),
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            let help_menu = SubmenuBuilder::new(app, "Aide")
+                .items(&[&legal_notice, &privacy_policy, &separator, &about])
+                .build()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&help_menu)
+                .build()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            app.set_menu(menu)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            // Handle menu events - emit Tauri events for frontend to listen
+            app.on_menu_event(move |app_handle, event| {
+                let event_id = event.id().as_ref();
+                match event_id {
+                    "legal-notice" => {
+                        if let Err(e) = app_handle.emit("open-legal-notice", ()) {
+                            tracing::warn!(error = %e, "Failed to emit open-legal-notice event");
+                        }
+                    }
+                    "privacy-policy" => {
+                        if let Err(e) = app_handle.emit("open-privacy-policy", ()) {
+                            tracing::warn!(error = %e, "Failed to emit open-privacy-policy event");
+                        }
+                    }
+                    _ => {}
+                }
+            });
+
+            tracing::info!("Native Help menu initialized with legal notices");
+
             // Set the app handle in AppState for event emission (validation, etc.)
             // Uses std::sync::RwLock for synchronous access
             let state = app.state::<AppState>();
