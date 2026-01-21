@@ -48,7 +48,6 @@ coverage/
 # Rust / Backend (Tauri)
 # ─────────────────────────────────────────────────────
 src-tauri/target/
-src-tauri/Cargo.lock
 **/*.rs.bk
 *.pdb
 
@@ -110,3 +109,8 @@ CLAUDE.md
 # ─────────────────────────────────────────────────────
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+
+# ─────────────────────────────────────────────────────
+# External / Generated Site
+# ─────────────────────────────────────────────────────
+/Site/
