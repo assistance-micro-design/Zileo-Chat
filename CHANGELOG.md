@@ -5,20 +5,45 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.1-beta] - 2025-12-14
+## [0.9.1-beta] - 2026-01-23
+
+### Added
+
+- **Legal Notices**: GDPR-compliant privacy policy and legal notices accessible from Help menu
+- **GitHub Actions**: CI/CD workflows for validation and release
+
+### Changed
+
+- **Dependencies (Rust)**:
+  - `keyring` 2.3.3 → 3.6.3 (with API migration: `delete_password` → `delete_credential`)
+  - `reqwest` 0.12.24 → 0.12.28
+  - `tauri-plugin-opener` 2.5.2 → 2.5.3
+  - `thiserror` 1.0.69 → 2.0.17
+  - `tracing-subscriber` 0.3.20 → 0.3.22
+- **Dependencies (NPM)**:
+  - `typescript-eslint` 8.48.1 → 8.53.1
+  - `@playwright/test` 1.57.0 → 1.58.0
+  - `@tauri-apps/cli` 2.9.5 → 2.9.6
+  - `@sveltejs/vite-plugin-svelte` 6.2.1 → 6.2.4
+- **GitHub Actions**:
+  - `actions/checkout` v4 → v6
+  - `actions/setup-node` v4 → v6
+  - `actions/download-artifact` v4 → v7
+  - `softprops/action-gh-release` v1 → v2
 
 ### Fixed
 
+- **CI/CD**: Added frontend dist placeholder for Tauri compile-time validation
+- **CI/CD**: Added clang/llvm for RocksDB compilation in CI
+- **CI/CD**: Added rustup targets for macOS universal binary builds
+- **Security**: Updated keyring API for v3.x compatibility (`delete_credential`)
 - **Error Handling**: Replaced `unwrap()` with proper pattern matching in production code (`models.rs`)
-- **Clippy Warnings**: Fixed 13 clippy warnings in test code:
-  - Unused variable prefixed with `_` (`sub_agent_executor.rs`)
-  - Replaced `assert!(true)` with meaningful assertions (`sub_agent_execution.rs`)
-  - Fixed constant assertions by using local variables (`pricing.rs`, `user_question/tests.rs`, `sub_agent_executor.rs`)
-  - Removed `::default()` on unit struct (`calculator/tool.rs`)
+- **Clippy Warnings**: Fixed 13 clippy warnings in test code
 
 ### Documentation
 
-- **ROADMAP_TO_1.0.md**: Updated with detailed analysis of `unwrap()`/`expect()` occurrences (68/69 in tests, 1 fixed in production)
+- **ROADMAP_TO_1.0.md**: Updated with detailed analysis of `unwrap()`/`expect()` occurrences
+- **DEPLOYMENT_GUIDE.md**: Added GitHub Actions configuration
 
 ---
 
@@ -83,7 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration tests with ephemeral SurrealDB
 - E2E tests with Playwright
 - macOS and Windows distribution packages
-- CI/CD pipeline with GitHub Actions
 
 ---
 
@@ -121,5 +145,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat-3/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat-3/compare/v0.9.0-beta...HEAD
+[0.9.1-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1-beta
+[0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.1-beta...HEAD
