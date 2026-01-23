@@ -160,7 +160,13 @@ mod tests {
         let small_input = mistral_pricing::SMALL_INPUT_PER_MTOK;
 
         assert!(large_input > 0.0, "Large input pricing should be positive");
-        assert!(large_output > large_input, "Output should cost more than input");
-        assert!(small_input < large_input, "Small model should be cheaper than large");
+        assert!(
+            large_output > large_input,
+            "Output should cost more than input"
+        );
+        assert!(
+            small_input < large_input,
+            "Small model should be cheaper than large"
+        );
     }
 }

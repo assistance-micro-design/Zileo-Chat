@@ -510,7 +510,8 @@ mod tests {
         assert!(truncated.ends_with("..."));
 
         // Test with emojis (4-byte UTF-8)
-        let emoji_text = "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
+        let emoji_text =
+            "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
         let truncated = safe_truncate(emoji_text, 30, true);
         assert!(truncated.ends_with("..."));
 
@@ -538,7 +539,10 @@ mod tests {
     fn test_spawn_details_utf8_prompt() {
         // Test spawn_details with UTF-8 text (must be > 200 chars to trigger truncation)
         let prompt = "Analyser le code pour trouver les problemes de securite. Verifier les entrees utilisateur et les acces a la base de donnees. Ceci est un texte long avec des accents francais pour tester la troncature UTF-8. Nous ajoutons encore plus de texte pour depasser la limite de 200 caracteres.";
-        assert!(prompt.chars().count() > 200, "Test prompt must be > 200 chars");
+        assert!(
+            prompt.chars().count() > 200,
+            "Test prompt must be > 200 chars"
+        );
         let details = ValidationHelper::spawn_details(
             "SecurityAgent",
             prompt,

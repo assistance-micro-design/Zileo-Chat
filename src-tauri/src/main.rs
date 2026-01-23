@@ -25,7 +25,9 @@ mod state;
 mod tools;
 
 use state::AppState;
-use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{
+    AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},

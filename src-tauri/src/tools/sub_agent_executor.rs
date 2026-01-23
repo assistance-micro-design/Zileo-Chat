@@ -1474,7 +1474,10 @@ mod tests {
         // Check interval should be much smaller than timeout
         let interval = ACTIVITY_CHECK_INTERVAL_SECS;
         let timeout = INACTIVITY_TIMEOUT_SECS;
-        assert!(interval < timeout / 2, "Check interval should be less than half the timeout");
+        assert!(
+            interval < timeout / 2,
+            "Check interval should be less than half the timeout"
+        );
     }
 
     // =========================================================================
