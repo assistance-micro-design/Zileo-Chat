@@ -8606,7 +8606,7 @@ dependencies = [
 
 [[package]]
 name = "zileo-chat"
-version = "0.9.1-beta"
+version = "0.9.1"
 dependencies = [
  "aes-gcm",
  "anyhow",

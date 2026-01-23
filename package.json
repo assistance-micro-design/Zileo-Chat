@@ -1,6 +1,6 @@
 {
   "name": "zileo-chat",
-  "version": "0.9.1-beta",
+  "version": "0.9.1",
   "description": "Zileo Chat - Multi-agent AI desktop application",
   "license": "Apache-2.0",
   "author": {
