@@ -4,10 +4,10 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.9.0-beta
-**Strategie** : Linux → macOS → Windows (progressif)
-**Format** : AppImage, .deb (Linux), .dmg (macOS prevu), .msi (Windows prevu)
-**CI/CD** : Non configure (prevu)
+**Version actuelle** : 0.9.1-beta
+**Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
+**Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
+**CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
 **Auto-updates** : Non configure (prevu v1.5)
 
 ---
@@ -367,283 +367,128 @@ cargo clippy -- -D warnings  # Linting
 cargo test                # Unit tests
 ```
 
-### GitHub Actions - Build Multi-OS
+### GitHub Actions - Configuration Active
+
+**Statut** : Configure et fonctionnel dans `.github/workflows/`
 
 **Contrainte importante** : Tauri ne supporte PAS la cross-compilation.
-Chaque OS doit etre builde sur son propre runner.
+Chaque OS est builde sur son propre runner en parallele.
 
-#### Etape 1: Creer le workflow
+#### Workflow Release (`.github/workflows/release.yml`)
 
-Creer `.github/workflows/release.yml` :
+**Declencheur** : Push de tag `v*` ou `workflow_dispatch` (manuel)
 
-```yaml
-name: Release Build
+**Fonctionnement** :
+- Build parallele sur 3 OS (Ubuntu, macOS, Windows)
+- Cree une release draft avec tous les artifacts
+- Detecte automatiquement les pre-releases (beta, alpha)
+- Genere les checksums SHA256
 
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:  # Permet lancement manuel
+**Artifacts generes** :
+- `zileo-chat_X.Y.Z_amd64.AppImage` (Linux)
+- `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
+- `zileo-chat_X.Y.Z_x64.dmg` (macOS)
+- `zileo-chat_X.Y.Z_x64.msi` (Windows)
+- `SHA256SUMS`
 
-permissions:
-  contents: write
+#### Workflow Validate (`.github/workflows/validate.yml`)
 
-jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux
-          - platform: ubuntu-22.04
-            target: ''
-            bundle_targets: 'appimage,deb'
-          # macOS Universal (Intel + Apple Silicon)
-          - platform: macos-latest
-            target: 'universal-apple-darwin'
-            bundle_targets: 'dmg'
-          # Windows
-          - platform: windows-latest
-            target: ''
-            bundle_targets: 'msi'
+**Declencheur** : Push sur `main`/`develop`, PR vers `main`
 
-    runs-on: ${{ matrix.platform }}
+**Jobs paralleles** :
+1. **Frontend** : `npm run lint` + `npm run check` + `npm run test`
+2. **Backend** : `cargo fmt --check` + `cargo clippy` + `cargo test`
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-action@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Zileo Chat ${{ github.ref_name }}'
-          releaseBody: |
-            ## Installation
-
-            | OS | Fichier | Instructions |
-            |----|---------|--------------|
-            | Linux | `.AppImage` | `chmod +x *.AppImage && ./*.AppImage` |
-            | Linux (Debian) | `.deb` | `sudo dpkg -i *.deb` |
-            | macOS | `.dmg` | Double-clic, glisser dans Applications |
-            | Windows | `.msi` | Double-clic, suivre assistant |
-
-            ## Checksums
-            Voir `SHA256SUMS` pour verifier l'integrite.
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
-
-      - name: Generate checksums (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          cd src-tauri/target/release/bundle
-          sha256sum appimage/*.AppImage deb/*.deb > SHA256SUMS-linux.txt
-          cat SHA256SUMS-linux.txt
-
-      - name: Upload checksums
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: src-tauri/target/release/bundle/SHA256SUMS-linux.txt
-          draft: true
-```
-
-#### Etape 2: Mettre a jour tauri.conf.json
-
-Modifier `bundle.targets` pour supporter tous les OS :
-
-```json
-{
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.ico",
-      "icons/icon.icns"
-    ]
-  }
-}
-```
-
-#### Etape 3: Creer une release
-
-```bash
-# Mettre a jour les versions
-# package.json, tauri.conf.json, Cargo.toml doivent avoir la meme version
-
-# Creer et pousser le tag
-git tag v0.9.0-beta
-git push origin v0.9.0-beta
-```
-
-GitHub Actions va automatiquement :
-1. Builder sur Linux, macOS et Windows en parallele
-2. Creer une draft release avec tous les artifacts
-3. Generer les checksums
-
-#### Etape 4: Publier
-
-1. Aller sur GitHub → Releases
-2. Verifier la draft release
-3. Editer les release notes si necessaire
-4. Cliquer "Publish release"
-
-### Workflow Validate (CI sur chaque push)
-
-Creer `.github/workflows/validate.yml` pour validation continue :
-
-```yaml
-name: Validate
-
-on:
-  push:
-    branches: [main, 'feature/**']
-  pull_request:
-    branches: [main]
-
-jobs:
-  lint-and-test:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-action@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Frontend checks
-      - name: Lint (ESLint)
-        run: npm run lint
-
-      - name: Type check (svelte-check)
-        run: npm run check
-
-      - name: Frontend tests
-        run: npm run test
-
-      # Backend checks
-      - name: Format check
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-
-      - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-
-      - name: Backend tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-```
-
-### Resume des Workflows
+#### Resume des Workflows
 
 | Workflow | Declencheur | Action |
 |----------|-------------|--------|
-| `validate.yml` | Push/PR sur main, feature/* | Lint + Tests |
-| `release.yml` | Tag v* | Build 3 OS + Release |
+| `validate.yml` | Push/PR sur main/develop | Lint + Type check + Tests (frontend + backend) |
+| `release.yml` | Tag `v*` ou manuel | Build 3 OS + Release draft |
 
-### Alternatives sans GitHub Actions
+### Creer une Release
 
-Si tu preferes builder manuellement sur chaque OS :
+#### Via GitHub Desktop (Recommande)
 
-**Sur Windows (VM ou machine physique)** :
-```powershell
-# Installer prerequisites
-winget install Microsoft.VisualStudio.2022.BuildTools
-winget install Rustlang.Rustup
+1. Verifier versions synchronisees (`package.json`, `Cargo.toml`, `tauri.conf.json`)
+2. Commit final des changements
+3. Aller dans **History**
+4. Clic droit sur le commit → **Create Tag**
+5. Nom : `v0.9.2-beta` (ou version suivante)
+6. **Push origin** (inclut automatiquement le tag)
 
-rustup default stable-msvc
-npm ci
-npm run tauri build
-# Output: src-tauri/target/release/bundle/msi/*.msi
-```
+#### Via CLI
 
-**Sur macOS (Mac physique ou MacStadium)** :
 ```bash
-xcode-select --install
-npm ci
-npm run tauri build -- --target universal-apple-darwin
-# Output: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+# Verifier que tout est propre
+git status
+npm run lint && npm run check
+cd src-tauri && cargo clippy && cargo test
+
+# Creer et pousser le tag
+git tag v0.9.2-beta
+git push origin v0.9.2-beta
 ```
 
-### Services Cloud pour macOS
+#### Finalisation sur GitHub
 
-| Service | Usage | Cout |
-|---------|-------|------|
-| GitHub Actions | 3000 min/mois (gratuit public) | Gratuit |
-| MacStadium | Mac dedies | ~$99/mois |
-| AWS EC2 Mac | Mac a la demande | ~$1/heure |
-| Codemagic | CI/CD mobile/desktop | Gratuit tier dispo |
+1. Aller dans **Releases** → La draft release apparait
+2. Verifier les artifacts (6 fichiers attendus)
+3. Editer les release notes (generees automatiquement via labels)
+4. Cliquer **Publish release**
+
+### Configuration Dependabot
+
+Fichier : `.github/dependabot.yml`
+
+Mises a jour automatiques hebdomadaires pour :
+- **npm** : Dependencies frontend
+- **cargo** : Dependencies Rust
+- **github-actions** : Actions CI (mensuel)
+
+Les PRs de dependabot ont le label `skip-changelog` pour ne pas polluer les release notes.
+
+### Templates GitHub
+
+| Fichier | Usage |
+|---------|-------|
+| `.github/ISSUE_TEMPLATE/bug_report.md` | Template pour signaler des bugs |
+| `.github/ISSUE_TEMPLATE/feature_request.md` | Template pour proposer des features |
+| `.github/PULL_REQUEST_TEMPLATE.md` | Checklist pour les PR |
+| `.github/release.yml` | Configuration auto-generation release notes |
+
+### Labels pour Release Notes
+
+Les release notes sont generees automatiquement selon les labels des PRs :
+
+| Label | Section |
+|-------|---------|
+| `breaking-change`, `breaking` | Breaking Changes |
+| `enhancement`, `feature` | New Features |
+| `bug`, `fix` | Bug Fixes |
+| `performance` | Performance |
+| `documentation` | Documentation |
+| `dependencies` | Exclu des notes |
 
 ---
 
 ## Distribution
 
-### GitHub Releases (Manuel)
+### GitHub Releases (Automatise)
 
-**Creation Release** :
-1. Tag version : `git tag v0.9.0-beta`
-2. Push tag : `git push origin v0.9.0-beta`
-3. Build local : `npm run tauri:build`
-4. Creer release manuellement sur GitHub
-5. Upload artifacts
+**Processus** :
+1. Creer tag `v*` (via GitHub Desktop ou CLI)
+2. Push le tag → GitHub Actions se declenche
+3. Build automatique sur 3 OS en parallele
+4. Release draft creee avec tous les artifacts
+5. Publier manuellement apres verification
 
-**Assets attendus** :
-- `zileo-chat_0.9.0-beta_amd64.AppImage` (Linux)
-- `zileo-chat_0.9.0-beta_amd64.deb` (Linux)
-- `zileo-chat_0.9.0-beta_x64.dmg` (macOS - prevu)
-- `zileo-chat_0.9.0-beta_x64.msi` (Windows - prevu)
+**Assets generes automatiquement** :
+- `zileo-chat_X.Y.Z_amd64.AppImage` (Linux Universal)
+- `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
+- `zileo-chat_X.Y.Z_x64.dmg` (macOS)
+- `zileo-chat_X.Y.Z_x64.msi` (Windows)
+- `SHA256SUMS` (Checksums)
 
 ### Checksums
 
@@ -799,21 +644,22 @@ git push origin v0.9.0-beta-hotfix
 
 ### Pre-Release
 - [ ] Tests passent : `npm run test` + `cargo test`
-- [ ] Lint OK : `npm run lint` + `cargo clippy`
-- [ ] Version synchronisee (package.json + tauri.conf.json + Cargo.toml)
+- [ ] Lint OK : `npm run lint` + `cargo clippy -- -D warnings`
+- [ ] Type check OK : `npm run check`
+- [ ] Format OK : `cargo fmt --check`
+- [ ] Version synchronisee (`package.json` + `tauri.conf.json` + `Cargo.toml`)
 - [ ] Changelog mis a jour
-- [ ] Security audit : `cargo audit` (si configure)
 
-### Release (Manuel - CI/CD non configure)
-- [ ] Build local : `npm run tauri:build`
-- [ ] Test manuel de l'AppImage/deb
-- [ ] Tag cree : `git tag v0.x.y && git push origin v0.x.y`
-- [ ] Checksums generes : `sha256sum zileo-chat_* > SHA256SUMS`
-- [ ] GitHub Release creee manuellement
-- [ ] Artifacts uploades
+### Release (Automatise via GitHub Actions)
+- [ ] Tag cree et pushe : `git tag vX.Y.Z && git push origin vX.Y.Z`
+- [ ] Workflow release termine sans erreur
+- [ ] 6 artifacts presents dans la draft release
+- [ ] Release notes verifiees et editees si besoin
+- [ ] Release publiee
 
 ### Post-Release
-- [ ] Test installation sur machine propre
+- [ ] Test installation sur machine propre (au moins 1 OS)
+- [ ] Verification checksums SHA256
 - [ ] Feedback utilisateurs collecte
 - [ ] Hotfix si critique (rollback si necessaire)
 
