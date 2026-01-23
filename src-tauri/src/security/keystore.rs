@@ -146,7 +146,7 @@ impl KeyStore {
     pub fn delete(&self, provider: &str) -> Result<(), KeyStoreError> {
         let entry = Self::get_entry(provider)?;
 
-        entry.delete_password().map_err(|e| match e {
+        entry.delete_credential().map_err(|e| match e {
             keyring::Error::NoEntry => KeyStoreError::NotFound(provider.to_string()),
             _ => KeyStoreError::KeychainError(format!("Failed to delete key: {}", e)),
         })?;
