@@ -52,7 +52,7 @@
     "globals": "^16.5.0",
     "jsdom": "^27.4.0",
     "svelte": "5.45.6",
-    "svelte-check": "^4.0.0",
+    "svelte-check": "^4.3.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.53.1",
     "vite": "^7.2.6",
