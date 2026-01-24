@@ -70,19 +70,5 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
 
-  checksums:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v7
-
-      - name: Generate checksums
-        run: |
-          find . -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.msi" \) -exec sha256sum {} \; > SHA256SUMS
-
-      - name: Upload checksums
-        uses: softprops/action-gh-release@v2
-        with:
-          files: SHA256SUMS
-          draft: true
+  # Note: checksums job removed - tauri-action uploads directly to GitHub Release
+  # If checksums are needed, they can be generated manually or via a separate script
