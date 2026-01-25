@@ -66,6 +66,8 @@ pub struct ToolFactory {
     /// Dynamic embedding service reference for MemoryTool
     /// Uses RwLock to allow runtime configuration via Settings UI
     embedding_service: Arc<tokio::sync::RwLock<Option<Arc<EmbeddingService>>>>,
+    /// Tauri app handle for event emission (set after app initialization)
+    app_handle: Arc<tokio::sync::RwLock<Option<tauri::AppHandle>>>,
 }
 
 impl ToolFactory {
@@ -89,12 +91,37 @@ impl ToolFactory {
         Self {
             db,
             embedding_service,
+            app_handle: Arc::new(tokio::sync::RwLock::new(None)),
         }
+    }
+
+    /// Sets the app handle for event emission.
+    ///
+    /// This should be called during app setup after the AppHandle is available.
+    pub async fn set_app_handle(&self, handle: tauri::AppHandle) {
+        let mut app_handle = self.app_handle.write().await;
+        *app_handle = Some(handle);
+        info!("ToolFactory app_handle configured");
+    }
+
+    /// Gets the app handle if available.
+    ///
+    /// Used by ValidationHelper as a fallback when agent_context is not available.
+    pub async fn get_app_handle(&self) -> Option<tauri::AppHandle> {
+        self.app_handle.read().await.clone()
     }
 
     /// Gets the current embedding service (reads from dynamic reference)
     async fn get_embedding_service(&self) -> Option<Arc<EmbeddingService>> {
         self.embedding_service.read().await.clone()
+    }
+
+    /// Returns a reference to the database client.
+    ///
+    /// Used by components that need direct DB access for operations
+    /// like validation that are not tied to a specific tool.
+    pub fn get_db(&self) -> Arc<DBClient> {
+        self.db.clone()
     }
 
     /// Creates a tool instance by name.

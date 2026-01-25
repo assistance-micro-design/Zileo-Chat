@@ -391,6 +391,83 @@ async fn respond_validation(
 
 ---
 
+### get_validation_settings
+
+Récupère les paramètres de validation globaux.
+
+**Frontend**
+```typescript
+const settings = await invoke<ValidationSettings>('get_validation_settings');
+```
+
+**Backend Signature**
+```rust
+async fn get_validation_settings(
+    state: State<'_, AppState>
+) -> Result<ValidationSettings, String>
+```
+
+**Returns** : ValidationSettings avec mode, selective_config, risk_thresholds
+
+---
+
+### update_validation_settings
+
+Met à jour les paramètres de validation.
+
+**Frontend**
+```typescript
+await invoke('update_validation_settings', {
+  mode: 'selective',
+  selectiveConfig: { tools: true, subAgents: true, mcp: false, fileOps: true, dbOps: true },
+  riskThresholds: { autoApproveLow: false, alwaysConfirmHigh: true }
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_validation_settings(
+    mode: ValidationMode,
+    selective_config: SelectiveValidationConfig,
+    risk_thresholds: RiskThresholds,
+    state: State<'_, AppState>
+) -> Result<(), String>
+```
+
+**Note** : IPC auto-converts camelCase (TS) → snake_case (Rust)
+
+---
+
+### list_available_tools
+
+Liste les outils et serveurs MCP disponibles pour l'affichage dans les settings.
+
+**Frontend**
+```typescript
+const tools = await invoke<AvailableToolInfo[]>('list_available_tools');
+```
+
+**Backend Signature**
+```rust
+async fn list_available_tools(
+    state: State<'_, AppState>
+) -> Result<Vec<AvailableToolInfo>, String>
+```
+
+**AvailableToolInfo Type**
+```typescript
+type AvailableToolInfo = {
+  name: string;
+  description: string;
+  source: 'local' | 'mcp';
+  server_name?: string;  // For MCP tools only
+};
+```
+
+**Returns** : Liste combinée des outils locaux (MemoryTool, etc.) et outils MCP
+
+---
+
 ## Memory
 
 ### add_memory

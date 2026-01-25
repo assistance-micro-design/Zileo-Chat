@@ -240,6 +240,8 @@ async fn main() -> anyhow::Result<()> {
             commands::validation::get_validation_settings,
             commands::validation::update_validation_settings,
             commands::validation::reset_validation_settings,
+            // Tool discovery for validation settings
+            commands::validation::list_available_tools,
             // Memory commands (Phase 5)
             commands::memory::add_memory,
             commands::memory::list_memories,
@@ -405,6 +407,14 @@ async fn main() -> anyhow::Result<()> {
             tauri::async_runtime::spawn(async move {
                 // Suppress unused warning for orchestrator (used in context)
                 let _ = &orchestrator;
+
+                // Set app handle in ToolFactory for validation event emission
+                // This is needed for sub-agents that don't have agent_context
+                // Clone handle first to avoid holding guard across await
+                let handle_to_set = app_handle_clone.read().ok().and_then(|g| g.clone());
+                if let Some(handle) = handle_to_set {
+                    tool_factory.set_app_handle(handle).await;
+                }
 
                 // Load agents from database
                 let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking FROM agent";

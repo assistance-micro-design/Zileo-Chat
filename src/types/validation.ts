@@ -226,6 +226,18 @@ export interface UpdateValidationSettingsRequest {
 }
 
 /**
+ * Information about an available tool for validation settings
+ */
+export interface AvailableToolInfo {
+  /** Tool name/ID */
+  name: string;
+  /** Tool category (basic, sub_agent) */
+  category: 'basic' | 'sub_agent';
+  /** Whether the tool requires context */
+  requiresContext: boolean;
+}
+
+/**
  * Default validation settings values
  */
 export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
