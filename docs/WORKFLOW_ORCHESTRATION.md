@@ -395,6 +395,156 @@ activityStore.reset(): void
 
 ---
 
+## Human-in-the-Loop Validation
+
+### Overview
+
+Le systeme de validation permet a l'utilisateur de controler l'execution des operations sensibles pendant un workflow. Trois modes sont disponibles :
+
+| Mode | Comportement |
+|------|--------------|
+| **Auto** | Aucune validation requise (execution immediate) |
+| **Manual** | Validation requise pour TOUTES les operations |
+| **Selective** | Validation requise selon la configuration par type d'operation |
+
+### Types d'Operations Validables
+
+| Type | Description | Niveau de Risque |
+|------|-------------|------------------|
+| `SubAgent` | Spawn/delegate/parallel sub-agents | High (spawn, parallel) / Medium (delegate) |
+| `Tool` | Outils locaux (MemoryTool, TodoTool, etc.) | Medium |
+| `Mcp` | Appels aux serveurs MCP externes | Medium |
+| `FileOp` | Operations fichiers (reserve pour futur) | - |
+| `DbOp` | Operations base de donnees (reserve pour futur) | - |
+
+### Configuration Selective
+
+En mode Selective, chaque type peut etre active/desactive independamment :
+
+```typescript
+interface SelectiveValidationConfig {
+  tools: boolean;      // Outils locaux
+  sub_agents: boolean; // Sub-agents
+  mcp: boolean;        // Serveurs MCP
+  file_ops: boolean;   // Operations fichiers (futur)
+  db_ops: boolean;     // Operations DB (futur)
+}
+```
+
+### Seuils de Risque (Overrides)
+
+Deux options permettent d'ajuster le comportement par-dessus le mode choisi :
+
+| Option | Effet |
+|--------|-------|
+| `auto_approve_low` | En mode Manual, auto-approuve les operations Low risk |
+| `always_confirm_high` | En mode Auto, force la validation pour les operations High risk |
+
+**Logique combinee** :
+```
+Mode Auto + always_confirm_high:
+  Low/Medium → Auto-approuve
+  High       → Popup validation
+
+Mode Manual + auto_approve_low:
+  Low        → Auto-approuve
+  Medium/High → Popup validation
+```
+
+### Implementation Backend
+
+**Fichiers cles** :
+- `tools/validation_helper.rs` : Logique de validation centralisee
+- `agents/llm_agent.rs` : Integration dans la boucle d'execution des outils
+- `commands/validation.rs` : Commands Tauri pour les settings
+
+**ValidationHelper** :
+```rust
+// Methode generique pour tous les types
+fn needs_validation_for_type(
+    settings: &ValidationSettings,
+    validation_type: &ValidationType,
+    risk_level: &RiskLevel,
+) -> bool
+
+// Methodes specifiques
+async fn request_validation(workflow_id, operation_type, description, details)
+async fn request_tool_validation(workflow_id, tool_name, arguments)
+async fn request_mcp_validation(workflow_id, server_name, tool_name, arguments)
+```
+
+**Integration LLMAgent** :
+```rust
+// Avant execution de chaque outil local (sauf sub-agent tools)
+if !is_sub_agent_tool {
+    validation_helper.request_tool_validation(workflow_id, tool_name, args).await?;
+}
+
+// Avant chaque appel MCP
+validation_helper.request_mcp_validation(workflow_id, server, tool, args).await?;
+```
+
+### Flow de Validation
+
+```
+1. Agent detecte operation necessitant validation
+   ↓
+2. ValidationHelper verifie settings (needs_validation_for_type)
+   ↓
+3a. Pas besoin → Execute immediatement
+3b. Besoin → Cree ValidationRequest en DB (status: pending)
+   ↓
+4. Emit "validation_required" → Frontend
+   ↓
+5. UI affiche popup ValidationModal
+   ↓
+6. User: Approve | Reject
+   ↓
+7. Frontend appelle respond_to_validation command
+   ↓
+8. Update status en DB → ValidationHelper detecte le changement
+   ↓
+9a. Approved → Continue execution
+9b. Rejected → Return error, workflow s'arrete
+```
+
+### Frontend Integration
+
+**Store** : `validationStore` (src/lib/stores/validation.ts)
+- `hasPendingValidation` : Derived indiquant si une validation attend
+- `pendingValidation` : Details de la validation en attente
+
+**Component** : `ValidationModal.svelte`
+- Affiche details de l'operation (type, risque, arguments)
+- Boutons Approve / Reject
+- Auto-timeout configurable
+
+**Event Listener** :
+```typescript
+listen('validation_required', (event) => {
+  validationStore.setPending(event.payload);
+});
+```
+
+### Persistence
+
+Les settings de validation sont stockes dans SurrealDB :
+
+```sql
+-- Table settings avec ID fixe
+settings:`settings:validation_settings`
+
+-- Structure
+{
+  mode: 'auto' | 'manual' | 'selective',
+  selective_config: { tools, sub_agents, mcp, file_ops, db_ops },
+  risk_thresholds: { auto_approve_low, always_confirm_high },
+  timeout_seconds: number
+}
+```
+
+---
+
 ## Types d'Operations Orchestrables
 
 ### Sous-Agents

@@ -39,7 +39,10 @@ use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoi
 use crate::models::mcp::MCPTool;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::{AgentConfig, Lifecycle};
-use crate::tools::{context::AgentToolContext, Tool, ToolDefinition, ToolFactory};
+use crate::tools::{
+    context::AgentToolContext, validation_helper::ValidationHelper, Tool, ToolDefinition,
+    ToolFactory,
+};
 use async_trait::async_trait;
 use chrono::Local;
 use std::sync::Arc;
@@ -614,6 +617,9 @@ You are currently running with the following configuration:
     /// * `mcp_manager` - Optional MCP manager for MCP tools
     /// * `tools_used` - Mutable vector to track local tool usage
     /// * `mcp_calls_made` - Mutable vector to track MCP tool calls
+    /// * `workflow_id` - Workflow ID for validation tracking
+    /// * `validation_helper` - Optional validation helper for human-in-the-loop
+    #[allow(clippy::too_many_arguments)]
     async fn execute_function_call(
         &self,
         call: &FunctionCall,
@@ -621,6 +627,8 @@ You are currently running with the following configuration:
         mcp_manager: Option<&Arc<MCPManager>>,
         tools_used: &mut Vec<String>,
         mcp_calls_made: &mut Vec<String>,
+        workflow_id: &str,
+        validation_helper: Option<&ValidationHelper>,
     ) -> FunctionCallResult {
         let start = std::time::Instant::now();
 
@@ -629,6 +637,22 @@ You are currently running with the following configuration:
             // Execute via MCP
             if let Some(mcp) = mcp_manager {
                 mcp_calls_made.push(call.name.clone());
+
+                // Request validation for MCP tool call
+                if let Some(helper) = validation_helper {
+                    if let Err(e) = helper
+                        .request_mcp_validation(
+                            workflow_id,
+                            server,
+                            tool,
+                            call.arguments.clone(),
+                        )
+                        .await
+                    {
+                        warn!(tool = %call.name, error = %e, "MCP validation rejected");
+                        return FunctionCallResult::failure(&call.id, &call.name, e.to_string());
+                    }
+                }
 
                 match mcp.call_tool(server, tool, call.arguments.clone()).await {
                     Ok(result) => {
@@ -657,6 +681,40 @@ You are currently running with the following configuration:
 
             if let Some(tool) = matching_tool {
                 tools_used.push(call.name.clone());
+
+                // Request validation for local tool
+                // Skip validation for sub-agent tools (they have their own validation)
+                let is_sub_agent_tool = call.name == "SpawnAgentTool"
+                    || call.name == "DelegateTaskTool"
+                    || call.name == "ParallelTasksTool";
+
+                if !is_sub_agent_tool {
+                    if let Some(helper) = validation_helper {
+                        // Extract operation from arguments if available
+                        let operation = call
+                            .arguments
+                            .get("operation")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("execute");
+
+                        if let Err(e) = helper
+                            .request_tool_validation(
+                                workflow_id,
+                                &call.name,
+                                operation,
+                                call.arguments.clone(),
+                            )
+                            .await
+                        {
+                            warn!(tool = %call.name, error = %e, "Tool validation rejected");
+                            return FunctionCallResult::failure(
+                                &call.id,
+                                &call.name,
+                                e.to_string(),
+                            );
+                        }
+                    }
+                }
 
                 match tool.execute(call.arguments.clone()).await {
                     Ok(result) => {
@@ -993,6 +1051,20 @@ impl Agent for LLMAgent {
         // Clone workflow_id for use in progress events (use task_id as fallback)
         let event_workflow_id = workflow_id.clone().unwrap_or_else(|| task.id.clone());
 
+        // Create validation helper for human-in-the-loop validation
+        // Uses db from tool_factory, app_handle from agent_context (or factory as fallback)
+        let validation_helper = if let Some(factory) = self.tool_factory.as_ref() {
+            let db = factory.get_db();
+            // Try agent_context first, then fallback to tool_factory's app_handle
+            let app_handle = match self.agent_context.as_ref().and_then(|ctx| ctx.app_handle.clone()) {
+                Some(handle) => Some(handle),
+                None => factory.get_app_handle().await,
+            };
+            Some(ValidationHelper::new(db, app_handle))
+        } else {
+            None
+        };
+
         // Check if this is the primary workflow agent
         let is_primary_agent = task
             .context
@@ -1263,6 +1335,8 @@ impl Agent for LLMAgent {
                         mcp_manager.as_ref(),
                         &mut tools_used,
                         &mut mcp_calls_made,
+                        &event_workflow_id,
+                        validation_helper.as_ref(),
                     )
                     .await;
 

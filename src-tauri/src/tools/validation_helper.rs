@@ -124,11 +124,32 @@ impl ValidationHelper {
         ValidationSettings::default()
     }
 
-    /// Checks if validation is required based on settings.
+    /// Checks if validation is required based on settings for sub-agent operations.
     fn needs_validation(
         &self,
         settings: &ValidationSettings,
         operation_type: &SubAgentOperationType,
+        risk_level: &RiskLevel,
+    ) -> bool {
+        // Delegate to generic method
+        let validation_type = match operation_type {
+            SubAgentOperationType::Spawn => ValidationType::SubAgent,
+            SubAgentOperationType::Delegate => ValidationType::SubAgent,
+            SubAgentOperationType::ParallelBatch => ValidationType::SubAgent,
+        };
+        self.needs_validation_for_type(settings, &validation_type, risk_level)
+    }
+
+    /// Checks if validation is required based on settings for any operation type.
+    ///
+    /// This is the generic validation check that supports all operation types:
+    /// - SubAgent: Spawn, Delegate, ParallelBatch operations
+    /// - Tool: Local tool execution (MemoryTool, TodoTool, etc.)
+    /// - Mcp: MCP server tool calls
+    fn needs_validation_for_type(
+        &self,
+        settings: &ValidationSettings,
+        validation_type: &ValidationType,
         risk_level: &RiskLevel,
     ) -> bool {
         // Check mode first
@@ -151,20 +172,22 @@ impl ValidationHelper {
                 return true;
             }
             ValidationMode::Selective => {
-                // Selective mode: check operation type
+                // Selective mode: check operation type below
             }
         }
 
         // Selective mode: check if operation type requires validation
-        let type_requires_validation = match operation_type {
-            SubAgentOperationType::Spawn => settings.selective_config.sub_agents,
-            SubAgentOperationType::Delegate => settings.selective_config.sub_agents,
-            SubAgentOperationType::ParallelBatch => settings.selective_config.sub_agents,
+        let type_requires_validation = match validation_type {
+            ValidationType::SubAgent => settings.selective_config.sub_agents,
+            ValidationType::Tool => settings.selective_config.tools,
+            ValidationType::Mcp => settings.selective_config.mcp,
+            ValidationType::FileOp => settings.selective_config.file_ops,
+            ValidationType::DbOp => settings.selective_config.db_ops,
         };
 
         if !type_requires_validation {
             info!(
-                operation_type = %operation_type,
+                validation_type = %validation_type,
                 "Selective mode: operation type does not require validation"
             );
             return false;
@@ -417,6 +440,215 @@ impl ValidationHelper {
             "task_count": tasks.len(),
             "tasks": task_list
         })
+    }
+
+    // =========================================================================
+    // Local Tool Validation
+    // =========================================================================
+
+    /// Requests validation for a local tool execution.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - Associated workflow ID
+    /// * `tool_name` - Name of the tool being executed
+    /// * `operation` - Operation being performed (e.g., "add", "delete")
+    /// * `arguments` - Tool arguments (JSON)
+    ///
+    /// # Returns
+    /// * `Ok(())` - If approved or validation skipped
+    /// * `Err(ToolError)` - If rejected or error
+    pub async fn request_tool_validation(
+        &self,
+        workflow_id: &str,
+        tool_name: &str,
+        operation: &str,
+        arguments: Value,
+    ) -> Result<(), ToolError> {
+        let settings = self.load_validation_settings().await;
+        let risk_level = RiskLevel::Low; // Local tools are generally low risk
+
+        if !self.needs_validation_for_type(&settings, &ValidationType::Tool, &risk_level) {
+            info!(
+                workflow_id = %workflow_id,
+                tool_name = %tool_name,
+                "Skipping validation for local tool (mode: {:?})",
+                settings.mode
+            );
+            return Ok(());
+        }
+
+        let validation_id = uuid::Uuid::new_v4().to_string();
+        let details = Self::tool_details(tool_name, operation, &arguments);
+        let description = format!("Execute {} tool: {}", tool_name, operation);
+
+        info!(
+            validation_id = %validation_id,
+            workflow_id = %workflow_id,
+            tool_name = %tool_name,
+            "Creating validation request for local tool"
+        );
+
+        self.create_and_wait_validation(
+            &validation_id,
+            workflow_id,
+            ValidationType::Tool,
+            &description,
+            details,
+            risk_level,
+        )
+        .await
+    }
+
+    /// Creates operation details JSON for tool execution.
+    pub fn tool_details(tool_name: &str, operation: &str, arguments: &Value) -> Value {
+        serde_json::json!({
+            "tool_name": tool_name,
+            "operation": operation,
+            "arguments_preview": safe_truncate(&arguments.to_string(), 200, true)
+        })
+    }
+
+    // =========================================================================
+    // MCP Tool Validation
+    // =========================================================================
+
+    /// Requests validation for an MCP server tool call.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - Associated workflow ID
+    /// * `server_name` - MCP server name
+    /// * `tool_name` - Tool name on the server
+    /// * `arguments` - Tool arguments (JSON)
+    ///
+    /// # Returns
+    /// * `Ok(())` - If approved or validation skipped
+    /// * `Err(ToolError)` - If rejected or error
+    pub async fn request_mcp_validation(
+        &self,
+        workflow_id: &str,
+        server_name: &str,
+        tool_name: &str,
+        arguments: Value,
+    ) -> Result<(), ToolError> {
+        let settings = self.load_validation_settings().await;
+        let risk_level = RiskLevel::Medium; // MCP calls are medium risk (external system)
+
+        if !self.needs_validation_for_type(&settings, &ValidationType::Mcp, &risk_level) {
+            info!(
+                workflow_id = %workflow_id,
+                server_name = %server_name,
+                tool_name = %tool_name,
+                "Skipping validation for MCP tool (mode: {:?})",
+                settings.mode
+            );
+            return Ok(());
+        }
+
+        let validation_id = uuid::Uuid::new_v4().to_string();
+        let details = Self::mcp_details(server_name, tool_name, &arguments);
+        let description = format!("Call MCP server '{}': {}", server_name, tool_name);
+
+        info!(
+            validation_id = %validation_id,
+            workflow_id = %workflow_id,
+            server_name = %server_name,
+            tool_name = %tool_name,
+            "Creating validation request for MCP tool"
+        );
+
+        self.create_and_wait_validation(
+            &validation_id,
+            workflow_id,
+            ValidationType::Mcp,
+            &description,
+            details,
+            risk_level,
+        )
+        .await
+    }
+
+    /// Creates operation details JSON for MCP tool call.
+    pub fn mcp_details(server_name: &str, tool_name: &str, arguments: &Value) -> Value {
+        serde_json::json!({
+            "server_name": server_name,
+            "tool_name": tool_name,
+            "arguments_preview": safe_truncate(&arguments.to_string(), 200, true)
+        })
+    }
+
+    // =========================================================================
+    // Common Validation Logic
+    // =========================================================================
+
+    /// Creates a validation request and waits for response.
+    /// This is the common logic shared by all validation types.
+    async fn create_and_wait_validation(
+        &self,
+        validation_id: &str,
+        workflow_id: &str,
+        validation_type: ValidationType,
+        description: &str,
+        details: Value,
+        risk_level: RiskLevel,
+    ) -> Result<(), ToolError> {
+        // Create validation request in database
+        let validation_create = ValidationRequestCreate::new(
+            workflow_id.to_string(),
+            validation_type.clone(),
+            description.to_string(),
+            details.clone(),
+            risk_level.clone(),
+            ValidationStatus::Pending,
+        );
+
+        self.db
+            .create("validation_request", validation_id, validation_create)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to create validation request in database");
+                ToolError::DatabaseError(format!("Failed to create validation request: {}", e))
+            })?;
+
+        // Emit validation_required event to frontend
+        if let Some(ref app_handle) = self.app_handle {
+            // Create a generic validation event
+            let event = serde_json::json!({
+                "validation_id": validation_id,
+                "workflow_id": workflow_id,
+                "validation_type": validation_type.to_string(),
+                "operation": description,
+                "risk_level": risk_level.to_string(),
+                "details": details
+            });
+
+            if let Err(e) = app_handle.emit(events::VALIDATION_REQUIRED, &event) {
+                warn!(error = %e, "Failed to emit validation_required event");
+            } else {
+                debug!(validation_id = %validation_id, "Emitted validation_required event");
+            }
+        } else {
+            warn!("No app handle available, skipping event emission");
+        }
+
+        // Wait for validation response
+        let result = self
+            .wait_for_validation(validation_id, Duration::from_secs(VALIDATION_TIMEOUT_SECS))
+            .await;
+
+        match result {
+            Ok(true) => {
+                info!(validation_id = %validation_id, "Validation approved");
+                Ok(())
+            }
+            Ok(false) => {
+                info!(validation_id = %validation_id, "Validation rejected");
+                Err(ToolError::PermissionDenied(format!(
+                    "Operation was rejected by user: {}",
+                    description
+                )))
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 

@@ -25,8 +25,10 @@ use crate::{
         ValidationType,
     },
     security::Validator,
+    tools::registry::TOOL_REGISTRY,
     AppState,
 };
+use serde::Serialize;
 use chrono::Utc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -510,6 +512,57 @@ fn apply_audit_config(
         current.retention_days = v;
     }
     Ok(())
+}
+
+// =====================================================
+// Tool Discovery Commands
+// =====================================================
+
+/// Information about an available tool for validation settings
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableToolInfo {
+    /// Tool name/ID
+    pub name: String,
+    /// Tool category (basic, sub_agent)
+    pub category: String,
+    /// Whether the tool requires context
+    pub requires_context: bool,
+}
+
+/// Lists all available local tools.
+///
+/// Returns tools registered in the tool registry that can be validated.
+/// This includes basic tools and sub-agent tools.
+///
+/// # Returns
+/// Vector of available tool information
+#[tauri::command]
+#[instrument(name = "list_available_tools", skip(_state))]
+pub async fn list_available_tools(
+    _state: State<'_, AppState>,
+) -> Result<Vec<AvailableToolInfo>, String> {
+    info!("Listing available tools for validation");
+
+    let tools: Vec<AvailableToolInfo> = TOOL_REGISTRY
+        .available_tools()
+        .into_iter()
+        .map(|name| {
+            let is_sub_agent = TOOL_REGISTRY.requires_context(name);
+            AvailableToolInfo {
+                name: name.to_string(),
+                category: if is_sub_agent {
+                    "sub_agent".to_string()
+                } else {
+                    "basic".to_string()
+                },
+                requires_context: is_sub_agent,
+            }
+        })
+        .collect();
+
+    info!(count = tools.len(), "Available tools listed");
+    Ok(tools)
 }
 
 #[cfg(test)]

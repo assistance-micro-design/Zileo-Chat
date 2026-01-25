@@ -374,23 +374,34 @@ onMount(() => {
   - Logs d'opérations (audit trail)
 
 #### Validation (Global Settings)
-- Mode par défaut : Auto | Manual | Selective
-- Configuration selective globale :
-  - Tools validation (ON/OFF)
-  - Sub-agents validation (ON/OFF)
-  - MCP calls validation (ON/OFF)
-  - File operations validation (ON/OFF)
-  - Database operations validation (ON/OFF)
-- Risk level thresholds :
-  - Auto-approve LOW risk (checkbox)
-  - Always confirm HIGH risk (checkbox, disabled par défaut)
-- Timeout validation request :
-  - Délai avant auto-reject (slider 30s - 5min)
-  - Comportement timeout : Reject | Approve | Ask Again
-- Audit settings :
-  - Enable validation logging (checkbox)
-  - Log retention (days, slider 7-90)
-  - Export logs (button → CSV/JSON)
+
+**Implementation Status**: Complete (v0.9.1)
+
+**Mode de validation** (radio buttons) :
+- **Auto** : Execute sans confirmation (affiche liste des outils/MCP avec badge "Auto-approved")
+- **Manual** : Demande confirmation pour tout (affiche liste avec badge "Requires approval")
+- **Selective** : Configuration granulaire par type d'operation
+
+**Configuration selective** (checkboxes, visible en mode Selective) :
+- Local Tools validation (ON/OFF) - MemoryTool, TodoTool, CalculatorTool, etc.
+- Sub-agents validation (ON/OFF) - SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+- MCP calls validation (ON/OFF) - Tous les appels aux serveurs MCP externes
+- File operations validation (ON/OFF) - Reserve pour futur
+- Database operations validation (ON/OFF) - Reserve pour futur
+
+**Seuils de risque** (overrides appliques par-dessus le mode) :
+- Auto-approve LOW risk (checkbox) : En mode Manual, ignore validation pour Low risk
+- Always confirm HIGH risk (checkbox) : En mode Auto, force validation pour High risk
+
+**Affichage dynamique** :
+- Chaque mode affiche la liste des outils locaux et serveurs MCP disponibles
+- Badges visuels indiquant le statut : "Auto-approved" (vert) ou "Requires approval" (orange)
+- En mode Selective, les badges refletent la configuration des toggles
+
+**Futur (non implemente)** :
+- Timeout validation request (slider 30s - 5min)
+- Comportement timeout : Reject | Approve | Ask Again
+- Audit settings (logging, retention, export)
 
 ## 3. Page Agent
 
