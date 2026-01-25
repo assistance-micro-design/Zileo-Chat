@@ -641,12 +641,7 @@ You are currently running with the following configuration:
                 // Request validation for MCP tool call
                 if let Some(helper) = validation_helper {
                     if let Err(e) = helper
-                        .request_mcp_validation(
-                            workflow_id,
-                            server,
-                            tool,
-                            call.arguments.clone(),
-                        )
+                        .request_mcp_validation(workflow_id, server, tool, call.arguments.clone())
                         .await
                     {
                         warn!(tool = %call.name, error = %e, "MCP validation rejected");
@@ -1056,7 +1051,11 @@ impl Agent for LLMAgent {
         let validation_helper = if let Some(factory) = self.tool_factory.as_ref() {
             let db = factory.get_db();
             // Try agent_context first, then fallback to tool_factory's app_handle
-            let app_handle = match self.agent_context.as_ref().and_then(|ctx| ctx.app_handle.clone()) {
+            let app_handle = match self
+                .agent_context
+                .as_ref()
+                .and_then(|ctx| ctx.app_handle.clone())
+            {
                 Some(handle) => Some(handle),
                 None => factory.get_app_handle().await,
             };
