@@ -5,6 +5,32 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-01-25
+
+### Added
+
+- **Human-in-the-Loop Validation**: Complete validation system for workflow operations
+  - Three validation modes: Auto, Manual, Selective
+  - Granular control per operation type (Tools, Sub-agents, MCP)
+  - Risk threshold overrides (auto-approve-low, always-confirm-high)
+  - Dynamic UI showing available tools and MCP servers with status badges
+- **New Command**: `list_available_tools` for retrieving tools/MCP info
+- **New Type**: `AvailableToolInfo` for tool metadata
+
+### Changed
+
+- **ToolFactory**: Now stores `app_handle` for sub-agent validation support
+- **LLMAgent**: Integrated ValidationHelper before tool/MCP execution
+- **ValidationSettings UI**: Enhanced with mode-specific displays and visual feedback
+
+### Documentation
+
+- **WORKFLOW_ORCHESTRATION.md**: Added comprehensive "Human-in-the-Loop Validation" section
+- **FRONTEND_SPECIFICATIONS.md**: Updated validation settings description
+- **API_REFERENCE.md**: Documented new validation commands
+
+---
+
 ## [0.9.1] - 2026-01-23
 
 ### Added
