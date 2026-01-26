@@ -17,7 +17,7 @@
 - Contrôle total structure dossiers pour agents/prompts/tools
 - Pas de dépendances template obsolètes
 
-**Structure Conceptuelle** :
+**Structure Reelle** :
 ```
 zileo-chat-3/
 ├─ src/                    # Frontend SvelteKit
@@ -27,14 +27,14 @@ zileo-chat-3/
 │
 ├─ src-tauri/              # Backend Rust
 │  ├─ agents/              # Système multi-agents
-│  │  ├─ core/             # Orchestrateur, registry
-│  │  ├─ specialized/      # Agents permanents (DB, API, etc.)
-│  │  ├─ config/           # Configs TOML agents
-│  │  └─ prompts/          # System prompts + templates
+│  │  ├─ core/             # Orchestrateur, registry, agent.rs
+│  │  ├─ llm_agent.rs      # Agent LLM principal
+│  │  └─ simple_agent.rs   # Agent simple
 │  ├─ llm/                 # Rig.rs integration, providers
 │  ├─ mcp/                 # MCP client/server (SDK officiel)
-│  ├─ tools/               # MCP tools custom
+│  ├─ tools/               # Tools (Memory, Todo, Calculator, UserQuestion, SubAgent)
 │  ├─ db/                  # SurrealDB client, schemas
+│  ├─ security/            # Keystore + validation
 │  └─ commands/            # Tauri commands (IPC)
 │
 └─ docs/                   # Documentation projet
@@ -116,7 +116,7 @@ zileo-chat-3/
 - agent → memory (one-to-many)
 - memory ↔ memory (many-to-many, relations sémantiques)
 
-> **Note Implémentation** : Le schéma final contient 18 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `prompt`, `settings`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
+> **Note Implémentation** : Le schéma final contient 16 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `user_question`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
 
 **Pas de schéma rigide** :
 - SurrealDB = schemaless possible
@@ -985,7 +985,7 @@ const handleSave = createAsyncHandler(
 - 1 request per second minimum delay (`MIN_DELAY_BETWEEN_CALLS_MS = 1000`)
 - Applied before every LLM API call
 - Compatible Mistral Free Tier et Ollama
-- Implementation: `src-tauri/src/llm/rate_limiter.rs`
+- Implementation: `src-tauri/src/llm/manager.rs` et `retry.rs`
 
 **Retry Mechanism** :
 - 3 max retries avec exponential backoff (1s, 2s, 4s)
@@ -1134,15 +1134,15 @@ let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 | ID | Item | Impact | Status |
 |---|---|---|---|
 | OPT-SCROLL-2 | Remove backdrop-filter blur | 15-30% GPU | Active |
-| OPT-SCROLL-3 | will-change: scroll-position | GPU acceleration | Active |
-| OPT-SCROLL-5 | CSS contain on grids | ~10% layout time | Active |
 | OPT-SCROLL-6 | getFilteredModelsMemoized() | ~5-10% JS | Active |
 | OPT-SCROLL-7 | Virtual scrolling MemoryList | 20 vs 20000 DOM nodes | Active |
-| OPT-SCROLL-8 | .is-scrolling animation pause | ~5% GPU during scroll | Active |
 
 **Obsoleted Optimizations** (superseded by route-based):
 - OPT-SCROLL-1: Single threshold IntersectionObserver
+- OPT-SCROLL-3: will-change scroll (not needed with routes)
 - OPT-SCROLL-4: RAF debounce IntersectionObserver
+- OPT-SCROLL-5: CSS contain on grids (not implemented)
+- OPT-SCROLL-8: .is-scrolling animation pause (not implemented)
 
 **Implementation Files**:
 - Layout: `src/routes/settings/+layout.svelte`

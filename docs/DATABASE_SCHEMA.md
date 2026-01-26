@@ -406,39 +406,6 @@ Historique des executions de sub-agents.
 
 ---
 
-### prompt
-
-Bibliotheque de prompts systeme.
-
-**Champs**
-- `id` : UUID
-- `name` : string
-- `description` : string?
-- `category` : string?
-- `content` : string
-- `variables` : array<string>
-- `created_at` : datetime
-- `updated_at` : datetime
-
-**Indexes**
-- `name`
-- `category`
-
----
-
-### settings
-
-Stockage cle-valeur pour configurations globales.
-
-**Champs**
-- `id` : string (key, e.g., "settings:validation", "settings:embedding_config")
-- `config` : object (JSON configuration)
-- `updated_at` : datetime
-
-**Usage** : ValidationSettings, EmbeddingConfig, etc.
-
----
-
 ### agent
 
 Configuration des agents crees par l'utilisateur.
@@ -467,22 +434,6 @@ Configuration des agents crees par l'utilisateur.
 
 ---
 
-## Relations Graph
-
-```sql
--- Workflow → Messages
-RELATE workflow:abc -> contains -> message:xyz
-
--- Workflow → Tasks
-RELATE workflow:abc -> has_task -> task:123
-
--- Agent → Memories
-RELATE agent_state:db_agent -> created -> memory:456
-
--- Memory ↔ Memory (relations sémantiques)
-RELATE memory:aaa -> relates_to -> memory:bbb
-```
-
 ## Schéma Vectoriel (HNSW)
 
 **Configuration Index**
@@ -498,55 +449,6 @@ ef_search: 50 (qualité recherche)
 ```
 
 **Recherche KNN** : Retour top_k résultats avec score similarité
-
----
-
-## Retention Policy
-
-**Workflows**
-- Completed : 90 jours → archivage JSON
-- Error : 180 jours (debug long terme)
-- Running : Pas suppression auto
-
-**Logs** (table séparée, non schématisée ici)
-- Application : 30 jours
-- Audit : 1 an
-- Metrics : 90 jours (agrégation mensuelle après)
-
-**Memory**
-- Temporary (workflow-specific) : Suppression avec workflow
-- Permanent : Pas expiration
-- Pruning : Manuel ou score pertinence
-
-**Messages**
-- Liés à workflow : Même retention que workflow
-- Compression : Embeddings pour old messages (économie tokens)
-
-**Validation Requests**
-- Audit trail : 1 an
-- Suppression : Avec workflow parent si <1an
-
-**Tasks**
-- Même retention que workflow parent
-
----
-
-## Queries Exemples (Conceptuel)
-
-### Workflow Actif avec Contexte
-Récupérer workflow + agent + messages + tasks pending
-
-### Recherche Sémantique Memory
-Vector search embedding similarity + filtres metadata
-
-### Agent Metrics
-Agrégation metrics tous workflows agent (success rate, avg tokens, cost)
-
-### Validation Pending
-Liste validations pending workflow running pour UI notification
-
-### Task Dependencies
-Graph traversal tasks bloquées par dépendances non-complétées
 
 ---
 
@@ -651,22 +553,6 @@ GROUP BY server_name
 
 ---
 
-## Migration & Évolution
-
-**Versioning Schema**
-- Migrations SurrealDB via fichiers `.surql`
-- Tracking version dans table `schema_version`
-
-**Ajout Champs**
-- Compatibilité backward : Champs optionnels
-- Validation schéma : SCHEMAFULL pour tables critiques
-
-**Refactoring Relations**
-- Graph queries facilitent évolution relations
-- Pas de foreign keys rigides (NoSQL graph)
-
----
-
 ## Sécurité
 
 **Permissions**
@@ -696,11 +582,6 @@ GROUP BY server_name
 - Batch inserts messages/tasks (transactions)
 - Cache queries fréquentes (ex: agent_state metrics)
 - Pagination results (50-100 items par page)
-
-**Monitoring**
-- Slow queries >100ms loggées
-- Index usage tracking
-- Vector search latency P95/P99
 
 ---
 

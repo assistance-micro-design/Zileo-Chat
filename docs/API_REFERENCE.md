@@ -76,41 +76,6 @@ async fn create_workflow(
 
 ---
 
-### save_workflow_state
-
-Persiste état workflow dans DB.
-
-**Frontend**
-```typescript
-await invoke('save_workflow_state', {
-  id: string,
-  state: WorkflowState
-});
-```
-
-**Backend Signature**
-```rust
-async fn save_workflow_state(
-    id: String,
-    state: WorkflowState
-) -> Result<(), String>
-```
-
-**WorkflowState Type**
-```rust
-struct WorkflowState {
-    name: String,
-    status: WorkflowStatus,
-    messages: Vec<Message>,
-    tools: Vec<ToolExecution>,
-    metrics: WorkflowMetrics
-}
-```
-
-**Errors** : DB connection failed, invalid state
-
----
-
 ### load_workflows
 
 Charge workflows (actifs, complétés, ou tous).
@@ -367,30 +332,6 @@ type ValidationRequest = {
 
 ---
 
-### respond_validation
-
-Envoie réponse validation.
-
-**Frontend**
-```typescript
-await invoke('respond_validation', {
-  requestId: string,
-  approved: boolean
-});
-```
-
-**Backend Signature**
-```rust
-async fn respond_validation(
-    request_id: String,
-    approved: bool
-) -> Result<(), String>
-```
-
-**Effect** : Workflow resume (si approved) ou skip operation (si rejected)
-
----
-
 ### get_validation_settings
 
 Récupère les paramètres de validation globaux.
@@ -499,29 +440,33 @@ async fn add_memory(
 
 ---
 
-### search_memory
+### search_memories
 
 Recherche sémantique mémoires.
 
 **Frontend**
 ```typescript
-const results = await invoke<Memory[]>('search_memory', {
+const results = await invoke<MemorySearchResult[]>('search_memories', {
   query: string,
-  topK?: number,
-  filters?: MemoryFilters
+  limit?: number,
+  typeFilter?: MemoryType,
+  workflowId?: string,
+  threshold?: number
 });
 ```
 
 **Backend Signature**
 ```rust
-async fn search_memory(
+async fn search_memories(
     query: String,
-    top_k: Option<usize>,
-    filters: Option<MemoryFilters>
-) -> Result<Vec<Memory>, String>
+    limit: Option<usize>,
+    type_filter: Option<MemoryType>,
+    workflow_id: Option<String>,
+    threshold: Option<f64>
+) -> Result<Vec<MemorySearchResult>, String>
 ```
 
-**Process** : Generate query embedding → KNN search → Return ranked results
+**Process** : Generate query embedding → KNN search → Return ranked results with similarity scores
 
 ---
 
@@ -1259,31 +1204,6 @@ const result = await invoke<ConnectionTest>('test_mcp_server', {
 
 ---
 
-### update_mcp_config
-
-Met à jour configuration MCP server.
-
-**Frontend**
-```typescript
-await invoke('update_mcp_config', {
-  serverName: string,
-  config: MCPConfig
-});
-```
-
-**MCPConfig**
-```typescript
-type MCPConfig = {
-  command: 'docker' | 'npx' | 'uvx';
-  args: string[];
-  env?: Record<string, string>;
-};
-```
-
-**Restart Required** : Oui (v1), config chargée au startup
-
----
-
 ### get_mcp_latency_metrics
 
 Retourne les metriques de latence (percentiles) pour les appels MCP.
@@ -1321,253 +1241,9 @@ interface MCPLatencyMetrics {
 
 ---
 
-## Utilities
+## Sub-Agent Events
 
-### count_tokens
-
-Compte tokens texte selon provider.
-
-**Frontend**
-```typescript
-const count = await invoke<number>('count_tokens', {
-  text: string,
-  provider: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn count_tokens(
-    text: String,
-    provider: String
-) -> Result<usize, String>
-```
-
-**Uses** : Provider-specific tokenizer
-
----
-
-### export_workflow
-
-Exporte workflow en JSON/Markdown.
-
-**Frontend**
-```typescript
-const data = await invoke<string>('export_workflow', {
-  id: string,
-  format: 'json' | 'markdown'
-});
-```
-
-**Backend Signature**
-```rust
-async fn export_workflow(
-    id: String,
-    format: String
-) -> Result<String, String>
-```
-
-**Returns** : Serialized data
-
----
-
-### import_workflow
-
-Importe workflow depuis JSON.
-
-**Frontend**
-```typescript
-const id = await invoke<string>('import_workflow', {
-  data: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn import_workflow(
-    data: String
-) -> Result<String, String>
-```
-
-**Validation** : Schema validation avant import
-
----
-
-## Sub-Agent Tools
-
-The sub-agent system allows the primary workflow agent to spawn, delegate to, and execute tasks in parallel across specialized agents.
-
-### SpawnAgentTool
-
-Internal tool used by agents to spawn temporary sub-agents for specialized tasks.
-
-**Tool Definition**
-```json
-{
-  "id": "SpawnAgentTool",
-  "name": "Spawn Agent",
-  "operations": ["spawn", "list", "terminate"]
-}
-```
-
-**Operations**
-
-**spawn**: Create and execute a temporary sub-agent
-```json
-{
-  "operation": "spawn",
-  "name": "CodeAnalyzer",
-  "prompt": "Analyze the codebase for security vulnerabilities...",
-  "tools": ["MemoryTool", "TodoTool"],
-  "mcp_servers": ["serena"]
-}
-```
-
-**list**: List active sub-agents for current workflow
-```json
-{
-  "operation": "list"
-}
-```
-
-**terminate**: Terminate a running sub-agent
-```json
-{
-  "operation": "terminate",
-  "child_id": "sub_agent_uuid"
-}
-```
-
-**Result Type**
-```typescript
-interface SubAgentSpawnResult {
-  success: boolean;
-  child_id: string;
-  report: string;  // Markdown report from sub-agent
-  metrics: {
-    duration_ms: number;
-    tokens_input: number;
-    tokens_output: number;
-  };
-}
-```
-
-**Constraints**
-- Maximum 3 sub-agents per workflow
-- Only primary agent can spawn sub-agents
-- Sub-agents cannot spawn their own sub-agents (single level hierarchy)
-
----
-
-### DelegateTaskTool
-
-Internal tool for delegating tasks to existing permanent agents.
-
-**Tool Definition**
-```json
-{
-  "id": "DelegateTaskTool",
-  "name": "Delegate Task",
-  "operations": ["delegate", "list_agents"]
-}
-```
-
-**Operations**
-
-**delegate**: Delegate a task to a permanent agent
-```json
-{
-  "operation": "delegate",
-  "agent_id": "db_agent",
-  "prompt": "Analyze the database schema for performance issues..."
-}
-```
-
-**list_agents**: List available permanent agents
-```json
-{
-  "operation": "list_agents"
-}
-```
-
-**Result Type**
-```typescript
-interface DelegateResult {
-  success: boolean;
-  agent_id: string;
-  report: string;
-  metrics: {
-    duration_ms: number;
-    tokens_input: number;
-    tokens_output: number;
-  };
-}
-```
-
-**Constraints**
-- Only primary agent can delegate tasks
-- Cannot delegate to self
-- Target agent must exist in registry
-
----
-
-### ParallelTasksTool
-
-Internal tool for executing multiple tasks in parallel across different agents.
-
-**Tool Definition**
-```json
-{
-  "id": "ParallelTasksTool",
-  "name": "Parallel Tasks",
-  "operations": ["execute_batch"]
-}
-```
-
-**Operations**
-
-**execute_batch**: Execute multiple tasks in parallel
-```json
-{
-  "operation": "execute_batch",
-  "tasks": [
-    {"agent_id": "db_agent", "prompt": "Analyze database schema..."},
-    {"agent_id": "api_agent", "prompt": "Review API security..."},
-    {"agent_id": "ui_agent", "prompt": "Check accessibility..."}
-  ]
-}
-```
-
-**Result Type**
-```typescript
-interface ParallelBatchResult {
-  success: boolean;
-  completed: number;
-  failed: number;
-  results: Array<{
-    agent_id: string;
-    success: boolean;
-    report?: string;
-    error?: string;
-    metrics?: {
-      duration_ms: number;
-      tokens_input: number;
-      tokens_output: number;
-    };
-  }>;
-  aggregated_report: string;  // Combined markdown report
-}
-```
-
-**Constraints**
-- Maximum 3 tasks per batch
-- Only primary agent can execute parallel tasks
-- All tasks execute concurrently (total time ~= slowest task)
-- Each agent only receives its prompt (no shared context)
-
----
-
-### Sub-Agent Validation Events
+### Validation Events
 
 Human-in-the-loop validation for sub-agent operations.
 

@@ -77,7 +77,7 @@ let tool = factory.create_tool_with_context(
 
 **Fichier**: `src-tauri/src/tools/registry.rs`
 
-Le `TOOL_REGISTRY` est un singleton global (lazy_static) pour la decouverte et validation des tools.
+Le `TOOL_REGISTRY` est un singleton global (once_cell::sync::Lazy) pour la decouverte et validation des tools.
 
 ### Tools enregistres
 
@@ -86,7 +86,7 @@ Le `TOOL_REGISTRY` est un singleton global (lazy_static) pour la decouverte et v
 | MemoryTool | Basic | false |
 | TodoTool | Basic | false |
 | CalculatorTool | Basic | false |
-| UserQuestionTool | Interaction | false |
+| UserQuestionTool | Basic | false |
 | SpawnAgentTool | SubAgent | true |
 | DelegateTaskTool | SubAgent | true |
 | ParallelTasksTool | SubAgent | true |

@@ -205,7 +205,7 @@ MCP Server Process
 
 **Design Decision**: Le `MCPManager` est indexé par **nom de serveur** (pas ID) car les agents référencent les serveurs par nom dans leur configuration (`mcp_servers: ["Serena", "Context7"]`).
 
-### Commandes Tauri (10 commands)
+### Commandes Tauri (11 commands)
 
 #### Configuration
 
@@ -232,15 +232,21 @@ MCP Server Process
 | `list_mcp_tools` | `(serverName: String) -> Result<Vec<MCPTool>>` | Liste les outils d'un serveur |
 | `call_mcp_tool` | `(request: MCPToolCallRequest) -> Result<MCPToolCallResult>` | Exécute un outil MCP |
 
+#### Métriques
+
+| Commande | Signature | Description |
+|----------|-----------|-------------|
+| `get_mcp_latency_metrics` | `(serverName?: String) -> Result<Vec<MCPLatencyMetrics>>` | Métriques de latence (p50, p95, p99) |
+
 ### Types TypeScript
 
 ```typescript
 // Configuration serveur (création/mise à jour)
 interface MCPServerConfig {
-  id?: string;           // Auto-généré si absent
+  id: string;            // Unique identifier
   name: string;          // Identifiant unique fonctionnel
   enabled: boolean;
-  command: 'docker' | 'npx' | 'uvx' | 'http';
+  command: MCPDeploymentMethod;  // 'docker' | 'npx' | 'uvx' | 'http'
   args: string[];
   env: Record<string, string>;
   description?: string;
@@ -273,8 +279,8 @@ interface MCPToolCallRequest {
 // Résultat d'appel d'outil
 interface MCPToolCallResult {
   success: boolean;
-  content: string | null;
-  error: string | null;
+  content: unknown;       // Can be string, object, or array
+  error?: string;         // Optional error message
   duration_ms: number;
 }
 
@@ -285,6 +291,15 @@ interface MCPTestResult {
   tools: MCPTool[];
   resources: MCPResource[];
   latency_ms: number;
+}
+
+// Métriques de latence (percentiles)
+interface MCPLatencyMetrics {
+  server_name: string;
+  p50_ms: number;      // Médiane
+  p95_ms: number;
+  p99_ms: number;
+  total_calls: number;
 }
 ```
 

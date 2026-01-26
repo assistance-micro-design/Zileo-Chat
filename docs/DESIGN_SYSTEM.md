@@ -1572,7 +1572,7 @@ Create `src/styles/variables.css`:
 
 ```
 src/lib/components/
-  ui/                        # 12 atomic components
+  ui/                        # 13 atomic components
     Button.svelte            # 4 variants, 4 sizes
     Card.svelte              # Flexible snippet slots
     Modal.svelte             # Accessible dialog
@@ -1675,7 +1675,7 @@ export const theme = createThemeStore();
 
 ### All Svelte Stores
 
-The application uses 13 Svelte stores for state management:
+The application uses 15 Svelte stores for state management:
 
 | Store | File | Purpose |
 |-------|------|---------|

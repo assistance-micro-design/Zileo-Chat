@@ -1,9 +1,9 @@
 # Remaining Tasks - Post-v1 Optimizations
 
 > **Status**: DEFERRED - To be implemented after v1 release
-> **Last Updated**: 2025-12-11
+> **Last Updated**: 2026-01-25
 > **Total Estimated Effort**: ~65-70 hours
-> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11) + OPT-FA (11/14) + OPT-MSG (7/8)
+> **Validation**: Code-verified, all v1.0 phases complete + OPT-MEM (11/11) + OPT-TODO (11/11) + OPT-UQ (12/12) + OPT-TD (8/10) + OPT-SCROLL (8/8) + OPT-WF (9/11) + OPT-FA (11/14) + OPT-MSG (8/8)
 
 ## Overview
 
@@ -35,7 +35,7 @@ All optimization phases are **COMPLETE**:
 | SCROLL | Settings Page Optimizations | Route-based navigation, CSS contain, virtual scroll, memoization (8/8 items) |
 | WF | Workflow Optimizations | 9/11 OPT-WF items (query constants, cascade delete, timeouts, cancellation sync, futures lock, security patch) |
 | FA | Frontend/Agent Optimizations | 11/14 OPT-FA items (modal fix, debounce, localStorage, PageState, WorkflowExecutor, stores consolidation) |
-| MSG | Messages Area Optimizations | 7/8 OPT-MSG items (TokenDisplay animations, formatDuration utility complete, icon consolidation, virtual scroll ActivityFeed, overflow fixes) |
+| MSG | Messages Area Optimizations | 8/8 OPT-MSG items (TokenDisplay animations, formatDuration utility complete, icon consolidation, virtual scroll ActivityFeed, overflow fixes, accessibility) |
 
 **Total Tests**: 844+ passing (backend unit)
 **Code Quality**: 0 errors across all validations (clippy, eslint, svelte-check)
@@ -100,7 +100,7 @@ Messages Area optimizations for Agent page: TokenDisplay, ActivityFeed, and side
 | OPT-MSG-5 | Virtual scroll ActivityFeed (threshold 20 items) | DONE |
 | OPT-MSG-6 | Fix overflow issues + extract ActivityItemDetails | DONE |
 | OPT-MSG-7 | Virtual scroll MessageList | DEFER (P3) |
-| OPT-MSG-8 | Accessibility task-details (role="region") | DEFER (P3) |
+| OPT-MSG-8 | Accessibility task-details (role="region") | DONE |
 
 **Key Deliverables**:
 - `src/lib/utils/duration.ts`: formatDuration utility (DRY)
@@ -297,13 +297,11 @@ Workflow domain optimizations targeting performance, maintainability, and securi
 | ID | Item | Description | Effort | Reason for Deferral |
 |----|------|-------------|--------|---------------------|
 | OPT-MSG-7 | Virtual scroll MessageList | Implement virtual scrolling for 500+ messages | 2h | P3, CSS containment OK until ~200 messages |
-| OPT-MSG-8 | Accessibility task-details | Add role="region" aria-label="Task details" | 5min | P3, nice-to-have |
 
 **Prerequisites**: None
 
 **Implementation Notes**:
 - OPT-MSG-7: Use @humanspeak/svelte-virtual-list (already installed), adapt auto-scroll to bottom
-- OPT-MSG-8: Add ARIA attributes for screen reader navigation
 
 ---
 

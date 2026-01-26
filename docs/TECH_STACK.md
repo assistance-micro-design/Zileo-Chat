@@ -1,14 +1,14 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 9 Decembre 2025**
+> **Versions actuelles du projet : 25 Janvier 2026**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.49.1 | Svelte 5.45.6
-Backend   : Rust 1.91.1 + Tauri 2.9.3
-Database  : SurrealDB 2.4.0 (protocol-http enabled)
+Frontend  : SvelteKit 2.49.1 | Svelte 5.48.0
+Backend   : Rust 1.91.1 + Tauri 2
+Database  : SurrealDB 2.5.0 (protocol-http enabled)
 Desktop   : Tauri (cross-platform)
 ```
 
@@ -17,28 +17,28 @@ Desktop   : Tauri (cross-platform)
 ### Frontend (package.json)
 
 **Core Framework**:
-- **svelte**: 5.45.6
+- **svelte**: 5.48.0
 - **@sveltejs/kit**: 2.49.1
 - **@sveltejs/adapter-static**: ^3.0.0
-- **@sveltejs/vite-plugin-svelte**: ^6.2.1
+- **@sveltejs/vite-plugin-svelte**: ^6.2.4
 - **vite**: ^7.2.6
 
 **TypeScript**:
 - **typescript**: ^5.9.3
-- **svelte-check**: ^4.0.0
+- **svelte-check**: ^4.3.5
 
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.9.0
-- **@tauri-apps/cli**: ^2.9.4
+- **@tauri-apps/cli**: ^2.9.6
 - **@tauri-apps/plugin-dialog**: ^2.4.2 (updated OPT-FA-2)
 
 **UI Components**:
-- **@lucide/svelte**: ^0.560.0 (official Lucide icon library - migrated OPT-FA-12)
+- **@lucide/svelte**: ^0.563.1 (official Lucide icon library - migrated OPT-FA-12)
 
 **Testing**:
 - **vitest**: ^4.0.15 (unit tests - updated OPT-FA-6)
-- **@playwright/test**: ^1.57.0 (E2E tests)
-- **jsdom**: ^27.2.0 (DOM testing)
+- **@playwright/test**: ^1.58.0 (E2E tests)
+- **jsdom**: ^27.4.0 (DOM testing)
 
 **Linting**:
 - **eslint**: ^9.0.0
@@ -46,7 +46,7 @@ Desktop   : Tauri (cross-platform)
 - **@eslint/js**: ^9.39.1
 - **@typescript-eslint/eslint-plugin**: ^8.0.0
 - **@typescript-eslint/parser**: ^8.0.0
-- **typescript-eslint**: ^8.48.0
+- **typescript-eslint**: ^8.53.1
 - **globals**: ^16.5.0
 
 ### Backend (Cargo.toml)
@@ -61,23 +61,23 @@ Desktop   : Tauri (cross-platform)
 **LLM & Multi-Agent**:
 - **rig-core**: 0.24.0 (features: all) - LLM abstraction framework
 - **async-trait**: 0.1 (agent trait definitions)
-- **futures**: 0.3 (parallel execution)
-- **futures-util**: 0.3
+- **futures**: 0.3.31 (parallel execution)
+- **futures-util**: 0.3.31
 
 **Database**:
-- **surrealdb**: 2.4.0 (features: kv-rocksdb, protocol-http)
+- **surrealdb**: 2.5.0 (features: kv-rocksdb, protocol-http)
 
 **Serialization**:
 - **serde**: 1.0.228 (features: derive)
-- **serde_json**: 1.0.145
+- **serde_json**: 1.0.149
 
 **Async Runtime**:
-- **tokio**: 1.48.0 (features: full)
+- **tokio**: 1.49.0 (features: rt-multi-thread, macros, sync, time)
 - **tokio-util**: 0.7 (features: rt)
 
 **Error Handling**:
 - **anyhow**: 1.0
-- **thiserror**: 1.0
+- **thiserror**: 2.0
 
 **Logging**:
 - **tracing**: 0.1
@@ -85,19 +85,19 @@ Desktop   : Tauri (cross-platform)
 
 **Utilities**:
 - **uuid**: 1.18 (features: v4, serde) - Updated OPT-MEM-3
-- **chrono**: 0.4.42 (features: serde) - Updated OPT-MEM-3
+- **chrono**: 0.4.43 (features: serde) - Updated OPT-MEM-3
 - **regex**: 1.10
-- **lazy_static**: 1.5
+- **once_cell**: 1.20
 
 **HTTP & Network**:
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
 
 **Security**:
-- **keyring**: 2.0 (OS keychain integration)
+- **keyring**: 3.6 (OS keychain integration)
 - **aes-gcm**: 0.10 (AES-256 encryption)
 
 **Dev Dependencies**:
-- **tempfile**: 3.14
+- **tempfile**: 3.24
 
 ### Database
 - **SurrealDB**: 2.4.0 (embedded with kv-rocksdb feature)

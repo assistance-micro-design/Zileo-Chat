@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.1 | Svelte 5.45.6 | Vite 7.2.6 | Tauri 2.9.4
+> **Stack**: SvelteKit 2.49.1 | Svelte 5.48.0 | Vite 7.2.6 | Tauri 2.9.4
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 
@@ -1269,11 +1269,11 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (83 Total Components)
+### Component Library (85 Total Components)
 
 ```
 src/lib/components/
-├─ ui/                  # 12 atomic UI components
+├─ ui/                  # 13 atomic UI components
 │  ├─ Button.svelte
 │  ├─ Badge.svelte
 │  ├─ Card.svelte
@@ -1307,7 +1307,7 @@ src/lib/components/
 │  ├─ ReasoningStep.svelte
 │  ├─ StreamingMessage.svelte
 │  └─ ToolExecution.svelte
-├─ workflow/            # 14 workflow components
+├─ workflow/            # 16 workflow components
 │  ├─ ActivityFeed.svelte
 │  ├─ ActivityItem.svelte
 │  ├─ ActivityItemDetails.svelte
@@ -1370,7 +1370,7 @@ src/lib/components/
       └─ StepComplete.svelte
 ```
 
-### Stores (14 Total)
+### Stores (15 Total)
 
 | Store | Type | Key Exports | Description |
 |-------|------|-------------|-------------|
@@ -1389,7 +1389,7 @@ src/lib/components/
 | `onboarding` | custom | N/A | First-launch wizard state |
 | `index` | barrel | All stores | Re-exports all stores |
 
-### Types (22 Modules in src/types/)
+### Types (23 Modules in src/types/)
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|

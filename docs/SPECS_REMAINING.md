@@ -1,8 +1,8 @@
 # Remaining Specifications - Deferred Frontend Optimizations
 
 > **Status**: DEFERRED - Post-v1 implementation
-> **Last Updated**: 2025-12-11
-> **Sources**: OPT-FA (11/14 done), OPT-MSG (7/8 done)
+> **Last Updated**: 2026-01-25
+> **Sources**: OPT-FA (11/14 done), OPT-MSG (8/8 done)
 
 ## Summary
 
@@ -68,7 +68,7 @@ export async function withRetry<T>(
 
 ---
 
-## OPT-MSG Deferred Items (2 remaining)
+## OPT-MSG Deferred Items (1 remaining)
 
 ### OPT-MSG-7: Virtual Scroll MessageList
 
@@ -95,25 +95,6 @@ import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 ---
 
-### OPT-MSG-8: Accessibility task-details
-
-**Status**: DEFERRED | **Effort**: 5min | **Priority**: P3
-
-Add ARIA attributes for screen reader navigation.
-
-```svelte
-<!-- ActivityItemDetails.svelte -->
-<div
-  class="task-details"
-  role="region"
-  aria-label="Task details"
->
-```
-
-**Risk**: NONE
-
----
-
 ## Completed Items Reference
 
 ### OPT-FA Completed (11/14)
@@ -133,7 +114,7 @@ Add ARIA attributes for screen reader navigation.
 | OPT-FA-12 | @lucide/svelte | 2396077 |
 | OPT-FA-13 | Activity memoization | 399abca |
 
-### OPT-MSG Completed (6/8)
+### OPT-MSG Completed (7/8)
 
 | Item | Description | Commit |
 |------|-------------|--------|
@@ -143,6 +124,7 @@ Add ARIA attributes for screen reader navigation.
 | OPT-MSG-4 | activity-icons.ts | b78be09 |
 | OPT-MSG-5 | Virtual scroll ActivityFeed | 0af6d5b |
 | OPT-MSG-6 | Overflow fixes + ActivityItemDetails | 02c0157 |
+| OPT-MSG-8 | Accessibility task-details (role="region") | Verified in code |
 
 ---
 

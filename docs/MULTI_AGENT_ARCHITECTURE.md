@@ -1039,10 +1039,10 @@ Pour garantir la securite des actions critiques, l'architecture utilise un syste
 // Creer une demande de validation
 await invoke('create_validation_request', {
   workflowId: string,
-  validationType: 'file_delete' | 'config_change' | 'external_api',
+  validationType: 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op',
   operation: string,
   details: Record<string, unknown>,
-  riskLevel: 'low' | 'medium' | 'high' | 'critical'
+  riskLevel: 'low' | 'medium' | 'high'
 });
 
 // Lister les validations en attente
@@ -1136,7 +1136,7 @@ zileo-chat-3/
 │  │
 │  └─ llm/                    # LLM provider integration
 │     ├─ mod.rs
-│     └─ provider_manager.rs  # ProviderManager (Rig.rs)
+│     └─ manager.rs           # ProviderManager (Rig.rs)
 │
 ├─ src/                       # Frontend (SvelteKit)
 │  ├─ lib/stores/agents.ts    # Agent store

@@ -4,9 +4,9 @@ Application desktop multi-agents avec interface conversationnelle.
 
 ## Stack Technique
 
-**Frontend** : SvelteKit 2.49.1 + Svelte 5.45.6 + Vite 7.2.6
+**Frontend** : SvelteKit 2.49.1 + Svelte 5.48.0 + Vite 7.2.6
 **Backend** : Rust 1.91.1 + Tauri 2.9.3
-**Database** : SurrealDB 2.4.0
+**Database** : SurrealDB 2.5.0
 **LLM Framework** : Rig.rs 0.24.0 (multi-provider)
 **LLM Providers Phase 1** : Mistral + Ollama
 **Protocol** : MCP 2025-06-18 (SDK officiel Anthropic)
@@ -146,11 +146,8 @@ Spécifications OPT-FA restantes : migration streaming class runes, $inspect hel
 
 ## Status Documentation
 
-✅ **Cohérente** : Interdépendances vérifiées
-✅ **Complète** : Toutes sections couvertes
-✅ **À jour** : Versions confirmées Dec 2025
-✅ **Phases 0-8 + SA + MEM + TODO + FA** : COMPLETES (code-verified)
-✅ **OPT-FA** : 11/14 items implemented (modal fix, debounce, PageState, WorkflowExecutor, stores consolidation, lazy modals, lucide migration)
-✅ **Tests** : 844+ backend unit, 1109+ total
+- **Cohérente** : Interdépendances vérifiées
+- **Complète** : Toutes sections couvertes
+- **Tests** : ~627 backend unit tests, ~179 frontend tests (~806 total)
 
-Dernière validation : 2025-12-11
+Dernière validation : 2026-01-25

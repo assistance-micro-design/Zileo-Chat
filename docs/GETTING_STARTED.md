@@ -61,7 +61,6 @@ surreal start --user root --pass root memory
 
 Vérifier `src-tauri/tauri.conf.json` :
 - `identifier` : Unique bundle ID
-- `allowlist` : Permissions IPC commands
 - `security.csp` : Content Security Policy
 
 ---
@@ -101,38 +100,38 @@ zileo-chat-3/
 │  ├─ routes/               # Pages (file-based routing)
 │  │  ├─ +layout.svelte     # Layout global (theme, locale, onboarding)
 │  │  ├─ +page.svelte       # Accueil (redirect vers /agent)
-│  │  ├─ settings/          # Page Settings (9 sections)
+│  │  ├─ settings/          # Page Settings (8 sections)
 │  │  └─ agent/             # Page Agent (chat principal)
 │  ├─ lib/
-│  │  ├─ components/        # 79 composants Svelte
-│  │  │  ├─ ui/             # Composants atomiques (14)
+│  │  ├─ components/        # 85 composants Svelte
+│  │  │  ├─ ui/             # Composants atomiques (13)
 │  │  │  ├─ layout/         # Layout (4)
 │  │  │  ├─ chat/           # Chat UI (8)
-│  │  │  ├─ workflow/       # Gestion workflows (14)
-│  │  │  ├─ settings/       # Sections settings (13)
+│  │  │  ├─ workflow/       # Gestion workflows (16)
+│  │  │  ├─ settings/       # Sections settings (22)
 │  │  │  └─ onboarding/     # Assistant premier lancement (9)
-│  │  ├─ stores/            # 14 stores Svelte
+│  │  ├─ stores/            # 15 stores Svelte
 │  │  ├─ services/          # Couche business logic
-│  │  └─ i18n.ts            # Internationalisation
-│  ├─ types/                # Définitions TypeScript (22 fichiers)
+│  │  └─ i18n/              # Internationalisation
+│  ├─ types/                # Définitions TypeScript (23 fichiers)
 │  ├─ messages/             # Traductions (en.json, fr.json)
 │  └─ app.html              # Template HTML
 │
 ├─ src-tauri/               # Backend Rust
 │  ├─ src/
 │  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # 18 modules (112 commandes Tauri)
+│  │  ├─ commands/          # 20 modules (116 commandes Tauri)
 │  │  ├─ agents/            # Système multi-agents
 │  │  ├─ llm/               # Rig.rs integration (Mistral, Ollama)
 │  │  ├─ mcp/               # MCP client/server
-│  │  ├─ tools/             # 6 outils (Memory, Todo, Calculator, SubAgent)
+│  │  ├─ tools/             # 7 outils (Memory, Todo, Calculator, UserQuestion, SpawnAgent, DelegateTask, ParallelTasks)
 │  │  ├─ models/            # Structs Rust (sync avec TS)
 │  │  ├─ security/          # Keystore + validation
-│  │  └─ db/                # SurrealDB client (17 tables)
+│  │  └─ db/                # SurrealDB client (16 tables)
 │  ├─ Cargo.toml            # Dépendances Rust
 │  └─ tauri.conf.json       # Config Tauri
 │
-└─ docs/                    # Documentation (16 fichiers)
+└─ docs/                    # Documentation (18 fichiers)
 ```
 
 ---

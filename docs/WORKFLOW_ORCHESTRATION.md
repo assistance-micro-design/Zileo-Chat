@@ -576,48 +576,6 @@ Services MCP distants accessibles via MCP Client
 
 ---
 
-## Matrice de Decision
-
-### Detection Automatique des Dependances
-
-```rust
-// Conceptuel - Analyse de dependances
-struct Operation {
-    id: String,
-    inputs: Vec<DataRef>,      // Donnees requises
-    outputs: Vec<DataRef>,     // Donnees produites
-    operation_type: OpType,    // SubAgent | Tool | MCP
-}
-
-fn analyze_dependencies(ops: Vec<Operation>) -> ExecutionPlan {
-    let mut graph = DependencyGraph::new();
-
-    for op in ops {
-        graph.add_node(op.id);
-        for input in op.inputs {
-            if let Some(producer) = find_producer(&ops, &input) {
-                graph.add_edge(producer.id, op.id);
-            }
-        }
-    }
-
-    graph.parallel_batches() // Retourne groupes executables en parallele
-}
-```
-
-### Exemples de Classification
-
-| Scenario | Type | Raison |
-|----------|------|--------|
-| Lire 5 fichiers code | **Parallele** | Lectures independantes |
-| Analyser puis refactorer | **Sequentiel** | Refactor necessite resultats analyse |
-| Query users + Query messages | **Parallele** | Requetes DB independantes |
-| Fetch API data puis store DB | **Sequentiel** | Store necessite data fetchee |
-| Appel serena + context7 | **Parallele** | MCP servers distincts, pas dependance |
-| Search code -> Refactor matches | **Sequentiel** | Refactor depend de search results |
-
----
-
 ## Patterns d'Orchestration
 
 ### Pattern 1 : Fan-Out / Fan-In
@@ -727,33 +685,6 @@ async fn retry_operation<T>(
 
 ## Optimisations Performance
 
-### Batch Processing
-
-**Regroupe operations similaires** pour reduire overhead
-
-```rust
-// Au lieu de : N appels individuels
-for file in files {
-    mcp_client.call("serena::read_file", file).await;
-}
-
-// Preferer : 1 appel batch
-mcp_client.call("serena::read_files_batch", files).await;
-```
-
-### Caching Intelligent
-
-**Evite recalculs** pour operations deterministes
-
-```rust
-let cache_key = format!("context7::docs::{}", library);
-if let Some(cached) = cache.get(&cache_key) {
-    return cached;
-}
-let result = mcp_client.call("context7::get_library_docs", library).await?;
-cache.insert(cache_key, result.clone(), Duration::from_secs(3600));
-```
-
 ### Timeouts (OPT-WF-9)
 
 **Timeouts configures** via constantes dans `tools/constants.rs`:
@@ -784,38 +715,6 @@ let results = timeout(
     Duration::from_secs(wf_const::FULL_STATE_LOAD_TIMEOUT_SECS),
     parallel_queries,
 ).await?;
-```
-
----
-
-## Monitoring et Observabilite
-
-### Metriques par Workflow
-
-```rust
-struct WorkflowMetrics {
-    total_duration: Duration,
-    parallel_batches: Vec<BatchMetrics>,
-    sequential_steps: Vec<StepMetrics>,
-
-    parallelization_ratio: f32,  // Ops paralleles / Total ops
-    speedup_factor: f32,         // Temps theorique seq / Temps reel
-}
-```
-
-### Visualisation Execution
-
-**Gantt Chart** pour analyser bottlenecks
-
-```
-Time ->
-0ms     500ms    1000ms   1500ms   2000ms
-|--------|--------|--------|--------|--------|
-[DB Query                        ] 1800ms <- Bottleneck
-[API Call 1     ]
-[API Call 2       ]
-[MCP serena  ]
-                 [Aggregate       ] 400ms
 ```
 
 ---

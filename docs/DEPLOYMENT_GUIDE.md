@@ -4,7 +4,7 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.9.1-beta
+**Version actuelle** : 0.9.2
 **Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
 **Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
 **CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
@@ -101,7 +101,7 @@ npm run tauri:build
 npm run tauri:build
 ```
 
-**Note** : Le profil release est utilise par defaut. LTO n'est pas encore configure dans Cargo.toml.
+**Note** : Le profil release est utilise par defaut avec LTO (`lto = true`, `strip = true`, `opt-level = 3`, `panic = "abort"`, `codegen-units = 1`).
 
 ---
 
@@ -253,7 +253,6 @@ powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -DevMode
 |--------|-------------|
 | (aucune) | Setup complet + build release |
 | `-SkipPrerequisites` | Passe la verification/installation des prerequisites |
-| `-BuildOnly` | Build uniquement, pas de verification |
 | `-DevMode` | Lance `npm run tauri dev` au lieu de build |
 
 #### Troubleshooting Windows
@@ -389,7 +388,6 @@ Chaque OS est builde sur son propre runner en parallele.
 - `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
 - `zileo-chat_X.Y.Z_x64.dmg` (macOS)
 - `zileo-chat_X.Y.Z_x64.msi` (Windows)
-- `SHA256SUMS`
 
 #### Workflow Validate (`.github/workflows/validate.yml`)
 
@@ -433,7 +431,7 @@ git push origin v0.9.2-beta
 #### Finalisation sur GitHub
 
 1. Aller dans **Releases** → La draft release apparait
-2. Verifier les artifacts (6 fichiers attendus)
+2. Verifier les artifacts (4 fichiers attendus)
 3. Editer les release notes (generees automatiquement via labels)
 4. Cliquer **Publish release**
 
@@ -488,19 +486,16 @@ Les release notes sont generees automatiquement selon les labels des PRs :
 - `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
 - `zileo-chat_X.Y.Z_x64.dmg` (macOS)
 - `zileo-chat_X.Y.Z_x64.msi` (Windows)
-- `SHA256SUMS` (Checksums)
 
-### Checksums
+### Checksums (Manuel)
 
-**Generation** :
+Si vous souhaitez generer des checksums manuellement :
 ```bash
 sha256sum zileo-chat_* > SHA256SUMS
+sha256sum -c SHA256SUMS  # Verification
 ```
 
-**Verification utilisateur** :
-```bash
-sha256sum -c SHA256SUMS
-```
+**Note** : Les checksums ne sont pas generes automatiquement par le workflow.
 
 ---
 

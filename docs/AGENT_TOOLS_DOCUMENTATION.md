@@ -542,29 +542,7 @@ Closed → [3 timeouts] → Open → [60s cooldown] → HalfOpen
 
 ---
 
-## 5. Internal Report Tool (Future - Not Implemented)
-
-**Statut** : NOT IMPLEMENTED - Design specification only
-
-**Objectif** : Communication inter-agents via rapports Markdown persistés localement
-
-> **Note** : Cet outil est une specification future. Il n'est pas encore implémenté dans le système.
-
-### Opérations Prevues
-- `read` : Lecture rapports existants
-- `write` : Création nouveaux rapports
-- `write_diff` : modifier un document
-- `glob` : Recherche pattern-based de rapports
-- `delete` : Suppression rapports obsolètes
-
-### Localisation Tauri (Future)
-
-**Répertoire** : `appDataDir()` résolu comme `${dataDir}/${bundleIdentifier}`
-([Référence officielle](https://v2.tauri.app/plugin/file-system/))
-
----
-
-## 6. Tool Execution Integration (LLMAgent)
+## 5. Tool Execution Integration (LLMAgent)
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
@@ -724,8 +702,8 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.1
-**Derniere mise a jour** : 2025-12-10
+**Version** : 2.2
+**Derniere mise a jour** : 2026-01-25
 **Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO + OPT-UQ + OPT-TD Optimizations
 
 **Features (v2.1)**:
