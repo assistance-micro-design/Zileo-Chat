@@ -60,7 +60,12 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 futures-util = "0.3.31"
 
 # Tauri Secure Storage
-keyring = "3.6"
+# Platform-native credential stores (no default features - must be explicit)
+keyring = { version = "3.6", features = [
+    "apple-native",           # macOS/iOS Keychain
+    "windows-native",         # Windows Credential Manager
+    "sync-secret-service",    # Linux Secret Service (Gnome Keyring/KWallet)
+] }
 aes-gcm = "0.10"
 
 [dev-dependencies]
