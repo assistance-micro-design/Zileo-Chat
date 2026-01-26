@@ -1,7 +1,6 @@
 # Roadmap vers 1.0 (Production)
 
-> **Version actuelle**: 0.9.1-beta
-> **Score Production-Readiness**: 7.5/10
+> **Version actuelle**: 0.9.2
 > **Statut**: Beta Stable - Pas encore GA (General Availability)
 
 ---
@@ -12,9 +11,8 @@
 |----------|----------|--------|----------------------|
 | ~~69 `unwrap()`/`expect()` dans commands/~~ | ~~HAUTE~~ RESOLU | ~~Panic potentiel en prod~~ 68/69 dans tests (OK), 1 corrige | `src-tauri/src/commands/*.rs` |
 | 66 doc tests ignores (necessitent DB) | MOYENNE | Couverture reduite | `src-tauri/src/**/*.rs` |
-| npm: cookie < 0.7.0 (LOW vuln) | BASSE | @sveltejs/kit dependance | `package.json` |
+| npm: @sveltejs/kit (1 HIGH vuln) | MOYENNE | DoS + SSRF potentiel | `package.json` |
 | cargo: GTK3 bindings "unmaintained" | BASSE | Dependance Tauri Linux | Tauri upstream |
-| 5 fichiers modifies non committes | BASSE | Changements copyright | voir `git status` |
 
 ---
 
@@ -112,9 +110,11 @@ cargo test -- --ignored  # Tests d'integration
 
 ## Moyenne Priorite
 
-### 1. Mettre a jour @sveltejs/kit (resout cookie vuln)
+### 1. Resoudre vulnerabilites npm
 
-**Vulnerabilite**: `cookie < 0.7.0` - GHSA-pxg6-pf52-xh8x (LOW)
+**Vulnerabilites actuelles** (janvier 2026):
+- 1 HIGH: DoS + SSRF dans @sveltejs/kit
+- 1 LOW: cookie < 0.7.0
 
 **Commande**:
 ```bash
@@ -124,25 +124,25 @@ npm update @sveltejs/kit
 npm audit fix --force  # Attention: peut casser
 ```
 
-**Note**: La vulnerabilite est LOW et concerne l'acceptation de caracteres hors-bornes dans les noms de cookies. Risque minimal pour une app desktop.
+**Note**: Verifier compatibilite avant mise a jour majeure de SvelteKit.
 
 ---
 
-### 2. Implementer les 12 OPT-TODO-* pour performance
+### 2. Implementer les 4 OPT-TODO-* restants
 
 **Liste des optimisations** (dans `src-tauri/src/tools/todo/tool.rs`):
 
-| ID | Description | Impact |
-|----|-------------|--------|
-| OPT-TODO-2 | ParamQueryBuilder pour SQL injection safety | Securite |
-| OPT-TODO-4 | Parameterized query pour SQL injection safety | Securite |
-| OPT-TODO-5 | Reduire N+1 queries (3->1) avec UPDATE RETURN | Perf |
-| OPT-TODO-6 | Reduire N+1 queries (2->1) avec UPDATE RETURN | Perf |
-| OPT-TODO-7 | Utiliser db_error() pour consistance | Code quality |
-| OPT-TODO-9 | TASK_SELECT_FIELDS constant pour DRY | Code quality |
-| OPT-TODO-10 | Ajouter LIMIT pour prevenir memory explosion | Stabilite |
-| OPT-TODO-11 | Tests d'integration avec vraie DB | Tests |
-| OPT-TODO-12 | Tests prevention SQL injection | Securite |
+| ID | Description | Impact | Statut |
+|----|-------------|--------|--------|
+| OPT-TODO-2 | ParamQueryBuilder pour SQL injection safety | Securite | TODO |
+| ~~OPT-TODO-4~~ | ~~Parameterized query pour SQL injection safety~~ | ~~Securite~~ | DONE |
+| ~~OPT-TODO-5~~ | ~~Reduire N+1 queries (3->1) avec UPDATE RETURN~~ | ~~Perf~~ | DONE |
+| ~~OPT-TODO-6~~ | ~~Reduire N+1 queries (2->1) avec UPDATE RETURN~~ | ~~Perf~~ | DONE |
+| ~~OPT-TODO-7~~ | ~~Utiliser db_error() pour consistance~~ | ~~Code quality~~ | DONE |
+| ~~OPT-TODO-9~~ | ~~TASK_SELECT_FIELDS constant pour DRY~~ | ~~Code quality~~ | DONE |
+| OPT-TODO-10 | Ajouter LIMIT pour prevenir memory explosion | Stabilite | TODO |
+| OPT-TODO-11 | Tests d'integration avec vraie DB | Tests | TODO |
+| OPT-TODO-12 | Tests prevention SQL injection | Securite | TODO |
 
 **Commande pour localiser**:
 ```bash
@@ -151,27 +151,20 @@ grep -rn "OPT-TODO" src-tauri/src/
 
 ---
 
-### 3. Tests E2E (Playwright)
+### 3. ~~Tests E2E (Playwright)~~ IMPLEMENTE
 
-**Couverture cible**: Flows critiques
-- Login/configuration initiale
-- Creation d'agent
-- Execution de workflow
-- Gestion des erreurs UI
+**Statut**: 7 fichiers de tests E2E existent dans `tests/e2e/`:
+- `workflow-crud.spec.ts` - CRUD workflows
+- `workflow-persistence.spec.ts` - Persistence et reload
+- `chat-interaction.spec.ts` - Interactions chat
+- `settings-config.spec.ts` - Configuration settings
+- `agent-crud.spec.ts` - CRUD agents
+- `mcp-management.spec.ts` - Gestion MCP
+- `memory-management.spec.ts` - Gestion memoire
 
-**Setup**:
+**Commande**:
 ```bash
-npm install -D @playwright/test
-npx playwright install
-```
-
-**Structure**:
-```
-tests/
-  e2e/
-    agent.spec.ts
-    workflow.spec.ts
-    settings.spec.ts
+npm run test:e2e
 ```
 
 ---
@@ -188,32 +181,16 @@ tests/
 
 ---
 
-### Fichiers modifies non committes
-
-**Fichiers**:
-- `src-tauri/src/db/queries.rs` - Copyright header
-- `src-tauri/src/mcp/error.rs` - Copyright header
-- `src-tauri/src/mcp/helpers.rs` - Copyright header
-- `src-tauri/src/tools/utils.rs` - Copyright header
-- `tsconfig.json` - Configuration cleanup
-
-**Action**:
-```bash
-git add -A
-git commit -m "chore: Update copyright headers and tsconfig cleanup"
-```
-
----
-
 ## Checklist Pre-Release 1.0
 
 - [x] 0 `unwrap()`/`expect()` dans commands/ en production (68/69 sont dans tests, 1 corrige)
+- [x] Tests E2E implementes (7 fichiers)
+- [x] CHANGELOG.md a jour (v0.9.2)
+- [x] Tous les fichiers committes
 - [ ] Couverture tests backend >= 50%
-- [ ] npm audit = 0 vulnerabilites HIGH/CRITICAL
+- [ ] npm audit = 0 vulnerabilites HIGH/CRITICAL (1 HIGH actuel)
 - [ ] cargo audit = 0 vulnerabilites (warnings OK)
-- [ ] Tous les fichiers committes
-- [ ] CHANGELOG.md a jour
-- [ ] Version bump 0.9.0-beta -> 1.0.0
+- [ ] Version bump 0.9.2 -> 1.0.0
 - [ ] Tag git v1.0.0
 - [ ] Build release teste sur Linux/Windows/macOS
 
@@ -241,4 +218,4 @@ grep -rn "OPT-TODO" src-tauri/src/
 
 ---
 
-*Document genere le 2025-12-14 - Zileo-Chat-3 v0.9.0-beta*
+*Document mis a jour le 2026-01-25 - Zileo-Chat-3 v0.9.2*
