@@ -27,6 +27,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
+import { tokenStore } from './tokens';
 
 /**
  * Event names for Tauri streaming events (inlined to avoid runtime resolution issues)
@@ -208,13 +209,21 @@ let isInitialized = false;
 type ChunkHandler = (state: StreamingState, chunk: StreamChunk) => StreamingState;
 
 /**
- * Handle token chunk - append content and increment token counter
+ * Handle token chunk - append content, increment counter, and sync with tokenStore.
+ * Now supports real-time token updates via tokens_delta/tokens_total fields.
  */
 function handleToken(s: StreamingState, c: StreamChunk): StreamingState {
+	const newTokensReceived = s.tokensReceived + 1;
+
+	// Sync with tokenStore for real-time display
+	// Use tokens_total from backend if available, otherwise use received count
+	const outputTokens = c.tokens_total ?? newTokensReceived;
+	tokenStore.updateStreamingTokens(outputTokens);
+
 	return {
 		...s,
 		content: s.content + (c.content ?? ''),
-		tokensReceived: s.tokensReceived + 1
+		tokensReceived: newTokensReceived
 	};
 }
 
