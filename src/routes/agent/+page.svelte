@@ -147,8 +147,7 @@ Uses extracted components, services, and stores for clean architecture.
 		try {
 			const id = await WorkflowService.create(name, agentId);
 
-			// Update selection
-			pageState.selectedAgentId = agentId;
+			// Update selection (but don't set selectedAgentId yet - let selectWorkflow handle it)
 			pageState.selectedWorkflowId = id;
 			pageState.messages = [];
 
