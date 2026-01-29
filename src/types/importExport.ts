@@ -132,6 +132,8 @@ export interface AgentExportData {
 	mcpServers: string[];
 	systemPrompt: string;
 	maxToolIterations: number;
+	/** Enable thinking mode for supported models (default: true for thinking models) */
+	enableThinking: boolean;
 	createdAt?: string;
 	updatedAt?: string;
 }

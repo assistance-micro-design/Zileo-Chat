@@ -165,10 +165,18 @@ pub struct AgentExportData {
     pub mcp_servers: Vec<String>,
     pub system_prompt: String,
     pub max_tool_iterations: usize,
+    /// Enable thinking mode for supported models (default: true for thinking models)
+    #[serde(default = "default_enable_thinking")]
+    pub enable_thinking: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+}
+
+/// Default value for enable_thinking
+fn default_enable_thinking() -> bool {
+    true
 }
 
 /// LLM config for export (simplified).

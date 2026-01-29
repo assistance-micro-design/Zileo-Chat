@@ -236,7 +236,7 @@ pub async fn generate_export_file(
     // Export agents
     for agent_id in &selection.agents {
         let query = format!(
-            "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, created_at, updated_at FROM agent WHERE meta::id(id) = '{}'",
+            "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = '{}'",
             agent_id
         );
         let results: Vec<serde_json::Value> = state
@@ -277,6 +277,7 @@ pub async fn generate_export_file(
                     .unwrap_or_default(),
                 system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
                 max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
+                enable_thinking: row["enable_thinking"].as_bool().unwrap_or(true),
                 created_at: if options.include_timestamps {
                     row["created_at"].as_str().map(String::from)
                 } else {
@@ -813,6 +814,7 @@ pub async fn execute_import(
                     mcp_servers = {}, \
                     system_prompt = {}, \
                     max_tool_iterations = {}, \
+                    enable_thinking = {}, \
                     updated_at = time::now()",
                 agent_id,
                 name_json,
@@ -824,7 +826,8 @@ pub async fn execute_import(
                 tools_json,
                 mcp_servers_json,
                 system_prompt_json,
-                agent.max_tool_iterations
+                agent.max_tool_iterations,
+                agent.enable_thinking
             )
         } else {
             format!(
@@ -837,6 +840,7 @@ pub async fn execute_import(
                     mcp_servers: {}, \
                     system_prompt: {}, \
                     max_tool_iterations: {}, \
+                    enable_thinking: {}, \
                     created_at: time::now(), \
                     updated_at: time::now() \
                 }}",
@@ -851,7 +855,8 @@ pub async fn execute_import(
                 tools_json,
                 mcp_servers_json,
                 system_prompt_json,
-                agent.max_tool_iterations
+                agent.max_tool_iterations,
+                agent.enable_thinking
             )
         };
 
