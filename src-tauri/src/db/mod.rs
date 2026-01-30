@@ -41,5 +41,7 @@
 pub mod client;
 pub mod queries;
 pub mod schema;
+pub mod utils;
 
 pub use client::DBClient;
+pub use utils::sanitize_for_surrealdb;

@@ -661,11 +661,18 @@ impl Tool for MemoryTool {
             description: format!(
                 r#"Manages persistent memory for contextual awareness and knowledge retrieval.
 
-USE THIS TOOL TO:
-- Store important information for future reference
-- Search past memories by semantic similarity
-- Maintain context across conversations
-- Organize knowledge by type (user_pref, context, knowledge, decision)
+USE THIS TOOL WHEN:
+- You need to store important information for future reference
+- You want to search past memories by semantic similarity
+- You need to maintain context across conversations
+- You want to organize knowledge by type (user_pref, context, knowledge, decision)
+- You need to retrieve previously stored decisions or user preferences
+
+DO NOT USE THIS TOOL WHEN:
+- Information is only relevant to the current message (use conversation context)
+- Storing duplicate content already in memory (search first!)
+- The content exceeds {} characters (split into smaller chunks)
+- For temporary calculations or intermediate values (use CalculatorTool or conversation)
 
 OPERATIONS:
 - activate_workflow: Set workflow-specific scope for memory isolation
@@ -706,8 +713,20 @@ EXAMPLES:
    {{"operation": "search", "query": "vector database indexing", "limit": 5}}
 
 4. Store knowledge:
-   {{"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}}"#,
-                MAX_CONTENT_LENGTH, DEFAULT_LIMIT, MAX_LIMIT, DEFAULT_SIMILARITY_THRESHOLD
+   {{"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}}
+
+5. Store user preference:
+   {{"operation": "add", "type": "user_pref", "content": "User prefers detailed explanations with examples", "tags": ["communication", "style"]}}
+
+6. Store decision rationale:
+   {{"operation": "add", "type": "decision", "content": "Chose PostgreSQL over MongoDB because the data is highly relational", "metadata": {{"decision_date": "2025-01-15", "alternatives_considered": ["MongoDB", "SurrealDB"]}}}}
+
+7. Delete a memory:
+   {{"operation": "delete", "memory_id": "mem_abc123"}}
+
+8. Clear all context memories:
+   {{"operation": "clear_by_type", "type": "context"}}"#,
+                MAX_CONTENT_LENGTH, MAX_CONTENT_LENGTH, DEFAULT_LIMIT, MAX_LIMIT, DEFAULT_SIMILARITY_THRESHOLD
             ),
 
             input_schema: serde_json::json!({

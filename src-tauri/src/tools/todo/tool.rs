@@ -381,11 +381,19 @@ impl Tool for TodoTool {
             description: format!(
                 r#"Manages workflow tasks for structured execution tracking.
 
-USE THIS TOOL TO:
-- Break down complex work into trackable tasks
-- Update task progress as you work
-- Coordinate with other agents via task assignment
-- Track task completion with timing metrics
+USE THIS TOOL WHEN:
+- You need to break down complex work into trackable tasks
+- You want to update task progress as you work
+- You need to coordinate with other agents via task assignment
+- You want to track task completion with timing metrics
+- Starting multi-step operations that need progress tracking
+- Tasks have dependencies that need to be managed
+
+DO NOT USE THIS TOOL WHEN:
+- The task is simple and single-step (just do it directly)
+- You're just gathering information without execution
+- The work is conversational and doesn't need tracking
+- Task names would exceed {} characters (simplify the name)
 
 OPERATIONS:
 - create: Create a new task with name, description, priority ({}-{})
@@ -417,7 +425,23 @@ EXAMPLES:
    {{"operation": "complete", "task_id": "abc123", "duration_ms": 5000}}
 
 4. List pending tasks:
-   {{"operation": "list", "status_filter": "pending"}}"#,
+   {{"operation": "list", "status_filter": "pending"}}
+
+5. Create task with dependencies:
+   {{"operation": "create", "name": "Deploy to production", "description": "Deploy after tests pass", "priority": 1, "dependencies": ["task_tests_123"]}}
+
+6. Mark task as blocked:
+   {{"operation": "update_status", "task_id": "abc123", "status": "blocked"}}
+
+7. Get task details:
+   {{"operation": "get", "task_id": "abc123"}}
+
+8. Delete obsolete task:
+   {{"operation": "delete", "task_id": "abc123"}}
+
+9. List all in-progress tasks:
+   {{"operation": "list", "status_filter": "in_progress"}}"#,
+                MAX_NAME_LENGTH,
                 PRIORITY_MIN,
                 PRIORITY_MAX,
                 MAX_NAME_LENGTH,

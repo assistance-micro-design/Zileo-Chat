@@ -441,12 +441,14 @@ pub async fn import_memories(
         let metadata = mem.get("metadata").cloned().unwrap_or_else(|| json!({}));
 
         // Create memory
+        // Sanitize content: remove null chars (SurrealDB panics on \0) and escape quotes
         let memory_id = uuid::Uuid::new_v4().to_string();
+        let sanitized_content = content.replace('\0', "").replace('\'', "''");
         let create_query = format!(
             "CREATE memory:`{}` CONTENT {{ type: '{}', content: '{}', metadata: {} }}",
             memory_id,
             memory_type,
-            content.replace('\'', "''"),
+            sanitized_content,
             serde_json::to_string(&metadata).unwrap_or_else(|_| "{}".to_string())
         );
 

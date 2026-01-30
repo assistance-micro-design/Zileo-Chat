@@ -16,7 +16,7 @@
 //!
 //! This tool allows agents to ask questions to users through a modal interface.
 
-use crate::db::DBClient;
+use crate::db::{sanitize_for_surrealdb, DBClient};
 use crate::models::{QuestionOption, UserQuestionCreate, UserQuestionStreamPayload};
 use crate::tools::constants::user_question as uq_const;
 use crate::tools::user_question::circuit_breaker::UserQuestionCircuitBreaker;
@@ -210,6 +210,8 @@ impl UserQuestionTool {
         // Use execute_with_params for CREATE (CLAUDE.md SurrealDB SDK 2.x pattern)
         let json_data = serde_json::to_value(&create_data)
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to encode JSON: {}", e)))?;
+        // Sanitize to remove null characters that cause SurrealDB panics
+        let json_data = sanitize_for_surrealdb(json_data);
         let query = format!("CREATE user_question:`{}` CONTENT $data", question_id);
 
         info!(question_id = %question_id, "Creating user question in DB");
@@ -513,6 +515,16 @@ USE THIS TOOL WHEN:
 - You need user input to proceed (clarification, choice, confirmation)
 - A decision cannot be made autonomously
 - User preferences or validation is required
+- Multiple valid options exist and user preference matters
+- Confirming potentially destructive or irreversible actions
+
+DO NOT USE THIS TOOL WHEN:
+- The answer is already in the conversation context
+- You can make a reasonable default choice
+- The question is rhetorical or for confirmation of obvious facts
+- The circuit breaker is active (after {} consecutive timeouts)
+- Questions exceed {} characters (simplify the question)
+- You have more than {} options (reduce or group options)
 
 IMPORTANT CONSTRAINTS:
 - Timeout: {} minutes (returns error if no response)
@@ -543,13 +555,29 @@ EXAMPLES:
    {{"operation": "ask", "question": "What should be the API endpoint name?", "questionType": "text", "textPlaceholder": "e.g., /api/v1/users"}}
 
 3. Mixed (options + text):
-   {{"operation": "ask", "question": "Select a template or describe custom:", "questionType": "mixed", "options": [{{"id": "basic", "label": "Basic template"}}], "textPlaceholder": "Custom description..."}}"#,
-                uq_const::DEFAULT_TIMEOUT_SECS / 60, // Convert to minutes
+   {{"operation": "ask", "question": "Select a template or describe custom:", "questionType": "mixed", "options": [{{"id": "basic", "label": "Basic template"}}], "textPlaceholder": "Custom description..."}}
+
+4. With context explanation:
+   {{"operation": "ask", "question": "Should we proceed with the migration?", "questionType": "checkbox", "options": [{{"id": "yes", "label": "Yes, proceed"}}, {{"id": "no", "label": "No, cancel"}}], "context": "The migration will affect 1500 records and cannot be easily reverted."}}
+
+5. Required text with options:
+   {{"operation": "ask", "question": "Choose a database and explain why:", "questionType": "mixed", "options": [{{"id": "pg", "label": "PostgreSQL"}}, {{"id": "mysql", "label": "MySQL"}}, {{"id": "mongo", "label": "MongoDB"}}], "textPlaceholder": "Explain your choice...", "textRequired": true}}
+
+ERROR HANDLING:
+- Timeout error: User didn't respond in {} minutes. Consider retrying or proceeding with defaults.
+- Circuit breaker open: Too many timeouts. Wait {} seconds before retrying.
+- Invalid options: Ensure each option has both "id" and "label" fields."#,
+                uq_const::CIRCUIT_FAILURE_THRESHOLD,
+                uq_const::MAX_QUESTION_LENGTH,
+                uq_const::MAX_OPTIONS,
+                uq_const::DEFAULT_TIMEOUT_SECS / 60,
                 uq_const::CIRCUIT_FAILURE_THRESHOLD,
                 uq_const::CIRCUIT_COOLDOWN_SECS,
                 uq_const::MAX_OPTIONS,
                 uq_const::MAX_QUESTION_LENGTH,
-                uq_const::MAX_CONTEXT_LENGTH
+                uq_const::MAX_CONTEXT_LENGTH,
+                uq_const::DEFAULT_TIMEOUT_SECS / 60,
+                uq_const::CIRCUIT_COOLDOWN_SECS
             ),
             input_schema: json!({
                 "type": "object",

@@ -326,12 +326,19 @@ impl Tool for CalculatorTool {
             name: "Scientific Calculator".to_string(),
             description: r#"Performs mathematical calculations for agents.
 
-USE THIS TOOL TO:
-- Perform arithmetic operations (add, subtract, multiply, divide)
-- Calculate trigonometric values (sin, cos, tan, asin, acos, atan)
-- Compute logarithms and exponentials (log, ln, exp, pow)
-- Access mathematical constants (PI, E, TAU)
-- Convert between degrees and radians
+USE THIS TOOL WHEN:
+- You need to perform arithmetic operations (add, subtract, multiply, divide)
+- You need to calculate trigonometric values (sin, cos, tan, asin, acos, atan)
+- You need to compute logarithms and exponentials (log, ln, exp, pow)
+- You need to access mathematical constants (PI, E, TAU)
+- You need to convert between degrees and radians
+- You need intermediate calculations for complex workflows
+
+DO NOT USE THIS TOOL WHEN:
+- The calculation is trivial mental math (2+2)
+- You need to store results persistently (use MemoryTool instead)
+- You need multiple chained operations (call tool multiple times)
+- Working with complex/imaginary numbers (not supported)
 
 OPERATIONS:
 
@@ -357,12 +364,31 @@ OPERATIONS:
 **Constants** (require "name"):
 - pi, e, tau, sqrt2, ln2, ln10
 
+BEST PRACTICES:
+- Trigonometric functions expect radians, not degrees (use radians operation first)
+- Use abs() before sqrt() for potentially negative values
+- Check domain constraints before ln/log operations (value must be positive)
+- Use nroot for nth roots instead of pow with fractions for better precision
+
 EXAMPLES:
 1. Calculate sine: {"operation": "sin", "value": 1.5708}
 2. Add numbers: {"operation": "add", "a": 10, "b": 5}
 3. Power: {"operation": "pow", "a": 2, "b": 10}
 4. Get PI: {"operation": "constant", "name": "pi"}
-5. Convert to radians: {"operation": "radians", "value": 180}"#
+5. Convert to radians: {"operation": "radians", "value": 180}
+6. Hyperbolic sine: {"operation": "sinh", "value": 1.0}
+7. Log base 2: {"operation": "log", "a": 8, "b": 2}
+8. Cube root: {"operation": "nroot", "a": 27, "b": 3}
+9. Modulo: {"operation": "modulo", "a": 17, "b": 5}
+10. Minimum: {"operation": "min", "a": 3.5, "b": 2.1}
+
+ERROR HANDLING:
+- sqrt(negative): Domain error - use abs() first or check input
+- ln/log10(<=0): Domain error - value must be positive
+- asin/acos(|x|>1): Domain error - value must be in [-1, 1]
+- divide/modulo by zero: Division error
+- tan(PI/2): Undefined at odd multiples of PI/2
+- log base 1: Invalid base - must be positive and not equal to 1"#
                 .to_string(),
 
             input_schema: json!({

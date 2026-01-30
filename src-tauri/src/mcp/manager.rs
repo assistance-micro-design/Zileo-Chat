@@ -42,7 +42,7 @@
 //! Server configurations are stored in the `mcp_server` table and
 //! automatically loaded on startup. Tool calls are logged to `mcp_call_log`.
 
-use crate::db::DBClient;
+use crate::db::{sanitize_for_surrealdb, DBClient};
 use crate::mcp::circuit_breaker::CircuitBreaker;
 use crate::mcp::client::MCPClient;
 use crate::mcp::{MCPError, MCPResult};
@@ -940,11 +940,17 @@ impl MCPManager {
     ///
     /// Uses execute_with_params instead of create() to avoid SurrealDB SDK 2.x
     /// deserialization issues with union types (array | object) in the result field.
+    ///
+    /// NOTE: MCP responses may contain null characters (\0) which cause SurrealDB
+    /// to panic. We sanitize the data before insertion to prevent this.
     async fn log_call(&self, log: MCPCallLogCreate) -> MCPResult<()> {
         let json_data = serde_json::to_value(&log).map_err(|e| MCPError::DatabaseError {
             context: "log call serialization".to_string(),
             message: e.to_string(),
         })?;
+
+        // Sanitize to remove null characters that cause SurrealDB panics
+        let json_data = sanitize_for_surrealdb(json_data);
 
         let query = format!("CREATE mcp_call_log:`{}` CONTENT $data", log.id);
         self.db
