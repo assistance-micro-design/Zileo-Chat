@@ -496,45 +496,43 @@ impl Tool for DelegateTaskTool {
     fn definition(&self) -> ToolDefinition {
         let tool_specific_desc = r#"Delegates tasks to existing permanent LLM agents.
 
-IMPORTANT: This tool is for LLM AGENTS, NOT for MCP servers!
+⚠️ LLM AGENTS ONLY - NOT MCP SERVERS:
 - agent_id must be an LLM agent ID (e.g., "db_agent", "analytics_agent")
-- DO NOT use MCP server IDs here (e.g., "mcp-1764345441545-7tj9p")
-- To use MCP tools, call them DIRECTLY with format: server_id:tool_name (see MCP Tools section)
+- DO NOT use MCP server IDs here (e.g., "mcp-xxx-7tj9p")
+- For MCP tools, call them DIRECTLY: server_id:tool_name
 
 USE THIS TOOL WHEN:
-- You need a specialized LLM agent to handle a specific task
-- The task requires an agent's configuration and expertise
-- Use list_agents first to see available agents
+- You need a specialized permanent agent to handle a task
+- The task benefits from an agent's pre-configured expertise and tools
 
-IMPORTANT CONSTRAINTS:
-- Can only delegate to permanent agents (not temporary)
-- Delegated agents only receive the prompt string - NO shared context/memory/state
-- You must include ALL necessary information in the prompt
+DO NOT USE WHEN:
+- You need custom tools or configuration (use SpawnAgentTool instead)
+- Simple single-step tasks that don't need agent expertise
+- You need shared state between agents
 
-DIFFERENCE FROM SPAWN:
-- Delegate: Uses existing agents with their configuration
-- Spawn: Creates temporary agents with custom configuration
+⚠️ CONTEXT ISOLATION - CRITICAL:
+Delegated agents receive ONLY the prompt string. They have NO access to your conversation history, memory, or state.
+You MUST include ALL necessary information directly in the prompt.
 
-COMMUNICATION PATTERN:
-- You send: A complete prompt with task, data, and expected report format
-- Agent returns: A markdown report with findings and metrics
+SPAWN vs DELEGATE:
+- Delegate: Permanent agents with fixed configuration
+- Spawn: Temporary agents with custom configuration
 
 OPERATIONS:
-- delegate: Execute a task via an existing permanent agent
+- delegate: Execute task via permanent agent
   Required: agent_id, prompt
 
-- list_agents: List available LLM agents for delegation (excludes self and temporary agents)
+- list_agents: Show available agents for delegation
 
-PROMPT BEST PRACTICES:
-1. Be explicit about the task objective
-2. Include any data the agent needs (it has no access to your context)
+PROMPT GUIDELINES:
+1. State the task objective explicitly
+2. Include all data the agent needs to process
 3. Specify the expected report format
-4. Set clear constraints if any
+4. Set scope boundaries if needed
 
-EXAMPLE - Delegate database analysis:
-{"operation": "delegate", "agent_id": "db_agent", "prompt": "Analyze the users table..."}
+EXAMPLE:
+{"operation": "delegate", "agent_id": "db_agent", "prompt": "TASK: Analyze the users table for performance issues.\n\nCONTEXT: Table has 50k rows, queries taking >2s.\n\nFOCUS: Missing indexes, query patterns, schema optimization.\n\nREPORT FORMAT:\n- Summary\n- Findings with impact level\n- Recommended changes"}
 
-EXAMPLE - List available agents:
 {"operation": "list_agents"}"#;
 
         ToolDefinition {

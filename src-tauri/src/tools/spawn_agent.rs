@@ -561,40 +561,38 @@ USE THIS TOOL WHEN:
 - A task requires different tools or context than your current configuration
 - You want to delegate a specific analysis or research task
 
-IMPORTANT CONSTRAINTS:
-- Sub-agents only receive the prompt string - NO shared context/memory/state
-- You must include ALL necessary information in the prompt
-- Sub-agents are TEMPORARY and are automatically cleaned up after execution
-- Sub-agents do NOT appear in the Settings agent list (they are workflow-scoped)
+DO NOT USE WHEN:
+- Simple single-step tasks that don't benefit from delegation
+- You need shared state or conversation context between agents
+- Real-time user interaction is needed during execution
+
+⚠️ CONTEXT ISOLATION - CRITICAL:
+Sub-agents receive ONLY the prompt string. They have NO access to your conversation history, memory, or state.
+You MUST include ALL necessary information directly in the prompt - never reference "the code above" or "as discussed".
 
 AVAILABLE TOOLS FOR SUB-AGENTS: {available_tools_str}
-Note: Sub-agents can only use basic tools listed above, NOT sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
-Do NOT invent or specify tools that are not in this list.
+Sub-agents cannot use sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
 
-AVAILABLE MCP SERVERS: See the "Available MCP Servers" section in your configuration above.
-You can assign any of these running MCP servers to sub-agents using the `mcp_servers` parameter with the server ID.
-
-COMMUNICATION PATTERN:
-- You send: A complete prompt with task, data, and expected report format
-- Sub-agent returns: A markdown report with findings and metrics
+AVAILABLE MCP SERVERS: See the "Available MCP Servers" section in your configuration.
+Assign servers using the `mcp_servers` parameter with server IDs.
 
 OPERATIONS:
 - spawn: Create and execute a temporary sub-agent
   Required: name, prompt
-  Optional: system_prompt, tools (from available list above), mcp_servers (from list above), provider, model
+  Optional: system_prompt, tools, mcp_servers, provider, model
 
-- list_children: See your spawned sub-agents and remaining slots
+- list_children: See spawned sub-agents and remaining slots
 
 - terminate: Cancel a running sub-agent
 
-PROMPT BEST PRACTICES:
-1. Be explicit about the task objective
-2. Include any data the sub-agent needs (it has no access to your context)
+PROMPT GUIDELINES:
+1. State the task objective explicitly
+2. Include all data the sub-agent needs to process
 3. Specify the expected report format
-4. Set clear constraints if any
+4. Set scope boundaries if needed
 
-EXAMPLE - Spawn for analysis:
-{{"operation": "spawn", "name": "CodeAnalyzer", "prompt": "Analyze the database module for security issues. Focus on SQL injection, input validation, and access control. Return a markdown report with: 1) Summary of findings, 2) Detailed issues with severity ratings, 3) Recommended fixes.", "tools": ["MemoryTool"]}}"#,
+EXAMPLE:
+{{"operation": "spawn", "name": "SecurityAuditor", "prompt": "TASK: Audit this authentication code for vulnerabilities.\n\nCODE:\n```rust\nfn authenticate(user: &str, pass: &str) -> bool {{\n    let query = format!(\"SELECT * FROM users WHERE name='{{}}'\", user);\n    // ...\n}}\n```\n\nFOCUS: SQL injection, input validation, auth bypass.\n\nREPORT FORMAT:\n- Summary (1-2 sentences)\n- Findings with severity (critical/high/medium/low)\n- Recommendations", "tools": ["MemoryTool"]}}"#,
             available_tools_str = available_tools_str
         );
 

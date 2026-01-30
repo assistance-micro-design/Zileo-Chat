@@ -615,40 +615,48 @@ impl Tool for ParallelTasksTool {
 
 USE THIS TOOL WHEN:
 - You need to run multiple independent analyses simultaneously
-- Time is critical and tasks don't depend on each other
+- Tasks don't depend on each other and can run concurrently
 - You want to gather information from multiple specialized agents at once
 
-IMPORTANT CONSTRAINTS:
-- All tasks execute concurrently (total time ≈ slowest task, not sum)
-- Each agent only receives its prompt - NO shared context/memory/state
-- You must include ALL necessary information in each prompt
+DO NOT USE WHEN:
+- Tasks depend on each other's results (use sequential delegation instead)
+- You have only one task (use DelegateTaskTool instead)
+- Tasks need to share state or context
+
+⚠️ CONTEXT ISOLATION - CRITICAL:
+Each agent receives ONLY its own prompt. Agents have NO access to your conversation, other tasks' prompts, or shared state.
+You MUST include ALL necessary information in each prompt independently.
+
+CONSTRAINTS:
+- Maximum 3 tasks per batch
+- All tasks execute concurrently (total time ≈ slowest task)
+- Tasks must be independent - no cross-task dependencies
 
 OPERATIONS:
 - execute_batch: Run multiple tasks in parallel
   Required: tasks (array of {agent_id, prompt})
-  Optional: wait_all (default: true)
 
-PROMPT BEST PRACTICES:
-1. Each prompt must be self-contained with all necessary context
+PROMPT GUIDELINES:
+1. Each prompt must be fully self-contained
 2. Specify expected report format in each prompt
-3. Keep tasks independent - don't rely on other task results
+3. Include all data each agent needs to process
 
-EXAMPLE - Parallel analysis:
+EXAMPLE:
 {
   "operation": "execute_batch",
   "tasks": [
-    {"agent_id": "db_agent", "prompt": "Analyze database performance. Return: 1) Slow queries, 2) Missing indexes."},
-    {"agent_id": "api_agent", "prompt": "Review API endpoints for security issues. Return: 1) Vulnerabilities found, 2) Recommendations."},
-    {"agent_id": "ui_agent", "prompt": "Check UI accessibility compliance. Return: 1) WCAG violations, 2) Fixes needed."}
+    {"agent_id": "db_agent", "prompt": "TASK: Analyze database performance.\n\nCONTEXT: Production DB, 50k users.\n\nFOCUS: Slow queries, missing indexes.\n\nREPORT: Summary + findings with severity."},
+    {"agent_id": "security_agent", "prompt": "TASK: Review API security.\n\nCONTEXT: REST API, JWT auth.\n\nFOCUS: Auth bypass, injection risks.\n\nREPORT: Summary + vulnerabilities with severity."},
+    {"agent_id": "ui_agent", "prompt": "TASK: Check accessibility.\n\nCONTEXT: React frontend.\n\nFOCUS: WCAG 2.1 compliance.\n\nREPORT: Summary + violations with fixes."}
   ]
 }
 
 RESULT FORMAT:
+Returns aggregated results with:
 - success: true if ALL tasks succeeded
-- completed: number of successful tasks
-- failed: number of failed tasks
-- results: array with each task's result (report or error)
-- aggregated_report: combined markdown report from all tasks"#;
+- completed/failed: task counts
+- results: array with each task's report and metrics
+- aggregated_report: combined markdown from all tasks"#;
 
         ToolDefinition {
             id: "ParallelTasksTool".to_string(),
