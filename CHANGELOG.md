@@ -5,6 +5,29 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-01-30
+
+### Fixed
+
+- **SurrealDB Panic**: Prevent database panic on null characters in MCP responses
+  - Created `sanitize_for_surrealdb()` utility to remove `\0` from JSON strings
+  - Applied to MCP call logging, user questions, and embedding imports
+- **Token Display**: Sync token counter with streaming in real-time
+  - Cross-store synchronization between `streamingStore` and `tokenStore`
+- **Agent Config**: Load agent configuration when creating workflow
+- **Import/Export**: Add missing `enable_thinking` field for agents
+- **Security**: Add native keyring features for API key persistence
+
+### Changed
+
+- **Tool Descriptions**: Improved sub-agent tool descriptions for LLM clarity
+  - Added "DO NOT USE WHEN" sections for usage guidance
+  - Added ⚠️ CONTEXT ISOLATION warnings
+  - Improved examples with structured prompts (TASK/CONTEXT/FOCUS/REPORT)
+  - Applied to SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+
+---
+
 ## [0.9.2] - 2026-01-25
 
 ### Added
@@ -171,6 +194,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.9.3]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.3
+[0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.3...HEAD

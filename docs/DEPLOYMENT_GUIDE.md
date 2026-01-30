@@ -4,7 +4,7 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.9.2
+**Version actuelle** : 0.9.3
 **Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
 **Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
 **CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
@@ -412,7 +412,7 @@ Chaque OS est builde sur son propre runner en parallele.
 2. Commit final des changements
 3. Aller dans **History**
 4. Clic droit sur le commit → **Create Tag**
-5. Nom : `v0.9.2-beta` (ou version suivante)
+5. Nom : `v0.9.3-beta` (ou version suivante)
 6. **Push origin** (inclut automatiquement le tag)
 
 #### Via CLI
@@ -424,8 +424,8 @@ npm run lint && npm run check
 cd src-tauri && cargo clippy && cargo test
 
 # Creer et pousser le tag
-git tag v0.9.2-beta
-git push origin v0.9.2-beta
+git tag v0.9.3-beta
+git push origin v0.9.3-beta
 ```
 
 #### Finalisation sur GitHub

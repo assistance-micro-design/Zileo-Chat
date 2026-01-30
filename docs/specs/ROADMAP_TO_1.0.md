@@ -1,6 +1,6 @@
 # Roadmap vers 1.0 (Production)
 
-> **Version actuelle**: 0.9.2
+> **Version actuelle**: 0.9.3
 > **Statut**: Beta Stable - Pas encore GA (General Availability)
 
 ---
@@ -185,12 +185,12 @@ npm run test:e2e
 
 - [x] 0 `unwrap()`/`expect()` dans commands/ en production (68/69 sont dans tests, 1 corrige)
 - [x] Tests E2E implementes (7 fichiers)
-- [x] CHANGELOG.md a jour (v0.9.2)
+- [x] CHANGELOG.md a jour (v0.9.3)
 - [x] Tous les fichiers committes
 - [ ] Couverture tests backend >= 50%
 - [ ] npm audit = 0 vulnerabilites HIGH/CRITICAL (1 HIGH actuel)
 - [ ] cargo audit = 0 vulnerabilites (warnings OK)
-- [ ] Version bump 0.9.2 -> 1.0.0
+- [ ] Version bump 0.9.3 -> 1.0.0
 - [ ] Tag git v1.0.0
 - [ ] Build release teste sur Linux/Windows/macOS
 
@@ -218,4 +218,4 @@ grep -rn "OPT-TODO" src-tauri/src/
 
 ---
 
-*Document mis a jour le 2026-01-25 - Zileo-Chat-3 v0.9.2*
+*Document mis a jour le 2026-01-25 - Zileo-Chat-3 v0.9.3*
