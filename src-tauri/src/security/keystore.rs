@@ -216,7 +216,7 @@ impl KeyStore {
             Err(e) => Err(KeyStoreError::KeychainError(format!(
                 "Failed to access master key: {}",
                 e
-            )))
+            ))),
         }
     }
 

@@ -726,7 +726,11 @@ EXAMPLES:
 
 8. Clear all context memories:
    {{"operation": "clear_by_type", "type": "context"}}"#,
-                MAX_CONTENT_LENGTH, MAX_CONTENT_LENGTH, DEFAULT_LIMIT, MAX_LIMIT, DEFAULT_SIMILARITY_THRESHOLD
+                MAX_CONTENT_LENGTH,
+                MAX_CONTENT_LENGTH,
+                DEFAULT_LIMIT,
+                MAX_LIMIT,
+                DEFAULT_SIMILARITY_THRESHOLD
             ),
 
             input_schema: serde_json::json!({
