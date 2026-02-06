@@ -154,10 +154,13 @@ impl OllamaProvider {
                 .api_key(Nothing)
                 .base_url(server_url)
                 .build()
-                .map_err(|e| LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e)))?
+                .map_err(|e| {
+                    LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e))
+                })?
         } else {
-            ollama::Client::new(Nothing)
-                .map_err(|e| LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e)))?
+            ollama::Client::new(Nothing).map_err(|e| {
+                LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e))
+            })?
         };
 
         *self.client.write().await = Some(client);
