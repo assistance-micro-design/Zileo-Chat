@@ -5155,21 +5155,24 @@ dependencies = [
 
 [[package]]
 name = "rig-core"
-version = "0.24.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "112bd2e51d1fadd16509be2b3d45bfa197725787627f6addcaffe57294f64e18"
+checksum = "a8f7a3f0c7c00eaced15a68ee16e1bd6bb709ff598d11b9aedac8b628217dc09"
 dependencies = [
  "as-any",
  "async-stream",
  "base64 0.22.1",
  "bytes",
  "eventsource-stream",
+ "fastrand",
  "futures",
  "futures-timer",
  "glob",
  "http",
  "lopdf",
+ "mime",
  "mime_guess",
+ "nanoid",
  "ordered-float",
  "pin-project-lite",
  "rayon",
@@ -5187,9 +5190,9 @@ dependencies = [
 
 [[package]]
 name = "rig-derive"
-version = "0.1.8"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d3f8b16bae04eca6b0f115f78f172cc7979c1ec82c30af0ccd7d7ed99f3ef48"
+checksum = "b1f4b48f1449fa214d5cb11d0d0d952fd4c13b7ca5d1eaac64c87ce03cfb9e24"
 dependencies = [
  "convert_case 0.8.0",
  "deluxe",
@@ -8554,7 +8557,7 @@ dependencies = [
 
 [[package]]
 name = "zileo-chat"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "aes-gcm",
  "anyhow",

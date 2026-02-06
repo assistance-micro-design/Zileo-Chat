@@ -105,7 +105,7 @@ Generated: 2025-12-11
 | regex | 1.12.2 | MIT OR Apache-2.0 | https://github.com/rust-lang/regex |
 | once_cell | 1.21.3 | MIT OR Apache-2.0 | https://github.com/matklad/once_cell |
 | tokio-util | 0.7.17 | MIT | https://github.com/tokio-rs/tokio |
-| rig-core | 0.24.0 | MIT | https://github.com/0xPlaygrounds/rig |
+| rig-core | 0.30.0 | MIT | https://github.com/0xPlaygrounds/rig |
 | reqwest | 0.12.24 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest |
 | futures-util | 0.3.31 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
 | keyring | 2.3.3 | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs |

@@ -17,6 +17,7 @@
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use super::utils::simulate_streaming;
 use async_trait::async_trait;
+use rig::client::Nothing;
 use rig::completion::Prompt;
 use rig::providers::ollama;
 
@@ -149,9 +150,17 @@ impl OllamaProvider {
 
         // Create client with custom URL if provided
         let client = if server_url != DEFAULT_OLLAMA_URL {
-            ollama::ClientBuilder::new().base_url(server_url).build()
+            ollama::Client::builder()
+                .api_key(Nothing)
+                .base_url(server_url)
+                .build()
+                .map_err(|e| {
+                    LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e))
+                })?
         } else {
-            ollama::Client::new()
+            ollama::Client::new(Nothing).map_err(|e| {
+                LLMError::ConnectionError(format!("Failed to create Ollama client: {}", e))
+            })?
         };
 
         *self.client.write().await = Some(client);

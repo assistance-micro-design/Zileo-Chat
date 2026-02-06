@@ -276,7 +276,9 @@ impl MistralProvider {
     /// Note: For production use, prefer using `new()` with a shared HTTP client
     /// from ProviderManager to benefit from connection pooling.
     pub fn with_api_key(api_key: &str) -> Result<Self, LLMError> {
-        let client = mistral::Client::new(api_key);
+        let client = mistral::Client::new(api_key).map_err(|e| {
+            LLMError::RequestFailed(format!("Failed to create Mistral client: {}", e))
+        })?;
         let http_client = Arc::new(
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
@@ -294,7 +296,9 @@ impl MistralProvider {
 
     /// Configures the provider with an API key
     pub async fn configure(&self, api_key: &str) -> Result<(), LLMError> {
-        let client = mistral::Client::new(api_key);
+        let client = mistral::Client::new(api_key).map_err(|e| {
+            LLMError::RequestFailed(format!("Failed to create Mistral client: {}", e))
+        })?;
         *self.client.write().await = Some(client);
         *self.api_key.write().await = Some(api_key.to_string());
         info!("Mistral provider configured");
