@@ -315,7 +315,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					<div class="field-group" role="group" aria-label={$i18n('agents_lifecycle')}>
 						<span class="field-label">{$i18n('agents_lifecycle')}</span>
 						<div class="card-selector">
-							{#each lifecycleOptions as option}
+							{#each lifecycleOptions as option (option.value)}
 								<button
 									type="button"
 									class="selector-card"
@@ -342,7 +342,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					<div class="field-group" role="group" aria-label={$i18n('agents_provider')}>
 						<span class="field-label">{$i18n('agents_provider')}</span>
 						<div class="card-selector">
-							{#each providerOptions as option}
+							{#each providerOptions as option (option.value)}
 								<button
 									type="button"
 									class="selector-card provider-card"
@@ -365,7 +365,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							</div>
 						{:else}
 							<div class="model-selector">
-								{#each availableModels as m}
+								{#each availableModels as m (m.api_name)}
 									<button
 										type="button"
 										class="model-card"
@@ -413,7 +413,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					<p class="section-help">{$i18n('agents_tools_help')}</p>
 
 					<div class="checkbox-group">
-						{#each availableTools as tool}
+						{#each availableTools as tool (tool.value)}
 							<label class="checkbox-item">
 								<input
 									type="checkbox"
@@ -440,7 +440,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						</p>
 					{:else}
 						<div class="checkbox-group">
-							{#each availableMcpServers as server}
+							{#each availableMcpServers as server (server.value)}
 								<label class="checkbox-item">
 									<input
 										type="checkbox"

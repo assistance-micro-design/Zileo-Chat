@@ -27,6 +27,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
 	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { resolve } from '$app/paths';
 	import type { AgentSummary } from '$types/agent';
 	import type { Workflow } from '$types/workflow';
 
@@ -74,7 +75,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 			<span class="agents-loading">{$i18n('agent_header_loading')}</span>
 		{:else if agents.length === 0}
 			<span class="no-agents">
-				<a href="/settings" class="settings-link">{$i18n('agent_header_add_agent')}</a>
+				<a href={resolve('/settings')} class="settings-link">{$i18n('agent_header_add_agent')}</a>
 			</span>
 		{:else}
 			<div class="agent-controls">

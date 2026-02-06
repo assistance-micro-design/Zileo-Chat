@@ -180,7 +180,7 @@
 
 				{#if variables.length > 0}
 					<div class="variables-form">
-						{#each variables as variable}
+						{#each variables as variable (variable)}
 							<div class="variable-field">
 								<Input
 									label={variable}

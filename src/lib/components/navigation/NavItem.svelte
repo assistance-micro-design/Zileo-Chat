@@ -29,6 +29,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { resolve } from '$app/paths';
 
 	/**
 	 * NavItem props
@@ -47,7 +48,7 @@
 	let { href, active = false, icon, children }: Props = $props();
 </script>
 
-<a {href} class="nav-item" class:active aria-current={active ? 'page' : undefined}>
+<a href={resolve(href)} class="nav-item" class:active aria-current={active ? 'page' : undefined}>
 	{#if icon}
 		<span class="nav-icon">
 			{@render icon()}

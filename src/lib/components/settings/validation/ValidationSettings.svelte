@@ -194,7 +194,7 @@
     <div class="settings-section">
       <h3 class="section-title">{$i18n('validation_mode_title')}</h3>
       <div class="card-selector" role="group" aria-label={$i18n('validation_mode_title')}>
-        {#each modeOptions as option}
+        {#each modeOptions as option (option.value)}
           <button
             type="button"
             class="selector-card"
@@ -224,7 +224,7 @@
             <span class="info-card-status">{$i18n('validation_auto_approved')}</span>
             {#if subAgentTools.length > 0}
               <div class="item-list">
-                {#each subAgentTools as tool}
+                {#each subAgentTools as tool (tool.name)}
                   <span class="item-badge approved">{tool.name}</span>
                 {/each}
               </div>
@@ -240,7 +240,7 @@
             <span class="info-card-status">{$i18n('validation_auto_approved')}</span>
             {#if basicTools.length > 0}
               <div class="item-list">
-                {#each basicTools as tool}
+                {#each basicTools as tool (tool.name)}
                   <span class="item-badge approved">{tool.name}</span>
                 {/each}
               </div>
@@ -258,7 +258,7 @@
               <span class="loading-text">{$i18n('common_loading')}</span>
             {:else if mcpServers.length > 0}
               <div class="item-list">
-                {#each mcpServers as server}
+                {#each mcpServers as server (server.name)}
                   <span class="item-badge approved" class:running={server.status === 'running'}>
                     {server.name}
                     {#if server.status === 'running'}
@@ -293,7 +293,7 @@
             <span class="info-card-status">{$i18n('validation_requires_approval')}</span>
             {#if subAgentTools.length > 0}
               <div class="item-list">
-                {#each subAgentTools as tool}
+                {#each subAgentTools as tool (tool.name)}
                   <span class="item-badge validation-required">{tool.name}</span>
                 {/each}
               </div>
@@ -309,7 +309,7 @@
             <span class="info-card-status">{$i18n('validation_requires_approval')}</span>
             {#if basicTools.length > 0}
               <div class="item-list">
-                {#each basicTools as tool}
+                {#each basicTools as tool (tool.name)}
                   <span class="item-badge validation-required">{tool.name}</span>
                 {/each}
               </div>
@@ -327,7 +327,7 @@
               <span class="loading-text">{$i18n('common_loading')}</span>
             {:else if mcpServers.length > 0}
               <div class="item-list">
-                {#each mcpServers as server}
+                {#each mcpServers as server (server.name)}
                   <span class="item-badge validation-required" class:running={server.status === 'running'}>
                     {server.name}
                     {#if server.status === 'running'}
@@ -365,7 +365,7 @@
               <span class="checkbox-description">{$i18n('validation_sub_agents_desc')}</span>
               {#if subAgentTools.length > 0}
                 <div class="item-list">
-                  {#each subAgentTools as tool}
+                  {#each subAgentTools as tool (tool.name)}
                     <span class="item-badge" class:enabled={localSubAgentsValidation}>{tool.name}</span>
                   {/each}
                 </div>
@@ -385,7 +385,7 @@
               <span class="checkbox-description">{$i18n('validation_tools_desc')}</span>
               {#if basicTools.length > 0}
                 <div class="item-list">
-                  {#each basicTools as tool}
+                  {#each basicTools as tool (tool.name)}
                     <span class="item-badge" class:enabled={localToolsValidation}>{tool.name}</span>
                   {/each}
                 </div>
@@ -407,7 +407,7 @@
                 <span class="loading-text">{$i18n('common_loading')}</span>
               {:else if mcpServers.length > 0}
                 <div class="item-list">
-                  {#each mcpServers as server}
+                  {#each mcpServers as server (server.name)}
                     <span class="item-badge" class:enabled={localMcpValidation} class:running={server.status === 'running'}>
                       {server.name}
                       {#if server.status === 'running'}

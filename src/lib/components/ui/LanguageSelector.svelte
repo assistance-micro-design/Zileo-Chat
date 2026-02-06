@@ -106,7 +106,7 @@
 
 	{#if isOpen}
 		<ul class="dropdown" role="listbox" aria-label={$i18n('ui_language_available')}>
-			{#each SUPPORTED_LOCALES as loc}
+			{#each SUPPORTED_LOCALES as loc (loc)}
 				{@const info = LOCALES[loc]}
 				<li role="option" aria-selected={loc === currentInfo.id}>
 					<button

@@ -192,7 +192,7 @@ Shows warnings for conflicts and missing MCP env vars.
 							/>
 							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
-						{#each validation.entities.agents as agent}
+						{#each validation.entities.agents as agent (agent.name)}
 							<label class="entity-item">
 								<input
 									type="checkbox"
@@ -224,7 +224,7 @@ Shows warnings for conflicts and missing MCP env vars.
 							/>
 							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
-						{#each validation.entities.mcpServers as server}
+						{#each validation.entities.mcpServers as server (server.name)}
 							<label class="entity-item">
 								<input
 									type="checkbox"
@@ -259,7 +259,7 @@ Shows warnings for conflicts and missing MCP env vars.
 							/>
 							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
-						{#each validation.entities.models as model}
+						{#each validation.entities.models as model (model.name)}
 							<label class="entity-item">
 								<input
 									type="checkbox"
@@ -292,7 +292,7 @@ Shows warnings for conflicts and missing MCP env vars.
 							/>
 							<span class="entity-name">{$i18n('ie_select_all')}</span>
 						</label>
-						{#each validation.entities.prompts as prompt}
+						{#each validation.entities.prompts as prompt (prompt.name)}
 							<label class="entity-item">
 								<input
 									type="checkbox"

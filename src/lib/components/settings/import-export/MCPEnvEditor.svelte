@@ -113,7 +113,7 @@ Marks sensitive keys as required.
 				</p>
 
 				<div class="env-fields">
-					{#each missingKeys as key}
+					{#each missingKeys as key (key)}
 						{@const sensitive = isSensitiveKey(key)}
 						<div class="env-field">
 							<div class="field-header">

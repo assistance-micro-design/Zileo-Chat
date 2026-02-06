@@ -159,7 +159,7 @@ Displays in a modal with variable detection and preview.
 		<div class="variables-section">
 			<span class="variables-label">{$i18n('prompts_detected_variables')}</span>
 			<div class="variables-list">
-				{#each detectedVariables as variable}
+				{#each detectedVariables as variable (variable)}
 					<Badge variant="primary">{variable}</Badge>
 				{/each}
 			</div>

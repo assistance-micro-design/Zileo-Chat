@@ -39,7 +39,7 @@
 	<h1 class="step-title">{$i18n('onboarding_values_title')}</h1>
 
 	<div class="values-grid">
-		{#each values as value}
+		{#each values as value (value.key)}
 			<div class="value-card">
 				<div class="value-icon" data-icon={value.icon}>
 					{#if value.icon === 'code'}

@@ -420,7 +420,7 @@ Orchestrates the multi-step import process:
 							<div class="warnings">
 								<Badge variant="warning">{$i18n('ie_warnings')}</Badge>
 								<ul class="warning-list">
-									{#each previewValidation.warnings as warning}
+									{#each previewValidation.warnings as warning (warning)}
 										<li>{warning}</li>
 									{/each}
 								</ul>
@@ -442,7 +442,7 @@ Orchestrates the multi-step import process:
 			/>
 		{:else if currentStep === 'mcp_env' && validation}
 			<div class="mcp-env-content">
-				{#each Object.entries(filteredMissingMcpEnv()) as [serverName, missingKeys]}
+				{#each Object.entries(filteredMissingMcpEnv()) as [serverName, missingKeys] (serverName)}
 					{@const server = validation.entities.mcpServers.find((s) => s.name === serverName)}
 					{#if server && missingKeys.length > 0}
 						<MCPEnvEditor
@@ -515,7 +515,7 @@ Orchestrates the multi-step import process:
 								<div class="errors">
 									<Badge variant="error">{$i18n('ie_errors')}</Badge>
 									<ul class="error-list">
-										{#each completeResult.errors as importError}
+										{#each completeResult.errors as importError, i (i)}
 											<li>
 												{importError.entityType}: {importError.entityId} - {importError.error}
 											</li>
@@ -529,7 +529,7 @@ Orchestrates the multi-step import process:
 							<p>{$i18n('ie_import_failed_description')}</p>
 							{#if completeResult.errors.length > 0}
 								<ul class="error-list">
-									{#each completeResult.errors as importError}
+									{#each completeResult.errors as importError, i (i)}
 										<li>
 											{importError.entityType}: {importError.entityId} - {importError.error}
 										</li>

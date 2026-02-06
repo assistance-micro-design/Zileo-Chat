@@ -141,7 +141,7 @@
 
 						{#if ($currentQuestion.questionType === 'checkbox' || $currentQuestion.questionType === 'mixed') && $currentQuestion.options}
 							<div class="options-container">
-								{#each $currentQuestion.options as option}
+								{#each $currentQuestion.options as option (option.id)}
 									<label class="option-item">
 										<input
 											type="checkbox"

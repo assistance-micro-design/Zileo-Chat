@@ -59,12 +59,7 @@
 	}: Props = $props();
 
 	/** Internal expanded state - syncs with collapsed prop */
-	let expanded = $state(true);
-
-	// Sync expanded state when collapsed prop changes
-	$effect(() => {
-		expanded = !collapsed;
-	});
+	let expanded = $derived(!collapsed);
 
 	/** Which step is fully expanded (null = none) */
 	let expandedStepId = $state<string | null>(null);
