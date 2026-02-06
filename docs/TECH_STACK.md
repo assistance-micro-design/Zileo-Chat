@@ -59,7 +59,7 @@ Desktop   : Tauri (cross-platform)
 - **tauri-plugin-dialog**: 2.6.0
 
 **LLM & Multi-Agent**:
-- **rig-core**: 0.24.0 (features: all) - LLM abstraction framework
+- **rig-core**: 0.30.0 (features: all) - LLM abstraction framework
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures**: 0.3.31 (parallel execution)
 - **futures-util**: 0.3.31

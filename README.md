@@ -141,7 +141,7 @@ npm run tauri:build
 | Frontend | SvelteKit 2.49 + Svelte 5 |
 | Backend | Rust + Tauri 2.9 |
 | Database | SurrealDB 2.4 (embedded) |
-| LLM | Rig.rs 0.24 |
+| LLM | Rig.rs 0.30 |
 
 ---
 

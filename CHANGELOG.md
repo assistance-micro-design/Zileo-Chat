@@ -5,6 +5,49 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-02-06
+
+### Added
+
+- **Background Workflow Execution**: Run workflows in background with concurrent multi-workflow support
+  - Central dispatch store (`backgroundWorkflowsStore`) with Tauri event listeners
+  - Concurrent workflow limits: 3 in auto mode, 1 in manual/selective mode
+  - Toast notification system for background workflow events
+  - Visual indicators in sidebar: running pulse dot, question badge, section headers
+  - UserQuestion support for background workflows with persistent toast
+  - i18n translations (en/fr) for all toast and sidebar strings
+
+### Changed
+
+- **rig-core**: Upgraded from 0.24.0 to 0.30.0
+  - Client constructors now return `Result` (Mistral, Ollama)
+  - Ollama client uses `Nothing` type for API key parameter
+  - No changes to completion/prompt API
+- **Sub-Agent Limit**: Increased `MAX_SUB_AGENTS` from 3 to 15 concurrent operations per workflow
+- **Dependencies (Rust)**:
+  - `rig-core` 0.24.0 -> 0.30.0
+  - `uuid` 1.18.1 -> 1.20.0
+  - `tokio-util` 0.7.17 -> 0.7.18
+  - `thiserror` 2.0.17 -> 2.0.18
+  - `tauri-build` 2.5.2 -> 2.5.3
+  - `tauri-plugin-dialog` 2.4.2 -> 2.6.0
+- **Dependencies (NPM)**:
+  - `eslint-plugin-svelte` 2.46.1 -> 3.14.0 (major)
+  - `globals` 16.5.0 -> 17.2.0 (major)
+  - `svelte` 5.48.0 -> 5.49.1
+  - `@typescript-eslint/parser` 8.53.1 -> 8.54.0
+  - `@tauri-apps/plugin-dialog` 2.4.2 -> 2.6.0
+
+### Fixed
+
+- **ESLint**: Resolved 52 eslint-plugin-svelte 3.x lint errors
+  - Added keys to all `{#each}` blocks (`svelte/require-each-key`)
+  - Replaced `$state`+`$effect` with `$derived` for synced props (`svelte/prefer-writable-derived`)
+  - Disabled `svelte/no-navigation-without-resolve` for Tauri desktop app
+  - Configured TypeScript parser for `.svelte.ts` files in ESLint config
+
+---
+
 ## [0.9.3] - 2026-01-30
 
 ### Fixed
@@ -194,8 +237,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.9.4]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.4
 [0.9.3]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.3
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.4...HEAD
