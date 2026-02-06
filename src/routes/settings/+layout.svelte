@@ -113,7 +113,7 @@ Each section is now a separate route for better performance and UX.
 		{#snippet nav()}
 			{#if !sidebarCollapsed}
 				<div class="nav-items">
-					{#each sectionDefs as section}
+					{#each sectionDefs as section (section.id)}
 						{@const Icon = section.icon}
 						<a
 							href={section.route}
@@ -127,7 +127,7 @@ Each section is now a separate route for better performance and UX.
 				</div>
 			{:else}
 				<div class="nav-items-collapsed">
-					{#each sectionDefs as section}
+					{#each sectionDefs as section (section.id)}
 						{@const Icon = section.icon}
 						<a
 							href={section.route}

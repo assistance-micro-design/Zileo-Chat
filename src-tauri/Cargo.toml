@@ -38,7 +38,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.20", features = ["v4", "serde"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 async-trait = "0.1"
 # OPT-WF-4: Lock futures version (earlier versions yanked)

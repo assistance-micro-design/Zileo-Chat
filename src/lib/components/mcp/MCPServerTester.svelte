@@ -126,7 +126,7 @@ Displays MCP server connection test results including tools, resources, and late
 							<p class="empty-list">{$i18n('mcp_tester_tools_empty')}</p>
 						{:else}
 							<ul class="tool-list">
-								{#each result.tools as tool}
+								{#each result.tools as tool (tool.name)}
 									<li class="tool-item">
 										<span class="tool-name">{tool.name}</span>
 										<span class="tool-description">
@@ -148,7 +148,7 @@ Displays MCP server connection test results including tools, resources, and late
 							<p class="empty-list">{$i18n('mcp_tester_resources_empty')}</p>
 						{:else}
 							<ul class="resource-list">
-								{#each result.resources as resource}
+								{#each result.resources as resource (resource.uri)}
 									<li class="resource-item">
 										<span class="resource-name">{resource.name}</span>
 										<span class="resource-uri">{resource.uri}</span>

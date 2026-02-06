@@ -83,7 +83,7 @@
 				<div class="help-tutorial">
 					<h4 class="tutorial-title">{$i18n('help_how_to_use')}</h4>
 					<ol class="tutorial-steps">
-						{#each tutorialSteps as step, i}
+						{#each tutorialSteps as step, i (i)}
 							<li class="tutorial-step">
 								<span class="step-number">{i + 1}</span>
 								<span class="step-text">{step}</span>

@@ -122,7 +122,7 @@
 <div class="activity-feed" class:collapsed>
 	<!-- Filter Tabs -->
 	<div class="filter-tabs" role="tablist" aria-label="Activity filters">
-		{#each ACTIVITY_FILTERS as f}
+		{#each ACTIVITY_FILTERS as f (f.id)}
 			{@const IconComponent = FILTER_ICONS[f.icon]}
 			<button
 				role="tab"

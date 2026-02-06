@@ -39,7 +39,7 @@
 		<div class="progress-fill" style="width: {progressPercent}%"></div>
 	</div>
 	<div class="progress-dots">
-		{#each Array(TOTAL_STEPS) as _, i}
+		{#each Array(TOTAL_STEPS) as _, i (i)}
 			<div
 				class="dot"
 				class:active={i <= currentStep}

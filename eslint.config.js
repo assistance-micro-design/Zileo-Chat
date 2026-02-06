@@ -28,12 +28,19 @@ export default [
     }
   },
   {
+    files: ['**/*.svelte.ts', '**/*.svelte.js'],
+    languageOptions: {
+      parser: ts.parser
+    }
+  },
+  {
     ignores: ['build/', '.svelte-kit/', 'dist/', 'node_modules/', 'src-tauri/', 'src/lib/i18n/generated/']
   },
   {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }]
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'svelte/no-navigation-without-resolve': 'off'
     }
   }
 ];

@@ -197,7 +197,7 @@ export interface SubAgentStreamEvent {
  */
 export const SUB_AGENT_CONSTANTS = {
   /** Maximum number of sub-agents per workflow */
-  MAX_SUB_AGENTS: 3,
+  MAX_SUB_AGENTS: 15,
   /** Maximum length for task descriptions */
   MAX_TASK_DESCRIPTION_LEN: 10000,
   /** Maximum length for result summaries */

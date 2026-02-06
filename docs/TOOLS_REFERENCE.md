@@ -1458,7 +1458,7 @@ Constantes centralisees pour tous les tools.
 | `memory::` | MAX_CONTENT_LENGTH (50000), DEFAULT_LIMIT (10), MAX_LIMIT (100), DEFAULT_SIMILARITY_THRESHOLD (0.7), VALID_TYPES |
 | `todo::` | MAX_NAME_LENGTH (128), MAX_DESCRIPTION_LENGTH (1000), PRIORITY_MIN (1), PRIORITY_MAX (5), VALID_STATUSES |
 | `calculator::` | MAX_VALUE (1e308), MIN_POSITIVE (1e-308), UNARY_OPS, BINARY_OPS, VALID_CONSTANTS |
-| `sub_agent::` | MAX_SUB_AGENTS (3) |
+| `sub_agent::` | MAX_SUB_AGENTS (15) |
 
 ### response.rs
 

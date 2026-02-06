@@ -499,7 +499,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							<div class="categories-section">
 								<h4 class="section-title">{$i18n('memory_by_category')}</h4>
 								<div class="categories-list">
-									{#each tokenStats.categories as cat}
+									{#each tokenStats.categories as cat (cat.memory_type)}
 										<div class="category-item">
 											<div class="category-header">
 												<Badge variant={getTypeVariant(cat.memory_type)}>{cat.memory_type}</Badge>
@@ -522,7 +522,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 							<div class="categories-section">
 								<h4 class="section-title">{$i18n('memory_by_type')}</h4>
 								<div class="type-list">
-									{#each Object.entries(stats.by_type) as [type, count]}
+									{#each Object.entries(stats.by_type) as [type, count] (type)}
 										<div class="type-item">
 											<Badge variant={getTypeVariant(type)}>{type}</Badge>
 											<span class="type-count">{count}</span>

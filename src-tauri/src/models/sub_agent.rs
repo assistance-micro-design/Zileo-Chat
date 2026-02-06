@@ -356,7 +356,7 @@ pub struct ParallelTaskResult {
 #[allow(dead_code)]
 pub mod constants {
     /// Maximum number of sub-agents per workflow
-    pub const MAX_SUB_AGENTS: usize = 3;
+    pub const MAX_SUB_AGENTS: usize = 15;
 
     /// Maximum length for task descriptions in database
     pub const MAX_TASK_DESCRIPTION_LEN: usize = 10000;
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn test_max_sub_agents_constant() {
-        assert_eq!(constants::MAX_SUB_AGENTS, 3);
+        assert_eq!(constants::MAX_SUB_AGENTS, 15);
     }
 
     // OPT-SA-11: Tests for parent_execution_id (Correlation ID for Hierarchical Tracing)

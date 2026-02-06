@@ -35,7 +35,7 @@ Sub-agents operate at exactly one level below the primary agent:
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `MAX_SUB_AGENTS` | 3 | Maximum sub-agents per workflow |
+| `MAX_SUB_AGENTS` | 15 | Maximum sub-agents per workflow |
 | `MAX_TASK_DESCRIPTION_LEN` | 10000 | Maximum task description length |
 | `MAX_RESULT_SUMMARY_LEN` | 5000 | Maximum result summary length |
 | `INACTIVITY_TIMEOUT_SECS` | 300 | Timeout after 5 minutes of inactivity |
@@ -45,7 +45,7 @@ Sub-agents operate at exactly one level below the primary agent:
 | `CIRCUIT_FAILURE_THRESHOLD` | 3 | Failures before circuit opens |
 | `CIRCUIT_COOLDOWN_SECS` | 60 | Cooldown before retry after circuit open |
 
-- **3 tasks per parallel batch** (matches MAX_SUB_AGENTS)
+- **15 tasks per parallel batch** (matches MAX_SUB_AGENTS)
 - Sub-agents have restricted tool access by default (sub-agent tools filtered out)
 
 ---
@@ -410,7 +410,7 @@ import type {
 // Constants
 import { SUB_AGENT_CONSTANTS, SUB_AGENT_EVENTS, VALIDATION_EVENTS } from '$types/sub-agent';
 
-console.log(SUB_AGENT_CONSTANTS.MAX_SUB_AGENTS); // 3
+console.log(SUB_AGENT_CONSTANTS.MAX_SUB_AGENTS); // 15
 ```
 
 ---
