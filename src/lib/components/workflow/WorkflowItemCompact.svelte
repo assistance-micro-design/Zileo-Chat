@@ -34,11 +34,15 @@
 		workflow: Workflow;
 		/** Whether this workflow is currently selected */
 		active?: boolean;
+		/** Whether this workflow is currently running in the background */
+		running?: boolean;
+		/** Whether this workflow has a pending user question */
+		hasQuestion?: boolean;
 		/** Selection handler */
 		onselect?: (workflow: Workflow) => void;
 	}
 
-	let { workflow, active = false, onselect }: Props = $props();
+	let { workflow, active = false, running = false, hasQuestion = false, onselect }: Props = $props();
 
 	/**
 	 * Handle workflow selection
@@ -67,6 +71,7 @@
 	type="button"
 	class="workflow-compact"
 	class:active
+	class:running
 	onclick={handleSelect}
 	onkeydown={handleKeydown}
 	title={workflow.name}
@@ -79,6 +84,9 @@
 	<span class="workflow-status">
 		<StatusIndicator status={workflow.status} size="sm" />
 	</span>
+	{#if hasQuestion}
+		<span class="question-badge"></span>
+	{/if}
 </button>
 
 <style>
@@ -131,5 +139,28 @@
 		border-radius: var(--border-radius-full);
 		padding: 2px;
 		line-height: 0;
+	}
+
+	.workflow-compact.running {
+		animation: pulse-ring 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse-ring {
+		0%, 100% {
+			box-shadow: 0 0 0 0 var(--color-success);
+		}
+		50% {
+			box-shadow: 0 0 0 3px var(--color-success);
+		}
+	}
+
+	.question-badge {
+		position: absolute;
+		top: -2px;
+		right: -2px;
+		width: 6px;
+		height: 6px;
+		border-radius: var(--border-radius-full);
+		background: var(--color-warning);
 	}
 </style>

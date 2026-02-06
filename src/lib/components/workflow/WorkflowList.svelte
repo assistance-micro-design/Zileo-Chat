@@ -45,9 +45,40 @@
 		ondelete?: (workflow: Workflow) => void;
 		/** Rename handler */
 		onrename?: (workflow: Workflow, newName: string) => void;
+		/** Set of workflow IDs currently running in the background */
+		runningWorkflowIds?: Set<string>;
+		/** Set of workflow IDs that recently completed */
+		recentlyCompletedIds?: Set<string>;
+		/** Set of workflow IDs with a pending user question */
+		questionPendingIds?: Set<string>;
 	}
 
-	let { workflows, selectedId, collapsed = false, onselect, ondelete, onrename }: Props = $props();
+	let {
+		workflows,
+		selectedId,
+		collapsed = false,
+		onselect,
+		ondelete,
+		onrename,
+		runningWorkflowIds = new Set<string>(),
+		recentlyCompletedIds = new Set<string>(),
+		questionPendingIds = new Set<string>()
+	}: Props = $props();
+
+	/** Workflows that are currently running in the background */
+	const runningWorkflows = $derived(
+		workflows.filter((w) => runningWorkflowIds.has(w.id))
+	);
+
+	/** Workflows that recently completed in the background */
+	const completedWorkflows = $derived(
+		workflows.filter((w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id))
+	);
+
+	/** Remaining workflows (not running, not recently completed) */
+	const remainingWorkflows = $derived(
+		workflows.filter((w) => !runningWorkflowIds.has(w.id) && !recentlyCompletedIds.has(w.id))
+	);
 </script>
 
 <div class="workflow-list" class:collapsed role="listbox" aria-label={$i18n('workflow_list_arialabel')}>
@@ -61,7 +92,24 @@
 			{/if}
 		</div>
 	{:else if collapsed}
-		{#each workflows as workflow (workflow.id)}
+		{#each runningWorkflows as workflow (workflow.id)}
+			<WorkflowItemCompact
+				{workflow}
+				active={workflow.id === selectedId}
+				running={true}
+				hasQuestion={questionPendingIds.has(workflow.id)}
+				{onselect}
+			/>
+		{/each}
+		{#each completedWorkflows as workflow (workflow.id)}
+			<WorkflowItemCompact
+				{workflow}
+				active={workflow.id === selectedId}
+				hasQuestion={questionPendingIds.has(workflow.id)}
+				{onselect}
+			/>
+		{/each}
+		{#each remainingWorkflows as workflow (workflow.id)}
 			<WorkflowItemCompact
 				{workflow}
 				active={workflow.id === selectedId}
@@ -69,7 +117,43 @@
 			/>
 		{/each}
 	{:else}
-		{#each workflows as workflow (workflow.id)}
+		{#if runningWorkflows.length > 0}
+			<h3 class="section-header running">{$i18n('workflow_section_running')}</h3>
+			{#each runningWorkflows as workflow (workflow.id)}
+				<WorkflowItem
+					{workflow}
+					active={workflow.id === selectedId}
+					running={true}
+					hasQuestion={questionPendingIds.has(workflow.id)}
+					{onselect}
+					{ondelete}
+					{onrename}
+				/>
+			{/each}
+		{/if}
+		{#if completedWorkflows.length > 0}
+			{#if runningWorkflows.length > 0}
+				<div class="section-divider"></div>
+			{/if}
+			<h3 class="section-header completed">{$i18n('workflow_section_recently_completed')}</h3>
+			{#each completedWorkflows as workflow (workflow.id)}
+				<WorkflowItem
+					{workflow}
+					active={workflow.id === selectedId}
+					hasQuestion={questionPendingIds.has(workflow.id)}
+					{onselect}
+					{ondelete}
+					{onrename}
+				/>
+			{/each}
+		{/if}
+		{#if remainingWorkflows.length > 0}
+			{#if runningWorkflows.length > 0 || completedWorkflows.length > 0}
+				<div class="section-divider"></div>
+			{/if}
+			<h3 class="section-header">{$i18n('workflow_section_workflows')}</h3>
+		{/if}
+		{#each remainingWorkflows as workflow (workflow.id)}
 			<WorkflowItem
 				{workflow}
 				active={workflow.id === selectedId}
@@ -123,5 +207,29 @@
 		background: var(--color-bg-tertiary);
 		color: var(--color-text-tertiary);
 		font-size: var(--font-size-sm);
+	}
+
+	.section-header {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		margin: var(--spacing-xs) 0 0 0;
+		padding: 0 var(--spacing-md);
+		font-weight: var(--font-weight-medium);
+	}
+
+	.section-header.running {
+		color: var(--color-success);
+	}
+
+	.section-header.completed {
+		color: var(--color-text-secondary);
+	}
+
+	.section-divider {
+		height: 1px;
+		background: var(--color-border);
+		margin: var(--spacing-sm) var(--spacing-md);
 	}
 </style>

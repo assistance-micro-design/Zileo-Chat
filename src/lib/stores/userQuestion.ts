@@ -19,19 +19,21 @@
 
 /**
  * User question store for managing interactive question-answer sessions during workflow execution.
- * Listens to streaming events and manages pending questions via modal UI.
+ * Works in coordination with backgroundWorkflowsStore, which owns all event listeners and
+ * dispatches question events to this store with workflow context.
  * @module stores/userQuestion
  */
 
 import { writable, derived } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
 	UserQuestion,
 	UserQuestionResponse,
 	UserQuestionStreamPayload
 } from '$types/user-question';
-import type { StreamChunk } from '$types/streaming';
+import { getErrorMessage } from '$lib/utils/error';
+import { backgroundWorkflowsStore } from './backgroundWorkflows';
+import { toastStore } from './toast';
 
 /**
  * Maximum number of pending questions to prevent memory issues (OPT-UQ-4)
@@ -71,18 +73,9 @@ const initialState: UserQuestionState = {
 const store = writable<UserQuestionState>(initialState);
 
 /**
- * Event listener cleanup function
- */
-let unlistenStream: UnlistenFn | null = null;
-
-/**
- * Tracks whether the store has been initialized with event listeners
- */
-let isInitialized = false;
-
-/**
  * User question store with actions for managing interactive question-answer flows.
- * Automatically listens to streaming events during workflow execution.
+ * Event listeners are owned by backgroundWorkflowsStore; this store receives
+ * question events via handleQuestionForWorkflow.
  */
 export const userQuestionStore = {
 	/**
@@ -91,36 +84,23 @@ export const userQuestionStore = {
 	subscribe: store.subscribe,
 
 	/**
-	 * Initializes the store by setting up streaming event listener.
-	 * Should be called once on app initialization.
+	 * Initializes the store by resetting state.
+	 * Event listeners are managed by backgroundWorkflowsStore.
 	 */
-	async init(): Promise<void> {
-		// Safety check: cleanup existing listener if already initialized
-		if (isInitialized) {
-			console.warn('[userQuestion] Store already initialized, cleaning up first');
-			this.cleanup();
-		}
-
-		// Listen to streaming events for user_question_start
-		unlistenStream = await listen<StreamChunk>('workflow_stream', (event) => {
-			const chunk = event.payload;
-			if (chunk.chunk_type === 'user_question_start' && chunk.user_question) {
-				this.handleQuestionStart(chunk.user_question);
-			}
-		});
-
-		isInitialized = true;
+	init(): void {
+		store.set(initialState);
 	},
 
 	/**
 	 * Handles incoming user_question_start streaming event.
 	 * Creates a new UserQuestion and adds it to pending queue.
 	 * @param payload - Question data from streaming event
+	 * @param workflowId - ID of the workflow this question belongs to
 	 */
-	handleQuestionStart(payload: UserQuestionStreamPayload): void {
+	handleQuestionStart(payload: UserQuestionStreamPayload, workflowId: string): void {
 		const question: UserQuestion = {
 			id: payload.questionId,
-			workflowId: '',
+			workflowId,
 			agentId: '',
 			question: payload.question,
 			questionType: payload.questionType,
@@ -146,13 +126,110 @@ export const userQuestionStore = {
 	},
 
 	/**
+	 * Handles a question event with workflow-aware modal behavior.
+	 * If the question belongs to the currently viewed workflow, opens the modal.
+	 * Otherwise, only queues the question (toast notification is handled by backgroundWorkflowsStore).
+	 *
+	 * @param payload - Question data from streaming event
+	 * @param workflowId - ID of the workflow this question belongs to
+	 * @param isViewed - Whether the workflow is currently being viewed in the UI
+	 */
+	handleQuestionForWorkflow(
+		payload: UserQuestionStreamPayload,
+		workflowId: string,
+		isViewed: boolean
+	): void {
+		const question: UserQuestion = {
+			id: payload.questionId,
+			workflowId,
+			agentId: '',
+			question: payload.question,
+			questionType: payload.questionType,
+			options: payload.options,
+			textPlaceholder: payload.textPlaceholder,
+			textRequired: payload.textRequired,
+			context: payload.context,
+			status: 'pending',
+			createdAt: new Date().toISOString()
+		};
+
+		store.update((s) => {
+			const newPending = [...s.pendingQuestions, question].slice(-MAX_PENDING_QUESTIONS);
+
+			if (isViewed) {
+				return {
+					...s,
+					pendingQuestions: newPending,
+					currentQuestion: s.currentQuestion ?? question,
+					isModalOpen: true,
+					error: null
+				};
+			}
+
+			// Non-viewed workflow: queue only, do not open modal
+			return {
+				...s,
+				pendingQuestions: newPending
+			};
+		});
+	},
+
+	/**
+	 * Returns pending questions filtered by workflow ID.
+	 *
+	 * @param workflowId - Workflow ID to filter by
+	 * @returns List of pending questions for the specified workflow
+	 */
+	getQuestionsForWorkflow(workflowId: string): UserQuestion[] {
+		let result: UserQuestion[] = [];
+		const unsub = store.subscribe((s) => {
+			result = s.pendingQuestions.filter((q) => q.workflowId === workflowId);
+		});
+		unsub();
+		return result;
+	},
+
+	/**
+	 * Opens the question modal for a specific workflow.
+	 * Sets currentQuestion to the first pending question for that workflow and opens modal.
+	 * Used when the user clicks "Go to workflow" on a toast notification.
+	 *
+	 * @param workflowId - Workflow ID to open questions for
+	 */
+	openForWorkflow(workflowId: string): void {
+		store.update((s) => {
+			const workflowQuestions = s.pendingQuestions.filter(
+				(q) => q.workflowId === workflowId
+			);
+			if (workflowQuestions.length === 0) return s;
+
+			return {
+				...s,
+				currentQuestion: workflowQuestions[0],
+				isModalOpen: true,
+				error: null
+			};
+		});
+	},
+
+	/**
 	 * Submits user's response to a question.
 	 * Removes question from pending queue and advances to next question if available.
+	 * Updates backgroundWorkflowsStore and toastStore for the affected workflow.
 	 * @param response - User's answer (selected options and/or text)
-	 * @throws Error if submission fails
 	 */
 	async submitResponse(response: UserQuestionResponse): Promise<void> {
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
+
+		// Capture workflowId before removing the question
+		let answeredWorkflowId = '';
+		const unsub = store.subscribe((s) => {
+			const question = s.pendingQuestions.find((q) => q.id === response.questionId);
+			if (question) {
+				answeredWorkflowId = question.workflowId;
+			}
+		});
+		unsub();
 
 		try {
 			await invoke('submit_user_response', {
@@ -171,12 +248,22 @@ export const userQuestionStore = {
 					isSubmitting: false
 				};
 			});
+
+			// Update background workflows and toast state
+			if (answeredWorkflowId) {
+				const remainingForWorkflow = this.getQuestionsForWorkflow(answeredWorkflowId);
+				const hasMore = remainingForWorkflow.length > 0;
+				backgroundWorkflowsStore.setHasPendingQuestion(answeredWorkflowId, hasMore);
+				if (!hasMore) {
+					toastStore.dismissForWorkflow(answeredWorkflowId);
+				}
+			}
 		} catch (e) {
-			console.error('[userQuestionStore] submitResponse error:', e);
+			const message = getErrorMessage(e);
 			store.update((s) => ({
 				...s,
 				isSubmitting: false,
-				error: String(e)
+				error: message
 			}));
 		}
 	},
@@ -184,11 +271,21 @@ export const userQuestionStore = {
 	/**
 	 * Skips a question without providing an answer.
 	 * Removes question from pending queue and advances to next question if available.
+	 * Updates backgroundWorkflowsStore and toastStore for the affected workflow.
 	 * @param questionId - ID of the question to skip
-	 * @throws Error if skip operation fails
 	 */
 	async skipQuestion(questionId: string): Promise<void> {
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
+
+		// Capture workflowId before removing the question
+		let skippedWorkflowId = '';
+		const unsub = store.subscribe((s) => {
+			const question = s.pendingQuestions.find((q) => q.id === questionId);
+			if (question) {
+				skippedWorkflowId = question.workflowId;
+			}
+		});
+		unsub();
 
 		try {
 			await invoke('skip_question', { questionId });
@@ -203,12 +300,22 @@ export const userQuestionStore = {
 					isSubmitting: false
 				};
 			});
+
+			// Update background workflows and toast state
+			if (skippedWorkflowId) {
+				const remainingForWorkflow = this.getQuestionsForWorkflow(skippedWorkflowId);
+				const hasMore = remainingForWorkflow.length > 0;
+				backgroundWorkflowsStore.setHasPendingQuestion(skippedWorkflowId, hasMore);
+				if (!hasMore) {
+					toastStore.dismissForWorkflow(skippedWorkflowId);
+				}
+			}
 		} catch (e) {
-			console.error('[userQuestionStore] skipQuestion error:', e);
+			const message = getErrorMessage(e);
 			store.update((s) => ({
 				...s,
 				isSubmitting: false,
-				error: String(e)
+				error: message
 			}));
 		}
 	},
@@ -229,15 +336,10 @@ export const userQuestionStore = {
 	},
 
 	/**
-	 * Cleans up event listeners and resets store to initial state.
-	 * Should be called on app cleanup/unmount.
+	 * Resets store to initial state.
+	 * No event listeners to clean up since backgroundWorkflowsStore owns them.
 	 */
 	cleanup(): void {
-		if (unlistenStream) {
-			unlistenStream();
-			unlistenStream = null;
-		}
-		isInitialized = false;
 		store.set(initialState);
 	}
 };

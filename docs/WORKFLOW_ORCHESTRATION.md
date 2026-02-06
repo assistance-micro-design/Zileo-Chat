@@ -2,8 +2,8 @@
 
 > **Objectif** : Definir comment l'agent principal determine l'execution parallele ou sequentielle des operations au sein d'un workflow
 
-**Status** : Implementation Complete (Phase 5 + OPT-WF)
-**Version** : 2.1 | **Derniere mise a jour** : 2025-12-10
+**Status** : Implementation Complete (Phase 5 + OPT-WF + Background Execution)
+**Version** : 2.2 | **Derniere mise a jour** : 2026-02-06
 
 ---
 
@@ -167,6 +167,8 @@ pub struct StreamChunk {
     pub task_name: Option<String>,
     pub task_status: Option<String>,
     pub task_priority: Option<u8>,
+    pub tokens_delta: Option<usize>,
+    pub tokens_total: Option<usize>,
 }
 ```
 
@@ -247,6 +249,62 @@ streamingStore.cleanup(): Promise<void>
 streamingStore.reset(): Promise<void>
 ```
 
+#### backgroundWorkflowsStore (src/lib/stores/backgroundWorkflows.ts)
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `backgroundWorkflowsStore` | Store Object | Central dispatch for concurrent background workflow management |
+| `runningWorkflows` | Derived Store | Array of currently running workflow executions |
+| `recentlyCompletedWorkflows` | Derived Store | Array of completed/error/cancelled executions |
+| `runningCount` | Derived Store | Count of running workflows |
+| `canStartNew` | Derived Store | Boolean: whether a new workflow can be started (concurrency limit) |
+| `viewedExecution` | Derived Store | Execution state for the currently-viewed workflow |
+| `runningWorkflowIds` | Derived Store | Set of workflow IDs that are running |
+| `recentlyCompletedIds` | Derived Store | Set of workflow IDs that completed |
+| `questionPendingIds` | Derived Store | Set of workflow IDs with pending user questions |
+
+**Methods**:
+```typescript
+backgroundWorkflowsStore.init(): Promise<void>           // Register Tauri listeners + cleanup timer
+backgroundWorkflowsStore.destroy(): Promise<void>        // Unregister listeners, stop timer, reset
+backgroundWorkflowsStore.setForwardCallbacks(chunkCb, completeCb, userQuestionCb): void
+backgroundWorkflowsStore.register(workflowId, agentId, workflowName): void
+backgroundWorkflowsStore.canStart(): boolean             // Check concurrency limit
+backgroundWorkflowsStore.getMaxConcurrent(): number      // Max allowed (3 auto, 1 other)
+backgroundWorkflowsStore.setViewed(workflowId): void     // Set currently-viewed workflow
+backgroundWorkflowsStore.getExecution(workflowId): WorkflowStreamState | undefined
+backgroundWorkflowsStore.setHasPendingQuestion(workflowId, value): void
+backgroundWorkflowsStore.remove(workflowId): void
+```
+
+**Constants**: `MAX_CONCURRENT_AUTO = 3`, `MAX_CONCURRENT_OTHER = 1`, `CLEANUP_INTERVAL_MS = 600000`
+
+**Architecture**: Central event dispatch pattern (PAT_STORE_004) - owns global Tauri listeners for `workflow_stream` and `workflow_complete`, routes events to internal Map, forwards to streamingStore for viewed workflow via callbacks set by `setForwardCallbacks()`.
+
+#### toastStore (src/lib/stores/toast.ts)
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `toastStore` | Store Object | Toast notification management |
+| `toasts` | Derived Store | All current toasts |
+| `visibleToasts` | Derived Store | Toasts limited to MAX_VISIBLE_TOASTS (5) |
+| `hasToasts` | Derived Store | Boolean: any toasts exist |
+| `navigationTarget` | Derived Store | Pending navigation target (workflow ID) |
+
+**Methods**:
+```typescript
+toastStore.add(toast): string                             // Add toast, returns generated ID
+toastStore.addWorkflowComplete(workflowId, workflowName, status): void
+toastStore.addUserQuestion(workflowId, workflowName, question): void
+toastStore.dismiss(toastId): void
+toastStore.dismissForWorkflow(workflowId): void
+toastStore.clear(): void
+toastStore.requestNavigation(workflowId): void           // Request navigation from toast action
+toastStore.clearNavigation(): void
+```
+
+**Constants**: `MAX_VISIBLE_TOASTS = 5`, `DEFAULT_DURATION = 5000`
+
 #### activityStore (src/lib/stores/activity.ts)
 
 | Export | Type | Description |
@@ -287,6 +345,15 @@ activityStore.reset(): void
 | `StreamChunk` | workflow_id, chunk_type, content, tool, duration, sub_agent_id, sub_agent_name, parent_agent_id, metrics, progress, task_id, task_name, task_status, task_priority |
 | `WorkflowComplete` | workflow_id, status ('completed' \| 'error' \| 'cancelled'), error |
 
+#### background-workflow.ts
+
+| Type | Fields |
+|------|--------|
+| `BackgroundWorkflowStatus` | `'running' \| 'completed' \| 'error' \| 'cancelled'` |
+| `ToastType` | `'success' \| 'error' \| 'info' \| 'warning' \| 'user-question'` |
+| `WorkflowStreamState` | workflowId, agentId, workflowName, status, content, tools[], reasoning[], subAgents[], tasks[], tokensReceived, error, startedAt, completedAt, hasPendingQuestion |
+| `Toast` | id, type, title, message, workflowId?, persistent, duration, createdAt |
+
 #### activity.ts
 
 | Type | Fields |
@@ -302,9 +369,9 @@ activityStore.reset(): void
 
 | Component | Props | File |
 |-----------|-------|------|
-| `WorkflowItem` | workflow, active, onselect, ondelete, onrename | WorkflowItem.svelte |
-| `WorkflowList` | workflows, selectedId, collapsed, onselect, ondelete, onrename | WorkflowList.svelte |
-| `WorkflowItemCompact` | workflow, active, onselect | WorkflowItemCompact.svelte |
+| `WorkflowItem` | workflow, active, onselect, ondelete, onrename, running, hasQuestion | WorkflowItem.svelte |
+| `WorkflowList` | workflows, selectedId, collapsed, onselect, ondelete, onrename, runningWorkflowIds, recentlyCompletedIds, questionPendingIds | WorkflowList.svelte |
+| `WorkflowItemCompact` | workflow, active, onselect, running, hasQuestion | WorkflowItemCompact.svelte |
 | `NewWorkflowModal` | open, agents, selectedAgentId, oncreate, onclose | NewWorkflowModal.svelte |
 | `ConfirmDeleteModal` | open, workflowName, onconfirm, oncancel | ConfirmDeleteModal.svelte |
 | `ActivityFeed` | activities, isStreaming, filter, onFilterChange, collapsed | ActivityFeed.svelte |
@@ -320,10 +387,21 @@ activityStore.reset(): void
 
 | Component | Props | File |
 |-----------|-------|------|
-| `WorkflowSidebar` | collapsed, workflows, selectedWorkflowId, searchFilter, onsearchchange, onselect, oncreate, ondelete, onrename | WorkflowSidebar.svelte |
+| `WorkflowSidebar` | collapsed, workflows, selectedWorkflowId, searchFilter, onsearchchange, onselect, oncreate, ondelete, onrename, runningWorkflowIds, recentlyCompletedIds, questionPendingIds | WorkflowSidebar.svelte |
 | `ActivitySidebar` | collapsed, activities, isStreaming, filter, onfilterchange | ActivitySidebar.svelte |
 | `ChatContainer` | messages, messagesLoading, streamContent, isStreaming, disabled, onsend, oncancel | ChatContainer.svelte |
 | `AgentHeader` | workflow, agents, selectedAgentId, maxIterations, agentsLoading, messagesLoading, onagentchange, oniterationschange | AgentHeader.svelte |
+
+#### UI Components (src/lib/components/ui/)
+
+| Component | Props | File |
+|-----------|-------|------|
+| `ToastContainer` | (none - uses global toastStore) | ToastContainer.svelte |
+| `ToastItem` | toast, onnavigate | ToastItem.svelte |
+
+**ToastContainer**: Global overlay (bottom-right, z-index 9999) rendering visible toasts. Placed in `+layout.svelte` for app-wide visibility. Handles navigation requests from toast action buttons.
+
+**ToastItem**: Single toast notification with visual variants (success/error/info/warning/user-question), dismiss button, optional "Go to workflow" action, slide-in animation, and auto-dismiss for non-persistent toasts.
 
 ### Services
 
@@ -357,6 +435,7 @@ activityStore.reset(): void
 ### Streaming (execute_workflow_streaming)
 
 1. **Validation**: Same as non-streaming
+1.5. **Concurrent Limit Check** (safety net): Reject if `streaming_cancellations.len() >= 3`
 2. **Create Cancellation Token**: Enable immediate cancellation via tokio::select!
 3. **Load Workflow**: Same SurrealDB query pattern
 4. **Generate Message ID**: Early UUID generation for thinking step references
@@ -742,6 +821,85 @@ let results = timeout(
 
 ---
 
+## Background Workflow Execution
+
+### Overview
+
+Multiple workflows can execute concurrently in the background. The system enforces concurrency limits based on validation mode:
+
+| Validation Mode | Max Concurrent Workflows |
+|----------------|--------------------------|
+| Auto | 3 |
+| Manual | 1 |
+| Selective | 1 |
+
+Limits are enforced at two levels:
+- **Frontend**: `backgroundWorkflowsStore.canStart()` checks `validationSettings.mode`
+- **Backend**: Safety net in `execute_workflow_streaming` rejects if `streaming_cancellations.len() >= 3`
+
+### Architecture
+
+```
++layout.svelte
+  └─ <ToastContainer /> (global, all pages)
+
++page.svelte (agent page)
+  ├─ backgroundWorkflowsStore.init()
+  ├─ setForwardCallbacks()
+  │   ├─ onChunk → streamingStore.processChunkDirect()
+  │   ├─ onComplete → streamingStore.processCompleteDirect()
+  │   └─ onUserQuestion → userQuestionStore.handleQuestionForWorkflow()
+  ├─ <WorkflowSidebar runningWorkflowIds recentlyCompletedIds questionPendingIds />
+  │   └─ <WorkflowList ...props />
+  │       ├─ Section: Running (green header)
+  │       ├─ Section: Recently Completed (gray header)
+  │       └─ Section: Workflows
+  │           └─ <WorkflowItem running hasQuestion /> or
+  │               <WorkflowItemCompact running hasQuestion />
+  └─ React to $navigationTarget → selectWorkflow()
+
+WorkflowExecutorService.execute()
+  ├─ Check backgroundWorkflowsStore.canStart()
+  ├─ Register in backgroundWorkflowsStore
+  ├─ Guard UI updates with isStillViewed()
+  └─ Always persist to DB
+
+backgroundWorkflowsStore (CENTRAL DISPATCH - PAT_STORE_004)
+  ├─ Owns global Tauri event listeners (workflow_stream, workflow_complete)
+  ├─ Maintains Map<workflowId, WorkflowStreamState>
+  ├─ Routes chunks to viewed workflow → streamingStore via callbacks
+  ├─ Fires toasts for non-viewed workflow events
+  └─ Enforces concurrency limits
+
+toastStore
+  ├─ addWorkflowComplete() → success/error toast (auto-dismiss 5s)
+  ├─ addUserQuestion() → persistent toast
+  └─ requestNavigation() → navigationTarget store → page reacts
+```
+
+### Visual Indicators
+
+| Indicator | Component | Appearance |
+|-----------|-----------|------------|
+| Running workflow | WorkflowItem | Green pulsing dot (8px, 2s animation) |
+| Running workflow | WorkflowItemCompact | Pulsing box-shadow ring (green glow) |
+| Pending question | WorkflowItem/Compact | Small orange dot (6px) top-right corner |
+| Sidebar sections | WorkflowList | "Running" (green) and "Recently Completed" (gray) section headers |
+
+### Workflow Switching
+
+When user switches to a background-running workflow:
+1. `backgroundWorkflowsStore.setViewed(workflowId)` updates view tracking
+2. `getExecution(workflowId)` retrieves `WorkflowStreamState`
+3. `streamingStore.restoreFrom(execution)` populates UI with accumulated data
+4. If `hasPendingQuestion`, opens `UserQuestionModal`
+
+### Cleanup
+
+Completed workflow executions are automatically removed from the background store after 10 minutes (`CLEANUP_INTERVAL_MS = 600000`) to prevent memory leaks.
+
+---
+
 ## References
 
 **Architecture** : [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md)
@@ -758,7 +916,7 @@ let results = timeout(
 - Query Constants: `src-tauri/src/db/queries.rs` (OPT-WF-1: centralized queries + cascade module)
 - Timeout Constants: `src-tauri/src/tools/constants.rs` (workflow module, OPT-WF-3/9)
 - Models: `src-tauri/src/models/workflow.rs`, `src-tauri/src/models/streaming.rs`
-- Frontend Stores: `src/lib/stores/workflows.ts`, `src/lib/stores/streaming.ts`, `src/lib/stores/activity.ts`
-- Frontend Types: `src/types/workflow.ts`, `src/types/streaming.ts`, `src/types/activity.ts`
-- Frontend Services: `src/lib/services/workflow.service.ts`
-- Components: `src/lib/components/workflow/`, `src/lib/components/agent/`
+- Frontend Stores: `src/lib/stores/workflows.ts`, `src/lib/stores/streaming.ts`, `src/lib/stores/activity.ts`, `src/lib/stores/backgroundWorkflows.ts`, `src/lib/stores/toast.ts`
+- Frontend Types: `src/types/workflow.ts`, `src/types/streaming.ts`, `src/types/activity.ts`, `src/types/background-workflow.ts`
+- Frontend Services: `src/lib/services/workflow.service.ts`, `src/lib/services/workflowExecutor.service.ts`
+- Components: `src/lib/components/workflow/`, `src/lib/components/agent/`, `src/lib/components/ui/ToastContainer.svelte`, `src/lib/components/ui/ToastItem.svelte`

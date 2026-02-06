@@ -25,6 +25,7 @@
 	import { AppContainer, FloatingMenu } from '$lib/components/layout';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
 	let { children } = $props();
 
@@ -85,6 +86,9 @@
 		</div>
 	</AppContainer>
 {/if}
+
+<!-- Toast notifications (global, visible on all pages) -->
+<ToastContainer />
 
 <!-- Legal modals accessible from Tauri Help menu -->
 <LegalModal type={legalModalType} open={legalModalOpen} onclose={() => (legalModalOpen = false)} />

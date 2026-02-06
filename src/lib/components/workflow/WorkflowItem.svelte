@@ -36,6 +36,10 @@
 		workflow: Workflow;
 		/** Whether this workflow is currently selected */
 		active?: boolean;
+		/** Whether this workflow is currently running in the background */
+		running?: boolean;
+		/** Whether this workflow has a pending user question */
+		hasQuestion?: boolean;
 		/** Selection handler */
 		onselect?: (workflow: Workflow) => void;
 		/** Delete handler */
@@ -44,7 +48,7 @@
 		onrename?: (workflow: Workflow, newName: string) => void;
 	}
 
-	let { workflow, active = false, onselect, ondelete, onrename }: Props = $props();
+	let { workflow, active = false, running = false, hasQuestion = false, onselect, ondelete, onrename }: Props = $props();
 
 	let editing = $state(false);
 	let editName = $state('');
@@ -129,7 +133,13 @@
 	aria-pressed={active}
 	aria-label={`Workflow: ${workflow.name}`}
 >
+	{#if running}
+		<span class="running-indicator"></span>
+	{/if}
 	<StatusIndicator status={workflow.status} size="sm" />
+	{#if hasQuestion}
+		<span class="question-badge"></span>
+	{/if}
 	{#if editing}
 		<input
 			bind:this={nameInputRef}
@@ -228,5 +238,33 @@
 	.workflow-delete:hover {
 		background: var(--color-error-light);
 		color: var(--color-error);
+	}
+
+	.running-indicator {
+		width: 8px;
+		height: 8px;
+		min-width: 8px;
+		border-radius: var(--border-radius-full);
+		background: var(--color-success);
+		animation: pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
+	}
+
+	.question-badge {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		width: 6px;
+		height: 6px;
+		border-radius: var(--border-radius-full);
+		background: var(--color-warning);
 	}
 </style>

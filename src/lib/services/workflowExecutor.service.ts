@@ -44,6 +44,9 @@ import { streamingStore } from '$lib/stores/streaming';
 import { tokenStore } from '$lib/stores/tokens';
 import { activityStore } from '$lib/stores/activity';
 import { workflowStore } from '$lib/stores/workflows';
+import { backgroundWorkflowsStore } from '$lib/stores/backgroundWorkflows';
+import { toastStore } from '$lib/stores/toast';
+import { t } from '$lib/i18n';
 
 /**
  * Parameters for executing a workflow message.
@@ -200,17 +203,45 @@ export const WorkflowExecutorService = {
 	async execute(params: ExecutionParams, callbacks?: ExecutionCallbacks): Promise<ExecutionResult> {
 		const { workflowId, message, agentId, locale } = params;
 
+		// Check concurrent limit before starting
+		if (!backgroundWorkflowsStore.canStart()) {
+			const max = backgroundWorkflowsStore.getMaxConcurrent();
+			toastStore.add({
+				type: 'warning',
+				title: t('toast_workflow_limit_title'),
+				message: t('toast_workflow_limit_message', { max }),
+				persistent: false,
+				duration: 5000
+			});
+			return {
+				success: false,
+				error: `Maximum concurrent workflows (${max}) reached`
+			};
+		}
+
+		// Helper: check if user is still viewing this workflow (may have switched)
+		const isStillViewed = () =>
+			backgroundWorkflowsStore.getViewedWorkflowId() === workflowId;
+
 		try {
 			// Step 1: Save user message
 			const userMessageId = await MessageService.saveUser(workflowId, message);
 			const userMessage = createUserMessage(workflowId, message);
 			callbacks?.onUserMessage?.(userMessage);
 
-			// Step 2: Start streaming
+			// Step 1.5: Register in background workflows store
+			const selectedWorkflow = workflowStore.getSelected();
+			backgroundWorkflowsStore.register(
+				workflowId,
+				agentId,
+				selectedWorkflow?.name ?? 'Workflow'
+			);
+
+			// Step 2: Start streaming (for the viewed workflow)
 			tokenStore.startStreaming();
 			await streamingStore.start(workflowId);
 
-			// Step 3: Execute workflow
+			// Step 3: Execute workflow (long-running IPC - user may switch workflows)
 			const workflowResult = await WorkflowService.executeStreaming(
 				workflowId,
 				message,
@@ -218,31 +249,43 @@ export const WorkflowExecutorService = {
 				locale
 			);
 
-			// Step 4: Update tokens and cost
-			tokenStore.setInputTokens(workflowResult.metrics.tokens_input);
-			tokenStore.updateStreamingTokens(workflowResult.metrics.tokens_output);
-			tokenStore.setSessionCost(workflowResult.metrics.cost_usd);
+			// Post-execution: user may have switched to a different workflow.
+			// DB saves always run; UI updates only if still viewing this workflow.
+
+			// Step 4: Update tokens and cost (UI-only, guard)
+			if (isStillViewed()) {
+				tokenStore.setInputTokens(workflowResult.metrics.tokens_input);
+				tokenStore.updateStreamingTokens(workflowResult.metrics.tokens_output);
+				tokenStore.setSessionCost(workflowResult.metrics.cost_usd);
+			}
 			callbacks?.onTokenUpdate?.(workflowResult.metrics);
 
-			// Step 5: Save assistant response
+			// Step 5: Save assistant response (always persist to DB)
 			const assistantMessageId = await MessageService.saveAssistant(
 				workflowId,
 				workflowResult.report,
 				workflowResult.metrics
 			);
-			const assistantMessage = createAssistantMessage(workflowId, workflowResult);
-			callbacks?.onAssistantMessage?.(assistantMessage);
-
-			// Step 6: Capture streaming activities to historical
-			activityStore.captureStreamingActivities();
-
-			// Step 7: Refresh workflows and update cumulative tokens
-			await workflowStore.loadWorkflows();
-			const workflow = workflowStore.getSelected();
-			if (workflow) {
-				tokenStore.updateFromWorkflow(workflow);
+			// Only push to UI if still viewing this workflow
+			if (isStillViewed()) {
+				const assistantMessage = createAssistantMessage(workflowId, workflowResult);
+				callbacks?.onAssistantMessage?.(assistantMessage);
 			}
-			callbacks?.onWorkflowRefresh?.(workflow);
+
+			// Step 6: Capture streaming activities to historical (UI-only, guard)
+			if (isStillViewed()) {
+				activityStore.captureStreamingActivities();
+			}
+
+			// Step 7: Refresh workflows (always reload list)
+			await workflowStore.loadWorkflows();
+			if (isStillViewed()) {
+				const workflow = workflowStore.getSelected();
+				if (workflow) {
+					tokenStore.updateFromWorkflow(workflow);
+				}
+				callbacks?.onWorkflowRefresh?.(workflow);
+			}
 
 			// Step 8: Return success result
 			return {
@@ -253,20 +296,26 @@ export const WorkflowExecutorService = {
 				workflowResult
 			};
 		} catch (error) {
-			// Handle execution errors
+			// Handle execution errors - always save to DB
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			await MessageService.saveSystem(workflowId, `Error: ${errorMsg}`);
-			const errorMessage = createErrorMessage(workflowId, errorMsg);
-			callbacks?.onError?.(errorMessage);
+
+			// Only push error to UI if still viewing this workflow
+			if (isStillViewed()) {
+				const errorMessage = createErrorMessage(workflowId, errorMsg);
+				callbacks?.onError?.(errorMessage);
+			}
 
 			return {
 				success: false,
 				error: errorMsg
 			};
 		} finally {
-			// Always cleanup streaming state
-			await streamingStore.reset();
-			tokenStore.stopStreaming();
+			// Only cleanup streaming/token UI if still viewing this workflow
+			if (isStillViewed()) {
+				streamingStore.reset();
+				tokenStore.stopStreaming();
+			}
 		}
 	}
 };

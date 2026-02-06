@@ -1,12 +1,12 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 25 Janvier 2026**
+> **Versions actuelles du projet : 6 Fevrier 2026**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.49.1 | Svelte 5.48.0
+Frontend  : SvelteKit 2.49.1 | Svelte 5.49.1
 Backend   : Rust 1.91.1 + Tauri 2
 Database  : SurrealDB 2.5.0 (protocol-http enabled)
 Desktop   : Tauri (cross-platform)
@@ -17,7 +17,7 @@ Desktop   : Tauri (cross-platform)
 ### Frontend (package.json)
 
 **Core Framework**:
-- **svelte**: 5.48.0
+- **svelte**: 5.49.1
 - **@sveltejs/kit**: 2.49.1
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
@@ -30,7 +30,7 @@ Desktop   : Tauri (cross-platform)
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.9.0
 - **@tauri-apps/cli**: ^2.9.6
-- **@tauri-apps/plugin-dialog**: ^2.4.2 (updated OPT-FA-2)
+- **@tauri-apps/plugin-dialog**: ^2.6.0
 
 **UI Components**:
 - **@lucide/svelte**: ^0.563.1 (official Lucide icon library - migrated OPT-FA-12)
@@ -42,21 +42,21 @@ Desktop   : Tauri (cross-platform)
 
 **Linting**:
 - **eslint**: ^9.0.0
-- **eslint-plugin-svelte**: ^2.46.0
+- **eslint-plugin-svelte**: ^3.14.0
 - **@eslint/js**: ^9.39.1
 - **@typescript-eslint/eslint-plugin**: ^8.0.0
-- **@typescript-eslint/parser**: ^8.0.0
+- **@typescript-eslint/parser**: ^8.54.0
 - **typescript-eslint**: ^8.53.1
-- **globals**: ^16.5.0
+- **globals**: ^17.2.0
 
 ### Backend (Cargo.toml)
 
 **Core Framework**:
 - **Rust**: 1.91.1 (stable, edition 2021)
 - **tauri**: 2 (framework)
-- **tauri-build**: 2 (build dependencies)
-- **tauri-plugin-opener**: 2.5.2
-- **tauri-plugin-dialog**: 2
+- **tauri-build**: 2.5.3 (build dependencies)
+- **tauri-plugin-opener**: 2.5.3
+- **tauri-plugin-dialog**: 2.6.0
 
 **LLM & Multi-Agent**:
 - **rig-core**: 0.24.0 (features: all) - LLM abstraction framework
@@ -73,18 +73,18 @@ Desktop   : Tauri (cross-platform)
 
 **Async Runtime**:
 - **tokio**: 1.49.0 (features: rt-multi-thread, macros, sync, time)
-- **tokio-util**: 0.7 (features: rt)
+- **tokio-util**: 0.7.18 (features: rt)
 
 **Error Handling**:
 - **anyhow**: 1.0
-- **thiserror**: 2.0
+- **thiserror**: 2.0.18
 
 **Logging**:
 - **tracing**: 0.1
 - **tracing-subscriber**: 0.3 (features: json, env-filter)
 
 **Utilities**:
-- **uuid**: 1.18 (features: v4, serde) - Updated OPT-MEM-3
+- **uuid**: 1.20.0 (features: v4, serde)
 - **chrono**: 0.4.43 (features: serde) - Updated OPT-MEM-3
 - **regex**: 1.10
 - **once_cell**: 1.20
@@ -100,8 +100,8 @@ Desktop   : Tauri (cross-platform)
 - **tempfile**: 3.24
 
 ### Database
-- **SurrealDB**: 2.4.0 (embedded with kv-rocksdb feature)
-- **surrealdb.rs**: 2.4.0 (Rust client via Cargo)
+- **SurrealDB**: 2.5.0 (embedded with kv-rocksdb feature)
+- **surrealdb.rs**: 2.5.0 (Rust client via Cargo)
 
 ## Architecture
 
@@ -270,6 +270,23 @@ cargo --version   # >= 1.91.1
 - **TypeScript**: https://www.typescriptlang.org
 
 ## Version Update Notes
+
+**6 Feb 2026 - Background Workflow Execution**:
+- New stores: `backgroundWorkflowsStore`, `toastStore`
+- New components: `ToastContainer.svelte`, `ToastItem.svelte`
+- New types: `background-workflow.ts` (`WorkflowStreamState`, `Toast`)
+- Concurrent workflow execution (up to 3 in auto mode, 1 in manual/selective)
+- Backend safety net: hard limit of 3 concurrent workflows in `execute_workflow_streaming`
+- Toast notifications for background workflow events
+- Visual indicators in sidebar (running dot, question badge, section headers)
+
+**6 Feb 2026 - Batch Dependency Updates (PR #35)**:
+- **svelte**: 5.49.1 (bugfixes only)
+- **eslint-plugin-svelte**: 3.14.0 (major - migration with 52 lint fixes)
+- **globals**: 17.2.0 (major - no impact on config)
+- **@typescript-eslint/parser**: 8.54.0
+- **@tauri-apps/plugin-dialog**: 2.6.0 + **tauri-plugin-dialog**: 2.6.0
+- **uuid**: 1.20.0, **thiserror**: 2.0.18, **tauri-build**: 2.5.3, **tokio-util**: 0.7.18
 
 **11 Dec 2025 - OPT-FA Frontend/Agent Optimizations**:
 - **@lucide/svelte 0.560.0** (migrated from lucide-svelte - OPT-FA-12)

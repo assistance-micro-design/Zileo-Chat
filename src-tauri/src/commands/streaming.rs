@@ -86,6 +86,17 @@ pub async fn execute_workflow_streaming(
         format!("Invalid agent_id: {}", e)
     })?;
 
+    // Safety net: enforce concurrent workflow limit
+    // Frontend enforces this too, but backend provides race condition protection
+    let running_count = state.streaming_cancellations.lock().await.len();
+    let max_concurrent: usize = 3; // Maximum concurrent workflows (frontend also enforces per-mode limits)
+    if running_count >= max_concurrent {
+        return Err(format!(
+            "Maximum concurrent workflows ({}) reached. Please wait for a workflow to complete.",
+            max_concurrent
+        ));
+    }
+
     // Create cancellation token for this workflow (enables real cancel functionality)
     let cancellation_token = state
         .create_cancellation_token(&validated_workflow_id)

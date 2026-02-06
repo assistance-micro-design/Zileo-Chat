@@ -25,17 +25,8 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
 import { tokenStore } from './tokens';
-
-/**
- * Event names for Tauri streaming events (inlined to avoid runtime resolution issues)
- */
-const STREAM_EVENTS = {
-	WORKFLOW_STREAM: 'workflow_stream',
-	WORKFLOW_COMPLETE: 'workflow_complete'
-} as const;
 
 // ============================================================================
 // Types
@@ -189,15 +180,6 @@ const initialState: StreamingState = {
  */
 const store = writable<StreamingState>(initialState);
 
-/**
- * Event listener cleanup functions
- */
-let unlisteners: UnlistenFn[] = [];
-
-/**
- * Tracks whether the store has been initialized with event listeners
- */
-let isInitialized = false;
 
 // ============================================================================
 // Chunk Processing
@@ -430,55 +412,9 @@ const chunkHandlers: Record<string, ChunkHandler> = {
 };
 
 /**
- * Process a stream chunk and update state accordingly.
- *
- * @param chunk - The stream chunk to process
- */
-function processChunk(chunk: StreamChunk): void {
-	store.update((s) => {
-		// Ignore chunks for different workflows
-		if (s.workflowId && chunk.workflow_id !== s.workflowId) {
-			return s;
-		}
-
-		// Lookup handler and execute, or return unchanged state
-		const handler = chunkHandlers[chunk.chunk_type];
-		return handler ? handler(s, chunk) : s;
-	});
-}
-
-/**
- * Process workflow completion event.
- *
- * @param complete - The workflow completion event
- */
-function processComplete(complete: WorkflowComplete): void {
-	store.update((s) => {
-		// Ignore completions for different workflows
-		if (s.workflowId && complete.workflow_id !== s.workflowId) {
-			return s;
-		}
-
-		// Mark as completed but keep isStreaming true until activities are captured
-		// This prevents the UI from switching to empty historicalActivities prematurely
-		const updates: Partial<StreamingState> = {
-			completed: true
-		};
-
-		if (complete.status === 'error') {
-			updates.error = complete.error ?? 'Unknown error';
-			updates.isStreaming = false; // Stop streaming on error
-		} else if (complete.status === 'cancelled') {
-			updates.cancelled = true;
-			updates.isStreaming = false; // Stop streaming on cancel
-		}
-
-		return { ...s, ...updates };
-	});
-}
-
-/**
  * Streaming store with actions for managing real-time workflow execution.
+ * Event listeners are now owned by backgroundWorkflowsStore which forwards
+ * chunks/completions for the currently viewed workflow via processChunkDirect/processCompleteDirect.
  */
 export const streamingStore = {
 	/**
@@ -488,38 +424,87 @@ export const streamingStore = {
 
 	/**
 	 * Starts streaming for a workflow.
-	 * Resets state and sets up event listeners.
+	 * Resets state and marks as streaming. Listeners are managed by backgroundWorkflowsStore.
 	 *
 	 * @param workflowId - The workflow ID to stream
 	 */
 	async start(workflowId: string): Promise<void> {
-		// Safety check: cleanup existing listeners if already initialized
-		if (isInitialized) {
-			console.warn('[streaming] Store already initialized, cleaning up first');
-			await this.cleanup();
-		}
-
 		// Reset state with new workflow
 		store.set({
 			...initialState,
 			workflowId,
 			isStreaming: true
 		});
+	},
 
-		// Setup new listeners
-		const unlistenChunk = await listen<StreamChunk>(STREAM_EVENTS.WORKFLOW_STREAM, (event) => {
-			processChunk(event.payload);
+	/**
+	 * Process a stream chunk directly (called by backgroundWorkflowsStore for viewed workflow).
+	 * Unlike the event-based processChunk, this skips workflow_id filtering.
+	 *
+	 * @param chunk - The stream chunk to process
+	 */
+	processChunkDirect(chunk: StreamChunk): void {
+		store.update((s) => {
+			const handler = chunkHandlers[chunk.chunk_type];
+			return handler ? handler(s, chunk) : s;
 		});
+	},
 
-		const unlistenComplete = await listen<WorkflowComplete>(
-			STREAM_EVENTS.WORKFLOW_COMPLETE,
-			(event) => {
-				processComplete(event.payload);
+	/**
+	 * Process a workflow completion directly (called by backgroundWorkflowsStore for viewed workflow).
+	 * Unlike the event-based processComplete, this skips workflow_id filtering.
+	 *
+	 * @param complete - The workflow completion event
+	 */
+	processCompleteDirect(complete: WorkflowComplete): void {
+		store.update((s) => {
+			const updates: Partial<StreamingState> = {
+				completed: true
+			};
+
+			if (complete.status === 'error') {
+				updates.error = complete.error ?? 'Unknown error';
+				updates.isStreaming = false;
+			} else if (complete.status === 'cancelled') {
+				updates.cancelled = true;
+				updates.isStreaming = false;
 			}
-		);
 
-		unlisteners = [unlistenChunk, unlistenComplete];
-		isInitialized = true;
+			return { ...s, ...updates };
+		});
+	},
+
+	/**
+	 * Restore streaming state from a background workflow execution.
+	 * Used when switching to view a running background workflow.
+	 *
+	 * @param state - The background workflow state to restore from
+	 */
+	restoreFrom(bgState: {
+		workflowId: string;
+		content: string;
+		tools: ActiveTool[];
+		reasoning: ActiveReasoningStep[];
+		subAgents: ActiveSubAgent[];
+		tasks: ActiveTask[];
+		tokensReceived: number;
+		error: string | null;
+		status: string;
+	}): void {
+		const isRunning = bgState.status === 'running';
+		store.set({
+			workflowId: bgState.workflowId,
+			content: bgState.content,
+			tools: bgState.tools,
+			reasoning: bgState.reasoning,
+			subAgents: bgState.subAgents,
+			tasks: bgState.tasks,
+			isStreaming: isRunning,
+			completed: !isRunning,
+			tokensReceived: bgState.tokensReceived,
+			error: bgState.error,
+			cancelled: bgState.status === 'cancelled'
+		});
 	},
 
 	/**
@@ -640,23 +625,17 @@ export const streamingStore = {
 	},
 
 	/**
-	 * Cleanup event listeners.
-	 * Should be called when unmounting or stopping streaming.
+	 * Cleanup any resources.
+	 * Event listeners are managed by backgroundWorkflowsStore, not this store.
 	 */
-	async cleanup(): Promise<void> {
-		for (const unlisten of unlisteners) {
-			unlisten();
-		}
-		unlisteners = [];
-		isInitialized = false;
+	cleanup(): void {
+		// No-op: listeners are now managed by backgroundWorkflowsStore
 	},
 
 	/**
 	 * Resets the store to initial state.
-	 * Also cleans up event listeners.
 	 */
-	async reset(): Promise<void> {
-		await this.cleanup();
+	reset(): void {
 		store.set(initialState);
 	},
 

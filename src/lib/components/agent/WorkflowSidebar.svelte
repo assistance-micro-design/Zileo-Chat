@@ -41,6 +41,12 @@ Left sidebar for workflow management with search and CRUD operations.
 		oncreate: () => void;
 		ondelete: (workflow: Workflow) => void;
 		onrename?: (workflow: Workflow, newName: string) => void;
+		/** Set of workflow IDs currently running in the background */
+		runningWorkflowIds?: Set<string>;
+		/** Set of workflow IDs that recently completed */
+		recentlyCompletedIds?: Set<string>;
+		/** Set of workflow IDs with a pending user question */
+		questionPendingIds?: Set<string>;
 	}
 
 	let {
@@ -52,7 +58,10 @@ Left sidebar for workflow management with search and CRUD operations.
 		onselect,
 		oncreate,
 		ondelete,
-		onrename
+		onrename,
+		runningWorkflowIds = new Set<string>(),
+		recentlyCompletedIds = new Set<string>(),
+		questionPendingIds = new Set<string>()
 	}: Props = $props();
 
 	function handleSearchInput(e: Event) {
@@ -124,6 +133,9 @@ Left sidebar for workflow management with search and CRUD operations.
 			{onselect}
 			{ondelete}
 			{onrename}
+			{runningWorkflowIds}
+			{recentlyCompletedIds}
+			{questionPendingIds}
 		/>
 	{/snippet}
 </Sidebar>
