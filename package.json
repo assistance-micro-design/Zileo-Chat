@@ -56,7 +56,7 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.53.1",
     "vite": "^7.2.6",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@lucide/svelte": "^0.563.1",
