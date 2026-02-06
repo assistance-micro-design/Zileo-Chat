@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn test_max_sub_agents_constant() {
-        assert_eq!(MAX_SUB_AGENTS, 3);
+        assert_eq!(MAX_SUB_AGENTS, 15);
     }
 
     #[test]

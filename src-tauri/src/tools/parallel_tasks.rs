@@ -912,14 +912,13 @@ mod tests {
 
     #[test]
     fn test_input_validation_too_many_tasks() {
+        let mut tasks = Vec::new();
+        for i in 0..=MAX_SUB_AGENTS {
+            tasks.push(serde_json::json!({"agent_id": format!("a{}", i), "prompt": format!("p{}", i)}));
+        }
         let invalid_input = serde_json::json!({
             "operation": "execute_batch",
-            "tasks": [
-                {"agent_id": "a1", "prompt": "p1"},
-                {"agent_id": "a2", "prompt": "p2"},
-                {"agent_id": "a3", "prompt": "p3"},
-                {"agent_id": "a4", "prompt": "p4"} // 4 tasks - exceeds limit
-            ]
+            "tasks": tasks
         });
 
         let tasks_len = invalid_input["tasks"].as_array().unwrap().len();
@@ -985,6 +984,6 @@ mod tests {
 
     #[test]
     fn test_max_sub_agents_constant() {
-        assert_eq!(MAX_SUB_AGENTS, 3);
+        assert_eq!(MAX_SUB_AGENTS, 15);
     }
 }

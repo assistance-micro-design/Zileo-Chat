@@ -993,7 +993,7 @@ L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
 | **ParallelTasksTool** | Execution parallele multiple taches | parallel_execute |
 
 **Contraintes Sub-Agent Tools**:
-- Maximum 3 sous-agents par workflow (`MAX_SUB_AGENTS`)
+- Maximum 15 sous-agents par workflow (`MAX_SUB_AGENTS`)
 - Uniquement accessible via `is_primary_agent = true`
 - Pattern "Prompt In, Report Out" (pas de contexte partage)
 
