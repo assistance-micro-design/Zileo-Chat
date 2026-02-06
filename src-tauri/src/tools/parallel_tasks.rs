@@ -914,7 +914,9 @@ mod tests {
     fn test_input_validation_too_many_tasks() {
         let mut tasks = Vec::new();
         for i in 0..=MAX_SUB_AGENTS {
-            tasks.push(serde_json::json!({"agent_id": format!("a{}", i), "prompt": format!("p{}", i)}));
+            tasks.push(
+                serde_json::json!({"agent_id": format!("a{}", i), "prompt": format!("p{}", i)}),
+            );
         }
         let invalid_input = serde_json::json!({
             "operation": "execute_batch",

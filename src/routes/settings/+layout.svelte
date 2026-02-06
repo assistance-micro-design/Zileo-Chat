@@ -34,7 +34,6 @@ Each section is now a separate route for better performance and UX.
 		FolderSync
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-	import { resolve } from '$app/paths';
 
 	/** Props from +layout.ts */
 	interface Props {
@@ -117,7 +116,7 @@ Each section is now a separate route for better performance and UX.
 					{#each sectionDefs as section (section.id)}
 						{@const Icon = section.icon}
 						<a
-							href={resolve(section.route)}
+							href={section.route}
 							class="nav-button"
 							class:active={activeSection === section.id}
 						>
@@ -131,7 +130,7 @@ Each section is now a separate route for better performance and UX.
 					{#each sectionDefs as section (section.id)}
 						{@const Icon = section.icon}
 						<a
-							href={resolve(section.route)}
+							href={section.route}
 							class="nav-button-icon"
 							class:active={activeSection === section.id}
 							title={$i18n(section.labelKey)}

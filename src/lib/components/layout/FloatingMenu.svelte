@@ -28,7 +28,6 @@
 	import { Sun, Moon, Settings, Bot } from '@lucide/svelte';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
-	import { resolve } from '$app/paths';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
 
 	/**
@@ -69,12 +68,12 @@
 
 	<!-- Center: Main Navigation -->
 	<div class="menu-center">
-		<a href={resolve('/agent')} class="btn btn-primary">
+		<a href="/agent" class="btn btn-primary">
 			<Bot size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
 		</a>
 
-		<a href={resolve('/settings')} class="btn btn-secondary">
+		<a href="/settings" class="btn btn-secondary">
 			<Settings size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
 		</a>

@@ -18,17 +18,13 @@
 Settings Index Page - Redirects to default section using meta refresh
 -->
 
-<script lang="ts">
-	import { resolve } from '$app/paths';
-</script>
-
 <svelte:head>
 	<meta http-equiv="refresh" content="0; url=/settings/providers" />
 </svelte:head>
 
 <div class="redirect-container">
 	<p>Redirecting to providers...</p>
-	<a href={resolve('/settings/providers')}>Click here if not redirected</a>
+	<a href="/settings/providers">Click here if not redirected</a>
 </div>
 
 <style>

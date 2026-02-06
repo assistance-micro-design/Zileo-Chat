@@ -39,7 +39,6 @@ Uses extracted components, services, and stores for clean architecture.
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-	import { resolve } from '$app/paths';
 
 	// Service imports
 	import { WorkflowService, MessageService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
@@ -445,7 +444,7 @@ Uses extracted components, services, and stores for clean architecture.
 					<p class="empty-description">
 						{$i18n('agent_no_agents_description')}
 					</p>
-					<a href={resolve('/settings')}>
+					<a href="/settings">
 						<Button variant="primary">
 							<Settings size={16} />
 							{$i18n('agent_go_to_settings')}
