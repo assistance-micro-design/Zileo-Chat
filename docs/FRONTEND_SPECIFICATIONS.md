@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.1 | Svelte 5.48.0 | Vite 7.2.6 | Tauri 2.9.4
+> **Stack**: SvelteKit 2.49.1 | Svelte 5.49.1 | Vite 7.2.6 | Tauri 2.9.4
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 
@@ -1048,11 +1048,12 @@ async function loadValidationConfig(agentId: string): Promise<ValidationConfig> 
 - Spinner pour tâches indéterminées
 - Progress bar pour tâches déterminées (avec %)
 - Estimated time remaining (si calculable)
-- Toast notifications pour events majeurs :
-  - Workflow started
-  - Workflow completed
-  - Error occurred
-  - User confirmation required
+- Toast notifications (via `toastStore` + `ToastContainer`/`ToastItem`) :
+  - Background workflow completed (auto-dismiss 5s)
+  - Background workflow failed (auto-dismiss 5s)
+  - User question pending on background workflow (persistent until dismissed)
+  - Concurrent workflow limit reached (warning)
+  - "Go to workflow" action button for navigation
 
 ### Settings Agent Spécifiques
 
@@ -1168,6 +1169,20 @@ async function loadValidationConfig(agentId: string): Promise<ValidationConfig> 
 
 ## 4. Multi-Workflow Simultané
 
+### Concurrent Execution Limits
+
+| Validation Mode | Max Concurrent | Behavior |
+|----------------|----------------|----------|
+| Auto | 3 | Multiple workflows run in background |
+| Manual | 1 | Single workflow at a time |
+| Selective | 1 | Single workflow at a time |
+
+**Enforcement**: Frontend (`backgroundWorkflowsStore.canStart()`) + Backend safety net (`streaming_cancellations.len() >= 3`).
+
+When limit is reached, a warning toast is shown to the user. Background workflows fire toast notifications for completion and user questions when not currently viewed.
+
+See `WORKFLOW_ORCHESTRATION.md > Background Workflow Execution` for full architecture.
+
 ### State Management
 
 **Store Global Workflows**
@@ -1269,11 +1284,11 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (85 Total Components)
+### Component Library (87 Total Components)
 
 ```
 src/lib/components/
-├─ ui/                  # 13 atomic UI components
+├─ ui/                  # 15 atomic UI components
 │  ├─ Button.svelte
 │  ├─ Badge.svelte
 │  ├─ Card.svelte
@@ -1285,7 +1300,9 @@ src/lib/components/
 │  ├─ ProgressBar.svelte
 │  ├─ StatusIndicator.svelte
 │  ├─ Skeleton.svelte
-│  └─ LanguageSelector.svelte
+│  ├─ LanguageSelector.svelte
+│  ├─ ToastContainer.svelte
+│  └─ ToastItem.svelte
 ├─ layout/              # 4 layout containers
 │  ├─ AppContainer.svelte
 │  ├─ Sidebar.svelte
@@ -1319,6 +1336,7 @@ src/lib/components/
 │  ├─ SubAgentActivity.svelte
 │  ├─ TokenDisplay.svelte
 │  ├─ ToolExecutionPanel.svelte
+│  ├─ UserQuestionModal.svelte
 │  ├─ ValidationModal.svelte
 │  ├─ WorkflowItem.svelte
 │  ├─ WorkflowItemCompact.svelte
@@ -1370,7 +1388,7 @@ src/lib/components/
       └─ StepComplete.svelte
 ```
 
-### Stores (15 Total)
+### Stores (17 Total)
 
 | Store | Type | Key Exports | Description |
 |-------|------|-------------|-------------|
@@ -1387,9 +1405,11 @@ src/lib/components/
 | `tokens` | custom | `tokenStore`, `tokenDisplayData`, `streamingTokens`, `cumulativeTokens` | Token usage/cost tracking |
 | `validation-settings` | custom | N/A | Validation configuration |
 | `onboarding` | custom | N/A | First-launch wizard state |
+| `backgroundWorkflows` | custom | `backgroundWorkflowsStore`, `runningWorkflows`, `canStartNew`, `runningWorkflowIds`, `questionPendingIds` | Central dispatch for concurrent background workflow execution (PAT_STORE_004) |
+| `toast` | custom | `toastStore`, `toasts`, `visibleToasts`, `hasToasts`, `navigationTarget` | Toast notifications for background workflow events |
 | `index` | barrel | All stores | Re-exports all stores |
 
-### Types (23 Modules in src/types/)
+### Types (24 Modules in src/types/)
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|
@@ -1406,6 +1426,7 @@ src/lib/components/
 | `validation.ts` | `ValidationRequest`, `ValidationType`, `RiskLevel` | Validation requests |
 | `prompt.ts` | `Prompt`, `PromptCreate`, `PromptSummary`, `PromptCategory` | Prompt library |
 | `activity.ts` | `WorkflowActivityEvent`, `ActivityFilter` | Activity events |
+| `background-workflow.ts` | `BackgroundWorkflowStatus`, `WorkflowStreamState`, `Toast`, `ToastType` | Background workflow execution and toast notifications |
 | `memory.ts` | `Memory`, `MemoryType` | Memory/RAG |
 | `embedding.ts` | Embedding config types | Vector embeddings |
 | `services.ts` | `ModalState` | Service layer |
@@ -1435,7 +1456,7 @@ src/lib/components/
 |--------|-------------|-------------|
 | `message.service.ts` | `MessageService.load()`, `MessageService.save()` | Message CRUD with error handling (returns `{ messages, error? }` - OPT-FA-3) |
 | `workflow.service.ts` | `WorkflowService.execute()`, `WorkflowService.cancel()` | Workflow execution management |
-| `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration (OPT-FA-8) |
+| `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration with concurrency check and view-aware guards (OPT-FA-8) |
 | `localStorage.service.ts` | `LocalStorage.get()`, `LocalStorage.set()`, `STORAGE_KEYS` | Typed localStorage access (OPT-FA-5) |
 | `index.ts` | All services | Barrel export |
 

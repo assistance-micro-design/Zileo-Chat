@@ -64,7 +64,15 @@ Uses extracted components, services, and stores for clean architecture.
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
 	import { validationStore, pendingValidation } from '$lib/stores/validation';
+	import { validationSettingsStore } from '$lib/stores/validation-settings';
 	import { userQuestionStore } from '$lib/stores/userQuestion';
+	import {
+		backgroundWorkflowsStore,
+		runningWorkflowIds as runningWorkflowIds$,
+		recentlyCompletedIds as recentlyCompletedIds$,
+		questionPendingIds as questionPendingIds$
+	} from '$lib/stores/backgroundWorkflows';
+	import { toastStore, navigationTarget } from '$lib/stores/toast';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
 	import type { ProviderType } from '$types/llm';
@@ -165,14 +173,33 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/**
 	 * Select a workflow and load its data.
+	 * Handles workflow switching for background workflows by restoring streaming state.
 	 */
 	async function selectWorkflow(workflowId: string): Promise<void> {
 		pageState.selectedWorkflowId = workflowId;
 		workflowStore.select(workflowId);
 		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
 
-		// Load workflow data
+		// Notify background store which workflow is being viewed
+		backgroundWorkflowsStore.setViewed(workflowId);
+
+		// Load workflow data (messages and historical activities)
 		await loadWorkflowData(workflowId);
+
+		// Check if this workflow is running in the background
+		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
+		if (bgExecution && bgExecution.status === 'running') {
+			// Restore streaming state from background execution
+			streamingStore.restoreFrom(bgExecution);
+			tokenStore.startStreaming();
+			tokenStore.updateStreamingTokens(bgExecution.tokensReceived);
+
+			// Open user question modal if there are pending questions for this workflow
+			userQuestionStore.openForWorkflow(workflowId);
+		} else {
+			// Not running in background - reset streaming state
+			streamingStore.reset();
+		}
 
 		// Update token store with workflow cumulative metrics
 		const workflow = workflowStore.getSelected();
@@ -348,6 +375,17 @@ Uses extracted components, services, and stores for clean architecture.
 		await workflowStore.loadWorkflows();
 		await agentStore.loadAgents();
 
+		// Load validation settings (needed for concurrent workflow limits)
+		await validationSettingsStore.loadSettings().catch(() => {});
+
+		// Initialize background workflows store (owns event listeners)
+		await backgroundWorkflowsStore.init();
+		backgroundWorkflowsStore.setForwardCallbacks(
+			(chunk) => streamingStore.processChunkDirect(chunk),
+			(complete) => streamingStore.processCompleteDirect(complete),
+			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
+		);
+
 		// Restore last selected workflow from localStorage
 		const lastWorkflowId = LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
 		if (lastWorkflowId && $workflows.find(w => w.id === lastWorkflowId)) {
@@ -356,13 +394,14 @@ Uses extracted components, services, and stores for clean architecture.
 
 		// Initialize validation and user question stores
 		await validationStore.init();
-		await userQuestionStore.init();
+		userQuestionStore.init();
 	});
 
 	/**
 	 * Cleanup on component destroy.
 	 */
 	onDestroy(() => {
+		backgroundWorkflowsStore.destroy();
 		streamingStore.cleanup();
 		validationStore.cleanup();
 		userQuestionStore.cleanup();
@@ -385,6 +424,18 @@ Uses extracted components, services, and stores for clean architecture.
 			modalState = { type: 'validation', request };
 		}
 	});
+
+	/**
+	 * React to toast navigation requests (e.g., "Go to workflow" button).
+	 * Navigates to the target workflow and opens any pending UserQuestion modal.
+	 */
+	$effect(() => {
+		const targetId = $navigationTarget;
+		if (targetId) {
+			toastStore.clearNavigation();
+			selectWorkflow(targetId);
+		}
+	});
 </script>
 
 <div class="agent-page">
@@ -394,6 +445,9 @@ Uses extracted components, services, and stores for clean architecture.
 		workflows={$filteredWorkflows}
 		selectedWorkflowId={pageState.selectedWorkflowId}
 		searchFilter={$workflowSearchFilter}
+		runningWorkflowIds={$runningWorkflowIds$}
+		recentlyCompletedIds={$recentlyCompletedIds$}
+		questionPendingIds={$questionPendingIds$}
 		onsearchchange={(v) => workflowStore.setSearchFilter(v)}
 		onselect={(w) => selectWorkflow(w.id)}
 		oncreate={() => modalState = { type: 'new-workflow' }}

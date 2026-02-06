@@ -206,6 +206,24 @@
           </button>
         {/each}
       </div>
+      {#if localMode === 'auto'}
+        <div class="mode-banner warning">
+          <span class="mode-banner-icon">!</span>
+          <div class="mode-banner-content">
+            <span class="mode-banner-title">{$i18n('validation_auto_multi_workflow_title')}</span>
+            <span class="mode-banner-text">{$i18n('validation_auto_multi_workflow_desc')}</span>
+          </div>
+        </div>
+      {/if}
+      {#if localMode === 'manual' || localMode === 'selective'}
+        <div class="mode-banner info">
+          <span class="mode-banner-icon">i</span>
+          <div class="mode-banner-content">
+            <span class="mode-banner-title">{$i18n('validation_single_workflow_title')}</span>
+            <span class="mode-banner-text">{$i18n('validation_single_workflow_desc')}</span>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Auto Mode Information -->
@@ -573,6 +591,65 @@
   }
 
   .selector-card-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  /* Mode Banners */
+  .mode-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-md);
+    margin-top: var(--spacing-sm);
+  }
+
+  .mode-banner.warning {
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    border: 1px solid var(--color-warning);
+  }
+
+  .mode-banner.info {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    border: 1px solid var(--color-primary);
+  }
+
+  .mode-banner-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    flex-shrink: 0;
+  }
+
+  .mode-banner.warning .mode-banner-icon {
+    background: var(--color-warning);
+    color: white;
+  }
+
+  .mode-banner.info .mode-banner-icon {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .mode-banner-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .mode-banner-title {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+  }
+
+  .mode-banner-text {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
   }
