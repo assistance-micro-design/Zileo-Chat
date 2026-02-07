@@ -294,10 +294,11 @@ async fn main() -> anyhow::Result<()> {
             commands::mcp::list_mcp_tools,
             commands::mcp::call_mcp_tool,
             commands::mcp::get_mcp_latency_metrics,
-            // Migration commands (Memory Tool Phase 2 + MCP HTTP)
+            // Migration commands (Memory Tool Phase 2 + MCP HTTP + Memory v2)
             commands::migration::migrate_memory_schema,
             commands::migration::get_memory_schema_status,
             commands::migration::migrate_mcp_http_schema,
+            commands::migration::migrate_memory_v2_schema,
             // Embedding commands (Memory Tool Phase 5)
             commands::embedding::get_embedding_config,
             commands::embedding::save_embedding_config,

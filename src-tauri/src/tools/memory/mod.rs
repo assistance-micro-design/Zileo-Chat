@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Allow dead code until Phase 4: Agent Integration
-#![allow(dead_code)]
-
 //! # Memory Tool Module
 //!
 //! This module provides the MemoryTool for agent contextual persistence
@@ -69,5 +66,5 @@
 mod helpers;
 mod tool;
 
-pub use helpers::{add_memory_core, AddMemoryParams};
+pub use helpers::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams};
 pub use tool::MemoryTool;

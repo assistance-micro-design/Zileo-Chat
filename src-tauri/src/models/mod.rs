@@ -40,7 +40,8 @@ pub use workflow::{
 };
 
 // Re-export types for Phase 5 implementation
-pub use memory::{Memory, MemoryCreate, MemorySearchResult, MemoryType};
+#[allow(unused_imports)]
+pub use memory::{Memory, MemoryCreate, MemoryDescribeResult, MemorySearchResult, MemoryType};
 // Re-export types for Memory Tool Phase 3 implementation (currently unused)
 #[allow(unused_imports)]
 pub use memory::MemoryCreateWithEmbedding;
