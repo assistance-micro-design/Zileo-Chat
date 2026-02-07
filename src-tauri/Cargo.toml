@@ -43,7 +43,7 @@ chrono = { version = "0.4.43", features = ["serde"] }
 async-trait = "0.1"
 # OPT-WF-4: Lock futures version (earlier versions yanked)
 futures = "0.3.31"
-regex = "1.10"
+regex = "1.12"
 # OPT-8: Migrated from lazy_static to once_cell (better performance, maintained)
 once_cell = "1.20"
 
