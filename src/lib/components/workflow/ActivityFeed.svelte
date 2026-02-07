@@ -117,6 +117,31 @@
 	 * Whether to use virtual scrolling based on activity count
 	 */
 	const useVirtualScroll = $derived(activities.length >= VIRTUAL_SCROLL_THRESHOLD);
+
+	/**
+	 * Discriminated union for virtual list items with separators
+	 */
+	type FeedItem =
+		| { kind: 'activity'; data: WorkflowActivityEvent }
+		| { kind: 'separator'; messageId: string };
+
+	/**
+	 * Group activities by messageId and produce a flat list with separator items
+	 */
+	const feedItems = $derived.by(() => {
+		const items: FeedItem[] = [];
+		let lastMessageId: string | null = null;
+
+		for (const activity of activities) {
+			const msgId = activity.metadata?.messageId ?? null;
+			if (msgId && lastMessageId !== null && msgId !== lastMessageId) {
+				items.push({ kind: 'separator', messageId: msgId });
+			}
+			items.push({ kind: 'activity', data: activity });
+			if (msgId) lastMessageId = msgId;
+		}
+		return items;
+	});
 </script>
 
 <div class="activity-feed" class:collapsed>
@@ -135,6 +160,9 @@
 				onclick={() => handleFilterChange(f.id)}
 			>
 				<IconComponent size={16} />
+				{#if counts[f.id] > 0}
+					<span class="filter-badge">{counts[f.id]}</span>
+				{/if}
 			</button>
 		{/each}
 	</div>
@@ -156,7 +184,7 @@
 				<!-- OPT-MSG-5: Virtual scroll for 20+ activities (90% DOM reduction) -->
 				<div class="virtual-list-container">
 					<SvelteVirtualList
-						items={activities}
+						items={feedItems}
 						defaultEstimatedItemHeight={72}
 						bufferSize={10}
 						containerClass="virtual-list-outer"
@@ -164,8 +192,12 @@
 						contentClass="virtual-list-content"
 						itemsClass="virtual-list-items"
 					>
-						{#snippet renderItem(activity)}
-							<ActivityItem {activity} />
+						{#snippet renderItem(item)}
+							{#if item.kind === "separator"}
+								<div class="round-separator">Round</div>
+							{:else}
+								<ActivityItem activity={item.data} />
+							{/if}
 						{/snippet}
 					</SvelteVirtualList>
 				</div>
@@ -178,8 +210,12 @@
 			{:else}
 				<!-- Standard rendering for small lists (<20 items) -->
 				<div class="standard-list-container">
-					{#each activities as activity (activity.id)}
-						<ActivityItem {activity} />
+					{#each feedItems as item (item.kind === "activity" ? item.data.id : "sep-" + item.messageId)}
+						{#if item.kind === "separator"}
+							<div class="round-separator">Round</div>
+						{:else}
+							<ActivityItem activity={item.data} />
+						{/if}
 					{/each}
 				</div>
 
@@ -229,9 +265,10 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
+		gap: 2px;
+		min-width: 32px;
 		height: 32px;
-		padding: 0;
+		padding: 0 var(--spacing-xs);
 		background: transparent;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
@@ -250,6 +287,25 @@
 		background: var(--color-accent);
 		border-color: var(--color-accent);
 		color: var(--color-text-inverse, white);
+	}
+
+	.filter-badge {
+		font-size: var(--font-size-xs);
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		border-radius: var(--radius-full);
+		background: var(--color-accent);
+		color: var(--color-bg-primary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		line-height: 1;
+	}
+
+	.filter-tab.active .filter-badge {
+		background: var(--color-bg-primary);
+		color: var(--color-accent);
 	}
 
 	/* Activity List */
@@ -372,6 +428,24 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* Round Separator */
+	.round-separator {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-md);
+		color: var(--color-text-tertiary);
+		font-size: var(--font-size-xs);
+	}
+
+	.round-separator::before,
+	.round-separator::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: var(--color-border);
 	}
 
 	/* Streaming Indicator */

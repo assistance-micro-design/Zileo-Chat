@@ -260,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
             commands::message::clear_workflow_messages,
             // Tool execution commands (Phase 3 - Tool Execution Persistence)
             commands::tool_execution::save_tool_execution,
+            commands::tool_execution::get_tool_execution,
             commands::tool_execution::load_workflow_tool_executions,
             commands::tool_execution::load_message_tool_executions,
             commands::tool_execution::delete_tool_execution,

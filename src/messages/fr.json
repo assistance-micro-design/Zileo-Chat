@@ -679,6 +679,11 @@
   "workflow_activity_priority_3": "Moyenne",
   "workflow_activity_priority_4": "Basse",
   "workflow_activity_priority_5": "Minimale",
+  "activity_export": "Exporter",
+  "activity_export_title": "Enregistrer l'export d'activites",
+  "activity_export_success": "{count} activites exportees",
+  "activity_export_error": "Erreur d'export : {error}",
+  "activity_export_empty": "Aucune activite a exporter",
 
   "workflow_token_arialabel": "Statistiques d'utilisation des jetons",
   "workflow_token_context": "contexte",

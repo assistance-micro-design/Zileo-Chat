@@ -20,7 +20,30 @@
 //! Phase 3: Tool Execution Persistence
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+/// Deserialize a JSON string from DB back into serde_json::Value.
+/// Handles both string (new format) and object (legacy format) inputs.
+fn deserialize_json_string<'de, D>(deserializer: D) -> Result<serde_json::Value, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
+        // Legacy: if DB still has object type data, pass through as-is
+        other => Ok(other),
+    }
+}
+
+/// Serialize serde_json::Value to a JSON string for DB storage.
+fn serialize_as_json_string<S>(value: &serde_json::Value, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let s = serde_json::to_string(value).map_err(serde::ser::Error::custom)?;
+    serializer.serialize_str(&s)
+}
 
 /// Tool type indicating execution context
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -61,9 +84,11 @@ pub struct ToolExecution {
     /// MCP server name (only for MCP tools)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_name: Option<String>,
-    /// Input parameters passed to the tool
+    /// Input parameters passed to the tool (stored as JSON string in DB, deserialized on read)
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input_params: serde_json::Value,
-    /// Output result from the tool
+    /// Output result from the tool (stored as JSON string in DB, deserialized on read)
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output_result: serde_json::Value,
     /// Whether the execution was successful
     pub success: bool,
@@ -96,9 +121,11 @@ pub struct ToolExecutionCreate {
     /// MCP server name (only for MCP tools)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_name: Option<String>,
-    /// Input parameters
+    /// Input parameters (serialized as JSON string for SCHEMAFULL storage)
+    #[serde(serialize_with = "serialize_as_json_string")]
     pub input_params: serde_json::Value,
-    /// Output result
+    /// Output result (serialized as JSON string for SCHEMAFULL storage)
+    #[serde(serialize_with = "serialize_as_json_string")]
     pub output_result: serde_json::Value,
     /// Success status
     pub success: bool,

@@ -395,10 +395,7 @@ pub async fn execute_workflow_streaming(
     {
         warn!(error = %e, "Failed to persist completion thinking step");
     }
-    #[allow(unused_assignments)]
-    {
-        thinking_step_number += 1;
-    }
+    thinking_step_number += 1;
 
     // Clear the placeholder and stream the actual response content
     // First, emit a newline to visually separate from placeholder
@@ -617,6 +614,24 @@ pub async fn execute_workflow_streaming(
                 "Failed to persist tool execution"
             );
         }
+    }
+
+    // Persist intermediate reasoning steps from agent execution
+    for rs in &report.metrics.reasoning_steps {
+        let step_id = Uuid::new_v4().to_string();
+        let step = ThinkingStepCreate {
+            workflow_id: validated_workflow_id.clone(),
+            message_id: message_id.clone(),
+            agent_id: validated_agent_id.clone(),
+            step_number: thinking_step_number,
+            content: rs.content.clone(),
+            duration_ms: Some(rs.duration_ms),
+            tokens: None,
+        };
+        if let Err(e) = state.db.create("thinking_step", &step_id, step).await {
+            warn!(error = %e, step_number = thinking_step_number, "Failed to persist intermediate reasoning step");
+        }
+        thinking_step_number += 1;
     }
 
     info!(

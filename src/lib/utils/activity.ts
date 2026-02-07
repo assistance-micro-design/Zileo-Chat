@@ -108,7 +108,8 @@ export function activeReasoningToActivity(
 		description: step.content.slice(0, 200) + (step.content.length > 200 ? '...' : ''),
 		status: 'completed',
 		metadata: {
-			stepNumber: step.stepNumber
+			stepNumber: step.stepNumber,
+			content: step.content
 		}
 	};
 }
@@ -320,7 +321,9 @@ export function toolExecutionToActivity(exec: ToolExecution, index: number): Wor
 
 	const metadata: ActivityMetadata = {
 		toolName: exec.tool_name,
-		iteration: exec.iteration
+		iteration: exec.iteration,
+		executionId: exec.id,
+		messageId: exec.message_id
 	};
 
 	if (exec.server_name) {
@@ -357,6 +360,16 @@ export function convertToolExecutions(executions: ToolExecution[]): WorkflowActi
  * Used for restoring historical reasoning activities from database.
  */
 export function thinkingStepToActivity(step: ThinkingStep, index: number): WorkflowActivityEvent {
+	const metadata: ActivityMetadata = {
+		stepNumber: step.step_number + 1,
+		content: step.content,
+		messageId: step.message_id
+	};
+
+	if (step.tokens) {
+		metadata.tokens = { input: 0, output: step.tokens };
+	}
+
 	return {
 		id: `reasoning-hist-${step.id}-${index}`,
 		timestamp: new Date(step.created_at).getTime(),
@@ -365,9 +378,7 @@ export function thinkingStepToActivity(step: ThinkingStep, index: number): Workf
 		description: step.content.slice(0, 200) + (step.content.length > 200 ? '...' : ''),
 		status: 'completed',
 		duration: step.duration_ms,
-		metadata: {
-			stepNumber: step.step_number + 1
-		}
+		metadata
 	};
 }
 
@@ -498,6 +509,27 @@ export function convertSubAgentExecutions(executions: SubAgentExecution[]): Work
 	return executions
 		.map((e, i) => subAgentExecutionToActivity(e, i))
 		.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Format token count for compact display.
+ * @param tokens - Total token count
+ * @returns Formatted string (e.g., "142", "1.5k")
+ */
+export function formatTokenCount(tokens: number): string {
+	if (tokens >= 1000) {
+		return `${(tokens / 1000).toFixed(1)}k`;
+	}
+	return String(tokens);
+}
+
+/**
+ * Format absolute timestamp for tooltip display.
+ * @param timestamp - Unix timestamp in milliseconds
+ * @returns Locale-formatted date+time string
+ */
+export function formatAbsoluteTimestamp(timestamp: number): string {
+	return new Date(timestamp).toLocaleString();
 }
 
 // ============================================================================
