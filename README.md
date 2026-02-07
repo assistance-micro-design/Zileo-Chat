@@ -1,6 +1,6 @@
 # Zileo Chat
 
-[![Version](https://img.shields.io/badge/version-0.9.3-orange)](https://github.com/assistance-micro-design/zileo-chat)
+[![Version](https://img.shields.io/badge/version-0.10.0-orange)](https://github.com/assistance-micro-design/zileo-chat)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Status](https://img.shields.io/badge/status-beta-yellow)](https://github.com/assistance-micro-design/zileo-chat)
 
@@ -14,7 +14,7 @@
 
 ## Beta Warning
 
-**This software is currently in beta (v0.9.3).**
+**This software is currently in beta (v0.10.0).**
 
 Before using Zileo Chat, please be aware of the following risks:
 

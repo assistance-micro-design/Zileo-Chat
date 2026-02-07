@@ -89,6 +89,12 @@ export interface ActivityMetadata {
 	agentAssigned?: string;
 	/** Task completion timestamp (for task_* types) */
 	completedAt?: string;
+	/** Full content text for reasoning steps */
+	content?: string;
+	/** Message ID for grouping by round */
+	messageId?: string;
+	/** Original execution ID for lazy-loading details */
+	executionId?: string;
 }
 
 /**

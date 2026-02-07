@@ -28,7 +28,7 @@
 //! 7. Loop continues until no more tool calls or max iterations reached
 
 use crate::agents::core::agent::{
-    Agent, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
+    Agent, ReasoningStepData, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
 };
 use crate::db::DBClient;
 use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter};
@@ -809,6 +809,7 @@ impl Agent for LLMAgent {
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
+                        reasoning_steps: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -836,6 +837,7 @@ impl Agent for LLMAgent {
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
+                        reasoning_steps: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -891,6 +893,7 @@ impl Agent for LLMAgent {
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
+                        reasoning_steps: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -934,6 +937,7 @@ impl Agent for LLMAgent {
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
+                        reasoning_steps: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -977,6 +981,7 @@ impl Agent for LLMAgent {
         let mut total_tokens_input: usize = 0;
         let mut total_tokens_output: usize = 0;
         let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
+        let mut reasoning_steps_data: Vec<ReasoningStepData> = Vec::new();
 
         // Get provider type early to fail fast
         let provider_type = match self.get_provider_type() {
@@ -997,6 +1002,7 @@ impl Agent for LLMAgent {
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
+                        reasoning_steps: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -1024,6 +1030,7 @@ impl Agent for LLMAgent {
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
+                        reasoning_steps: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -1167,22 +1174,33 @@ impl Agent for LLMAgent {
                     iterations = max_iterations,
                     "Max tool iterations reached, stopping execution"
                 );
+                let reasoning_content = format!(
+                    "Max tool iterations ({}) reached, stopping execution",
+                    max_iterations
+                );
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
-                    format!(
-                        "Max tool iterations ({}) reached, stopping execution",
-                        max_iterations
-                    ),
+                    reasoning_content.clone(),
                 ));
+                reasoning_steps_data.push(ReasoningStepData {
+                    content: reasoning_content,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                });
                 break;
             }
 
             // Emit progress event for iteration start
             if iteration > 1 {
+                let reasoning_content =
+                    format!("Tool iteration {} - Processing tool results...", iteration);
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
-                    format!("Tool iteration {} - Processing tool results...", iteration),
+                    reasoning_content.clone(),
                 ));
+                reasoning_steps_data.push(ReasoningStepData {
+                    content: reasoning_content,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                });
             }
 
             debug!(
@@ -1257,6 +1275,7 @@ impl Agent for LLMAgent {
                             tools_used,
                             mcp_calls: mcp_calls_made,
                             tool_executions: tool_executions_data,
+                            reasoning_steps: reasoning_steps_data,
                         },
                         system_prompt: None,
                         tools_json: None,
@@ -1302,14 +1321,19 @@ impl Agent for LLMAgent {
 
             // Emit progress event about found tool calls
             let tool_names: Vec<String> = function_calls.iter().map(|c| c.name.clone()).collect();
+            let reasoning_content = format!(
+                "Executing {} tool(s): {}",
+                function_calls.len(),
+                tool_names.join(", ")
+            );
             self.emit_progress(StreamChunk::reasoning(
                 event_workflow_id.clone(),
-                format!(
-                    "Executing {} tool(s): {}",
-                    function_calls.len(),
-                    tool_names.join(", ")
-                ),
+                reasoning_content.clone(),
             ));
+            reasoning_steps_data.push(ReasoningStepData {
+                content: reasoning_content,
+                duration_ms: start.elapsed().as_millis() as u64,
+            });
 
             // Add assistant message with tool calls to messages array
             // This preserves the conversation flow for the next iteration
@@ -1444,6 +1468,7 @@ impl Agent for LLMAgent {
                 tools_used,
                 mcp_calls: mcp_calls_made,
                 tool_executions: tool_executions_data,
+                reasoning_steps: reasoning_steps_data,
             },
             // Return system_prompt and tools_json only on first message for persistence
             system_prompt: system_prompt_for_report,

@@ -302,6 +302,55 @@ pub async fn load_message_tool_executions(
     Ok(executions)
 }
 
+/// Loads a single tool execution by ID.
+///
+/// # Arguments
+/// * `execution_id` - The tool execution UUID
+///
+/// # Returns
+/// The full ToolExecution record including input_params and output_result
+#[tauri::command]
+#[instrument(name = "get_tool_execution", skip(state), fields(execution_id = %execution_id))]
+pub async fn get_tool_execution(
+    execution_id: String,
+    state: State<'_, AppState>,
+) -> Result<ToolExecution, String> {
+    info!("Loading tool execution by ID");
+
+    let validated_id = Validator::validate_uuid(&execution_id).map_err(|e| {
+        warn!(error = %e, "Invalid execution_id");
+        format!("Invalid execution_id: {}", e)
+    })?;
+
+    let query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            workflow_id, message_id, agent_id, tool_type, tool_name,
+            server_name, input_params, output_result, success,
+            error_message, duration_ms, iteration, created_at
+        FROM tool_execution
+        WHERE meta::id(id) = '{}'"#,
+        validated_id
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to get tool execution");
+        format!("Failed to get tool execution: {}", e)
+    })?;
+
+    let execution: Option<ToolExecution> = json_results
+        .into_iter()
+        .next()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize tool execution");
+            format!("Failed to deserialize tool execution: {}", e)
+        })?;
+
+    execution.ok_or_else(|| format!("Tool execution not found: {}", execution_id))
+}
+
 /// Deletes a single tool execution by ID.
 ///
 /// # Arguments

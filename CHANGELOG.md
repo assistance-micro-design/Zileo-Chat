@@ -5,6 +5,39 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-02-07
+
+### Added
+
+- **Activity Sidebar v2**: Enhanced activity feed with rich details and interaction
+  - Badge counts on filter tabs (tool, reasoning, message, error)
+  - Expandable tool details with lazy-loaded input/output via `get_tool_execution` command
+  - Expandable reasoning step details with full text display
+  - Message grouping by conversation rounds (user message + agent responses)
+  - Token count display on tool and reasoning activities
+  - Absolute timestamps on hover (tooltip)
+  - Activity export to JSON with full content (not truncated)
+  - New `JsonViewer` component for recursive JSON display with collapse/expand
+  - New `ToolDetailsPanel` and `ReasoningDetailsPanel` components
+  - 14 unit tests for activity utility functions
+  - i18n translations (en/fr) for export dialog and toast
+- **Memory Tool v2**: Intelligent memory management with auto-scoping and semantic search
+  - Auto-scoping: `user_pref`/`knowledge` memories are general, `context`/`decision` are workflow-scoped
+  - Importance scoring (1-10) and TTL (time-to-live) for automatic expiry
+  - `describe` operation for agents to discover memory stats before searching
+  - Composite scoring: cosine_similarity*0.7 + importance*0.15 + recency*0.15
+  - Compact list mode with truncated content for token efficiency
+  - Shared helper functions between tool and commands (`search_memories_core`, `describe_memories_core`)
+  - Stateless tool design with immutable `default_workflow_id`
+
+### Fixed
+
+- **Reasoning steps lost on workflow switch**: Agent intermediate reasoning steps were only emitted to frontend via `emit_progress()` but never persisted to DB. Added `ReasoningStepData` collection during execution, passed through `ReportMetrics`, and persisted by `streaming.rs`
+- **Tool input/output empty in historical view**: SurrealDB SCHEMAFULL `TYPE object` silently dropped dynamic keys from tool I/O JSON (ERR_SURREAL_001). Changed schema to `TYPE string` with custom serde for JSON string serialization/deserialization with backward compatibility
+- **Export content truncated**: Activity export now uses `metadata.content` (full text) instead of `description` (truncated to 200 chars)
+
+---
+
 ## [0.9.4] - 2026-02-06
 
 ### Added
@@ -237,9 +270,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.10.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.10.0
 [0.9.4]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.4
 [0.9.3]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.3
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.10.0...HEAD

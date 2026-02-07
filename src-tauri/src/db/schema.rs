@@ -288,8 +288,8 @@ DEFINE FIELD OVERWRITE tool_type ON tool_execution TYPE string
 DEFINE FIELD OVERWRITE tool_name ON tool_execution TYPE string
     ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
 DEFINE FIELD OVERWRITE server_name ON tool_execution TYPE option<string>;
-DEFINE FIELD OVERWRITE input_params ON tool_execution TYPE object;
-DEFINE FIELD OVERWRITE output_result ON tool_execution TYPE option<object>;
+DEFINE FIELD OVERWRITE input_params ON tool_execution TYPE string;
+DEFINE FIELD OVERWRITE output_result ON tool_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE success ON tool_execution TYPE bool;
 DEFINE FIELD OVERWRITE error_message ON tool_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE duration_ms ON tool_execution TYPE int;

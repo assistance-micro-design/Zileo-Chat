@@ -679,6 +679,11 @@
   "workflow_activity_priority_3": "Medium",
   "workflow_activity_priority_4": "Low",
   "workflow_activity_priority_5": "Minimal",
+  "activity_export": "Export",
+  "activity_export_title": "Save Activity Export",
+  "activity_export_success": "Exported {count} activities",
+  "activity_export_error": "Export failed: {error}",
+  "activity_export_empty": "No activities to export",
 
   "workflow_token_arialabel": "Token usage metrics",
   "workflow_token_context": "context",

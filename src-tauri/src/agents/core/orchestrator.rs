@@ -217,6 +217,7 @@ mod tests {
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
+                    reasoning_steps: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,

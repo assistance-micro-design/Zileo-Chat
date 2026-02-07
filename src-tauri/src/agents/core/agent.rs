@@ -59,6 +59,15 @@ pub enum ReportStatus {
     Partial,
 }
 
+/// Intermediate reasoning step data for persistence
+#[derive(Debug, Clone)]
+pub struct ReasoningStepData {
+    /// Content of the reasoning step
+    pub content: String,
+    /// Duration in milliseconds (from start of execution to this step)
+    pub duration_ms: u64,
+}
+
 /// Detailed tool execution data for persistence
 #[derive(Debug, Clone)]
 pub struct ToolExecutionData {
@@ -97,6 +106,8 @@ pub struct ReportMetrics {
     pub mcp_calls: Vec<String>,
     /// Detailed tool execution data for persistence
     pub tool_executions: Vec<ToolExecutionData>,
+    /// Intermediate reasoning steps collected during execution
+    pub reasoning_steps: Vec<ReasoningStepData>,
 }
 
 /// Agent trait - unified interface for all agents

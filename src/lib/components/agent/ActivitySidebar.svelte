@@ -23,11 +23,15 @@ Right sidebar for displaying workflow activity feed with filtering.
 -->
 
 <script lang="ts">
-	import { Activity } from '@lucide/svelte';
+	import { Activity, Download } from '@lucide/svelte';
+	import { save } from '@tauri-apps/plugin-dialog';
+	import { invoke } from '@tauri-apps/api/core';
 	import RightSidebar from '$lib/components/layout/RightSidebar.svelte';
 	import ActivityFeed from '$lib/components/workflow/ActivityFeed.svelte';
 	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { toastStore } from '$lib/stores/toast';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 
 	/**
@@ -58,6 +62,53 @@ Right sidebar for displaying workflow activity feed with filtering.
 		filter = newFilter;
 		onfilterchange?.(newFilter);
 	}
+
+	async function handleExport(): Promise<void> {
+		if (allActivities.length === 0) {
+			toastStore.add({
+				type: 'info',
+				title: $i18n('activity_export_empty'),
+				message: '',
+				persistent: false,
+				duration: 3000
+			});
+			return;
+		}
+
+		try {
+			const filename = `zileo-activity-${new Date().toISOString().slice(0, 10)}.json`;
+			const filePath = await save({
+				defaultPath: filename,
+				filters: [{ name: 'JSON', extensions: ['json'] }],
+				title: $i18n('activity_export_title')
+			});
+
+			if (!filePath) return;
+
+			const exportData = allActivities.map((a) => ({
+				...a,
+				description: a.metadata?.content ?? a.description
+			}));
+			const content = JSON.stringify(exportData, null, 2);
+			await invoke('save_export_to_file', { path: filePath, content });
+
+			toastStore.add({
+				type: 'success',
+				title: $i18n('activity_export_success', { count: allActivities.length }),
+				message: '',
+				persistent: false,
+				duration: 3000
+			});
+		} catch (e) {
+			toastStore.add({
+				type: 'error',
+				title: $i18n('activity_export_error', { error: getErrorMessage(e) }),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
+		}
+	}
 </script>
 
 <RightSidebar bind:collapsed={collapsed}>
@@ -66,6 +117,14 @@ Right sidebar for displaying workflow activity feed with filtering.
 			<Activity size={20} class="header-icon" />
 			{#if !isCollapsed}
 				<span class="activity-title">{$i18n('activity_title')}</span>
+				<button
+					class="export-btn"
+					onclick={handleExport}
+					title={$i18n('activity_export')}
+					aria-label={$i18n('activity_export')}
+				>
+					<Download size={16} />
+				</button>
 				<HelpButton
 					titleKey="help_activity_sidebar_title"
 					descriptionKey="help_activity_sidebar_description"
@@ -112,6 +171,24 @@ Right sidebar for displaying workflow activity feed with filtering.
 		font-size: var(--font-size-md);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
+	}
+
+	.export-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 4px;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		color: var(--color-text-secondary);
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast, 150ms) ease;
+	}
+
+	.export-btn:hover {
+		color: var(--color-accent);
+		background: var(--color-bg-tertiary);
 	}
 
 	.streaming-indicator {

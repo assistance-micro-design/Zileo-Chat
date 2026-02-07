@@ -31,13 +31,15 @@
 	import type { WorkflowActivityEvent, ActivityStatus } from '$types/activity';
 	import { getActivityIcon } from '$lib/utils/activity-icons';
 	import { formatDuration } from '$lib/utils/duration';
+	import { formatTokenCount, formatAbsoluteTimestamp } from '$lib/utils/activity';
 	import ActivityItemDetails from './ActivityItemDetails.svelte';
+	import ReasoningDetailsPanel from './ReasoningDetailsPanel.svelte';
+	import ToolDetailsPanel from './ToolDetailsPanel.svelte';
 	import {
 		Loader2,
 		CheckCircle2,
 		XCircle,
 		Clock,
-		ListTodo,
 		ChevronDown,
 		ChevronRight
 	} from '@lucide/svelte';
@@ -58,11 +60,44 @@
 	/** Local state for task collapse */
 	let isTaskExpanded = $state(false);
 
+	/** Local state for reasoning collapse */
+	let isReasoningExpanded = $state(false);
+
+	/** Local state for tool details collapse */
+	let isToolExpanded = $state(false);
+
 	/** Check if this is a task with expandable details */
 	const isTaskWithDetails = $derived(
 		activity.type.startsWith('task_') &&
 			(activity.description || activity.metadata?.agentAssigned || activity.metadata?.priority)
 	);
+
+	/** Check if this is a reasoning step with full content */
+	const isReasoningWithContent = $derived(
+		activity.type === 'reasoning' && !!activity.metadata?.content
+	);
+
+	/** Check if this is a tool with lazy-loadable details */
+	const isToolWithDetails = $derived(
+		activity.type.startsWith('tool_') && !!activity.metadata?.executionId
+	);
+
+	/** Whether this item is expandable at all */
+	const isExpandable = $derived(isTaskWithDetails || isReasoningWithContent || isToolWithDetails);
+
+	/** Whether the item is currently expanded */
+	const isExpanded = $derived(
+		(isTaskWithDetails && isTaskExpanded) ||
+		(isReasoningWithContent && isReasoningExpanded) ||
+		(isToolWithDetails && isToolExpanded)
+	);
+
+	/** Toggle expand based on item type */
+	function handleToggle(): void {
+		if (isTaskWithDetails) isTaskExpanded = !isTaskExpanded;
+		else if (isReasoningWithContent) isReasoningExpanded = !isReasoningExpanded;
+		else if (isToolWithDetails) isToolExpanded = !isToolExpanded;
+	}
 
 	/**
 	 * Get status CSS class for styling
@@ -119,14 +154,14 @@
 
 <div class="activity-item {statusClass}" role="listitem">
 	<div class="item-icon">
-		{#if isTaskWithDetails}
+		{#if isExpandable}
 			<button
 				class="expand-btn"
-				onclick={() => (isTaskExpanded = !isTaskExpanded)}
-				aria-expanded={isTaskExpanded}
-				aria-label={isTaskExpanded ? $i18n('workflow_activity_collapse') : $i18n('workflow_activity_expand')}
+				onclick={handleToggle}
+				aria-expanded={isExpanded}
+				aria-label={isExpanded ? $i18n('workflow_activity_collapse') : $i18n('workflow_activity_expand')}
 			>
-				{#if isTaskExpanded}
+				{#if isExpanded}
 					<ChevronDown size={14} />
 				{:else}
 					<ChevronRight size={14} />
@@ -138,8 +173,8 @@
 	</div>
 	<div class="item-content">
 		<div class="item-title">
-			{#if isTaskWithDetails}
-				<ListTodo size={14} class="type-icon" />
+			{#if isExpandable}
+				<IconComponent size={14} class="type-icon" />
 			{/if}
 			{activity.title}
 			<span class="status-icon-wrapper" class:spinning={activity.status === 'running'}>
@@ -152,13 +187,27 @@
 		{#if activity.metadata?.error}
 			<div class="item-error">{activity.metadata.error}</div>
 		{/if}
-		<!-- Task details collapse (OPT-MSG-6: extracted to ActivityItemDetails) -->
+		<!-- Task details collapse -->
 		{#if isTaskWithDetails && isTaskExpanded}
 			<ActivityItemDetails {activity} />
 		{/if}
+		<!-- Reasoning details collapse -->
+		{#if isReasoningWithContent && isReasoningExpanded && activity.metadata?.content}
+			<ReasoningDetailsPanel content={activity.metadata.content} />
+		{/if}
+		<!-- Tool details collapse (lazy-loaded) -->
+		{#if isToolWithDetails && isToolExpanded && activity.metadata?.executionId}
+			<ToolDetailsPanel executionId={activity.metadata.executionId} />
+		{/if}
 	</div>
 	<div class="item-meta">
-		<span class="item-duration">{formattedDuration}</span>
+		{#if activity.metadata?.tokens}
+			{@const totalTokens = activity.metadata.tokens.input + activity.metadata.tokens.output}
+			{#if totalTokens > 0}
+				<span class="token-badge">{formatTokenCount(totalTokens)} tok</span>
+			{/if}
+		{/if}
+		<span class="item-duration" title={formatAbsoluteTimestamp(activity.timestamp)}>{formattedDuration}</span>
 	</div>
 </div>
 
@@ -297,7 +346,15 @@
 		flex-shrink: 0;
 		display: flex;
 		align-items: flex-start;
+		gap: var(--spacing-xs);
 		margin-top: 2px;
+	}
+
+	.token-badge {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		font-family: var(--font-mono);
+		white-space: nowrap;
 	}
 
 	.item-duration {
