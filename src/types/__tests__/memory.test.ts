@@ -81,6 +81,7 @@ describe('Memory Types', () => {
 				type: 'knowledge',
 				content: 'SurrealDB supports HNSW vector indexing',
 				metadata: { priority: 0.8, tags: ['database', 'vectors'] },
+				importance: 0.6,
 				created_at: '2025-11-26T10:30:00Z'
 			};
 
@@ -100,6 +101,7 @@ describe('Memory Types', () => {
 					type,
 					content: `Content for ${type}`,
 					metadata: {},
+					importance: 0.5,
 					created_at: new Date().toISOString()
 				};
 
@@ -121,6 +123,7 @@ describe('Memory Types', () => {
 					related_ids: ['mem_002', 'mem_003'],
 					custom_field: 'any value'
 				},
+				importance: 0.7,
 				created_at: '2025-11-26T10:30:00Z'
 			};
 
@@ -239,6 +242,7 @@ describe('Memory Types', () => {
 					type: 'knowledge',
 					content: 'SurrealDB is a multi-model database',
 					metadata: {},
+					importance: 0.6,
 					created_at: '2025-11-26T10:30:00Z'
 				},
 				score: 0.92
@@ -257,6 +261,7 @@ describe('Memory Types', () => {
 					type: 'knowledge',
 					content: 'Exact match',
 					metadata: {},
+					importance: 0.6,
 					created_at: '2025-11-26T10:30:00Z'
 				},
 				score: 1.0
@@ -268,6 +273,7 @@ describe('Memory Types', () => {
 					type: 'knowledge',
 					content: 'Barely relevant',
 					metadata: {},
+					importance: 0.6,
 					created_at: '2025-11-26T10:30:00Z'
 				},
 				score: 0.7
@@ -289,6 +295,7 @@ describe('Memory Types', () => {
 						priority: 0.9,
 						tags: ['architecture', 'design']
 					},
+					importance: 0.7,
 					created_at: '2025-11-26T10:30:00Z'
 				},
 				score: 0.85
@@ -313,6 +320,7 @@ describe('Memory Types', () => {
 				type: 'knowledge',
 				content: 'Content with embedding',
 				metadata: { has_embedding: true },
+				importance: 0.6,
 				created_at: '2025-11-26T10:30:00Z',
 				embedding_id: 'emb_vec_001'
 			};
@@ -330,6 +338,7 @@ describe('Memory Types', () => {
 					workflow_id: 'wf_code_review',
 					scope: 'workflow'
 				},
+				importance: 0.3,
 				created_at: '2025-11-26T10:30:00Z'
 			};
 

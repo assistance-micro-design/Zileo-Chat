@@ -24,7 +24,7 @@ use crate::{
     models::{Memory, MemorySearchResult, MemoryType},
     security::Validator,
     tools::constants::{memory as memory_constants, query_limits},
-    tools::memory::{add_memory_core, AddMemoryParams},
+    tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
     AppState,
 };
 use tauri::State;
@@ -89,6 +89,8 @@ pub async fn add_memory(
         content: trimmed_content.to_string(),
         metadata: metadata.unwrap_or(serde_json::json!({})),
         workflow_id: workflow_id.clone(),
+        importance: memory_constants::DEFAULT_IMPORTANCE,
+        expires_at: None,
     };
 
     // Use shared helper for core creation logic
@@ -252,16 +254,13 @@ pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Res
 
 /// Searches memories using semantic similarity (vector search) with text search fallback.
 ///
-/// If an EmbeddingService is configured, this performs vector similarity search
-/// using cosine distance. Otherwise, falls back to basic text matching.
+/// Delegates to shared `search_memories_core` helper (deduplicates logic with tool.rs).
 ///
 /// # Arguments
 /// * `query` - Search query text
 /// * `limit` - Maximum number of results (default: 10)
 /// * `type_filter` - Optional filter by memory type
-/// * `workflow_id` - Optional workflow ID filter:
-///   - `Some(id)`: Only search memories scoped to this workflow
-///   - `None`: Search all memories (both workflow-scoped and general)
+/// * `workflow_id` - Optional workflow ID filter
 /// * `threshold` - Similarity threshold 0-1 for vector search (default: 0.7)
 ///
 /// # Returns
@@ -291,124 +290,44 @@ pub async fn search_memories(
     let result_limit = limit.unwrap_or(10).min(100);
     let similarity_threshold = threshold.unwrap_or(0.7).clamp(0.0, 1.0);
 
-    // Try to get embedding service
+    // Get embedding service
     let service_guard = state.embedding_service.read().await;
     let embedding_service = service_guard.as_ref().cloned();
     drop(service_guard);
 
-    // Try vector search if embedding service is available
-    if let Some(ref embed_svc) = embedding_service {
-        match embed_svc.embed(trimmed_query).await {
-            Ok(query_embedding) => {
-                return vector_search(
-                    &state.db,
-                    &query_embedding,
-                    result_limit,
-                    type_filter.as_ref(),
-                    workflow_id.as_ref(),
-                    similarity_threshold,
-                )
-                .await;
-            }
-            Err(e) => {
-                warn!(error = %e, "Query embedding failed, falling back to text search");
-            }
-        }
-    }
-
-    // Fallback to text search
-    text_search(
-        &state.db,
-        trimmed_query,
-        result_limit,
-        type_filter.as_ref(),
-        workflow_id.as_ref(),
-    )
-    .await
-}
-
-/// Performs vector similarity search using HNSW index.
-async fn vector_search(
-    db: &crate::db::DBClient,
-    query_embedding: &[f32],
-    limit: usize,
-    type_filter: Option<&MemoryType>,
-    workflow_id: Option<&String>,
-    threshold: f64,
-) -> Result<Vec<MemorySearchResult>, String> {
-    // Build conditions and parameters
-    let mut conditions = vec!["embedding IS NOT NONE".to_string()];
-    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
-
-    if let Some(wf_id) = workflow_id {
-        conditions.push("workflow_id = $workflow_id".to_string());
-        params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
-    }
-
-    if let Some(mem_type) = type_filter {
-        let type_str = serde_json::to_string(mem_type)
-            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+    // Convert type_filter to string for shared helper
+    let type_filter_str = type_filter.as_ref().map(|t| {
+        serde_json::to_string(t)
+            .unwrap_or_default()
             .trim_matches('"')
-            .to_string();
-        conditions.push("type = $type".to_string());
-        params.push(("type".to_string(), serde_json::json!(type_str)));
-    }
+            .to_string()
+    });
 
-    let where_clause = conditions.join(" AND ");
-
-    // Convert threshold to distance (cosine distance = 1 - similarity)
-    let distance_threshold = 1.0 - threshold;
-
-    // Format embedding for SurrealQL (numeric array is safe, not user input)
-    let embedding_str: String = query_embedding
-        .iter()
-        .map(|v| v.to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    // Note: embedding_str contains floats generated from the embedding model, not user input
-    // distance_threshold and limit are numeric values, safe to interpolate
-    let query = format!(
-        r#"SELECT
-            meta::id(id) AS id,
-            type,
-            content,
-            workflow_id,
-            metadata,
-            created_at,
-            vector::similarity::cosine(embedding, [{embedding}]) AS score
-        FROM memory
-        WHERE {where_clause}
-          AND vector::distance::cosine(embedding, [{embedding}]) < {distance}
-        ORDER BY score DESC
-        LIMIT {limit}"#,
-        embedding = embedding_str,
-        where_clause = where_clause,
-        distance = distance_threshold,
-        limit = limit
-    );
-
-    // Use parameterized query if we have parameters
-    let results: Vec<serde_json::Value> = if params.is_empty() {
-        db.query_json(&query).await.map_err(|e| {
-            error!(error = %e, "Vector search failed");
-            format!("Failed to search memories: {}", e)
-        })?
+    // Build scope: use "both" if no workflow_id, "workflow" if workflow_id provided
+    // (preserves backward compatibility - commands filter by specific workflow_id)
+    let scope = if workflow_id.is_some() {
+        "workflow".to_string()
     } else {
-        db.query_json_with_params(&query, params)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "Vector search failed");
-                format!("Failed to search memories: {}", e)
-            })?
+        "both".to_string()
     };
 
-    // Convert to MemorySearchResult
+    let params = SearchParams {
+        query_text: trimmed_query.to_string(),
+        limit: result_limit,
+        type_filter: type_filter_str,
+        workflow_id,
+        scope,
+        threshold: similarity_threshold,
+    };
+
+    let (results, search_type) =
+        search_memories_core(params, &state.db, embedding_service.as_ref()).await?;
+
+    // Convert JSON results to MemorySearchResult for the command's return type
     let search_results: Vec<MemorySearchResult> = results
         .into_iter()
         .map(|v| {
             let score = v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
-            // Deserialize memory fields
             let memory = Memory {
                 id: v
                     .get("id")
@@ -427,6 +346,12 @@ async fn vector_search(
                     .and_then(|w| w.as_str())
                     .map(String::from),
                 metadata: v.get("metadata").cloned().unwrap_or(serde_json::json!({})),
+                importance: v.get("importance").and_then(|i| i.as_f64()).unwrap_or(0.5),
+                expires_at: v
+                    .get("expires_at")
+                    .and_then(|e| e.as_str())
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc)),
                 created_at: v
                     .get("created_at")
                     .and_then(|c| c.as_str())
@@ -434,93 +359,16 @@ async fn vector_search(
                     .map(|dt| dt.with_timezone(&chrono::Utc))
                     .unwrap_or_else(chrono::Utc::now),
             };
-
             MemorySearchResult { memory, score }
         })
         .collect();
 
     debug!(
         count = search_results.len(),
-        search_type = "vector",
-        "Vector search completed"
+        search_type = %search_type,
+        "Search completed"
     );
     Ok(search_results)
-}
-
-/// Performs text-based search as fallback.
-async fn text_search(
-    db: &crate::db::DBClient,
-    query_text: &str,
-    limit: usize,
-    type_filter: Option<&MemoryType>,
-    workflow_id: Option<&String>,
-) -> Result<Vec<MemorySearchResult>, String> {
-    let mut conditions = Vec::new();
-    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
-
-    // Text content contains query (case-insensitive) - use bind parameter
-    conditions.push("string::lowercase(content) CONTAINS string::lowercase($query)".to_string());
-    params.push(("query".to_string(), serde_json::json!(query_text)));
-
-    if let Some(wf_id) = workflow_id {
-        conditions.push("workflow_id = $workflow_id".to_string());
-        params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
-    }
-
-    if let Some(mem_type) = type_filter {
-        let type_str = serde_json::to_string(mem_type)
-            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
-            .trim_matches('"')
-            .to_string();
-        conditions.push("type = $type".to_string());
-        params.push(("type".to_string(), serde_json::json!(type_str)));
-    }
-
-    let where_clause = conditions.join(" AND ");
-
-    // limit is a numeric value, safe to interpolate
-    let search_query = format!(
-        "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
-         FROM memory WHERE {} ORDER BY created_at DESC LIMIT {}",
-        where_clause, limit
-    );
-
-    let memories: Vec<Memory> = db
-        .query_with_params(&search_query, params)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Text search failed");
-            format!("Failed to search memories: {}", e)
-        })?;
-
-    // Convert to search results with simple relevance scoring
-    let query_lower = query_text.to_lowercase();
-    let results: Vec<MemorySearchResult> = memories
-        .into_iter()
-        .map(|memory| {
-            let content_lower = memory.content.to_lowercase();
-
-            // Simple relevance: count occurrences / content length
-            let occurrences = content_lower.matches(&query_lower).count();
-            let score = if memory.content.is_empty() {
-                0.0
-            } else {
-                (occurrences as f64 * query_lower.len() as f64) / memory.content.len() as f64
-            };
-
-            MemorySearchResult {
-                memory,
-                score: score.min(1.0),
-            }
-        })
-        .collect();
-
-    debug!(
-        count = results.len(),
-        search_type = "text",
-        "Text search completed"
-    );
-    Ok(results)
 }
 
 /// Clears all memories of a specific type.
@@ -654,6 +502,8 @@ mod tests {
             content: "User prefers dark mode".to_string(),
             workflow_id: None,
             metadata: serde_json::json!({"source": "settings"}),
+            importance: 0.3,
+            expires_at: None,
             created_at: Utc::now(),
         };
 
@@ -670,6 +520,8 @@ mod tests {
             content: "Chose Rust for backend".to_string(),
             workflow_id: None,
             metadata: serde_json::json!({}),
+            importance: 0.7,
+            expires_at: None,
             created_at: Utc::now(),
         };
 

@@ -17,12 +17,16 @@
 //! This tool allows agents to manage memories with semantic search capabilities
 //! using vector embeddings and SurrealDB's HNSW index.
 
-use super::helpers::{add_memory_core, AddMemoryParams};
+use super::helpers::{
+    add_memory_core, build_scope_condition, describe_memories_core, search_memories_core,
+    AddMemoryParams, SearchParams,
+};
 use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
 use crate::models::memory::{Memory, MemoryType};
 use crate::tools::constants::memory::{
-    DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD, MAX_CONTENT_LENGTH, MAX_LIMIT, VALID_TYPES,
+    self as mem_constants, DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD, MAX_CONTENT_LENGTH,
+    MAX_LIMIT, VALID_TYPES,
 };
 use crate::tools::response::ResponseBuilder;
 use crate::tools::utils::{
@@ -30,10 +34,10 @@ use crate::tools::utils::{
 };
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
+use chrono::{Duration, Utc};
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Tool for managing agent memories with semantic search.
 ///
@@ -45,9 +49,11 @@ use tracing::{debug, info, instrument, warn};
 ///
 /// # Scope
 ///
-/// MemoryTool supports two modes:
-/// - **Workflow mode**: Memories are scoped to a specific workflow
-/// - **General mode**: Memories are accessible across workflows
+/// MemoryTool uses auto-scoping based on memory type:
+/// - `user_pref` and `knowledge` are stored as **general** (cross-workflow)
+/// - `context` and `decision` are stored as **workflow-scoped**
+///
+/// Agents can override auto-scoping via the `scope` parameter.
 ///
 /// # Embedding Support
 ///
@@ -59,8 +65,8 @@ pub struct MemoryTool {
     db: Arc<DBClient>,
     /// Embedding service for vector generation (optional)
     embedding_service: Option<Arc<EmbeddingService>>,
-    /// Current workflow ID (scope) - None for general mode
-    workflow_id: Arc<RwLock<Option<String>>>,
+    /// Default workflow ID set at creation, immutable
+    default_workflow_id: Option<String>,
     /// Agent ID using this tool
     agent_id: String,
 }
@@ -71,7 +77,7 @@ impl MemoryTool {
     /// # Arguments
     /// * `db` - Database client for persistence
     /// * `embedding_service` - Optional embedding service (None = text search only)
-    /// * `workflow_id` - Optional workflow ID for scoping (None = general mode)
+    /// * `default_workflow_id` - Workflow ID set at creation (used for auto-scoping)
     /// * `agent_id` - Agent ID using this tool
     ///
     /// # Example
@@ -86,54 +92,67 @@ impl MemoryTool {
     pub fn new(
         db: Arc<DBClient>,
         embedding_service: Option<Arc<EmbeddingService>>,
-        workflow_id: Option<String>,
+        default_workflow_id: Option<String>,
         agent_id: String,
     ) -> Self {
         Self {
             db,
             embedding_service,
-            workflow_id: Arc::new(RwLock::new(workflow_id)),
+            default_workflow_id,
             agent_id,
         }
     }
 
-    /// Activates workflow-scoped mode.
+    /// Determines the workflow_id to store on a new memory.
     ///
-    /// All subsequent memory operations will be scoped to this workflow.
-    ///
-    /// # Arguments
-    /// * `workflow_id` - Workflow ID for memory isolation
-    #[instrument(skip(self), fields(agent_id = %self.agent_id))]
-    pub async fn activate_workflow(&self, workflow_id: String) -> ToolResult<Value> {
-        *self.workflow_id.write().await = Some(workflow_id.clone());
-        info!(workflow_id = %workflow_id, "Activated workflow scope");
+    /// Priority: 1) explicit scope override, 2) auto-scope by type.
+    /// - `user_pref` and `knowledge` are general (workflow_id = None)
+    /// - `context` and `decision` are workflow-scoped (workflow_id = default_workflow_id)
+    fn resolve_storage_scope(&self, memory_type: &str, input: &MemoryInput) -> Option<String> {
+        // Agent can override with explicit scope parameter
+        if let Some(ref scope) = input.scope {
+            return match scope.as_str() {
+                "general" => None,
+                "workflow" => self.default_workflow_id.clone(),
+                _ => self.default_workflow_id.clone(),
+            };
+        }
 
-        Ok(serde_json::json!({
-            "success": true,
-            "scope": "workflow",
-            "workflow_id": workflow_id,
-            "message": format!("Memory scope set to workflow '{}'", workflow_id)
-        }))
+        // Auto-scope based on memory type
+        if mem_constants::GENERAL_SCOPE_TYPES.contains(&memory_type) {
+            None // user_pref, knowledge -> always general
+        } else {
+            self.default_workflow_id.clone() // context, decision -> workflow-scoped
+        }
     }
 
-    /// Activates general mode (cross-workflow access).
+    /// Resolves the workflow_id for query filtering (list/search/describe).
     ///
-    /// Memories will not be filtered by workflow_id.
-    #[instrument(skip(self), fields(agent_id = %self.agent_id))]
-    pub async fn activate_general(&self) -> ToolResult<Value> {
-        *self.workflow_id.write().await = None;
-        info!("Activated general scope");
-
-        Ok(serde_json::json!({
-            "success": true,
-            "scope": "general",
-            "message": "Memory scope set to general (cross-workflow)"
-        }))
+    /// Explicit `workflow_id` in input takes priority over `default_workflow_id`.
+    fn resolve_query_workflow_id(&self, input: &MemoryInput) -> Option<String> {
+        input
+            .workflow_id
+            .clone()
+            .or(self.default_workflow_id.clone())
     }
 
-    /// Gets the current workflow ID (if in workflow mode).
-    async fn current_workflow_id(&self) -> Option<String> {
-        self.workflow_id.read().await.clone()
+    /// Returns the default importance for a memory type.
+    fn default_importance_for_type(memory_type: &str) -> f64 {
+        match memory_type {
+            "user_pref" => mem_constants::IMPORTANCE_USER_PREF,
+            "decision" => mem_constants::IMPORTANCE_DECISION,
+            "knowledge" => mem_constants::IMPORTANCE_KNOWLEDGE,
+            "context" => mem_constants::IMPORTANCE_CONTEXT,
+            _ => mem_constants::DEFAULT_IMPORTANCE,
+        }
+    }
+
+    /// Returns the default expires_at for a memory type.
+    fn default_expires_at_for_type(memory_type: &str) -> Option<chrono::DateTime<Utc>> {
+        match memory_type {
+            "context" => Some(Utc::now() + Duration::days(mem_constants::DEFAULT_CONTEXT_TTL_DAYS)),
+            _ => None,
+        }
     }
 
     /// Parses memory type from string.
@@ -150,50 +169,21 @@ impl MemoryTool {
         }
     }
 
-    /// Builds scope condition for WHERE clause (OPT-MEM-2 + OPT-MEM-5: parameterized).
-    ///
-    /// Returns `Some(condition)` to add to WHERE clause, or `None` if no condition needed.
-    /// When workflow_id is needed, it adds a parameter to the params vector.
-    ///
-    /// # Arguments
-    /// * `scope` - Scope filter: "workflow", "general", or "both"
-    /// * `workflow_id` - Current workflow ID if in workflow mode
-    /// * `params` - Mutable params vector to add workflow_id param if needed
-    fn build_scope_condition(
-        scope: &str,
-        workflow_id: &Option<String>,
-        params: &mut Vec<(String, serde_json::Value)>,
-    ) -> Option<String> {
-        match scope {
-            "workflow" => workflow_id.as_ref().map(|wf_id| {
-                params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
-                "workflow_id = $workflow_id".to_string()
-            }),
-            "general" => Some("workflow_id IS NONE".to_string()),
-            // "both" or any other value - include both workflow and general
-            _ => workflow_id.as_ref().map(|wf_id| {
-                params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
-                "(workflow_id = $workflow_id OR workflow_id IS NONE)".to_string()
-            }),
-        }
-    }
-
     /// Adds a new memory with optional embedding.
     ///
-    /// Uses the shared `add_memory_core` helper for the core creation logic.
-    /// This method handles Tool-specific concerns:
-    /// - Parameter validation using utils.rs validators
-    /// - Metadata enrichment (agent_source, tags)
-    /// - ResponseBuilder JSON formatting
+    /// Uses auto-scoping by type, auto-importance, and auto-TTL.
+    /// The agent can override auto-scoping via the `scope` parameter.
     ///
     /// # Arguments
+    /// * `input` - Parsed memory input (provides scope override, workflow_id, etc.)
     /// * `memory_type` - Type of memory (user_pref, context, knowledge, decision)
     /// * `content` - Text content of the memory
     /// * `metadata` - Additional metadata (optional)
     /// * `tags` - Classification tags (optional)
-    #[instrument(skip(self, content, metadata), fields(agent_id = %self.agent_id, memory_type = %memory_type))]
+    #[instrument(skip(self, input, content, metadata), fields(agent_id = %self.agent_id, memory_type = %memory_type))]
     async fn add_memory(
         &self,
+        input: &MemoryInput,
         memory_type: &str,
         content: &str,
         metadata: Option<Value>,
@@ -207,7 +197,14 @@ impl MemoryTool {
         validate_enum_value(memory_type, VALID_TYPES, "memory_type")?;
         let mem_type = Self::parse_memory_type(memory_type)?;
 
-        let workflow_id = self.current_workflow_id().await;
+        // Auto-scope by type (or explicit override via scope param)
+        let workflow_id = self.resolve_storage_scope(memory_type, input);
+
+        // Auto-importance by type
+        let importance = Self::default_importance_for_type(memory_type);
+
+        // Auto-TTL by type (context -> 7 days)
+        let expires_at = Self::default_expires_at_for_type(memory_type);
 
         // Build metadata with agent source and tags (Tool-specific enrichment)
         let mut meta = metadata.unwrap_or(serde_json::json!({}));
@@ -224,6 +221,8 @@ impl MemoryTool {
             content: content.to_string(),
             metadata: meta,
             workflow_id: workflow_id.clone(),
+            importance,
+            expires_at,
         };
 
         let result = add_memory_core(params, &self.db, self.embedding_service.as_ref())
@@ -234,6 +233,7 @@ impl MemoryTool {
             memory_id = %result.memory_id,
             memory_type = %memory_type,
             embedding = result.embedding_generated,
+            scope = ?workflow_id,
             "Memory created"
         );
 
@@ -243,6 +243,7 @@ impl MemoryTool {
             .field("type", memory_type)
             .field("embedding_generated", result.embedding_generated)
             .field("workflow_id", workflow_id)
+            .field("importance", importance)
             .message("Memory created successfully")
             .build())
     }
@@ -260,6 +261,8 @@ impl MemoryTool {
                 content,
                 workflow_id,
                 metadata,
+                importance,
+                expires_at,
                 created_at
             FROM memory
             WHERE meta::id(id) = $memory_id"#;
@@ -286,43 +289,46 @@ impl MemoryTool {
     /// Lists memories with optional filters.
     ///
     /// # Arguments
+    /// * `input` - Parsed memory input (provides workflow_id override)
     /// * `type_filter` - Optional memory type to filter by
     /// * `limit` - Maximum number of results (default: 10)
     /// * `scope` - Scope filter: "workflow", "general", or "both" (default: "both")
-    #[instrument(skip(self), fields(type_filter = ?type_filter, limit = limit, scope = %scope))]
+    /// * `mode` - Display mode: "full" (default) or "compact"
+    #[instrument(skip(self, input), fields(type_filter = ?type_filter, limit = limit, scope = %scope))]
     async fn list_memories(
         &self,
+        input: &MemoryInput,
         type_filter: Option<&str>,
         limit: usize,
         scope: &str,
+        mode: &str,
     ) -> ToolResult<Value> {
-        let workflow_id = self.current_workflow_id().await;
+        let workflow_id = self.resolve_query_workflow_id(input);
         let limit = limit.min(MAX_LIMIT);
 
         let mut conditions = Vec::new();
-        // OPT-MEM-5: Parameterized query support
         let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-        // OPT-MEM-2: Use centralized scope filter helper
+        // Expiration filter
+        conditions.push(super::helpers::expiration_filter());
+
         // Special case: scope="workflow" with no active workflow returns early
         if scope == "workflow" && workflow_id.is_none() {
             return Ok(ResponseBuilder::new()
                 .success(true)
                 .count(0)
                 .field("scope", "workflow")
+                .field("mode", mode)
                 .field("workflow_id", Option::<String>::None)
                 .data("memories", Vec::<Memory>::new())
-                .message("No active workflow. Use 'activate_workflow' first or scope='both'")
+                .message("No active workflow. Use scope='both' or provide workflow_id")
                 .build());
         }
-        // OPT-MEM-5: build_scope_condition now adds params
-        if let Some(scope_cond) = Self::build_scope_condition(scope, &workflow_id, &mut params) {
+        if let Some(scope_cond) = build_scope_condition(scope, &workflow_id, &mut params) {
             conditions.push(scope_cond);
         }
 
-        // Type filter condition - OPT-MEM-5: parameterized
         if let Some(mem_type) = type_filter {
-            // Validate the type
             Self::parse_memory_type(mem_type)?;
             conditions.push("type = $type_filter".to_string());
             params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
@@ -334,7 +340,6 @@ impl MemoryTool {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        // OPT-MEM-5: LIMIT is safe as integer, not user input
         let query = format!(
             r#"SELECT
                 meta::id(id) AS id,
@@ -342,6 +347,8 @@ impl MemoryTool {
                 content,
                 workflow_id,
                 metadata,
+                importance,
+                expires_at,
                 created_at
             FROM memory
             {}
@@ -356,153 +363,109 @@ impl MemoryTool {
             .await
             .map_err(db_error)?;
 
-        debug!(count = memories.len(), scope = %scope, "Memories listed");
+        debug!(count = memories.len(), scope = %scope, mode = %mode, "Memories listed");
 
-        Ok(ResponseBuilder::new()
-            .success(true)
-            .count(memories.len())
-            .field("scope", scope)
-            .field("workflow_id", workflow_id)
-            .data("memories", memories)
-            .build())
+        if mode == "compact" {
+            // Compact mode: truncate content, extract tags/importance as top-level fields
+            let compact_memories: Vec<serde_json::Value> = memories
+                .into_iter()
+                .map(|m| {
+                    let preview = if m.content.len()
+                        > crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH
+                    {
+                        format!(
+                            "{}...",
+                            &m.content[..crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH]
+                        )
+                    } else {
+                        m.content.clone()
+                    };
+                    let tags = m
+                        .metadata
+                        .get("tags")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+
+                    serde_json::json!({
+                        "id": m.id,
+                        "type": m.memory_type,
+                        "preview": preview,
+                        "tags": tags,
+                        "importance": m.importance,
+                        "workflow_id": m.workflow_id,
+                        "created_at": m.created_at,
+                    })
+                })
+                .collect();
+
+            Ok(serde_json::json!({
+                "success": true,
+                "count": compact_memories.len(),
+                "mode": "compact",
+                "scope": scope,
+                "workflow_id": workflow_id,
+                "memories": compact_memories,
+            }))
+        } else {
+            Ok(ResponseBuilder::new()
+                .success(true)
+                .count(memories.len())
+                .field("scope", scope)
+                .field("mode", "full")
+                .field("workflow_id", workflow_id)
+                .data("memories", memories)
+                .build())
+        }
     }
 
-    /// Searches memories using semantic similarity.
-    ///
-    /// Falls back to text search if embeddings are not available.
+    /// Searches memories using semantic similarity (delegates to shared helpers).
     ///
     /// # Arguments
+    /// * `input` - Parsed memory input (provides workflow_id override)
     /// * `query_text` - Search query
     /// * `limit` - Maximum results (default: 10)
     /// * `type_filter` - Optional type filter
     /// * `threshold` - Similarity threshold 0-1 (default: 0.7)
     /// * `scope` - Scope filter: "workflow", "general", or "both" (default: "both")
-    #[instrument(skip(self), fields(query_len = query_text.len(), limit = limit, scope = %scope))]
+    #[instrument(skip(self, input), fields(query_len = query_text.len(), limit = limit, scope = %scope))]
     async fn search_memories(
         &self,
+        input: &MemoryInput,
         query_text: &str,
         limit: usize,
         type_filter: Option<&str>,
         threshold: f64,
         scope: &str,
     ) -> ToolResult<Value> {
-        let workflow_id = self.current_workflow_id().await;
-        let limit = limit.min(MAX_LIMIT);
-        let threshold = threshold.clamp(0.0, 1.0);
+        let workflow_id = self.resolve_query_workflow_id(input);
 
         // Validate type filter if provided
         if let Some(mem_type) = type_filter {
             Self::parse_memory_type(mem_type)?;
         }
 
-        // Try vector search if embedding service is available
-        if let Some(ref embed_service) = self.embedding_service {
-            match embed_service.embed(query_text).await {
-                Ok(query_embedding) => {
-                    return self
-                        .vector_search(
-                            &query_embedding,
-                            limit,
-                            type_filter,
-                            threshold,
-                            &workflow_id,
-                            scope,
-                        )
-                        .await;
-                }
-                Err(e) => {
-                    warn!(error = %e, "Query embedding failed, falling back to text search");
-                }
-            }
-        }
+        let params = SearchParams {
+            query_text: query_text.to_string(),
+            limit,
+            type_filter: type_filter.map(String::from),
+            workflow_id: workflow_id.clone(),
+            scope: scope.to_string(),
+            threshold,
+        };
 
-        // Fallback to text search
-        self.text_search(query_text, limit, type_filter, &workflow_id, scope)
-            .await
-    }
-
-    /// Performs vector similarity search using HNSW index.
-    async fn vector_search(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-        type_filter: Option<&str>,
-        threshold: f64,
-        workflow_id: &Option<String>,
-        scope: &str,
-    ) -> ToolResult<Value> {
-        // Build conditions
-        let mut conditions = vec!["embedding IS NOT NONE".to_string()];
-        // OPT-MEM-5: Parameterized query support
-        let mut params: Vec<(String, serde_json::Value)> = Vec::new();
-
-        // OPT-MEM-2 + OPT-MEM-5: Use centralized scope filter helper with params
-        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id, &mut params) {
-            conditions.push(scope_cond);
-        }
-
-        // OPT-MEM-5: Type filter parameterized
-        if let Some(mem_type) = type_filter {
-            conditions.push("type = $type_filter".to_string());
-            params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
-        }
-
-        let where_clause = conditions.join(" AND ");
-
-        // Convert threshold to distance (cosine distance = 1 - similarity)
-        let distance_threshold = 1.0 - threshold;
-
-        // OPT-MEM-11: Pre-allocate String to avoid intermediate Vec allocation
-        // Format embedding for SurrealQL - must be inline array for vector operations
-        // Note: embedding array is generated internally from query_text, not user input
-        // Estimate ~12 chars per float (sign + digits + decimal + separator)
-        let mut embedding_str = String::with_capacity(query_embedding.len() * 12);
-        for (i, v) in query_embedding.iter().enumerate() {
-            if i > 0 {
-                embedding_str.push_str(", ");
-            }
-            use std::fmt::Write;
-            let _ = write!(embedding_str, "{}", v);
-        }
-
-        // OPT-MEM-5: LIMIT and distance_threshold are safe (integers/floats, not user strings)
-        // The embedding is also safe (generated from EmbeddingService)
-        let query = format!(
-            r#"SELECT
-                meta::id(id) AS id,
-                type,
-                content,
-                workflow_id,
-                metadata,
-                created_at,
-                vector::similarity::cosine(embedding, [{embedding}]) AS score
-            FROM memory
-            WHERE {where_clause}
-              AND vector::distance::cosine(embedding, [{embedding}]) < {distance}
-            ORDER BY score DESC
-            LIMIT {limit}"#,
-            embedding = embedding_str,
-            where_clause = where_clause,
-            distance = distance_threshold,
-            limit = limit
-        );
-
-        let results: Vec<Value> = self
-            .db
-            .query_json_with_params(&query, params)
-            .await
-            .map_err(db_error)?;
-
-        debug!(
-            count = results.len(),
-            threshold = threshold,
-            scope = %scope,
-            "Vector search completed"
-        );
+        let (results, search_type) =
+            search_memories_core(params, &self.db, self.embedding_service.as_ref())
+                .await
+                .map_err(ToolError::DatabaseError)?;
 
         Ok(serde_json::json!({
             "success": true,
-            "search_type": "vector",
+            "search_type": search_type,
             "count": results.len(),
             "threshold": threshold,
             "scope": scope,
@@ -511,77 +474,26 @@ impl MemoryTool {
         }))
     }
 
-    /// Performs text-based search as fallback.
-    async fn text_search(
-        &self,
-        query_text: &str,
-        limit: usize,
-        type_filter: Option<&str>,
-        workflow_id: &Option<String>,
-        scope: &str,
-    ) -> ToolResult<Value> {
-        let mut conditions = Vec::new();
-        // OPT-MEM-5: Parameterized query support
-        let mut params: Vec<(String, serde_json::Value)> = Vec::new();
+    /// Describes memory statistics (for agent discovery).
+    #[instrument(skip(self, input), fields(scope = %scope))]
+    async fn describe_memories(&self, input: &MemoryInput, scope: &str) -> ToolResult<Value> {
+        let wf_id = self.resolve_query_workflow_id(input);
 
-        // OPT-MEM-5: Text content contains query (case-insensitive) - parameterized
-        // No more manual escaping needed - SurrealDB handles it via params
-        conditions
-            .push("string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string());
-        params.push(("query_text".to_string(), serde_json::json!(query_text)));
-
-        // OPT-MEM-2 + OPT-MEM-5: Use centralized scope filter helper with params
-        if let Some(scope_cond) = Self::build_scope_condition(scope, workflow_id, &mut params) {
-            conditions.push(scope_cond);
-        }
-
-        // OPT-MEM-5: Type filter parameterized
-        if let Some(mem_type) = type_filter {
-            conditions.push("type = $type_filter".to_string());
-            params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
-        }
-
-        let where_clause = conditions.join(" AND ");
-
-        // OPT-MEM-5: LIMIT is safe as integer, not user input
-        let query = format!(
-            r#"SELECT
-                meta::id(id) AS id,
-                type,
-                content,
-                workflow_id,
-                metadata,
-                created_at
-            FROM memory
-            WHERE {}
-            ORDER BY created_at DESC
-            LIMIT {}"#,
-            where_clause, limit
-        );
-
-        let results: Vec<Memory> = self
-            .db
-            .query_with_params(&query, params)
+        let result = describe_memories_core(wf_id.as_deref(), scope, &self.db)
             .await
-            .map_err(db_error)?;
-
-        debug!(count = results.len(), scope = %scope, "Text search completed");
+            .map_err(ToolError::DatabaseError)?;
 
         Ok(serde_json::json!({
             "success": true,
-            "search_type": "text",
-            "count": results.len(),
+            "total": result.total,
+            "by_type": result.by_type,
+            "tags": result.tags,
             "scope": scope,
-            "workflow_id": workflow_id,
-            "results": results.into_iter().map(|m| serde_json::json!({
-                "id": m.id,
-                "type": m.memory_type,
-                "content": m.content,
-                "workflow_id": m.workflow_id,
-                "metadata": m.metadata,
-                "created_at": m.created_at,
-                "score": null
-            })).collect::<Vec<_>>()
+            "workflow_id": wf_id,
+            "workflow_count": result.workflow_count,
+            "general_count": result.general_count,
+            "oldest": result.oldest,
+            "newest": result.newest,
         }))
     }
 
@@ -605,13 +517,14 @@ impl MemoryTool {
     /// Clears all memories of a specific type.
     ///
     /// # Arguments
+    /// * `input` - Parsed memory input (provides scope/workflow_id override)
     /// * `memory_type` - Type of memories to clear
-    #[instrument(skip(self), fields(memory_type = %memory_type))]
-    async fn clear_by_type(&self, memory_type: &str) -> ToolResult<Value> {
+    #[instrument(skip(self, input), fields(memory_type = %memory_type))]
+    async fn clear_by_type(&self, input: &MemoryInput, memory_type: &str) -> ToolResult<Value> {
         // Validate memory type
         Self::parse_memory_type(memory_type)?;
 
-        let workflow_id = self.current_workflow_id().await;
+        let workflow_id = self.resolve_query_workflow_id(input);
 
         // OPT-MEM-5: Use execute_with_params() for parameterized DELETE
         let (delete_query, params) = if let Some(ref wf_id) = workflow_id {
@@ -675,16 +588,20 @@ DO NOT USE THIS TOOL WHEN:
 - For temporary calculations or intermediate values (use CalculatorTool or conversation)
 
 OPERATIONS:
-- activate_workflow: Set workflow-specific scope for memory isolation
-- activate_general: Switch to general mode (cross-workflow access)
-- add: Store new memory with automatic embedding generation
+- describe: Overview of available memories (counts, types, tags) - call this first!
+- add: Store new memory with auto-scoping by type and embedding generation
 - get: Retrieve specific memory by ID
-- list: View memories with optional type filter and scope
-- search: Find semantically similar memories using vector search
+- list: View memories with optional type filter and scope (supports compact mode)
+- search: Find semantically similar memories using vector search (ranked by relevance + importance + recency)
 - delete: Remove a memory
 - clear_by_type: Bulk delete all memories of a specific type
 
-SCOPE PARAMETER (for list/search):
+AUTO-SCOPING (for add):
+- user_pref, knowledge -> stored as GENERAL (cross-workflow, accessible everywhere)
+- context, decision -> stored as WORKFLOW-SCOPED (tied to current workflow)
+- Override with scope parameter: "general" forces cross-workflow, "workflow" forces workflow-scoped
+
+SCOPE PARAMETER (for list/search/describe):
 - "both" (default): Shows workflow-specific AND general memories
 - "workflow": Only memories from current workflow
 - "general": Only global memories (not tied to any workflow)
@@ -703,29 +620,35 @@ BEST PRACTICES:
 - Search before adding to avoid duplicates
 
 EXAMPLES:
-1. List all memories (workflow + general):
-   {{"operation": "list"}}
+1. Discover available memories (always start here):
+   {{"operation": "describe"}}
 
-2. List only workflow memories:
-   {{"operation": "list", "scope": "workflow"}}
+2. Compact listing (token-efficient):
+   {{"operation": "list", "mode": "compact"}}
 
-3. Search all memories:
+3. Search all memories (ranked by relevance + importance + recency):
    {{"operation": "search", "query": "vector database indexing", "limit": 5}}
 
-4. Store knowledge:
+4. Store knowledge (auto-scoped to general):
    {{"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}}
 
-5. Store user preference:
+5. Store user preference (auto-scoped to general):
    {{"operation": "add", "type": "user_pref", "content": "User prefers detailed explanations with examples", "tags": ["communication", "style"]}}
 
-6. Store decision rationale:
-   {{"operation": "add", "type": "decision", "content": "Chose PostgreSQL over MongoDB because the data is highly relational", "metadata": {{"decision_date": "2025-01-15", "alternatives_considered": ["MongoDB", "SurrealDB"]}}}}
+6. Store decision (auto-scoped to current workflow):
+   {{"operation": "add", "type": "decision", "content": "Chose PostgreSQL over MongoDB because the data is highly relational"}}
 
-7. Delete a memory:
+7. Store context (auto-scoped to workflow, auto-expires in 7 days):
+   {{"operation": "add", "type": "context", "content": "User is working on database migration project"}}
+
+8. Force a decision to be global (override auto-scope):
+   {{"operation": "add", "type": "decision", "content": "Company policy: always use RGPD-compliant storage", "scope": "general"}}
+
+9. Delete a memory:
    {{"operation": "delete", "memory_id": "mem_abc123"}}
 
-8. Clear all context memories:
-   {{"operation": "clear_by_type", "type": "context"}}"#,
+10. Clear all context memories:
+    {{"operation": "clear_by_type", "type": "context"}}"#,
                 MAX_CONTENT_LENGTH,
                 MAX_CONTENT_LENGTH,
                 DEFAULT_LIMIT,
@@ -738,12 +661,12 @@ EXAMPLES:
                 "properties": {
                     "operation": {
                         "type": "string",
-                        "enum": ["activate_workflow", "activate_general", "add", "get", "list", "search", "delete", "clear_by_type"],
-                        "description": "Operation: 'activate_workflow'/'activate_general' set scope, 'add' stores memory, 'get' retrieves by ID, 'list' shows memories, 'search' finds similar, 'delete' removes, 'clear_by_type' bulk deletes"
+                        "enum": ["describe", "add", "get", "list", "search", "delete", "clear_by_type"],
+                        "description": "Operation: 'describe' shows overview, 'add' stores memory (auto-scoped by type), 'get' retrieves by ID, 'list' shows memories, 'search' finds similar, 'delete' removes, 'clear_by_type' bulk deletes"
                     },
                     "workflow_id": {
                         "type": "string",
-                        "description": "Workflow ID (for activate_workflow)"
+                        "description": "Override the default workflow context. Rarely needed - the tool auto-detects from its creation context."
                     },
                     "type": {
                         "type": "string",
@@ -787,7 +710,13 @@ EXAMPLES:
                         "type": "string",
                         "enum": ["workflow", "general", "both"],
                         "default": "both",
-                        "description": "Memory scope filter (for list/search): 'workflow' = current workflow only, 'general' = global memories only, 'both' = both scopes (default)"
+                        "description": "For add: override auto-scoping ('general' forces cross-workflow, 'workflow' forces workflow-scoped). For list/search/describe: filter scope."
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["full", "compact"],
+                        "default": "full",
+                        "description": "Display mode for list: 'full' returns complete memories, 'compact' returns truncated previews with tags"
                     },
                     "threshold": {
                         "type": "number",
@@ -833,33 +762,35 @@ EXAMPLES:
         // Dispatch to operation handlers using pre-parsed params
         // Fields are guaranteed to be present after validation
         match params.operation.as_str() {
-            "activate_workflow" => {
-                // SAFETY: validate_activate_workflow() ensures workflow_id is Some
-                self.activate_workflow(params.workflow_id.unwrap()).await
-            }
-
-            "activate_general" => self.activate_general().await,
-
             "add" => {
                 // SAFETY: validate_add() ensures memory_type and content are Some
+                let memory_type = params.memory_type.as_deref().unwrap();
+                let content = params.content.as_deref().unwrap();
                 self.add_memory(
-                    &params.memory_type.unwrap(),
-                    &params.content.unwrap(),
-                    params.metadata,
-                    params.tags,
+                    &params,
+                    memory_type,
+                    content,
+                    params.metadata.clone(),
+                    params.tags.clone(),
                 )
                 .await
             }
 
             "get" => {
                 // SAFETY: validate_get_or_delete() ensures memory_id is Some
-                self.get_memory(&params.memory_id.unwrap()).await
+                self.get_memory(params.memory_id.as_deref().unwrap()).await
+            }
+
+            "describe" => {
+                let scope = params.scope.as_deref().unwrap_or("both");
+                self.describe_memories(&params, scope).await
             }
 
             "list" => {
                 let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
                 let scope = params.scope.as_deref().unwrap_or("both");
-                self.list_memories(params.type_filter.as_deref(), limit, scope)
+                let mode = params.mode.as_deref().unwrap_or("full");
+                self.list_memories(&params, params.type_filter.as_deref(), limit, scope, mode)
                     .await
             }
 
@@ -869,7 +800,8 @@ EXAMPLES:
                 let threshold = params.threshold.unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
                 let scope = params.scope.as_deref().unwrap_or("both");
                 self.search_memories(
-                    &params.query.unwrap(),
+                    &params,
+                    params.query.as_deref().unwrap(),
                     limit,
                     params.type_filter.as_deref(),
                     threshold,
@@ -880,12 +812,14 @@ EXAMPLES:
 
             "delete" => {
                 // SAFETY: validate_get_or_delete() ensures memory_id is Some
-                self.delete_memory(&params.memory_id.unwrap()).await
+                self.delete_memory(params.memory_id.as_deref().unwrap())
+                    .await
             }
 
             "clear_by_type" => {
                 // SAFETY: validate_clear_by_type() ensures memory_type is Some
-                self.clear_by_type(&params.memory_type.unwrap()).await
+                self.clear_by_type(&params, params.memory_type.as_deref().unwrap())
+                    .await
             }
 
             // SAFETY: validate() rejects unknown operations, this branch is unreachable
@@ -933,6 +867,7 @@ struct MemoryInput {
     threshold: Option<f64>,
     limit: Option<usize>,
     scope: Option<String>,
+    mode: Option<String>,
     metadata: Option<Value>,
     tags: Option<Vec<String>>,
 }
@@ -969,6 +904,7 @@ impl MemoryInput {
             threshold: input["threshold"].as_f64(),
             limit: input["limit"].as_u64().map(|v| v as usize),
             scope: input["scope"].as_str().map(String::from),
+            mode: input["mode"].as_str().map(String::from),
             metadata: input.get("metadata").cloned(),
             tags,
         })
@@ -977,28 +913,17 @@ impl MemoryInput {
     /// Validates input based on operation type.
     fn validate(&self) -> ToolResult<()> {
         match self.operation.as_str() {
-            "activate_workflow" => self.validate_activate_workflow(),
-            "activate_general" => Ok(()),
+            "describe" => Ok(()),
             "add" => self.validate_add(),
             "get" | "delete" => self.validate_get_or_delete(),
             "list" => self.validate_type_filter(),
             "search" => self.validate_search(),
             "clear_by_type" => self.validate_clear_by_type(),
             _ => Err(ToolError::InvalidInput(format!(
-                "Unknown operation: '{}'. Valid operations: activate_workflow, activate_general, add, get, list, search, delete, clear_by_type",
+                "Unknown operation: '{}'. Valid operations: describe, add, get, list, search, delete, clear_by_type",
                 self.operation
             ))),
         }
-    }
-
-    /// Validates activate_workflow operation.
-    fn validate_activate_workflow(&self) -> ToolResult<()> {
-        if self.workflow_id.is_none() {
-            return Err(ToolError::InvalidInput(
-                "Missing 'workflow_id' for activate_workflow operation".to_string(),
-            ));
-        }
-        Ok(())
     }
 
     /// Validates add operation.
@@ -1168,14 +1093,13 @@ mod tests {
     }
 
     #[test]
-    fn test_input_validation_activate_workflow() {
+    fn test_input_validation_describe() {
         let valid_input = serde_json::json!({
-            "operation": "activate_workflow",
-            "workflow_id": "wf_123"
+            "operation": "describe"
         });
 
         assert!(valid_input.is_object());
-        assert!(valid_input.get("workflow_id").is_some());
+        assert_eq!(valid_input["operation"], "describe");
     }
 
     #[test]
@@ -1331,48 +1255,65 @@ mod validate_input_tests {
     }
 
     // =========================================================================
-    // validate_input: activate_workflow tests
+    // validate_input: describe tests
     // =========================================================================
 
     #[tokio::test]
-    async fn test_validate_input_activate_workflow_valid() {
+    async fn test_validate_input_describe_valid() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "describe"
+        }));
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_input_describe_with_scope() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let result = tool.validate_input(&serde_json::json!({
+            "operation": "describe",
+            "scope": "general"
+        }));
+        assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // validate_input: removed operations are rejected
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_validate_input_activate_workflow_rejected() {
         let (tool, _temp) = create_test_tool().await;
 
         let result = tool.validate_input(&serde_json::json!({
             "operation": "activate_workflow",
             "workflow_id": "wf_123"
         }));
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_validate_input_activate_workflow_missing_id() {
-        let (tool, _temp) = create_test_tool().await;
-
-        let result = tool.validate_input(&serde_json::json!({
-            "operation": "activate_workflow"
-        }));
         assert!(result.is_err());
         match result {
             Err(ToolError::InvalidInput(msg)) => {
-                assert!(msg.contains("Missing 'workflow_id'"));
+                assert!(msg.contains("Unknown operation"));
             }
             _ => panic!("Expected InvalidInput error"),
         }
     }
 
-    // =========================================================================
-    // validate_input: activate_general tests
-    // =========================================================================
-
     #[tokio::test]
-    async fn test_validate_input_activate_general_valid() {
+    async fn test_validate_input_activate_general_rejected() {
         let (tool, _temp) = create_test_tool().await;
 
         let result = tool.validate_input(&serde_json::json!({
             "operation": "activate_general"
         }));
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("Unknown operation"));
+            }
+            _ => panic!("Expected InvalidInput error"),
+        }
     }
 
     // =========================================================================

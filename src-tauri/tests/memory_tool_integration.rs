@@ -152,6 +152,8 @@ mod memory_tool_operations_tests {
         assert_eq!(add_response["success"], true);
         assert!(add_response["memory_id"].is_string());
         assert_eq!(add_response["embedding_generated"], false); // No embedding service
+                                                                // knowledge auto-scopes to general (null workflow_id)
+        assert!(add_response["workflow_id"].is_null());
 
         // List memories
         let list_result = tool.execute(json!({"operation": "list"})).await;
@@ -163,7 +165,7 @@ mod memory_tool_operations_tests {
     }
 
     #[tokio::test]
-    async fn test_memory_tool_scope_switching() {
+    async fn test_memory_tool_auto_scoping() {
         use zileo_chat::db::DBClient;
         use zileo_chat::tools::{MemoryTool, Tool};
 
@@ -171,29 +173,40 @@ mod memory_tool_operations_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let tool = MemoryTool::new(db, None, None, "test_agent".to_string());
+        let tool = MemoryTool::new(
+            db,
+            None,
+            Some("wf_auto_scope".to_string()),
+            "test_agent".to_string(),
+        );
 
-        // Activate workflow scope
+        // Add user_pref (auto-scoped to general)
         let result = tool
             .execute(json!({
-                "operation": "activate_workflow",
-                "workflow_id": "wf_scope_test"
+                "operation": "add",
+                "type": "user_pref",
+                "content": "User prefers dark mode"
             }))
             .await;
-
         assert!(result.is_ok());
         let response = result.unwrap();
         assert_eq!(response["success"], true);
-        assert_eq!(response["scope"], "workflow");
-        assert_eq!(response["workflow_id"], "wf_scope_test");
+        // user_pref should have null workflow_id (general)
+        assert!(response["workflow_id"].is_null());
 
-        // Switch to general mode
-        let result = tool.execute(json!({"operation": "activate_general"})).await;
-
-        assert!(result.is_ok());
+        // Add context (auto-scoped to workflow)
+        let result = tool
+            .execute(json!({
+                "operation": "add",
+                "type": "context",
+                "content": "Working on database migration"
+            }))
+            .await;
+        assert!(result.is_ok(), "Add context failed: {:?}", result.err());
         let response = result.unwrap();
         assert_eq!(response["success"], true);
-        assert_eq!(response["scope"], "general");
+        // context should have workflow_id set
+        assert_eq!(response["workflow_id"], "wf_auto_scope");
     }
 
     #[tokio::test]
@@ -602,36 +615,42 @@ mod workflow_isolation_tests {
             "agent_b".to_string(),
         );
 
-        // Add memories in workflow A
+        // Add context memories (auto-scoped to workflow) in workflow A
         let _ = tool_a
             .execute(json!({
                 "operation": "add",
-                "type": "knowledge",
-                "content": "Memory from workflow A"
+                "type": "context",
+                "content": "Context from workflow A"
             }))
             .await
             .expect("Add should succeed");
 
-        // Add memories in workflow B
+        // Add context memories (auto-scoped to workflow) in workflow B
         let _ = tool_b
             .execute(json!({
                 "operation": "add",
-                "type": "knowledge",
-                "content": "Memory from workflow B"
+                "type": "context",
+                "content": "Context from workflow B"
             }))
             .await
             .expect("Add should succeed");
 
-        // List in workflow A - should only see A's memory
-        let list_a = tool_a.execute(json!({"operation": "list"})).await.unwrap();
+        // List in workflow A (scope=workflow) - should only see A's context
+        let list_a = tool_a
+            .execute(json!({"operation": "list", "scope": "workflow"}))
+            .await
+            .unwrap();
         assert_eq!(list_a["count"], 1);
         assert!(list_a["memories"][0]["content"]
             .as_str()
             .unwrap()
             .contains("workflow A"));
 
-        // List in workflow B - should only see B's memory
-        let list_b = tool_b.execute(json!({"operation": "list"})).await.unwrap();
+        // List in workflow B (scope=workflow) - should only see B's context
+        let list_b = tool_b
+            .execute(json!({"operation": "list", "scope": "workflow"}))
+            .await
+            .unwrap();
         assert_eq!(list_b["count"], 1);
         assert!(list_b["memories"][0]["content"]
             .as_str()
@@ -640,7 +659,7 @@ mod workflow_isolation_tests {
     }
 
     #[tokio::test]
-    async fn test_general_mode_sees_all() {
+    async fn test_general_memories_visible_cross_workflow() {
         use zileo_chat::db::DBClient;
         use zileo_chat::tools::{MemoryTool, Tool};
 
@@ -648,48 +667,47 @@ mod workflow_isolation_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let tool = MemoryTool::new(db, None, None, "test_agent".to_string());
-
-        // Add memory in workflow A scope
-        let _ = tool
+        // Tool A adds a user_pref (auto-scoped to general)
+        let tool_a = MemoryTool::new(
+            db.clone(),
+            None,
+            Some("workflow_A".to_string()),
+            "agent_a".to_string(),
+        );
+        let _ = tool_a
             .execute(json!({
-                "operation": "activate_workflow",
-                "workflow_id": "workflow_A"
+                "operation": "add",
+                "type": "user_pref",
+                "content": "User prefers dark mode"
             }))
-            .await;
-        let _ = tool
+            .await
+            .expect("Add should succeed");
+
+        // Tool A adds knowledge (auto-scoped to general)
+        let _ = tool_a
             .execute(json!({
                 "operation": "add",
                 "type": "knowledge",
-                "content": "Memory in workflow A"
+                "content": "SurrealDB supports HNSW indexing"
             }))
-            .await;
+            .await
+            .expect("Add should succeed");
 
-        // Add memory in workflow B scope
-        let _ = tool
-            .execute(json!({
-                "operation": "activate_workflow",
-                "workflow_id": "workflow_B"
-            }))
-            .await;
-        let _ = tool
-            .execute(json!({
-                "operation": "add",
-                "type": "knowledge",
-                "content": "Memory in workflow B"
-            }))
-            .await;
+        // Tool B from a different workflow can see general memories
+        let tool_b = MemoryTool::new(
+            db.clone(),
+            None,
+            Some("workflow_B".to_string()),
+            "agent_b".to_string(),
+        );
 
-        // Switch to general mode
-        let _ = tool.execute(json!({"operation": "activate_general"})).await;
-
-        // List in general mode - should see all memories
-        let list_result = tool.execute(json!({"operation": "list"})).await.unwrap();
+        // List with scope=both (default) should see both general memories
+        let list_result = tool_b.execute(json!({"operation": "list"})).await.unwrap();
         assert_eq!(list_result["count"], 2);
     }
 
     #[tokio::test]
-    async fn test_scope_switching() {
+    async fn test_scope_override_on_add() {
         use zileo_chat::db::DBClient;
         use zileo_chat::tools::{MemoryTool, Tool};
 
@@ -697,31 +715,42 @@ mod workflow_isolation_tests {
         let db = Arc::new(DBClient::new(&db_path).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let tool = MemoryTool::new(db, None, None, "test_agent".to_string());
+        let tool = MemoryTool::new(
+            db,
+            None,
+            Some("wf_override".to_string()),
+            "test_agent".to_string(),
+        );
 
-        // Start in general mode (None workflow)
-        let result = tool.execute(json!({"operation": "activate_general"})).await;
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        assert_eq!(response["scope"], "general");
-
-        // Switch to workflow mode
+        // Decision normally auto-scopes to workflow, but override to general
         let result = tool
             .execute(json!({
-                "operation": "activate_workflow",
-                "workflow_id": "wf_123"
+                "operation": "add",
+                "type": "decision",
+                "content": "Global policy: RGPD compliance required",
+                "scope": "general"
             }))
             .await;
         assert!(result.is_ok());
         let response = result.unwrap();
-        assert_eq!(response["scope"], "workflow");
-        assert_eq!(response["workflow_id"], "wf_123");
+        assert_eq!(response["success"], true);
+        // Should be stored as general (null workflow_id) despite being a decision
+        assert!(response["workflow_id"].is_null());
 
-        // Switch back to general mode
-        let result = tool.execute(json!({"operation": "activate_general"})).await;
+        // Knowledge normally auto-scopes to general, but override to workflow
+        let result = tool
+            .execute(json!({
+                "operation": "add",
+                "type": "knowledge",
+                "content": "Workflow-specific API endpoint documentation",
+                "scope": "workflow"
+            }))
+            .await;
         assert!(result.is_ok());
         let response = result.unwrap();
-        assert_eq!(response["scope"], "general");
+        assert_eq!(response["success"], true);
+        // Should be stored in workflow despite being knowledge
+        assert_eq!(response["workflow_id"], "wf_override");
     }
 }
 

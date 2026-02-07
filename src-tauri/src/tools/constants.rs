@@ -21,6 +21,31 @@ pub mod memory {
     pub const MAX_LIMIT: usize = 100;
     pub const DEFAULT_SIMILARITY_THRESHOLD: f64 = 0.7;
     pub const VALID_TYPES: &[&str] = &["user_pref", "context", "knowledge", "decision"];
+
+    // Importance defaults by memory type
+    pub const DEFAULT_IMPORTANCE: f64 = 0.5;
+    pub const IMPORTANCE_USER_PREF: f64 = 0.8;
+    pub const IMPORTANCE_DECISION: f64 = 0.7;
+    pub const IMPORTANCE_KNOWLEDGE: f64 = 0.6;
+    pub const IMPORTANCE_CONTEXT: f64 = 0.3;
+
+    // Compact list preview
+    pub const COMPACT_PREVIEW_LENGTH: usize = 100;
+
+    // TTL
+    pub const DEFAULT_CONTEXT_TTL_DAYS: i64 = 7;
+
+    // Scoring weights for composite search ranking
+    pub const SCORE_WEIGHT_COSINE: f64 = 0.70;
+    pub const SCORE_WEIGHT_IMPORTANCE: f64 = 0.15;
+    pub const SCORE_WEIGHT_RECENCY: f64 = 0.15;
+    pub const RECENCY_DECAY_DAYS: f64 = 30.0;
+
+    /// Types that are stored as general (cross-workflow) by default
+    pub const GENERAL_SCOPE_TYPES: &[&str] = &["user_pref", "knowledge"];
+    /// Types that are stored as workflow-scoped by default (complement of GENERAL_SCOPE_TYPES)
+    #[allow(dead_code)]
+    pub const WORKFLOW_SCOPE_TYPES: &[&str] = &["context", "decision"];
 }
 
 // ===== Todo Tool =====

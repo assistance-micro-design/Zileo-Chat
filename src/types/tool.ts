@@ -94,8 +94,8 @@ export interface ToolExecution {
 	server_name?: string;
 	/** Input parameters as JSON */
 	input_params: ToolInputParams;
-	/** Output result as JSON */
-	output_result: ToolOutputResult;
+	/** Output result as JSON (null when tool execution failed) */
+	output_result: ToolOutputResult | null;
 	/** Whether execution was successful */
 	success: boolean;
 	/** Error message if failed */
@@ -121,8 +121,8 @@ export interface WorkflowToolExecution {
 	server_name?: string;
 	/** Input parameters as JSON */
 	input_params: ToolInputParams;
-	/** Output result as JSON */
-	output_result: ToolOutputResult;
+	/** Output result as JSON (null when tool execution failed) */
+	output_result: ToolOutputResult | null;
 	/** Whether execution was successful */
 	success: boolean;
 	/** Error message if failed */

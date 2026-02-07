@@ -202,6 +202,87 @@ pub async fn get_memory_schema_status(
     })
 }
 
+/// SQL for migrating memory table to v2 schema.
+///
+/// Changes:
+/// - Add importance field (float, default 0.5)
+/// - Add expires_at field (option<datetime>)
+/// - Set importance for existing records to 0.5
+const MEMORY_V2_MIGRATION: &str = r#"
+-- Step 1: Add importance field with default
+DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
+
+-- Step 2: Add expires_at field for TTL
+DEFINE FIELD expires_at ON memory TYPE option<datetime>;
+
+-- Step 3: Set importance for existing records
+UPDATE memory SET importance = 0.5 WHERE importance IS NONE;
+"#;
+
+/// Migrates the memory table schema for v2 (importance + TTL).
+///
+/// This migration:
+/// - Adds importance field (float, default 0.5)
+/// - Adds expires_at field (option<datetime>) for TTL
+/// - Sets importance to 0.5 for existing records
+///
+/// # Returns
+/// Migration result with affected record count
+///
+/// # Safety
+/// This migration is idempotent and can be run multiple times.
+#[tauri::command]
+#[instrument(name = "migrate_memory_v2_schema", skip(state))]
+pub async fn migrate_memory_v2_schema(
+    state: State<'_, AppState>,
+) -> Result<MigrationResult, String> {
+    info!("Starting memory v2 schema migration (importance + TTL)");
+
+    // Count memories before migration
+    let count_query = "SELECT count() FROM memory GROUP ALL";
+    let count_before: Vec<serde_json::Value> = state.db.query(count_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count memories");
+        format!("Failed to count memories: {}", e)
+    })?;
+
+    let total_memories = count_before
+        .first()
+        .and_then(|v| v.get("count"))
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0) as usize;
+
+    info!(
+        total_memories = total_memories,
+        "Memories found before v2 migration"
+    );
+
+    // Run migration queries
+    let _: Vec<serde_json::Value> = state.db.query(MEMORY_V2_MIGRATION).await.map_err(|e| {
+        error!(error = %e, "Memory v2 schema migration failed");
+        format!("Memory v2 schema migration failed: {}", e)
+    })?;
+
+    let message = if total_memories > 0 {
+        format!(
+            "Memory v2 migration complete. {} memories updated with importance=0.5.",
+            total_memories
+        )
+    } else {
+        "Memory v2 migration complete. Schema updated. No existing memories to migrate.".to_string()
+    };
+
+    info!(
+        records_affected = total_memories,
+        "Memory v2 schema migration completed successfully"
+    );
+
+    Ok(MigrationResult {
+        success: true,
+        message,
+        records_affected: total_memories,
+    })
+}
+
 /// SQL for updating MCP server command field ASSERT constraint to include HTTP
 ///
 /// This migration adds 'http' to the allowed values for the command field,

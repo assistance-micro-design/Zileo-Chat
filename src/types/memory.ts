@@ -64,6 +64,10 @@ export interface Memory {
   workflow_id?: string;
   /** Additional metadata */
   metadata: MemoryMetadata;
+  /** Importance score (0.0-1.0, higher = more important) */
+  importance: number;
+  /** Optional expiration timestamp (ISO string, absent = permanent) */
+  expires_at?: string;
   /** Creation timestamp (ISO string from backend) */
   created_at: string;
 }
@@ -116,4 +120,24 @@ export interface MemorySearchResult {
   memory: Memory;
   /** Relevance score (0-1, higher is more relevant) */
   score: number;
+}
+
+/**
+ * Result of the describe operation - statistics about memories
+ */
+export interface MemoryDescribeResult {
+  /** Total number of matching memories */
+  total: number;
+  /** Count by memory type */
+  by_type: Record<string, number>;
+  /** All unique tags across matching memories */
+  tags: string[];
+  /** Number of workflow-scoped memories */
+  workflow_count: number;
+  /** Number of general (cross-workflow) memories */
+  general_count: number;
+  /** Oldest memory timestamp (ISO string) */
+  oldest?: string;
+  /** Newest memory timestamp (ISO string) */
+  newest?: string;
 }

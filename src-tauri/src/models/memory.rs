@@ -62,9 +62,19 @@ pub struct Memory {
     pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
+    /// Importance score (0.0-1.0, higher = more important)
+    #[serde(default = "default_importance")]
+    pub importance: f64,
+    /// Optional expiration timestamp for TTL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
     /// Creation timestamp (set by database)
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
+}
+
+fn default_importance() -> f64 {
+    0.5
 }
 
 /// Memory creation payload - only fields needed for creation
@@ -83,6 +93,15 @@ pub struct MemoryCreate {
     pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
+    /// Importance score (0.0-1.0)
+    pub importance: f64,
+    /// Optional expiration timestamp for TTL.
+    /// Not serialized into CONTENT - set via separate UPDATE with datetime cast
+    /// because SurrealDB SCHEMAFULL rejects ISO 8601 strings for option<datetime>.
+    /// The value is passed through AddMemoryParams -> set_expires_at_if_present().
+    #[serde(skip_serializing)]
+    #[allow(dead_code)]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl MemoryCreate {
@@ -94,6 +113,8 @@ impl MemoryCreate {
             content,
             workflow_id: None,
             metadata,
+            importance: 0.5,
+            expires_at: None,
         }
     }
 
@@ -110,22 +131,27 @@ impl MemoryCreate {
             content,
             workflow_id: Some(workflow_id),
             metadata,
+            importance: 0.5,
+            expires_at: None,
         }
     }
 
-    /// OPT-MEM-10: Unified builder accepting optional workflow_id
-    /// Eliminates the match branches in callers
+    /// Unified builder accepting optional workflow_id, importance, and expires_at
     pub fn build(
         memory_type: MemoryType,
         content: String,
         metadata: serde_json::Value,
         workflow_id: Option<String>,
+        importance: f64,
+        expires_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             memory_type: memory_type.to_string(),
             content,
             workflow_id,
             metadata,
+            importance,
+            expires_at,
         }
     }
 }
@@ -147,6 +173,13 @@ pub struct MemoryCreateWithEmbedding {
     pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
+    /// Importance score (0.0-1.0)
+    pub importance: f64,
+    /// Optional expiration timestamp for TTL.
+    /// Not serialized into CONTENT - set via separate UPDATE with datetime cast.
+    #[serde(skip_serializing)]
+    #[allow(dead_code)]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[allow(dead_code)] // Used by MemoryTool in Phase 3
@@ -164,6 +197,8 @@ impl MemoryCreateWithEmbedding {
             embedding,
             workflow_id: None,
             metadata,
+            importance: 0.5,
+            expires_at: None,
         }
     }
 
@@ -181,17 +216,20 @@ impl MemoryCreateWithEmbedding {
             embedding,
             workflow_id: Some(workflow_id),
             metadata,
+            importance: 0.5,
+            expires_at: None,
         }
     }
 
-    /// OPT-MEM-10: Unified builder accepting optional workflow_id
-    /// Eliminates the match branches in callers
+    /// Unified builder accepting optional workflow_id, importance, and expires_at
     pub fn build(
         memory_type: MemoryType,
         content: String,
         embedding: Vec<f32>,
         metadata: serde_json::Value,
         workflow_id: Option<String>,
+        importance: f64,
+        expires_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             memory_type: memory_type.to_string(),
@@ -199,6 +237,8 @@ impl MemoryCreateWithEmbedding {
             embedding,
             workflow_id,
             metadata,
+            importance,
+            expires_at,
         }
     }
 }
@@ -222,6 +262,12 @@ pub struct MemoryWithEmbedding {
     pub workflow_id: Option<String>,
     /// Additional metadata
     pub metadata: serde_json::Value,
+    /// Importance score (0.0-1.0)
+    #[serde(default = "default_importance")]
+    pub importance: f64,
+    /// Optional expiration timestamp for TTL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
     /// Creation timestamp
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
@@ -234,6 +280,27 @@ pub struct MemorySearchResult {
     pub memory: Memory,
     /// Relevance score (0-1, higher is more relevant)
     pub score: f64,
+}
+
+/// Result of the describe operation - statistics about memories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryDescribeResult {
+    /// Total number of matching memories
+    pub total: usize,
+    /// Count by memory type
+    pub by_type: std::collections::HashMap<String, usize>,
+    /// All unique tags across matching memories
+    pub tags: Vec<String>,
+    /// Number of workflow-scoped memories
+    pub workflow_count: usize,
+    /// Number of general (cross-workflow) memories
+    pub general_count: usize,
+    /// Oldest memory timestamp
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest: Option<DateTime<Utc>>,
+    /// Newest memory timestamp
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]
@@ -276,6 +343,8 @@ mod tests {
             content: "User prefers dark mode".to_string(),
             workflow_id: None,
             metadata: serde_json::json!({"source": "settings"}),
+            importance: 0.5,
+            expires_at: None,
             created_at: Utc::now(),
         };
 
@@ -283,13 +352,17 @@ mod tests {
         assert!(json.contains("\"type\":\"context\""));
         assert!(json.contains("\"content\":\"User prefers dark mode\""));
         assert!(json.contains("\"source\":\"settings\""));
+        assert!(json.contains("\"importance\":0.5"));
         // workflow_id should be omitted when None
         assert!(!json.contains("workflow_id"));
+        // expires_at should be omitted when None
+        assert!(!json.contains("expires_at"));
 
         let deserialized: Memory = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, memory.id);
         assert_eq!(deserialized.memory_type, memory.memory_type);
         assert_eq!(deserialized.content, memory.content);
+        assert!((deserialized.importance - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -300,6 +373,8 @@ mod tests {
             content: "Workflow specific memory".to_string(),
             workflow_id: Some("wf_123".to_string()),
             metadata: serde_json::json!({}),
+            importance: 0.3,
+            expires_at: None,
             created_at: Utc::now(),
         };
 
@@ -316,6 +391,8 @@ mod tests {
             embedding: vec![0.1, 0.2, 0.3],
             workflow_id: None,
             metadata: serde_json::json!({}),
+            importance: 0.6,
+            expires_at: None,
             created_at: Utc::now(),
         };
 
@@ -360,6 +437,8 @@ mod tests {
             content: "Chose SurrealDB for embedded database".to_string(),
             workflow_id: None,
             metadata: serde_json::json!({}),
+            importance: 0.7,
+            expires_at: None,
             created_at: Utc::now(),
         };
 
