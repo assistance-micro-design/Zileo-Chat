@@ -2,7 +2,8 @@
 
 ## Metadata
 - Date: 2026-02-08
-- Stack: Svelte 5.49.1 + Rust 1.91.1 + Tauri 2.10 + SurrealDB 2.5.0
+- Stack: Svelte 5.49.1 + Rust 1.93.0 + Tauri 2.10 + SurrealDB 2.5.0
+- Status: **IN PROGRESS** (Phases 1-4 complete, Phase 5 pending)
 - Complexity: medium
 - Branch: `feature/chat-bubble-redesign`
 
@@ -17,12 +18,12 @@
 - Excluded: Streaming text preview (user confirmed activity sidebar suffices), message edit/delete
 
 **Success Criteria**:
-- [ ] Bubble shows only the LLM response content, rendered as markdown
-- [ ] Metrics + tool usage displayed below the bubble in structured format
-- [ ] Copy button copies the response as markdown
-- [ ] TokenDisplay updates in real-time during workflow execution (output tokens + speed)
-- [ ] No regressions: existing messages still display correctly
-- [ ] Backward compatible: old messages (full report) still render gracefully
+- [x] Bubble shows only the LLM response content, rendered as markdown
+- [x] Metrics + tool usage displayed below the bubble in structured format
+- [x] Copy button copies the response as markdown
+- [ ] TokenDisplay updates in real-time during workflow execution (output tokens + speed) *(Phase 5 - pending)*
+- [x] No regressions: existing messages still display correctly
+- [x] Backward compatible: old messages (full report) still render gracefully
 
 ## Architecture
 
@@ -347,13 +348,9 @@ New messages will have `content` = response only. Both render correctly through 
     message.duration_ms
   );
 
-  function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-
-  // REUSE existing utility (inventory: utilities.frontend.formatTokenCount)
+  // REUSE existing utilities
   import { formatTokenCount } from '$lib/utils/activity';
+  import { formatDuration } from '$lib/utils/duration';
 </script>
 
 {#if hasMetrics}
@@ -463,11 +460,12 @@ export interface Message {
 
 ```typescript
 import { get } from 'svelte/store';
+import { activeSubAgents } from '$lib/stores/streaming';
 import type { SubAgentSummary } from '$types/message';
 
 // After invoke() returns result, before streaming reset:
-const streamState = get(streamingStore);
-const subAgentSummaries: SubAgentSummary[] = streamState.subAgents
+const subAgents = get(activeSubAgents);
+const subAgentSummaries: SubAgentSummary[] = subAgents
   .filter(a => a.status === 'completed' || a.status === 'error')
   .map(a => ({
     name: a.name,
@@ -484,7 +482,7 @@ if (subAgentSummaries.length > 0) {
 }
 ```
 
-**Note**: This data is transient (only in current session). On message reload from DB, `sub_agents` will be `undefined` and the section won't render. This is acceptable: the Activity Sidebar provides full persistent sub-agent history.
+**Note**: Sub-agent data is captured from the streaming store during the current session. On reload, `MessageService.loadWithSubAgents()` enriches messages from the `sub_agent_execution` DB table, so chips persist across reloads.
 
 ##### 3.4.3 Display sub-agents in MessageMetrics
 
@@ -662,9 +660,9 @@ const contextUsed = $derived(
 
 | Package | Version | Size | Purpose |
 |---------|---------|------|---------|
-| `marked` | ^15.0.0 | ~40KB | Markdown to HTML parser |
-| `dompurify` | ^3.2.0 | ~15KB | XSS sanitization |
-| `@types/dompurify` | ^3.2.0 | dev | TypeScript types |
+| `marked` | ^17.0.1 | ~40KB | Markdown to HTML parser |
+| `dompurify` | ^3.3.1 | ~15KB | XSS sanitization |
+| `@types/dompurify` | ^3.0.5 | dev | TypeScript types |
 
 ## Risks
 
@@ -676,7 +674,7 @@ const contextUsed = $derived(
 | `marked` bundle size | Low | Low | 40KB acceptable; could lazy-load if needed |
 | Token events not reaching frontend | Medium | Medium | Phase 5 investigation step; fallback to cumulative |
 
-## i18n Keys Needed
+## i18n Keys Used
 
 | Key | EN | FR |
 |-----|----|----|

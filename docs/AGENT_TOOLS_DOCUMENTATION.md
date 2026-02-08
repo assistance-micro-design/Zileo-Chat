@@ -172,37 +172,42 @@ enabled = ["TodoTool", "SurrealDBTool"]
 
 | Operation | Description | Parametres requis |
 |-----------|-------------|-------------------|
-| `activate_workflow` | Activation scope workflow | `workflow_id` |
-| `activate_general` | Mode general (cross-workflow) | (aucun) |
-| `add` | Ajout memoire avec embedding | `type`, `content` |
+| `describe` | Decouverte: stats des memoires par type/scope | (aucun) |
+| `add` | Ajout memoire avec embedding + auto-scoping | `type`, `content` |
 | `get` | Lecture par ID | `memory_id` |
-| `list` | Liste avec filtres | (aucun) |
-| `search` | Recherche semantique | `query` |
+| `list` | Liste avec filtres (mode `compact` ou `full`) | (aucun) |
+| `search` | Recherche semantique composite (cosine + importance + recency) | `query` |
 | `delete` | Suppression | `memory_id` |
 | `clear_by_type` | Suppression en masse par type | `type` |
 
+**Auto-scoping (v2)**: Le scope est determine automatiquement par le type de memoire :
+- `user_pref`, `knowledge` → scope general (cross-workflow)
+- `context`, `decision` → scope workflow (lie au workflow courant)
+- Override possible via le parametre `scope`
+
+**Scoring composite (v2)**: `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`
+
 ### Exemples d'Utilisation
 
-**Activation scope workflow**:
+**Decouverte (describe) - a appeler en premier**:
 ```json
 {
-  "operation": "activate_workflow",
-  "workflow_id": "wf_abc123"
+  "operation": "describe"
 }
 ```
 
-**Ajout memoire avec embedding**:
+**Ajout memoire (auto-scoping)**:
 ```json
 {
   "operation": "add",
   "type": "knowledge",
   "content": "SurrealDB supports HNSW vector indexing for semantic search",
-  "metadata": {"priority": 0.8},
+  "importance": 0.8,
   "tags": ["database", "vector-search"]
 }
 ```
 
-**Recherche semantique**:
+**Recherche semantique (scoring composite)**:
 ```json
 {
   "operation": "search",
@@ -212,11 +217,12 @@ enabled = ["TodoTool", "SurrealDBTool"]
 }
 ```
 
-**Liste filtree**:
+**Liste compacte (mode compact pour economiser les tokens)**:
 ```json
 {
   "operation": "list",
   "type_filter": "knowledge",
+  "mode": "compact",
   "limit": 20
 }
 ```
@@ -230,6 +236,8 @@ enabled = ["TodoTool", "SurrealDBTool"]
   "content": "string (max 50000 chars)",
   "embedding": [0.1, 0.2, ...],
   "workflow_id": "string?",
+  "importance": 0.5,
+  "expires_at": "datetime? (auto-set for context: 7 days)",
   "metadata": {
     "agent_source": "string",
     "priority": 0.0-1.0,
@@ -238,6 +246,9 @@ enabled = ["TodoTool", "SurrealDBTool"]
   "created_at": "datetime"
 }
 ```
+
+**Importance par defaut**: user_pref=0.8, decision=0.7, knowledge=0.6, context=0.3
+**TTL automatique**: Les memoires `context` expirent apres 7 jours par defaut
 
 ### Cas d'Usage
 - **Préférences utilisateur** : Stockage personnalisation interface, modèles préférés

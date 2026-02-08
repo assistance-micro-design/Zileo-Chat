@@ -87,32 +87,28 @@ Représente un workflow multi-agents avec son cycle de vie complet.
 
 ### memory
 
-Stockage vectoriel pour RAG et contexte agent.
+Stockage vectoriel pour RAG et contexte agent. Supporte l'auto-scoping, l'importance et le TTL (Memory Tool v2).
 
 **Champs**
 - `id` : UUID
-- `type` : enum (user_pref, context, knowledge, decision)
-- `content` : string (texte indexé)
-- `embedding` : array<float> (vecteur 768D-3072D selon provider)
+- `type` : string ASSERT IN [user_pref, context, knowledge, decision]
+- `content` : string (texte indexe)
+- `embedding` : option<array<float>> (vecteur 768D-3072D selon provider)
+- `workflow_id` : option<string> (auto-set par scope)
+- `importance` : float DEFAULT 0.5 (0.0-1.0, poids dans le scoring composite)
+- `expires_at` : option<datetime> (TTL, auto-set a 7j pour context)
 - `metadata` : object
-  - `agent_source` : string
-  - `timestamp` : datetime
-  - `workflow_id` : UUID?
-  - `priority` : float (0.0-1.0)
-  - `tags` : array<string>
-- `relations` : array<UUID> (liens vers autres mémoires)
+  - `agent_source` : option<string>
+  - `priority` : option<float> (0.0-1.0)
+  - `tags` : option<array<string>>
+- `created_at` : datetime DEFAULT time::now()
 
 **Relations**
-- → `workflow` (optionnel, si workflow-specific)
-- → `agent_state` (créateur)
-- ↔ `memory[]` (relations sémantiques)
+- → `workflow` (optionnel, auto-set par scope type)
 
 **Indexes**
-- `type` (filtrage categorie)
-- `embedding` (HNSW vectoriel, KNN search)
-- `metadata.agent_source` (memoires par agent)
-- `metadata.workflow_id` (scope workflow)
-- `metadata.timestamp` (retention policy)
+- `memory_vec_idx` : embedding (HNSW vectoriel, KNN search)
+- `memory_workflow_idx` : workflow_id (scope workflow)
 
 **Index Composites (OPT-MEM-4)**:
 - `memory_type_workflow_idx` ON (type, workflow_id) - Optimise search_memories() avec type + workflow

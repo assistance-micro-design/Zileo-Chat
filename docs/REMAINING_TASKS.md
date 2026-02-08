@@ -334,7 +334,7 @@ The following items from original specs were intentionally not implemented:
 | Type-safe Invoke Helpers | Direct `invoke<T>()` with TypeScript generics is sufficient |
 | CRUD Factory Pattern | Pure function pattern used instead - equally effective, more explicit |
 | `interaction_tools()` method | Registry uses `basic_tools()` and `sub_agent_tools()` categories - sufficient |
-| rig-core 0.26.0 upgrade | Breaking changes, requires extensive testing in staging |
+| ~~rig-core 0.26.0 upgrade~~ | **DONE** - Upgraded to 0.30.0 (commit 04d7220, 2026-02-06) |
 | Real streaming (non-simulated) | Requires rig-core investigation, current simulation adequate |
 | Context window manager | Post-v1, needed only for long conversations |
 | Automatic fallback | Complex, requires circuit breaker maturity data |

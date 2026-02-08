@@ -7,7 +7,7 @@
 
 ```
 Frontend  : SvelteKit 2.49.1 | Svelte 5.49.1
-Backend   : Rust 1.91.1 + Tauri 2
+Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB 2.5.0 (protocol-http enabled)
 Desktop   : Tauri (cross-platform)
 ```
