@@ -36,8 +36,10 @@ pub struct Report {
     pub task_id: String,
     /// Report status
     pub status: ReportStatus,
-    /// Markdown content
+    /// Full markdown report content (for DB/export)
     pub content: String,
+    /// Pure LLM response content only (for display in chat bubble)
+    pub response: String,
     /// Execution metrics
     pub metrics: ReportMetrics,
     /// System prompt used (for persistence on first message)

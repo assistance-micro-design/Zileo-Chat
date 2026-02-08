@@ -59,10 +59,13 @@
 
 	/**
 	 * Calculate context usage percentage
-	 * Uses tokens_input which represents the actual context size at last API call
-	 * (not cumulative, but the real context window usage)
+	 * Uses tokens_input which represents the actual context size at last API call.
+	 * During streaming, tokens_input is 0 (not yet known), so falls back to
+	 * cumulative_input for a rough estimate of context window usage.
 	 */
-	const contextUsed = $derived(data.tokens_input);
+	const contextUsed = $derived(
+		data.tokens_input > 0 ? data.tokens_input : data.cumulative_input
+	);
 	const contextPercentage = $derived(
 		data.context_max > 0 ? Math.min((contextUsed / data.context_max) * 100, 100) : 0
 	);

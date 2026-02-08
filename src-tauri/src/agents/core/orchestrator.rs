@@ -210,6 +210,7 @@ mod tests {
                 task_id: task.id.clone(),
                 status: ReportStatus::Success,
                 content: format!("Report from agent {}: {}", self.config.id, task.description),
+                response: format!("Report from agent {}: {}", self.config.id, task.description),
                 metrics: ReportMetrics {
                     duration_ms: self.delay_ms,
                     tokens_input: 0,

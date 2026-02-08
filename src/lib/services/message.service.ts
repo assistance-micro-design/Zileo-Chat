@@ -24,9 +24,11 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Message } from '$types/message';
+import type { Message, SubAgentSummary } from '$types/message';
+import type { SubAgentExecution } from '$types/sub-agent';
 import type { WorkflowMetrics } from '$types/workflow';
 import { getErrorMessage } from '$lib/utils/error';
+import { ActivityService } from '$lib/services/activity.service';
 
 /**
  * Parameters for creating a message via save_message command.
@@ -36,6 +38,55 @@ interface MessageCreate {
 	role: 'user' | 'assistant' | 'system';
 	content: string;
 	metrics?: WorkflowMetrics;
+}
+
+/**
+ * Enrich messages with sub-agent execution data from the database.
+ *
+ * For each completed/error sub-agent execution, finds the first assistant message
+ * whose timestamp >= the execution's completion time (or creation time as fallback),
+ * then attaches a SubAgentSummary to that message's sub_agents array.
+ *
+ * @param messages - Messages sorted chronologically
+ * @param executions - Sub-agent executions for the same workflow
+ * @returns Messages with sub_agents populated where applicable
+ */
+function enrichMessagesWithSubAgents(
+	messages: Message[],
+	executions: SubAgentExecution[]
+): Message[] {
+	const terminal = executions.filter((e) => e.status === 'completed' || e.status === 'error');
+	if (terminal.length === 0) return messages;
+
+	const assistantMessages = messages.filter((m) => m.role === 'assistant');
+	if (assistantMessages.length === 0) return messages;
+
+	for (const exec of terminal) {
+		const execTime = exec.completed_at ?? exec.created_at;
+		const execDate = new Date(execTime);
+
+		const target = assistantMessages.find((m) => new Date(m.timestamp) >= execDate);
+		if (!target) continue;
+
+		const summary: SubAgentSummary = {
+			name: exec.sub_agent_name,
+			status: exec.status as 'completed' | 'error',
+			duration_ms: exec.duration_ms,
+			tokens_input: exec.tokens_input,
+			tokens_output: exec.tokens_output
+		};
+
+		if (!target.sub_agents) {
+			target.sub_agents = [];
+		}
+
+		const alreadyExists = target.sub_agents.some((s) => s.name === summary.name);
+		if (!alreadyExists) {
+			target.sub_agents.push(summary);
+		}
+	}
+
+	return messages;
 }
 
 /**
@@ -56,6 +107,28 @@ export const MessageService = {
 			return { messages };
 		} catch (e) {
 			console.error('Failed to load messages:', e);
+			return { messages: [], error: getErrorMessage(e) };
+		}
+	},
+
+	/**
+	 * Load messages with sub-agent data enrichment.
+	 *
+	 * Loads messages and sub-agent executions in parallel, then correlates
+	 * executions to assistant messages by timestamp.
+	 *
+	 * @param workflowId - Workflow ID to load messages for
+	 * @returns Object containing enriched messages array and optional error message
+	 */
+	async loadWithSubAgents(workflowId: string): Promise<{ messages: Message[]; error?: string }> {
+		try {
+			const [messages, executions] = await Promise.all([
+				invoke<Message[]>('load_workflow_messages', { workflowId }),
+				ActivityService.loadSubAgentExecutions(workflowId)
+			]);
+			return { messages: enrichMessagesWithSubAgents(messages, executions) };
+		} catch (e) {
+			console.error('Failed to load messages with sub-agents:', e);
 			return { messages: [], error: getErrorMessage(e) };
 		}
 	},
