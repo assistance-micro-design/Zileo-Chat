@@ -795,13 +795,15 @@ impl Agent for LLMAgent {
             Ok(pt) => pt,
             Err(e) => {
                 error!(error = %e, "Invalid provider type in config");
+                let error_msg = format!("Invalid provider configuration: {}", e);
                 return Ok(Report {
                     task_id: task.id.clone(),
                     status: ReportStatus::Failed,
                     content: format!(
-                        "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\nInvalid provider configuration: {}",
-                        self.config.id, task.description, e
+                        "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n{}",
+                        self.config.id, task.description, error_msg
                     ),
+                    response: error_msg,
                     metrics: ReportMetrics {
                         duration_ms: start.elapsed().as_millis() as u64,
                         tokens_input: 0,
@@ -823,13 +825,18 @@ impl Agent for LLMAgent {
                 ?provider_type,
                 "Provider not configured, returning configuration error"
             );
+            let error_msg = format!(
+                "LLM provider '{}' is not configured. Please configure it in Settings.",
+                provider_type
+            );
             return Ok(Report {
                 task_id: task.id.clone(),
                 status: ReportStatus::Failed,
                 content: format!(
-                    "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\nLLM provider '{}' is not configured. Please configure it in Settings.",
-                    self.config.id, task.description, provider_type
+                    "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n{}",
+                    self.config.id, task.description, error_msg
                 ),
+                response: error_msg,
                 metrics: ReportMetrics {
                     duration_ms: start.elapsed().as_millis() as u64,
                     tokens_input: 0,
@@ -837,7 +844,7 @@ impl Agent for LLMAgent {
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
-                        reasoning_steps: vec![],
+                    reasoning_steps: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -886,6 +893,7 @@ impl Agent for LLMAgent {
                     task_id: task.id,
                     status: ReportStatus::Success,
                     content,
+                    response: response.content.clone(),
                     metrics: ReportMetrics {
                         duration_ms,
                         tokens_input: response.tokens_input,
@@ -930,6 +938,7 @@ impl Agent for LLMAgent {
                     task_id: task.id,
                     status: ReportStatus::Failed,
                     content,
+                    response: error_message,
                     metrics: ReportMetrics {
                         duration_ms,
                         tokens_input: 0,
@@ -988,13 +997,15 @@ impl Agent for LLMAgent {
             Ok(pt) => pt,
             Err(e) => {
                 error!(error = %e, "Invalid provider type in config");
+                let error_msg = format!("Invalid provider configuration: {}", e);
                 return Ok(Report {
                     task_id: task.id.clone(),
                     status: ReportStatus::Failed,
                     content: format!(
-                        "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\nInvalid provider configuration: {}",
-                        self.config.id, task.description, e
+                        "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n{}",
+                        self.config.id, task.description, error_msg
                     ),
+                    response: error_msg,
                     metrics: ReportMetrics {
                         duration_ms: start.elapsed().as_millis() as u64,
                         tokens_input: 0,
@@ -1016,13 +1027,18 @@ impl Agent for LLMAgent {
                 ?provider_type,
                 "Provider not configured, returning configuration error"
             );
+            let error_msg = format!(
+                "LLM provider '{}' is not configured. Please configure it in Settings.",
+                provider_type
+            );
             return Ok(Report {
                 task_id: task.id.clone(),
                 status: ReportStatus::Failed,
                 content: format!(
-                    "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\nLLM provider '{}' is not configured. Please configure it in Settings.",
-                    self.config.id, task.description, provider_type
+                    "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n{}",
+                    self.config.id, task.description, error_msg
                 ),
+                response: error_msg,
                 metrics: ReportMetrics {
                     duration_ms: start.elapsed().as_millis() as u64,
                     tokens_input: 0,
@@ -1030,7 +1046,7 @@ impl Agent for LLMAgent {
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
-                        reasoning_steps: vec![],
+                    reasoning_steps: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -1268,6 +1284,7 @@ impl Agent for LLMAgent {
                             "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n\n{}",
                             self.config.id, task.description, error_message
                         ),
+                        response: error_message,
                         metrics: ReportMetrics {
                             duration_ms: start.elapsed().as_millis() as u64,
                             tokens_input: total_tokens_input,
@@ -1461,6 +1478,7 @@ impl Agent for LLMAgent {
             task_id: task.id,
             status: ReportStatus::Success,
             content,
+            response: final_response_content,
             metrics: ReportMetrics {
                 duration_ms,
                 tokens_input: total_tokens_input,

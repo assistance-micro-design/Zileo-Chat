@@ -643,6 +643,7 @@ pub async fn execute_workflow_streaming(
     // Build result with calculated cost
     let result = WorkflowResult {
         report: report.content,
+        response: report.response,
         metrics: WorkflowMetrics {
             duration_ms: report.metrics.duration_ms,
             tokens_input: report.metrics.tokens_input,

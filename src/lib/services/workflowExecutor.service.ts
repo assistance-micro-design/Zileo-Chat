@@ -36,11 +36,12 @@
  * @module lib/services/workflowExecutor
  */
 
-import type { Message } from '$types/message';
+import type { Message, SubAgentSummary } from '$types/message';
 import type { Workflow, WorkflowMetrics, WorkflowResult } from '$types/workflow';
 import { MessageService } from './message.service';
 import { WorkflowService } from './workflow.service';
-import { streamingStore } from '$lib/stores/streaming';
+import { streamingStore, activeSubAgents } from '$lib/stores/streaming';
+import { get } from 'svelte/store';
 import { tokenStore } from '$lib/stores/tokens';
 import { activityStore } from '$lib/stores/activity';
 import { workflowStore } from '$lib/stores/workflows';
@@ -126,7 +127,7 @@ function createAssistantMessage(workflowId: string, result: WorkflowResult): Mes
 		id: crypto.randomUUID(),
 		workflow_id: workflowId,
 		role: 'assistant',
-		content: result.report,
+		content: result.response,
 		tokens: result.metrics.tokens_output,
 		tokens_input: result.metrics.tokens_input,
 		tokens_output: result.metrics.tokens_output,
@@ -263,12 +264,26 @@ export const WorkflowExecutorService = {
 			// Step 5: Save assistant response (always persist to DB)
 			const assistantMessageId = await MessageService.saveAssistant(
 				workflowId,
-				workflowResult.report,
+				workflowResult.response,
 				workflowResult.metrics
 			);
 			// Only push to UI if still viewing this workflow
 			if (isStillViewed()) {
 				const assistantMessage = createAssistantMessage(workflowId, workflowResult);
+				// Capture sub-agent summaries from streaming state (transient, current session only)
+				const subAgents = get(activeSubAgents);
+				const subAgentSummaries: SubAgentSummary[] = subAgents
+					.filter(a => a.status === 'completed' || a.status === 'error')
+					.map(a => ({
+						name: a.name,
+						status: a.status as 'completed' | 'error',
+						duration_ms: a.metrics?.duration_ms,
+						tokens_input: a.metrics?.tokens_input,
+						tokens_output: a.metrics?.tokens_output,
+					}));
+				if (subAgentSummaries.length > 0) {
+					assistantMessage.sub_agents = subAgentSummaries;
+				}
 				callbacks?.onAssistantMessage?.(assistantMessage);
 			}
 

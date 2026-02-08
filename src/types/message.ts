@@ -23,6 +23,23 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
+ * Summary of a sub-agent execution (frontend-only, not persisted in message).
+ * Captured from StreamingState during current session.
+ */
+export interface SubAgentSummary {
+  /** Sub-agent name */
+  name: string;
+  /** Execution status */
+  status: 'completed' | 'error';
+  /** Duration in milliseconds */
+  duration_ms?: number;
+  /** Input tokens consumed */
+  tokens_input?: number;
+  /** Output tokens generated */
+  tokens_output?: number;
+}
+
+/**
  * Message entity representing a conversation message with optional metrics.
  *
  * Extended in Phase 6 to include token counts, model info, cost, and duration
@@ -53,6 +70,8 @@ export interface Message {
   duration_ms?: number;
   /** Message timestamp */
   timestamp: Date;
+  /** Sub-agent summaries (transient, captured from StreamingState) */
+  sub_agents?: SubAgentSummary[];
 }
 
 /**

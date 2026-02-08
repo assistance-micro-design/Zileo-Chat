@@ -130,7 +130,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 		try {
 			// Load messages
-			const result = await MessageService.load(workflowId);
+			const result = await MessageService.loadWithSubAgents(workflowId);
 			pageState.messages = result.messages;
 			if (result.error) {
 				console.error('Error loading messages:', result.error);

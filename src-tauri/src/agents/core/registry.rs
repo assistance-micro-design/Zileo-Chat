@@ -187,6 +187,7 @@ mod tests {
                 task_id: task.id,
                 status: ReportStatus::Success,
                 content: "Test report".to_string(),
+                response: "Test report".to_string(),
                 metrics: ReportMetrics {
                     duration_ms: 10,
                     tokens_input: 0,

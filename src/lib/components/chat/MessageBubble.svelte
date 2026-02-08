@@ -17,14 +17,15 @@
 <!--
   MessageBubble Component
   A chat message bubble for user or assistant messages.
-  Supports markdown rendering, code highlighting, and timestamps.
+  Supports markdown rendering for assistant messages, timestamps, and copy functionality.
 
   @example
   <MessageBubble message={msg} isUser={false} />
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Hash } from '@lucide/svelte';
+	import { Clock, Copy, Check } from '@lucide/svelte';
+	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -44,6 +45,19 @@
 	 */
 	const isUserMessage = $derived(isUser ?? message.role === 'user');
 
+	let copied = $state(false);
+
+	/**
+	 * Copy message content as markdown to clipboard
+	 */
+	async function copyContent(): Promise<void> {
+		await navigator.clipboard.writeText(message.content);
+		copied = true;
+		setTimeout(() => {
+			copied = false;
+		}, 2000);
+	}
+
 	/**
 	 * Format timestamp for display
 	 */
@@ -55,18 +69,29 @@
 
 <div class="message-bubble" class:user={isUserMessage} class:assistant={!isUserMessage}>
 	<div class="message-content">
-		{message.content}
+		{#if isUserMessage}
+			{message.content}
+		{:else}
+			<MarkdownRenderer content={message.content} />
+		{/if}
 	</div>
-	<div class="message-meta">
+	<div class="message-footer">
 		<span class="message-time">
 			<Clock size={12} />
 			{formatTime(message.timestamp)}
 		</span>
-		{#if message.tokens > 0}
-			<span class="message-tokens">
-				<Hash size={12} />
-				{$i18n('chat_tokens').replace('{count}', String(message.tokens))}
-			</span>
+		{#if !isUserMessage}
+			<button
+				class="copy-button"
+				onclick={copyContent}
+				aria-label={$i18n('chat_copy_arialabel')}
+			>
+				{#if copied}
+					<Check size={14} />
+				{:else}
+					<Copy size={14} />
+				{/if}
+			</button>
 		{/if}
 	</div>
 </div>
@@ -77,6 +102,7 @@
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-lg);
 		animation: fadeIn 0.3s ease-in;
+		position: relative;
 	}
 
 	.message-bubble.user {
@@ -95,41 +121,62 @@
 	.message-content {
 		font-size: var(--font-size-sm);
 		line-height: var(--line-height-relaxed);
-		white-space: pre-wrap;
 		word-break: break-word;
 	}
 
-	/* Code blocks within messages */
-	.message-content :global(code) {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-tertiary);
-		border-radius: var(--border-radius-sm);
+	/* User messages: plain text with pre-wrap */
+	.message-bubble.user .message-content {
+		white-space: pre-wrap;
 	}
 
-	.message-meta {
+	.message-footer {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: var(--spacing-md);
 		margin-top: var(--spacing-sm);
 		font-size: var(--font-size-xs);
 		opacity: 0.7;
 	}
 
-	.message-time,
-	.message-tokens {
+	.message-time {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
 	}
 
-	.message-bubble.user .message-meta {
+	.message-bubble.user .message-footer {
 		color: var(--color-text-inverse);
 	}
 
-	.message-bubble.assistant .message-meta {
+	.message-bubble.assistant .message-footer {
 		color: var(--color-text-tertiary);
+	}
+
+	.copy-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-xs);
+		border: none;
+		background: transparent;
+		color: var(--color-text-tertiary);
+		cursor: pointer;
+		border-radius: var(--border-radius-sm);
+		opacity: 0;
+		transition:
+			opacity 0.2s ease,
+			color 0.2s ease,
+			background-color 0.2s ease;
+	}
+
+	.message-bubble.assistant:hover .copy-button {
+		opacity: 1;
+	}
+
+	.copy-button:hover {
+		color: var(--color-text-primary);
+		background: var(--color-bg-tertiary);
 	}
 
 	@keyframes fadeIn {

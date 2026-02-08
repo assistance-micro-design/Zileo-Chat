@@ -5,6 +5,36 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-02-08
+
+### Added
+
+- **Chat Bubble Redesign (Phases 1-4)**: Redesigned message display with structured content separation
+  - Backend `response` field on `Report` and `WorkflowResult` for clean LLM output extraction
+  - `MarkdownRenderer` component: safe markdown rendering using `marked` + `DOMPurify` with link interception
+  - `MessageMetrics` component: model, tokens, duration, cost display below assistant messages
+  - Sub-agent chips on assistant messages (name, status, duration, tokens)
+  - Copy button with 2-second visual feedback on assistant messages
+  - Backward compatible: old messages (full report) still render gracefully via `MarkdownRenderer`
+- **Sub-agent chips persistence**: Sub-agent execution data now survives page reload
+  - `enrichMessagesWithSubAgents()` correlates `sub_agent_execution` DB records to messages by timestamp
+  - `MessageService.loadWithSubAgents()` loads messages and executions in parallel
+- **Dependencies**: `marked` ^17.0.1, `dompurify` ^3.3.1, `@types/dompurify` ^3.0.5
+
+### Changed
+
+- `MessageBubble` uses `MarkdownRenderer` for assistant messages instead of `pre-wrap` plain text
+- `workflowExecutor.service.ts` extracts `result.response` for assistant message content
+- `WorkflowResult` TypeScript type includes `response: string` field
+
+### Documentation
+
+- Synced all docs with codebase: version corrections, Memory Tool v2 operations, DB schema updates
+- Removed 4 completed spec documents (background workflow, rig-core upgrade, activity sidebar v2, memory tool v2)
+- Updated CLAUDE.md, TECH_STACK.md, README.md, AGENT_TOOLS_DOCUMENTATION.md, DATABASE_SCHEMA.md, REMAINING_TASKS.md
+
+---
+
 ## [0.10.0] - 2026-02-07
 
 ### Added
@@ -270,10 +300,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.11.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.11.0
 [0.10.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.10.0
 [0.9.4]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.4
 [0.9.3]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.3
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.11.0...HEAD

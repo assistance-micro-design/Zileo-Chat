@@ -207,6 +207,7 @@ pub async fn execute_workflow(
 
     let result = WorkflowResult {
         report: report.content,
+        response: report.response,
         metrics: WorkflowMetrics {
             duration_ms: report.metrics.duration_ms,
             tokens_input: report.metrics.tokens_input,
@@ -628,6 +629,7 @@ mod tests {
     async fn test_workflow_result_structure() {
         let result = WorkflowResult {
             report: "# Test Report\n\nContent here".to_string(),
+            response: "Content here".to_string(),
             metrics: WorkflowMetrics {
                 duration_ms: 100,
                 tokens_input: 50,

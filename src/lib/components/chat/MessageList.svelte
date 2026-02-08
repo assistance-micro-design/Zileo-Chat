@@ -25,6 +25,7 @@
 <script lang="ts">
 	import type { Message } from '$types/message';
 	import MessageBubble from './MessageBubble.svelte';
+	import MessageMetrics from './MessageMetrics.svelte';
 	import { tick } from 'svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -84,6 +85,9 @@
 		{#each messages as message (message.id)}
 			<div class="message-wrapper" class:optimize={enablePerformanceMode}>
 				<MessageBubble {message} />
+				{#if message.role === 'assistant'}
+					<MessageMetrics {message} />
+				{/if}
 			</div>
 		{/each}
 	{/if}

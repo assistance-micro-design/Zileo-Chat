@@ -71,6 +71,7 @@ impl Agent for SimpleAgent {
         let report = Report {
             task_id: task.id.clone(),
             status: ReportStatus::Success,
+            response: task.description.clone(),
             content,
             metrics: ReportMetrics {
                 duration_ms,
