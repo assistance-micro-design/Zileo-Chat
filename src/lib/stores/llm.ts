@@ -392,7 +392,7 @@ export function getProviderSettingsFromState(
 	state: LLMState,
 	provider: ProviderType
 ): ProviderSettings | null {
-	return state.providers[provider];
+	return state.providers[provider] ?? null;
 }
 
 /**

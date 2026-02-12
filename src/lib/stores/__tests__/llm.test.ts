@@ -101,8 +101,8 @@ describe('LLM Store', () => {
 		it('should create empty initial state', () => {
 			const state = createInitialLLMState();
 
-			expect(state.providers.mistral).toBeNull();
-			expect(state.providers.ollama).toBeNull();
+			expect(state.providers.mistral).toBeUndefined();
+			expect(state.providers.ollama).toBeUndefined();
 			expect(state.models).toEqual([]);
 			expect(state.activeProvider).toBeNull();
 			expect(state.loading).toBe(false);
@@ -282,7 +282,7 @@ describe('LLM Store', () => {
 
 			expect(state.providers.mistral).toBeDefined();
 			expect(state.providers.mistral?.api_key_configured).toBe(true);
-			expect(state.providers.ollama).toBeNull();
+			expect(state.providers.ollama).toBeUndefined();
 		});
 
 		it('should set ollama settings', () => {
@@ -292,7 +292,7 @@ describe('LLM Store', () => {
 
 			expect(state.providers.ollama).toBeDefined();
 			expect(state.providers.ollama?.default_model_id).toBe('llama3');
-			expect(state.providers.mistral).toBeNull();
+			expect(state.providers.mistral).toBeUndefined();
 		});
 	});
 
@@ -646,7 +646,7 @@ describe('LLM Store', () => {
 			const settings = createMockProviderSettings('mistral');
 			const newState = setProviderSettings(initialState, 'mistral', settings);
 
-			expect(initialState.providers.mistral).toBeNull();
+			expect(initialState.providers.mistral).toBeUndefined();
 			expect(newState.providers.mistral).toBeDefined();
 		});
 	});
