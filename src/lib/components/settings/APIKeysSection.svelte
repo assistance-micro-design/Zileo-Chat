@@ -31,17 +31,24 @@ Manages API key configuration modal for LLM providers.
 		open: boolean;
 		/** Current provider being configured */
 		provider: ProviderType;
+		/** Optional display name for the provider (custom providers) */
+		providerDisplayName?: string;
 		/** Provider settings (for Ollama base_url) */
 		providerSettings: ProviderSettings | null;
 		/** Whether provider has API key configured */
 		hasApiKey: boolean;
+		/** Whether this is a custom provider */
+		isCustom?: boolean;
 		/** Close modal callback */
 		onclose: () => void;
 		/** Reload LLM data callback (after save/delete) */
 		onReload: () => void;
 	}
 
-	let { open, provider, providerSettings, hasApiKey, onclose, onReload }: Props = $props();
+	let { open, provider, providerDisplayName, providerSettings, hasApiKey, isCustom = false, onclose, onReload }: Props = $props();
+
+	/** Whether this provider requires an API key (not ollama) */
+	const requiresApiKey = $derived(provider !== 'ollama');
 
 	/** Form state */
 	let apiKey = $state('');
@@ -119,7 +126,7 @@ Manages API key configuration modal for LLM providers.
 
 <Modal
 	{open}
-	title={provider === 'mistral' ? $i18n('api_key_modal_mistral') : $i18n('api_key_modal_ollama')}
+	title={provider === 'ollama' ? $i18n('api_key_modal_ollama') : (isCustom ? `${$i18n('llm_provider_configure')} ${providerDisplayName ?? provider}` : $i18n('api_key_modal_mistral'))}
 	onclose={() => onclose()}
 >
 	{#snippet body()}
@@ -141,7 +148,11 @@ Manages API key configuration modal for LLM providers.
 				</div>
 			{:else}
 				<p class="api-key-info">
-					{$i18n('api_key_mistral_info')}
+					{#if isCustom}
+						{$i18n('llm_custom_provider_api_key')}
+					{:else}
+						{$i18n('api_key_mistral_info')}
+					{/if}
 				</p>
 				<Input
 					type="password"
@@ -171,7 +182,7 @@ Manages API key configuration modal for LLM providers.
 			<Button variant="ghost" onclick={() => onclose()} disabled={saving}>
 				{$i18n('common_cancel')}
 			</Button>
-			{#if provider === 'mistral'}
+			{#if requiresApiKey}
 				{#if hasApiKey}
 					<Button
 						variant="danger"

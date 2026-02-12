@@ -40,6 +40,7 @@ pub mod embedding;
 mod manager;
 mod mistral;
 mod ollama;
+pub mod openai_compatible;
 pub mod pricing;
 mod provider;
 pub mod retry;
@@ -75,6 +76,10 @@ pub use embedding::{
 // Tool adapter exports for JSON function calling
 // Exported for public API but consumed directly from submodules internally
 #[allow(unused_imports)]
-pub use adapters::{MistralToolAdapter, OllamaToolAdapter};
+pub use adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
 #[allow(unused_imports)]
 pub use tool_adapter::ProviderToolAdapter;
+
+// Re-export OpenAI-compatible provider for custom provider commands
+#[allow(unused_imports)]
+pub use openai_compatible::OpenAiCompatibleProvider;

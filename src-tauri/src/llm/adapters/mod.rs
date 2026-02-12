@@ -24,9 +24,11 @@
 
 mod mistral_adapter;
 mod ollama_adapter;
+mod openai_adapter;
 
 pub use mistral_adapter::MistralToolAdapter;
 pub use ollama_adapter::OllamaToolAdapter;
+pub use openai_adapter::OpenAiToolAdapter;
 
 #[cfg(test)]
 mod tests;

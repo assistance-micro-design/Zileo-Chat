@@ -183,7 +183,7 @@ DEFINE INDEX OVERWRITE mcp_call_server ON mcp_call_log FIELDS server_name;
 DEFINE TABLE OVERWRITE llm_model SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON llm_model TYPE string;
 DEFINE FIELD OVERWRITE provider ON llm_model TYPE string
-    ASSERT $value IN ['mistral', 'ollama'];
+    ASSERT string::len($value) > 0 AND string::len($value) <= 64;
 DEFINE FIELD OVERWRITE name ON llm_model TYPE string
     ASSERT string::len($value) > 0 AND string::len($value) <= 64;
 DEFINE FIELD OVERWRITE api_name ON llm_model TYPE string
@@ -217,13 +217,30 @@ DEFINE INDEX OVERWRITE model_api_name_idx ON llm_model FIELDS provider, api_name
 -- =============================================
 DEFINE TABLE OVERWRITE provider_settings SCHEMAFULL;
 DEFINE FIELD OVERWRITE provider ON provider_settings TYPE string
-    ASSERT $value IN ['mistral', 'ollama'];
+    ASSERT string::len($value) > 0 AND string::len($value) <= 64;
 DEFINE FIELD OVERWRITE enabled ON provider_settings TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE default_model_id ON provider_settings TYPE option<string>;
 DEFINE FIELD OVERWRITE base_url ON provider_settings TYPE option<string>;
 DEFINE FIELD OVERWRITE updated_at ON provider_settings TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX OVERWRITE unique_provider ON provider_settings FIELDS provider UNIQUE;
+
+-- =============================================
+-- Table: custom_provider
+-- Stores user-created OpenAI-compatible providers
+-- =============================================
+DEFINE TABLE OVERWRITE custom_provider SCHEMAFULL;
+DEFINE FIELD OVERWRITE name ON custom_provider TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 64;
+DEFINE FIELD OVERWRITE display_name ON custom_provider TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 128;
+DEFINE FIELD OVERWRITE base_url ON custom_provider TYPE string
+    ASSERT string::len($value) > 0 AND string::len($value) <= 512;
+DEFINE FIELD OVERWRITE enabled ON custom_provider TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE created_at ON custom_provider TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON custom_provider TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE unique_custom_provider_name ON custom_provider FIELDS name UNIQUE;
 
 -- =============================================
 -- Table: agent
@@ -239,7 +256,7 @@ DEFINE FIELD OVERWRITE lifecycle ON agent TYPE string
 -- LLM configuration (embedded object)
 DEFINE FIELD OVERWRITE llm ON agent TYPE object;
 DEFINE FIELD OVERWRITE llm.provider ON agent TYPE string
-    ASSERT $value IN ['Mistral', 'Ollama', 'Demo'];
+    ASSERT string::len($value) > 0 AND string::len($value) <= 64;
 DEFINE FIELD OVERWRITE llm.model ON agent TYPE string
     ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
 DEFINE FIELD OVERWRITE llm.temperature ON agent TYPE float

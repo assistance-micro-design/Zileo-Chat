@@ -156,6 +156,7 @@
 //! to prevent injection attacks and ensure data integrity.
 
 pub mod agent;
+pub mod custom_provider;
 pub mod embedding;
 pub mod import_export;
 pub mod llm;

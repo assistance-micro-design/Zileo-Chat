@@ -33,13 +33,18 @@ import type {
 	ConnectionTestResult,
 	ProviderType
 } from '$types/llm';
+import type { ProviderInfo } from '$types/customProvider';
 
 // ============================================================================
 // Cache Management (OPT-9)
 // ============================================================================
 
 interface LLMDataCache {
-	data: { mistral: ProviderSettings; ollama: ProviderSettings; models: LLMModel[] } | null;
+	data: {
+		providerList: ProviderInfo[];
+		settings: Record<string, ProviderSettings>;
+		models: LLMModel[];
+	} | null;
 	timestamp: number;
 }
 
@@ -76,10 +81,7 @@ export function invalidateLLMCache(): void {
  */
 export function createInitialLLMState(): LLMState {
 	return {
-		providers: {
-			mistral: null,
-			ollama: null
-		},
+		providers: {},
 		models: [],
 		activeProvider: null,
 		loading: false,
@@ -589,14 +591,82 @@ export async function seedBuiltinModels(): Promise<number> {
 }
 
 /**
+ * Lists all providers (builtin + custom) from the backend.
+ * @returns Promise resolving to array of provider info
+ */
+export async function listProviders(): Promise<ProviderInfo[]> {
+	return invoke<ProviderInfo[]>('list_providers');
+}
+
+/**
+ * Creates a new custom provider.
+ * @param name - URL-safe identifier
+ * @param displayName - Human-readable name
+ * @param baseUrl - API base URL
+ * @param apiKey - API key
+ * @returns Promise resolving to created provider info
+ */
+export async function createCustomProvider(
+	name: string,
+	displayName: string,
+	baseUrl: string,
+	apiKey: string
+): Promise<ProviderInfo> {
+	const result = await invoke<ProviderInfo>('create_custom_provider', {
+		name,
+		displayName,
+		baseUrl,
+		apiKey
+	});
+	invalidateLLMCache();
+	return result;
+}
+
+/**
+ * Updates an existing custom provider.
+ * @param name - Provider identifier
+ * @param displayName - New display name
+ * @param baseUrl - New base URL
+ * @param apiKey - New API key
+ * @param enabled - Enable/disable
+ * @returns Promise resolving to updated provider info
+ */
+export async function updateCustomProvider(
+	name: string,
+	displayName?: string,
+	baseUrl?: string,
+	apiKey?: string,
+	enabled?: boolean
+): Promise<ProviderInfo> {
+	const result = await invoke<ProviderInfo>('update_custom_provider', {
+		name,
+		displayName: displayName ?? null,
+		baseUrl: baseUrl ?? null,
+		apiKey: apiKey ?? null,
+		enabled: enabled ?? null
+	});
+	invalidateLLMCache();
+	return result;
+}
+
+/**
+ * Deletes a custom provider.
+ * @param name - Provider identifier
+ */
+export async function deleteCustomProvider(name: string): Promise<void> {
+	await invoke<void>('delete_custom_provider', { name });
+	invalidateLLMCache();
+}
+
+/**
  * Loads all provider settings and models.
  * Uses cache with 30s TTL to avoid duplicate API calls.
  * @param forceRefresh - Force reload ignoring cache
- * @returns Promise resolving to object with providers and models
+ * @returns Promise resolving to object with providers, provider list, and models
  */
 export async function loadAllLLMData(forceRefresh = false): Promise<{
-	mistral: ProviderSettings;
-	ollama: ProviderSettings;
+	providerList: ProviderInfo[];
+	settings: Record<string, ProviderSettings>;
 	models: LLMModel[];
 }> {
 	const now = Date.now();
@@ -604,13 +674,22 @@ export async function loadAllLLMData(forceRefresh = false): Promise<{
 		return llmCache.data;
 	}
 
-	const [mistral, ollama, models] = await Promise.all([
-		loadProviderSettings('mistral'),
-		loadProviderSettings('ollama'),
+	const providerList = await listProviders();
+
+	const [settingsResults, models] = await Promise.all([
+		Promise.all(providerList.map((p) => loadProviderSettings(p.id).catch(() => null))),
 		loadModels()
 	]);
 
-	const data = { mistral, ollama, models };
+	const settings: Record<string, ProviderSettings> = {};
+	providerList.forEach((p, i) => {
+		const s = settingsResults[i];
+		if (s) {
+			settings[p.id] = s;
+		}
+	});
+
+	const data = { providerList, settings, models };
 
 	llmCache = {
 		data,

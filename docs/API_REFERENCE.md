@@ -925,6 +925,146 @@ async fn seed_builtin_models() -> Result<usize, String>
 
 ---
 
+## Custom Providers
+
+Management of user-created OpenAI-compatible providers (RouterLab, OpenRouter, Together AI, etc.).
+
+### list_providers
+
+Liste tous les providers (builtin + custom).
+
+**Frontend**
+```typescript
+import type { ProviderInfo } from '$types/customProvider';
+
+const providers = await invoke<ProviderInfo[]>('list_providers');
+```
+
+**Backend Signature**
+```rust
+async fn list_providers(
+    state: State<'_, AppState>
+) -> Result<Vec<ProviderInfo>, String>
+```
+
+**ProviderInfo Type**
+```typescript
+interface ProviderInfo {
+  id: string;            // e.g., "mistral", "ollama", "routerlab"
+  displayName: string;   // Human-readable name
+  isBuiltin: boolean;    // true for Mistral/Ollama
+  isCloud: boolean;      // true if requires internet
+  requiresApiKey: boolean;
+  hasBaseUrl: boolean;
+  baseUrl: string | null;
+  enabled: boolean;
+}
+```
+
+**Returns** : Unified list of all providers (builtin first, then custom sorted by name)
+
+---
+
+### create_custom_provider
+
+Cree un nouveau provider OpenAI-compatible.
+
+**Frontend**
+```typescript
+const provider = await invoke<ProviderInfo>('create_custom_provider', {
+  name: 'routerlab',                          // URL-safe ID (lowercase + hyphens)
+  displayName: 'RouterLab',                   // Human-readable name
+  baseUrl: 'https://api.routerlab.ch/v1',     // API base URL
+  apiKey: 'sk-...'                            // API key
+});
+```
+
+**Backend Signature**
+```rust
+async fn create_custom_provider(
+    name: String,
+    display_name: String,
+    base_url: String,
+    api_key: String,
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>
+) -> Result<ProviderInfo, String>
+```
+
+**Validation** :
+- name: lowercase alphanumeric + hyphens, 1-64 chars, not "mistral" or "ollama"
+- display_name: 1-128 chars
+- base_url: 1-512 chars, trailing slash stripped
+- api_key: non-empty
+
+**Side Effects** :
+- Stores provider metadata in `custom_provider` DB table
+- Stores API key in SecureKeyStore (AES-256-GCM)
+- Registers OpenAiCompatibleProvider in ProviderManager
+
+**Errors** : Validation failure, provider already exists, DB error
+
+---
+
+### update_custom_provider
+
+Met a jour un provider custom existant.
+
+**Frontend**
+```typescript
+const provider = await invoke<ProviderInfo>('update_custom_provider', {
+  name: 'routerlab',               // Required: identifies the provider
+  displayName: 'RouterLab v2',     // Optional
+  baseUrl: 'https://new-api.url',  // Optional
+  apiKey: 'sk-new-key',            // Optional
+  enabled: false                   // Optional
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_custom_provider(
+    name: String,
+    display_name: Option<String>,
+    base_url: Option<String>,
+    api_key: Option<String>,
+    enabled: Option<bool>,
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>
+) -> Result<ProviderInfo, String>
+```
+
+**Returns** : Updated ProviderInfo
+
+---
+
+### delete_custom_provider
+
+Supprime un provider custom.
+
+**Frontend**
+```typescript
+await invoke('delete_custom_provider', { name: 'routerlab' });
+```
+
+**Backend Signature**
+```rust
+async fn delete_custom_provider(
+    name: String,
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>
+) -> Result<(), String>
+```
+
+**Side Effects** :
+- Removes from DB
+- Deletes API key from SecureKeyStore
+- Unregisters from ProviderManager
+
+**Warning** : Models using this provider will stop working.
+
+---
+
 ## Task Commands (Todo Tool)
 
 Task management for workflow decomposition. Enables agents to track progress on complex multi-step operations.

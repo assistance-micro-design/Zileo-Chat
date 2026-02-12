@@ -29,9 +29,11 @@ Combines Providers and Models sections.
 		UpdateModelRequest,
 		LLMState
 	} from '$types/llm';
+	import type { ProviderInfo } from '$types/customProvider';
 	import { Card, Button, StatusIndicator, Modal, HelpButton, Select } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
+	import CustomProviderForm from './CustomProviderForm.svelte';
 	import {
 		createInitialLLMState,
 		setLLMLoading,
@@ -48,9 +50,10 @@ Combines Providers and Models sections.
 		createModel,
 		updateModel,
 		deleteModel,
-		updateProviderSettings
+		updateProviderSettings,
+		deleteCustomProvider
 	} from '$lib/stores/llm';
-	import { Plus, Cpu, Sparkles, Server } from '@lucide/svelte';
+	import { Plus, Cpu, Sparkles, Server, Globe } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
@@ -58,24 +61,25 @@ Combines Providers and Models sections.
 	/** Props */
 	interface Props {
 		/** Callback when API key modal should be opened */
-		onConfigureApiKey: (provider: ProviderType) => void;
+		onConfigureApiKey: (provider: ProviderType, displayName?: string, isCustom?: boolean) => void;
 	}
 
 	let { onConfigureApiKey }: Props = $props();
 
 	/** LLM state */
 	let llmState = $state<LLMState>(createInitialLLMState());
+	let providerList = $state<ProviderInfo[]>([]);
 	const modelModal: ModalController<LLMModel> = createModalController<LLMModel>();
 	let modelSaving = $state(false);
 	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+	let showCustomProviderForm = $state(false);
 
-	/** Provider filter options for models section */
-	const modelsProviderOptions: SelectOption[] = [
+	/** Provider filter options for models section (dynamic from providerList) */
+	const modelsProviderOptions: SelectOption[] = $derived([
 		{ value: 'all', label: 'All Providers' },
-		{ value: 'mistral', label: 'Mistral' },
-		{ value: 'ollama', label: 'Ollama' }
-	];
+		...providerList.map((p) => ({ value: p.id, label: p.displayName }))
+	]);
 
 	/**
 	 * Loads all LLM data (providers and models) from the backend
@@ -84,12 +88,39 @@ Combines Providers and Models sections.
 		llmState = setLLMLoading(llmState, true);
 		try {
 			const data = await loadAllLLMData();
-			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
-			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
+			providerList = data.providerList;
+			for (const [providerId, provSettings] of Object.entries(data.settings)) {
+				llmState = setProviderSettings(llmState, providerId, provSettings);
+			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
 			llmState = setLLMError(llmState, `Failed to load LLM data: ${err}`);
 		}
+	}
+
+	/**
+	 * Handles custom provider deletion
+	 */
+	async function handleDeleteCustomProvider(providerInfo: ProviderInfo): Promise<void> {
+		if (!confirm($i18n('llm_custom_provider_delete_confirm'))) {
+			return;
+		}
+		try {
+			await deleteCustomProvider(providerInfo.id);
+			message = { type: 'success', text: `Provider "${providerInfo.displayName}" deleted` };
+			await loadLLMData();
+		} catch (err) {
+			message = { type: 'error', text: `Failed to delete provider: ${err}` };
+		}
+	}
+
+	/**
+	 * Handles custom provider creation success
+	 */
+	async function handleCustomProviderCreated(): Promise<void> {
+		showCustomProviderForm = false;
+		message = { type: 'success', text: $i18n('llm_custom_provider_created') };
+		await loadLLMData();
 	}
 
 	/**
@@ -226,31 +257,50 @@ Combines Providers and Models sections.
 		</Card>
 	{:else}
 		<div class="provider-grid">
-			<!-- Mistral Provider Card -->
-			<ProviderCard
-				provider="mistral"
-				settings={llmState.providers.mistral}
-				hasApiKey={providerHasApiKey('mistral')}
-				defaultModel={getProviderDefaultModel('mistral')}
-				onConfigure={() => onConfigureApiKey('mistral')}
-			>
-				{#snippet icon()}
-					<Sparkles size={24} class="icon-accent" />
-				{/snippet}
-			</ProviderCard>
+			<!-- Builtin Provider Cards -->
+			{#each providerList.filter((p) => p.isBuiltin) as provInfo (provInfo.id)}
+				<ProviderCard
+					provider={provInfo.id}
+					settings={llmState.providers[provInfo.id] ?? null}
+					hasApiKey={provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id)}
+					defaultModel={getProviderDefaultModel(provInfo.id)}
+					onConfigure={() => onConfigureApiKey(provInfo.id)}
+				>
+					{#snippet icon()}
+						{#if provInfo.id === 'mistral'}
+							<Sparkles size={24} class="icon-accent" />
+						{:else}
+							<Server size={24} class="icon-success" />
+						{/if}
+					{/snippet}
+				</ProviderCard>
+			{/each}
 
-			<!-- Ollama Provider Card -->
-			<ProviderCard
-				provider="ollama"
-				settings={llmState.providers.ollama}
-				hasApiKey={true}
-				defaultModel={getProviderDefaultModel('ollama')}
-				onConfigure={() => onConfigureApiKey('ollama')}
-			>
-				{#snippet icon()}
-					<Server size={24} class="icon-success" />
-				{/snippet}
-			</ProviderCard>
+			<!-- Custom Provider Cards -->
+			{#each providerList.filter((p) => !p.isBuiltin) as provInfo (provInfo.id)}
+				<ProviderCard
+					provider={provInfo.id}
+					displayName={provInfo.displayName}
+					settings={llmState.providers[provInfo.id] ?? null}
+					hasApiKey={providerHasApiKey(provInfo.id)}
+					defaultModel={getProviderDefaultModel(provInfo.id)}
+					isCustom={true}
+					onConfigure={() => onConfigureApiKey(provInfo.id, provInfo.displayName, true)}
+					onDelete={() => handleDeleteCustomProvider(provInfo)}
+				>
+					{#snippet icon()}
+						<Globe size={24} class="icon-info" />
+					{/snippet}
+				</ProviderCard>
+			{/each}
+		</div>
+
+		<!-- Add Custom Provider Button -->
+		<div class="custom-provider-actions">
+			<Button variant="secondary" size="sm" onclick={() => (showCustomProviderForm = true)}>
+				<Plus size={16} />
+				<span>{$i18n('llm_add_custom_provider')}</span>
+			</Button>
 		</div>
 	{/if}
 
@@ -303,10 +353,8 @@ Combines Providers and Models sections.
 					<p class="empty-description">
 						{#if selectedModelsProvider === 'all'}
 							{$i18n('models_not_configured_all')}
-						{:else if selectedModelsProvider === 'mistral'}
-							{$i18n('models_not_configured_mistral')}
 						{:else}
-							{$i18n('models_not_configured_ollama')}
+							{$i18n('models_not_configured_provider')}
 						{/if}
 						{$i18n('models_add_custom')}
 					</p>
@@ -343,9 +391,24 @@ Combines Providers and Models sections.
 			mode={modelModal.mode}
 			model={modelModal.editing}
 			provider={selectedModelsProvider === 'all' ? 'mistral' : selectedModelsProvider}
+			{providerList}
 			onsubmit={handleSaveModel}
 			oncancel={() => modelModal.close()}
 			saving={modelSaving}
+		/>
+	{/snippet}
+</Modal>
+
+<!-- Custom Provider Form Modal -->
+<Modal
+	open={showCustomProviderForm}
+	title={$i18n('llm_add_custom_provider')}
+	onclose={() => (showCustomProviderForm = false)}
+>
+	{#snippet body()}
+		<CustomProviderForm
+			oncreated={handleCustomProviderCreated}
+			oncancel={() => (showCustomProviderForm = false)}
 		/>
 	{/snippet}
 </Modal>
@@ -397,6 +460,18 @@ Combines Providers and Models sections.
 		gap: var(--spacing-lg);
 		margin-bottom: var(--spacing-lg);
 		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
+	}
+
+	.custom-provider-actions {
+		display: flex;
+		justify-content: flex-start;
+		margin-top: var(--spacing-md);
+	}
+
+	.custom-provider-actions :global(button) {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 
 	.message-toast {

@@ -129,7 +129,7 @@ pub async fn set_active_provider(
 
     state
         .llm_manager
-        .set_active_provider(provider_type)
+        .set_active_provider(provider_type.clone())
         .await
         .map_err(|e| format!("Failed to set active provider: {}", e))?;
 
@@ -150,7 +150,9 @@ pub async fn set_default_model(
         .map_err(|_| format!("Invalid provider: {}", provider))?;
 
     // Validate model is in available list
-    let available = state.llm_manager.get_available_models(provider_type);
+    let available = state
+        .llm_manager
+        .get_available_models(provider_type.clone());
     if !available.contains(&model) {
         return Err(format!(
             "Model '{}' not in available models for {}: {:?}",
@@ -160,7 +162,7 @@ pub async fn set_default_model(
 
     state
         .llm_manager
-        .set_default_model(provider_type, &model)
+        .set_default_model(provider_type.clone(), &model)
         .await;
 
     info!(?provider_type, model, "Default model updated");

@@ -17,6 +17,7 @@
 use super::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
+use super::openai_compatible::OpenAiCompatibleProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use super::retry::{with_retry, RetryConfig};
 use std::collections::HashMap;
@@ -73,6 +74,8 @@ pub struct ProviderManager {
     mistral: Arc<MistralProvider>,
     /// Ollama provider instance
     ollama: Arc<OllamaProvider>,
+    /// Custom OpenAI-compatible providers (keyed by provider name)
+    custom_providers: Arc<RwLock<HashMap<String, Arc<OpenAiCompatibleProvider>>>>,
     /// Configuration state
     config: Arc<RwLock<ProviderConfig>>,
     /// Shared HTTP client for all providers (connection pooling)
@@ -123,6 +126,7 @@ impl ProviderManager {
         Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
+            custom_providers: Arc::new(RwLock::new(HashMap::new())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
             http_client,
             retry_config: RetryConfig::default(),
@@ -161,6 +165,7 @@ impl ProviderManager {
         Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
+            custom_providers: Arc::new(RwLock::new(HashMap::new())),
             config: Arc::new(RwLock::new(ProviderConfig::default())),
             http_client,
             retry_config,
@@ -240,6 +245,36 @@ impl ProviderManager {
         }
     }
 
+    /// Registers a custom OpenAI-compatible provider.
+    pub async fn register_custom_provider(
+        &self,
+        name: &str,
+        provider: Arc<OpenAiCompatibleProvider>,
+    ) {
+        self.custom_providers
+            .write()
+            .await
+            .insert(name.to_string(), provider);
+        info!(provider = name, "Custom provider registered in manager");
+    }
+
+    /// Unregisters a custom provider.
+    pub async fn unregister_custom_provider(&self, name: &str) {
+        self.custom_providers.write().await.remove(name);
+        info!(provider = name, "Custom provider unregistered from manager");
+    }
+
+    /// Gets a custom provider by name.
+    pub async fn get_custom_provider(&self, name: &str) -> Option<Arc<OpenAiCompatibleProvider>> {
+        self.custom_providers.read().await.get(name).cloned()
+    }
+
+    /// Checks if a custom provider exists.
+    #[allow(dead_code)]
+    pub async fn has_custom_provider(&self, name: &str) -> bool {
+        self.custom_providers.read().await.contains_key(name)
+    }
+
     /// Gets the current configuration
     pub async fn get_config(&self) -> ProviderConfig {
         self.config.read().await.clone()
@@ -248,16 +283,23 @@ impl ProviderManager {
     /// Sets the active provider
     pub async fn set_active_provider(&self, provider: ProviderType) -> Result<(), LLMError> {
         // Verify the provider is configured
-        let is_configured = match provider {
+        let is_configured = match &provider {
             ProviderType::Mistral => self.mistral.is_configured(),
             ProviderType::Ollama => self.ollama.is_configured(),
+            ProviderType::Custom(ref name) => self
+                .custom_providers
+                .read()
+                .await
+                .get(name)
+                .map(|p| p.is_configured())
+                .unwrap_or(false),
         };
 
         if !is_configured {
             return Err(LLMError::NotConfigured(provider.to_string()));
         }
 
-        self.config.write().await.active_provider = provider;
+        self.config.write().await.active_provider = provider.clone();
         info!(?provider, "Active provider changed");
         Ok(())
     }
@@ -265,7 +307,7 @@ impl ProviderManager {
     /// Gets the active provider type
     #[allow(dead_code)] // API completeness - provider inspection
     pub async fn get_active_provider(&self) -> ProviderType {
-        self.config.read().await.active_provider
+        self.config.read().await.active_provider.clone()
     }
 
     /// Configures the Mistral provider with an API key
@@ -298,6 +340,10 @@ impl ProviderManager {
         match provider {
             ProviderType::Mistral => config.mistral_model = model.to_string(),
             ProviderType::Ollama => config.ollama_model = model.to_string(),
+            ProviderType::Custom(_) => {
+                // Custom providers don't have a config-level default model;
+                // their default model is managed via provider_settings in the DB
+            }
         }
         debug!(?provider, model, "Default model updated");
     }
@@ -309,6 +355,7 @@ impl ProviderManager {
         match provider {
             ProviderType::Mistral => config.mistral_model.clone(),
             ProviderType::Ollama => config.ollama_model.clone(),
+            ProviderType::Custom(_) => String::new(),
         }
     }
 
@@ -317,6 +364,7 @@ impl ProviderManager {
         match provider {
             ProviderType::Mistral => self.mistral.available_models(),
             ProviderType::Ollama => self.ollama.available_models(),
+            ProviderType::Custom(_) => Vec::new(), // Custom providers list models from DB
         }
     }
 
@@ -325,6 +373,11 @@ impl ProviderManager {
         match provider {
             ProviderType::Mistral => self.mistral.is_configured(),
             ProviderType::Ollama => self.ollama.is_configured(),
+            ProviderType::Custom(ref name) => self
+                .custom_providers
+                .try_read()
+                .map(|guard| guard.get(name).map(|p| p.is_configured()).unwrap_or(false))
+                .unwrap_or(false),
         }
     }
 
@@ -337,6 +390,14 @@ impl ProviderManager {
         }
         if self.ollama.is_configured() {
             providers.push(ProviderType::Ollama);
+        }
+        // Custom providers added at runtime
+        if let Ok(guard) = self.custom_providers.try_read() {
+            for (name, p) in guard.iter() {
+                if p.is_configured() {
+                    providers.push(ProviderType::Custom(name.clone()));
+                }
+            }
         }
         providers
     }
@@ -365,18 +426,19 @@ impl ProviderManager {
     ) -> Result<LLMResponse, LLMError> {
         let (provider_type, model_to_use) = {
             let config = self.config.read().await;
-            let provider = config.active_provider;
+            let provider = config.active_provider.clone();
             let model_str = model
                 .map(|m| m.to_string())
-                .unwrap_or_else(|| match provider {
+                .unwrap_or_else(|| match &provider {
                     ProviderType::Mistral => config.mistral_model.clone(),
                     ProviderType::Ollama => config.ollama_model.clone(),
+                    ProviderType::Custom(_) => String::new(),
                 });
             (provider, model_str)
         };
 
         // Check circuit breaker before making request (OPT-LLM-6)
-        self.check_circuit_breaker(provider_type).await?;
+        self.check_circuit_breaker(provider_type.clone()).await?;
 
         debug!(
             ?provider_type,
@@ -390,7 +452,7 @@ impl ProviderManager {
         let model_owned = model_to_use.clone();
 
         // Execute with retry (OPT-LLM-4)
-        let result = match provider_type {
+        let result = match &provider_type {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -427,6 +489,30 @@ impl ProviderManager {
                 )
                 .await
             }
+            ProviderType::Custom(ref name) => {
+                let custom = self
+                    .custom_providers
+                    .read()
+                    .await
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let provider = custom.clone();
+                        async move {
+                            provider
+                                .complete(&p, sp.as_deref(), &m, temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
+            }
         };
 
         // Record result for circuit breaker (OPT-LLM-6)
@@ -452,14 +538,14 @@ impl ProviderManager {
         max_tokens: usize,
     ) -> Result<LLMResponse, LLMError> {
         // Check circuit breaker before making request (OPT-LLM-6)
-        self.check_circuit_breaker(provider).await?;
+        self.check_circuit_breaker(provider.clone()).await?;
 
         // Clone values for the retry closure
         let prompt_owned = prompt.to_string();
         let system_prompt_owned = system_prompt.map(|s| s.to_string());
         let model_owned = model.map(|s| s.to_string());
 
-        let result = match provider {
+        let result = match &provider {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -487,6 +573,30 @@ impl ProviderManager {
                         let prov = ollama.clone();
                         async move {
                             prov.complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
+            }
+            ProviderType::Custom(ref name) => {
+                let custom = self
+                    .custom_providers
+                    .read()
+                    .await
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
+                with_retry(
+                    || {
+                        let p = prompt_owned.clone();
+                        let sp = system_prompt_owned.clone();
+                        let m = model_owned.clone();
+                        let prov = custom.clone();
+                        async move {
+                            let model_str = m.unwrap_or_default();
+                            prov.complete(&p, sp.as_deref(), &model_str, temperature, max_tokens)
                                 .await
                         }
                     },
@@ -539,7 +649,7 @@ impl ProviderManager {
         max_tokens: usize,
     ) -> Result<serde_json::Value, LLMError> {
         // Check circuit breaker before making request (OPT-LLM-6)
-        self.check_circuit_breaker(provider).await?;
+        self.check_circuit_breaker(provider.clone()).await?;
 
         debug!(
             ?provider,
@@ -551,7 +661,7 @@ impl ProviderManager {
         // Clone values for the retry closure
         let model_owned = model.to_string();
 
-        let result = match provider {
+        let result = match &provider {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
@@ -588,6 +698,30 @@ impl ProviderManager {
                 )
                 .await
             }
+            ProviderType::Custom(ref name) => {
+                let custom = self
+                    .custom_providers
+                    .read()
+                    .await
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
+                with_retry(
+                    || {
+                        let msgs = messages.clone();
+                        let tls = tools.clone();
+                        let tc = tool_choice.clone();
+                        let m = model_owned.clone();
+                        let prov = custom.clone();
+                        async move {
+                            prov.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
+                                .await
+                        }
+                    },
+                    &self.retry_config,
+                )
+                .await
+            }
         };
 
         // Record result for circuit breaker (OPT-LLM-6)
@@ -616,20 +750,21 @@ impl ProviderManager {
     ) -> Result<tokio::sync::mpsc::Receiver<Result<String, LLMError>>, LLMError> {
         let (provider_type, model_to_use) = {
             let config = self.config.read().await;
-            let provider = config.active_provider;
+            let provider = config.active_provider.clone();
             let model_str = model
                 .map(|m| m.to_string())
-                .unwrap_or_else(|| match provider {
+                .unwrap_or_else(|| match &provider {
                     ProviderType::Mistral => config.mistral_model.clone(),
                     ProviderType::Ollama => config.ollama_model.clone(),
+                    ProviderType::Custom(_) => String::new(),
                 });
             (provider, model_str)
         };
 
         // Check circuit breaker before making request (OPT-LLM-6)
-        self.check_circuit_breaker(provider_type).await?;
+        self.check_circuit_breaker(provider_type.clone()).await?;
 
-        match provider_type {
+        match &provider_type {
             ProviderType::Mistral => {
                 self.mistral
                     .complete_stream(
@@ -647,6 +782,24 @@ impl ProviderManager {
                         prompt,
                         system_prompt,
                         Some(&model_to_use),
+                        temperature,
+                        max_tokens,
+                    )
+                    .await
+            }
+            ProviderType::Custom(ref name) => {
+                let custom = self
+                    .custom_providers
+                    .read()
+                    .await
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
+                custom
+                    .complete_stream(
+                        prompt,
+                        system_prompt,
+                        &model_to_use,
                         temperature,
                         max_tokens,
                     )

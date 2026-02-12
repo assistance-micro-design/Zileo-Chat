@@ -44,52 +44,63 @@
 	interface Props {
 		/** Provider type identifier */
 		provider: ProviderType;
+		/** Override display name (for custom providers) */
+		displayName?: string;
 		/** Provider settings (null if not loaded) */
 		settings: ProviderSettings | null;
 		/** Whether the provider has an API key configured */
 		hasApiKey: boolean;
 		/** Default model for this provider (if set) */
 		defaultModel?: LLMModel | null;
+		/** Whether this is a custom (non-builtin) provider */
+		isCustom?: boolean;
 		/** Icon snippet to render */
 		icon?: Snippet;
 		/** Callback when configure button is clicked */
 		onConfigure: () => void;
+		/** Callback when delete button is clicked (custom providers only) */
+		onDelete?: () => void;
 	}
 
 	let {
 		provider,
+		displayName,
 		settings,
 		hasApiKey,
 		defaultModel = null,
+		isCustom = false,
 		icon,
-		onConfigure
+		onConfigure,
+		onDelete
 	}: Props = $props();
 
 	/**
-	 * Gets the translation key for provider name
+	 * Gets the display name for the provider.
+	 * Uses displayName prop override for custom providers, i18n for builtins.
 	 */
-	function getProviderNameKey(p: ProviderType): string {
+	function getProviderDisplayName(p: ProviderType): string {
+		if (displayName) return displayName;
 		switch (p) {
 			case 'mistral':
-				return 'llm_provider_mistral';
+				return $i18n('llm_provider_mistral');
 			case 'ollama':
-				return 'llm_provider_ollama';
+				return $i18n('llm_provider_ollama');
 			default:
-				return 'llm_provider_type';
+				return p;
 		}
 	}
 
 	/**
-	 * Gets the translation key for provider type description
+	 * Gets the provider type description.
 	 */
-	function getProviderTypeKey(p: ProviderType): string {
+	function getProviderTypeDescription(p: ProviderType): string {
 		switch (p) {
 			case 'mistral':
-				return 'llm_provider_cloud_api';
+				return $i18n('llm_provider_cloud_api');
 			case 'ollama':
-				return 'llm_provider_local_server';
+				return $i18n('llm_provider_local_server');
 			default:
-				return 'llm_provider_type';
+				return $i18n('llm_provider_cloud_api');
 		}
 	}
 
@@ -111,6 +122,10 @@
 	 * Determines if the provider is configured
 	 */
 	const isConfigured = $derived(hasApiKey || provider === 'ollama');
+
+	/** Provider name for display */
+	const providerDisplayName = $derived(getProviderDisplayName(provider));
+	const providerTypeDesc = $derived(getProviderTypeDescription(provider));
 </script>
 
 <Card>
@@ -123,8 +138,8 @@
 					</div>
 				{/if}
 				<div class="provider-details">
-					<h3 class="provider-name">{$i18n(getProviderNameKey(provider))}</h3>
-					<p class="provider-type">{$i18n(getProviderTypeKey(provider))}</p>
+					<h3 class="provider-name">{providerDisplayName}</h3>
+					<p class="provider-type">{providerTypeDesc}</p>
 				</div>
 			</div>
 			<Badge variant={getBadgeVariant()}>
@@ -140,7 +155,7 @@
 					<div class="status-row">
 						<StatusIndicator status="completed" size="sm" />
 						<span class="status-text">
-							{provider === 'mistral' ? $i18n('llm_provider_api_key_configured') : $i18n('llm_provider_server_available')}
+							{provider === 'ollama' ? $i18n('llm_provider_server_available') : $i18n('llm_provider_api_key_configured')}
 						</span>
 					</div>
 				{:else}
@@ -157,7 +172,7 @@
 					</div>
 				{/if}
 
-				{#if settings?.base_url && provider === 'ollama'}
+				{#if settings?.base_url && (provider === 'ollama' || isCustom)}
 					<div class="info-row">
 						<span class="info-label">{$i18n('llm_provider_server_url')}</span>
 						<span class="info-value url">{settings.base_url}</span>
@@ -171,6 +186,11 @@
 
 	{#snippet footer()}
 		<div class="provider-actions">
+			{#if isCustom && onDelete}
+				<Button variant="danger" size="sm" onclick={onDelete}>
+					{$i18n('common_delete')}
+				</Button>
+			{/if}
 			<Button variant="primary" size="sm" onclick={onConfigure}>
 				{$i18n('llm_provider_configure')}
 			</Button>

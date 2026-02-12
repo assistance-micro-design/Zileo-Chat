@@ -29,15 +29,38 @@ use serde::{Deserialize, Serialize};
 
 /// LLM provider type supported by the application.
 ///
-/// Phase 1 supports Mistral (cloud API) and Ollama (local server).
-/// Future phases may add Claude, GPT-4, Gemini, etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// Mistral and Ollama are builtin providers with dedicated implementations.
+/// Custom(String) represents user-created OpenAI-compatible providers
+/// (RouterLab, OpenRouter, Together AI, etc.).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProviderType {
     /// Mistral AI cloud API
     Mistral,
     /// Ollama local inference server
     Ollama,
+    /// User-created OpenAI-compatible provider (e.g., Custom("routerlab"))
+    Custom(String),
+}
+
+impl Serialize for ProviderType {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ProviderType::Mistral => s.serialize_str("mistral"),
+            ProviderType::Ollama => s.serialize_str("ollama"),
+            ProviderType::Custom(name) => s.serialize_str(name),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ProviderType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "mistral" => ProviderType::Mistral,
+            "ollama" => ProviderType::Ollama,
+            other => ProviderType::Custom(other.to_string()),
+        })
+    }
 }
 
 impl std::fmt::Display for ProviderType {
@@ -45,6 +68,7 @@ impl std::fmt::Display for ProviderType {
         match self {
             ProviderType::Mistral => write!(f, "mistral"),
             ProviderType::Ollama => write!(f, "ollama"),
+            ProviderType::Custom(name) => write!(f, "{}", name),
         }
     }
 }
@@ -56,7 +80,13 @@ impl std::str::FromStr for ProviderType {
         match s.to_lowercase().as_str() {
             "mistral" => Ok(ProviderType::Mistral),
             "ollama" => Ok(ProviderType::Ollama),
-            _ => Err(format!("Unknown provider type: {}", s)),
+            other => {
+                if other.is_empty() {
+                    Err(format!("Unknown provider type: {}", s))
+                } else {
+                    Ok(ProviderType::Custom(other.to_string()))
+                }
+            }
         }
     }
 }
@@ -140,7 +170,7 @@ impl LLMModel {
         let now = Utc::now();
         Self {
             id,
-            provider: request.provider,
+            provider: request.provider.clone(),
             name: request.name.clone(),
             api_name: request.api_name.clone(),
             context_window: request.context_window,
@@ -441,15 +471,17 @@ fn default_enabled() -> bool {
 impl ProviderSettings {
     /// Creates default settings for a provider.
     pub fn default_for(provider: ProviderType) -> Self {
+        let base_url = match &provider {
+            ProviderType::Ollama => Some("http://localhost:11434".into()),
+            ProviderType::Mistral => None,
+            ProviderType::Custom(_) => None,
+        };
         Self {
             provider,
             enabled: true,
             default_model_id: None,
             api_key_configured: false,
-            base_url: match provider {
-                ProviderType::Ollama => Some("http://localhost:11434".into()),
-                ProviderType::Mistral => None,
-            },
+            base_url,
             updated_at: Utc::now(),
         }
     }
@@ -528,6 +560,10 @@ mod tests {
     fn test_provider_type_display() {
         assert_eq!(ProviderType::Mistral.to_string(), "mistral");
         assert_eq!(ProviderType::Ollama.to_string(), "ollama");
+        assert_eq!(
+            ProviderType::Custom("routerlab".to_string()).to_string(),
+            "routerlab"
+        );
     }
 
     #[test]
@@ -540,7 +576,11 @@ mod tests {
             "OLLAMA".parse::<ProviderType>().unwrap(),
             ProviderType::Ollama
         );
-        assert!("unknown".parse::<ProviderType>().is_err());
+        assert_eq!(
+            "routerlab".parse::<ProviderType>().unwrap(),
+            ProviderType::Custom("routerlab".to_string())
+        );
+        assert!("".parse::<ProviderType>().is_err());
     }
 
     #[test]

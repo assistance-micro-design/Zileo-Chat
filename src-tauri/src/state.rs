@@ -211,6 +211,51 @@ impl AppState {
         } else {
             tracing::debug!("No Mistral API key found in keystore");
         }
+
+        // Initialize custom providers from database
+        let query = "SELECT name, base_url FROM custom_provider WHERE enabled = true";
+        match self.db.query_json(query).await {
+            Ok(results) => {
+                for row in results {
+                    let name = match row.get("name").and_then(|v| v.as_str()) {
+                        Some(n) => n.to_string(),
+                        None => continue,
+                    };
+                    let base_url = match row.get("base_url").and_then(|v| v.as_str()) {
+                        Some(u) => u.to_string(),
+                        None => continue,
+                    };
+
+                    let provider = std::sync::Arc::new(
+                        crate::llm::openai_compatible::OpenAiCompatibleProvider::new(
+                            &name,
+                            self.llm_manager.http_client().clone(),
+                        ),
+                    );
+
+                    // Configure with API key if available
+                    if let Some(api_key) = keystore.get_key(&name) {
+                        if !api_key.is_empty() {
+                            if let Err(e) = provider.configure(&api_key, &base_url).await {
+                                tracing::warn!(
+                                    provider = %name,
+                                    error = %e,
+                                    "Failed to configure custom provider"
+                                );
+                            }
+                        }
+                    }
+
+                    self.llm_manager
+                        .register_custom_provider(&name, provider)
+                        .await;
+                    tracing::info!(provider = %name, "Custom provider initialized from database");
+                }
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "No custom providers found (this is normal on first run)");
+            }
+        }
     }
 
     /// Initializes the embedding service from saved configuration.
