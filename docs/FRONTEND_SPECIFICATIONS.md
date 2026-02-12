@@ -179,14 +179,17 @@ onMount(() => {
 ### Sections Détaillées
 
 #### Providers
-- Liste providers disponibles (OpenAI, Anthropic, Gemini, Ollama)
+- Liste providers disponibles (Mistral, Ollama + custom OpenAI-compatible)
+- Builtin providers : Mistral (cloud), Ollama (local)
+- Custom providers : OpenAI-compatible (RouterLab, OpenRouter, Together AI, etc.)
+  - Bouton "Add Provider" ouvre CustomProviderForm modal
+  - Champs : Provider ID (auto-generated), Display Name, Base URL, API Key
 - Configuration par provider :
   - API Key (input type="password")
-  - Endpoint URL
-  - Rate limits (requests/min)
-  - Timeout (seconds)
+  - Endpoint URL (custom + Ollama)
 - Toggle enable/disable
 - Test connection (button + status indicator)
+- Delete custom provider (with confirmation)
 
 #### Models
 - Sélection model par provider
@@ -1284,7 +1287,7 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (87 Total Components)
+### Component Library (93 Total Components)
 
 ```
 src/lib/components/
@@ -1341,6 +1344,8 @@ src/lib/components/
 │  ├─ WorkflowItem.svelte
 │  ├─ WorkflowItemCompact.svelte
 │  └─ WorkflowList.svelte
+├─ settings/            # Includes CustomProviderForm.svelte
+│  └─ CustomProviderForm.svelte  # Modal form for adding OpenAI-compatible providers
 ├─ mcp/                 # 3 MCP management components
 │  ├─ MCPServerCard.svelte
 │  ├─ MCPServerForm.svelte
@@ -1396,7 +1401,7 @@ src/lib/components/
 | `agents` | custom | `agentStore`, `agents`, `selectedAgent`, `isLoading`, `hasAgents`, `agentCount` | Agent CRUD with reactive state |
 | `workflows` | custom | `workflowStore`, `workflows`, `selectedWorkflow`, `filteredWorkflows` | Workflow management (pure functions + reactive store) |
 | `locale` | custom | `localeStore`, `locale`, `localeInfo` | i18n language management |
-| `llm` | pure functions | `createInitialLLMState()`, `loadModels()`, `updateProviderSettings()` | LLM provider/model state |
+| `llm` | pure functions | `createInitialLLMState()`, `loadModels()`, `updateProviderSettings()`, `listProviders()`, `createCustomProvider()`, `deleteCustomProvider()`, `loadAllLLMData()` | LLM provider/model state + custom provider CRUD |
 | `mcp` | pure functions | `createInitialMCPState()`, `loadServers()`, `testServer()`, `callTool()` | MCP server state |
 | `streaming` | custom | `streamingStore`, `isStreaming`, `streamContent`, `activeTools`, `reasoningSteps` | Real-time workflow execution |
 | `activity` | custom | `activityStore`, `historicalActivities`, `allActivities`, `filteredActivities` | Workflow activity tracking |
@@ -1409,13 +1414,14 @@ src/lib/components/
 | `toast` | custom | `toastStore`, `toasts`, `visibleToasts`, `hasToasts`, `navigationTarget` | Toast notifications for background workflow events |
 | `index` | barrel | All stores | Re-exports all stores |
 
-### Types (24 Modules in src/types/)
+### Types (25 Modules in src/types/)
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|
 | `agent.ts` | `Agent`, `AgentConfig`, `AgentConfigCreate`, `AgentSummary`, `LLMConfig` | Agent configuration |
 | `workflow.ts` | `Workflow`, `WorkflowResult`, `WorkflowMetrics`, `WorkflowFullState` | Workflow execution |
-| `llm.ts` | `LLMModel`, `ProviderSettings`, `ConnectionTestResult`, `LLMState` | LLM providers |
+| `llm.ts` | `LLMModel`, `ProviderSettings`, `ConnectionTestResult`, `LLMState`, `ProviderType` | LLM providers (ProviderType = BuiltinProvider \| string) |
+| `customProvider.ts` | `ProviderInfo`, `CreateCustomProviderRequest` | Custom OpenAI-compatible provider types |
 | `mcp.ts` | `MCPServer`, `MCPServerConfig`, `MCPTool`, `MCPTestResult` | MCP servers |
 | `streaming.ts` | `StreamChunk`, `WorkflowComplete`, `ChunkType` | Streaming events |
 | `message.ts` | `Message` | Chat messages |

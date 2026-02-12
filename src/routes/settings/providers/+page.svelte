@@ -32,14 +32,18 @@ Manages LLM providers and models configuration.
 	/** API Key Modal state */
 	let showApiKeyModal = $state(false);
 	let apiKeyProvider = $state<ProviderType>('mistral');
+	let apiKeyProviderDisplayName = $state<string | undefined>(undefined);
 	let apiKeyProviderSettings = $state<ProviderSettings | null>(null);
 	let apiKeyHasKey = $state(false);
+	let apiKeyIsCustom = $state(false);
 
 	/**
 	 * Opens API key configuration modal
 	 */
-	function handleConfigureApiKey(provider: ProviderType): void {
+	function handleConfigureApiKey(provider: ProviderType, displayName?: string, isCustom?: boolean): void {
 		apiKeyProvider = provider;
+		apiKeyProviderDisplayName = displayName;
+		apiKeyIsCustom = isCustom ?? false;
 		showApiKeyModal = true;
 	}
 
@@ -75,8 +79,10 @@ Manages LLM providers and models configuration.
 <APIKeysSection
 	open={showApiKeyModal}
 	provider={apiKeyProvider}
+	providerDisplayName={apiKeyProviderDisplayName}
 	providerSettings={apiKeyProviderSettings}
 	hasApiKey={apiKeyHasKey}
+	isCustom={apiKeyIsCustom}
 	onclose={() => { showApiKeyModal = false; }}
 	onReload={handleApiKeyReload}
 />

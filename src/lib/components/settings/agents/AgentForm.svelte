@@ -39,6 +39,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		setProviderSettings
 	} from '$lib/stores/llm';
 	import type { ProviderType, LLMState } from '$types/llm';
+	import type { ProviderInfo } from '$types/customProvider';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';
@@ -61,7 +62,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	/** Form state */
 	let name = $state('');
 	let lifecycle = $state<Lifecycle>('permanent');
-	let provider = $state('Mistral');
+	let provider = $state('mistral');
 	let model = $state('mistral-large-latest');
 	let maxToolIterations = $state(50);
 	let selectedTools = $state<string[]>([]);
@@ -72,7 +73,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	$effect(() => {
 		name = agent?.name ?? '';
 		lifecycle = agent?.lifecycle ?? 'permanent';
-		provider = agent?.llm.provider ?? 'Mistral';
+		provider = (agent?.llm.provider ?? 'mistral').toLowerCase();
 		model = agent?.llm.model ?? 'mistral-large-latest';
 		maxToolIterations = agent?.max_tool_iterations ?? 50;
 		selectedTools = agent?.tools ?? [];
@@ -87,6 +88,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let errors = $state<Record<string, string>>({});
 	let mcpState = $state<MCPState>(createInitialMCPState());
 	let llmState = $state<LLMState>(createInitialLLMState());
+	let providerList = $state<ProviderInfo[]>([]);
 
 	/** Available tools (from backend) - reactive to locale */
 	const availableTools = $derived([
@@ -102,11 +104,21 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		{ value: 'temporary' as Lifecycle, label: $i18n('agents_lifecycle_temporary'), description: $i18n('agents_lifecycle_temporary_desc') }
 	]);
 
-	/** Provider options with details - reactive to locale */
-	const providerOptions = $derived([
-		{ value: 'Mistral', label: $i18n('agents_provider_mistral'), type: $i18n('agents_provider_mistral_type') },
-		{ value: 'Ollama', label: $i18n('agents_provider_ollama'), type: $i18n('agents_provider_ollama_type') }
-	]);
+	/** Provider options with details - reactive to locale, includes custom providers */
+	const providerOptions = $derived.by(() => {
+		if (providerList.length > 0) {
+			return providerList.map((p) => ({
+				value: p.id,
+				label: p.displayName,
+				type: p.isCloud ? $i18n('llm_provider_cloud_api') : $i18n('agents_provider_ollama_type')
+			}));
+		}
+		// Fallback when providerList hasn't loaded yet
+		return [
+			{ value: 'mistral', label: $i18n('agents_provider_mistral'), type: $i18n('agents_provider_mistral_type') },
+			{ value: 'ollama', label: $i18n('agents_provider_ollama'), type: $i18n('agents_provider_ollama_type') }
+		];
+	});
 
 	/**
 	 * Converts provider name to ProviderType (lowercase)
@@ -149,11 +161,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			// MCP servers are optional - form still usable without them
 		}
 
-		// Load LLM models
+		// Load LLM models and provider list
 		try {
 			const data = await loadAllLLMData();
-			llmState = setProviderSettings(llmState, 'mistral', data.mistral);
-			llmState = setProviderSettings(llmState, 'ollama', data.ollama);
+			providerList = data.providerList;
+			for (const [providerId, provSettings] of Object.entries(data.settings)) {
+				llmState = setProviderSettings(llmState, providerId, provSettings);
+			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
 			console.warn('[AgentForm] Failed to load LLM models:', err);

@@ -31,7 +31,7 @@ use crate::agents::core::agent::{
     Agent, ReasoningStepData, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
 };
 use crate::db::DBClient;
-use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter};
+use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
 use crate::llm::tool_adapter::ProviderToolAdapter;
 use crate::llm::{LLMError, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
@@ -820,7 +820,10 @@ impl Agent for LLMAgent {
         };
 
         // Check if provider is configured
-        if !self.provider_manager.is_provider_configured(provider_type) {
+        if !self
+            .provider_manager
+            .is_provider_configured(provider_type.clone())
+        {
             warn!(
                 ?provider_type,
                 "Provider not configured, returning configuration error"
@@ -855,7 +858,7 @@ impl Agent for LLMAgent {
         let llm_result = self
             .provider_manager
             .complete_with_provider(
-                provider_type,
+                provider_type.clone(),
                 &prompt,
                 Some(&self.config.system_prompt),
                 Some(&self.config.llm.model),
@@ -1022,7 +1025,10 @@ impl Agent for LLMAgent {
         };
 
         // Check if provider is configured
-        if !self.provider_manager.is_provider_configured(provider_type) {
+        if !self
+            .provider_manager
+            .is_provider_configured(provider_type.clone())
+        {
             warn!(
                 ?provider_type,
                 "Provider not configured, returning configuration error"
@@ -1057,6 +1063,7 @@ impl Agent for LLMAgent {
         let adapter: Box<dyn ProviderToolAdapter> = match provider_type {
             ProviderType::Mistral => Box::new(MistralToolAdapter::new()),
             ProviderType::Ollama => Box::new(OllamaToolAdapter::new()),
+            ProviderType::Custom(_) => Box::new(OpenAiToolAdapter::new()),
         };
 
         // Extract workflow_id early for event emission
@@ -1229,7 +1236,7 @@ impl Agent for LLMAgent {
             let response = match self
                 .provider_manager
                 .complete_with_tools(
-                    provider_type,
+                    provider_type.clone(),
                     messages.clone(),
                     tools_json.clone(),
                     Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
@@ -1672,13 +1679,29 @@ mod tests {
 
     #[test]
     fn test_llm_agent_invalid_provider() {
+        // Empty provider is the only invalid case now (others become Custom)
         let mut config = create_test_config();
-        config.llm.provider = "InvalidProvider".to_string();
+        config.llm.provider = String::new();
         let manager = Arc::new(ProviderManager::new());
         let agent = LLMAgent::new(config, manager);
 
         let result = agent.get_provider_type();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_llm_agent_custom_provider() {
+        let mut config = create_test_config();
+        config.llm.provider = "routerlab".to_string();
+        let manager = Arc::new(ProviderManager::new());
+        let agent = LLMAgent::new(config, manager);
+
+        let result = agent.get_provider_type();
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            ProviderType::Custom("routerlab".to_string())
+        );
     }
 
     // Note: XML-based tool calling tests have been removed.

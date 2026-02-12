@@ -67,13 +67,9 @@ fn validate_model_id(id: &str) -> Result<(), String> {
 
 /// Validates a provider string.
 fn validate_provider_string(provider: &str) -> Result<ProviderType, String> {
-    provider.parse::<ProviderType>().map_err(|_| {
-        format!(
-            "Invalid provider '{}'. Valid providers: {:?}",
-            provider,
-            cmd_const::VALID_MODEL_PROVIDERS
-        )
-    })
+    provider
+        .parse::<ProviderType>()
+        .map_err(|_| format!("Invalid provider '{}'", provider))
 }
 
 // ============================================================================
@@ -607,11 +603,10 @@ pub async fn get_provider_settings(
     info!(found = result.is_some(), "Provider settings query result");
 
     // Check if API key is configured (using the secure keystore)
-    let api_key_configured = if provider_type == ProviderType::Mistral {
-        // Check OS keychain directly - this is the source of truth
-        keystore.has_key("Mistral")
-    } else {
-        false // Ollama doesn't need API key
+    let api_key_configured = match &provider_type {
+        ProviderType::Mistral => keystore.has_key("Mistral"),
+        ProviderType::Custom(name) => keystore.has_key(name),
+        ProviderType::Ollama => false, // Ollama doesn't need API key
     };
 
     match result {
@@ -833,6 +828,37 @@ pub async fn test_provider_connection(
                 }
             }
         }
+        ProviderType::Custom(ref name) => {
+            let name = name.clone();
+            match state.llm_manager.get_custom_provider(&name).await {
+                Some(custom_provider) => match custom_provider.test_connection().await {
+                    Ok(success) => {
+                        let latency = start.elapsed().as_millis() as u64;
+                        if success {
+                            info!(provider = %name, latency_ms = latency, "Custom provider connection successful");
+                            Ok(ConnectionTestResult::success(provider_type, latency, None))
+                        } else {
+                            warn!(provider = %name, "Custom provider connection returned false");
+                            Ok(ConnectionTestResult::failure(
+                                provider_type,
+                                "Connection test returned false".into(),
+                            ))
+                        }
+                    }
+                    Err(e) => {
+                        warn!(provider = %name, error = %e, "Custom provider connection failed");
+                        Ok(ConnectionTestResult::failure(
+                            provider_type,
+                            format!("Connection failed: {}", e),
+                        ))
+                    }
+                },
+                None => Ok(ConnectionTestResult::failure(
+                    provider_type,
+                    format!("Custom provider '{}' not found", name),
+                )),
+            }
+        }
     }
 }
 
@@ -991,23 +1017,24 @@ mod tests {
 
     #[test]
     fn test_validate_provider_string_invalid() {
-        // Unknown providers
-        assert!(validate_provider_string("invalid").is_err());
-        assert!(validate_provider_string("claude").is_err());
-        assert!(validate_provider_string("gpt-4").is_err());
-        assert!(validate_provider_string("openai").is_err());
-        // Empty
+        // Empty string rejected
         assert!(validate_provider_string("").is_err());
-        // Typos
-        assert!(validate_provider_string("mistrl").is_err());
-        assert!(validate_provider_string("olama").is_err());
+    }
+
+    #[test]
+    fn test_validate_provider_string_custom_providers() {
+        // Unknown names now parse as Custom providers
+        let custom = validate_provider_string("routerlab").unwrap();
+        assert_eq!(custom, ProviderType::Custom("routerlab".to_string()));
+
+        let custom2 = validate_provider_string("openai").unwrap();
+        assert_eq!(custom2, ProviderType::Custom("openai".to_string()));
     }
 
     #[test]
     fn test_validate_provider_string_error_message() {
-        let err = validate_provider_string("invalid").unwrap_err();
+        let err = validate_provider_string("").unwrap_err();
         assert!(err.contains("Invalid provider"));
-        assert!(err.contains("invalid"));
     }
 
     // ========================================================================
@@ -1020,9 +1047,10 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_providers_constant() {
-        assert_eq!(cmd_const::VALID_MODEL_PROVIDERS.len(), 2);
-        assert!(cmd_const::VALID_MODEL_PROVIDERS.contains(&"mistral"));
-        assert!(cmd_const::VALID_MODEL_PROVIDERS.contains(&"ollama"));
+    fn test_validate_provider_string() {
+        assert!(validate_provider_string("mistral").is_ok());
+        assert!(validate_provider_string("ollama").is_ok());
+        assert!(validate_provider_string("routerlab").is_ok()); // Custom providers accepted
+        assert!(validate_provider_string("").is_err()); // Empty rejected
     }
 }

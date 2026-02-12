@@ -18,9 +18,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * LLM provider types supported by the application
+ * Builtin provider identifiers.
  */
-export type ProviderType = 'mistral' | 'ollama';
+export type BuiltinProvider = 'mistral' | 'ollama';
+
+/**
+ * LLM provider types supported by the application.
+ *
+ * Extends beyond builtins to support custom OpenAI-compatible providers
+ * (e.g., "routerlab", "openrouter", "together-ai").
+ */
+export type ProviderType = BuiltinProvider | string;
 
 /**
  * LLM response from a completion request
@@ -208,11 +216,8 @@ export interface ConnectionTestResult {
  * Centralizes all LLM-related state for the settings UI.
  */
 export interface LLMState {
-  /** Provider settings indexed by provider type */
-  providers: {
-    mistral: ProviderSettings | null;
-    ollama: ProviderSettings | null;
-  };
+  /** Provider settings indexed by provider id */
+  providers: Record<string, ProviderSettings | null>;
   /** All loaded models (builtin + custom) */
   models: LLMModel[];
   /** Currently active provider */

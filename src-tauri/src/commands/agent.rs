@@ -25,6 +25,7 @@
 //! - [`delete_agent`] - Delete an agent
 
 use crate::agents::LLMAgent;
+use crate::models::llm_models::ProviderType;
 use crate::models::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
 };
@@ -79,14 +80,10 @@ fn validate_system_prompt(prompt: &str) -> Result<String, String> {
 
 /// Validates LLM configuration
 fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
-    // Validate provider
-    if !cmd_const::VALID_PROVIDERS.contains(&llm.provider.as_str()) {
-        return Err(format!(
-            "Invalid provider '{}'. Valid providers: {:?}",
-            llm.provider,
-            cmd_const::VALID_PROVIDERS
-        ));
-    }
+    // Validate provider (supports builtin + custom providers)
+    llm.provider
+        .parse::<ProviderType>()
+        .map_err(|_| format!("Invalid provider '{}'", llm.provider))?;
 
     // Validate model name
     let model = llm.model.trim();

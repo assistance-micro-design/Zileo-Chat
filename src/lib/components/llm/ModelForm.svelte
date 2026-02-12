@@ -40,6 +40,7 @@
 	import type { SelectOption } from '$lib/components/ui';
 	import { i18n, t } from '$lib/i18n';
 	import type { CreateModelRequest, UpdateModelRequest, LLMModel, ProviderType } from '$types/llm';
+	import type { ProviderInfo } from '$types/customProvider';
 
 	/**
 	 * ModelForm props
@@ -51,6 +52,8 @@
 		model?: LLMModel;
 		/** Default provider for create mode */
 		provider?: ProviderType;
+		/** Available providers (builtin + custom) */
+		providerList?: ProviderInfo[];
 		/** Callback when form is submitted with valid data */
 		onsubmit: (data: CreateModelRequest | UpdateModelRequest) => void;
 		/** Callback when form is cancelled */
@@ -59,13 +62,17 @@
 		saving?: boolean;
 	}
 
-	let { mode, model, provider, onsubmit, oncancel, saving = false }: Props = $props();
+	let { mode, model, provider, providerList = [], onsubmit, oncancel, saving = false }: Props = $props();
 
-	/** Provider options for the select dropdown (computed reactively) */
-	const providerOptions: SelectOption[] = $derived([
-		{ value: 'mistral', label: $i18n('llm_provider_mistral') },
-		{ value: 'ollama', label: $i18n('llm_provider_ollama') }
-	]);
+	/** Provider options for the select dropdown (dynamic from providerList) */
+	const providerOptions: SelectOption[] = $derived(
+		providerList.length > 0
+			? providerList.map((p) => ({ value: p.id, label: p.displayName }))
+			: [
+					{ value: 'mistral', label: $i18n('llm_provider_mistral') },
+					{ value: 'ollama', label: $i18n('llm_provider_ollama') }
+				]
+	);
 
 	/** Form data state */
 	let formData = $state({

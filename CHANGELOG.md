@@ -5,6 +5,37 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-02-12
+
+### Added
+
+- **OpenAI-compatible Custom Providers**: Full support for user-created providers (RouterLab, OpenRouter, Together AI, etc.)
+  - `OpenAiCompatibleProvider`: HTTP-based provider with SSE streaming and tool calling (OpenAI function call format)
+  - `OpenAiToolAdapter`: Converts MCP tools to OpenAI function call schema
+  - `ProviderType::Custom(String)`: Extensible provider enum replacing hardcoded validation
+  - `custom_provider` DB table with CRUD commands (`list_providers`, `create_custom_provider`, `update_custom_provider`, `delete_custom_provider`)
+  - `CustomProviderForm` component: modal form with auto-generated URL-safe provider ID
+  - Dynamic provider selection in `AgentForm`, `ModelForm`, `ProviderCard`, `LLMSection`
+  - `loadAllLLMData()`: unified data loader for providers + models + settings
+  - SecureKeyStore integration for custom provider API keys
+  - Provider auto-registration at startup from DB
+  - 10 new i18n keys (fr + en) for custom provider UI
+
+### Changed
+
+- `ProviderType` TypeScript type: `'mistral' | 'ollama'` -> `BuiltinProvider | string` (extensible)
+- Agent validation uses `ProviderType::from_str()` instead of hardcoded provider list
+- `LLMSection` dynamically loads provider list instead of hardcoding Mistral/Ollama
+- `ProviderCard` supports custom provider actions (delete, configure)
+
+### Documentation
+
+- `API_REFERENCE.md`: Custom Providers CRUD section (4 commands)
+- `DATABASE_SCHEMA.md`: `custom_provider` table, count 19->20, SurrealDB 2.5.0
+- `FRONTEND_SPECIFICATIONS.md`: CustomProviderForm component, updated types/stores/counts
+
+---
+
 ## [0.11.0] - 2026-02-08
 
 ### Added
@@ -300,6 +331,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.12.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.12.0
 [0.11.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.11.0
 [0.10.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.10.0
 [0.9.4]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.4
@@ -307,4 +339,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.12.0...HEAD

@@ -161,7 +161,7 @@ export interface MCPServerExportData {
  * A new UUID is generated on import.
  */
 export interface LLMModelExportData {
-	provider: 'mistral' | 'ollama';
+	provider: string;
 	/** Model name - used as unique identifier for import conflict detection */
 	name: string;
 	apiName: string;

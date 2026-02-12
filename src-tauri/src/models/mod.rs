@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod agent;
+pub mod custom_provider;
 pub mod embedding;
 pub mod function_calling;
 pub mod import_export;

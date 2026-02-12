@@ -218,6 +218,11 @@ async fn main() -> anyhow::Result<()> {
             commands::llm::test_ollama_connection,
             commands::llm::test_mistral_connection,
             commands::llm::test_llm_completion,
+            // Custom provider commands
+            commands::custom_provider::list_providers,
+            commands::custom_provider::create_custom_provider,
+            commands::custom_provider::update_custom_provider,
+            commands::custom_provider::delete_custom_provider,
             // Model CRUD commands
             commands::models::list_models,
             commands::models::get_model,

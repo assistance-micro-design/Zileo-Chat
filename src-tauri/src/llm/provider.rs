@@ -18,14 +18,40 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// LLM provider type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// LLM provider type.
+///
+/// Mistral and Ollama are builtin providers with dedicated implementations.
+/// Custom(String) represents user-created OpenAI-compatible providers
+/// (RouterLab, OpenRouter, Together AI, etc.).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProviderType {
     /// Mistral AI cloud API
     Mistral,
     /// Local Ollama server
     Ollama,
+    /// User-created OpenAI-compatible provider (e.g., Custom("routerlab"))
+    Custom(String),
+}
+
+impl Serialize for ProviderType {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ProviderType::Mistral => s.serialize_str("mistral"),
+            ProviderType::Ollama => s.serialize_str("ollama"),
+            ProviderType::Custom(name) => s.serialize_str(name),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ProviderType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "mistral" => ProviderType::Mistral,
+            "ollama" => ProviderType::Ollama,
+            other => ProviderType::Custom(other.to_string()),
+        })
+    }
 }
 
 impl std::fmt::Display for ProviderType {
@@ -33,6 +59,7 @@ impl std::fmt::Display for ProviderType {
         match self {
             ProviderType::Mistral => write!(f, "Mistral"),
             ProviderType::Ollama => write!(f, "Ollama"),
+            ProviderType::Custom(name) => write!(f, "{}", name),
         }
     }
 }
@@ -44,7 +71,13 @@ impl std::str::FromStr for ProviderType {
         match s.to_lowercase().as_str() {
             "mistral" => Ok(ProviderType::Mistral),
             "ollama" => Ok(ProviderType::Ollama),
-            _ => Err(LLMError::InvalidProvider(s.to_string())),
+            other => {
+                if other.is_empty() {
+                    Err(LLMError::InvalidProvider(s.to_string()))
+                } else {
+                    Ok(ProviderType::Custom(other.to_string()))
+                }
+            }
         }
     }
 }
@@ -176,6 +209,10 @@ mod tests {
     fn test_provider_type_display() {
         assert_eq!(ProviderType::Mistral.to_string(), "Mistral");
         assert_eq!(ProviderType::Ollama.to_string(), "Ollama");
+        assert_eq!(
+            ProviderType::Custom("routerlab".to_string()).to_string(),
+            "routerlab"
+        );
     }
 
     #[test]
@@ -199,8 +236,17 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_type_from_str_invalid() {
-        let result = "invalid".parse::<ProviderType>();
+    fn test_provider_type_from_str_custom() {
+        let result = "routerlab".parse::<ProviderType>();
+        assert_eq!(
+            result.unwrap(),
+            ProviderType::Custom("routerlab".to_string())
+        );
+    }
+
+    #[test]
+    fn test_provider_type_from_str_empty() {
+        let result = "".parse::<ProviderType>();
         assert!(result.is_err());
     }
 

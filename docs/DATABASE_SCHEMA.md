@@ -1,12 +1,12 @@
 # Schéma Database SurrealDB
 
 > **Version** : 1.0
-> **SurrealDB** : 2.4.0
+> **SurrealDB** : 2.5.0
 > **Type** : Graph relationnel avec support vectoriel
 
 ## Vue d'Ensemble
 
-**Total : 19 tables**
+**Total : 20 tables**
 
 ```
 workflow ─────────────┐
@@ -24,6 +24,7 @@ workflow ─────────────┐
 mcp_server ───────────→ mcp_call_log
 
 llm_model ────────────→ provider_settings
+custom_provider ──────→ (linked via provider name)
 
 prompt (standalone)
 settings (key-value config)
@@ -322,6 +323,27 @@ Configuration des providers LLM.
 
 **Indexes**
 - `provider` (UNIQUE)
+
+---
+
+### custom_provider
+
+Metadata des providers OpenAI-compatible crees par l'utilisateur.
+
+**Champs**
+- `name` : string (UNIQUE, URL-safe: lowercase + hyphens)
+- `display_name` : string
+- `base_url` : string (API endpoint, trailing slash stripped)
+- `enabled` : boolean (DEFAULT true)
+- `created_at` : datetime (DEFAULT time::now())
+- `updated_at` : datetime?
+
+**Indexes**
+- `name` (UNIQUE)
+
+**Notes**
+- Les API keys sont stockees dans SecureKeyStore, pas dans la DB
+- Le champ `provider` dans `llm_model` et `provider_settings` accepte desormais les noms de custom providers en plus de "mistral" et "ollama"
 
 ---
 

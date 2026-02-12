@@ -218,8 +218,6 @@ pub mod commands {
     pub const MIN_MAX_TOKENS: usize = 256;
     /// Maximum max_tokens value
     pub const MAX_MAX_TOKENS: usize = 128000;
-    /// Valid LLM providers
-    pub const VALID_PROVIDERS: &[&str] = &["Mistral", "Ollama", "Demo"];
     /// Valid lifecycle values
     pub const VALID_LIFECYCLES: &[&str] = &["permanent", "temporary"];
 

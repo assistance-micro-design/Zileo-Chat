@@ -52,6 +52,16 @@ impl SecureKeyStore {
     pub fn get_key(&self, provider: &str) -> Option<String> {
         self.inner.get(provider).ok()
     }
+
+    /// Saves an API key for a provider.
+    pub fn set_key(&self, provider: &str, api_key: &str) -> Result<(), KeyStoreError> {
+        self.inner.save(provider, api_key)
+    }
+
+    /// Deletes an API key for a provider.
+    pub fn delete_key(&self, provider: &str) -> Result<(), KeyStoreError> {
+        self.inner.delete(provider)
+    }
 }
 
 impl Default for SecureKeyStore {

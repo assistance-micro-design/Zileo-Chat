@@ -14,7 +14,7 @@ import { z } from 'zod';
 // LLM Schemas
 // ============================================================================
 
-export const ProviderTypeSchema = z.enum(['mistral', 'ollama']);
+export const ProviderTypeSchema = z.string().min(1).max(64);
 
 export const LLMConfigSchema = z.object({
 	provider: z.string(),
