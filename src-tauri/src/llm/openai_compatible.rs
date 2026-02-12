@@ -80,13 +80,9 @@ struct ChatResponseMessage {
 #[serde(tag = "type")]
 enum ContentBlock {
     #[serde(rename = "thinking")]
-    Thinking {
-        thinking: Vec<TextBlock>,
-    },
+    Thinking { thinking: Vec<TextBlock> },
     #[serde(rename = "text")]
-    Text {
-        text: String,
-    },
+    Text { text: String },
 }
 
 /// Text block within thinking content
@@ -312,14 +308,9 @@ impl OpenAiCompatibleProvider {
             .clone()
             .ok_or_else(|| LLMError::NotConfigured(self.provider_name.clone()))?;
 
-        let base_url = self
-            .base_url
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| {
-                LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
-            })?;
+        let base_url = self.base_url.read().await.clone().ok_or_else(|| {
+            LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
+        })?;
 
         let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
 
@@ -451,14 +442,9 @@ impl OpenAiCompatibleProvider {
             .clone()
             .ok_or_else(|| LLMError::NotConfigured(self.provider_name.clone()))?;
 
-        let base_url = self
-            .base_url
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| {
-                LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
-            })?;
+        let base_url = self.base_url.read().await.clone().ok_or_else(|| {
+            LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
+        })?;
 
         let request_body = ToolChatRequest {
             model: model.to_string(),
@@ -564,14 +550,9 @@ impl OpenAiCompatibleProvider {
             .clone()
             .ok_or_else(|| LLMError::NotConfigured(self.provider_name.clone()))?;
 
-        let base_url = self
-            .base_url
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| {
-                LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
-            })?;
+        let base_url = self.base_url.read().await.clone().ok_or_else(|| {
+            LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
+        })?;
 
         let url = format!("{}/models", base_url);
 
@@ -620,10 +601,7 @@ mod tests {
         assert!(result.is_ok());
         assert!(provider.is_configured());
 
-        assert_eq!(
-            provider.get_api_key().await,
-            Some("test-key".to_string())
-        );
+        assert_eq!(provider.get_api_key().await, Some("test-key".to_string()));
         assert_eq!(
             provider.get_base_url().await,
             Some("https://api.example.com/v1".to_string())

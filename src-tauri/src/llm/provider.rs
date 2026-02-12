@@ -238,7 +238,10 @@ mod tests {
     #[test]
     fn test_provider_type_from_str_custom() {
         let result = "routerlab".parse::<ProviderType>();
-        assert_eq!(result.unwrap(), ProviderType::Custom("routerlab".to_string()));
+        assert_eq!(
+            result.unwrap(),
+            ProviderType::Custom("routerlab".to_string())
+        );
     }
 
     #[test]

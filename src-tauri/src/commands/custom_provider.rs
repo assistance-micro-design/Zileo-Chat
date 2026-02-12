@@ -33,7 +33,9 @@ fn validate_provider_name(name: &str) -> Result<(), String> {
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
-        return Err("Provider name must contain only lowercase letters, numbers, and hyphens".into());
+        return Err(
+            "Provider name must contain only lowercase letters, numbers, and hyphens".into(),
+        );
     }
     if name == "mistral" || name == "ollama" {
         return Err(format!("'{}' is a builtin provider name", name));
@@ -46,9 +48,7 @@ fn validate_provider_name(name: &str) -> Result<(), String> {
 /// Returns a unified list of provider metadata for the frontend.
 #[tauri::command]
 #[instrument(name = "list_providers", skip(state))]
-pub async fn list_providers(
-    state: State<'_, AppState>,
-) -> Result<Vec<ProviderInfo>, String> {
+pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderInfo>, String> {
     let db = &state.db;
 
     // Builtin providers
@@ -149,10 +149,7 @@ pub async fn create_custom_provider(
     let normalized_url = base_url.trim_end_matches('/').to_string();
 
     // Insert into DB
-    let insert_query = format!(
-        "CREATE custom_provider:`{}` CONTENT $data",
-        name
-    );
+    let insert_query = format!("CREATE custom_provider:`{}` CONTENT $data", name);
     let data = serde_json::json!({
         "name": name,
         "display_name": display_name,
@@ -265,9 +262,7 @@ pub async fn update_custom_provider(
             let current_key = if let Some(ref key) = api_key {
                 key.clone()
             } else {
-                keystore
-                    .get_key(&name)
-                    .unwrap_or_default()
+                keystore.get_key(&name).unwrap_or_default()
             };
             let current_url = if let Some(ref url) = base_url {
                 url.trim_end_matches('/').to_string()
@@ -333,10 +328,7 @@ pub async fn delete_custom_provider(
     }
 
     // Unregister from manager
-    state
-        .llm_manager
-        .unregister_custom_provider(&name)
-        .await;
+    state.llm_manager.unregister_custom_provider(&name).await;
 
     info!(name = %name, "Custom provider deleted");
     Ok(())
