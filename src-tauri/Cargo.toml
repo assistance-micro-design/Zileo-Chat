@@ -16,7 +16,6 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-# OPT-WF-5: Verified >= 2.2.1 (CVE-2025-31477 patched, current: 2.5.2)
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -33,7 +32,9 @@ tokio = { version = "1.49.0", features = [
     "net",          # TCP/UDP networking
     "process",      # Async process spawning (for MCP stdio)
 ] }
-surrealdb = { version = "2.5.0", features = ["kv-rocksdb", "protocol-http"] }
+# SA-006 DEP-2: Pruned unused features (protocol-http, protocol-ws, rustls)
+# Only kv-rocksdb is needed for embedded storage (Surreal::new::<RocksDb>)
+surrealdb = { version = "2.5.0", default-features = false, features = ["kv-rocksdb"] }
 anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"

@@ -37,7 +37,7 @@
 | **2-I** | HTTPS Warning Custom Providers | **DONE** | 8 tests |
 | **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests. SA-010 ERR-2 complete. SA-013 #16-20 complete: all 28 console.* removed from services (silent return), stores/i18n (silent fallback), agent page (toast notifications), settings pages (error state UI), components (UI error state) |
 | **3-B** | Defense-in-Depth | **DONE** | URL scheme (11 tests), depth limit (2 tests), entity limit |
-| **3-C** | Dependency Feature Bloat | **PARTIAL** | rig-core features removed. SurrealDB unchanged |
+| **3-C** | Dependency Feature Bloat | **DONE** | rig-core features removed. SurrealDB pruned: `default-features = false, features = ["kv-rocksdb"]`. Removed protocol-http, protocol-ws, rustls. 902 tests pass. OPT-WF-5 outdated comment cleaned up. |
 | **3-D** | Tauri Permissions Hardening | **PARTIAL** | SA-005 M1+M4 DONE (opener scope + StepImport openUrl). M2-M3 NOT DONE |
 | **3-E** | Type Alignment Medium | **PARTIAL** | Workflow.model_id DONE. Task priority NOT DONE |
 

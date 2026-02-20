@@ -12,9 +12,9 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 54 | Fix implemented and tested |
+| DONE | 55 | Fix implemented and tested |
 | PARTIAL | 1 | Some aspects done, others remain |
-| NOT DONE | 12 | Not yet addressed |
+| NOT DONE | 11 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
@@ -147,7 +147,7 @@
 |----|----------|---------|--------|----------|
 | 7 CVEs | N/A | All NPM CVEs inapplicable to desktop | **N/A** | Confirmed in EVALUATION. |
 | DEP-1 | HIGH | rig-core features = ["all"] pulls bloat | **DONE** | Cargo.toml: removed `features = ["all"]` from rig-core. |
-| DEP-2 | HIGH | surrealdb unused features | **NOT DONE** | surrealdb dependencies unchanged. |
+| DEP-2 | HIGH | surrealdb unused features | **DONE** | Cargo.toml: `default-features = false, features = ["kv-rocksdb"]`. Removed protocol-http, protocol-ws, rustls. 902 tests pass. |
 | DEP-3 | HIGH | NPM patch updates available | **NOT DONE** | No package.json changes in branch. |
 | L/INFO | LOW/INFO | Unmaintained transitive deps | **NOT DONE** | Upstream dependency, cannot fix. |
 
@@ -277,7 +277,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Code deduplication (Rust) | SA-007 DUP-1/2/3, SA-008 DUP-1/3/4 | 6h |
 | Function decomposition | SA-007 F1-F13 | 4h |
 | NPM dependency updates | SA-006 DEP-3 | 30min |
-| SurrealDB feature pruning | SA-006 DEP-2 | 1h |
+| ~~SurrealDB feature pruning~~ | ~~SA-006 DEP-2~~ | **DONE** |
 | Orphan TS types cleanup | SA-013 #14-15 | 30min |
 | MCP HTTP validation | SA-002 S2-H3 | 30min |
 

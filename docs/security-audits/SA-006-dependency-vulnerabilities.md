@@ -87,6 +87,8 @@ These are entirely dev-time and do not affect the production Tauri binary.
 
 **Recommendation**: Remove `protocol-http` from Cargo.toml features. Investigate if `default-features = false, features = ["kv-rocksdb"]` reduces the dependency tree.
 
+**REMEDIATED (2026-02-20)**: Changed to `default-features = false, features = ["kv-rocksdb"]`. Removed protocol-http, protocol-ws, rustls from SurrealDB subtree. Build passes, 902 tests pass, 0 clippy warnings.
+
 ### B.2 rig-core 0.30.0
 
 | Metric | Value |
@@ -192,6 +194,8 @@ No unmaintained packages detected in the NPM dependency tree.
 | `rustls` | **NO** | TLS for network protocols. Unnecessary for embedded. |
 
 **Recommendation**: Use `default-features = false, features = ["kv-rocksdb"]`. This eliminates `reqwest` (from SurrealDB's perspective), `tokio-tungstenite`, `rustls`, and related network deps from the SurrealDB subtree.
+
+**REMEDIATED (2026-02-20)**: Applied recommended change. Only `kv-rocksdb` feature now resolved for SurrealDB.
 
 ### D.3 keyring `features = ["apple-native", "windows-native", "sync-secret-service"]`
 
@@ -332,6 +336,8 @@ All three platform backends are enabled. For a Linux-only build, only `sync-secr
 ### G.3 Cargo.toml comment: CVE-2025-31477
 
 **Status**: The comment `OPT-WF-5: Verified >= 2.2.1 (CVE-2025-31477 patched, current: 2.5.2)` on `tauri-plugin-opener` is outdated - current resolved version is 2.5.3. The CVE is long patched. Comment should be cleaned up.
+
+**REMEDIATED (2026-02-20)**: Outdated OPT-WF-5 comment removed from Cargo.toml.
 
 ---
 
