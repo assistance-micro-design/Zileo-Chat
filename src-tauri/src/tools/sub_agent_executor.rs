@@ -536,7 +536,7 @@ impl SubAgentExecutor {
 
         let result = self
             .orchestrator
-            .execute_with_mcp(agent_id, task, self.mcp_manager.clone())
+            .execute_with_mcp(agent_id, task, self.mcp_manager.clone(), None)
             .await;
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
@@ -887,7 +887,7 @@ impl SubAgentExecutor {
             monitor_for_exec.record_activity();
 
             let result = orchestrator
-                .execute_with_mcp(&agent_id_owned, task, mcp_manager)
+                .execute_with_mcp(&agent_id_owned, task, mcp_manager, None)
                 .await;
 
             // Record activity at end

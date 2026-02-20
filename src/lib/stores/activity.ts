@@ -67,6 +67,14 @@ const initialState: ActivityState = {
 const store = writable<ActivityState>(initialState);
 
 /**
+ * Guard to prevent duplicate activity captures for the same workflow execution.
+ * Tracks the workflow ID of the last successful capture. Reset when the store is reset.
+ * This prevents the race condition where captureStreamingActivities could be called
+ * multiple times before streamingStore.reset() clears the streaming state (SA-011 H-001).
+ */
+let lastCapturedWorkflowId: string | null = null;
+
+/**
  * Activity store with actions for managing workflow activity events.
  * Combines historical activities from database with live streaming activities.
  */
@@ -110,10 +118,20 @@ export const activityStore = {
 	 *
 	 * This converts all active streaming state (tools, reasoning, sub-agents, tasks)
 	 * into WorkflowActivityEvent format and prepends them to historical activities.
+	 *
+	 * Includes a guard to prevent duplicate captures for the same workflow execution
+	 * (SA-011 H-001). Returns false if capture was skipped (duplicate or empty).
+	 *
+	 * @param workflowId - The workflow ID being captured (used for dedup guard)
+	 * @returns true if activities were captured, false if skipped
 	 */
-	captureStreamingActivities(): void {
+	captureStreamingActivities(workflowId: string): boolean {
+		// Guard: prevent duplicate capture for the same workflow execution
+		if (workflowId === lastCapturedWorkflowId) {
+			return false;
+		}
+
 		const streamingState = get(streamingStore);
-		const currentState = get(store);
 
 		const newActivities: WorkflowActivityEvent[] = [
 			...streamingState.tools.map((t, i) => activeToolToActivity(t, i)),
@@ -122,19 +140,31 @@ export const activityStore = {
 			...streamingState.tasks.map((t, i) => activeTaskToActivity(t, i))
 		];
 
+		// Guard: skip if no streaming activities to capture
+		if (newActivities.length === 0) {
+			return false;
+		}
+
+		// Mark as captured for this workflow
+		lastCapturedWorkflowId = workflowId;
+
+		const currentState = get(store);
+
 		// Merge and sort by timestamp (most recent first)
 		const merged = [...newActivities, ...currentState.historical].sort(
 			(a, b) => b.timestamp - a.timestamp
 		);
 
 		store.update((s) => ({ ...s, historical: merged }));
+		return true;
 	},
 
 	/**
 	 * Reset store to initial state.
-	 * Clears all activities and errors.
+	 * Clears all activities, errors, and the capture guard.
 	 */
 	reset(): void {
+		lastCapturedWorkflowId = null;
 		store.set(initialState);
 	},
 

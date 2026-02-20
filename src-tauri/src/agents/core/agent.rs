@@ -16,6 +16,7 @@ use crate::mcp::MCPManager;
 use crate::models::{AgentConfig, Lifecycle};
 use async_trait::async_trait;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Task represents a request to the agent
 #[derive(Debug, Clone)]
@@ -122,7 +123,7 @@ pub trait Agent: Send + Sync {
     /// New implementations should prefer `execute_with_mcp`.
     async fn execute(&self, task: Task) -> anyhow::Result<Report>;
 
-    /// Executes a task with access to MCP tools
+    /// Executes a task with access to MCP tools and optional cancellation support.
     ///
     /// This method allows the agent to call MCP tools during execution.
     /// The default implementation delegates to `execute()` for backward compatibility.
@@ -130,6 +131,9 @@ pub trait Agent: Send + Sync {
     /// # Arguments
     /// * `task` - The task to execute
     /// * `mcp_manager` - Optional MCP manager for tool invocation
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown.
+    ///   When provided, the agent should propagate this token to sub-agent tools
+    ///   so they can abort when the user cancels the workflow.
     ///
     /// # Returns
     /// A report containing the execution results and metrics
@@ -137,6 +141,7 @@ pub trait Agent: Send + Sync {
         &self,
         task: Task,
         _mcp_manager: Option<Arc<MCPManager>>,
+        _cancellation_token: Option<CancellationToken>,
     ) -> anyhow::Result<Report> {
         // Default implementation for backward compatibility
         self.execute(task).await

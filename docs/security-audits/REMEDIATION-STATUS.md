@@ -1,10 +1,10 @@
 # Remediation Status - Security Audit Findings
 
-**Date**: 2026-02-20
+**Date**: 2026-02-20 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 68 (vs main)
-**Lines**: +1,882 / -1,477
+**Files changed**: 75 (vs main)
+**Lines**: +2,100 / -1,500 (approx)
 
 ---
 
@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 43 | Fix implemented and tested |
+| DONE | 45 | Fix implemented and tested |
 | PARTIAL | 6 | Some aspects done, others remain |
-| NOT DONE | 17 | Not yet addressed |
+| NOT DONE | 15 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 20 | 3 | 4 |
+| HIGH (27) | 22 | 3 | 2 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -67,12 +67,13 @@
 | commands/migration.rs | test_memory_v2_migration_guard | Guard: v2 migration idempotent |
 | commands/migration.rs | test_mcp_http_migration_guard | Guard: MCP HTTP migration idempotent |
 
-### TypeScript (18 new tests in 2 new files)
+### TypeScript (30 new tests in 3 new files)
 
 | File | Tests | Purpose |
 |------|-------|---------|
 | utils/__tests__/error.test.ts | 11 tests | getErrorMessage + formatErrorForDisplay |
 | utils/__tests__/url.test.ts | 11 tests | isAllowedScheme (XSS defense) |
+| stores/__tests__/activity.test.ts | 8 tests | Activity capture guard (SA-011 H-001 race condition) |
 
 ### Infrastructure
 
@@ -188,7 +189,7 @@
 
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
-| H-001 | HIGH | Activity capture race condition | **NOT DONE** | No guard added to activity capture. |
+| H-001 | HIGH | Activity capture race condition | **DONE** | **Frontend**: activity.ts: `lastCapturedWorkflowId` guard prevents duplicate capture. workflowExecutor.service.ts: capture moved to `finally` block (before `streamingStore.reset()`), runs on both success and error paths. 8 new tests in activity.test.ts. **Backend**: CancellationToken now propagated through full chain: streaming.rs -> orchestrator -> Agent trait -> LLMAgent -> AgentToolContext -> sub-agent tools -> SubAgentExecutor. Sub-agents stop promptly on user cancel. Files: agent.rs, orchestrator.rs, llm_agent.rs, context.rs, streaming.rs, workflow.rs, sub_agent_executor.rs. |
 | H-002 | HIGH | No error recovery on loadWorkflows | **NOT DONE** | No error state or retry added. |
 | H-003 | HIGH | No double-submit protection | **DONE** | workflowExecutor.service.ts: `executingWorkflows` Set guards against concurrent sends. |
 | M-001 to M-012 | MEDIUM | Various quality issues | **NOT DONE** | No changes to chat/workflow components (except MarkdownRenderer URL check). |
@@ -229,6 +230,8 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 | Change | Files | Rationale |
 |--------|-------|-----------|
+| CancellationToken propagation to sub-agents | agent.rs, orchestrator.rs, llm_agent.rs, context.rs, streaming.rs, workflow.rs, sub_agent_executor.rs | Sub-agents continued running after user cancel. Token now threaded through full execution chain. |
+| UTF-8 safe truncation in memory compact mode | tools/memory/tool.rs | Panic on multi-byte chars (French accented text). Replaced byte slice with safe_truncate(). |
 | CSP blob: directive | tauri.conf.json | `default-src 'self' blob:` for markdown/export |
 | MemoryList export via Tauri dialog | MemoryList.svelte | Replaced Blob+DOM link with native save dialog + backend invoke |
 | Accessibility improvements | ExportPreview, ImportExportSettings, MemorySettings, settings/+layout | aria-expanded, role, aria-current, aria-label |
@@ -246,7 +249,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Finding | Why | Effort |
 |---------|-----|--------|
 | ~~SA-005 H3: Migration guard~~ | ~~Memory embeddings can be destroyed by re-running migration~~ | **DONE** |
-| SA-011 H-001: Activity capture race | Activities can be lost during streaming reset | 2h |
+| ~~SA-011 H-001: Activity capture race~~ | ~~Activities can be lost during streaming reset~~ | **DONE** (frontend guard + backend cancellation token propagation) |
 | SA-011 H-002: loadWorkflows error recovery | Blank sidebar with no retry on DB failure | 1h |
 | SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |
 | SA-013 #6: MessageCreate tokens | Missing field in TS type | 15min |
@@ -280,11 +283,14 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| cargo clippy -- -D warnings | **NOT RUN** | Should run before merge |
-| cargo test | **NOT RUN** | Should run before merge |
+| cargo fmt --check | **PASS** | 2026-02-20 |
+| cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
+| cargo test --lib | **PASS** | 2026-02-20, 891 tests passed |
 | npm run lint | **NOT RUN** | Should run before merge |
 | npm run check | **NOT RUN** | Should run before merge |
 | npm run test | **NOT RUN** | Should run before merge |
+| Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
+| Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
 | Manual test: custom provider HTTP warning | **NOT RUN** | |

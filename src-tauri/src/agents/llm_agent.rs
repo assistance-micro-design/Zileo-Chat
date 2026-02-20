@@ -47,6 +47,7 @@ use async_trait::async_trait;
 use chrono::Local;
 use std::sync::Arc;
 use tauri::Emitter;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Default maximum number of tool execution iterations to prevent infinite loops
@@ -397,25 +398,29 @@ impl LLMAgent {
     /// # Arguments
     /// * `workflow_id` - Optional workflow ID for scoping tool operations
     /// * `is_primary_agent` - Whether this is the primary workflow agent
+    /// * `context_override` - Optional context to use instead of `self.agent_context`.
+    ///   This allows injecting a modified context (e.g., with a cancellation token)
+    ///   without mutating the agent.
     async fn create_local_tools(
         &self,
         workflow_id: Option<String>,
         is_primary_agent: bool,
+        context_override: Option<&AgentToolContext>,
     ) -> Vec<Arc<dyn Tool>> {
         let Some(ref factory) = self.tool_factory else {
             return Vec::new();
         };
 
+        // Use override if provided, otherwise fall back to self.agent_context
+        let effective_context = context_override.or(self.agent_context.as_ref());
+
         // Extract app_handle from context if available
-        let app_handle = self
-            .agent_context
-            .as_ref()
-            .and_then(|ctx| ctx.app_handle.clone());
+        let app_handle = effective_context.and_then(|ctx| ctx.app_handle.clone());
 
         // If this is the primary agent and we have context, use create_tools_with_context
         // to include sub-agent tools
         if is_primary_agent {
-            if let Some(ref context) = self.agent_context {
+            if let Some(context) = effective_context {
                 debug!(
                     agent_id = %self.config.id,
                     "Creating tools with context for primary agent (sub-agent tools available)"
@@ -436,7 +441,7 @@ impl LLMAgent {
         debug!(
             agent_id = %self.config.id,
             is_primary_agent = is_primary_agent,
-            has_context = self.agent_context.is_some(),
+            has_context = effective_context.is_some(),
             "Creating basic tools (sub-agent tools NOT available)"
         );
         factory
@@ -971,7 +976,7 @@ impl Agent for LLMAgent {
     /// 7. Repeats until no tool calls or MAX_TOOL_ITERATIONS reached
     #[instrument(
         name = "llm_agent_execute_with_mcp",
-        skip(self, task, mcp_manager),
+        skip(self, task, mcp_manager, cancellation_token),
         fields(
             agent_id = %self.config.id,
             task_id = %task.id,
@@ -986,6 +991,7 @@ impl Agent for LLMAgent {
         &self,
         task: Task,
         mcp_manager: Option<Arc<MCPManager>>,
+        cancellation_token: Option<CancellationToken>,
     ) -> anyhow::Result<Report> {
         let start = std::time::Instant::now();
         let mut tools_used: Vec<String> = Vec::new();
@@ -1108,7 +1114,17 @@ impl Agent for LLMAgent {
             .and_then(|v| v.as_str())
             .map(String::from);
 
-        let local_tools = self.create_local_tools(workflow_id, is_primary_agent).await;
+        // Inject cancellation token into context if both are available.
+        // This ensures sub-agent tools receive the workflow's cancellation token
+        // and can propagate it to SubAgentExecutor for graceful shutdown.
+        let effective_context = match (&self.agent_context, &cancellation_token) {
+            (Some(ctx), Some(token)) => Some(ctx.clone().with_cancellation_token(token.clone())),
+            _ => None,
+        };
+
+        let local_tools = self
+            .create_local_tools(workflow_id, is_primary_agent, effective_context.as_ref())
+            .await;
 
         // Discover MCP tools and server summaries if manager is available
         let (mcp_tools, mcp_server_summaries) = if let Some(ref mcp) = mcp_manager {

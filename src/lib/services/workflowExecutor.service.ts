@@ -293,10 +293,9 @@ export const WorkflowExecutorService = {
 				callbacks?.onAssistantMessage?.(assistantMessage);
 			}
 
-			// Step 6: Capture streaming activities to historical (UI-only, guard)
-			if (isStillViewed()) {
-				activityStore.captureStreamingActivities();
-			}
+			// Step 6: Activity capture moved to finally block (SA-011 H-001)
+			// This ensures capture happens on both success AND error paths,
+			// always before streamingStore.reset().
 
 			// Step 7: Refresh workflows (always reload list)
 			await workflowStore.loadWorkflows();
@@ -337,6 +336,12 @@ export const WorkflowExecutorService = {
 
 			// Only cleanup streaming/token UI if still viewing this workflow
 			if (isStillViewed()) {
+				// SA-011 H-001: Capture streaming activities BEFORE reset.
+				// This runs on both success and error paths, preserving partial
+				// activities (tools, reasoning) even when execution fails.
+				// The capture guard in activityStore prevents duplicates.
+				activityStore.captureStreamingActivities(workflowId);
+
 				streamingStore.reset();
 				tokenStore.stopStreaming();
 			}

@@ -18,6 +18,7 @@ use super::{
 };
 use crate::mcp::MCPManager;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Agent orchestrator for coordinating agent execution
@@ -46,7 +47,7 @@ impl AgentOrchestrator {
         )
     )]
     pub async fn execute(&self, agent_id: &str, task: Task) -> anyhow::Result<Report> {
-        self.execute_with_mcp(agent_id, task, None).await
+        self.execute_with_mcp(agent_id, task, None, None).await
     }
 
     /// Executes a task via a specific agent with MCP tool support
@@ -55,9 +56,10 @@ impl AgentOrchestrator {
     /// * `agent_id` - ID of the agent to execute the task
     /// * `task` - The task to execute
     /// * `mcp_manager` - Optional MCP manager for tool invocation
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown
     #[instrument(
         name = "orchestrator_execute_with_mcp",
-        skip(self, task, mcp_manager),
+        skip(self, task, mcp_manager, cancellation_token),
         fields(
             task_id = %task.id,
             agent_id = %agent_id,
@@ -70,6 +72,7 @@ impl AgentOrchestrator {
         agent_id: &str,
         task: Task,
         mcp_manager: Option<Arc<MCPManager>>,
+        cancellation_token: Option<CancellationToken>,
     ) -> anyhow::Result<Report> {
         debug!("Looking up agent in registry");
 
@@ -87,7 +90,7 @@ impl AgentOrchestrator {
         );
 
         let report = agent
-            .execute_with_mcp(task, mcp_manager)
+            .execute_with_mcp(task, mcp_manager, cancellation_token)
             .await
             .map_err(|e| {
                 error!(error = %e, "Agent execution failed");

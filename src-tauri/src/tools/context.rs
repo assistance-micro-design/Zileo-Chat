@@ -261,6 +261,25 @@ impl AgentToolContext {
         }
     }
 
+    /// Returns a new context with the cancellation token replaced.
+    ///
+    /// This is used by `LLMAgent::execute_with_mcp` to inject the workflow's
+    /// cancellation token into the context before passing it to the tool factory.
+    /// This ensures sub-agent tools receive the token and can propagate cancellation.
+    ///
+    /// # Arguments
+    /// * `token` - The cancellation token to set
+    ///
+    /// # Example
+    /// ```ignore
+    /// let ctx_with_token = context.with_cancellation_token(token.clone());
+    /// // ctx_with_token.cancellation_token is now Some(token)
+    /// ```
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
     /// Creates an AgentToolContext with all dependencies from AppState.
     ///
     /// Convenience method that always includes the MCP manager from AppState.

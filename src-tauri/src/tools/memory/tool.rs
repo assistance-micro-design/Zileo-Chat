@@ -370,16 +370,11 @@ impl MemoryTool {
             let compact_memories: Vec<serde_json::Value> = memories
                 .into_iter()
                 .map(|m| {
-                    let preview = if m.content.len()
-                        > crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH
-                    {
-                        format!(
-                            "{}...",
-                            &m.content[..crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH]
-                        )
-                    } else {
-                        m.content.clone()
-                    };
+                    let preview = crate::tools::validation_helper::safe_truncate(
+                        &m.content,
+                        crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH,
+                        true,
+                    );
                     let tags = m
                         .metadata
                         .get("tags")

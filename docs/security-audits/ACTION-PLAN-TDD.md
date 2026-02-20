@@ -28,7 +28,7 @@
 | **1-F** | models.rs + task.rs Injection | **DONE** | 3 tests |
 | **2-A** | Type Mismatches TS/Rust | **PARTIAL** | RiskLevel::Critical DONE (1 test), enable_thinking DONE. max_tool_iterations/MessageCreate/#12/#14-15 NOT DONE |
 | **2-B** | Performance messages.clone() | **DONE** | Signatures changed to &[Value] |
-| **2-C** | Frontend Robustness | **PARTIAL** | H-003 double-submit DONE. H-001 race / H-002 retry NOT DONE |
+| **2-C** | Frontend Robustness | **PARTIAL** | H-003 double-submit DONE. H-001 race DONE (8 TS tests + backend cancellation token propagation through 7 Rust files). H-002 retry NOT DONE |
 | **2-D** | Export/Validation Parameterization | **DONE** | All bind params |
 | **2-E** | Parallel DB Writes | **DONE** | futures::join_all |
 | **2-F** | Dependency Updates NPM | **NOT DONE** | No package.json changes |

@@ -154,6 +154,7 @@ pub async fn execute_workflow(
         &validated_agent_id,
         task,
         Some(state.mcp_manager.clone()),
+        None, // No cancellation token for non-streaming execution
     );
 
     let report = timeout(
