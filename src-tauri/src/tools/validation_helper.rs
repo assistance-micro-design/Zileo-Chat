@@ -156,8 +156,10 @@ impl ValidationHelper {
         match settings.mode {
             ValidationMode::Auto => {
                 // In auto mode, only validate if always_confirm_high is set AND risk is high
-                if settings.risk_thresholds.always_confirm_high && *risk_level == RiskLevel::High {
-                    info!("Auto mode but high risk requires confirmation");
+                if settings.risk_thresholds.always_confirm_high
+                    && (*risk_level == RiskLevel::High || *risk_level == RiskLevel::Critical)
+                {
+                    info!("Auto mode but high/critical risk requires confirmation");
                     return true;
                 }
                 info!("Auto mode: skipping validation");

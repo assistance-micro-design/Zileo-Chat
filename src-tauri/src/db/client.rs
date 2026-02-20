@@ -220,24 +220,6 @@ impl DBClient {
         }
     }
 
-    /// Updates a record by ID (prepared for future phases)
-    #[allow(dead_code)]
-    #[instrument(name = "db_update", skip(self, data), fields(record_id = %id))]
-    pub async fn update<T>(&self, id: &str, data: T) -> Result<()>
-    where
-        T: serde::Serialize + Send + Sync + 'static,
-    {
-        debug!("Updating record");
-
-        let _: Vec<serde_json::Value> = self.db.update(id).content(data).await.map_err(|e| {
-            error!(error = %e, "Failed to update record");
-            e
-        })?;
-
-        debug!("Record updated");
-        Ok(())
-    }
-
     /// Deletes a record by ID
     ///
     /// Accepts ID in format `table:uuid` (e.g., "workflow:123e4567-...")

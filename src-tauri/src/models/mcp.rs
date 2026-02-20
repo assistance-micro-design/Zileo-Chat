@@ -222,9 +222,11 @@ pub struct MCPCallLog {
     pub server_name: String,
     /// Tool name that was called
     pub tool_name: String,
-    /// Parameters passed to the tool
+    /// Parameters passed to the tool (stored as JSON string in DB)
+    #[serde(deserialize_with = "crate::models::serde_utils::deserialize_json_string")]
     pub params: serde_json::Value,
-    /// Result returned by the tool
+    /// Result returned by the tool (stored as JSON string in DB)
+    #[serde(deserialize_with = "crate::models::serde_utils::deserialize_json_string")]
     pub result: serde_json::Value,
     /// Whether the call succeeded
     pub success: bool,
@@ -251,9 +253,11 @@ pub struct MCPCallLogCreate {
     pub server_name: String,
     /// Tool name that was called
     pub tool_name: String,
-    /// Parameters passed to the tool
+    /// Parameters passed to the tool (serialized as JSON string for SCHEMAFULL storage)
+    #[serde(serialize_with = "crate::models::serde_utils::serialize_as_json_string")]
     pub params: serde_json::Value,
-    /// Result returned by the tool
+    /// Result returned by the tool (serialized as JSON string for SCHEMAFULL storage)
+    #[serde(serialize_with = "crate::models::serde_utils::serialize_as_json_string")]
     pub result: serde_json::Value,
     /// Whether the call succeeded
     pub success: bool,

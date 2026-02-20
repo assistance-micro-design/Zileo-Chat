@@ -126,78 +126,6 @@ pub fn validate_enum_value(value: &str, valid_values: &[&str], field_name: &str)
     Ok(())
 }
 
-/// Fluent builder for SurrealDB queries.
-#[allow(dead_code)]
-pub struct QueryBuilder {
-    table: String,
-    fields: Vec<String>,
-    conditions: Vec<String>,
-    order_by: Option<(String, bool)>,
-    limit: Option<usize>,
-}
-
-#[allow(dead_code)]
-impl QueryBuilder {
-    pub fn new(table: &str) -> Self {
-        Self {
-            table: table.to_string(),
-            fields: vec!["meta::id(id) AS id".to_string()],
-            conditions: Vec::new(),
-            order_by: None,
-            limit: None,
-        }
-    }
-
-    pub fn select(mut self, fields: &[&str]) -> Self {
-        self.fields.extend(fields.iter().map(|f| f.to_string()));
-        self
-    }
-
-    pub fn where_eq(mut self, field: &str, value: &str) -> Self {
-        let escaped = serde_json::to_string(value).unwrap_or_else(|_| format!("'{}'", value));
-        self.conditions.push(format!("{} = {}", field, escaped));
-        self
-    }
-
-    pub fn where_clause(mut self, condition: &str) -> Self {
-        self.conditions.push(condition.to_string());
-        self
-    }
-
-    pub fn order_by(mut self, field: &str, desc: bool) -> Self {
-        self.order_by = Some((field.to_string(), desc));
-        self
-    }
-
-    pub fn limit(mut self, n: usize) -> Self {
-        self.limit = Some(n);
-        self
-    }
-
-    pub fn build(self) -> String {
-        let mut query = format!("SELECT {} FROM {}", self.fields.join(", "), self.table);
-
-        if !self.conditions.is_empty() {
-            query.push_str(" WHERE ");
-            query.push_str(&self.conditions.join(" AND "));
-        }
-
-        if let Some((field, desc)) = self.order_by {
-            query.push_str(&format!(
-                " ORDER BY {} {}",
-                field,
-                if desc { "DESC" } else { "ASC" }
-            ));
-        }
-
-        if let Some(n) = self.limit {
-            query.push_str(&format!(" LIMIT {}", n));
-        }
-
-        query
-    }
-}
-
 /// OPT-MEM-9: Parameterized query builder for SQL-injection safe queries.
 /// Returns both the query string and the bind parameters.
 #[allow(dead_code)]
@@ -393,30 +321,6 @@ mod tests {
     fn test_validate_enum_value_invalid() {
         let result = validate_enum_value("invalid", &["pending", "done"], "status");
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_query_builder_simple() {
-        let query = QueryBuilder::new("memory")
-            .select(&["content", "memory_type"])
-            .build();
-        assert_eq!(
-            query,
-            "SELECT meta::id(id) AS id, content, memory_type FROM memory"
-        );
-    }
-
-    #[test]
-    fn test_query_builder_with_conditions() {
-        let query = QueryBuilder::new("memory")
-            .select(&["content"])
-            .where_eq("memory_type", "knowledge")
-            .order_by("created_at", true)
-            .limit(10)
-            .build();
-        assert!(query.contains("WHERE memory_type ="));
-        assert!(query.contains("ORDER BY created_at DESC"));
-        assert!(query.contains("LIMIT 10"));
     }
 
     #[test]

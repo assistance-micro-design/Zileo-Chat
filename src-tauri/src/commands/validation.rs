@@ -125,7 +125,11 @@ pub async fn list_pending_validations(
 
     let validations: Vec<ValidationRequest> = state
         .db
-        .query("SELECT * FROM validation_request WHERE status = 'pending' ORDER BY created_at DESC")
+        .query(
+            "SELECT meta::id(id) AS id, workflow_id, validation_type, details, status, \
+             risk_level, created_at, updated_at \
+             FROM validation_request WHERE status = 'pending' ORDER BY created_at DESC",
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to load pending validations");
@@ -159,15 +163,23 @@ pub async fn list_workflow_validations(
 
     let validations: Vec<ValidationRequest> = state
         .db
-        .query(&format!(
-            "SELECT * FROM validation_request WHERE workflow_id = '{}' ORDER BY created_at DESC",
-            validated_workflow_id
-        ))
+        .query_json_with_params(
+            "SELECT meta::id(id) AS id, workflow_id, validation_type, details, status, \
+             risk_level, created_at, updated_at \
+             FROM validation_request WHERE workflow_id = $wf_id ORDER BY created_at DESC",
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to load workflow validations");
             format!("Failed to load workflow validations: {}", e)
-        })?;
+        })?
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect();
 
     info!(count = validations.len(), "Workflow validations loaded");
     Ok(validations)
@@ -191,13 +203,16 @@ pub async fn approve_validation(
         format!("Invalid validation ID: {}", e)
     })?;
 
-    // Update status to approved using SurrealDB record ID format
+    // Update status to approved using bind param for status value
     state
         .db
-        .execute(&format!(
-            "UPDATE validation_request:`{}` SET status = 'approved'",
-            validated_id
-        ))
+        .execute_with_params(
+            &format!(
+                "UPDATE validation_request:`{}` SET status = $status",
+                validated_id
+            ),
+            vec![("status".to_string(), serde_json::json!("approved"))],
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to approve validation");
@@ -234,16 +249,19 @@ pub async fn reject_validation(
         format!("Invalid rejection reason: {}", e)
     })?;
 
-    // Update status to rejected and store reason in details using SurrealDB record ID format
-    // Use JSON encoding for the reason to handle special characters
-    let reason_json = serde_json::to_string(&validated_reason)
-        .unwrap_or_else(|_| "\"Unknown reason\"".to_string());
+    // Update status to rejected and store reason using bind params
     state
         .db
-        .execute(&format!(
-            "UPDATE validation_request:`{}` SET status = 'rejected', details.rejection_reason = {}",
-            validated_id, reason_json
-        ))
+        .execute_with_params(
+            &format!(
+                "UPDATE validation_request:`{}` SET status = $status, details.rejection_reason = $reason",
+                validated_id
+            ),
+            vec![
+                ("status".to_string(), serde_json::json!("rejected")),
+                ("reason".to_string(), serde_json::json!(validated_reason)),
+            ],
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to reject validation");

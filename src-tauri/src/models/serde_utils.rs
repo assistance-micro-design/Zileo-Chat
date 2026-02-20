@@ -87,8 +87,58 @@
 //! 3. Add comprehensive tests for all expected formats
 //! 4. Document the formats handled
 
-use serde::{de, Deserialize, Deserializer};
+use serde::{de, Deserialize, Deserializer, Serializer};
 use std::fmt;
+
+/// Deserialize a JSON string from DB back into serde_json::Value.
+/// Handles both string (new format) and object/array (legacy format) inputs.
+///
+/// Use this for SCHEMAFULL fields that were changed from TYPE object to TYPE string
+/// to work around ERR_SURREAL_001 (dynamic keys dropped in SCHEMAFULL tables).
+///
+/// # Usage
+/// ```ignore
+/// #[derive(Deserialize)]
+/// struct Record {
+///     #[serde(deserialize_with = "deserialize_json_string")]
+///     params: serde_json::Value,
+/// }
+/// ```
+pub fn deserialize_json_string<'de, D>(deserializer: D) -> Result<serde_json::Value, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
+        // Legacy: if DB still has object/array type data, pass through as-is
+        other => Ok(other),
+    }
+}
+
+/// Serialize serde_json::Value to a JSON string for DB storage.
+///
+/// Converts `{"key": "value"}` to `"{\"key\": \"value\"}"` so SurrealDB
+/// stores it as a plain string, avoiding SCHEMAFULL dynamic key issues.
+///
+/// # Usage
+/// ```ignore
+/// #[derive(Serialize)]
+/// struct Record {
+///     #[serde(serialize_with = "serialize_as_json_string")]
+///     params: serde_json::Value,
+/// }
+/// ```
+pub fn serialize_as_json_string<S>(
+    value: &serde_json::Value,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let s = serde_json::to_string(value).map_err(serde::ser::Error::custom)?;
+    serializer.serialize_str(&s)
+}
 
 /// Deserializes a SurrealDB record ID (Thing) to a String.
 ///

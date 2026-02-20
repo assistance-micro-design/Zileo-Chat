@@ -24,6 +24,7 @@ Displays memories with filtering, search, and action buttons.
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
+	import { save } from '@tauri-apps/plugin-dialog';
 	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { Memory, MemoryType, MemorySearchResult } from '$types/memory';
@@ -31,6 +32,7 @@ Displays memories with filtering, search, and action buttons.
 	import MemoryForm from './MemoryForm.svelte';
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 	// OPT-SCROLL-7: Virtual scrolling for large memory lists
 	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
@@ -125,7 +127,7 @@ Displays memories with filtering, search, and action buttons.
 			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
 			memories = await invoke<Memory[]>('list_memories', { typeFilter: filter, workflowId: null });
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_load').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_failed_load').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			loading = false;
 		}
@@ -153,7 +155,7 @@ Displays memories with filtering, search, and action buttons.
 			});
 			memories = results.map((r) => r.memory);
 		} catch (err) {
-			message = { type: 'error', text: t('memory_search_failed').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_search_failed').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			searching = false;
 		}
@@ -225,14 +227,14 @@ Displays memories with filtering, search, and action buttons.
 			message = { type: 'success', text: t('memory_deleted') };
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_delete_memory').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_failed_delete_memory').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			actionLoading = false;
 		}
 	}
 
 	/**
-	 * Exports memories
+	 * Exports memories using native Tauri save dialog
 	 */
 	async function handleExport(format: 'json' | 'csv'): Promise<void> {
 		actionLoading = true;
@@ -243,20 +245,25 @@ Displays memories with filtering, search, and action buttons.
 				typeFilter: typeFilter || undefined
 			});
 
-			// Create download link
-			const blob = new Blob([data], { type: format === 'json' ? 'application/json' : 'text/csv' });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `memories-${new Date().toISOString().slice(0, 10)}.${format}`;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
+			const defaultFilename = `memories-${new Date().toISOString().slice(0, 10)}.${format}`;
+			const filterName = format === 'json' ? 'JSON' : 'CSV';
+
+			const filePath = await save({
+				defaultPath: defaultFilename,
+				filters: [{ name: filterName, extensions: [format] }],
+				title: t('memory_export_title')
+			});
+
+			if (!filePath) {
+				actionLoading = false;
+				return;
+			}
+
+			await invoke('save_export_to_file', { path: filePath, content: data });
 
 			message = { type: 'success', text: t('memory_exported').replace('{count}', String(memories.length)) };
 		} catch (err) {
-			message = { type: 'error', text: t('memory_export_failed').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_export_failed').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			actionLoading = false;
 		}
@@ -292,7 +299,7 @@ Displays memories with filtering, search, and action buttons.
 					};
 				}
 			} catch (err) {
-				message = { type: 'error', text: t('memory_import_failed_generic').replace('{error}', String(err)) };
+				message = { type: 'error', text: t('memory_import_failed_generic').replace('{error}', getErrorMessage(err)) };
 			} finally {
 				actionLoading = false;
 			}
@@ -323,7 +330,7 @@ Displays memories with filtering, search, and action buttons.
 			};
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_regenerate_failed').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_regenerate_failed').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			actionLoading = false;
 		}

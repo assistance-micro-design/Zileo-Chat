@@ -29,6 +29,7 @@ Multi-step process: entity selection, options, preview, and export.
 	import EntitySelector from './EntitySelector.svelte';
 	import ExportPreview from './ExportPreview.svelte';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type {
 		ExportSelection,
 		ExportOptions,
@@ -107,7 +108,7 @@ Multi-step process: entity selection, options, preview, and export.
 				invoke<PromptSummary[]>('list_prompts')
 			]);
 		} catch (err) {
-			error = `${$i18n('ie_load_entities_failed')}: ${err}`;
+			error = `${$i18n('ie_load_entities_failed')}: ${getErrorMessage(err)}`;
 		} finally {
 			loading = false;
 		}
@@ -138,7 +139,7 @@ Multi-step process: entity selection, options, preview, and export.
 
 			currentStep = 'preview';
 		} catch (err) {
-			error = `${$i18n('ie_prepare_preview_failed')}: ${err}`;
+			error = `${$i18n('ie_prepare_preview_failed')}: ${getErrorMessage(err)}`;
 		} finally {
 			loading = false;
 		}
@@ -228,8 +229,8 @@ Multi-step process: entity selection, options, preview, and export.
 			// Reset state
 			resetWizard();
 		} catch (err) {
-			error = `${$i18n('ie_export_failed')}: ${err}`;
-			message = { type: 'error', text: `${$i18n('ie_export_failed')}: ${err}` };
+			error = `${$i18n('ie_export_failed')}: ${getErrorMessage(err)}`;
+			message = { type: 'error', text: `${$i18n('ie_export_failed')}: ${getErrorMessage(err)}` };
 			onexport?.(false);
 		} finally {
 			exporting = false;

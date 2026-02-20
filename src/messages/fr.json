@@ -199,6 +199,7 @@
   "memory_search_placeholder": "Rechercher des memoires...",
   "memory_export_json": "JSON",
   "memory_export_csv": "CSV",
+  "memory_export_title": "Exporter les memoires",
   "memory_import": "Importer",
   "memory_regenerate": "Regenerer",
   "memory_add": "Ajouter une memoire",

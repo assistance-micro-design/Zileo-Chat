@@ -119,6 +119,7 @@ Each section is now a separate route for better performance and UX.
 							href={section.route}
 							class="nav-button"
 							class:active={activeSection === section.id}
+							aria-current={activeSection === section.id ? 'page' : undefined}
 						>
 							<Icon size={20} />
 							<span class="nav-text">{$i18n(section.labelKey)}</span>
@@ -133,7 +134,9 @@ Each section is now a separate route for better performance and UX.
 							href={section.route}
 							class="nav-button-icon"
 							class:active={activeSection === section.id}
+							aria-current={activeSection === section.id ? 'page' : undefined}
 							title={$i18n(section.labelKey)}
+							aria-label={$i18n(section.labelKey)}
 						>
 							<Icon size={20} />
 						</a>

@@ -48,6 +48,7 @@ import { workflowStore } from '$lib/stores/workflows';
 import { backgroundWorkflowsStore } from '$lib/stores/backgroundWorkflows';
 import { toastStore } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * Parameters for executing a workflow message.
@@ -169,7 +170,18 @@ function createErrorMessage(workflowId: string, error: string): Message {
  * 7. Refresh workflows and update cumulative tokens
  * 8. Return execution result
  */
+/** Tracks workflow IDs currently being executed to prevent double-submit */
+const executingWorkflows = new Set<string>();
+
 export const WorkflowExecutorService = {
+	/**
+	 * Check if a workflow is currently being executed.
+	 * Used by the UI to disable the send button during execution.
+	 */
+	isExecuting(workflowId: string): boolean {
+		return executingWorkflows.has(workflowId);
+	},
+
 	/**
 	 * Execute a workflow message with full orchestration.
 	 *
@@ -183,26 +195,17 @@ export const WorkflowExecutorService = {
 	 * @param params - Execution parameters
 	 * @param callbacks - Optional callbacks for UI updates
 	 * @returns Execution result with success status and metrics
-	 *
-	 * @example
-	 * ```typescript
-	 * const result = await WorkflowExecutorService.execute(
-	 *   {
-	 *     workflowId: 'wf-123',
-	 *     message: 'Hello, analyze this code',
-	 *     agentId: 'agent-456',
-	 *     locale: 'en'
-	 *   },
-	 *   {
-	 *     onUserMessage: (msg) => messages.push(msg),
-	 *     onAssistantMessage: (msg) => messages.push(msg),
-	 *     onError: (msg) => messages.push(msg)
-	 *   }
-	 * );
-	 * ```
 	 */
 	async execute(params: ExecutionParams, callbacks?: ExecutionCallbacks): Promise<ExecutionResult> {
 		const { workflowId, message, agentId, locale } = params;
+
+		// Double-submit guard: prevent concurrent executions for same workflow
+		if (executingWorkflows.has(workflowId)) {
+			return {
+				success: false,
+				error: 'A message is already being processed for this workflow'
+			};
+		}
 
 		// Check concurrent limit before starting
 		if (!backgroundWorkflowsStore.canStart()) {
@@ -223,6 +226,9 @@ export const WorkflowExecutorService = {
 		// Helper: check if user is still viewing this workflow (may have switched)
 		const isStillViewed = () =>
 			backgroundWorkflowsStore.getViewedWorkflowId() === workflowId;
+
+		// Mark workflow as executing (atomic guard)
+		executingWorkflows.add(workflowId);
 
 		try {
 			// Step 1: Save user message
@@ -312,7 +318,7 @@ export const WorkflowExecutorService = {
 			};
 		} catch (error) {
 			// Handle execution errors - always save to DB
-			const errorMsg = error instanceof Error ? error.message : String(error);
+			const errorMsg = getErrorMessage(error);
 			await MessageService.saveSystem(workflowId, `Error: ${errorMsg}`);
 
 			// Only push error to UI if still viewing this workflow
@@ -326,6 +332,9 @@ export const WorkflowExecutorService = {
 				error: errorMsg
 			};
 		} finally {
+			// Release double-submit guard
+			executingWorkflows.delete(workflowId);
+
 			// Only cleanup streaming/token UI if still viewing this workflow
 			if (isStillViewed()) {
 				streamingStore.reset();

@@ -28,8 +28,8 @@
 
 	/** Props */
 	interface Props {
-		/** Called when provider is created successfully */
-		oncreated: () => void;
+		/** Called when provider is created successfully, with optional warning */
+		oncreated: (warning?: string) => void;
 		/** Called when form is cancelled */
 		oncancel: () => void;
 	}
@@ -67,8 +67,8 @@
 		error = null;
 
 		try {
-			await createCustomProvider(name, displayName.trim(), baseUrl.trim(), apiKey.trim());
-			oncreated();
+			const response = await createCustomProvider(name, displayName.trim(), baseUrl.trim(), apiKey.trim());
+			oncreated(response.warning);
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {

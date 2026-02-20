@@ -24,6 +24,9 @@ mod security;
 mod state;
 mod tools;
 
+#[cfg(test)]
+mod test_utils;
+
 use state::AppState;
 use tauri::menu::{
     AboutMetadata, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
@@ -133,30 +136,31 @@ async fn main() -> anyhow::Result<()> {
                 > 0;
 
             if !exists {
-                let insert_query = format!(
-                    "CREATE llm_model:`{}` CONTENT {{ \
-                        id: '{}', \
-                        provider: '{}', \
-                        name: '{}', \
-                        api_name: '{}', \
-                        context_window: {}, \
-                        max_output_tokens: {}, \
-                        temperature_default: {}, \
-                        is_builtin: true, \
-                        created_at: time::now(), \
-                        updated_at: time::now() \
-                    }}",
-                    model.id,
-                    model.id,
-                    model.provider,
-                    model.name.replace('\'', "''"),
-                    model.api_name.replace('\'', "''"),
-                    model.context_window,
-                    model.max_output_tokens,
-                    model.temperature_default
-                );
-
-                if app_state.db.execute(&insert_query).await.is_ok() {
+                let data = serde_json::json!({
+                    "id": model.id,
+                    "provider": model.provider,
+                    "name": model.name,
+                    "api_name": model.api_name,
+                    "context_window": model.context_window,
+                    "max_output_tokens": model.max_output_tokens,
+                    "temperature_default": model.temperature_default,
+                    "is_builtin": true,
+                });
+                let query = format!("CREATE llm_model:`{}` CONTENT $data", model.id);
+                if app_state
+                    .db
+                    .execute_with_params(&query, vec![("data".to_string(), data)])
+                    .await
+                    .is_ok()
+                {
+                    // Set timestamps via SurrealQL functions (can't be in CONTENT bind)
+                    let _ = app_state
+                        .db
+                        .execute(&format!(
+                            "UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+                            model.id
+                        ))
+                        .await;
                     inserted += 1;
                 }
             }
@@ -329,7 +333,6 @@ async fn main() -> anyhow::Result<()> {
             commands::import_export::validate_import,
             commands::import_export::execute_import,
             commands::import_export::save_export_to_file,
-            commands::import_export::read_import_file,
             // User Question commands (Phase 8 - UserQuestionTool)
             commands::user_question::submit_user_response,
             commands::user_question::get_pending_questions,

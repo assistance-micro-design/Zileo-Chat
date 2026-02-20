@@ -102,22 +102,28 @@ pub async fn execute_workflow_streaming(
         .create_cancellation_token(&validated_workflow_id)
         .await;
 
-    // OPT-WF-1: Use centralized query constant
-    let query = format!(
-        "{} WHERE meta::id(id) = '{}'",
-        wf_queries::SELECT_BASIC,
-        validated_workflow_id
-    );
+    // OPT-WF-1: Use centralized query constant with bind param
+    let query = format!("{} WHERE meta::id(id) = $wf_id", wf_queries::SELECT_BASIC);
 
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load workflow");
-        emit_error(
-            &window,
-            &validated_workflow_id,
-            &format!("Failed to load workflow: {}", e),
-        );
-        format!("Failed to load workflow: {}", e)
-    })?;
+    let json_results = state
+        .db
+        .query_json_with_params(
+            &query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to load workflow");
+            emit_error(
+                &window,
+                &validated_workflow_id,
+                &format!("Failed to load workflow: {}", e),
+            );
+            format!("Failed to load workflow: {}", e)
+        })?;
 
     let workflows: Vec<Workflow> = json_results
         .into_iter()
@@ -184,6 +190,7 @@ pub async fn execute_workflow_streaming(
 
     // Load conversation history for context (API-native format for continuation)
     // Messages are stored with role: system|user|assistant
+    // OPT-WF-3: Use centralized constant with bind param for workflow_id
     let history_query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -199,16 +206,21 @@ pub async fn execute_workflow_streaming(
             duration_ms,
             timestamp
         FROM message
-        WHERE workflow_id = '{}'
+        WHERE workflow_id = $wf_id
         ORDER BY timestamp ASC
-        LIMIT {}"#, // OPT-WF-3: Use centralized constant
-        validated_workflow_id,
+        LIMIT {}"#,
         wf_const::MESSAGE_HISTORY_LIMIT
     );
 
     let history_json = state
         .db
-        .query_json(&history_query)
+        .query_json_with_params(
+            &history_query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
         .await
         .unwrap_or_default();
     let conversation_history: Vec<Message> = history_json
@@ -469,17 +481,21 @@ pub async fn execute_workflow_streaming(
     let (input_price, output_price, model_id) = {
         // Convert provider string to lowercase for matching (DB stores lowercase)
         let provider_lower = provider.to_lowercase();
-        let model_query = format!(
-            "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+        let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
              created_at, updated_at \
-             FROM llm_model WHERE api_name = '{}' AND provider = '{}'",
-            model, provider_lower
-        );
+             FROM llm_model WHERE api_name = $model_name AND provider = $provider_name";
 
-        match state.db.db.query(&model_query).await {
+        match state
+            .db
+            .db
+            .query(model_query)
+            .bind(("model_name", model.clone()))
+            .bind(("provider_name", provider_lower.clone()))
+            .await
+        {
             Ok(mut response) => {
                 let models: Result<Vec<LLMModel>, _> = response.take(0);
                 match models {
@@ -529,30 +545,40 @@ pub async fn execute_workflow_streaming(
     );
 
     // Update workflow with cumulative tokens, cost, model_id, and current context size
-    // OPT-WF-2: Use ?? (null coalescing) instead of IF/THEN/ELSE to eliminate param duplication
-    // Use explicit float formatting to avoid scientific notation (e.g., 1.6e-5)
+    // OPT-WF-2: Use ?? (null coalescing) instead of IF/THEN/ELSE
     // current_context_tokens = tokens_input (actual context size at last API call)
     let update_query = format!(
         "UPDATE workflow:`{}` SET \
-            total_tokens_input = (total_tokens_input ?? 0) + {}, \
-            total_tokens_output = (total_tokens_output ?? 0) + {}, \
-            total_cost_usd = (total_cost_usd ?? 0.0) + {:.10}, \
-            model_id = '{}', \
-            current_context_tokens = {}, \
+            total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
+            total_tokens_output = (total_tokens_output ?? 0) + $tokens_out, \
+            total_cost_usd = (total_cost_usd ?? 0.0) + $cost, \
+            model_id = $model_id, \
+            current_context_tokens = $context_tokens, \
             updated_at = time::now()",
-        validated_workflow_id,
-        report.metrics.tokens_input,
-        report.metrics.tokens_output,
-        cost_usd,
-        model_id,                    // Use real model UUID, not api_name
-        report.metrics.tokens_input  // Current context size (last API call)
+        validated_workflow_id
     );
 
     // Log the query for debugging
-    info!(query = %update_query, "Executing workflow token update");
+    info!(
+        tokens_in = report.metrics.tokens_input,
+        tokens_out = report.metrics.tokens_output,
+        cost = cost_usd,
+        model_id = %model_id,
+        "Executing workflow token update"
+    );
 
-    if let Err(e) = state.db.db.query(&update_query).await {
-        error!(error = %e, query = %update_query, "Failed to update workflow cumulative tokens");
+    if let Err(e) = state
+        .db
+        .db
+        .query(&update_query)
+        .bind(("tokens_in", report.metrics.tokens_input))
+        .bind(("tokens_out", report.metrics.tokens_output))
+        .bind(("cost", cost_usd))
+        .bind(("model_id", model_id.clone()))
+        .bind(("context_tokens", report.metrics.tokens_input))
+        .await
+    {
+        error!(error = %e, "Failed to update workflow cumulative tokens");
     } else {
         info!(
             workflow_id = %validated_workflow_id,
@@ -584,54 +610,73 @@ pub async fn execute_workflow_streaming(
         .collect();
     // Note: Clones here are necessary as WorkflowToolExecution needs owned data for Tauri IPC
 
-    // Persist tool executions to database (message_id was generated earlier)
-    for (idx, te) in tool_executions.iter().enumerate() {
-        let execution_id = Uuid::new_v4().to_string();
-        let execution = ToolExecutionCreate {
-            workflow_id: validated_workflow_id.clone(),
-            message_id: message_id.clone(),
-            agent_id: validated_agent_id.clone(),
-            tool_type: te.tool_type.clone(),
-            tool_name: te.tool_name.clone(),
-            server_name: te.server_name.clone(),
-            input_params: te.input_params.clone(),
-            output_result: te.output_result.clone(),
-            success: te.success,
-            error_message: te.error_message.clone(),
-            duration_ms: te.duration_ms,
-            iteration: te.iteration,
-        };
-
-        if let Err(e) = state
-            .db
-            .create("tool_execution", &execution_id, execution)
-            .await
-        {
-            warn!(
-                error = %e,
-                tool_name = %te.tool_name,
-                index = idx,
-                "Failed to persist tool execution"
-            );
-        }
+    // Persist tool executions in parallel (OPT-PERF: was sequential loop)
+    {
+        let tool_futures: Vec<_> = tool_executions
+            .iter()
+            .enumerate()
+            .map(|(idx, te)| {
+                let execution_id = Uuid::new_v4().to_string();
+                let execution = ToolExecutionCreate {
+                    workflow_id: validated_workflow_id.clone(),
+                    message_id: message_id.clone(),
+                    agent_id: validated_agent_id.clone(),
+                    tool_type: te.tool_type.clone(),
+                    tool_name: te.tool_name.clone(),
+                    server_name: te.server_name.clone(),
+                    input_params: te.input_params.clone(),
+                    output_result: te.output_result.clone(),
+                    success: te.success,
+                    error_message: te.error_message.clone(),
+                    duration_ms: te.duration_ms,
+                    iteration: te.iteration,
+                };
+                let db = &state.db;
+                let tool_name = te.tool_name.clone();
+                async move {
+                    if let Err(e) = db.create("tool_execution", &execution_id, execution).await {
+                        warn!(
+                            error = %e,
+                            tool_name = %tool_name,
+                            index = idx,
+                            "Failed to persist tool execution"
+                        );
+                    }
+                }
+            })
+            .collect();
+        futures::future::join_all(tool_futures).await;
     }
 
-    // Persist intermediate reasoning steps from agent execution
-    for rs in &report.metrics.reasoning_steps {
-        let step_id = Uuid::new_v4().to_string();
-        let step = ThinkingStepCreate {
-            workflow_id: validated_workflow_id.clone(),
-            message_id: message_id.clone(),
-            agent_id: validated_agent_id.clone(),
-            step_number: thinking_step_number,
-            content: rs.content.clone(),
-            duration_ms: Some(rs.duration_ms),
-            tokens: None,
-        };
-        if let Err(e) = state.db.create("thinking_step", &step_id, step).await {
-            warn!(error = %e, step_number = thinking_step_number, "Failed to persist intermediate reasoning step");
-        }
-        thinking_step_number += 1;
+    // Persist intermediate reasoning steps in parallel (OPT-PERF: was sequential loop)
+    {
+        let step_futures: Vec<_> = report
+            .metrics
+            .reasoning_steps
+            .iter()
+            .enumerate()
+            .map(|(idx, rs)| {
+                let step_id = Uuid::new_v4().to_string();
+                let step_num = thinking_step_number + idx as u32;
+                let step = ThinkingStepCreate {
+                    workflow_id: validated_workflow_id.clone(),
+                    message_id: message_id.clone(),
+                    agent_id: validated_agent_id.clone(),
+                    step_number: step_num,
+                    content: rs.content.clone(),
+                    duration_ms: Some(rs.duration_ms),
+                    tokens: None,
+                };
+                let db = &state.db;
+                async move {
+                    if let Err(e) = db.create("thinking_step", &step_id, step).await {
+                        warn!(error = %e, step_number = step_num, "Failed to persist intermediate reasoning step");
+                    }
+                }
+            })
+            .collect();
+        futures::future::join_all(step_futures).await;
+        thinking_step_number += report.metrics.reasoning_steps.len() as u32;
     }
 
     info!(

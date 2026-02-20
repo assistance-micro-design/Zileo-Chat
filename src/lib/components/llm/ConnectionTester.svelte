@@ -27,6 +27,7 @@
 	import { testConnection } from '$lib/stores/llm';
 	import { i18n } from '$lib/i18n';
 	import type { ProviderType, ConnectionTestResult } from '$types/llm';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/**
 	 * ConnectionTester props
@@ -60,7 +61,7 @@
 				provider,
 				success: false,
 				latency_ms: null,
-				error_message: err instanceof Error ? err.message : String(err),
+				error_message: getErrorMessage(err),
 				model_tested: null
 			};
 		} finally {

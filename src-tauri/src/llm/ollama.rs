@@ -313,8 +313,8 @@ impl OllamaProvider {
     )]
     pub async fn complete_with_tools(
         &self,
-        messages: Vec<serde_json::Value>,
-        tools: Vec<serde_json::Value>,
+        messages: &[serde_json::Value],
+        tools: &[serde_json::Value],
         model: &str,
         temperature: f32,
         max_tokens: usize,

@@ -35,6 +35,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 	} from '$types/embedding';
 	import { Settings, Pencil, Trash2, Plus } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
@@ -121,7 +122,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			// Config exists if backend returns a valid config (provider and model are set)
 			configExists = Boolean(loadedConfig.provider && loadedConfig.model);
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_load').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_failed_load').replace('{error}', getErrorMessage(err)) };
 			configExists = false;
 		} finally {
 			loading = false;
@@ -140,7 +141,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
 		} catch (err) {
-			console.error('Failed to refresh stats:', err);
+			console.error('Failed to refresh stats:', getErrorMessage(err));
 		}
 	}
 
@@ -175,7 +176,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			showConfigModal = false;
 			onsave?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_save').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_failed_save').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			saving = false;
 		}
@@ -198,7 +199,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			configExists = false;
 			message = { type: 'success', text: t('memory_config_deleted') };
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_delete').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_failed_delete').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			saving = false;
 		}
@@ -308,7 +309,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 				message = { type: 'error', text: testResult.error || t('common_error') };
 			}
 		} catch (err) {
-			message = { type: 'error', text: t('memory_test_failed').replace('{error}', String(err)) };
+			message = { type: 'error', text: t('memory_test_failed').replace('{error}', getErrorMessage(err)) };
 		} finally {
 			testingEmbedding = false;
 		}
@@ -338,10 +339,10 @@ Allows users to configure embedding provider, model, and chunking settings via m
 					<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
 					{#if configExists}
 						<div class="header-actions">
-							<button type="button" class="icon-btn" onclick={openConfigModal} title={$i18n('common_edit')}>
+							<button type="button" class="icon-btn" onclick={openConfigModal} title={$i18n('common_edit')} aria-label={$i18n('common_edit')}>
 								<Pencil size={16} />
 							</button>
-							<button type="button" class="icon-btn danger" onclick={handleDelete} title={$i18n('common_delete')}>
+							<button type="button" class="icon-btn danger" onclick={handleDelete} title={$i18n('common_delete')} aria-label={$i18n('common_delete')}>
 								<Trash2 size={16} />
 							</button>
 						</div>

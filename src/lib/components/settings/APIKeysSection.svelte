@@ -24,6 +24,7 @@ Manages API key configuration modal for LLM providers.
 	import type { ProviderType, ProviderSettings } from '$types/llm';
 	import { Button, Input, Modal, StatusIndicator } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
@@ -94,7 +95,7 @@ Manages API key configuration modal for LLM providers.
 			message = { type: 'success', text: 'API key saved securely' };
 			onclose();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to save: ${err}` };
+			message = { type: 'error', text: `Failed to save: ${getErrorMessage(err)}` };
 		} finally {
 			saving = false;
 		}
@@ -117,7 +118,7 @@ Manages API key configuration modal for LLM providers.
 			onReload();
 			message = { type: 'success', text: 'API key deleted' };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${err}` };
+			message = { type: 'error', text: `Failed to delete: ${getErrorMessage(err)}` };
 		} finally {
 			saving = false;
 		}

@@ -210,41 +210,6 @@ export const formMode = derivedStores.formMode;
 export const editingAgent = derivedStores.editing;
 
 /**
- * Derived store: number of agents
- * @deprecated Use `agents.length` instead
- */
-export const agentCount = derivedStores.count;
-
-/**
  * Derived store: whether agents are available (non-empty list)
  */
 export const hasAgents = derivedStores.hasItems;
-
-// ============================================================================
-// Legacy Pure Functions (for backward compatibility)
-// ============================================================================
-
-/**
- * @deprecated Use agentStore instead
- * Creates the initial agent state
- */
-export interface AgentState {
-	agentIds: string[];
-	configs: Map<string, AgentConfig>;
-	selectedId: string | null;
-	loading: boolean;
-	error: string | null;
-}
-
-/**
- * @deprecated Use agentStore instead
- */
-export function createInitialAgentState(): AgentState {
-	return {
-		agentIds: [],
-		configs: new Map(),
-		selectedId: null,
-		loading: false,
-		error: null
-	};
-}

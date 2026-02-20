@@ -57,6 +57,7 @@ Combines Providers and Models sections.
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
@@ -72,7 +73,7 @@ Combines Providers and Models sections.
 	const modelModal: ModalController<LLMModel> = createModalController<LLMModel>();
 	let modelSaving = $state(false);
 	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+	let message = $state<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 	let showCustomProviderForm = $state(false);
 
 	/** Provider filter options for models section (dynamic from providerList) */
@@ -94,7 +95,7 @@ Combines Providers and Models sections.
 			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
-			llmState = setLLMError(llmState, `Failed to load LLM data: ${err}`);
+			llmState = setLLMError(llmState, `Failed to load LLM data: ${getErrorMessage(err)}`);
 		}
 	}
 
@@ -110,16 +111,21 @@ Combines Providers and Models sections.
 			message = { type: 'success', text: `Provider "${providerInfo.displayName}" deleted` };
 			await loadLLMData();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete provider: ${err}` };
+			message = { type: 'error', text: `Failed to delete provider: ${getErrorMessage(err)}` };
 		}
 	}
 
 	/**
-	 * Handles custom provider creation success
+	 * Handles custom provider creation success.
+	 * @param warning - Optional security warning from the backend
 	 */
-	async function handleCustomProviderCreated(): Promise<void> {
+	async function handleCustomProviderCreated(warning?: string): Promise<void> {
 		showCustomProviderForm = false;
-		message = { type: 'success', text: $i18n('llm_custom_provider_created') };
+		if (warning) {
+			message = { type: 'warning', text: warning };
+		} else {
+			message = { type: 'success', text: $i18n('llm_custom_provider_created') };
+		}
 		await loadLLMData();
 	}
 
@@ -140,7 +146,7 @@ Combines Providers and Models sections.
 			}
 			modelModal.close();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to save model: ${err}` };
+			message = { type: 'error', text: `Failed to save model: ${getErrorMessage(err)}` };
 		} finally {
 			modelSaving = false;
 		}
@@ -159,7 +165,7 @@ Combines Providers and Models sections.
 			llmState = removeModel(llmState, model.id);
 			message = { type: 'success', text: `Model "${model.name}" deleted successfully` };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete model: ${err}` };
+			message = { type: 'error', text: `Failed to delete model: ${getErrorMessage(err)}` };
 		}
 	}
 
@@ -177,7 +183,7 @@ Combines Providers and Models sections.
 			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
 			message = { type: 'success', text: `"${model.name}" set as default` };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to set default model: ${err}` };
+			message = { type: 'error', text: `Failed to set default model: ${getErrorMessage(err)}` };
 		}
 	}
 
@@ -305,7 +311,7 @@ Combines Providers and Models sections.
 	{/if}
 
 	{#if message}
-		<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'}>
+		<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'} class:warning={message.type === 'warning'}>
 			{message.text}
 		</div>
 	{/if}
@@ -489,6 +495,11 @@ Combines Providers and Models sections.
 	.message-toast.error {
 		background: var(--color-error-light);
 		color: var(--color-error);
+	}
+
+	.message-toast.warning {
+		background: var(--color-warning-light);
+		color: var(--color-warning);
 	}
 
 	/* LLM Section */

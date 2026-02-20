@@ -28,6 +28,7 @@ Provides fields for memory type, content, and metadata.
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { Memory, MemoryType } from '$types/memory';
 	import { i18n, t } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
@@ -139,7 +140,7 @@ Provides fields for memory type, content, and metadata.
 
 			onsave?.();
 		} catch (err) {
-			error = t('memory_failed_save').replace('{error}', String(err));
+			error = t('memory_failed_save').replace('{error}', getErrorMessage(err));
 		} finally {
 			saving = false;
 		}

@@ -27,9 +27,7 @@ import {
 	error,
 	formMode,
 	editingAgent,
-	agentCount,
-	hasAgents,
-	createInitialAgentState
+	hasAgents
 } from '../agents';
 import type { AgentConfig, AgentSummary, AgentConfigCreate } from '$types/agent';
 
@@ -74,7 +72,8 @@ describe('Agent Store', () => {
 		tools: ['MemoryTool', 'TodoTool'],
 		mcp_servers: ['serena'],
 		system_prompt: 'You are a helpful assistant.',
-		max_tool_iterations: 50
+		max_tool_iterations: 50,
+		enable_thinking: true
 	});
 
 	beforeEach(() => {
@@ -349,10 +348,6 @@ describe('Agent Store', () => {
 			expect(get(selectedAgent)).toBeNull();
 		});
 
-		it('agentCount should return correct count', () => {
-			expect(get(agentCount)).toBe(2);
-		});
-
 		it('hasAgents should return true when agents exist', () => {
 			expect(get(hasAgents)).toBe(true);
 		});
@@ -363,15 +358,4 @@ describe('Agent Store', () => {
 		});
 	});
 
-	describe('Legacy Functions', () => {
-		it('createInitialAgentState should return legacy state structure', () => {
-			const state = createInitialAgentState();
-
-			expect(state.agentIds).toEqual([]);
-			expect(state.configs).toBeInstanceOf(Map);
-			expect(state.selectedId).toBeNull();
-			expect(state.loading).toBe(false);
-			expect(state.error).toBeNull();
-		});
-	});
 });

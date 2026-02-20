@@ -18,7 +18,9 @@
 
 use crate::commands::SecureKeyStore;
 use crate::llm::openai_compatible::OpenAiCompatibleProvider;
-use crate::models::custom_provider::{CustomProvider, ProviderInfo};
+use crate::models::custom_provider::{
+    check_http_warning, CustomProvider, CustomProviderResponse, ProviderInfo,
+};
 use crate::state::AppState;
 use std::sync::Arc;
 use tauri::State;
@@ -108,6 +110,9 @@ pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
 ///
 /// Stores metadata in DB, API key in SecureKeyStore, and registers
 /// the provider in ProviderManager's HashMap.
+///
+/// Returns `CustomProviderResponse` which includes the provider info
+/// and an optional security warning (e.g., HTTP without TLS).
 #[tauri::command]
 #[instrument(name = "create_custom_provider", skip(state, keystore, api_key))]
 pub async fn create_custom_provider(
@@ -117,7 +122,7 @@ pub async fn create_custom_provider(
     api_key: String,
     state: State<'_, AppState>,
     keystore: State<'_, SecureKeyStore>,
-) -> Result<ProviderInfo, String> {
+) -> Result<CustomProviderResponse, String> {
     // Validate inputs
     validate_provider_name(&name)?;
 
@@ -178,21 +183,37 @@ pub async fn create_custom_provider(
         .register_custom_provider(&name, provider)
         .await;
 
+    // Check for HTTP security warning on non-localhost URLs
+    let warning = check_http_warning(&normalized_url);
+    if warning.is_some() {
+        warn!(
+            name = %name,
+            url = %normalized_url,
+            "Custom provider created with insecure HTTP URL"
+        );
+    }
+
     info!(name = %name, display_name = %display_name, "Custom provider created");
 
-    Ok(ProviderInfo {
-        id: name,
-        display_name,
-        is_builtin: false,
-        is_cloud: true,
-        requires_api_key: true,
-        has_base_url: true,
-        base_url: Some(normalized_url),
-        enabled: true,
+    Ok(CustomProviderResponse {
+        provider: ProviderInfo {
+            id: name,
+            display_name,
+            is_builtin: false,
+            is_cloud: true,
+            requires_api_key: true,
+            has_base_url: true,
+            base_url: Some(normalized_url),
+            enabled: true,
+        },
+        warning,
     })
 }
 
 /// Updates an existing custom provider.
+///
+/// Returns `CustomProviderResponse` which includes the provider info
+/// and an optional security warning (e.g., HTTP without TLS).
 #[tauri::command]
 #[instrument(name = "update_custom_provider", skip(state, keystore, api_key))]
 pub async fn update_custom_provider(
@@ -203,7 +224,7 @@ pub async fn update_custom_provider(
     enabled: Option<bool>,
     state: State<'_, AppState>,
     keystore: State<'_, SecureKeyStore>,
-) -> Result<ProviderInfo, String> {
+) -> Result<CustomProviderResponse, String> {
     validate_provider_name(&name)?;
 
     let db = &state.db;
@@ -290,17 +311,30 @@ pub async fn update_custom_provider(
         .and_then(|v| serde_json::from_value(v).ok())
         .ok_or_else(|| format!("Provider '{}' not found after update", name))?;
 
+    // Check for HTTP security warning on the current base URL
+    let warning = check_http_warning(&cp.base_url);
+    if warning.is_some() {
+        warn!(
+            name = %name,
+            url = %cp.base_url,
+            "Custom provider updated with insecure HTTP URL"
+        );
+    }
+
     info!(name = %name, "Custom provider updated");
 
-    Ok(ProviderInfo {
-        id: cp.name,
-        display_name: cp.display_name,
-        is_builtin: false,
-        is_cloud: true,
-        requires_api_key: true,
-        has_base_url: true,
-        base_url: Some(cp.base_url),
-        enabled: cp.enabled,
+    Ok(CustomProviderResponse {
+        provider: ProviderInfo {
+            id: cp.name,
+            display_name: cp.display_name,
+            is_builtin: false,
+            is_cloud: true,
+            requires_api_key: true,
+            has_base_url: true,
+            base_url: Some(cp.base_url),
+            enabled: cp.enabled,
+        },
+        warning,
     })
 }
 

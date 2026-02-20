@@ -44,6 +44,7 @@
 	import { PROMPT_CATEGORY_LABELS } from '$types/prompt';
 	import type { Prompt, PromptSummary, PromptCategory } from '$types/prompt';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/**
 	 * PromptSelectorModal props
@@ -130,7 +131,7 @@
 				variableValues[v.name] = v.defaultValue ?? '';
 			}
 		} catch (e) {
-			console.error('Failed to load prompt:', e);
+			console.error('Failed to load prompt:', getErrorMessage(e));
 		} finally {
 			loadingPrompt = false;
 		}

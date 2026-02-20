@@ -156,46 +156,42 @@ pub async fn create_prompt(
 
     // Detect variables from content
     let variables = Prompt::detect_variables(&content);
-    let variables_json = serde_json::to_string(&variables).map_err(|e| {
-        error!(error = %e, "Failed to serialize variables");
-        format!("Failed to serialize variables: {}", e)
-    })?;
-
-    // Serialize strings for SurrealDB
-    let name_json =
-        serde_json::to_string(&name).map_err(|e| format!("Failed to serialize name: {}", e))?;
-    let description_json = serde_json::to_string(&description)
-        .map_err(|e| format!("Failed to serialize description: {}", e))?;
-    let content_json = serde_json::to_string(&content)
-        .map_err(|e| format!("Failed to serialize content: {}", e))?;
-    let category_str = config.category.to_string();
-
+    // Use bind parameters for all user-supplied values
+    // Note: prompt_id is a uuid::Uuid::new_v4() output (safe for format!())
+    // but name, description, content, category come from user input
     let query = format!(
-        r#"
-        CREATE prompt:`{}` CONTENT {{
-            id: '{}',
-            name: {},
-            description: {},
-            category: '{}',
-            content: {},
-            variables: {},
+        r#"CREATE prompt:`{}` CONTENT {{
+            name: $name,
+            description: $description,
+            category: $category,
+            content: $content,
+            variables: $variables,
             created_at: time::now(),
             updated_at: time::now()
-        }}
-        "#,
-        prompt_id,
-        prompt_id,
-        name_json,
-        description_json,
-        category_str,
-        content_json,
-        variables_json
+        }}"#,
+        prompt_id
     );
 
-    state.db.execute(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to create prompt in database");
-        format!("Failed to create prompt: {}", e)
-    })?;
+    state
+        .db
+        .execute_with_params(
+            &query,
+            vec![
+                ("name".to_string(), serde_json::json!(name)),
+                ("description".to_string(), serde_json::json!(description)),
+                (
+                    "category".to_string(),
+                    serde_json::json!(config.category.to_string()),
+                ),
+                ("content".to_string(), serde_json::json!(content)),
+                ("variables".to_string(), serde_json::json!(variables)),
+            ],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to create prompt in database");
+            format!("Failed to create prompt: {}", e)
+        })?;
 
     info!(prompt_id = %prompt_id, "Prompt created successfully");
     Ok(prompt_id)
@@ -229,7 +225,9 @@ pub async fn update_prompt(
     }
 
     if let Some(ref category) = config.category {
-        set_clauses.push(format!("category = '{}'", category));
+        let cat_json = serde_json::to_string(&category.to_string())
+            .map_err(|e| format!("Failed to serialize category: {}", e))?;
+        set_clauses.push(format!("category = {}", cat_json));
     }
 
     if let Some(ref content) = config.content {
@@ -297,20 +295,23 @@ pub async fn search_prompts(
     info!(query = ?query, category = ?category, "Searching prompts");
 
     let mut conditions = Vec::new();
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
     if let Some(ref q) = query {
         if !q.trim().is_empty() {
             let search_term = q.trim().to_lowercase();
-            conditions.push(format!(
-                "(string::lowercase(name) CONTAINS '{}' OR string::lowercase(description) CONTAINS '{}')",
-                search_term, search_term
-            ));
+            conditions.push(
+                "(string::lowercase(name) CONTAINS $search OR string::lowercase(description) CONTAINS $search)"
+                    .to_string(),
+            );
+            params.push(("search".to_string(), serde_json::json!(search_term)));
         }
     }
 
     if let Some(ref cat) = category {
         if !cat.trim().is_empty() {
-            conditions.push(format!("category = '{}'", cat.trim()));
+            conditions.push("category = $category".to_string());
+            params.push(("category".to_string(), serde_json::json!(cat.trim())));
         }
     }
 
@@ -336,10 +337,14 @@ pub async fn search_prompts(
         where_clause
     );
 
-    let results: Vec<serde_json::Value> = state.db.query_json(&db_query).await.map_err(|e| {
-        error!(error = %e, "Failed to search prompts");
-        format!("Failed to search prompts: {}", e)
-    })?;
+    let results: Vec<serde_json::Value> = state
+        .db
+        .query_json_with_params(&db_query, params)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to search prompts");
+            format!("Failed to search prompts: {}", e)
+        })?;
 
     let prompts: Vec<PromptSummary> = results
         .into_iter()
@@ -348,4 +353,135 @@ pub async fn search_prompts(
 
     info!(count = prompts.len(), "Search completed");
     Ok(prompts)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{seed_test_prompt, seed_test_prompt_with_category, setup_test_state};
+
+    #[tokio::test]
+    async fn test_search_prompts_with_valid_query() {
+        let state = setup_test_state().await;
+        seed_test_prompt(&state.db).await;
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json_with_params(
+                r#"SELECT meta::id(id) AS id, name FROM prompt
+                   WHERE string::lowercase(name) CONTAINS $search"#,
+                vec![("search".to_string(), serde_json::json!("test"))],
+            )
+            .await
+            .unwrap();
+        assert!(!results.is_empty(), "Should find prompts matching 'test'");
+    }
+
+    #[tokio::test]
+    async fn test_search_prompts_injection_safe() {
+        let state = setup_test_state().await;
+        seed_test_prompt(&state.db).await;
+        // Attempt SQL injection via search parameter
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json_with_params(
+                r#"SELECT meta::id(id) AS id, name FROM prompt
+                   WHERE string::lowercase(name) CONTAINS $search"#,
+                vec![(
+                    "search".to_string(),
+                    serde_json::json!("'; DELETE prompt WHERE '1'='1"),
+                )],
+            )
+            .await
+            .unwrap();
+        assert!(results.is_empty(), "Injection string should match nothing");
+    }
+
+    #[tokio::test]
+    async fn test_search_prompts_injection_preserves_data() {
+        let state = setup_test_state().await;
+        seed_test_prompt(&state.db).await;
+        // Attempt injection
+        let _ = state
+            .db
+            .query_json_with_params(
+                r#"SELECT meta::id(id) AS id FROM prompt
+                   WHERE string::lowercase(name) CONTAINS $search"#,
+                vec![(
+                    "search".to_string(),
+                    serde_json::json!("'; DELETE prompt WHERE '1'='1"),
+                )],
+            )
+            .await;
+        // Verify data is still intact
+        let all: Vec<serde_json::Value> = state
+            .db
+            .query_json("SELECT meta::id(id) AS id FROM prompt")
+            .await
+            .unwrap();
+        assert!(!all.is_empty(), "Data should not be deleted by injection");
+    }
+
+    #[tokio::test]
+    async fn test_search_prompts_with_category() {
+        let state = setup_test_state().await;
+        seed_test_prompt_with_category(&state.db, "coding").await;
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json_with_params(
+                "SELECT meta::id(id) AS id FROM prompt WHERE category = $category",
+                vec![("category".to_string(), serde_json::json!("coding"))],
+            )
+            .await
+            .unwrap();
+        assert!(
+            !results.is_empty(),
+            "Should find prompts with category 'coding'"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_prompt_with_bind_params() {
+        let state = setup_test_state().await;
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            r#"CREATE prompt:`{}` CONTENT {{
+                name: $name,
+                description: $description,
+                category: $category,
+                content: $content,
+                variables: $variables,
+                created_at: time::now(),
+                updated_at: time::now()
+            }}"#,
+            id
+        );
+        state
+            .db
+            .execute_with_params(
+                &query,
+                vec![
+                    ("name".to_string(), serde_json::json!("Test's Prompt")),
+                    (
+                        "description".to_string(),
+                        serde_json::json!("A prompt with 'quotes' and \"doubles\""),
+                    ),
+                    ("category".to_string(), serde_json::json!("general")),
+                    ("content".to_string(), serde_json::json!("Hello {{name}}")),
+                    ("variables".to_string(), serde_json::json!([])),
+                ],
+            )
+            .await
+            .unwrap();
+
+        // Verify the prompt was created with correct data
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id, name FROM prompt:`{}`",
+                id
+            ))
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["name"], "Test's Prompt");
+    }
 }

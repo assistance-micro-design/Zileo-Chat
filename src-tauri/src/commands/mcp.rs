@@ -1096,4 +1096,101 @@ mod tests {
         let result = validate_mcp_server_config(&config);
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_mcp_call_log_write_read_cycle() {
+        let state = crate::test_utils::setup_test_state().await;
+
+        // Write a call log with dynamic params using the MCPCallLogCreate struct
+        let log = crate::models::mcp::MCPCallLogCreate {
+            id: uuid::Uuid::new_v4().to_string(),
+            workflow_id: Some("test-workflow".to_string()),
+            server_name: "test-server".to_string(),
+            tool_name: "find_symbol".to_string(),
+            params: serde_json::json!({"symbol": "MyClass", "include_body": true}),
+            result: serde_json::json!([{"name": "MyClass", "line": 42}]),
+            success: true,
+            duration_ms: 150,
+        };
+
+        // Serialize and insert using the same pattern as manager.rs
+        let json_data = serde_json::to_value(&log).expect("Failed to serialize");
+        let json_data = crate::db::sanitize_for_surrealdb(json_data);
+        let query = format!("CREATE mcp_call_log:`{}` CONTENT $data", log.id);
+        state
+            .db
+            .execute_with_params(&query, vec![("data".to_string(), json_data)])
+            .await
+            .expect("Failed to create mcp_call_log");
+
+        // Read back and verify params/result are preserved as JSON strings
+        let logs: Vec<serde_json::Value> = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id, params, result, server_name FROM mcp_call_log WHERE meta::id(id) = '{}'",
+                log.id
+            ))
+            .await
+            .expect("Failed to query mcp_call_log");
+
+        assert_eq!(logs.len(), 1, "Should find exactly one log entry");
+        let entry = &logs[0];
+
+        // Params should be a JSON string in DB (new format)
+        let params_str = entry.get("params").expect("params missing");
+        assert!(params_str.is_string(), "params should be stored as string");
+        let params: serde_json::Value = serde_json::from_str(params_str.as_str().unwrap())
+            .expect("params should be valid JSON");
+        assert_eq!(params["symbol"], "MyClass");
+        assert_eq!(params["include_body"], true);
+
+        // Result should also be a JSON string
+        let result_str = entry.get("result").expect("result missing");
+        assert!(result_str.is_string(), "result should be stored as string");
+        let result: serde_json::Value = serde_json::from_str(result_str.as_str().unwrap())
+            .expect("result should be valid JSON");
+        assert_eq!(result[0]["name"], "MyClass");
+        assert_eq!(result[0]["line"], 42);
+    }
+
+    #[test]
+    fn test_deserialize_mcp_call_log_from_string_params() {
+        // New format: params and result stored as JSON strings
+        let json = serde_json::json!({
+            "id": "test-id",
+            "workflow_id": "wf-1",
+            "server_name": "test-server",
+            "tool_name": "find_symbol",
+            "params": "{\"symbol\": \"MyClass\"}",
+            "result": "[{\"name\": \"MyClass\"}]",
+            "success": true,
+            "duration_ms": 100,
+            "timestamp": "2026-01-01T00:00:00Z"
+        });
+
+        let log: crate::models::mcp::MCPCallLog =
+            serde_json::from_value(json).expect("Should deserialize MCPCallLog with string params");
+        assert_eq!(log.params["symbol"], "MyClass");
+        assert_eq!(log.result[0]["name"], "MyClass");
+    }
+
+    #[test]
+    fn test_deserialize_mcp_call_log_from_legacy_object_params() {
+        // Legacy format: params and result stored as objects (backward compat)
+        let json = serde_json::json!({
+            "id": "test-id",
+            "server_name": "test-server",
+            "tool_name": "find_symbol",
+            "params": {"symbol": "MyClass"},
+            "result": [{"name": "MyClass"}],
+            "success": true,
+            "duration_ms": 100,
+            "timestamp": "2026-01-01T00:00:00Z"
+        });
+
+        let log: crate::models::mcp::MCPCallLog = serde_json::from_value(json)
+            .expect("Should deserialize MCPCallLog with legacy object params");
+        assert_eq!(log.params["symbol"], "MyClass");
+        assert_eq!(log.result[0]["name"], "MyClass");
+    }
 }

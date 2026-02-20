@@ -1,0 +1,83 @@
+# Security Audits
+
+This directory contains the findings from security audits conducted on Zileo-Chat-3.
+
+Each audit is run in a dedicated session for focused attention and thoroughness.
+
+## Audit Index
+
+| ID | Audit | Date | Findings (verified) | Remediation |
+|----|-------|------|---------------------|-------------|
+| SA-001 | [SurrealQL Injection](./SA-001-surrealql-injection.md) | 2026-02-19 | **3C**, 9H, 5M, 18L | **3C DONE, 9H DONE, 5M DONE**, 18L deferred |
+| SA-002 | [MCP + Import + XSS + Secrets](./SA-002-mcp-import-xss-secrets.md) | 2026-02-19 | **0C**, 3H, 6M, 2L | **3H DONE, 4M DONE**, 1M open, 2L deferred |
+| ~~SA-003~~ | ~~MCP Input Sanitization~~ | - | Merged into SA-002 | - |
+| ~~SA-004~~ | ~~Secret Management / Logging~~ | - | Merged into SA-002 | - |
+| SA-005 | [CSP / Tauri Permissions](./SA-005-csp-tauri-permissions.md) | 2026-02-19 | **0C**, 4H, 4M, 3L | **3H DONE**, 1H open, 1M partial, 3M open, 3L deferred |
+| SA-006 | [Dependency Vulnerabilities](./SA-006-dependency-vulnerabilities.md) | 2026-02-19 | 3H, 4M, 5L, 2I (7 CVEs N/A) | **1H DONE**, 2H open |
+| SA-007 | [Commands Control Flow](./SA-007-commands-control-flow.md) | 2026-02-19 | Quality audit | Not started (refactoring) |
+| SA-008 | [Agent System Quality](./SA-008-agent-system-quality.md) | 2026-02-19 | Quality audit | **PERF-1 DONE, PERF-2 DONE**, duplication deferred |
+| SA-009 | [Svelte Stores Quality](./SA-009-stores-quality-audit.md) | 2026-02-19 | Quality audit | **F2/F4 DONE, dead code DONE**, F1 deferred |
+| SA-010 | [Settings & Forms Quality](./SA-010-settings-forms-quality.md) | 2026-02-19 | Quality audit | **Error handling DONE, 4 a11y DONE**, templates deferred |
+| SA-011 | [Chat & Workflow Components](./SA-011-chat-workflow-components.md) | 2026-02-19 | 0C, 3H, 12M, 26L | **H-003 DONE**, H-001/H-002 open |
+| SA-012 | [DB Layer & Migrations](./SA-012-db-layer-migrations.md) | 2026-02-19 | 4H, 4M, 4L | **4H DONE, 2M DONE, 5L DONE** |
+| SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE**, 2H partial, 2H open |
+
+**Evaluation report**: [EVALUATION-2026-02-19.md](./EVALUATION-2026-02-19.md)
+**Remediation status**: [REMEDIATION-STATUS.md](./REMEDIATION-STATUS.md) (2026-02-20, branch `security/audit-remediation-tdd`)
+
+## Severity Definitions
+
+| Level | Definition |
+|-------|------------|
+| **CRITICAL** | Direct exploitation possible from user/external input. Fix immediately. |
+| **HIGH** | Known anti-pattern with exploitable potential. Fix before next release. |
+| **MEDIUM** | Internal data in sensitive positions. Defense-in-depth recommended. |
+| **LOW** | Validated data, no realistic exploit path. Fix during normal maintenance. |
+
+## Cross-Session Totals (After Verification)
+
+**Security audits only** (SA-001, SA-002, SA-005, SA-006, SA-012, SA-013):
+
+| Severity | Original | Verified | Delta |
+|----------|----------|----------|-------|
+| CRITICAL | 10 | **4** | -6 |
+| HIGH | 27 | **27** | 0 (reshuffled) |
+| MEDIUM | 30 | **34** | +4 |
+| LOW | 13 | 13 | 0 |
+| INFO | 2 | 2 | 0 |
+
+**Quality audits** (SA-007, SA-008, SA-009, SA-010, SA-011): Confirmed as correctly categorized. No security severity ratings changed.
+
+## Action Plan
+
+The cross-session analysis and prioritized remediation plan is in **[ACTION-PLAN.md](./ACTION-PLAN.md)**.
+
+| Priority | Items | Est. Hours | Impact |
+|----------|-------|------------|--------|
+| **P0** | 5 groups | ~10h | Eliminates injection + import pipeline security |
+| **P1** | 8 groups | ~18h | Fixes type crashes, races, perf, CVE patches, CSP |
+| **P2** | 9 groups | ~29h | -700 lines duplication, permissions hardening, feature bloat |
+| **P3** | 6 groups | ~11h | -720 lines templates, a11y, CSP docs, dep planning |
+
+Each P0 and P1 item includes a ready-to-run `/Fix_Zileo` or `/Build_zileo` prompt.
+
+## CSP Policy Notes
+
+The Content Security Policy is defined in `src-tauri/tauri.conf.json`:
+
+| Directive | Value | Justification |
+|-----------|-------|---------------|
+| `default-src` | `'self' blob:` | `blob:` required for `URL.createObjectURL()` in memory/export downloads |
+| `style-src` | `'self' 'unsafe-inline'` | `unsafe-inline` required by SvelteKit 5 scoped CSS injection at runtime. Cannot be removed without build-time CSS extraction. |
+| `script-src` | `'self'` | No inline scripts needed |
+| `frame-ancestors` | `'none'` | Prevents framing (clickjacking protection) |
+| `object-src` | `'none'` | Blocks Flash/Java plugins |
+
+## Workflow
+
+1. Run audit in dedicated Claude Code session
+2. Document findings in `SA-XXX-{name}.md`
+3. Update this index
+4. **Verify findings against real code** (added 2026-02-19)
+5. Implement fixes (can be batched across audits)
+6. Re-audit to verify fixes

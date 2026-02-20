@@ -29,6 +29,7 @@
 	import { Download, Upload } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { HelpButton } from '$lib/components/ui';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
@@ -64,7 +65,7 @@
 			try {
 				await onRefreshNeeded?.();
 			} catch (err) {
-				console.error('Failed to refresh stores after import:', err);
+				console.error('Failed to refresh stores after import:', getErrorMessage(err));
 			}
 		} else {
 			message = { type: 'error', text: $i18n('ie_import_failed') };
@@ -92,9 +93,11 @@
 	</div>
 
 	<!-- Tab navigation -->
-	<div class="tabs">
+	<div class="tabs" role="tablist">
 		<button
 			class="tab"
+			role="tab"
+			aria-selected={activeTab === 'export'}
 			class:active={activeTab === 'export'}
 			onclick={() => (activeTab = 'export')}
 		>
@@ -103,6 +106,8 @@
 		</button>
 		<button
 			class="tab"
+			role="tab"
+			aria-selected={activeTab === 'import'}
 			class:active={activeTab === 'import'}
 			onclick={() => (activeTab = 'import')}
 		>
@@ -113,7 +118,7 @@
 
 	<!-- Message banner -->
 	{#if message}
-		<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
+		<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'} role="status" aria-live="polite">
 			{message.text}
 		</div>
 	{/if}

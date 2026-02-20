@@ -38,6 +38,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	import { Plus } from '@lucide/svelte';
 	import type { PromptCreate } from '$types/prompt';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Form modal saving state */
 	let saving = $state(false);
@@ -112,7 +113,7 @@ Provides CRUD operations for prompts with list view and form modal.
 				await promptStore.updatePrompt($editingPrompt.id, data);
 			}
 		} catch (e) {
-			console.error('Failed to save prompt:', e);
+			console.error('Failed to save prompt:', getErrorMessage(e));
 		} finally {
 			saving = false;
 		}

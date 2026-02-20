@@ -28,6 +28,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { Button } from '$lib/components/ui';
   import { i18n } from '$lib/i18n';
+  import { getErrorMessage } from '$lib/utils/error';
   import {
     validationSettingsStore,
     settings,
@@ -108,7 +109,7 @@
       availableTools = tools;
       mcpServers = servers;
     } catch (err) {
-      console.error('Failed to load resources:', err);
+      console.error('Failed to load resources:', getErrorMessage(err));
     } finally {
       loadingResources = false;
     }
@@ -163,7 +164,7 @@
         if (message?.type === 'success') message = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: $i18n('validation_save_failed').replace('{error}', String(err)) };
+      message = { type: 'error', text: $i18n('validation_save_failed').replace('{error}', getErrorMessage(err)) };
     }
   }
 
@@ -178,7 +179,7 @@
         if (message?.type === 'success') message = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: $i18n('validation_reset_failed').replace('{error}', String(err)) };
+      message = { type: 'error', text: $i18n('validation_reset_failed').replace('{error}', getErrorMessage(err)) };
     }
   }
 </script>

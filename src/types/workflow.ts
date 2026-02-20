@@ -51,7 +51,7 @@ export interface Workflow {
   /** Cumulative cost for this workflow (USD) */
   total_cost_usd: number;
   /** Model ID used (for context_window lookup) */
-  model_id?: string;
+  model_id: string | null;
   /** Current context size (last API call context window usage) */
   current_context_tokens: number;
 }

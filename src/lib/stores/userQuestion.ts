@@ -24,7 +24,7 @@
  * @module stores/userQuestion
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import type {
 	UserQuestion,
@@ -181,12 +181,7 @@ export const userQuestionStore = {
 	 * @returns List of pending questions for the specified workflow
 	 */
 	getQuestionsForWorkflow(workflowId: string): UserQuestion[] {
-		let result: UserQuestion[] = [];
-		const unsub = store.subscribe((s) => {
-			result = s.pendingQuestions.filter((q) => q.workflowId === workflowId);
-		});
-		unsub();
-		return result;
+		return get(store).pendingQuestions.filter((q) => q.workflowId === workflowId);
 	},
 
 	/**
@@ -222,14 +217,8 @@ export const userQuestionStore = {
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		// Capture workflowId before removing the question
-		let answeredWorkflowId = '';
-		const unsub = store.subscribe((s) => {
-			const question = s.pendingQuestions.find((q) => q.id === response.questionId);
-			if (question) {
-				answeredWorkflowId = question.workflowId;
-			}
-		});
-		unsub();
+		const answeredWorkflowId =
+			get(store).pendingQuestions.find((q) => q.id === response.questionId)?.workflowId ?? '';
 
 		try {
 			await invoke('submit_user_response', {
@@ -278,14 +267,8 @@ export const userQuestionStore = {
 		store.update((s) => ({ ...s, isSubmitting: true, error: null }));
 
 		// Capture workflowId before removing the question
-		let skippedWorkflowId = '';
-		const unsub = store.subscribe((s) => {
-			const question = s.pendingQuestions.find((q) => q.id === questionId);
-			if (question) {
-				skippedWorkflowId = question.workflowId;
-			}
-		});
-		unsub();
+		const skippedWorkflowId =
+			get(store).pendingQuestions.find((q) => q.id === questionId)?.workflowId ?? '';
 
 		try {
 			await invoke('skip_question', { questionId });

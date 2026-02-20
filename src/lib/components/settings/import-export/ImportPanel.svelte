@@ -34,6 +34,7 @@ Orchestrates the multi-step import process:
 	import ConflictResolver from './ConflictResolver.svelte';
 	import MCPEnvEditor from './MCPEnvEditor.svelte';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type {
 		ImportValidation,
 		ImportSelection,
@@ -170,7 +171,7 @@ Orchestrates the multi-step import process:
 
 				currentStep = 'preview';
 			} catch (err) {
-				error = `${$i18n('ie_parse_failed')}: ${err}`;
+				error = `${$i18n('ie_parse_failed')}: ${getErrorMessage(err)}`;
 			} finally {
 				loading = false;
 			}
@@ -269,7 +270,7 @@ Orchestrates the multi-step import process:
 			// CRITICAL: Await the callback to ensure stores are refreshed before UI updates
 			await onimport?.(result.success);
 		} catch (err) {
-			error = `${$i18n('ie_import_failed')}: ${err}`;
+			error = `${$i18n('ie_import_failed')}: ${getErrorMessage(err)}`;
 			currentStep = 'preview';
 		} finally {
 			loading = false;

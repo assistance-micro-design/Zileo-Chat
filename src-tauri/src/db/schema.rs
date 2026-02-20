@@ -37,15 +37,6 @@ DEFINE FIELD OVERWRITE model_id ON workflow TYPE option<string>;
 -- Current context size (last API call context window usage)
 DEFINE FIELD OVERWRITE current_context_tokens ON workflow TYPE int DEFAULT 0;
 
--- Table: agent_state
-DEFINE TABLE OVERWRITE agent_state SCHEMAFULL;
-DEFINE FIELD OVERWRITE agent_id ON agent_state TYPE string;
-DEFINE FIELD OVERWRITE lifecycle ON agent_state TYPE string ASSERT $value IN ['permanent', 'temporary'];
-DEFINE FIELD OVERWRITE config ON agent_state TYPE object;
-DEFINE FIELD OVERWRITE metrics ON agent_state TYPE object;
-DEFINE FIELD OVERWRITE last_active ON agent_state TYPE datetime DEFAULT time::now();
-DEFINE INDEX OVERWRITE unique_agent_id ON agent_state FIELDS agent_id UNIQUE;
-
 -- Table: message
 -- Extended with metrics fields for Phase 6 persistence
 DEFINE TABLE OVERWRITE message SCHEMAFULL;
@@ -104,8 +95,8 @@ DEFINE FIELD OVERWRITE id ON validation_request TYPE string;
 DEFINE FIELD OVERWRITE workflow_id ON validation_request TYPE string;
 DEFINE FIELD OVERWRITE type ON validation_request TYPE string ASSERT $value IN ['tool', 'sub_agent', 'mcp', 'file_op', 'db_op'];
 DEFINE FIELD OVERWRITE operation ON validation_request TYPE string;
-DEFINE FIELD OVERWRITE details ON validation_request TYPE object;
-DEFINE FIELD OVERWRITE risk_level ON validation_request TYPE string ASSERT $value IN ['low', 'medium', 'high'];
+DEFINE FIELD OVERWRITE details ON validation_request TYPE string DEFAULT '{}'; -- JSON string (ERR_SURREAL_001: TYPE object drops dynamic keys)
+DEFINE FIELD OVERWRITE risk_level ON validation_request TYPE string ASSERT $value IN ['low', 'medium', 'high', 'critical'];
 DEFINE FIELD OVERWRITE status ON validation_request TYPE string DEFAULT 'pending' ASSERT $value IN ['pending', 'approved', 'rejected'];
 DEFINE FIELD OVERWRITE created_at ON validation_request TYPE datetime DEFAULT time::now();
 
@@ -133,12 +124,6 @@ DEFINE INDEX OVERWRITE task_status_idx ON task FIELDS status;
 DEFINE INDEX OVERWRITE task_priority_idx ON task FIELDS priority;
 DEFINE INDEX OVERWRITE task_agent_idx ON task FIELDS agent_assigned;
 
--- Relations graph
-DEFINE TABLE OVERWRITE workflow_agent SCHEMAFULL;
-DEFINE FIELD OVERWRITE in ON workflow_agent TYPE record<workflow>;
-DEFINE FIELD OVERWRITE out ON workflow_agent TYPE record<agent_state>;
-DEFINE FIELD OVERWRITE created_by ON workflow_agent TYPE bool DEFAULT true;
-
 -- Table: mcp_server (MCP server configurations)
 DEFINE TABLE OVERWRITE mcp_server SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON mcp_server TYPE string;
@@ -160,8 +145,8 @@ DEFINE FIELD OVERWRITE id ON mcp_call_log TYPE string;
 DEFINE FIELD OVERWRITE workflow_id ON mcp_call_log TYPE option<string>;
 DEFINE FIELD OVERWRITE server_name ON mcp_call_log TYPE string;
 DEFINE FIELD OVERWRITE tool_name ON mcp_call_log TYPE string;
-DEFINE FIELD OVERWRITE params ON mcp_call_log TYPE object;
-DEFINE FIELD OVERWRITE result ON mcp_call_log TYPE array | object; -- MCP tool results can be arrays or objects
+DEFINE FIELD OVERWRITE params ON mcp_call_log TYPE string DEFAULT '{}'; -- JSON string (ERR_SURREAL_001: TYPE object drops dynamic keys)
+DEFINE FIELD OVERWRITE result ON mcp_call_log TYPE string DEFAULT '[]'; -- JSON string (was TYPE array | object)
 DEFINE FIELD OVERWRITE success ON mcp_call_log TYPE bool;
 DEFINE FIELD OVERWRITE duration_ms ON mcp_call_log TYPE int;
 DEFINE FIELD OVERWRITE timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();

@@ -28,6 +28,7 @@
 	import DOMPurify from 'dompurify';
 	import { openUrl } from '@tauri-apps/plugin-opener';
 	import { i18n } from '$lib/i18n';
+	import { isAllowedScheme } from '$lib/utils/url';
 	import { ExternalLink, Copy, X } from '@lucide/svelte';
 
 	/**
@@ -56,7 +57,7 @@
 		event.stopPropagation();
 
 		const url = anchor.getAttribute('href');
-		if (!url) return;
+		if (!url || !isAllowedScheme(url)) return;
 
 		const rect = anchor.getBoundingClientRect();
 		linkPopup = {

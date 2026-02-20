@@ -239,13 +239,6 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 });
 
 /**
- * Derived store: whether streaming is active (token tracking perspective)
- * NOTE: Use streamingStore.isStreaming for general streaming state
- * @deprecated Use `streamingStore.isStreaming` instead to avoid redundancy
- */
-export const isTokenStreaming = derived(store, ($s) => $s.isStreaming);
-
-/**
  * Derived store: streaming token metrics
  */
 export const streamingTokens = derived(store, ($s) => $s.streaming);

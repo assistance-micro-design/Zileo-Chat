@@ -46,6 +46,13 @@ export function getErrorMessage(error: unknown): string {
 	if (error !== null && typeof error === 'object' && 'message' in error) {
 		return String((error as { message: unknown }).message);
 	}
+	if (error !== null && typeof error === 'object') {
+		try {
+			return JSON.stringify(error);
+		} catch {
+			return String(error);
+		}
+	}
 	return String(error);
 }
 

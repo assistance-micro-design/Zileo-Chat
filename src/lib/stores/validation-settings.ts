@@ -28,6 +28,7 @@ import type {
   ValidationSettings,
   UpdateValidationSettingsRequest
 } from '$types/validation';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * State for the validation settings store
@@ -68,7 +69,7 @@ function createValidationSettingsStore() {
         const settings = await invoke<ValidationSettings>('get_validation_settings');
         store.update((s) => ({ ...s, settings, loading: false }));
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = getErrorMessage(err);
         store.update((s) => ({ ...s, error: errorMsg, loading: false }));
         throw err;
       }
@@ -86,7 +87,7 @@ function createValidationSettingsStore() {
         });
         store.update((s) => ({ ...s, settings, saving: false }));
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = getErrorMessage(err);
         store.update((s) => ({ ...s, error: errorMsg, saving: false }));
         throw err;
       }
@@ -101,7 +102,7 @@ function createValidationSettingsStore() {
         const settings = await invoke<ValidationSettings>('reset_validation_settings');
         store.update((s) => ({ ...s, settings, saving: false }));
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = getErrorMessage(err);
         store.update((s) => ({ ...s, error: errorMsg, saving: false }));
         throw err;
       }

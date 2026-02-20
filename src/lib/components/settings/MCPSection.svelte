@@ -46,6 +46,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	import { i18n } from '$lib/i18n';
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** MCP state */
 	let mcpState = $state<MCPState>(createInitialMCPState());
@@ -65,7 +66,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${err}`);
+			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${getErrorMessage(err)}`);
 		}
 	}
 
@@ -99,7 +100,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			}
 			mcpModal.close();
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to save server: ${err}`);
+			mcpState = setMCPError(mcpState, `Failed to save server: ${getErrorMessage(err)}`);
 		} finally {
 			mcpSaving = false;
 		}
@@ -117,7 +118,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			await deleteServer(server.id);
 			mcpState = removeServer(mcpState, server.id);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to delete server: ${err}`);
+			mcpState = setMCPError(mcpState, `Failed to delete server: ${getErrorMessage(err)}`);
 		}
 	}
 
@@ -143,7 +144,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			const result = await testServer(testingServerConfig);
 			testResult = result;
 		} catch (err) {
-			testError = `${err}`;
+			testError = getErrorMessage(err);
 		} finally {
 			mcpState = setTestingServer(mcpState, null);
 		}
@@ -163,7 +164,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			const result = await testServer(testingServerConfig);
 			testResult = result;
 		} catch (err) {
-			testError = `${err}`;
+			testError = getErrorMessage(err);
 		} finally {
 			mcpState = setTestingServer(mcpState, null);
 		}
@@ -192,7 +193,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			}
 			mcpState = updateServer(mcpState, server.id, updatedServer);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to toggle server: ${err}`);
+			mcpState = setMCPError(mcpState, `Failed to toggle server: ${getErrorMessage(err)}`);
 		}
 	}
 

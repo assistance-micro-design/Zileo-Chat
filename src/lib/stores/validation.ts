@@ -28,6 +28,7 @@ import { writable, derived, get } from 'svelte/store';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import type { ValidationRequest, RiskLevel } from '$types/validation';
+import { getErrorMessage } from '$lib/utils/error';
 import type { ValidationRequiredEvent } from '$types/sub-agent';
 
 /**
@@ -186,7 +187,7 @@ export const validationStore = {
 				totalProcessed: s.totalProcessed + 1
 			}));
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorMessage = getErrorMessage(error);
 			store.update((s) => ({
 				...s,
 				isProcessing: false,
@@ -221,7 +222,7 @@ export const validationStore = {
 				totalProcessed: s.totalProcessed + 1
 			}));
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error);
+			const errorMessage = getErrorMessage(error);
 			store.update((s) => ({
 				...s,
 				isProcessing: false,

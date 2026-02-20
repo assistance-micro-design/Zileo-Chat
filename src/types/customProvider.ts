@@ -47,6 +47,19 @@ export interface ProviderInfo {
 }
 
 /**
+ * Response from create/update custom provider commands.
+ *
+ * Wraps `ProviderInfo` with an optional security warning (e.g., HTTP usage).
+ * Synchronized with src-tauri/src/models/custom_provider.rs :: CustomProviderResponse
+ */
+export interface CustomProviderResponse {
+	/** Provider metadata */
+	provider: ProviderInfo;
+	/** Optional security warning (e.g., HTTP without TLS on non-localhost) */
+	warning?: string;
+}
+
+/**
  * Request payload for creating a new custom provider.
  */
 export interface CreateCustomProviderRequest {

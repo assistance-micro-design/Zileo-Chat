@@ -19,31 +19,9 @@
 //!
 //! Phase 3: Tool Execution Persistence
 
+use crate::models::serde_utils::{deserialize_json_string, serialize_as_json_string};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-/// Deserialize a JSON string from DB back into serde_json::Value.
-/// Handles both string (new format) and object (legacy format) inputs.
-fn deserialize_json_string<'de, D>(deserializer: D) -> Result<serde_json::Value, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = serde_json::Value::deserialize(deserializer)?;
-    match value {
-        serde_json::Value::String(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
-        // Legacy: if DB still has object type data, pass through as-is
-        other => Ok(other),
-    }
-}
-
-/// Serialize serde_json::Value to a JSON string for DB storage.
-fn serialize_as_json_string<S>(value: &serde_json::Value, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let s = serde_json::to_string(value).map_err(serde::ser::Error::custom)?;
-    serializer.serialize_str(&s)
-}
+use serde::{Deserialize, Serialize};
 
 /// Tool type indicating execution context
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

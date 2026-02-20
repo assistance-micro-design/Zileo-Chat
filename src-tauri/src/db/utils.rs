@@ -24,11 +24,16 @@
 
 use serde_json::Value;
 
+/// Maximum nesting depth for sanitization to prevent stack overflow
+/// on maliciously crafted deeply nested JSON from external sources.
+const MAX_SANITIZE_DEPTH: usize = 64;
+
 /// Sanitizes a JSON value for SurrealDB by removing null characters.
 ///
 /// SurrealDB's Strand type panics on strings containing `\0` characters.
 /// This function recursively removes null characters from all string values
-/// in the JSON structure.
+/// in the JSON structure. Nesting depth is limited to prevent stack overflow
+/// on malicious input.
 ///
 /// # Arguments
 ///
@@ -37,6 +42,7 @@ use serde_json::Value;
 /// # Returns
 ///
 /// A new JSON value with all null characters removed from strings.
+/// Values nested beyond `MAX_SANITIZE_DEPTH` are replaced with `null`.
 ///
 /// # Example
 ///
@@ -49,6 +55,13 @@ use serde_json::Value;
 /// assert_eq!(clean["text"], "helloworld");
 /// ```
 pub fn sanitize_for_surrealdb(value: Value) -> Value {
+    sanitize_recursive(value, 0)
+}
+
+fn sanitize_recursive(value: Value, depth: usize) -> Value {
+    if depth > MAX_SANITIZE_DEPTH {
+        return Value::Null;
+    }
     match value {
         Value::String(s) => {
             // Remove null characters from strings
@@ -56,13 +69,17 @@ pub fn sanitize_for_surrealdb(value: Value) -> Value {
         }
         Value::Array(arr) => {
             // Recursively sanitize array elements
-            Value::Array(arr.into_iter().map(sanitize_for_surrealdb).collect())
+            Value::Array(
+                arr.into_iter()
+                    .map(|v| sanitize_recursive(v, depth + 1))
+                    .collect(),
+            )
         }
         Value::Object(obj) => {
             // Recursively sanitize object values
             Value::Object(
                 obj.into_iter()
-                    .map(|(k, v)| (k, sanitize_for_surrealdb(v)))
+                    .map(|(k, v)| (k, sanitize_recursive(v, depth + 1)))
                     .collect(),
             )
         }
@@ -70,6 +87,10 @@ pub fn sanitize_for_surrealdb(value: Value) -> Value {
         other => other,
     }
 }
+
+/// Maximum number of entities allowed in a single import file.
+/// Prevents DoS via extremely large import files.
+pub const MAX_IMPORT_ENTITIES: usize = 100;
 
 #[cfg(test)]
 mod tests {
@@ -147,5 +168,46 @@ mod tests {
         let value = json!("\0\0\0");
         let result = sanitize_for_surrealdb(value);
         assert_eq!(result, json!(""));
+    }
+
+    #[test]
+    fn test_sanitize_deeply_nested_json_truncated() {
+        // Build JSON with 100 levels of nesting (exceeds MAX_SANITIZE_DEPTH of 64)
+        let mut value = json!("leaf\0value");
+        for _ in 0..100 {
+            value = json!({"nested": value});
+        }
+        let result = sanitize_for_surrealdb(value);
+        // Should not stack overflow, and deep levels should be truncated to null
+        assert!(result.is_object());
+
+        // Walk down to verify truncation at depth limit
+        // depth 0 = outermost object, depth > 64 = truncated to null
+        let mut current = &result;
+        for _ in 0..65 {
+            current = &current["nested"];
+        }
+        // At depth 65+ (depth > MAX_SANITIZE_DEPTH), values become null
+        assert!(
+            current.is_null(),
+            "Values beyond MAX_SANITIZE_DEPTH should be null"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_normal_depth_preserved() {
+        // Build JSON with 10 levels (well within limit)
+        let mut value = json!("leaf\0text");
+        for _ in 0..10 {
+            value = json!({"nested": value});
+        }
+        let result = sanitize_for_surrealdb(value);
+
+        // Walk down 10 levels - leaf should be preserved and sanitized
+        let mut current = &result;
+        for _ in 0..10 {
+            current = &current["nested"];
+        }
+        assert_eq!(current, &json!("leaftext"));
     }
 }

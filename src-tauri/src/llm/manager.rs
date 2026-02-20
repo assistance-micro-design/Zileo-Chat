@@ -641,8 +641,8 @@ impl ProviderManager {
     pub async fn complete_with_tools(
         &self,
         provider: ProviderType,
-        messages: Vec<serde_json::Value>,
-        tools: Vec<serde_json::Value>,
+        messages: &[serde_json::Value],
+        tools: &[serde_json::Value],
         tool_choice: Option<serde_json::Value>,
         model: &str,
         temperature: f32,
@@ -661,18 +661,22 @@ impl ProviderManager {
         // Clone values for the retry closure
         let model_owned = model.to_string();
 
+        // Clone messages/tools once for the retry closure (only cloned per-retry, not per-call)
+        let messages_owned = messages.to_vec();
+        let tools_owned = tools.to_vec();
+
         let result = match &provider {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
                 with_retry(
                     || {
-                        let msgs = messages.clone();
-                        let tls = tools.clone();
+                        let msgs = messages_owned.clone();
+                        let tls = tools_owned.clone();
                         let tc = tool_choice.clone();
                         let m = model_owned.clone();
                         let prov = mistral.clone();
                         async move {
-                            prov.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
+                            prov.complete_with_tools(&msgs, &tls, tc, &m, temperature, max_tokens)
                                 .await
                         }
                     },
@@ -685,12 +689,12 @@ impl ProviderManager {
                 // Ollama doesn't use tool_choice, so we ignore it
                 with_retry(
                     || {
-                        let msgs = messages.clone();
-                        let tls = tools.clone();
+                        let msgs = messages_owned.clone();
+                        let tls = tools_owned.clone();
                         let m = model_owned.clone();
                         let prov = ollama.clone();
                         async move {
-                            prov.complete_with_tools(msgs, tls, &m, temperature, max_tokens)
+                            prov.complete_with_tools(&msgs, &tls, &m, temperature, max_tokens)
                                 .await
                         }
                     },
@@ -708,13 +712,13 @@ impl ProviderManager {
                     .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
                 with_retry(
                     || {
-                        let msgs = messages.clone();
-                        let tls = tools.clone();
+                        let msgs = messages_owned.clone();
+                        let tls = tools_owned.clone();
                         let tc = tool_choice.clone();
                         let m = model_owned.clone();
                         let prov = custom.clone();
                         async move {
-                            prov.complete_with_tools(msgs, tls, tc, &m, temperature, max_tokens)
+                            prov.complete_with_tools(&msgs, &tls, tc, &m, temperature, max_tokens)
                                 .await
                         }
                     },

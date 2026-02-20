@@ -109,11 +109,22 @@ pub mod cascade {
     ///
     /// # Arguments
     /// * `db` - Database client Arc reference
-    /// * `table` - Table name to delete from
-    /// * `workflow_id` - The workflow ID to match
+    /// * `table` - Table name from CASCADE_DELETE_TABLES constant (hardcoded, not user input)
+    /// * `workflow_id` - The workflow ID to match (parameterized to prevent injection)
     pub async fn delete_by_workflow_id(db: &Arc<DBClient>, table: &str, workflow_id: &str) {
-        let query = format!("DELETE {} WHERE workflow_id = '{}'", table, workflow_id);
-        match db.execute(&query).await {
+        // Table names come from the hardcoded CASCADE_DELETE_TABLES constant.
+        // workflow_id is parameterized via $wf_id bind variable.
+        let query = format!("DELETE {} WHERE workflow_id = $wf_id", table);
+        match db
+            .execute_with_params(
+                &query,
+                vec![(
+                    "wf_id".to_string(),
+                    serde_json::Value::String(workflow_id.to_string()),
+                )],
+            )
+            .await
+        {
             Ok(_) => info!(table = %table, workflow_id = %workflow_id, "Cascade deleted records"),
             Err(e) => warn!(error = %e, table = %table, "Cascade delete failed (may not exist)"),
         }

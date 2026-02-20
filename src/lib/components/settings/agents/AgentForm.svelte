@@ -44,6 +44,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/**
 	 * Component props
@@ -157,7 +158,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch (err) {
-			console.warn('[AgentForm] Failed to load MCP servers:', err);
+			console.warn('[AgentForm] Failed to load MCP servers:', getErrorMessage(err));
 			// MCP servers are optional - form still usable without them
 		}
 
@@ -170,7 +171,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
-			console.warn('[AgentForm] Failed to load LLM models:', err);
+			console.warn('[AgentForm] Failed to load LLM models:', getErrorMessage(err));
 			// Will show empty model list - user will see no-models message
 		}
 	});

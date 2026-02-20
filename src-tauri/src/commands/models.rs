@@ -52,6 +52,10 @@ use crate::tools::constants::{commands as cmd_const, query_limits};
 // ============================================================================
 
 /// Validates a model ID string.
+///
+/// Ensures the ID is non-empty, within length limits, and contains only safe
+/// characters (alphanumeric, hyphens, underscores, dots) to prevent SurrealQL
+/// injection when used in record ID positions.
 fn validate_model_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("Model ID is required".into());
@@ -61,6 +65,13 @@ fn validate_model_id(id: &str) -> Result<(), String> {
             "Model ID must be {} characters or less",
             cmd_const::MAX_MODEL_ID_LEN
         ));
+    }
+    // Strict character check: only allow chars safe for SurrealQL record IDs
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err("Model ID contains invalid characters (only alphanumeric, hyphens, underscores, and dots allowed)".into());
     }
     Ok(())
 }
@@ -113,19 +124,30 @@ pub async fn list_models(
     // Build query based on filter
     // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
     // Add LIMIT to prevent memory explosion (OPT-DB-8)
-    let query = if let Some(ref pt) = provider_filter {
-        format!(
+    // Use bind params for provider filter to prevent SurrealQL injection (Custom providers have user-supplied names)
+    let result: Vec<LLMModel> = if let Some(ref pt) = provider_filter {
+        let query = format!(
             "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
              created_at, updated_at \
-             FROM llm_model WHERE provider = '{}' LIMIT {}",
-            pt,
+             FROM llm_model WHERE provider = $provider LIMIT {}",
             query_limits::DEFAULT_MODELS_LIMIT
-        )
+        );
+        state
+            .db
+            .query_with_params(
+                &query,
+                vec![("provider".to_string(), serde_json::json!(pt.to_string()))],
+            )
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to query models");
+                format!("Database error: {}", e)
+            })?
     } else {
-        format!(
+        let query = format!(
             "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
@@ -133,23 +155,22 @@ pub async fn list_models(
              created_at, updated_at \
              FROM llm_model LIMIT {}",
             query_limits::DEFAULT_MODELS_LIMIT
-        )
+        );
+        state
+            .db
+            .db
+            .query(&query)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Failed to query models");
+                format!("Database error: {}", e)
+            })?
+            .take(0)
+            .map_err(|e| {
+                error!(error = %e, "Failed to deserialize models");
+                format!("Failed to deserialize models: {}", e)
+            })?
     };
-
-    let result: Vec<LLMModel> = state
-        .db
-        .db
-        .query(&query)
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to query models");
-            format!("Database error: {}", e)
-        })?
-        .take(0)
-        .map_err(|e| {
-            error!(error = %e, "Failed to deserialize models");
-            format!("Failed to deserialize models: {}", e)
-        })?;
 
     info!(count = result.len(), "Models retrieved");
     Ok(result)
@@ -242,29 +263,27 @@ pub async fn get_model_by_api_name(
     // Convert provider to lowercase for matching (DB stores lowercase)
     let provider_lower = provider.to_lowercase();
 
-    let query = format!(
-        "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+    // Use bind params for user-supplied api_name and provider to prevent SurrealQL injection
+    let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
          max_output_tokens, temperature_default, is_builtin, is_reasoning, \
          (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
          (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
          created_at, updated_at \
-         FROM llm_model WHERE api_name = '{}' AND provider = '{}'",
-        api_name, provider_lower
-    );
+         FROM llm_model WHERE api_name = $api_name AND provider = $provider";
 
     let mut result: Vec<LLMModel> = state
         .db
-        .db
-        .query(&query)
+        .query_with_params(
+            query,
+            vec![
+                ("api_name".to_string(), serde_json::json!(api_name)),
+                ("provider".to_string(), serde_json::json!(provider_lower)),
+            ],
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to query model by api_name");
             format!("Database error: {}", e)
-        })?
-        .take(0)
-        .map_err(|e| {
-            error!(error = %e, "Failed to deserialize model");
-            format!("Failed to deserialize model: {}", e)
         })?;
 
     result.pop().ok_or_else(|| {
@@ -307,20 +326,26 @@ pub async fn create_model(
         "Creating custom model"
     );
 
-    // Check for duplicate api_name
-    let check_query = format!(
-        "SELECT count() FROM llm_model WHERE provider = '{}' AND api_name = '{}' GROUP ALL",
-        data.provider, data.api_name
-    );
+    // Check for duplicate api_name (use bind params to prevent injection)
+    let check_query =
+        "SELECT count() FROM llm_model WHERE provider = $provider AND api_name = $api_name GROUP ALL";
 
-    let count_result: Option<serde_json::Value> = state
+    let check_results: Vec<serde_json::Value> = state
         .db
-        .db
-        .query(&check_query)
+        .query_json_with_params(
+            check_query,
+            vec![
+                (
+                    "provider".to_string(),
+                    serde_json::json!(data.provider.to_string()),
+                ),
+                ("api_name".to_string(), serde_json::json!(&data.api_name)),
+            ],
+        )
         .await
-        .map_err(|e| format!("Database error: {}", e))?
-        .take(0)
-        .map_err(|e| format!("Failed to check duplicate: {}", e))?;
+        .map_err(|e| format!("Database error: {}", e))?;
+
+    let count_result: Option<serde_json::Value> = check_results.into_iter().next();
 
     if let Some(val) = count_result {
         if let Some(count) = val.get("count").and_then(|v| v.as_i64()) {
@@ -340,40 +365,38 @@ pub async fn create_model(
     // Create the model from request
     let model = LLMModel::from_create_request(model_id.clone(), &data);
 
-    // Insert into database using raw query (SurrealDB SDK 2.x workaround)
-    let insert_query = format!(
-        "CREATE llm_model:`{}` CONTENT {{ \
-            id: '{}', \
-            provider: '{}', \
-            name: '{}', \
-            api_name: '{}', \
-            context_window: {}, \
-            max_output_tokens: {}, \
-            temperature_default: {}, \
-            is_builtin: false, \
-            is_reasoning: {}, \
-            input_price_per_mtok: {}, \
-            output_price_per_mtok: {}, \
-            created_at: time::now(), \
-            updated_at: time::now() \
-        }}",
-        model_id,
-        model_id,
-        model.provider,
-        model.name.replace('\'', "''"),
-        model.api_name.replace('\'', "''"),
-        model.context_window,
-        model.max_output_tokens,
-        model.temperature_default,
-        model.is_reasoning,
-        model.input_price_per_mtok,
-        model.output_price_per_mtok
-    );
+    // Insert into database using parameterized query (SurrealDB SDK 2.x workaround)
+    // model_id is from Uuid::new_v4() so safe for format!() in record ID position
+    let insert_query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
+    let insert_data = serde_json::json!({
+        "id": model_id,
+        "provider": model.provider.to_string(),
+        "name": model.name,
+        "api_name": model.api_name,
+        "context_window": model.context_window,
+        "max_output_tokens": model.max_output_tokens,
+        "temperature_default": model.temperature_default,
+        "is_builtin": false,
+        "is_reasoning": model.is_reasoning,
+        "input_price_per_mtok": model.input_price_per_mtok,
+        "output_price_per_mtok": model.output_price_per_mtok,
+    });
 
-    state.db.execute(&insert_query).await.map_err(|e| {
-        error!(error = %e, "Failed to create model");
-        format!("Failed to create model: {}", e)
-    })?;
+    // time::now() must be set separately as a SurrealQL function (not a param)
+    state
+        .db
+        .execute_with_params(
+            &format!(
+                "{} ; UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+                insert_query, model_id
+            ),
+            vec![("data".to_string(), insert_data)],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to create model");
+            format!("Failed to create model: {}", e)
+        })?;
 
     info!(model_id = %model_id, "Model created");
 
@@ -437,28 +460,36 @@ pub async fn update_model(
 
     info!(is_builtin = existing.is_builtin, "Updating model");
 
-    // Build SET clause dynamically
+    // Build SET clause dynamically with bind params for string values
     let mut set_parts: Vec<String> = vec!["updated_at = time::now()".to_string()];
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
     if let Some(ref name) = data.name {
-        set_parts.push(format!("name = '{}'", name.replace('\'', "''")));
+        set_parts.push("name = $p_name".to_string());
+        params.push(("p_name".to_string(), serde_json::json!(name)));
     }
     if let Some(ref api_name) = data.api_name {
-        // Check for duplicate api_name
-        let check_query = format!(
-            "SELECT count() FROM llm_model WHERE provider = '{}' AND api_name = '{}' AND id != '{}' GROUP ALL",
-            existing.provider, api_name, id
-        );
-        let count_result: Option<serde_json::Value> = state
+        // Check for duplicate api_name (use bind params to prevent injection)
+        let check_query = "SELECT count() FROM llm_model \
+            WHERE provider = $provider AND api_name = $api_name AND meta::id(id) != $exclude_id \
+            GROUP ALL";
+        let check_results: Vec<serde_json::Value> = state
             .db
-            .db
-            .query(&check_query)
+            .query_json_with_params(
+                check_query,
+                vec![
+                    (
+                        "provider".to_string(),
+                        serde_json::json!(existing.provider.to_string()),
+                    ),
+                    ("api_name".to_string(), serde_json::json!(api_name)),
+                    ("exclude_id".to_string(), serde_json::json!(&id)),
+                ],
+            )
             .await
-            .map_err(|e| format!("Database error: {}", e))?
-            .take(0)
-            .map_err(|e| format!("Failed to check duplicate: {}", e))?;
+            .map_err(|e| format!("Database error: {}", e))?;
 
-        if let Some(val) = count_result {
+        if let Some(val) = check_results.into_iter().next() {
             if let Some(count) = val.get("count").and_then(|v| v.as_i64()) {
                 if count > 0 {
                     return Err(format!(
@@ -468,7 +499,8 @@ pub async fn update_model(
                 }
             }
         }
-        set_parts.push(format!("api_name = '{}'", api_name.replace('\'', "''")));
+        set_parts.push("api_name = $p_api_name".to_string());
+        params.push(("p_api_name".to_string(), serde_json::json!(api_name)));
     }
     if let Some(ctx) = data.context_window {
         set_parts.push(format!("context_window = {}", ctx));
@@ -489,12 +521,17 @@ pub async fn update_model(
         set_parts.push(format!("output_price_per_mtok = {}", output_price));
     }
 
+    // id is validated by validate_model_id (strict char check) so safe for record ID
     let update_query = format!("UPDATE llm_model:`{}` SET {}", id, set_parts.join(", "));
 
-    state.db.execute(&update_query).await.map_err(|e| {
-        error!(error = %e, "Failed to update model");
-        format!("Failed to update model: {}", e)
-    })?;
+    state
+        .db
+        .execute_with_params(&update_query, params)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to update model");
+            format!("Failed to update model: {}", e)
+        })?;
 
     info!("Model updated");
 
@@ -579,6 +616,7 @@ pub async fn get_provider_settings(
     info!("Getting provider settings");
 
     // Query by record ID (provider_settings:mistral or provider_settings:ollama)
+    // Backticks handle special chars in record IDs; provider_type is already validated
     let query = format!(
         "SELECT provider, enabled, default_model_id, base_url, updated_at \
          FROM provider_settings:`{}`",
@@ -675,11 +713,16 @@ pub async fn update_provider_settings(
     }
 
     // Build SET clause with null coalescing (??) to preserve existing values
-    // or use defaults for new records
+    // or use defaults for new records.
+    // Use bind params for user-supplied string values to prevent SurrealQL injection.
     let mut set_parts: Vec<String> = vec![
-        format!("provider = '{}'", provider_type),
+        "provider = $p_provider".to_string(),
         "updated_at = time::now()".to_string(),
     ];
+    let mut params: Vec<(String, serde_json::Value)> = vec![(
+        "p_provider".to_string(),
+        serde_json::json!(provider_type.to_string()),
+    )];
 
     // For enabled: use provided value, keep existing, or default to true
     if let Some(en) = enabled {
@@ -690,19 +733,22 @@ pub async fn update_provider_settings(
 
     // For default_model_id: use provided value or keep existing
     if let Some(ref model_id) = default_model_id {
-        set_parts.push(format!("default_model_id = '{}'", model_id));
+        set_parts.push("default_model_id = $p_model_id".to_string());
+        params.push(("p_model_id".to_string(), serde_json::json!(model_id)));
     } else {
         set_parts.push("default_model_id = default_model_id".to_string());
     }
 
     // For base_url: use provided value or keep existing
     if let Some(ref url) = base_url {
-        set_parts.push(format!("base_url = '{}'", url.replace('\'', "''")));
+        set_parts.push("base_url = $p_base_url".to_string());
+        params.push(("p_base_url".to_string(), serde_json::json!(url)));
     } else {
         set_parts.push("base_url = base_url".to_string());
     }
 
     // Upsert: create if not exists, update if exists
+    // Backticks handle special chars in record IDs; provider_type is already validated
     let upsert_query = format!(
         "UPSERT provider_settings:`{}` SET {}",
         provider_type,
@@ -711,10 +757,14 @@ pub async fn update_provider_settings(
 
     info!(query = %upsert_query, "Executing UPSERT query");
 
-    state.db.execute(&upsert_query).await.map_err(|e| {
-        error!(error = %e, "Failed to update provider settings");
-        format!("Failed to update settings: {}", e)
-    })?;
+    state
+        .db
+        .execute_with_params(&upsert_query, params)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to update provider settings");
+            format!("Failed to update settings: {}", e)
+        })?;
 
     info!("Provider settings updated successfully");
 
@@ -908,39 +958,35 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
             > 0;
 
         if !exists {
+            // Use parameterized query with CONTENT $data for safe string handling
+            // model.id is from builtin definitions (safe hex/alphanumeric) for record ID
             let insert_query = format!(
-                "CREATE llm_model:`{}` CONTENT {{ \
-                    id: '{}', \
-                    provider: '{}', \
-                    name: '{}', \
-                    api_name: '{}', \
-                    context_window: {}, \
-                    max_output_tokens: {}, \
-                    temperature_default: {}, \
-                    is_builtin: true, \
-                    is_reasoning: {}, \
-                    input_price_per_mtok: {}, \
-                    output_price_per_mtok: {}, \
-                    created_at: time::now(), \
-                    updated_at: time::now() \
-                }}",
-                model.id,
-                model.id,
-                model.provider,
-                model.name.replace('\'', "''"),
-                model.api_name.replace('\'', "''"),
-                model.context_window,
-                model.max_output_tokens,
-                model.temperature_default,
-                model.is_reasoning,
-                model.input_price_per_mtok,
-                model.output_price_per_mtok
+                "CREATE llm_model:`{}` CONTENT $data ; \
+                 UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+                model.id, model.id
             );
+            let insert_data = serde_json::json!({
+                "id": model.id,
+                "provider": model.provider.to_string(),
+                "name": model.name,
+                "api_name": model.api_name,
+                "context_window": model.context_window,
+                "max_output_tokens": model.max_output_tokens,
+                "temperature_default": model.temperature_default,
+                "is_builtin": true,
+                "is_reasoning": model.is_reasoning,
+                "input_price_per_mtok": model.input_price_per_mtok,
+                "output_price_per_mtok": model.output_price_per_mtok,
+            });
 
-            state.db.execute(&insert_query).await.map_err(|e| {
-                error!(error = %e, model_id = %model.id, "Failed to insert builtin model");
-                format!("Failed to insert model {}: {}", model.id, e)
-            })?;
+            state
+                .db
+                .execute_with_params(&insert_query, vec![("data".to_string(), insert_data)])
+                .await
+                .map_err(|e| {
+                    error!(error = %e, model_id = %model.id, "Failed to insert builtin model");
+                    format!("Failed to insert model {}: {}", model.id, e)
+                })?;
 
             inserted += 1;
         }
@@ -976,6 +1022,8 @@ mod tests {
         assert!(validate_model_id("mistral-large-latest").is_ok());
         // Single character
         assert!(validate_model_id("a").is_ok());
+        // Underscores and dots
+        assert!(validate_model_id("my_model.v2").is_ok());
         // Max length (128 chars)
         assert!(validate_model_id(&"a".repeat(128)).is_ok());
     }
@@ -990,6 +1038,12 @@ mod tests {
         // Too long (>128 chars)
         assert!(validate_model_id(&"a".repeat(129)).is_err());
         assert!(validate_model_id(&"x".repeat(200)).is_err());
+        // Characters that could enable SurrealQL injection
+        assert!(validate_model_id("id'; DROP TABLE --").is_err());
+        assert!(validate_model_id("id`; DELETE llm_model").is_err());
+        assert!(validate_model_id("id with spaces").is_err());
+        assert!(validate_model_id("id{injection}").is_err());
+        assert!(validate_model_id("id\x00null").is_err());
     }
 
     #[test]
@@ -1052,5 +1106,142 @@ mod tests {
         assert!(validate_provider_string("ollama").is_ok());
         assert!(validate_provider_string("routerlab").is_ok()); // Custom providers accepted
         assert!(validate_provider_string("").is_err()); // Empty rejected
+    }
+}
+
+#[cfg(test)]
+mod injection_tests {
+    use crate::test_utils::setup_test_state;
+
+    /// Creates a model with a name containing an apostrophe via bind params.
+    /// Verifies it is stored and retrieved correctly without SQL injection.
+    #[tokio::test]
+    async fn test_model_name_with_apostrophe() {
+        let state = setup_test_state().await;
+        let model_id = uuid::Uuid::new_v4().to_string();
+
+        // Insert a model with an apostrophe in the name using parameterized CONTENT
+        let insert_query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
+        let data = serde_json::json!({
+            "id": model_id,
+            "provider": "mistral",
+            "name": "L'assistant intelligent",
+            "api_name": "test-apostrophe-model",
+            "context_window": 32000,
+            "max_output_tokens": 4096,
+            "temperature_default": 0.7,
+            "is_builtin": false,
+            "is_reasoning": false,
+            "input_price_per_mtok": 0.0,
+            "output_price_per_mtok": 0.0,
+        });
+
+        state
+            .db
+            .execute_with_params(
+                &format!(
+                    "{} ; UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+                    insert_query, model_id
+                ),
+                vec![("data".to_string(), data)],
+            )
+            .await
+            .expect("Failed to create model with apostrophe in name");
+
+        // Verify the model was stored correctly
+        let query = format!(
+            "SELECT meta::id(id) AS id, name FROM llm_model:`{}`",
+            model_id
+        );
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json(&query)
+            .await
+            .expect("Failed to query model");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].get("name").and_then(|v| v.as_str()),
+            Some("L'assistant intelligent")
+        );
+    }
+
+    /// Searches with a SurrealQL injection string as api_name.
+    /// Verifies no data loss occurs and the query returns empty (no match).
+    #[tokio::test]
+    async fn test_model_search_injection_safe() {
+        let state = setup_test_state().await;
+
+        // First, seed a legitimate model
+        let legit_id = uuid::Uuid::new_v4().to_string();
+        let seed_data = serde_json::json!({
+            "id": legit_id,
+            "provider": "mistral",
+            "name": "Legitimate Model",
+            "api_name": "legit-model",
+            "context_window": 32000,
+            "max_output_tokens": 4096,
+            "temperature_default": 0.7,
+            "is_builtin": false,
+            "is_reasoning": false,
+            "input_price_per_mtok": 0.0,
+            "output_price_per_mtok": 0.0,
+        });
+        state
+            .db
+            .execute_with_params(
+                &format!(
+                    "CREATE llm_model:`{}` CONTENT $data ; \
+                     UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+                    legit_id, legit_id
+                ),
+                vec![("data".to_string(), seed_data)],
+            )
+            .await
+            .expect("Failed to seed legitimate model");
+
+        // Attempt injection via api_name search using bind params
+        let injection_string = "' OR 1=1; DELETE FROM llm_model; --";
+        let search_query = "SELECT meta::id(id) AS id, name FROM llm_model \
+            WHERE api_name = $api_name AND provider = $provider";
+
+        let results: Vec<serde_json::Value> = state
+            .db
+            .query_json_with_params(
+                search_query,
+                vec![
+                    ("api_name".to_string(), serde_json::json!(injection_string)),
+                    ("provider".to_string(), serde_json::json!("mistral")),
+                ],
+            )
+            .await
+            .expect("Parameterized query should not fail");
+
+        // Injection string should not match any model
+        assert!(
+            results.is_empty(),
+            "Injection string should not match any model"
+        );
+
+        // Verify the legitimate model still exists (no data loss from injection attempt)
+        let verify_query = format!(
+            "SELECT meta::id(id) AS id, name FROM llm_model:`{}`",
+            legit_id
+        );
+        let verify_results: Vec<serde_json::Value> = state
+            .db
+            .query_json(&verify_query)
+            .await
+            .expect("Failed to verify model still exists");
+
+        assert_eq!(
+            verify_results.len(),
+            1,
+            "Legitimate model should still exist after injection attempt"
+        );
+        assert_eq!(
+            verify_results[0].get("name").and_then(|v| v.as_str()),
+            Some("Legitimate Model")
+        );
     }
 }

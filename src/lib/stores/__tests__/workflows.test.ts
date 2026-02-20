@@ -51,6 +51,7 @@ describe('Workflow Store', () => {
 		total_tokens_input: 0,
 		total_tokens_output: 0,
 		total_cost_usd: 0,
+		model_id: null,
 		current_context_tokens: 0
 	});
 

@@ -68,6 +68,7 @@ Shows summaries for each entity type and MCP sanitization options.
 				<button
 					type="button"
 					class="section-header"
+					aria-expanded={expandedAgents}
 					onclick={() => (expandedAgents = !expandedAgents)}
 				>
 					<div class="section-title">
@@ -102,6 +103,7 @@ Shows summaries for each entity type and MCP sanitization options.
 				<button
 					type="button"
 					class="section-header"
+					aria-expanded={expandedMcp}
 					onclick={() => (expandedMcp = !expandedMcp)}
 				>
 					<div class="section-title">
@@ -164,6 +166,7 @@ Shows summaries for each entity type and MCP sanitization options.
 				<button
 					type="button"
 					class="section-header"
+					aria-expanded={expandedModels}
 					onclick={() => (expandedModels = !expandedModels)}
 				>
 					<div class="section-title">
@@ -203,6 +206,7 @@ Shows summaries for each entity type and MCP sanitization options.
 				<button
 					type="button"
 					class="section-header"
+					aria-expanded={expandedPrompts}
 					onclick={() => (expandedPrompts = !expandedPrompts)}
 				>
 					<div class="section-title">

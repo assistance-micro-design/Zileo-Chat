@@ -23,6 +23,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { onboardingStore, onboardingLoading } from '$lib/stores/onboarding';
 	import { Button, Input } from '$lib/components/ui';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	interface Props {
 		onNext: () => void;
@@ -59,7 +60,7 @@
 				onboardingStore.setApiKeyValid(false);
 			}
 		} catch (e) {
-			testError = String(e);
+			testError = getErrorMessage(e);
 			onboardingStore.setApiKeyValid(false);
 		} finally {
 			onboardingStore.setLoading(false);

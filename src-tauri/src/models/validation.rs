@@ -43,6 +43,7 @@ pub enum RiskLevel {
     Low,
     Medium,
     High,
+    Critical,
 }
 
 /// Validation status for human-in-the-loop requests
@@ -68,7 +69,8 @@ pub struct ValidationRequest {
     pub validation_type: ValidationType,
     /// Operation description
     pub operation: String,
-    /// Additional details about the operation
+    /// Additional details about the operation (stored as JSON string in DB)
+    #[serde(deserialize_with = "crate::models::serde_utils::deserialize_json_string")]
     pub details: serde_json::Value,
     /// Risk level assessment
     pub risk_level: RiskLevel,
@@ -93,7 +95,8 @@ pub struct ValidationRequestCreate {
     pub validation_type: String,
     /// Operation description
     pub operation: String,
-    /// Additional details about the operation
+    /// Additional details about the operation (serialized as JSON string for SCHEMAFULL storage)
+    #[serde(serialize_with = "crate::models::serde_utils::serialize_as_json_string")]
     pub details: serde_json::Value,
     /// Risk level assessment (as string for SurrealDB)
     pub risk_level: String,
@@ -140,6 +143,7 @@ impl std::fmt::Display for RiskLevel {
             RiskLevel::Low => write!(f, "low"),
             RiskLevel::Medium => write!(f, "medium"),
             RiskLevel::High => write!(f, "high"),
+            RiskLevel::Critical => write!(f, "critical"),
         }
     }
 }
@@ -387,6 +391,14 @@ mod tests {
 
         let deserialized: RiskLevel = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, RiskLevel::High);
+    }
+
+    #[test]
+    fn test_risk_level_deserializes_critical() {
+        let json = "\"critical\"";
+        let level: Result<RiskLevel, _> = serde_json::from_str(json);
+        assert!(level.is_ok(), "RiskLevel should handle 'critical' variant");
+        assert_eq!(level.unwrap(), RiskLevel::Critical);
     }
 
     #[test]

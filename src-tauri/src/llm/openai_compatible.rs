@@ -428,8 +428,8 @@ impl OpenAiCompatibleProvider {
     )]
     pub async fn complete_with_tools(
         &self,
-        messages: Vec<serde_json::Value>,
-        tools: Vec<serde_json::Value>,
+        messages: &[serde_json::Value],
+        tools: &[serde_json::Value],
         tool_choice: Option<serde_json::Value>,
         model: &str,
         temperature: f32,
@@ -448,10 +448,14 @@ impl OpenAiCompatibleProvider {
 
         let request_body = ToolChatRequest {
             model: model.to_string(),
-            messages,
+            messages: messages.to_vec(),
             temperature: Some(temperature),
             max_tokens: Some(max_tokens),
-            tools: if tools.is_empty() { None } else { Some(tools) },
+            tools: if tools.is_empty() {
+                None
+            } else {
+                Some(tools.to_vec())
+            },
             tool_choice,
         };
 

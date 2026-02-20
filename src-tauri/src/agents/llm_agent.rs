@@ -1237,8 +1237,8 @@ impl Agent for LLMAgent {
                 .provider_manager
                 .complete_with_tools(
                     provider_type.clone(),
-                    messages.clone(),
-                    tools_json.clone(),
+                    &messages,
+                    &tools_json,
                     Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
                     &self.config.llm.model,
                     self.config.llm.temperature,

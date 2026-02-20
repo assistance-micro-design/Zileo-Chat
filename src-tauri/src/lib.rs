@@ -55,6 +55,9 @@ pub mod security;
 pub mod state;
 pub mod tools;
 
+#[cfg(test)]
+pub mod test_utils;
+
 pub use commands::SecureKeyStore;
 pub use llm::ProviderManager;
 pub use mcp::{MCPClient, MCPError, MCPManager, MCPResult, MCPServerHandle};

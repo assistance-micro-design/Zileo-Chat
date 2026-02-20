@@ -33,7 +33,7 @@ import type {
 	ConnectionTestResult,
 	ProviderType
 } from '$types/llm';
-import type { ProviderInfo } from '$types/customProvider';
+import type { ProviderInfo, CustomProviderResponse } from '$types/customProvider';
 
 // ============================================================================
 // Cache Management (OPT-9)
@@ -604,15 +604,15 @@ export async function listProviders(): Promise<ProviderInfo[]> {
  * @param displayName - Human-readable name
  * @param baseUrl - API base URL
  * @param apiKey - API key
- * @returns Promise resolving to created provider info
+ * @returns Promise resolving to response with provider info and optional warning
  */
 export async function createCustomProvider(
 	name: string,
 	displayName: string,
 	baseUrl: string,
 	apiKey: string
-): Promise<ProviderInfo> {
-	const result = await invoke<ProviderInfo>('create_custom_provider', {
+): Promise<CustomProviderResponse> {
+	const result = await invoke<CustomProviderResponse>('create_custom_provider', {
 		name,
 		displayName,
 		baseUrl,
@@ -629,7 +629,7 @@ export async function createCustomProvider(
  * @param baseUrl - New base URL
  * @param apiKey - New API key
  * @param enabled - Enable/disable
- * @returns Promise resolving to updated provider info
+ * @returns Promise resolving to response with provider info and optional warning
  */
 export async function updateCustomProvider(
 	name: string,
@@ -637,8 +637,8 @@ export async function updateCustomProvider(
 	baseUrl?: string,
 	apiKey?: string,
 	enabled?: boolean
-): Promise<ProviderInfo> {
-	const result = await invoke<ProviderInfo>('update_custom_provider', {
+): Promise<CustomProviderResponse> {
+	const result = await invoke<CustomProviderResponse>('update_custom_provider', {
 		name,
 		displayName: displayName ?? null,
 		baseUrl: baseUrl ?? null,
