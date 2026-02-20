@@ -141,7 +141,7 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
 		} catch (err) {
-			console.error('Failed to refresh stats:', getErrorMessage(err));
+			message = { type: 'error', text: t('memory_failed_refresh_stats').replace('{error}', getErrorMessage(err)) };
 		}
 	}
 

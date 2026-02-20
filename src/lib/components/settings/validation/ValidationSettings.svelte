@@ -109,7 +109,7 @@
       availableTools = tools;
       mcpServers = servers;
     } catch (err) {
-      console.error('Failed to load resources:', getErrorMessage(err));
+      message = { type: 'error', text: $i18n('validation_load_resources_failed').replace('{error}', getErrorMessage(err)) };
     } finally {
       loadingResources = false;
     }

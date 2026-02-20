@@ -44,8 +44,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
-	import { getErrorMessage } from '$lib/utils/error';
-
 	/**
 	 * Component props
 	 */
@@ -89,6 +87,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	/** UI state */
 	let saving = $state(false);
 	let errors = $state<Record<string, string>>({});
+	let loadWarnings = $state<string[]>([]);
 	let mcpState = $state<MCPState>(createInitialMCPState());
 	let llmState = $state<LLMState>(createInitialLLMState());
 	let providerList = $state<ProviderInfo[]>([]);
@@ -159,9 +158,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		try {
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
-		} catch (err) {
-			console.warn('[AgentForm] Failed to load MCP servers:', getErrorMessage(err));
-			// MCP servers are optional - form still usable without them
+		} catch {
+			loadWarnings = [...loadWarnings, t('agents_mcp_load_failed')];
 		}
 
 		// Load LLM models and provider list
@@ -172,9 +170,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 				llmState = setProviderSettings(llmState, providerId, provSettings);
 			}
 			llmState = setModels(llmState, data.models);
-		} catch (err) {
-			console.warn('[AgentForm] Failed to load LLM models:', getErrorMessage(err));
-			// Will show empty model list - user will see no-models message
+		} catch {
+			loadWarnings = [...loadWarnings, t('agents_llm_load_failed')];
 		}
 	});
 
@@ -315,6 +312,14 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			<h3 class="form-title">
 				{mode === 'create' ? $i18n('agents_create_new') : $i18n('agents_edit')}
 			</h3>
+
+			{#if loadWarnings.length > 0}
+				<div class="load-warnings" role="status">
+					{#each loadWarnings as warning (warning)}
+						<p class="load-warning">{warning}</p>
+					{/each}
+				</div>
+			{/if}
 
 			<div class="form-grid">
 				<!-- Basic Information -->
@@ -514,6 +519,21 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		font-size: var(--font-size-lg);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
+	}
+
+	.load-warnings {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.load-warning {
+		margin: 0;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		color: var(--color-warning);
+		background: var(--color-warning-bg, rgba(234, 179, 8, 0.1));
+		border-radius: var(--radius-sm);
 	}
 
 	.form-grid {

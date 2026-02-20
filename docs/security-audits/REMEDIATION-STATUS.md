@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 51 | Fix implemented and tested |
-| PARTIAL | 4 | Some aspects done, others remain |
+| DONE | 52 | Fix implemented and tested |
+| PARTIAL | 3 | Some aspects done, others remain |
 | NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -21,7 +21,7 @@
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
 | HIGH (27) | 26 | 1 | 0 |
-| MEDIUM (35) | 16 | 2 | 17 |
+| MEDIUM (35) | 17 | 1 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
 
@@ -183,7 +183,7 @@
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
 | ERR-1 | MEDIUM | 29/30 try/catch not using getErrorMessage | **DONE** | 18+ components updated to use getErrorMessage(). See frontend diff. |
-| ERR-2 | MEDIUM | 5 files use console.error/warn | **PARTIAL** | Most replaced with getErrorMessage. Some console.warn remain in AgentForm. |
+| ERR-2 | MEDIUM | 5 files use console.error/warn | **DONE** | All console.error/warn replaced: AgentForm (loadWarnings state + i18n), PromptSettings (store handles error), ValidationSettings/MemorySettings/ImportExportSettings (message state + i18n). Empty catch in AgentForm documented (store handles error). |
 | DUP-1 | MEDIUM | ValidationSettings 9 identical info-cards | **NOT DONE** | No template extraction. |
 | DUP-2 | MEDIUM | ImportPreview 4 identical sections | **NOT DONE** | |
 | DUP-3 | MEDIUM | ExportPreview 4 identical sections | **NOT DONE** | |
@@ -227,7 +227,7 @@
 | #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
 | #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **DONE** | llm_models.rs: removed `skip_serializing_if` from `base_url`. Now serializes as `null` when None, matching TS `string \| null`. 3 new tests. |
 | #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
-| #16-20 | MEDIUM | Console.* violations (28 instances) | **PARTIAL** | Many console.error replaced with getErrorMessage(). Some remain. |
+| #16-20 | MEDIUM | Console.* violations (28 instances) | **PARTIAL** | All settings/ console.error/warn removed (SA-010 ERR-2 complete). Remaining console.* in non-settings files (agent/+page.svelte, services, stores). |
 | model_id | - | Workflow.model_id convention | **DONE** | workflow.ts: `model_id: string | null` (was `model_id?: string`). |
 
 ---
@@ -283,7 +283,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | UUID bind params for validated IDs | SA-001 L1-L18 | Defense-in-depth, IDs from DB |
 | Chat/workflow component quality | SA-011 M-001 to M-012 | UX improvements, not security |
 | Error message context | SA-007 F14 | Quality improvement |
-| Remaining console.* | SA-013 #16-20 partial | Non-critical |
+| Remaining console.* (non-settings) | SA-013 #16-20 partial | Settings complete. Non-settings remain (services, pages) |
 
 ---
 

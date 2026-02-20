@@ -65,7 +65,7 @@
 			try {
 				await onRefreshNeeded?.();
 			} catch (err) {
-				console.error('Failed to refresh stores after import:', getErrorMessage(err));
+				message = { type: 'error', text: $i18n('ie_refresh_failed').replace('{error}', getErrorMessage(err)) };
 			}
 		} else {
 			message = { type: 'error', text: $i18n('ie_import_failed') };

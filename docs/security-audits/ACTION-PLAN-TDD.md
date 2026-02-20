@@ -35,7 +35,7 @@
 | **2-G** | Fonts self-hosted + Migration Guard | **DONE** | Fonts DONE (4 woff2 + @font-face). Migration guard DONE (migration_log table + guards + 7 tests) |
 | **2-H** | Dead Code Cleanup | **DONE** | 6 items removed |
 | **2-I** | HTTPS Warning Custom Providers | **DONE** | 8 tests |
-| **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests |
+| **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests. SA-010 ERR-2 complete: all settings console.error/warn replaced with user-visible messages |
 | **3-B** | Defense-in-Depth | **DONE** | URL scheme (11 tests), depth limit (2 tests), entity limit |
 | **3-C** | Dependency Feature Bloat | **PARTIAL** | rig-core features removed. SurrealDB unchanged |
 | **3-D** | Tauri Permissions Hardening | **PARTIAL** | SA-005 M1+M4 DONE (opener scope + StepImport openUrl). M2-M3 NOT DONE |
