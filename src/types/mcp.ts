@@ -129,6 +129,19 @@ export interface MCPResource {
 }
 
 /**
+ * Response from create/update MCP server commands.
+ *
+ * Wraps `MCPServer` with an optional security warning (e.g., HTTP usage).
+ * Synchronized with src-tauri/src/models/mcp.rs :: MCPServerResponse
+ */
+export interface MCPServerResponse {
+	/** Server data */
+	server: MCPServer;
+	/** Optional security warning (e.g., HTTP without TLS on non-localhost) */
+	warning?: string;
+}
+
+/**
  * Result from testing an MCP server connection.
  */
 export interface MCPTestResult {

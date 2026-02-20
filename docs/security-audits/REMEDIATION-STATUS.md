@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 56 | Fix implemented and tested |
-| NOT DONE | 11 | Not yet addressed |
+| DONE | 57 | Fix implemented and tested |
+| NOT DONE | 10 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 18 | 17 |
+| MEDIUM (35) | 19 | 16 |
 | LOW (13) | 5 | 8 |
 | N/A (7) | - | - |
 
@@ -30,7 +30,7 @@
 
 ## Tests Added
 
-### Rust (42 new tests)
+### Rust (52 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -76,6 +76,16 @@
 | tools/validation_helper.rs | test_should_require_validation_manual_mode | SA-012 F8: Manual mode always requires |
 | tools/validation_helper.rs | test_should_require_validation_selective_mode | SA-012 F8: Selective mode per-type |
 | tools/validation_helper.rs | test_should_require_validation_selective_auto_approve_low | SA-012 F8: Selective auto-approve low |
+| commands/mcp.rs | test_check_mcp_http_warning_docker_no_warning | SA-002 S2-H3: Docker method no warning |
+| commands/mcp.rs | test_check_mcp_http_warning_npx_no_warning | SA-002 S2-H3: Npx method no warning |
+| commands/mcp.rs | test_check_mcp_http_warning_https_no_warning | SA-002 S2-H3: HTTPS no warning |
+| commands/mcp.rs | test_check_mcp_http_warning_localhost_no_warning | SA-002 S2-H3: Localhost no warning |
+| commands/mcp.rs | test_check_mcp_http_warning_remote_http_returns_warning | SA-002 S2-H3: Remote HTTP triggers |
+| commands/mcp.rs | test_check_mcp_http_warning_remote_ip_returns_warning | SA-002 S2-H3: Remote IP triggers |
+| commands/mcp.rs | test_check_mcp_http_warning_empty_args_no_warning | SA-002 S2-H3: Empty args safe |
+| mcp/http_handle.rs | test_http_warning_for_remote_http_url | SA-002 S2-H3: Integration - remote HTTP |
+| mcp/http_handle.rs | test_no_http_warning_for_https_url | SA-002 S2-H3: Integration - HTTPS safe |
+| mcp/http_handle.rs | test_no_http_warning_for_localhost | SA-002 S2-H3: Integration - localhost safe |
 
 ### TypeScript (35 new tests in 3 new files + 1 updated)
 
@@ -117,7 +127,7 @@
 | S2-H1 | HIGH | String interpolation in import UPDATE/CREATE | **DONE** | import_export.rs: All INSERT/UPDATE use `CONTENT $data` with `execute_with_params()`. |
 | S2-H2 | HIGH | Entity ID interpolation in export SELECT | **DONE** | import_export.rs: All WHERE use `.bind(("id", ...))`. |
 | S2-M1 | HIGH (upgraded) | Missing sanitize_for_surrealdb() on import | **DONE** | import_export.rs calls sanitize. db/utils.rs has depth-limited sanitizer. |
-| S2-H3 | MEDIUM (adj.) | MCP HTTP base_url not validated | **NOT DONE** | Only custom_provider.rs has HTTP warning. MCP server config unchanged. |
+| S2-H3 | MEDIUM (adj.) | MCP HTTP base_url not validated | **DONE** | `check_http_warning()` reused in `http_handle.rs::connect()` (runtime) + `commands/mcp.rs` create/update (config-time). `MCPServerResponse` wrapper returns warning to frontend. MCPSection.svelte shows warning. 10 new tests. |
 | S2-C1 | MEDIUM (adj.) | HTTP provider URLs in cleartext | **DONE** | CustomProviderResponse with warning. Frontend shows warning toast. |
 | S2-M2 | MEDIUM | MCP env stored as TYPE object | **NOT DONE** | MCP env already uses TYPE string in schema. No change needed? Needs verification. |
 | S2-M3 | MEDIUM | Import file read from arbitrary path | **DONE** | `read_import_file` command removed entirely. |
@@ -278,7 +288,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | NPM dependency updates | SA-006 DEP-3 | 30min |
 | ~~SurrealDB feature pruning~~ | ~~SA-006 DEP-2~~ | **DONE** |
 | Orphan TS types cleanup | SA-013 #14-15 | 30min |
-| MCP HTTP validation | SA-002 S2-H3 | 30min |
+| ~~MCP HTTP validation~~ | ~~SA-002 S2-H3~~ | **DONE** |
 
 ### Deferred (LOW / quality-only)
 
@@ -297,7 +307,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-20 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 902 tests passed |
+| cargo test --lib | **PASS** | 2026-02-20, 912 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-20, 225 tests passed |

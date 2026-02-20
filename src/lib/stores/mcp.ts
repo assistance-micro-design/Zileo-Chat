@@ -27,6 +27,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
 	MCPServer,
 	MCPServerConfig,
+	MCPServerResponse,
 	MCPServerStatus,
 	MCPTestResult,
 	MCPTool,
@@ -374,27 +375,27 @@ export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
 /**
  * Creates a new MCP server
  * @param config - Server configuration
- * @returns Promise resolving to created server
+ * @returns Promise resolving to server response with optional warning
  */
-export async function createServer(config: MCPServerConfig): Promise<MCPServer> {
-	const server = await invoke<MCPServer>('create_mcp_server', { config });
+export async function createServer(config: MCPServerConfig): Promise<MCPServerResponse> {
+	const response = await invoke<MCPServerResponse>('create_mcp_server', { config });
 	invalidateMCPCache();
-	return server;
+	return response;
 }
 
 /**
  * Updates an existing MCP server
  * @param id - Server ID to update
  * @param config - New server configuration
- * @returns Promise resolving to updated server
+ * @returns Promise resolving to server response with optional warning
  */
 export async function updateServerConfig(
 	id: string,
 	config: MCPServerConfig
-): Promise<MCPServer> {
-	const server = await invoke<MCPServer>('update_mcp_server', { id, config });
+): Promise<MCPServerResponse> {
+	const response = await invoke<MCPServerResponse>('update_mcp_server', { id, config });
 	invalidateMCPCache();
-	return server;
+	return response;
 }
 
 /**

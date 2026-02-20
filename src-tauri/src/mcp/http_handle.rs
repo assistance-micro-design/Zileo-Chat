@@ -37,6 +37,7 @@ use crate::mcp::{
     MCPResourceDefinition, MCPResourcesListResult, MCPResult, MCPToolCallParams,
     MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
 };
+use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
 use once_cell::sync::Lazy;
 use reqwest::Client;
@@ -155,6 +156,17 @@ impl MCPHttpHandle {
                     base_url
                 ),
             });
+        }
+
+        // SA-002 S2-H3: Warn if connecting to remote MCP server over plain HTTP
+        if let Some(warning_msg) = check_http_warning(&base_url) {
+            warn!(
+                server_id = %config.id,
+                server_name = %config.name,
+                url = %base_url,
+                "{}",
+                warning_msg
+            );
         }
 
         // Build HTTP client with custom headers from env
@@ -723,5 +735,26 @@ mod tests {
 
         // Empty args should fail at connect time
         assert!(config.args.is_empty());
+    }
+
+    // SA-002 S2-H3: HTTP warning integration tests
+    #[test]
+    fn test_http_warning_for_remote_http_url() {
+        let result = check_http_warning("http://remote-api.com/mcp");
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("HTTPS"));
+    }
+
+    #[test]
+    fn test_no_http_warning_for_https_url() {
+        let result = check_http_warning("https://remote-api.com/mcp");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_no_http_warning_for_localhost() {
+        assert!(check_http_warning("http://localhost:3000/mcp").is_none());
+        assert!(check_http_warning("http://127.0.0.1:8080/mcp").is_none());
+        assert!(check_http_warning("http://[::1]:3000/mcp").is_none());
     }
 }

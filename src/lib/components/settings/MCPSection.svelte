@@ -52,6 +52,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	let mcpState = $state<MCPState>(createInitialMCPState());
 	const mcpModal: ModalController<MCPServerConfig> = createModalController<MCPServerConfig>();
 	let mcpSaving = $state(false);
+	let mcpWarning = $state<string | null>(null);
 	let testResult = $state<MCPTestResult | null>(null);
 	let testError = $state<string | null>(null);
 	let showTestModal = $state(false);
@@ -90,13 +91,16 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	 */
 	async function handleSaveMCPServer(config: MCPServerConfig): Promise<void> {
 		mcpSaving = true;
+		mcpWarning = null;
 		try {
 			if (mcpModal.mode === 'create') {
-				const server = await createServer(config);
-				mcpState = addServer(mcpState, server);
+				const response = await createServer(config);
+				mcpState = addServer(mcpState, response.server);
+				mcpWarning = response.warning ?? null;
 			} else {
-				const server = await updateServerConfig(config.id, config);
-				mcpState = updateServer(mcpState, config.id, server);
+				const response = await updateServerConfig(config.id, config);
+				mcpState = updateServer(mcpState, config.id, response.server);
+				mcpWarning = response.warning ?? null;
 			}
 			mcpModal.close();
 		} catch (err) {
@@ -224,6 +228,13 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			<span>{$i18n('mcp_add_server')}</span>
 		</Button>
 	</div>
+
+	{#if mcpWarning}
+		<div class="mcp-warning" role="alert">
+			{mcpWarning}
+			<button class="dismiss-warning" onclick={() => (mcpWarning = null)} aria-label="Dismiss warning">x</button>
+		</div>
+	{/if}
 
 	{#if mcpState.error}
 		<div class="mcp-error">
@@ -403,6 +414,27 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		color: var(--color-error);
 		border-radius: var(--border-radius-md);
 		margin-bottom: var(--spacing-lg);
+	}
+
+	.mcp-warning {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--spacing-md);
+		background: var(--color-warning-light);
+		color: var(--color-warning);
+		border-radius: var(--border-radius-md);
+		margin-bottom: var(--spacing-lg);
+	}
+
+	.dismiss-warning {
+		background: none;
+		border: none;
+		color: var(--color-warning);
+		cursor: pointer;
+		padding: var(--spacing-xs);
+		font-size: var(--font-size-lg);
+		line-height: 1;
 	}
 
 	/* Responsive */

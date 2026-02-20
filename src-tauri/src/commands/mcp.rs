@@ -35,9 +35,10 @@
 //! - [`list_mcp_tools`] - List available tools from a server
 //! - [`call_mcp_tool`] - Execute a tool on an MCP server
 
+use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{
-    MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPTestResult, MCPTool, MCPToolCallRequest,
-    MCPToolCallResult,
+    MCPDeploymentMethod, MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPServerResponse,
+    MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
 };
 use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
@@ -286,6 +287,17 @@ fn validate_tool_name(name: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
+/// Checks if an MCP server config uses HTTP on a non-localhost host.
+///
+/// Only applies to HTTP deployment method where args[0] is the base URL.
+/// Returns `Some(warning)` if insecure, `None` otherwise.
+fn check_mcp_http_warning(config: &MCPServerConfig) -> Option<String> {
+    if config.command != MCPDeploymentMethod::Http {
+        return None;
+    }
+    config.args.first().and_then(|url| check_http_warning(url))
+}
+
 // =============================================================================
 // Tauri Commands
 // =============================================================================
@@ -368,7 +380,7 @@ pub async fn get_mcp_server(id: String, state: State<'_, AppState>) -> Result<MC
 pub async fn create_mcp_server(
     config: MCPServerConfig,
     state: State<'_, AppState>,
-) -> Result<MCPServer, String> {
+) -> Result<MCPServerResponse, String> {
     // Log what we received from frontend BEFORE validation
     info!(
         name = %config.name,
@@ -400,6 +412,16 @@ pub async fn create_mcp_server(
         ));
     }
 
+    // SA-002 S2-H3: Check for HTTP security warning on non-localhost URLs
+    let warning = check_mcp_http_warning(&validated_config);
+    if warning.is_some() {
+        warn!(
+            id = %validated_config.id,
+            name = %validated_config.name,
+            "MCP server created with insecure HTTP URL"
+        );
+    }
+
     // Spawn the server (this also saves to DB)
     let server = state
         .mcp_manager
@@ -415,7 +437,7 @@ pub async fn create_mcp_server(
         status = %server.status,
         "MCP server created"
     );
-    Ok(server)
+    Ok(MCPServerResponse { server, warning })
 }
 
 /// Updates an existing MCP server configuration.
@@ -444,7 +466,7 @@ pub async fn update_mcp_server(
     id: String,
     config: MCPServerConfig,
     state: State<'_, AppState>,
-) -> Result<MCPServer, String> {
+) -> Result<MCPServerResponse, String> {
     let validated_id = validate_mcp_server_id(&id)?;
     let validated_config = validate_mcp_server_config(&config)?;
 
@@ -462,6 +484,16 @@ pub async fn update_mcp_server(
     // Check if server exists
     if state.mcp_manager.get_server(&validated_id).await.is_none() {
         return Err(format!("MCP server '{}' not found", validated_id));
+    }
+
+    // SA-002 S2-H3: Check for HTTP security warning on non-localhost URLs
+    let warning = check_mcp_http_warning(&validated_config);
+    if warning.is_some() {
+        warn!(
+            id = %validated_id,
+            name = %validated_config.name,
+            "MCP server updated with insecure HTTP URL"
+        );
     }
 
     // Update the configuration in database
@@ -494,7 +526,7 @@ pub async fn update_mcp_server(
         status = %server.status,
         "MCP server updated"
     );
-    Ok(server)
+    Ok(MCPServerResponse { server, warning })
 }
 
 /// Deletes an MCP server configuration.
@@ -1192,5 +1224,111 @@ mod tests {
             .expect("Should deserialize MCPCallLog with legacy object params");
         assert_eq!(log.params["symbol"], "MyClass");
         assert_eq!(log.result[0]["name"], "MyClass");
+    }
+
+    // =========================================================================
+    // SA-002 S2-H3: MCP HTTP warning tests
+    // =========================================================================
+
+    #[test]
+    fn test_check_mcp_http_warning_docker_no_warning() {
+        let config = MCPServerConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Docker,
+            args: vec!["run".to_string(), "-i".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_none());
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_npx_no_warning() {
+        let config = MCPServerConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Npx,
+            args: vec!["-y".to_string(), "@test/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_none());
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_https_no_warning() {
+        let config = MCPServerConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["https://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_none());
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_localhost_no_warning() {
+        let config = MCPServerConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["http://localhost:3000/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_none());
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_remote_http_returns_warning() {
+        let config = MCPServerConfig {
+            id: "remote-mcp".to_string(),
+            name: "Remote MCP".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["http://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        let warning = check_mcp_http_warning(&config);
+        assert!(warning.is_some());
+        let msg = warning.unwrap();
+        assert!(msg.contains("HTTP instead of HTTPS"));
+        assert!(msg.contains("http://api.example.com/mcp"));
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_remote_ip_returns_warning() {
+        let config = MCPServerConfig {
+            id: "remote-ip".to_string(),
+            name: "Remote IP".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["http://192.168.1.100:8080/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_some());
+    }
+
+    #[test]
+    fn test_check_mcp_http_warning_empty_args_no_warning() {
+        let config = MCPServerConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec![],
+            env: HashMap::new(),
+            description: None,
+        };
+        assert!(check_mcp_http_warning(&config).is_none());
     }
 }

@@ -160,6 +160,20 @@ pub struct MCPServer {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Response from create/update MCP server commands.
+///
+/// Wraps `MCPServer` with an optional security warning (e.g., HTTP usage).
+/// Mirrors the `CustomProviderResponse` pattern from custom_provider.rs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MCPServerResponse {
+    /// Server data
+    pub server: MCPServer,
+    /// Optional security warning (e.g., HTTP without TLS on non-localhost)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
 /// MCP server connection test result
 ///
 /// Returned after testing an MCP server configuration.
