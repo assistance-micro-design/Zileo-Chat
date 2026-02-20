@@ -18,7 +18,7 @@
 //! responses via Tauri events.
 
 use crate::{
-    agents::core::agent::Task,
+    agents::core::agent::{ReasoningStepData, Task},
     db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
@@ -185,87 +185,9 @@ pub async fn execute_workflow_streaming(
     }
     thinking_step_number += 1;
 
-    // Load conversation history for context (API-native format for continuation)
-    // Messages are stored with role: system|user|assistant
-    // OPT-WF-3: Use centralized constant with bind param for workflow_id
-    let history_query = format!(
-        r#"SELECT
-            meta::id(id) AS id,
-            workflow_id,
-            role,
-            content,
-            tokens,
-            tokens_input,
-            tokens_output,
-            model,
-            provider,
-            cost_usd,
-            duration_ms,
-            timestamp
-        FROM message
-        WHERE workflow_id = $wf_id
-        ORDER BY timestamp ASC
-        LIMIT {}"#,
-        wf_const::MESSAGE_HISTORY_LIMIT
-    );
-
-    let history_json = state
-        .db
-        .query_json_with_params(
-            &history_query,
-            vec![(
-                "wf_id".to_string(),
-                serde_json::json!(validated_workflow_id),
-            )],
-        )
-        .await
-        .unwrap_or_default();
-    let conversation_history: Vec<Message> = history_json
-        .into_iter()
-        .filter_map(|v| serde_json::from_value(v).ok())
-        .collect();
-
-    // Check if we have a system message (indicates existing context)
-    let has_system_message = conversation_history
-        .iter()
-        .any(|msg| matches!(msg.role, crate::models::MessageRole::System));
-
-    // Build conversation context for the LLM
-    // If we have existing messages with system prompt, pass them as conversation_messages
-    // for direct reuse (no reconstruction needed)
-    // Note: locale is always passed for system prompt injection (first message only uses it)
-    let history_context = if has_system_message && !conversation_history.is_empty() {
-        // Continuation: format messages for API-native reuse
-        let api_messages: Vec<serde_json::Value> = conversation_history
-            .iter()
-            .map(|msg| {
-                serde_json::json!({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            })
-            .collect();
-        serde_json::json!({
-            "conversation_messages": api_messages,
-            "is_primary_agent": true,
-            "workflow_id": validated_workflow_id.clone(),
-            "locale": locale.clone()
-        })
-    } else {
-        // First message or no system prompt: let agent build the context
-        serde_json::json!({
-            "is_primary_agent": true,
-            "workflow_id": validated_workflow_id.clone(),
-            "locale": locale.clone()
-        })
-    };
-
-    info!(
-        history_count = conversation_history.len(),
-        has_system_message = has_system_message,
-        is_continuation = has_system_message && !conversation_history.is_empty(),
-        "Loaded conversation history for context"
-    );
+    // Load conversation history and build context for the LLM
+    let (history_context, _history_count) =
+        load_conversation_history(&state, &validated_workflow_id, &locale).await;
 
     // Create task with conversation history
     let task_id = Uuid::new_v4().to_string();
@@ -415,180 +337,35 @@ pub async fn execute_workflow_streaming(
         StreamChunk::token(validated_workflow_id.clone(), "\n".to_string()),
     );
 
-    // Stream the response content in chunks
-    let content = &report.content;
-    let chunk_size = 50; // Characters per chunk for simulated streaming
-    let mut cancelled = false;
+    // Stream the response content in chunks (with cancellation support)
+    stream_content_to_frontend(
+        &window,
+        &cancellation_token,
+        &state,
+        &report.content,
+        &validated_workflow_id,
+    )
+    .await?;
 
-    // OPT-WF-6: Single allocation outside loop instead of per-iteration
-    let chars: Vec<char> = content.chars().collect();
-    for (i, chunk) in chars.chunks(chunk_size).enumerate() {
-        // OPT-WF-7: Use sync is_cancelled() instead of async state.is_cancelled()
-        // CancellationToken::is_cancelled() is synchronous (no Mutex lock per iteration)
-        if cancellation_token.is_cancelled() {
-            warn!(workflow_id = %validated_workflow_id, "Streaming cancelled by user during response display");
-            cancelled = true;
-            emit_chunk(
-                &window,
-                StreamChunk::error(
-                    validated_workflow_id.clone(),
-                    "Cancelled by user".to_string(),
-                ),
-            );
-            emit_complete(
-                &window,
-                WorkflowComplete::cancelled(validated_workflow_id.clone()),
-            );
-            // Clear the cancellation flag
-            state.clear_cancellation(&validated_workflow_id).await;
-            break;
-        }
-
-        let chunk_text: String = chunk.iter().collect();
-        emit_chunk(
-            &window,
-            StreamChunk::token(validated_workflow_id.clone(), chunk_text),
-        );
-
-        // Small delay between chunks to simulate streaming
-        if i < chars.len() / chunk_size {
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        }
-    }
-
-    if cancelled {
-        return Err("Workflow cancelled by user".to_string());
-    }
-
-    // Get agent config for accurate provider/model info (OPT-7: avoid cloning by using &str temporarily)
-    let (provider, model) = match state.registry.get(&validated_agent_id).await {
-        Some(agent) => {
-            let config = agent.config();
-            (config.llm.provider.clone(), config.llm.model.clone())
-        }
-        None => {
-            // Fallback if agent not found (shouldn't happen after successful execution)
-            ("Unknown".to_string(), validated_agent_id.clone())
-        }
-    };
-    // Note: Further optimization would require lifetime annotations in WorkflowMetrics, which
-    // would be a breaking change. Current clone is acceptable as it's post-execution.
-
-    // Load model to get pricing info for cost calculation
-    // Note: model is the api_name (e.g. "mistral-large-latest"), not the UUID
-    // We need to search by api_name + provider to find the correct model
-    let (input_price, output_price, model_id) = {
-        // Convert provider string to lowercase for matching (DB stores lowercase)
-        let provider_lower = provider.to_lowercase();
-        let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-             created_at, updated_at \
-             FROM llm_model WHERE api_name = $model_name AND provider = $provider_name";
-
-        match state
-            .db
-            .db
-            .query(model_query)
-            .bind(("model_name", model.clone()))
-            .bind(("provider_name", provider_lower.clone()))
-            .await
-        {
-            Ok(mut response) => {
-                let models: Result<Vec<LLMModel>, _> = response.take(0);
-                match models {
-                    Ok(mut m) if !m.is_empty() => {
-                        let loaded_model = m.remove(0);
-                        info!(
-                            model_api_name = %model,
-                            model_id = %loaded_model.id,
-                            input_price = loaded_model.input_price_per_mtok,
-                            output_price = loaded_model.output_price_per_mtok,
-                            "Loaded model for pricing"
-                        );
-                        (
-                            loaded_model.input_price_per_mtok,
-                            loaded_model.output_price_per_mtok,
-                            loaded_model.id,
-                        )
-                    }
-                    _ => {
-                        warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
-                        (0.0, 0.0, model.clone())
-                    }
-                }
-            }
-            Err(e) => {
-                warn!(error = %e, "Failed to load model for pricing, using defaults");
-                (0.0, 0.0, model.clone())
-            }
-        }
-    };
-
-    // Calculate cost using model pricing
-    let cost_usd = calculate_cost(
+    // Load agent config, model pricing, and calculate cost
+    let pricing = load_model_pricing_info(
+        &state,
+        &validated_agent_id,
         report.metrics.tokens_input,
         report.metrics.tokens_output,
-        input_price,
-        output_price,
-    );
-
-    info!(
-        tokens_input = report.metrics.tokens_input,
-        tokens_output = report.metrics.tokens_output,
-        input_price = input_price,
-        output_price = output_price,
-        cost_usd = cost_usd,
-        "Calculated token cost"
-    );
+    )
+    .await;
 
     // Update workflow with cumulative tokens, cost, model_id, and current context size
-    // OPT-WF-2: Use ?? (null coalescing) instead of IF/THEN/ELSE
-    // current_context_tokens = tokens_input (actual context size at last API call)
-    let update_query = format!(
-        "UPDATE workflow:`{}` SET \
-            total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
-            total_tokens_output = (total_tokens_output ?? 0) + $tokens_out, \
-            total_cost_usd = (total_cost_usd ?? 0.0) + $cost, \
-            model_id = $model_id, \
-            current_context_tokens = $context_tokens, \
-            updated_at = time::now()",
-        validated_workflow_id
-    );
-
-    // Log the query for debugging
-    info!(
-        tokens_in = report.metrics.tokens_input,
-        tokens_out = report.metrics.tokens_output,
-        cost = cost_usd,
-        model_id = %model_id,
-        "Executing workflow token update"
-    );
-
-    if let Err(e) = state
-        .db
-        .db
-        .query(&update_query)
-        .bind(("tokens_in", report.metrics.tokens_input))
-        .bind(("tokens_out", report.metrics.tokens_output))
-        .bind(("cost", cost_usd))
-        .bind(("model_id", model_id.clone()))
-        .bind(("context_tokens", report.metrics.tokens_input))
-        .await
-    {
-        error!(error = %e, "Failed to update workflow cumulative tokens");
-    } else {
-        info!(
-            workflow_id = %validated_workflow_id,
-            tokens_input = report.metrics.tokens_input,
-            tokens_output = report.metrics.tokens_output,
-            current_context = report.metrics.tokens_input,
-            cost_usd = cost_usd,
-            model_id = %model_id,
-            "Updated workflow cumulative tokens and context"
-        );
-    }
+    update_workflow_cumulative_metrics(
+        &state,
+        &validated_workflow_id,
+        report.metrics.tokens_input,
+        report.metrics.tokens_output,
+        pricing.cost_usd,
+        &pricing.model_id,
+    )
+    .await;
 
     // Convert tool executions to IPC-friendly format (OPT-7: clones necessary for IPC serialization)
     let tool_executions: Vec<WorkflowToolExecution> = report
@@ -609,74 +386,26 @@ pub async fn execute_workflow_streaming(
         .collect();
     // Note: Clones here are necessary as WorkflowToolExecution needs owned data for Tauri IPC
 
-    // Persist tool executions in parallel (OPT-PERF: was sequential loop)
-    {
-        let tool_futures: Vec<_> = tool_executions
-            .iter()
-            .enumerate()
-            .map(|(idx, te)| {
-                let execution_id = Uuid::new_v4().to_string();
-                let execution = ToolExecutionCreate {
-                    workflow_id: validated_workflow_id.clone(),
-                    message_id: message_id.clone(),
-                    agent_id: validated_agent_id.clone(),
-                    tool_type: te.tool_type.clone(),
-                    tool_name: te.tool_name.clone(),
-                    server_name: te.server_name.clone(),
-                    input_params: te.input_params.clone(),
-                    output_result: te.output_result.clone(),
-                    success: te.success,
-                    error_message: te.error_message.clone(),
-                    duration_ms: te.duration_ms,
-                    iteration: te.iteration,
-                };
-                let db = &state.db;
-                let tool_name = te.tool_name.clone();
-                async move {
-                    if let Err(e) = db.create("tool_execution", &execution_id, execution).await {
-                        warn!(
-                            error = %e,
-                            tool_name = %tool_name,
-                            index = idx,
-                            "Failed to persist tool execution"
-                        );
-                    }
-                }
-            })
-            .collect();
-        futures::future::join_all(tool_futures).await;
-    }
+    // Persist tool executions in parallel
+    persist_tool_executions_batch(
+        &state,
+        &tool_executions,
+        &validated_workflow_id,
+        &message_id,
+        &validated_agent_id,
+    )
+    .await;
 
-    // Persist intermediate reasoning steps in parallel (OPT-PERF: was sequential loop)
-    {
-        let step_futures: Vec<_> = report
-            .metrics
-            .reasoning_steps
-            .iter()
-            .enumerate()
-            .map(|(idx, rs)| {
-                let step_id = Uuid::new_v4().to_string();
-                let step_num = thinking_step_number + idx as u32;
-                let step = ThinkingStepCreate {
-                    workflow_id: validated_workflow_id.clone(),
-                    message_id: message_id.clone(),
-                    agent_id: validated_agent_id.clone(),
-                    step_number: step_num,
-                    content: rs.content.clone(),
-                    duration_ms: Some(rs.duration_ms),
-                    tokens: None,
-                };
-                let db = &state.db;
-                async move {
-                    if let Err(e) = db.create("thinking_step", &step_id, step).await {
-                        warn!(error = %e, step_number = step_num, "Failed to persist intermediate reasoning step");
-                    }
-                }
-            })
-            .collect();
-        futures::future::join_all(step_futures).await;
-        thinking_step_number += report.metrics.reasoning_steps.len() as u32;
-    }
+    // Persist intermediate reasoning steps in parallel
+    thinking_step_number = persist_reasoning_steps_batch(
+        &state,
+        &report.metrics.reasoning_steps,
+        &validated_workflow_id,
+        &message_id,
+        &validated_agent_id,
+        thinking_step_number,
+    )
+    .await;
 
     info!(
         tool_executions_count = tool_executions.len(),
@@ -692,9 +421,9 @@ pub async fn execute_workflow_streaming(
             duration_ms: report.metrics.duration_ms,
             tokens_input: report.metrics.tokens_input,
             tokens_output: report.metrics.tokens_output,
-            cost_usd,
-            provider,
-            model,
+            cost_usd: pricing.cost_usd,
+            provider: pricing.provider,
+            model: pricing.model,
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
@@ -745,6 +474,353 @@ fn emit_error(window: &Window, workflow_id: &str, error: &str) {
         window,
         WorkflowComplete::failed(workflow_id.to_string(), error.to_string()),
     );
+}
+
+/// Loads conversation history and builds the context payload for the LLM.
+///
+/// Returns the history context JSON and the number of loaded messages.
+async fn load_conversation_history(
+    state: &AppState,
+    workflow_id: &str,
+    locale: &str,
+) -> (serde_json::Value, usize) {
+    let history_query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            workflow_id,
+            role,
+            content,
+            tokens,
+            tokens_input,
+            tokens_output,
+            model,
+            provider,
+            cost_usd,
+            duration_ms,
+            timestamp
+        FROM message
+        WHERE workflow_id = $wf_id
+        ORDER BY timestamp ASC
+        LIMIT {}"#,
+        wf_const::MESSAGE_HISTORY_LIMIT
+    );
+
+    let history_json = state
+        .db
+        .query_json_with_params(
+            &history_query,
+            vec![("wf_id".to_string(), serde_json::json!(workflow_id))],
+        )
+        .await
+        .unwrap_or_default();
+    let conversation_history: Vec<Message> = history_json
+        .into_iter()
+        .filter_map(|v| serde_json::from_value(v).ok())
+        .collect();
+
+    let has_system_message = conversation_history
+        .iter()
+        .any(|msg| matches!(msg.role, crate::models::MessageRole::System));
+
+    let history_count = conversation_history.len();
+
+    let history_context = if has_system_message && !conversation_history.is_empty() {
+        let api_messages: Vec<serde_json::Value> = conversation_history
+            .iter()
+            .map(|msg| {
+                serde_json::json!({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "conversation_messages": api_messages,
+            "is_primary_agent": true,
+            "workflow_id": workflow_id,
+            "locale": locale
+        })
+    } else {
+        serde_json::json!({
+            "is_primary_agent": true,
+            "workflow_id": workflow_id,
+            "locale": locale
+        })
+    };
+
+    info!(
+        history_count = history_count,
+        has_system_message = has_system_message,
+        is_continuation = has_system_message && !conversation_history.is_empty(),
+        "Loaded conversation history for context"
+    );
+
+    (history_context, history_count)
+}
+
+/// Pricing information for a model, loaded from agent config and database.
+struct ModelPricingInfo {
+    provider: String,
+    model: String,
+    model_id: String,
+    cost_usd: f64,
+}
+
+/// Loads agent configuration and model pricing info, then calculates cost.
+async fn load_model_pricing_info(
+    state: &AppState,
+    agent_id: &str,
+    tokens_input: usize,
+    tokens_output: usize,
+) -> ModelPricingInfo {
+    let (provider, model) = match state.registry.get(agent_id).await {
+        Some(agent) => {
+            let config = agent.config();
+            (config.llm.provider.clone(), config.llm.model.clone())
+        }
+        None => ("Unknown".to_string(), agent_id.to_string()),
+    };
+
+    let (input_price, output_price, model_id) = {
+        let provider_lower = provider.to_lowercase();
+        let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
+             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             created_at, updated_at \
+             FROM llm_model WHERE api_name = $model_name AND provider = $provider_name";
+
+        match state
+            .db
+            .db
+            .query(model_query)
+            .bind(("model_name", model.clone()))
+            .bind(("provider_name", provider_lower.clone()))
+            .await
+        {
+            Ok(mut response) => {
+                let models: Result<Vec<LLMModel>, _> = response.take(0);
+                match models {
+                    Ok(mut m) if !m.is_empty() => {
+                        let loaded_model = m.remove(0);
+                        info!(
+                            model_api_name = %model,
+                            model_id = %loaded_model.id,
+                            input_price = loaded_model.input_price_per_mtok,
+                            output_price = loaded_model.output_price_per_mtok,
+                            "Loaded model for pricing"
+                        );
+                        (
+                            loaded_model.input_price_per_mtok,
+                            loaded_model.output_price_per_mtok,
+                            loaded_model.id,
+                        )
+                    }
+                    _ => {
+                        warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
+                        (0.0, 0.0, model.clone())
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to load model for pricing, using defaults");
+                (0.0, 0.0, model.clone())
+            }
+        }
+    };
+
+    let cost_usd = calculate_cost(tokens_input, tokens_output, input_price, output_price);
+
+    info!(
+        tokens_input = tokens_input,
+        tokens_output = tokens_output,
+        input_price = input_price,
+        output_price = output_price,
+        cost_usd = cost_usd,
+        "Calculated token cost"
+    );
+
+    ModelPricingInfo {
+        provider,
+        model,
+        model_id,
+        cost_usd,
+    }
+}
+
+/// Streams response content to the frontend in chunks, checking for cancellation.
+///
+/// Returns `Ok(())` if streaming completed, `Err` if cancelled by user.
+async fn stream_content_to_frontend(
+    window: &Window,
+    cancellation_token: &tokio_util::sync::CancellationToken,
+    state: &AppState,
+    content: &str,
+    workflow_id: &str,
+) -> Result<(), String> {
+    let chunk_size = 50;
+    let chars: Vec<char> = content.chars().collect();
+
+    for (i, chunk) in chars.chunks(chunk_size).enumerate() {
+        if cancellation_token.is_cancelled() {
+            warn!(workflow_id = %workflow_id, "Streaming cancelled by user during response display");
+            emit_chunk(
+                window,
+                StreamChunk::error(workflow_id.to_string(), "Cancelled by user".to_string()),
+            );
+            emit_complete(
+                window,
+                WorkflowComplete::cancelled(workflow_id.to_string()),
+            );
+            state.clear_cancellation(workflow_id).await;
+            return Err("Workflow cancelled by user".to_string());
+        }
+
+        let chunk_text: String = chunk.iter().collect();
+        emit_chunk(
+            window,
+            StreamChunk::token(workflow_id.to_string(), chunk_text),
+        );
+
+        if i < chars.len() / chunk_size {
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+    }
+
+    Ok(())
+}
+
+/// Updates workflow cumulative token counts, cost, model, and context size.
+async fn update_workflow_cumulative_metrics(
+    state: &AppState,
+    workflow_id: &str,
+    tokens_input: usize,
+    tokens_output: usize,
+    cost_usd: f64,
+    model_id: &str,
+) {
+    let update_query = format!(
+        "UPDATE workflow:`{}` SET \
+            total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
+            total_tokens_output = (total_tokens_output ?? 0) + $tokens_out, \
+            total_cost_usd = (total_cost_usd ?? 0.0) + $cost, \
+            model_id = $model_id, \
+            current_context_tokens = $context_tokens, \
+            updated_at = time::now()",
+        workflow_id
+    );
+
+    info!(
+        tokens_in = tokens_input,
+        tokens_out = tokens_output,
+        cost = cost_usd,
+        model_id = %model_id,
+        "Executing workflow token update"
+    );
+
+    if let Err(e) = state
+        .db
+        .db
+        .query(&update_query)
+        .bind(("tokens_in", tokens_input))
+        .bind(("tokens_out", tokens_output))
+        .bind(("cost", cost_usd))
+        .bind(("model_id", model_id.to_string()))
+        .bind(("context_tokens", tokens_input))
+        .await
+    {
+        error!(error = %e, "Failed to update workflow cumulative tokens");
+    } else {
+        info!(
+            workflow_id = %workflow_id,
+            tokens_input = tokens_input,
+            tokens_output = tokens_output,
+            current_context = tokens_input,
+            cost_usd = cost_usd,
+            model_id = %model_id,
+            "Updated workflow cumulative tokens and context"
+        );
+    }
+}
+
+/// Persists tool execution records in parallel.
+async fn persist_tool_executions_batch(
+    state: &AppState,
+    tool_executions: &[WorkflowToolExecution],
+    workflow_id: &str,
+    message_id: &str,
+    agent_id: &str,
+) {
+    let tool_futures: Vec<_> = tool_executions
+        .iter()
+        .enumerate()
+        .map(|(idx, te)| {
+            let execution_id = Uuid::new_v4().to_string();
+            let execution = ToolExecutionCreate {
+                workflow_id: workflow_id.to_string(),
+                message_id: message_id.to_string(),
+                agent_id: agent_id.to_string(),
+                tool_type: te.tool_type.clone(),
+                tool_name: te.tool_name.clone(),
+                server_name: te.server_name.clone(),
+                input_params: te.input_params.clone(),
+                output_result: te.output_result.clone(),
+                success: te.success,
+                error_message: te.error_message.clone(),
+                duration_ms: te.duration_ms,
+                iteration: te.iteration,
+            };
+            let db = &state.db;
+            let tool_name = te.tool_name.clone();
+            async move {
+                if let Err(e) = db.create("tool_execution", &execution_id, execution).await {
+                    warn!(
+                        error = %e,
+                        tool_name = %tool_name,
+                        index = idx,
+                        "Failed to persist tool execution"
+                    );
+                }
+            }
+        })
+        .collect();
+    futures::future::join_all(tool_futures).await;
+}
+
+/// Persists reasoning step records in parallel. Returns the next step number.
+async fn persist_reasoning_steps_batch(
+    state: &AppState,
+    reasoning_steps: &[ReasoningStepData],
+    workflow_id: &str,
+    message_id: &str,
+    agent_id: &str,
+    start_step_number: u32,
+) -> u32 {
+    let step_futures: Vec<_> = reasoning_steps
+        .iter()
+        .enumerate()
+        .map(|(idx, rs)| {
+            let step_id = Uuid::new_v4().to_string();
+            let step_num = start_step_number + idx as u32;
+            let step = ThinkingStepCreate {
+                workflow_id: workflow_id.to_string(),
+                message_id: message_id.to_string(),
+                agent_id: agent_id.to_string(),
+                step_number: step_num,
+                content: rs.content.clone(),
+                duration_ms: Some(rs.duration_ms),
+                tokens: None,
+            };
+            let db = &state.db;
+            async move {
+                if let Err(e) = db.create("thinking_step", &step_id, step).await {
+                    warn!(error = %e, step_number = step_num, "Failed to persist intermediate reasoning step");
+                }
+            }
+        })
+        .collect();
+    futures::future::join_all(step_futures).await;
+    start_step_number + reasoning_steps.len() as u32
 }
 
 /// Cancels a streaming workflow execution immediately.
