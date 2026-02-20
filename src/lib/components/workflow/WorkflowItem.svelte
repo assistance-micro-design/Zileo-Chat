@@ -27,6 +27,7 @@
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 	import { X } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { tick } from 'svelte';
 
 	/**
 	 * WorkflowItem props
@@ -54,7 +55,9 @@
 	let editName = $state('');
 	let nameInputRef = $state<HTMLInputElement | null>(null);
 
-	// Sync editName with workflow.name when workflow changes (e.g., external rename)
+	// Sync editName with workflow.name when workflow changes (e.g., external rename).
+	// Note (M-011): While editing, external renames are intentionally ignored to
+	// avoid overwriting user input. The sync resumes when editing ends.
 	$effect(() => {
 		if (!editing) {
 			editName = workflow.name;
@@ -77,7 +80,7 @@
 		event.stopPropagation();
 		editing = true;
 		editName = workflow.name;
-		setTimeout(() => nameInputRef?.focus(), 0);
+		tick().then(() => nameInputRef?.focus());
 	}
 
 	/**

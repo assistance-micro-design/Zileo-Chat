@@ -30,20 +30,11 @@
 -->
 <script lang="ts">
 	import type { ToolExecution, WorkflowToolExecution, ToolExecutionStatus } from '$types/tool';
-	import { formatToolDuration, getToolTypeDisplay, getToolIdentifier } from '$types/tool';
+	import type { ActiveTool } from '$lib/stores/streaming';
+	import { formatToolDuration } from '$types/tool';
+	import { mergeToolExecutions } from '$lib/utils/panel-merge';
 	import { Wrench, Clock, CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-
-	/**
-	 * Active tool execution (during streaming)
-	 */
-	interface ActiveTool {
-		name: string;
-		status: ToolExecutionStatus;
-		startedAt: number;
-		duration?: number;
-		error?: string;
-	}
 
 	/**
 	 * ToolExecutionPanel props
@@ -96,75 +87,11 @@
 	}
 
 	/**
-	 * Format success/failure for historical executions
-	 */
-	function getHistoricalStatus(success: boolean): ToolExecutionStatus {
-		return success ? 'completed' : 'error';
-	}
-
-	/**
 	 * All executions to display (combines active + historical)
 	 */
-	const displayExecutions = $derived.by(() => {
-		const items: Array<{
-			id: string;
-			name: string;
-			type: string;
-			serverName?: string;
-			status: ToolExecutionStatus;
-			duration?: number;
-			error?: string;
-			iteration: number;
-			isActive: boolean;
-		}> = [];
-
-		// Add active tools first (during streaming)
-		for (const tool of activeTools) {
-			items.push({
-				id: `active-${tool.name}-${tool.startedAt}`,
-				name: tool.name,
-				type: 'unknown',
-				status: tool.status,
-				duration: tool.duration,
-				error: tool.error,
-				iteration: 0,
-				isActive: true
-			});
-		}
-
-		// Add workflow executions (from current result)
-		for (let i = 0; i < workflowExecutions.length; i++) {
-			const exec = workflowExecutions[i];
-			items.push({
-				id: `workflow-${i}`,
-				name: getToolIdentifier(exec),
-				type: getToolTypeDisplay(exec.tool_type as 'local' | 'mcp'),
-				serverName: exec.server_name,
-				status: getHistoricalStatus(exec.success),
-				duration: exec.duration_ms,
-				error: exec.error_message,
-				iteration: exec.iteration,
-				isActive: false
-			});
-		}
-
-		// Add persisted executions (from database)
-		for (const exec of executions) {
-			items.push({
-				id: exec.id,
-				name: getToolIdentifier(exec),
-				type: getToolTypeDisplay(exec.tool_type),
-				serverName: exec.server_name,
-				status: getHistoricalStatus(exec.success),
-				duration: exec.duration_ms,
-				error: exec.error_message,
-				iteration: exec.iteration,
-				isActive: false
-			});
-		}
-
-		return items;
-	});
+	const displayExecutions = $derived(
+		mergeToolExecutions(activeTools, workflowExecutions, executions)
+	);
 
 	/**
 	 * Count of total executions

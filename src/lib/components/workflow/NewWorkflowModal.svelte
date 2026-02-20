@@ -32,6 +32,7 @@
 	import type { AgentSummary } from '$types/agent';
 	import { Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { tick } from 'svelte';
 
 	/**
 	 * NewWorkflowModal props
@@ -65,8 +66,8 @@
 			workflowName = '';
 			error = null;
 			isSubmitting = false;
-			// Focus input after mount
-			setTimeout(() => nameInputRef?.focus(), 50);
+			// Focus input after DOM update
+			tick().then(() => nameInputRef?.focus());
 		}
 	});
 

@@ -27,7 +27,7 @@
 	import { getErrorMessage } from '$lib/utils/error';
 	import type { ToolExecution } from '$types/tool';
 	import JsonViewer from '$lib/components/ui/JsonViewer.svelte';
-	import { Loader2, AlertCircle } from '@lucide/svelte';
+	import { Loader2, AlertCircle, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { onMount } from 'svelte';
 
@@ -42,7 +42,9 @@
 	let error = $state<string | null>(null);
 	let execution = $state<ToolExecution | null>(null);
 
-	onMount(async () => {
+	async function loadExecution(): Promise<void> {
+		loading = true;
+		error = null;
 		try {
 			execution = await invoke<ToolExecution>('get_tool_execution', { executionId });
 		} catch (e) {
@@ -50,6 +52,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(() => {
+		loadExecution();
 	});
 </script>
 
@@ -63,6 +69,14 @@
 		<div class="tool-details-error">
 			<AlertCircle size={14} />
 			<span>{error}</span>
+			<button
+				class="retry-button"
+				onclick={loadExecution}
+				aria-label={$i18n('common_retry')}
+			>
+				<RefreshCw size={12} />
+				{$i18n('common_retry')}
+			</button>
 		</div>
 	{:else if execution}
 		<div class="tool-details-section">
@@ -134,6 +148,27 @@
 		gap: var(--spacing-xs);
 		color: var(--color-error);
 		font-size: var(--font-size-xs);
+	}
+
+	.retry-button {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 2px var(--spacing-xs);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text-secondary);
+		font-size: var(--font-size-xs);
+		cursor: pointer;
+		transition: all var(--transition-fast, 150ms) ease;
+		margin-left: var(--spacing-xs);
+	}
+
+	.retry-button:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-primary);
+		border-color: var(--color-accent);
 	}
 
 	.tool-details-section {

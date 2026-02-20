@@ -12,7 +12,7 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 60 | Fix implemented and tested |
+| DONE | 72 | Fix implemented and tested |
 | NOT DONE | 7 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -20,7 +20,7 @@
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 22 | 13 |
+| MEDIUM (35) | 34 | 1 |
 | LOW (13) | 5 | 8 |
 | N/A (7) | - | - |
 
@@ -95,7 +95,7 @@
 | security/validation.rs | test_serialize_for_query_vec | SA-007 DUP-2: vec serializes to JSON array |
 | security/validation.rs | test_serialize_for_query_option_none | SA-007 DUP-2: None serializes to null |
 
-### TypeScript (57 new tests in 4 new files + 1 updated)
+### TypeScript (67 new tests in 5 new files + 1 updated)
 
 | File | Tests | Purpose |
 |------|-------|---------|
@@ -104,6 +104,7 @@
 | stores/__tests__/activity.test.ts | 8 tests | Activity capture guard (SA-011 H-001 race condition) |
 | stores/__tests__/workflows.test.ts | 5 new tests | loadWorkflows retry recovery (SA-011 H-002) |
 | stores/__tests__/chunkProcessor.test.ts | 22 tests | Shared chunk processor (SA-009 F1: all 12 chunk types + immutability + extended state) |
+| utils/__tests__/panel-merge.test.ts | 10 tests | Panel merge utilities (SA-011 M-003/M-004: reasoning step merge + tool execution merge) |
 
 ### Infrastructure
 
@@ -223,7 +224,18 @@
 | H-001 | HIGH | Activity capture race condition | **DONE** | **Frontend**: activity.ts: `lastCapturedWorkflowId` guard prevents duplicate capture. workflowExecutor.service.ts: capture moved to `finally` block (before `streamingStore.reset()`), runs on both success and error paths. 8 new tests in activity.test.ts. **Backend**: CancellationToken now propagated through full chain: streaming.rs -> orchestrator -> Agent trait -> LLMAgent -> AgentToolContext -> sub-agent tools -> SubAgentExecutor. Sub-agents stop promptly on user cancel. Files: agent.rs, orchestrator.rs, llm_agent.rs, context.rs, streaming.rs, workflow.rs, sub_agent_executor.rs. |
 | H-002 | HIGH | No error recovery on loadWorkflows | **DONE** | WorkflowList: error state with retry button. WorkflowSidebar/+page.svelte: pass workflowsError + workflowsLoading + onretry. 5 new store tests. i18n keys added. |
 | H-003 | HIGH | No double-submit protection | **DONE** | workflowExecutor.service.ts: `executingWorkflows` Set guards against concurrent sends. |
-| M-001 to M-012 | MEDIUM | Various quality issues | **NOT DONE** | No changes to chat/workflow components (except MarkdownRenderer URL check). |
+| M-001 | MEDIUM | Clipboard copy no error handling | **DONE** | MessageBubble: try/catch + copyError state + AlertCircle visual feedback. |
+| M-002 | MEDIUM | PromptSelector console.error | **DONE** | Already fixed in SA-013 #16-20 (console cleanup). |
+| M-003 | MEDIUM | ReasoningPanel large derivation | **DONE** | Extracted `mergeAndSortReasoningSteps()` to `utils/panel-merge.ts`. 5 tests. |
+| M-004 | MEDIUM | ToolExecutionPanel large derivation | **DONE** | Extracted `mergeToolExecutions()` to `utils/panel-merge.ts`. Reused `ActiveTool` from streaming store. 5 tests. |
+| M-005 | MEDIUM | Validation no timeout | **DONE** | validation.ts: 5-min `VALIDATION_TIMEOUT_MS`, auto-reject via `startValidationTimeout()`. Wired into init/approve/reject/dismiss/cleanup. |
+| M-006 | MEDIUM | UserQuestionModal console.warn | **DONE** | Already fixed in SA-013 #16-20 (console cleanup). |
+| M-007 | MEDIUM | ActivityItem 3 boolean states | **DONE** | Replaced `isTaskExpanded`/`isReasoningExpanded`/`isToolExpanded` with single `expandedSection` enum. |
+| M-008 | MEDIUM | setTimeout for focus | **DONE** | NewWorkflowModal + WorkflowItem: replaced `setTimeout(() => ref?.focus())` with `tick().then(() => ref?.focus())`. |
+| M-009 | MEDIUM | TokenDisplay progressbar ARIA | **DONE** | Moved `role="progressbar"` to parent, added `aria-valuetext` with warning-level-aware text + `aria-label`. |
+| M-010 | MEDIUM | backgroundWorkflows cleanup | **DONE** | Already had `status !== 'running'` guard at line 268. No change needed. |
+| M-011 | MEDIUM | WorkflowItem rename edge case | **DONE** | Added documentation comment explaining intentional behavior (editing ignores external renames). |
+| M-012 | MEDIUM | ToolDetailsPanel no retry | **DONE** | Extracted `loadExecution()` from onMount, added retry button with RefreshCw icon in error state. |
 
 ### SA-012: DB Layer & Migrations
 
@@ -267,6 +279,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | MemoryList export via Tauri dialog | MemoryList.svelte | Replaced Blob+DOM link with native save dialog + backend invoke |
 | Accessibility improvements | ExportPreview, ImportExportSettings, MemorySettings, settings/+layout | aria-expanded, role, aria-current, aria-label |
 | i18n keys for export | en.json, fr.json | `memory_export_title` |
+| SA-011 M-001 to M-012 remediation | MessageBubble, ActivityItem, TokenDisplay, WorkflowItem, NewWorkflowModal, ToolDetailsPanel, ReasoningPanel, ToolExecutionPanel, validation.ts, panel-merge.ts (new), panel-merge.test.ts (new), vitest.config.ts, en.json, fr.json | 12 MEDIUM quality issues: clipboard error handling, derivation extraction, validation timeout, boolean consolidation, tick() focus, ARIA progressbar, retry button. 10 new tests. |
 | Agent test update | agents.test.ts | Added `enable_thinking: true` to mock config |
 | Workflow test update | workflows.test.ts | Added `model_id: null` to mock workflow |
 | serde_utils consolidation | serde_utils.rs, tool_execution.rs | Moved shared serializers to serde_utils, removed duplicates |
@@ -306,7 +319,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Group | Findings | Reason |
 |-------|----------|--------|
 | UUID bind params for validated IDs | SA-001 L1-L18 | Defense-in-depth, IDs from DB |
-| Chat/workflow component quality | SA-011 M-001 to M-012 | UX improvements, not security |
+| ~~Chat/workflow component quality~~ | ~~SA-011 M-001 to M-012~~ | **DONE** - 9 new fixes + 3 already done (M-002/M-006 in SA-013, M-010 existing guard) |
 | Error message context | SA-007 F14 | Quality improvement |
 | ~~Remaining console.* (non-settings)~~ | ~~SA-013 #16-20~~ | **DONE** - All 22 remaining removed |
 
@@ -321,7 +334,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | cargo test --lib | **PASS** | 2026-02-20, 920 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
-| npm run test | **PASS** | 2026-02-20, 247 tests passed |
+| npm run test | **PASS** | 2026-02-20, 257 tests passed |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: search prompts | **NOT RUN** | |

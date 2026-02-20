@@ -57,14 +57,9 @@
 
 	let { activity, expanded = false }: Props = $props();
 
-	/** Local state for task collapse */
-	let isTaskExpanded = $state(false);
-
-	/** Local state for reasoning collapse */
-	let isReasoningExpanded = $state(false);
-
-	/** Local state for tool details collapse */
-	let isToolExpanded = $state(false);
+	/** Which section is currently expanded (null = none collapsed) */
+	type ExpandableSection = 'task' | 'reasoning' | 'tool' | null;
+	let expandedSection = $state<ExpandableSection>(null);
 
 	/** Check if this is a task with expandable details */
 	const isTaskWithDetails = $derived(
@@ -86,17 +81,19 @@
 	const isExpandable = $derived(isTaskWithDetails || isReasoningWithContent || isToolWithDetails);
 
 	/** Whether the item is currently expanded */
-	const isExpanded = $derived(
-		(isTaskWithDetails && isTaskExpanded) ||
-		(isReasoningWithContent && isReasoningExpanded) ||
-		(isToolWithDetails && isToolExpanded)
-	);
+	const isExpanded = $derived(expandedSection !== null);
 
 	/** Toggle expand based on item type */
 	function handleToggle(): void {
-		if (isTaskWithDetails) isTaskExpanded = !isTaskExpanded;
-		else if (isReasoningWithContent) isReasoningExpanded = !isReasoningExpanded;
-		else if (isToolWithDetails) isToolExpanded = !isToolExpanded;
+		if (expandedSection !== null) {
+			expandedSection = null;
+		} else if (isTaskWithDetails) {
+			expandedSection = 'task';
+		} else if (isReasoningWithContent) {
+			expandedSection = 'reasoning';
+		} else if (isToolWithDetails) {
+			expandedSection = 'tool';
+		}
 	}
 
 	/**
@@ -188,15 +185,15 @@
 			<div class="item-error">{activity.metadata.error}</div>
 		{/if}
 		<!-- Task details collapse -->
-		{#if isTaskWithDetails && isTaskExpanded}
+		{#if isTaskWithDetails && expandedSection === 'task'}
 			<ActivityItemDetails {activity} />
 		{/if}
 		<!-- Reasoning details collapse -->
-		{#if isReasoningWithContent && isReasoningExpanded && activity.metadata?.content}
+		{#if isReasoningWithContent && expandedSection === 'reasoning' && activity.metadata?.content}
 			<ReasoningDetailsPanel content={activity.metadata.content} />
 		{/if}
 		<!-- Tool details collapse (lazy-loaded) -->
-		{#if isToolWithDetails && isToolExpanded && activity.metadata?.executionId}
+		{#if isToolWithDetails && expandedSection === 'tool' && activity.metadata?.executionId}
 			<ToolDetailsPanel executionId={activity.metadata.executionId} />
 		{/if}
 	</div>

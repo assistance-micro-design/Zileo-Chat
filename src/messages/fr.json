@@ -15,6 +15,7 @@
   "common_done": "Termine",
   "common_saving": "Enregistrement...",
   "common_add": "Ajouter",
+  "common_retry": "Reessayer",
 
   "nav_skip_to_content": "Aller au contenu principal",
 
@@ -707,6 +708,11 @@
 
   "workflow_token_arialabel": "Statistiques d'utilisation des jetons",
   "workflow_token_context": "contexte",
+  "workflow_token_context_progress": "Utilisation de la fenetre de contexte",
+  "workflow_token_context_used": "du contexte utilise",
+  "workflow_token_context_warning": "Attention : utilisation du contexte",
+  "workflow_token_context_critical": "Critique : fenetre de contexte presque pleine",
+  "workflow_token_context_full": "Fenetre de contexte pleine",
   "workflow_token_in_out": "entree/sortie",
   "workflow_token_total": "total",
   "workflow_token_speed": "j/s",

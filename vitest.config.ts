@@ -14,7 +14,8 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			$lib: '/src/lib',
-			$app: '/src/app'
+			$app: '/src/app',
+			$types: '/src/types'
 		}
 	}
 });

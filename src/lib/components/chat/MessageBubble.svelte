@@ -24,9 +24,10 @@
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Copy, Check } from '@lucide/svelte';
+	import { Clock, Copy, Check, AlertCircle } from '@lucide/svelte';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/**
 	 * MessageBubble props
@@ -46,16 +47,27 @@
 	const isUserMessage = $derived(isUser ?? message.role === 'user');
 
 	let copied = $state(false);
+	let copyError = $state(false);
 
 	/**
-	 * Copy message content as markdown to clipboard
+	 * Copy message content as markdown to clipboard.
+	 * Handles clipboard API errors gracefully with visual feedback.
 	 */
 	async function copyContent(): Promise<void> {
-		await navigator.clipboard.writeText(message.content);
-		copied = true;
-		setTimeout(() => {
-			copied = false;
-		}, 2000);
+		copyError = false;
+		try {
+			await navigator.clipboard.writeText(message.content);
+			copied = true;
+			setTimeout(() => {
+				copied = false;
+			}, 2000);
+		} catch (e) {
+			const _msg = getErrorMessage(e);
+			copyError = true;
+			setTimeout(() => {
+				copyError = false;
+			}, 2000);
+		}
 	}
 
 	/**
@@ -83,11 +95,14 @@
 		{#if !isUserMessage}
 			<button
 				class="copy-button"
+				class:copy-error={copyError}
 				onclick={copyContent}
 				aria-label={$i18n('chat_copy_arialabel')}
 			>
 				{#if copied}
 					<Check size={14} />
+				{:else if copyError}
+					<AlertCircle size={14} />
 				{:else}
 					<Copy size={14} />
 				{/if}
@@ -177,6 +192,11 @@
 	.copy-button:hover {
 		color: var(--color-text-primary);
 		background: var(--color-bg-tertiary);
+	}
+
+	.copy-button.copy-error {
+		opacity: 1;
+		color: var(--color-error);
 	}
 
 	@keyframes fadeIn {

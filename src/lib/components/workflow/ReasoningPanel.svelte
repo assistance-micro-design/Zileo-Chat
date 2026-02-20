@@ -31,6 +31,7 @@
 <script lang="ts">
 	import type { ThinkingStep, ActiveThinkingStep } from '$types/thinking';
 	import { formatThinkingDuration, truncateThinkingContent } from '$types/thinking';
+	import { mergeAndSortReasoningSteps } from '$lib/utils/panel-merge';
 	import { Brain, Clock, ChevronDown, ChevronUp, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -85,46 +86,7 @@
 	/**
 	 * All steps to display (combines active + historical)
 	 */
-	const displaySteps = $derived.by(() => {
-		const items: Array<{
-			id: string;
-			stepNumber: number;
-			content: string;
-			durationMs?: number;
-			tokens?: number;
-			isActive: boolean;
-			timestamp?: number;
-		}> = [];
-
-		// Add active steps first (during streaming)
-		for (const step of activeSteps) {
-			items.push({
-				id: `active-${step.stepNumber}-${step.timestamp}`,
-				stepNumber: step.stepNumber,
-				content: step.content,
-				durationMs: step.durationMs,
-				isActive: true,
-				timestamp: step.timestamp
-			});
-		}
-
-		// Add persisted steps (from database)
-		for (const step of steps) {
-			items.push({
-				id: step.id,
-				stepNumber: step.step_number + 1, // Display as 1-indexed
-				content: step.content,
-				durationMs: step.duration_ms,
-				tokens: step.tokens,
-				isActive: false
-			});
-		}
-
-		// Sort by step number
-		items.sort((a, b) => a.stepNumber - b.stepNumber);
-
-		return items;
-	});
+	const displaySteps = $derived(mergeAndSortReasoningSteps(activeSteps, steps));
 
 	/**
 	 * Count of total steps

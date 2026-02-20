@@ -15,6 +15,7 @@
   "common_done": "Done",
   "common_saving": "Saving...",
   "common_add": "Add",
+  "common_retry": "Retry",
 
   "nav_skip_to_content": "Skip to main content",
 
@@ -707,6 +708,11 @@
 
   "workflow_token_arialabel": "Token usage metrics",
   "workflow_token_context": "context",
+  "workflow_token_context_progress": "Context window usage",
+  "workflow_token_context_used": "of context used",
+  "workflow_token_context_warning": "Warning: context window usage",
+  "workflow_token_context_critical": "Critical: context window almost full",
+  "workflow_token_context_full": "Context window full",
   "workflow_token_in_out": "in/out",
   "workflow_token_total": "total",
   "workflow_token_speed": "tk/s",

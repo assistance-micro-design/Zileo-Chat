@@ -141,16 +141,26 @@
 		</div>
 		<div class="context-content">
 			<div class="context-progress">
-				<div class="progress-bar">
+				<div
+					class="progress-bar"
+					role="progressbar"
+					aria-valuenow={contextPercentage}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuetext={warningLevel === 'full'
+						? $i18n('workflow_token_context_full')
+						: warningLevel === 'critical'
+							? `${$i18n('workflow_token_context_critical')}: ${contextPercentage.toFixed(0)}%`
+							: warningLevel === 'warning'
+								? `${$i18n('workflow_token_context_warning')}: ${contextPercentage.toFixed(0)}%`
+								: `${contextPercentage.toFixed(0)}% ${$i18n('workflow_token_context_used')}`}
+					aria-label={$i18n('workflow_token_context_progress')}
+				>
 					<div
 						class="progress-fill"
 						class:warning={warningLevel === 'warning'}
 						class:critical={warningLevel === 'critical' || warningLevel === 'full'}
 						style="width: {contextPercentage}%"
-						role="progressbar"
-						aria-valuenow={contextPercentage}
-						aria-valuemin={0}
-						aria-valuemax={100}
 					></div>
 				</div>
 				<span class="percentage-value" class:warning={warningLevel === 'warning'} class:critical={warningLevel === 'critical' || warningLevel === 'full'}>
