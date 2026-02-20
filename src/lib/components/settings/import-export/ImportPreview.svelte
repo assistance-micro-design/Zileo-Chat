@@ -21,6 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 ImportPreview - Preview what will be imported with selection controls.
 Displays entity summaries with checkboxes for selection/deselection.
 Shows warnings for conflicts and missing MCP env vars.
+Refactored for SA-010 DUP-2: data-driven loops replace 4 identical summary cards + 4 entity lists.
 -->
 
 <script lang="ts">
@@ -40,11 +41,21 @@ Shows warnings for conflicts and missing MCP env vars.
 
 	let { validation, selection, onSelectionChange }: Props = $props();
 
+	/** Entity type definitions for data-driven rendering */
+	type EntityType = 'agents' | 'mcpServers' | 'models' | 'prompts';
+
+	const entityDefs: Array<{ type: EntityType; titleKey: string }> = [
+		{ type: 'agents', titleKey: 'ie_entity_agents' },
+		{ type: 'mcpServers', titleKey: 'ie_entity_mcp_servers' },
+		{ type: 'models', titleKey: 'ie_entity_models' },
+		{ type: 'prompts', titleKey: 'ie_entity_prompts' }
+	];
+
 	/**
 	 * Toggle all entities of a specific type.
 	 * Selection is now by NAME (not ID) since IDs are not exported.
 	 */
-	function toggleAll(type: 'agents' | 'mcpServers' | 'models' | 'prompts'): void {
+	function toggleAll(type: EntityType): void {
 		const entities = validation.entities[type];
 		const currentNames = selection[type];
 		const allNames = entities.map((e) => e.name);
@@ -63,10 +74,7 @@ Shows warnings for conflicts and missing MCP env vars.
 	 * Toggle a single entity.
 	 * Selection is now by NAME (not ID).
 	 */
-	function toggleEntity(
-		type: 'agents' | 'mcpServers' | 'models' | 'prompts',
-		entityName: string
-	): void {
+	function toggleEntity(type: EntityType, entityName: string): void {
 		const currentNames = selection[type];
 		const newNames = currentNames.includes(entityName)
 			? currentNames.filter((name) => name !== entityName)
@@ -107,7 +115,7 @@ Shows warnings for conflicts and missing MCP env vars.
 	 * Check if all entities of a type are selected.
 	 * Selection is by NAME.
 	 */
-	function allSelected(type: 'agents' | 'mcpServers' | 'models' | 'prompts'): boolean {
+	function allSelected(type: EntityType): boolean {
 		const entities = validation.entities[type];
 		const selectedNames = selection[type];
 		return entities.length > 0 && entities.every((e) => selectedNames.includes(e.name));
@@ -117,199 +125,85 @@ Shows warnings for conflicts and missing MCP env vars.
 	 * Check if some entities of a type are selected (indeterminate state).
 	 * Selection is by NAME.
 	 */
-	function someSelected(type: 'agents' | 'mcpServers' | 'models' | 'prompts'): boolean {
+	function someSelected(type: EntityType): boolean {
 		const entities = validation.entities[type];
 		const selectedNames = selection[type];
 		return selectedNames.length > 0 && !entities.every((e) => selectedNames.includes(e.name));
+	}
+
+	/**
+	 * Get type-specific metadata for an entity item.
+	 * Returns null if no extra metadata for this entity type.
+	 */
+	function getEntityMeta(type: EntityType, item: { name: string }): string | null {
+		if (type === 'models' && 'provider' in item && 'apiName' in item) {
+			return `${String(item.provider)} - ${String(item.apiName)}`;
+		}
+		if (type === 'prompts' && 'category' in item) {
+			return String(item.category);
+		}
+		return null;
 	}
 </script>
 
 <div class="import-preview">
 	<!-- Summary Cards -->
 	<div class="summary-cards">
-		<Card>
-			{#snippet body()}
-				<div class="summary-card">
-					<div class="summary-header">
-						<h4>{$i18n('ie_entity_agents')}</h4>
-						<Badge variant="primary">{validation.entities.agents.length}</Badge>
+		{#each entityDefs as def (def.type)}
+			<Card>
+				{#snippet body()}
+					<div class="summary-card">
+						<div class="summary-header">
+							<h4>{$i18n(def.titleKey)}</h4>
+							<Badge variant="primary">{validation.entities[def.type].length}</Badge>
+						</div>
+						<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection[def.type].length))}</p>
 					</div>
-					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.agents.length))}</p>
-				</div>
-			{/snippet}
-		</Card>
-
-		<Card>
-			{#snippet body()}
-				<div class="summary-card">
-					<div class="summary-header">
-						<h4>{$i18n('ie_entity_mcp_servers')}</h4>
-						<Badge variant="primary">{validation.entities.mcpServers.length}</Badge>
-					</div>
-					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.mcpServers.length))}</p>
-				</div>
-			{/snippet}
-		</Card>
-
-		<Card>
-			{#snippet body()}
-				<div class="summary-card">
-					<div class="summary-header">
-						<h4>{$i18n('ie_entity_models')}</h4>
-						<Badge variant="primary">{validation.entities.models.length}</Badge>
-					</div>
-					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.models.length))}</p>
-				</div>
-			{/snippet}
-		</Card>
-
-		<Card>
-			{#snippet body()}
-				<div class="summary-card">
-					<div class="summary-header">
-						<h4>{$i18n('ie_entity_prompts')}</h4>
-						<Badge variant="primary">{validation.entities.prompts.length}</Badge>
-					</div>
-					<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection.prompts.length))}</p>
-				</div>
-			{/snippet}
-		</Card>
+				{/snippet}
+			</Card>
+		{/each}
 	</div>
 
 	<!-- Entity Lists -->
 	<div class="entity-lists">
-		<!-- Agents -->
-		{#if validation.entities.agents.length > 0}
-			<Card title={$i18n('ie_entity_agents')}>
-				{#snippet body()}
-					<div class="entity-list">
-						<label class="entity-item header-item">
-							<input
-								type="checkbox"
-								checked={allSelected('agents')}
-								indeterminate={someSelected('agents')}
-								onchange={() => toggleAll('agents')}
-							/>
-							<span class="entity-name">{$i18n('ie_select_all')}</span>
-						</label>
-						{#each validation.entities.agents as agent (agent.name)}
-							<label class="entity-item">
+		{#each entityDefs as def (def.type)}
+			{#if validation.entities[def.type].length > 0}
+				<Card title={$i18n(def.titleKey)}>
+					{#snippet body()}
+						<div class="entity-list">
+							<label class="entity-item header-item">
 								<input
 									type="checkbox"
-									checked={selection.agents.includes(agent.name)}
-									onchange={() => toggleEntity('agents', agent.name)}
+									checked={allSelected(def.type)}
+									indeterminate={someSelected(def.type)}
+									onchange={() => toggleAll(def.type)}
 								/>
-								<span class="entity-name">{agent.name}</span>
-								{#if hasConflict(agent.name)}
-									<Badge variant="warning">{getConflictBadge(agent.name)}</Badge>
-								{/if}
+								<span class="entity-name">{$i18n('ie_select_all')}</span>
 							</label>
-						{/each}
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
-
-		<!-- MCP Servers -->
-		{#if validation.entities.mcpServers.length > 0}
-			<Card title={$i18n('ie_entity_mcp_servers')}>
-				{#snippet body()}
-					<div class="entity-list">
-						<label class="entity-item header-item">
-							<input
-								type="checkbox"
-								checked={allSelected('mcpServers')}
-								indeterminate={someSelected('mcpServers')}
-								onchange={() => toggleAll('mcpServers')}
-							/>
-							<span class="entity-name">{$i18n('ie_select_all')}</span>
-						</label>
-						{#each validation.entities.mcpServers as server (server.name)}
-							<label class="entity-item">
-								<input
-									type="checkbox"
-									checked={selection.mcpServers.includes(server.name)}
-									onchange={() => toggleEntity('mcpServers', server.name)}
-								/>
-								<span class="entity-name">{server.name}</span>
-								{#if hasConflict(server.name)}
-									<Badge variant="warning">{getConflictBadge(server.name)}</Badge>
-								{/if}
-								{#if hasMissingEnv(server.name)}
-									<Badge variant="error">{$i18n('ie_missing_env_vars')}</Badge>
-								{/if}
-							</label>
-						{/each}
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
-
-		<!-- Models -->
-		{#if validation.entities.models.length > 0}
-			<Card title={$i18n('ie_entity_models')}>
-				{#snippet body()}
-					<div class="entity-list">
-						<label class="entity-item header-item">
-							<input
-								type="checkbox"
-								checked={allSelected('models')}
-								indeterminate={someSelected('models')}
-								onchange={() => toggleAll('models')}
-							/>
-							<span class="entity-name">{$i18n('ie_select_all')}</span>
-						</label>
-						{#each validation.entities.models as model (model.name)}
-							<label class="entity-item">
-								<input
-									type="checkbox"
-									checked={selection.models.includes(model.name)}
-									onchange={() => toggleEntity('models', model.name)}
-								/>
-								<span class="entity-name">{model.name}</span>
-								<span class="entity-meta">{model.provider} - {model.apiName}</span>
-								{#if hasConflict(model.name)}
-									<Badge variant="warning">{getConflictBadge(model.name)}</Badge>
-								{/if}
-							</label>
-						{/each}
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
-
-		<!-- Prompts -->
-		{#if validation.entities.prompts.length > 0}
-			<Card title={$i18n('ie_entity_prompts')}>
-				{#snippet body()}
-					<div class="entity-list">
-						<label class="entity-item header-item">
-							<input
-								type="checkbox"
-								checked={allSelected('prompts')}
-								indeterminate={someSelected('prompts')}
-								onchange={() => toggleAll('prompts')}
-							/>
-							<span class="entity-name">{$i18n('ie_select_all')}</span>
-						</label>
-						{#each validation.entities.prompts as prompt (prompt.name)}
-							<label class="entity-item">
-								<input
-									type="checkbox"
-									checked={selection.prompts.includes(prompt.name)}
-									onchange={() => toggleEntity('prompts', prompt.name)}
-								/>
-								<span class="entity-name">{prompt.name}</span>
-								<span class="entity-meta">{prompt.category}</span>
-								{#if hasConflict(prompt.name)}
-									<Badge variant="warning">{getConflictBadge(prompt.name)}</Badge>
-								{/if}
-							</label>
-						{/each}
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
+							{#each validation.entities[def.type] as item (item.name)}
+								<label class="entity-item">
+									<input
+										type="checkbox"
+										checked={selection[def.type].includes(item.name)}
+										onchange={() => toggleEntity(def.type, item.name)}
+									/>
+									<span class="entity-name">{item.name}</span>
+									{#if getEntityMeta(def.type, item)}
+										<span class="entity-meta">{getEntityMeta(def.type, item)}</span>
+									{/if}
+									{#if hasConflict(item.name)}
+										<Badge variant="warning">{getConflictBadge(item.name)}</Badge>
+									{/if}
+									{#if def.type === 'mcpServers' && hasMissingEnv(item.name)}
+										<Badge variant="error">{$i18n('ie_missing_env_vars')}</Badge>
+									{/if}
+								</label>
+							{/each}
+						</div>
+					{/snippet}
+				</Card>
+			{/if}
+		{/each}
 	</div>
 </div>
 

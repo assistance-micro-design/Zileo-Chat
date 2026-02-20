@@ -17,7 +17,7 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | SA-007 | [Commands Control Flow](./SA-007-commands-control-flow.md) | 2026-02-19 | Quality audit | **DUP-1+DUP-2 DONE** (UUID validation + serde_json escaping dedup), rest deferred |
 | SA-008 | [Agent System Quality](./SA-008-agent-system-quality.md) | 2026-02-19 | Quality audit | **PERF-1 DONE, PERF-2 DONE**, duplication deferred |
 | SA-009 | [Svelte Stores Quality](./SA-009-stores-quality-audit.md) | 2026-02-19 | Quality audit | **F1/F2/F4 DONE, dead code DONE** |
-| SA-010 | [Settings & Forms Quality](./SA-010-settings-forms-quality.md) | 2026-02-19 | Quality audit | **Error handling DONE (ERR-1+ERR-2), 4 a11y DONE**, templates deferred |
+| SA-010 | [Settings & Forms Quality](./SA-010-settings-forms-quality.md) | 2026-02-19 | Quality audit | **Error handling DONE (ERR-1+ERR-2), 4 a11y DONE, DUP-1/2/3 DONE** (template dedup) |
 | SA-011 | [Chat & Workflow Components](./SA-011-chat-workflow-components.md) | 2026-02-19 | 0C, 3H, 12M, 26L | **H-001 DONE, H-002 DONE, H-003 DONE** |
 | SA-012 | [DB Layer & Migrations](./SA-012-db-layer-migrations.md) | 2026-02-19 | 4H, 2M, 5L | **ALL DONE** (4H, 2M, 5L) |
 | SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE, 4H DONE, 2M DONE** (#14-15 ChunkType alignment + #16-20 console.*) |

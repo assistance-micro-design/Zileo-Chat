@@ -20,11 +20,13 @@ SPDX-License-Identifier: Apache-2.0
 
 ExportPreview - Preview what will be exported.
 Shows summaries for each entity type and MCP sanitization options.
+Refactored for SA-010 DUP-3: ExportEntitySection replaces 4 identical collapsible sections.
 -->
 
 <script lang="ts">
 	import { Card, Badge } from '$lib/components/ui';
 	import MCPFieldEditor from './MCPFieldEditor.svelte';
+	import ExportEntitySection from './ExportEntitySection.svelte';
 	import { i18n } from '$lib/i18n';
 	import type { ExportPreviewData, MCPSanitizationConfig } from '$types';
 
@@ -48,11 +50,13 @@ Shows summaries for each entity type and MCP sanitization options.
 			preview.prompts.length
 	);
 
-	/** Whether to show expanded sections */
-	let expandedAgents = $state(false);
-	let expandedMcp = $state(false);
-	let expandedModels = $state(false);
-	let expandedPrompts = $state(false);
+	/** Expanded state for all sections */
+	let expanded = $state<Record<string, boolean>>({
+		agents: false,
+		mcp: false,
+		models: false,
+		prompts: false
+	});
 </script>
 
 <div class="export-preview">
@@ -63,177 +67,125 @@ Shows summaries for each entity type and MCP sanitization options.
 
 	<!-- Agents Section -->
 	{#if preview.agents.length > 0}
-		<Card>
-			{#snippet header()}
-				<button
-					type="button"
-					class="section-header"
-					aria-expanded={expandedAgents}
-					onclick={() => (expandedAgents = !expandedAgents)}
-				>
-					<div class="section-title">
-						<span class="title-text">{$i18n('ie_entity_agents')}</span>
-						<Badge variant="primary">{preview.agents.length}</Badge>
+		<ExportEntitySection
+			title={$i18n('ie_entity_agents')}
+			count={preview.agents.length}
+			expanded={expanded.agents}
+			onToggle={() => (expanded.agents = !expanded.agents)}
+		>
+			<div class="items-list">
+				{#each preview.agents as agent (agent.id)}
+					<div class="item">
+						<span class="item-name">{agent.name}</span>
+						<div class="item-meta">
+							<span class="meta-text">{agent.provider} / {agent.model}</span>
+							<Badge variant="success">{agent.lifecycle}</Badge>
+						</div>
 					</div>
-					<span class="expand-icon" class:expanded={expandedAgents}>▼</span>
-				</button>
-			{/snippet}
-			{#snippet body()}
-				{#if expandedAgents}
-					<div class="items-list">
-						{#each preview.agents as agent (agent.id)}
-							<div class="item">
-								<span class="item-name">{agent.name}</span>
-								<div class="item-meta">
-									<span class="meta-text">{agent.provider} / {agent.model}</span>
-									<Badge variant="success">{agent.lifecycle}</Badge>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			{/snippet}
-		</Card>
+				{/each}
+			</div>
+		</ExportEntitySection>
 	{/if}
 
-	<!-- MCP Servers Section -->
+	<!-- MCP Servers Section (kept inline - has MCPFieldEditor, sanitization, excluded items) -->
 	{#if preview.mcpServers.length > 0}
-		<Card>
-			{#snippet header()}
-				<button
-					type="button"
-					class="section-header"
-					aria-expanded={expandedMcp}
-					onclick={() => (expandedMcp = !expandedMcp)}
-				>
-					<div class="section-title">
-						<span class="title-text">{$i18n('ie_entity_mcp_servers')}</span>
-						<Badge variant="primary">{preview.mcpServers.length}</Badge>
-					</div>
-					<span class="expand-icon" class:expanded={expandedMcp}>▼</span>
-				</button>
-			{/snippet}
-			{#snippet body()}
-				{#if expandedMcp}
-					<div class="mcp-list">
-						{#each preview.mcpServers as server (server.id ?? server.name)}
-							{@const serverId = server.id ?? server.name}
-							{@const sanitization = mcpSanitization[serverId]}
-							{@const envKeys = preview.mcpEnvKeys[serverId] || []}
+		<ExportEntitySection
+			title={$i18n('ie_entity_mcp_servers')}
+			count={preview.mcpServers.length}
+			expanded={expanded.mcp}
+			onToggle={() => (expanded.mcp = !expanded.mcp)}
+		>
+			<div class="mcp-list">
+				{#each preview.mcpServers as server (server.id ?? server.name)}
+					{@const serverId = server.id ?? server.name}
+					{@const sanitization = mcpSanitization[serverId]}
+					{@const envKeys = preview.mcpEnvKeys[serverId] || []}
 
-							{#if !sanitization?.excludeFromExport}
-								<div class="mcp-item">
-									<div class="item">
-										<span class="item-name">{server.name}</span>
-										<div class="item-meta">
-											<Badge variant={server.enabled ? 'success' : 'error'}>
-												{server.enabled ? $i18n('ie_enabled') : $i18n('ie_disabled')}
-											</Badge>
-											<span class="meta-text">{server.command}</span>
-											{#if server.toolsCount > 0}
-												<span class="meta-text">{$i18n('ie_x_tools').replace('{count}', String(server.toolsCount))}</span>
-											{/if}
-										</div>
-									</div>
-
-									{#if envKeys.length > 0 && sanitization}
-										<MCPFieldEditor
-											serverId={serverId}
-											serverName={server.name}
-											{envKeys}
-											{sanitization}
-											onchange={(config) => onMcpSanitizationChange(serverId, config)}
-										/>
+					{#if !sanitization?.excludeFromExport}
+						<div class="mcp-item">
+							<div class="item">
+								<span class="item-name">{server.name}</span>
+								<div class="item-meta">
+									<Badge variant={server.enabled ? 'success' : 'error'}>
+										{server.enabled ? $i18n('ie_enabled') : $i18n('ie_disabled')}
+									</Badge>
+									<span class="meta-text">{server.command}</span>
+									{#if server.toolsCount > 0}
+										<span class="meta-text">{$i18n('ie_x_tools').replace('{count}', String(server.toolsCount))}</span>
 									{/if}
 								</div>
-							{:else}
-								<div class="excluded-item">
-									<span class="item-name">{server.name}</span>
-									<Badge variant="error">{$i18n('ie_excluded_from_export')}</Badge>
-								</div>
+							</div>
+
+							{#if envKeys.length > 0 && sanitization}
+								<MCPFieldEditor
+									serverId={serverId}
+									serverName={server.name}
+									{envKeys}
+									{sanitization}
+									onchange={(config) => onMcpSanitizationChange(serverId, config)}
+								/>
 							{/if}
-						{/each}
-					</div>
-				{/if}
-			{/snippet}
-		</Card>
+						</div>
+					{:else}
+						<div class="excluded-item">
+							<span class="item-name">{server.name}</span>
+							<Badge variant="error">{$i18n('ie_excluded_from_export')}</Badge>
+						</div>
+					{/if}
+				{/each}
+			</div>
+		</ExportEntitySection>
 	{/if}
 
 	<!-- Models Section -->
 	{#if preview.models.length > 0}
-		<Card>
-			{#snippet header()}
-				<button
-					type="button"
-					class="section-header"
-					aria-expanded={expandedModels}
-					onclick={() => (expandedModels = !expandedModels)}
-				>
-					<div class="section-title">
-						<span class="title-text">{$i18n('ie_entity_models')}</span>
-						<Badge variant="primary">{preview.models.length}</Badge>
+		<ExportEntitySection
+			title={$i18n('ie_entity_models')}
+			count={preview.models.length}
+			expanded={expanded.models}
+			onToggle={() => (expanded.models = !expanded.models)}
+		>
+			<div class="items-list">
+				{#each preview.models as model (model.id)}
+					<div class="item">
+						<span class="item-name">{model.name}</span>
+						<div class="item-meta">
+							<span class="meta-text">{model.provider}</span>
+							<span class="meta-text">{model.apiName}</span>
+							{#if model.isBuiltin}
+								<Badge variant="success">{$i18n('ie_builtin')}</Badge>
+							{:else}
+								<Badge variant="warning">{$i18n('ie_custom')}</Badge>
+							{/if}
+						</div>
 					</div>
-					<span class="expand-icon" class:expanded={expandedModels}>▼</span>
-				</button>
-			{/snippet}
-			{#snippet body()}
-				{#if expandedModels}
-					<div class="items-list">
-						{#each preview.models as model (model.id)}
-							<div class="item">
-								<span class="item-name">{model.name}</span>
-								<div class="item-meta">
-									<span class="meta-text">{model.provider}</span>
-									<span class="meta-text">{model.apiName}</span>
-									{#if model.isBuiltin}
-										<Badge variant="success">{$i18n('ie_builtin')}</Badge>
-									{:else}
-										<Badge variant="warning">{$i18n('ie_custom')}</Badge>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			{/snippet}
-		</Card>
+				{/each}
+			</div>
+		</ExportEntitySection>
 	{/if}
 
 	<!-- Prompts Section -->
 	{#if preview.prompts.length > 0}
-		<Card>
-			{#snippet header()}
-				<button
-					type="button"
-					class="section-header"
-					aria-expanded={expandedPrompts}
-					onclick={() => (expandedPrompts = !expandedPrompts)}
-				>
-					<div class="section-title">
-						<span class="title-text">{$i18n('ie_entity_prompts')}</span>
-						<Badge variant="primary">{preview.prompts.length}</Badge>
+		<ExportEntitySection
+			title={$i18n('ie_entity_prompts')}
+			count={preview.prompts.length}
+			expanded={expanded.prompts}
+			onToggle={() => (expanded.prompts = !expanded.prompts)}
+		>
+			<div class="items-list">
+				{#each preview.prompts as prompt (prompt.id)}
+					<div class="item">
+						<span class="item-name">{prompt.name}</span>
+						<div class="item-meta">
+							<Badge variant="primary">{prompt.category}</Badge>
+							{#if prompt.description}
+								<span class="meta-text">{prompt.description}</span>
+							{/if}
+						</div>
 					</div>
-					<span class="expand-icon" class:expanded={expandedPrompts}>▼</span>
-				</button>
-			{/snippet}
-			{#snippet body()}
-				{#if expandedPrompts}
-					<div class="items-list">
-						{#each preview.prompts as prompt (prompt.id)}
-							<div class="item">
-								<span class="item-name">{prompt.name}</span>
-								<div class="item-meta">
-									<Badge variant="primary">{prompt.category}</Badge>
-									{#if prompt.description}
-										<span class="meta-text">{prompt.description}</span>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			{/snippet}
-		</Card>
+				{/each}
+			</div>
+		</ExportEntitySection>
 	{/if}
 
 	{#if totalCount === 0}
@@ -268,45 +220,6 @@ Shows summaries for each entity type and MCP sanitization options.
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 		color: var(--color-text-primary);
-	}
-
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		width: 100%;
-		padding: 0;
-		background: none;
-		border: none;
-		cursor: pointer;
-		gap: var(--spacing-md);
-		transition: opacity 0.2s;
-	}
-
-	.section-header:hover {
-		opacity: 0.8;
-	}
-
-	.section-title {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.title-text {
-		font-size: var(--font-size-md);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-text-primary);
-	}
-
-	.expand-icon {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		transition: transform 0.2s;
-	}
-
-	.expand-icon.expanded {
-		transform: rotate(180deg);
 	}
 
 	.items-list {

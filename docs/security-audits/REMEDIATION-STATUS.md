@@ -212,9 +212,9 @@
 |----|----------|---------|--------|----------|
 | ERR-1 | MEDIUM | 29/30 try/catch not using getErrorMessage | **DONE** | 18+ components updated to use getErrorMessage(). See frontend diff. |
 | ERR-2 | MEDIUM | 5 files use console.error/warn | **DONE** | All console.error/warn replaced: AgentForm (loadWarnings state + i18n), PromptSettings (store handles error), ValidationSettings/MemorySettings/ImportExportSettings (message state + i18n). Empty catch in AgentForm documented (store handles error). |
-| DUP-1 | MEDIUM | ValidationSettings 9 identical info-cards | **NOT DONE** | No template extraction. |
-| DUP-2 | MEDIUM | ImportPreview 4 identical sections | **NOT DONE** | |
-| DUP-3 | MEDIUM | ExportPreview 4 identical sections | **NOT DONE** | |
+| DUP-1 | MEDIUM | ValidationSettings 9 identical info-cards | **DONE** | Extracted `ValidationInfoCard.svelte` component. Merged auto/manual modes into single block with `@const` variant. Shared `toolBadgeList`/`mcpBadgeList` snippets reused by all 3 modes. ~130 lines removed. |
+| DUP-2 | MEDIUM | ImportPreview 4 identical sections | **DONE** | Data-driven loop with `entityDefs` array replaces 4 summary cards + 4 entity lists. `getEntityMeta()` helper for type-specific content. ~126 lines removed. |
+| DUP-3 | MEDIUM | ExportPreview 4 identical sections | **DONE** | Extracted `ExportEntitySection.svelte` component with collapsible Card + expand logic. 4 `expanded*` variables replaced by single object. MCP section kept inline (MCPFieldEditor + sanitization). ~80 lines removed. |
 | A11Y-1 | LOW | Tab ARIA attributes | **DONE** | ImportExportSettings: role="tablist", role="tab", aria-selected. |
 | A11Y-2 | LOW | aria-expanded on collapsible sections | **DONE** | ExportPreview: aria-expanded on 4 section-header buttons. |
 | A11Y-3 | LOW | aria-live on status messages | **DONE** | ImportExportSettings: role="status", aria-live="polite". |
