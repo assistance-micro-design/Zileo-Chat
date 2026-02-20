@@ -91,7 +91,8 @@ pub struct MessageCreate {
     pub role: String,
     /// Message content
     pub content: String,
-    /// Legacy token count
+    /// Legacy token count (computed from tokens_output, defaults to 0)
+    #[serde(default)]
     pub tokens: usize,
     /// Input tokens consumed
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -301,5 +302,58 @@ mod tests {
         assert_eq!(MessageRole::User.to_string(), "user");
         assert_eq!(MessageRole::Assistant.to_string(), "assistant");
         assert_eq!(MessageRole::System.to_string(), "system");
+    }
+
+    /// SA-013 #6: Verify MessageCreate always serializes the `tokens` field.
+    /// Rust `tokens: usize` is required, so it must always appear in JSON output.
+    #[test]
+    fn test_message_create_always_serializes_tokens() {
+        let create = MessageCreate::user("wf-1".to_string(), "Hello".to_string());
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(
+            json.contains("\"tokens\""),
+            "tokens field must always be present in serialized output"
+        );
+    }
+
+    /// SA-013 #6: Defense-in-depth - MessageCreate should deserialize even without
+    /// the `tokens` field, defaulting to 0. This protects against incomplete JSON
+    /// from external sources (import, tests).
+    #[test]
+    fn test_message_create_deserializes_without_tokens() {
+        let json = r#"{
+            "workflow_id": "wf-1",
+            "role": "user",
+            "content": "Hello"
+        }"#;
+        let result: Result<MessageCreate, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "MessageCreate should deserialize without tokens field"
+        );
+        assert_eq!(
+            result.unwrap().tokens,
+            0,
+            "Missing tokens should default to 0"
+        );
+    }
+
+    /// SA-013 #6: Verify tokens value is preserved through serialization roundtrip.
+    #[test]
+    fn test_message_create_tokens_roundtrip() {
+        let create = MessageCreate::assistant(
+            "wf-1".to_string(),
+            "Response".to_string(),
+            Some(100),
+            Some(75),
+            Some("gpt-4".to_string()),
+            None,
+            Some(1500),
+        );
+        assert_eq!(create.tokens, 75);
+
+        let json = serde_json::to_string(&create).unwrap();
+        let deserialized: MessageCreate = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tokens, 75, "tokens must survive roundtrip");
     }
 }

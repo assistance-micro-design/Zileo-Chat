@@ -85,6 +85,8 @@ export interface MessageCreate {
   role: MessageRole;
   /** Message content */
   content: string;
+  /** Legacy token count (computed from tokens_output, defaults to 0) */
+  tokens: number;
   /** Input tokens consumed */
   tokens_input?: number;
   /** Output tokens generated */
@@ -111,6 +113,7 @@ export function createUserMessage(workflowId: string, content: string): MessageC
     workflow_id: workflowId,
     role: 'user',
     content,
+    tokens: 0,
   };
 }
 
@@ -138,6 +141,7 @@ export function createAssistantMessage(
     workflow_id: workflowId,
     role: 'assistant',
     content,
+    tokens: metrics?.tokens_output ?? 0,
     tokens_input: metrics?.tokens_input,
     tokens_output: metrics?.tokens_output,
     model: metrics?.model,
@@ -159,6 +163,7 @@ export function createSystemMessage(workflowId: string, content: string): Messag
     workflow_id: workflowId,
     role: 'system',
     content,
+    tokens: 0,
   };
 }
 

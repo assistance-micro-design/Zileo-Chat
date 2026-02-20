@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 46 | Fix implemented and tested |
+| DONE | 47 | Fix implemented and tested |
 | PARTIAL | 6 | Some aspects done, others remain |
-| NOT DONE | 14 | Not yet addressed |
+| NOT DONE | 13 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 23 | 3 | 1 |
+| HIGH (27) | 24 | 3 | 0 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -31,7 +31,7 @@
 
 ## Tests Added
 
-### Rust (31 new tests)
+### Rust (34 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -66,6 +66,9 @@
 | commands/migration.rs | test_memory_migration_second_run_preserves_embeddings | Guard: SA-005 H3 core test |
 | commands/migration.rs | test_memory_v2_migration_guard | Guard: v2 migration idempotent |
 | commands/migration.rs | test_mcp_http_migration_guard | Guard: MCP HTTP migration idempotent |
+| models/message.rs | test_message_create_always_serializes_tokens | SA-013 #6: tokens always in JSON output |
+| models/message.rs | test_message_create_deserializes_without_tokens | SA-013 #6: defense-in-depth default |
+| models/message.rs | test_message_create_tokens_roundtrip | SA-013 #6: roundtrip preservation |
 
 ### TypeScript (35 new tests in 3 new files + 1 updated)
 
@@ -217,7 +220,7 @@
 |----|----------|---------|--------|----------|
 | #13 | CRITICAL | RiskLevel missing 'critical' variant | **DONE** | validation.rs: `RiskLevel::Critical` added. Schema ASSERT updated. 1 test. validation_helper.rs updated. |
 | #1-4 | HIGH (adj.) | AgentConfig optional vs required mismatch | **PARTIAL** | enable_thinking: `boolean` (was `boolean?`) in agent.ts. But max_tool_iterations not changed in TS. |
-| #6 | HIGH | MessageCreate missing tokens field | **NOT DONE** | No changes to MessageCreate type. |
+| #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
 | #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **NOT DONE** | No changes to ProviderSettings type. |
 | #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
 | #16-20 | MEDIUM | Console.* violations (28 instances) | **PARTIAL** | Many console.error replaced with getErrorMessage(). Some remain. |
@@ -253,7 +256,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | ~~SA-011 H-001: Activity capture race~~ | ~~Activities can be lost during streaming reset~~ | **DONE** (frontend guard + backend cancellation token propagation) |
 | ~~SA-011 H-002: loadWorkflows error recovery~~ | ~~Blank sidebar with no retry on DB failure~~ | **DONE** |
 | SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |
-| SA-013 #6: MessageCreate tokens | Missing field in TS type | 15min |
+| ~~SA-013 #6: MessageCreate tokens~~ | ~~Missing field in TS type~~ | **DONE** |
 | SA-013 #12: ProviderSettings.base_url | Nullability mismatch | 15min |
 
 ### Should Do (MEDIUM unresolved, grouped)
@@ -286,10 +289,10 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-20 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 891 tests passed |
-| npm run lint | **NOT RUN** | Should run before merge |
-| npm run check | **NOT RUN** | Should run before merge |
-| npm run test | **NOT RUN** | Should run before merge |
+| cargo test --lib | **PASS** | 2026-02-20, 894 tests passed |
+| npm run lint | **PASS** | 2026-02-20, 0 errors |
+| npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
+| npm run test | **PASS** | 2026-02-20, 225 tests passed |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: search prompts | **NOT RUN** | |
