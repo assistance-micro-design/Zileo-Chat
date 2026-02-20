@@ -27,6 +27,7 @@
 import { writable, derived, get } from 'svelte/store';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
 import { tokenStore } from './tokens';
+import { applyChunkToState } from './utils/chunkProcessor';
 
 // ============================================================================
 // Types
@@ -186,230 +187,31 @@ const store = writable<StreamingState>(initialState);
 // ============================================================================
 
 /**
- * Type for chunk handler functions that process stream chunks
+ * Process a stream chunk with streaming-specific side-effects.
+ * Delegates common state updates to applyChunkToState, then applies:
+ * - token: syncs tokenStore for real-time display
+ * - error: sets isStreaming to false
+ *
+ * @param state - Current streaming state
+ * @param chunk - Incoming stream chunk
+ * @returns Updated streaming state
  */
-type ChunkHandler = (state: StreamingState, chunk: StreamChunk) => StreamingState;
+function processChunk(state: StreamingState, chunk: StreamChunk): StreamingState {
+	// Apply common state update
+	const updated = applyChunkToState(state, chunk);
 
-/**
- * Handle token chunk - append content, increment counter, and sync with tokenStore.
- * Now supports real-time token updates via tokens_delta/tokens_total fields.
- */
-function handleToken(s: StreamingState, c: StreamChunk): StreamingState {
-	const newTokensReceived = s.tokensReceived + 1;
+	// Streaming-specific side-effects
+	if (chunk.chunk_type === 'token') {
+		const outputTokens = chunk.tokens_total ?? updated.tokensReceived;
+		tokenStore.updateStreamingTokens(outputTokens);
+	}
 
-	// Sync with tokenStore for real-time display
-	// Use tokens_total from backend if available, otherwise use received count
-	const outputTokens = c.tokens_total ?? newTokensReceived;
-	tokenStore.updateStreamingTokens(outputTokens);
+	if (chunk.chunk_type === 'error') {
+		return { ...updated, isStreaming: false };
+	}
 
-	return {
-		...s,
-		content: s.content + (c.content ?? ''),
-		tokensReceived: newTokensReceived
-	};
+	return updated;
 }
-
-/**
- * Handle tool_start chunk - add new tool with running status
- */
-function handleToolStart(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		tools: [
-			...s.tools,
-			{
-				name: c.tool ?? 'unknown',
-				status: 'running' as ToolStatus,
-				startedAt: Date.now()
-			}
-		]
-	};
-}
-
-/**
- * Handle tool_end chunk - mark tool as completed with duration
- */
-function handleToolEnd(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		tools: s.tools.map((t) =>
-			t.name === c.tool && t.status === 'running'
-				? { ...t, status: 'completed' as ToolStatus, duration: c.duration }
-				: t
-		)
-	};
-}
-
-/**
- * Handle reasoning chunk - add new reasoning step
- */
-function handleReasoning(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		reasoning: [
-			...s.reasoning,
-			{
-				content: c.content ?? '',
-				timestamp: Date.now(),
-				stepNumber: s.reasoning.length + 1
-			}
-		]
-	};
-}
-
-/**
- * Handle error chunk - set error message and stop streaming
- */
-function handleError(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		error: c.content ?? 'Unknown error',
-		isStreaming: false
-	};
-}
-
-/**
- * Handle sub_agent_start chunk - add new sub-agent with running status
- */
-function handleSubAgentStart(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		subAgents: [
-			...s.subAgents,
-			{
-				id: c.sub_agent_id ?? 'unknown',
-				name: c.sub_agent_name ?? 'Unknown Agent',
-				parentAgentId: c.parent_agent_id ?? '',
-				taskDescription: c.content ?? '',
-				status: 'running' as SubAgentStatus,
-				startedAt: Date.now(),
-				progress: 0
-			}
-		]
-	};
-}
-
-/**
- * Handle sub_agent_progress chunk - update sub-agent progress and status message
- */
-function handleSubAgentProgress(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		subAgents: s.subAgents.map((a) =>
-			a.id === c.sub_agent_id
-				? {
-						...a,
-						progress: c.progress ?? a.progress,
-						statusMessage: c.content ?? a.statusMessage
-					}
-				: a
-		)
-	};
-}
-
-/**
- * Handle sub_agent_complete chunk - mark sub-agent as completed with metrics
- */
-function handleSubAgentComplete(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		subAgents: s.subAgents.map((a) =>
-			a.id === c.sub_agent_id
-				? {
-						...a,
-						status: 'completed' as SubAgentStatus,
-						progress: 100,
-						duration: c.duration,
-						report: c.content,
-						metrics: c.metrics
-					}
-				: a
-		)
-	};
-}
-
-/**
- * Handle sub_agent_error chunk - mark sub-agent as errored with error message
- */
-function handleSubAgentError(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		subAgents: s.subAgents.map((a) =>
-			a.id === c.sub_agent_id
-				? {
-						...a,
-						status: 'error' as SubAgentStatus,
-						error: c.content ?? 'Unknown error',
-						duration: c.duration
-					}
-				: a
-		)
-	};
-}
-
-/**
- * Handle task_create chunk - add new task
- */
-function handleTaskCreate(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		tasks: [
-			...s.tasks,
-			{
-				id: c.task_id!,
-				name: c.task_name!,
-				status: (c.task_status ?? 'pending') as ActiveTask['status'],
-				priority: c.task_priority ?? 3,
-				createdAt: Date.now(),
-				updatedAt: Date.now()
-			}
-		]
-	};
-}
-
-/**
- * Handle task_update chunk - update task status
- */
-function handleTaskUpdate(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === c.task_id
-				? { ...t, status: c.task_status as ActiveTask['status'], updatedAt: Date.now() }
-				: t
-		)
-	};
-}
-
-/**
- * Handle task_complete chunk - mark task as completed
- */
-function handleTaskComplete(s: StreamingState, c: StreamChunk): StreamingState {
-	return {
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === c.task_id ? { ...t, status: 'completed' as const, updatedAt: Date.now() } : t
-		)
-	};
-}
-
-/**
- * Chunk handler registry mapping chunk types to their handler functions
- */
-const chunkHandlers: Record<string, ChunkHandler> = {
-	token: handleToken,
-	tool_start: handleToolStart,
-	tool_end: handleToolEnd,
-	reasoning: handleReasoning,
-	error: handleError,
-	sub_agent_start: handleSubAgentStart,
-	sub_agent_progress: handleSubAgentProgress,
-	sub_agent_complete: handleSubAgentComplete,
-	sub_agent_error: handleSubAgentError,
-	task_create: handleTaskCreate,
-	task_update: handleTaskUpdate,
-	task_complete: handleTaskComplete
-};
 
 /**
  * Streaming store with actions for managing real-time workflow execution.
@@ -439,15 +241,12 @@ export const streamingStore = {
 
 	/**
 	 * Process a stream chunk directly (called by backgroundWorkflowsStore for viewed workflow).
-	 * Unlike the event-based processChunk, this skips workflow_id filtering.
+	 * Skips workflow_id filtering since backgroundWorkflowsStore already handles routing.
 	 *
 	 * @param chunk - The stream chunk to process
 	 */
 	processChunkDirect(chunk: StreamChunk): void {
-		store.update((s) => {
-			const handler = chunkHandlers[chunk.chunk_type];
-			return handler ? handler(s, chunk) : s;
-		});
+		store.update((s) => processChunk(s, chunk));
 	},
 
 	/**

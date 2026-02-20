@@ -3,8 +3,8 @@
 **Date**: 2026-02-20 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 120 (vs main)
-**Lines**: +10,152 / -1,877
+**Files changed**: 133 (vs main)
+**Lines**: +10,647 / -2,542
 
 ---
 
@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 59 | Fix implemented and tested |
-| NOT DONE | 8 | Not yet addressed |
+| DONE | 60 | Fix implemented and tested |
+| NOT DONE | 7 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 21 | 14 |
+| MEDIUM (35) | 22 | 13 |
 | LOW (13) | 5 | 8 |
 | N/A (7) | - | - |
 
@@ -95,7 +95,7 @@
 | security/validation.rs | test_serialize_for_query_vec | SA-007 DUP-2: vec serializes to JSON array |
 | security/validation.rs | test_serialize_for_query_option_none | SA-007 DUP-2: None serializes to null |
 
-### TypeScript (35 new tests in 3 new files + 1 updated)
+### TypeScript (57 new tests in 4 new files + 1 updated)
 
 | File | Tests | Purpose |
 |------|-------|---------|
@@ -103,6 +103,7 @@
 | utils/__tests__/url.test.ts | 11 tests | isAllowedScheme (XSS defense) |
 | stores/__tests__/activity.test.ts | 8 tests | Activity capture guard (SA-011 H-001 race condition) |
 | stores/__tests__/workflows.test.ts | 5 new tests | loadWorkflows retry recovery (SA-011 H-002) |
+| stores/__tests__/chunkProcessor.test.ts | 22 tests | Shared chunk processor (SA-009 F1: all 12 chunk types + immutability + extended state) |
 
 ### Infrastructure
 
@@ -194,7 +195,7 @@
 
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
-| F1 | MEDIUM | Streaming/backgroundWorkflows chunk duplication | **NOT DONE** | |
+| F1 | MEDIUM | Streaming/backgroundWorkflows chunk duplication | **DONE** | `applyChunkToState()` in `stores/utils/chunkProcessor.ts`. Both stores delegate to shared processor. 22 new tests. |
 | F2 | MEDIUM | Manual error extraction in 6 stores | **DONE** | validation-settings.ts, validation.ts: now use getErrorMessage(). |
 | F4 | MEDIUM | userQuestion.ts subscribe/unsub hack | **DONE** | Replaced with `get(store)` pattern. |
 | F9 | - | Zero ERR_SVELTE_005 violations | **CONFIRMED** | Still true. |
@@ -320,7 +321,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | cargo test --lib | **PASS** | 2026-02-20, 920 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
-| npm run test | **PASS** | 2026-02-20, 225 tests passed |
+| npm run test | **PASS** | 2026-02-20, 247 tests passed |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: search prompts | **NOT RUN** | |

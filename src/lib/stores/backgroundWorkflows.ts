@@ -33,8 +33,8 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
 import type { WorkflowStreamState, BackgroundWorkflowStatus } from '$types/background-workflow';
 import type { UserQuestionStreamPayload } from '$types/user-question';
-import type { ActiveTool, ActiveSubAgent, ActiveTask } from '$lib/stores/streaming';
 import { toastStore } from './toast';
+import { applyChunkToState } from './utils/chunkProcessor';
 import { settings as validationSettings } from './validation-settings';
 
 // ============================================================================
@@ -141,7 +141,8 @@ function createInitialExecution(
 
 /**
  * Applies a stream chunk to an existing execution state, returning the updated state.
- * This is a pure function that does not mutate the input.
+ * Delegates common chunk processing to applyChunkToState and handles
+ * background-specific chunk types (user_question_start/complete).
  *
  * @param exec - Current execution state
  * @param chunk - Incoming stream chunk
@@ -151,140 +152,15 @@ function updateExecutionFromChunk(
 	exec: WorkflowStreamState,
 	chunk: StreamChunk
 ): WorkflowStreamState {
-	const updated = { ...exec };
+	// Apply common state update (token, tool, reasoning, sub-agent, task, error)
+	const updated = applyChunkToState(exec, chunk);
 
-	switch (chunk.chunk_type) {
-		case 'token':
-			updated.content += chunk.content ?? '';
-			updated.tokensReceived += 1;
-			break;
-
-		case 'tool_start':
-			updated.tools = [
-				...updated.tools,
-				{
-					name: chunk.tool ?? 'unknown',
-					status: 'running' as const,
-					startedAt: Date.now()
-				}
-			];
-			break;
-
-		case 'tool_end':
-			updated.tools = updated.tools.map((t: ActiveTool) =>
-				t.name === chunk.tool && t.status === 'running'
-					? { ...t, status: 'completed' as const, duration: chunk.duration }
-					: t
-			);
-			break;
-
-		case 'reasoning':
-			updated.reasoning = [
-				...updated.reasoning,
-				{
-					content: chunk.content ?? '',
-					timestamp: Date.now(),
-					stepNumber: updated.reasoning.length + 1
-				}
-			];
-			break;
-
-		case 'error':
-			updated.error = chunk.content ?? 'Unknown error';
-			break;
-
-		case 'sub_agent_start':
-			updated.subAgents = [
-				...updated.subAgents,
-				{
-					id: chunk.sub_agent_id ?? 'unknown',
-					name: chunk.sub_agent_name ?? 'Unknown Agent',
-					parentAgentId: chunk.parent_agent_id ?? '',
-					taskDescription: chunk.content ?? '',
-					status: 'running' as const,
-					startedAt: Date.now(),
-					progress: 0
-				}
-			];
-			break;
-
-		case 'sub_agent_progress':
-			updated.subAgents = updated.subAgents.map((a: ActiveSubAgent) =>
-				a.id === chunk.sub_agent_id
-					? {
-							...a,
-							progress: chunk.progress ?? a.progress,
-							statusMessage: chunk.content ?? a.statusMessage
-						}
-					: a
-			);
-			break;
-
-		case 'sub_agent_complete':
-			updated.subAgents = updated.subAgents.map((a: ActiveSubAgent) =>
-				a.id === chunk.sub_agent_id
-					? {
-							...a,
-							status: 'completed' as const,
-							progress: 100,
-							duration: chunk.duration,
-							report: chunk.content,
-							metrics: chunk.metrics
-						}
-					: a
-			);
-			break;
-
-		case 'sub_agent_error':
-			updated.subAgents = updated.subAgents.map((a: ActiveSubAgent) =>
-				a.id === chunk.sub_agent_id
-					? {
-							...a,
-							status: 'error' as const,
-							error: chunk.content ?? 'Unknown error',
-							duration: chunk.duration
-						}
-					: a
-			);
-			break;
-
-		case 'task_create':
-			updated.tasks = [
-				...updated.tasks,
-				{
-					id: chunk.task_id!,
-					name: chunk.task_name!,
-					status: (chunk.task_status ?? 'pending') as ActiveTask['status'],
-					priority: chunk.task_priority ?? 3,
-					createdAt: Date.now(),
-					updatedAt: Date.now()
-				}
-			];
-			break;
-
-		case 'task_update':
-			updated.tasks = updated.tasks.map((t: ActiveTask) =>
-				t.id === chunk.task_id
-					? { ...t, status: chunk.task_status as ActiveTask['status'], updatedAt: Date.now() }
-					: t
-			);
-			break;
-
-		case 'task_complete':
-			updated.tasks = updated.tasks.map((t: ActiveTask) =>
-				t.id === chunk.task_id
-					? { ...t, status: 'completed' as const, updatedAt: Date.now() }
-					: t
-			);
-			break;
-
-		case 'user_question_start':
-			updated.hasPendingQuestion = true;
-			break;
-
-		case 'user_question_complete':
-			updated.hasPendingQuestion = false;
-			break;
+	// Background-specific chunk types
+	if (chunk.chunk_type === 'user_question_start') {
+		return { ...updated, hasPendingQuestion: true };
+	}
+	if (chunk.chunk_type === 'user_question_complete') {
+		return { ...updated, hasPendingQuestion: false };
 	}
 
 	return updated;
