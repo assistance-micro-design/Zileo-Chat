@@ -77,6 +77,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { toastStore, navigationTarget } from '$lib/stores/toast';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
@@ -135,8 +136,13 @@ Uses extracted components, services, and stores for clean architecture.
 			const result = await MessageService.loadWithSubAgents(workflowId);
 			pageState.messages = result.messages;
 			if (result.error) {
-				console.error('Error loading messages:', result.error);
-				// Optionally show UI notification here
+				toastStore.add({
+					type: 'error',
+					title: result.error,
+					message: '',
+					persistent: false,
+					duration: 5000
+				});
 			}
 
 			// Load historical activities (store handles internally)
@@ -154,23 +160,15 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Create a new workflow.
 	 */
 	async function handleCreateWorkflow(name: string, agentId: string): Promise<void> {
-		try {
-			const id = await WorkflowService.create(name, agentId);
+		const id = await WorkflowService.create(name, agentId);
 
-			// Update selection (but don't set selectedAgentId yet - let selectWorkflow handle it)
-			pageState.selectedWorkflowId = id;
-			pageState.messages = [];
+		pageState.selectedWorkflowId = id;
+		pageState.messages = [];
 
-			// Reload workflows and select the new one
-			await workflowStore.loadWorkflows();
-			await selectWorkflow(id);
+		await workflowStore.loadWorkflows();
+		await selectWorkflow(id);
 
-			// Close modal
-			modalState = { type: 'none' };
-		} catch (err) {
-			console.error('Failed to create workflow:', err);
-			throw err; // Let modal handle the error
-		}
+		modalState = { type: 'none' };
 	}
 
 	/**
@@ -233,7 +231,13 @@ Uses extracted components, services, and stores for clean architecture.
 
 			modalState = { type: 'none' };
 		} catch (err) {
-			console.error('Failed to delete workflow:', err);
+			toastStore.add({
+				type: 'error',
+				title: getErrorMessage(err),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
 		}
 	}
 
@@ -245,8 +249,13 @@ Uses extracted components, services, and stores for clean architecture.
 			await WorkflowService.rename(workflowId, newName);
 			await workflowStore.loadWorkflows();
 		} catch (err) {
-			console.error('Failed to rename workflow:', err);
-			alert('Failed to rename workflow: ' + err);
+			toastStore.add({
+				type: 'error',
+				title: getErrorMessage(err),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
 		}
 	}
 
@@ -278,18 +287,15 @@ Uses extracted components, services, and stores for clean architecture.
 						config.llm.model,
 						config.llm.provider.toLowerCase() as ProviderType
 					);
-					// Update token store with model context window and pricing
 					tokenStore.updateFromModel(model);
 					pageState.currentContextWindow = model.context_window;
-				} catch (modelErr) {
-					console.warn('Failed to load model for token metrics, using defaults:', modelErr);
+				} catch {
 					pageState.currentContextWindow = 128000;
 				}
 			} else {
 				pageState.currentContextWindow = 128000;
 			}
-		} catch (e) {
-			console.error('Failed to load agent config:', e);
+		} catch {
 			pageState.currentMaxIterations = 50;
 			pageState.currentContextWindow = 128000;
 		}

@@ -57,7 +57,6 @@ export function setLanguageTag(locale: Locale | string): void {
 	if (SUPPORTED_LOCALES.includes(locale as Locale)) {
 		currentLocale.set(locale as Locale);
 	} else {
-		console.warn(`Unsupported locale: ${locale}, using ${DEFAULT_LOCALE}`);
 		currentLocale.set(DEFAULT_LOCALE);
 	}
 }

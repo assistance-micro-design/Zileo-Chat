@@ -106,7 +106,6 @@ export const MessageService = {
 			const messages = await invoke<Message[]>('load_workflow_messages', { workflowId });
 			return { messages };
 		} catch (e) {
-			console.error('Failed to load messages:', e);
 			return { messages: [], error: getErrorMessage(e) };
 		}
 	},
@@ -128,7 +127,6 @@ export const MessageService = {
 			]);
 			return { messages: enrichMessagesWithSubAgents(messages, executions) };
 		} catch (e) {
-			console.error('Failed to load messages with sub-agents:', e);
 			return { messages: [], error: getErrorMessage(e) };
 		}
 	},

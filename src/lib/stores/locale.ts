@@ -42,7 +42,6 @@ function createLocaleStore() {
 		 */
 		setLocale: (locale: Locale): void => {
 			if (!SUPPORTED_LOCALES.includes(locale)) {
-				console.warn(`Unsupported locale: ${locale}, falling back to ${DEFAULT_LOCALE}`);
 				locale = DEFAULT_LOCALE;
 			}
 

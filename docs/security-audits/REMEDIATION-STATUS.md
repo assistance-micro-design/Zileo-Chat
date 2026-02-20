@@ -3,7 +3,7 @@
 **Date**: 2026-02-20 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 77 (vs main)
+**Files changed**: 87 (vs main)
 **Lines**: +2,150 / -1,510 (approx)
 
 ---
@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 53 | Fix implemented and tested |
-| PARTIAL | 2 | Some aspects done, others remain |
+| DONE | 54 | Fix implemented and tested |
+| PARTIAL | 1 | Some aspects done, others remain |
 | NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -21,7 +21,7 @@
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
 | HIGH (27) | 26 | 1 | 0 |
-| MEDIUM (35) | 17 | 1 | 17 |
+| MEDIUM (35) | 18 | 0 | 17 |
 | LOW (13) | 5 | 0 | 8 |
 | N/A (7) | - | - | - |
 
@@ -232,7 +232,7 @@
 | #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
 | #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **DONE** | llm_models.rs: removed `skip_serializing_if` from `base_url`. Now serializes as `null` when None, matching TS `string \| null`. 3 new tests. |
 | #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
-| #16-20 | MEDIUM | Console.* violations (28 instances) | **PARTIAL** | All settings/ console.error/warn removed (SA-010 ERR-2 complete). Remaining console.* in non-settings files (agent/+page.svelte, services, stores). |
+| #16-20 | MEDIUM | Console.* violations (28 instances) | **DONE** | All 28 console.* removed: services (silent return), stores/i18n (silent fallback), agent page (toast notifications), settings pages (error state in UI), components (UI error state or silent guard). 0 remaining. |
 | model_id | - | Workflow.model_id convention | **DONE** | workflow.ts: `model_id: string | null` (was `model_id?: string`). |
 
 ---
@@ -288,7 +288,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | UUID bind params for validated IDs | SA-001 L1-L18 | Defense-in-depth, IDs from DB |
 | Chat/workflow component quality | SA-011 M-001 to M-012 | UX improvements, not security |
 | Error message context | SA-007 F14 | Quality improvement |
-| Remaining console.* (non-settings) | SA-013 #16-20 partial | Settings complete. Non-settings remain (services, pages) |
+| ~~Remaining console.* (non-settings)~~ | ~~SA-013 #16-20~~ | **DONE** - All 22 remaining removed |
 
 ---
 

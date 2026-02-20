@@ -131,7 +131,6 @@ export const validationStore = {
 	async init(): Promise<void> {
 		// Safety check: cleanup existing listener if already initialized
 		if (isInitialized) {
-			console.warn('[validation] Store already initialized, cleaning up first');
 			await this.cleanup();
 		}
 

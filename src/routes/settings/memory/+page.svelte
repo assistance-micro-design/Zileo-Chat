@@ -23,6 +23,7 @@ Manages memory configuration and memory list with lazy loading.
 	import { onMount } from 'svelte';
 	import { Card, StatusIndicator, HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Lazy loaded components */
 	type LazyMemorySettings = typeof import('$lib/components/settings/memory/MemorySettings.svelte').default;
@@ -30,12 +31,12 @@ Manages memory configuration and memory list with lazy loading.
 
 	let MemorySettingsComponent = $state<LazyMemorySettings | null>(null);
 	let MemoryListComponent = $state<LazyMemoryList | null>(null);
+	let loadError = $state<string | null>(null);
 
 	/** Reference for MemorySettings to refresh stats */
 	let memorySettingsRef = $state<{ refreshStats: () => Promise<void> } | undefined>(undefined);
 
 	onMount(() => {
-		// Lazy load memory components in parallel
 		Promise.all([
 			import('$lib/components/settings/memory/MemorySettings.svelte'),
 			import('$lib/components/settings/memory/MemoryList.svelte')
@@ -45,7 +46,7 @@ Manages memory configuration and memory list with lazy loading.
 				MemoryListComponent = memoryListModule.default;
 			})
 			.catch((err: unknown) => {
-				console.warn('[Settings/Memory] Failed to lazy load components:', err);
+				loadError = getErrorMessage(err);
 			});
 	});
 </script>
@@ -74,6 +75,15 @@ Manages memory configuration and memory list with lazy loading.
 				<MemoryListComponent onchange={() => memorySettingsRef?.refreshStats()} />
 			</div>
 		</div>
+	{:else if loadError}
+		<Card>
+			{#snippet body()}
+				<div class="lazy-loading">
+					<StatusIndicator status="error" />
+					<span>{loadError}</span>
+				</div>
+			{/snippet}
+		</Card>
 	{:else}
 		<Card>
 			{#snippet body()}

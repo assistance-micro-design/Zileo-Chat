@@ -66,8 +66,7 @@ export const ActivityService = {
 	async loadToolExecutions(workflowId: string): Promise<ToolExecution[]> {
 		try {
 			return await invoke<ToolExecution[]>('load_workflow_tool_executions', { workflowId });
-		} catch (e) {
-			console.error('Failed to load tool executions:', e);
+		} catch {
 			return [];
 		}
 	},
@@ -81,8 +80,7 @@ export const ActivityService = {
 	async loadThinkingSteps(workflowId: string): Promise<ThinkingStep[]> {
 		try {
 			return await invoke<ThinkingStep[]>('load_workflow_thinking_steps', { workflowId });
-		} catch (e) {
-			console.error('Failed to load thinking steps:', e);
+		} catch {
 			return [];
 		}
 	},
@@ -96,8 +94,7 @@ export const ActivityService = {
 	async loadSubAgentExecutions(workflowId: string): Promise<SubAgentExecution[]> {
 		try {
 			return await invoke<SubAgentExecution[]>('load_workflow_sub_agent_executions', { workflowId });
-		} catch (e) {
-			console.error('Failed to load sub-agent executions:', e);
+		} catch {
 			return [];
 		}
 	},
@@ -111,8 +108,7 @@ export const ActivityService = {
 	async loadTasks(workflowId: string): Promise<Task[]> {
 		try {
 			return await invoke<Task[]>('list_workflow_tasks', { workflowId });
-		} catch (e) {
-			console.error('Failed to load tasks:', e);
+		} catch {
 			return [];
 		}
 	},

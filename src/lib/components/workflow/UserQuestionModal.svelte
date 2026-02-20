@@ -85,7 +85,6 @@
 	 */
 	async function handleSubmit(): Promise<void> {
 		if (!$currentQuestion || !isValid()) {
-			console.warn('[UserQuestionModal] Submit blocked - invalid state');
 			return;
 		}
 
@@ -103,7 +102,6 @@
 	 */
 	async function handleSkip(): Promise<void> {
 		if (!$currentQuestion) {
-			console.warn('[UserQuestionModal] Skip blocked - no current question');
 			return;
 		}
 

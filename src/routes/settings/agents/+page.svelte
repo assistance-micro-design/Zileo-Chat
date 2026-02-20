@@ -23,10 +23,12 @@ Manages agent configuration with lazy loading.
 	import { onMount } from 'svelte';
 	import { Card, StatusIndicator } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Lazy loaded AgentSettings component */
 	type LazyAgentSettings = typeof import('$lib/components/settings/agents/AgentSettings.svelte').default;
 	let AgentSettingsComponent = $state<LazyAgentSettings | null>(null);
+	let loadError = $state<string | null>(null);
 
 	/** Refresh trigger for AgentSettings */
 	let agentRefreshKey = $state(0);
@@ -39,16 +41,14 @@ Manages agent configuration with lazy loading.
 	}
 
 	onMount(() => {
-		// Lazy load AgentSettings component
 		import('$lib/components/settings/agents/AgentSettings.svelte')
 			.then((module) => {
 				AgentSettingsComponent = module.default;
 			})
 			.catch((err: unknown) => {
-				console.warn('[Settings/Agents] Failed to lazy load component:', err);
+				loadError = getErrorMessage(err);
 			});
 
-		// Only add event listeners in browser context (onMount only runs client-side)
 		window.addEventListener('settings:refresh', handleSettingsRefresh);
 		return () => {
 			window.removeEventListener('settings:refresh', handleSettingsRefresh);
@@ -59,6 +59,15 @@ Manages agent configuration with lazy loading.
 <section class="settings-section">
 	{#if AgentSettingsComponent}
 		<AgentSettingsComponent refreshTrigger={agentRefreshKey} />
+	{:else if loadError}
+		<Card>
+			{#snippet body()}
+				<div class="lazy-loading">
+					<StatusIndicator status="error" />
+					<span>{loadError}</span>
+				</div>
+			{/snippet}
+		</Card>
 	{:else}
 		<Card>
 			{#snippet body()}
