@@ -21,6 +21,7 @@
 	 */
 	import { i18n } from '$lib/i18n';
 	import { Button } from '$lib/components/ui';
+	import { openUrl } from '@tauri-apps/plugin-opener';
 
 	interface Props {
 		onNext: () => void;
@@ -30,8 +31,8 @@
 
 	const EXTERNAL_URL = 'https://assistancemicrodesign.net/';
 
-	function openExternalLink(): void {
-		window.open(EXTERNAL_URL, '_blank', 'noopener,noreferrer');
+	async function openExternalLink(): Promise<void> {
+		await openUrl(EXTERNAL_URL);
 	}
 
 	function handleSkip(): void {

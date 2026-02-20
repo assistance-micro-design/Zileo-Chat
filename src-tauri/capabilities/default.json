@@ -8,7 +8,23 @@
     "core:event:default",
     "core:event:allow-listen",
     "core:event:allow-emit",
-    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" },
+        { "url": "mailto:*" }
+      ],
+      "deny": [
+        { "url": "file://*" },
+        { "url": "tel:*" },
+        { "url": "data:*" },
+        { "url": "javascript:*" },
+        { "url": "vbscript:*" }
+      ]
+    },
+    "opener:deny-open-path",
+    "opener:allow-reveal-item-in-dir",
     "dialog:default"
   ]
 }

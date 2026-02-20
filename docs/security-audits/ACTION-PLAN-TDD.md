@@ -38,7 +38,7 @@
 | **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests |
 | **3-B** | Defense-in-Depth | **DONE** | URL scheme (11 tests), depth limit (2 tests), entity limit |
 | **3-C** | Dependency Feature Bloat | **PARTIAL** | rig-core features removed. SurrealDB unchanged |
-| **3-D** | Tauri Permissions Hardening | **NOT DONE** | |
+| **3-D** | Tauri Permissions Hardening | **PARTIAL** | SA-005 M1+M4 DONE (opener scope + StepImport openUrl). M2-M3 NOT DONE |
 | **3-E** | Type Alignment Medium | **PARTIAL** | Workflow.model_id DONE. Task priority NOT DONE |
 
 ## Philosophie

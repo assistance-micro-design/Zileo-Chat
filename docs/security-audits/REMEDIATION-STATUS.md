@@ -3,8 +3,8 @@
 **Date**: 2026-02-20 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 75 (vs main)
-**Lines**: +2,100 / -1,500 (approx)
+**Files changed**: 77 (vs main)
+**Lines**: +2,150 / -1,510 (approx)
 
 ---
 
@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 49 | Fix implemented and tested |
-| PARTIAL | 5 | Some aspects done, others remain |
+| DONE | 51 | Fix implemented and tested |
+| PARTIAL | 4 | Some aspects done, others remain |
 | NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -21,7 +21,7 @@
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
 | HIGH (27) | 26 | 1 | 0 |
-| MEDIUM (34) | 14 | 3 | 17 |
+| MEDIUM (35) | 16 | 2 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
 
@@ -130,9 +130,10 @@
 | H1 | HIGH | Google Fonts blocked by CSP | **DONE** | CDN links removed from +layout.svelte. 4 @font-face in global.css. 4 woff2 files in /static/fonts/. |
 | H2 | HIGH | Missing sanitize_for_surrealdb() in import | **DONE** | Same as S2-M1 above. |
 | H3 | HIGH | migrate_memory_schema destroys embeddings | **DONE** | migration_log table in schema.rs. check_migration_applied/record_migration_applied guards all 3 migrations. 7 new tests. |
-| M1 | MEDIUM | opener:default allows any URL | **PARTIAL** | isAllowedScheme() added for markdown links. But Tauri permission scope unchanged. |
+| M1 | MEDIUM | opener:default allows any URL | **DONE** | isAllowedScheme() for markdown links + Tauri permission scope restricted: `opener:allow-open-url` with allow `https://*`, `http://*`, `mailto:*` and deny `file://*`, `tel:*`, `data:*`, `javascript:*`, `vbscript:*`. `opener:deny-open-path` added. StepImport.svelte: `window.open()` replaced with `openUrl()` (SA-005 M4). |
 | M2 | MEDIUM | dialog:default grants all types | **NOT DONE** | Tauri capabilities unchanged. |
 | M3 | MEDIUM | No IPC deny patterns | **NOT DONE** | Tauri capabilities unchanged. |
+| M4 | MEDIUM | window.open() bypasses opener plugin | **DONE** | StepImport.svelte: replaced `window.open()` with `openUrl()` from `@tauri-apps/plugin-opener`. Now goes through scoped permission. |
 | L1-L3 | LOW | CSP documentation, permission comments | **NOT DONE** | No documentation added. |
 
 ### SA-006: Dependency Vulnerabilities
@@ -266,7 +267,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 | Group | Findings | Effort |
 |-------|----------|--------|
-| Tauri permissions hardening | SA-005 M1-M3 | 1h |
+| Tauri permissions hardening | SA-005 M2-M3 (M1+M4 DONE) | 30min |
 | Template deduplication | SA-010 DUP-1/2/3 | 3h |
 | Code deduplication (Rust) | SA-007 DUP-1/2/3, SA-008 DUP-1/3/4 | 6h |
 | Function decomposition | SA-007 F1-F13 | 4h |
