@@ -376,6 +376,51 @@ pub async fn create_agent(
     Ok(agent_id)
 }
 
+/// Merges partial update fields with existing agent config, validating each field.
+fn merge_agent_config(
+    update: &AgentConfigUpdate,
+    existing: &AgentConfig,
+) -> Result<AgentConfig, String> {
+    let name = match &update.name {
+        Some(n) => validate_agent_name(n)?,
+        None => existing.name.clone(),
+    };
+    let llm = match &update.llm {
+        Some(l) => validate_llm_config(l)?,
+        None => existing.llm.clone(),
+    };
+    let tools = match &update.tools {
+        Some(t) => validate_tools(t)?,
+        None => existing.tools.clone(),
+    };
+    let mcp_servers = match &update.mcp_servers {
+        Some(m) => validate_mcp_servers(m)?,
+        None => existing.mcp_servers.clone(),
+    };
+    let system_prompt = match &update.system_prompt {
+        Some(p) => validate_system_prompt(p)?,
+        None => existing.system_prompt.clone(),
+    };
+    let max_tool_iterations = update
+        .max_tool_iterations
+        .map_or(existing.max_tool_iterations, |m| m.clamp(1, 200));
+    let enable_thinking = update
+        .enable_thinking
+        .unwrap_or(existing.enable_thinking);
+
+    Ok(AgentConfig {
+        id: existing.id.clone(),
+        name,
+        lifecycle: existing.lifecycle.clone(),
+        llm,
+        tools,
+        mcp_servers,
+        system_prompt,
+        max_tool_iterations,
+        enable_thinking,
+    })
+}
+
 /// Updates an existing agent
 ///
 /// Validates the configuration, updates database, and re-registers in memory.
@@ -388,71 +433,21 @@ pub async fn update_agent(
 ) -> Result<AgentConfig, String> {
     info!("Updating agent");
 
-    // Validate agent ID
     let validated_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
         warn!(error = %e, "Invalid agent_id");
         format!("Invalid agent_id: {}", e)
     })?;
 
-    // Get existing agent
     let existing = state.registry.get(&validated_id).await.ok_or_else(|| {
         warn!(agent_id = %validated_id, "Agent not found");
         "Agent not found".to_string()
     })?;
 
-    let existing_config = existing.config().clone();
+    let mut updated_config = merge_agent_config(&config, existing.config())?;
+    updated_config.id = validated_id.clone();
 
-    // Build updated config (merge with existing)
-    let new_name = match &config.name {
-        Some(n) => validate_agent_name(n)?,
-        None => existing_config.name.clone(),
-    };
-
-    let new_llm = match &config.llm {
-        Some(l) => validate_llm_config(l)?,
-        None => existing_config.llm.clone(),
-    };
-
-    let new_tools = match &config.tools {
-        Some(t) => validate_tools(t)?,
-        None => existing_config.tools.clone(),
-    };
-
-    let new_mcp = match &config.mcp_servers {
-        Some(m) => validate_mcp_servers(m)?,
-        None => existing_config.mcp_servers.clone(),
-    };
-
-    let new_prompt = match &config.system_prompt {
-        Some(p) => validate_system_prompt(p)?,
-        None => existing_config.system_prompt.clone(),
-    };
-
-    let new_max_iterations = match config.max_tool_iterations {
-        Some(m) => m.clamp(1, 200),
-        None => existing_config.max_tool_iterations,
-    };
-
-    let new_enable_thinking = match config.enable_thinking {
-        Some(e) => e,
-        None => existing_config.enable_thinking,
-    };
-
-    let updated_config = AgentConfig {
-        id: validated_id.clone(),
-        name: new_name,
-        lifecycle: existing_config.lifecycle.clone(), // Cannot change lifecycle
-        llm: new_llm,
-        tools: new_tools,
-        mcp_servers: new_mcp,
-        system_prompt: new_prompt,
-        max_tool_iterations: new_max_iterations,
-        enable_thinking: new_enable_thinking,
-    };
-
-    // Serialize fields for database (OPT-5 refactoring)
+    // Serialize and persist to database
     let fields = serialize_agent_fields(&updated_config)?;
-
     let query = format!(
         "UPDATE agent:`{}` SET
             name = {},
@@ -469,8 +464,8 @@ pub async fn update_agent(
         fields.tools_json,
         fields.mcp_json,
         fields.prompt_json,
-        new_max_iterations,
-        new_enable_thinking
+        updated_config.max_tool_iterations,
+        updated_config.enable_thinking
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -478,7 +473,7 @@ pub async fn update_agent(
         format!("Failed to update agent: {}", e)
     })?;
 
-    // Unregister old and register new agent (OPT-5 refactoring)
+    // Unregister old and register new agent
     state.registry.unregister_any(&validated_id).await;
     register_agent_runtime(state.inner(), &validated_id, updated_config.clone()).await;
 

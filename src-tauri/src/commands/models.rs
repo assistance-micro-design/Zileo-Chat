@@ -318,7 +318,6 @@ pub async fn create_model(
     tracing::Span::current().record("provider", data.provider.to_string().as_str());
     tracing::Span::current().record("name", &data.name);
 
-    // Validate request
     data.validate()?;
 
     info!(
@@ -327,12 +326,35 @@ pub async fn create_model(
         "Creating custom model"
     );
 
-    // Check for duplicate api_name (use bind params to prevent injection)
+    // Check for duplicate api_name
+    check_model_uniqueness(&state.db, &data).await?;
+
+    // Generate ID and create model
+    let model_id = Uuid::new_v4().to_string();
+    let now = Utc::now();
+    let model = LLMModel::from_create_request(model_id.clone(), &data);
+
+    // Persist to database
+    insert_model_record(&state.db, &model_id, &model).await?;
+
+    info!(model_id = %model_id, "Model created");
+
+    Ok(LLMModel {
+        created_at: now,
+        updated_at: now,
+        ..model
+    })
+}
+
+/// Checks that no model with the same api_name exists for the provider.
+async fn check_model_uniqueness(
+    db: &crate::db::DBClient,
+    data: &CreateModelRequest,
+) -> Result<(), String> {
     let check_query =
         "SELECT count() FROM llm_model WHERE provider = $provider AND api_name = $api_name GROUP ALL";
 
-    let check_results: Vec<serde_json::Value> = state
-        .db
+    let check_results: Vec<serde_json::Value> = db
         .query_json_with_params(
             check_query,
             vec![
@@ -353,15 +375,15 @@ pub async fn create_model(
         ));
     }
 
-    // Generate ID and timestamps
-    let model_id = Uuid::new_v4().to_string();
-    let now = Utc::now();
+    Ok(())
+}
 
-    // Create the model from request
-    let model = LLMModel::from_create_request(model_id.clone(), &data);
-
-    // Insert into database using parameterized query (SurrealDB SDK 2.x workaround)
-    // model_id is from Uuid::new_v4() so safe for format!() in record ID position
+/// Inserts a model record into the database with timestamps.
+async fn insert_model_record(
+    db: &crate::db::DBClient,
+    model_id: &str,
+    model: &LLMModel,
+) -> Result<(), String> {
     let insert_query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
     let insert_data = serde_json::json!({
         "id": model_id,
@@ -378,38 +400,17 @@ pub async fn create_model(
     });
 
     // time::now() must be set separately as a SurrealQL function (not a param)
-    state
-        .db
-        .execute_with_params(
-            &format!(
-                "{} ; UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
-                insert_query, model_id
-            ),
-            vec![("data".to_string(), insert_data)],
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to create model");
-            format!("Failed to create model: {}", e)
-        })?;
-
-    info!(model_id = %model_id, "Model created");
-
-    // Return the model with proper timestamps
-    Ok(LLMModel {
-        id: model_id,
-        provider: model.provider,
-        name: model.name,
-        api_name: model.api_name,
-        context_window: model.context_window,
-        max_output_tokens: model.max_output_tokens,
-        temperature_default: model.temperature_default,
-        is_builtin: false,
-        is_reasoning: model.is_reasoning,
-        input_price_per_mtok: model.input_price_per_mtok,
-        output_price_per_mtok: model.output_price_per_mtok,
-        created_at: now,
-        updated_at: now,
+    db.execute_with_params(
+        &format!(
+            "{} ; UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+            insert_query, model_id
+        ),
+        vec![("data".to_string(), insert_data)],
+    )
+    .await
+    .map_err(|e| {
+        error!(error = %e, "Failed to create model");
+        format!("Failed to create model: {}", e)
     })
 }
 
@@ -766,23 +767,81 @@ pub async fn update_provider_settings(
 // Connection Test Commands
 // ============================================================================
 
+/// Converts a `test_connection()` Result<bool, E> into a ConnectionTestResult.
+fn connection_test_outcome(
+    result: Result<bool, impl std::fmt::Display>,
+    provider_type: ProviderType,
+    start: Instant,
+    label: &str,
+) -> ConnectionTestResult {
+    match result {
+        Ok(true) => {
+            let latency = start.elapsed().as_millis() as u64;
+            info!(provider = %label, latency_ms = latency, "Connection successful");
+            ConnectionTestResult::success(provider_type, latency, None)
+        }
+        Ok(false) => {
+            warn!(provider = %label, "Connection returned false");
+            ConnectionTestResult::failure(provider_type, "Connection test returned false".into())
+        }
+        Err(e) => {
+            warn!(provider = %label, error = %e, "Connection failed");
+            ConnectionTestResult::failure(provider_type, format!("Connection failed: {}", e))
+        }
+    }
+}
+
+/// Tests Mistral API connectivity by listing models.
+async fn test_mistral_api(
+    api_key: &str,
+    provider_type: ProviderType,
+    start: Instant,
+) -> ConnectionTestResult {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return ConnectionTestResult::failure(
+                provider_type,
+                format!("Failed to create HTTP client: {}", e),
+            )
+        }
+    };
+
+    let response = client
+        .get("https://api.mistral.ai/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    let latency = start.elapsed().as_millis() as u64;
+
+    match response {
+        Ok(resp) if resp.status().is_success() => {
+            info!(latency_ms = latency, "Mistral connection successful");
+            ConnectionTestResult::success(provider_type, latency, None)
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            warn!(status = %status, body = %body, "Mistral API error");
+            ConnectionTestResult::failure(
+                provider_type,
+                format!("API error ({}): {}", status, body),
+            )
+        }
+        Err(e) => {
+            warn!(error = %e, "Mistral connection failed");
+            ConnectionTestResult::failure(provider_type, format!("Connection failed: {}", e))
+        }
+    }
+}
+
 /// Tests connection to an LLM provider.
 ///
-/// For Ollama: Tests the `/api/version` endpoint.
-/// For Mistral: Tests by making a simple API request.
-///
-/// # Arguments
-///
-/// * `provider` - The provider to test ("mistral" or "ollama")
-///
-/// # Returns
-///
-/// A [`ConnectionTestResult`] with success status, latency, and error details.
-///
-/// # Notes
-///
-/// - Timeout is 10 seconds
-/// - Returns success=false with error message on failure
+/// Delegates to provider-specific test logic and returns a unified result.
 #[tauri::command]
 #[instrument(name = "test_provider_connection", skip(state, keystore), fields(provider = %provider))]
 pub async fn test_provider_connection(
@@ -797,30 +856,11 @@ pub async fn test_provider_connection(
     let start = Instant::now();
 
     match provider_type {
-        ProviderType::Ollama => match state.llm_manager.ollama().test_connection().await {
-            Ok(success) => {
-                let latency = start.elapsed().as_millis() as u64;
-                if success {
-                    info!(latency_ms = latency, "Ollama connection successful");
-                    Ok(ConnectionTestResult::success(provider_type, latency, None))
-                } else {
-                    warn!("Ollama connection returned false");
-                    Ok(ConnectionTestResult::failure(
-                        provider_type,
-                        "Connection test returned false".into(),
-                    ))
-                }
-            }
-            Err(e) => {
-                warn!(error = %e, "Ollama connection failed");
-                Ok(ConnectionTestResult::failure(
-                    provider_type,
-                    format!("Connection failed: {}", e),
-                ))
-            }
-        },
+        ProviderType::Ollama => {
+            let result = state.llm_manager.ollama().test_connection().await;
+            Ok(connection_test_outcome(result, provider_type, start, "ollama"))
+        }
         ProviderType::Mistral => {
-            // Check if API key is configured (from OS keychain)
             let api_key = match keystore.get_key("Mistral") {
                 Some(key) => key,
                 None => {
@@ -830,70 +870,15 @@ pub async fn test_provider_connection(
                     ));
                 }
             };
-
-            // Test Mistral by making a models list request
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
-                .build()
-                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-            let response = client
-                .get("https://api.mistral.ai/v1/models")
-                .header("Authorization", format!("Bearer {}", api_key))
-                .send()
-                .await;
-
-            let latency = start.elapsed().as_millis() as u64;
-
-            match response {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        info!(latency_ms = latency, "Mistral connection successful");
-                        Ok(ConnectionTestResult::success(provider_type, latency, None))
-                    } else {
-                        let status = resp.status();
-                        let body = resp.text().await.unwrap_or_default();
-                        warn!(status = %status, body = %body, "Mistral API error");
-                        Ok(ConnectionTestResult::failure(
-                            provider_type,
-                            format!("API error ({}): {}", status, body),
-                        ))
-                    }
-                }
-                Err(e) => {
-                    warn!(error = %e, "Mistral connection failed");
-                    Ok(ConnectionTestResult::failure(
-                        provider_type,
-                        format!("Connection failed: {}", e),
-                    ))
-                }
-            }
+            Ok(test_mistral_api(&api_key, provider_type, start).await)
         }
         ProviderType::Custom(ref name) => {
             let name = name.clone();
             match state.llm_manager.get_custom_provider(&name).await {
-                Some(custom_provider) => match custom_provider.test_connection().await {
-                    Ok(success) => {
-                        let latency = start.elapsed().as_millis() as u64;
-                        if success {
-                            info!(provider = %name, latency_ms = latency, "Custom provider connection successful");
-                            Ok(ConnectionTestResult::success(provider_type, latency, None))
-                        } else {
-                            warn!(provider = %name, "Custom provider connection returned false");
-                            Ok(ConnectionTestResult::failure(
-                                provider_type,
-                                "Connection test returned false".into(),
-                            ))
-                        }
-                    }
-                    Err(e) => {
-                        warn!(provider = %name, error = %e, "Custom provider connection failed");
-                        Ok(ConnectionTestResult::failure(
-                            provider_type,
-                            format!("Connection failed: {}", e),
-                        ))
-                    }
-                },
+                Some(cp) => {
+                    let result = cp.test_connection().await;
+                    Ok(connection_test_outcome(result, provider_type, start, &name))
+                }
                 None => Ok(ConnectionTestResult::failure(
                     provider_type,
                     format!("Custom provider '{}' not found", name),

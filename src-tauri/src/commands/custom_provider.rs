@@ -211,26 +211,12 @@ pub async fn create_custom_provider(
     })
 }
 
-/// Updates an existing custom provider.
-///
-/// Returns `CustomProviderResponse` which includes the provider info
-/// and an optional security warning (e.g., HTTP without TLS).
-#[tauri::command]
-#[instrument(name = "update_custom_provider", skip(state, keystore, api_key))]
-pub async fn update_custom_provider(
-    name: String,
-    display_name: Option<String>,
-    base_url: Option<String>,
-    api_key: Option<String>,
+/// Validates and builds SET clauses for provider update fields.
+fn build_provider_update_clauses(
+    display_name: &Option<String>,
+    base_url: &Option<String>,
     enabled: Option<bool>,
-    state: State<'_, AppState>,
-    keystore: State<'_, SecureKeyStore>,
-) -> Result<CustomProviderResponse, String> {
-    validate_provider_name(&name)?;
-
-    let db = &state.db;
-
-    // Build SET clauses dynamically
+) -> Result<Vec<String>, String> {
     let mut set_parts: Vec<String> = Vec::new();
 
     if let Some(ref dn) = display_name {
@@ -252,6 +238,56 @@ pub async fn update_custom_provider(
 
     if !set_parts.is_empty() {
         set_parts.push("updated_at = time::now()".to_string());
+    }
+
+    Ok(set_parts)
+}
+
+/// Reconfigures a running provider if URL or API key changed.
+async fn reconfigure_provider_runtime(
+    provider: &Arc<OpenAiCompatibleProvider>,
+    name: &str,
+    api_key: &Option<String>,
+    base_url: &Option<String>,
+    keystore: &SecureKeyStore,
+) {
+    let current_key = if let Some(ref key) = api_key {
+        key.clone()
+    } else {
+        keystore.get_key(name).unwrap_or_default()
+    };
+    let current_url = if let Some(ref url) = base_url {
+        url.trim_end_matches('/').to_string()
+    } else {
+        provider.get_base_url().await.unwrap_or_default()
+    };
+    if let Err(e) = provider.configure(&current_key, &current_url).await {
+        warn!(name = %name, error = %e, "Failed to reconfigure custom provider");
+    }
+}
+
+/// Updates an existing custom provider.
+///
+/// Returns `CustomProviderResponse` which includes the provider info
+/// and an optional security warning (e.g., HTTP without TLS).
+#[tauri::command]
+#[instrument(name = "update_custom_provider", skip(state, keystore, api_key))]
+pub async fn update_custom_provider(
+    name: String,
+    display_name: Option<String>,
+    base_url: Option<String>,
+    api_key: Option<String>,
+    enabled: Option<bool>,
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
+) -> Result<CustomProviderResponse, String> {
+    validate_provider_name(&name)?;
+
+    let db = &state.db;
+
+    // Build and execute SET clauses
+    let set_parts = build_provider_update_clauses(&display_name, &base_url, enabled)?;
+    if !set_parts.is_empty() {
         let update_query = format!(
             "UPDATE custom_provider:`{}` SET {}",
             name,
@@ -275,19 +311,7 @@ pub async fn update_custom_provider(
     // Reconfigure provider in manager if URL or key changed
     if api_key.is_some() || base_url.is_some() {
         if let Some(provider) = state.llm_manager.get_custom_provider(&name).await {
-            let current_key = if let Some(ref key) = api_key {
-                key.clone()
-            } else {
-                keystore.get_key(&name).unwrap_or_default()
-            };
-            let current_url = if let Some(ref url) = base_url {
-                url.trim_end_matches('/').to_string()
-            } else {
-                provider.get_base_url().await.unwrap_or_default()
-            };
-            if let Err(e) = provider.configure(&current_key, &current_url).await {
-                warn!(name = %name, error = %e, "Failed to reconfigure custom provider");
-            }
+            reconfigure_provider_runtime(&provider, &name, &api_key, &base_url, &keystore).await;
         }
     }
 

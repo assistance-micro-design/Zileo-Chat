@@ -49,6 +49,66 @@ use uuid::Uuid;
 ///
 /// # Returns
 /// The ID of the created tool execution record
+/// Validates tool-specific fields (type, name, params size, server_name).
+fn validate_tool_fields(
+    tool_type: &str,
+    tool_name: &str,
+    server_name: &Option<String>,
+    input_params: &serde_json::Value,
+    output_result: &serde_json::Value,
+) -> Result<(), String> {
+    // Validate tool type
+    match tool_type {
+        "local" | "mcp" => {}
+        _ => {
+            warn!(tool_type = %tool_type, "Invalid tool type");
+            return Err(format!(
+                "Invalid tool type: {}. Expected 'local' or 'mcp'",
+                tool_type
+            ));
+        }
+    };
+
+    // Validate tool name
+    if tool_name.is_empty() {
+        return Err("Tool name cannot be empty".to_string());
+    }
+    if tool_name.len() > cmd_const::MAX_TOOL_NAME_LEN {
+        return Err(format!(
+            "Tool name exceeds maximum length of {} characters",
+            cmd_const::MAX_TOOL_NAME_LEN
+        ));
+    }
+
+    // Validate params size
+    let input_size = serde_json::to_string(input_params)
+        .map(|s| s.len())
+        .unwrap_or(0);
+    let output_size = serde_json::to_string(output_result)
+        .map(|s| s.len())
+        .unwrap_or(0);
+
+    if input_size > cmd_const::MAX_PARAMS_SIZE {
+        return Err(format!(
+            "Input params exceed maximum size of {} bytes",
+            cmd_const::MAX_PARAMS_SIZE
+        ));
+    }
+    if output_size > cmd_const::MAX_PARAMS_SIZE {
+        return Err(format!(
+            "Output result exceeds maximum size of {} bytes",
+            cmd_const::MAX_PARAMS_SIZE
+        ));
+    }
+
+    // Validate server_name for MCP tools
+    if tool_type == "mcp" && server_name.is_none() {
+        return Err("server_name is required for MCP tools".to_string());
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 #[instrument(
@@ -77,67 +137,18 @@ pub async fn save_tool_execution(
 ) -> Result<String, String> {
     info!("Saving tool execution");
 
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
-    let validated_message_id = validate_uuid_field(&message_id, "message_id")?;
-    let validated_agent_id = validate_uuid_field(&agent_id, "agent_id")?;
-
-    // Validate tool type
-    let validated_tool_type = match tool_type.as_str() {
-        "local" | "mcp" => tool_type.clone(),
-        _ => {
-            warn!(tool_type = %tool_type, "Invalid tool type");
-            return Err(format!(
-                "Invalid tool type: {}. Expected 'local' or 'mcp'",
-                tool_type
-            ));
-        }
-    };
-
-    // Validate tool name
-    if tool_name.is_empty() {
-        return Err("Tool name cannot be empty".to_string());
-    }
-    if tool_name.len() > cmd_const::MAX_TOOL_NAME_LEN {
-        return Err(format!(
-            "Tool name exceeds maximum length of {} characters",
-            cmd_const::MAX_TOOL_NAME_LEN
-        ));
-    }
-
-    // Validate params size
-    let input_size = serde_json::to_string(&input_params)
-        .map(|s| s.len())
-        .unwrap_or(0);
-    let output_size = serde_json::to_string(&output_result)
-        .map(|s| s.len())
-        .unwrap_or(0);
-
-    if input_size > cmd_const::MAX_PARAMS_SIZE {
-        return Err(format!(
-            "Input params exceed maximum size of {} bytes",
-            cmd_const::MAX_PARAMS_SIZE
-        ));
-    }
-    if output_size > cmd_const::MAX_PARAMS_SIZE {
-        return Err(format!(
-            "Output result exceeds maximum size of {} bytes",
-            cmd_const::MAX_PARAMS_SIZE
-        ));
-    }
-
-    // Validate server_name for MCP tools
-    if validated_tool_type == "mcp" && server_name.is_none() {
-        return Err("server_name is required for MCP tools".to_string());
-    }
+    validate_uuid_field(&workflow_id, "workflow_id")?;
+    validate_uuid_field(&message_id, "message_id")?;
+    validate_uuid_field(&agent_id, "agent_id")?;
+    validate_tool_fields(&tool_type, &tool_name, &server_name, &input_params, &output_result)?;
 
     let execution_id = Uuid::new_v4().to_string();
 
-    // Build ToolExecutionCreate payload
     let execution = ToolExecutionCreate {
-        workflow_id: validated_workflow_id,
-        message_id: validated_message_id,
-        agent_id: validated_agent_id,
-        tool_type: validated_tool_type,
+        workflow_id,
+        message_id,
+        agent_id,
+        tool_type,
         tool_name,
         server_name,
         input_params,
@@ -148,7 +159,6 @@ pub async fn save_tool_execution(
         iteration,
     };
 
-    // Insert into database
     let id = state
         .db
         .create("tool_execution", &execution_id, execution)

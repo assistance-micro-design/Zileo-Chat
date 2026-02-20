@@ -93,28 +93,13 @@ pub async fn prepare_export_preview(
     }
 
     // Load MCP server summaries and env keys
-    for server_id in &selection.mcp_servers {
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, env FROM mcp_server WHERE meta::id(id) = $id";
-        if let Some(row) = query_entity_by_id(&state.db, query, server_id, "MCP server").await? {
-            let id = row["id"].as_str().unwrap_or("").to_string();
-            preview.mcp_servers.push(MCPServerExportSummary {
-                id: Some(id.clone()),
-                name: row["name"].as_str().unwrap_or("Unknown").to_string(),
-                enabled: row["enabled"].as_bool().unwrap_or(false),
-                command: row["command"].as_str().unwrap_or("").to_string(),
-                tools_count: 0, // Tools are runtime, not stored in DB
-            });
-
-            // Extract env keys for sanitization UI (env stored as JSON string in DB)
-            let env_str = row["env"].as_str().unwrap_or("{}");
-            if let Ok(env_map) = serde_json::from_str::<HashMap<String, String>>(env_str) {
-                let keys: Vec<String> = env_map.keys().cloned().collect();
-                if !keys.is_empty() {
-                    preview.mcp_env_keys.insert(id, keys);
-                }
-            }
-        }
-    }
+    load_mcp_preview(
+        &state.db,
+        &selection.mcp_servers,
+        &mut preview.mcp_servers,
+        &mut preview.mcp_env_keys,
+    )
+    .await?;
 
     // Load model summaries
     for model_id in &selection.models {
@@ -431,6 +416,37 @@ pub async fn save_export_to_file(path: String, content: String) -> Result<usize,
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/// Loads MCP server export summaries and extracts env keys for sanitization UI.
+async fn load_mcp_preview(
+    db: &DBClient,
+    server_ids: &[String],
+    mcp_summaries: &mut Vec<MCPServerExportSummary>,
+    env_keys: &mut HashMap<String, Vec<String>>,
+) -> Result<(), String> {
+    for server_id in server_ids {
+        let query = "SELECT meta::id(id) AS id, name, enabled, command, env FROM mcp_server WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, server_id, "MCP server").await? {
+            let id = row["id"].as_str().unwrap_or("").to_string();
+            mcp_summaries.push(MCPServerExportSummary {
+                id: Some(id.clone()),
+                name: row["name"].as_str().unwrap_or("Unknown").to_string(),
+                enabled: row["enabled"].as_bool().unwrap_or(false),
+                command: row["command"].as_str().unwrap_or("").to_string(),
+                tools_count: 0,
+            });
+
+            let env_str = row["env"].as_str().unwrap_or("{}");
+            if let Ok(env_map) = serde_json::from_str::<HashMap<String, String>>(env_str) {
+                let keys: Vec<String> = env_map.keys().cloned().collect();
+                if !keys.is_empty() {
+                    env_keys.insert(id, keys);
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Queries a single entity by ID using a parameterized bind.
 ///
