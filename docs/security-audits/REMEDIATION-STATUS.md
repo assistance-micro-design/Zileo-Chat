@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 52 | Fix implemented and tested |
-| PARTIAL | 3 | Some aspects done, others remain |
+| DONE | 53 | Fix implemented and tested |
+| PARTIAL | 2 | Some aspects done, others remain |
 | NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -22,7 +22,7 @@
 | CRITICAL (4) | 4 | 0 | 0 |
 | HIGH (27) | 26 | 1 | 0 |
 | MEDIUM (35) | 17 | 1 | 17 |
-| LOW (13) | 4 | 0 | 9 |
+| LOW (13) | 5 | 0 | 8 |
 | N/A (7) | - | - | - |
 
 **All 4 CRITICAL findings are remediated.**
@@ -31,7 +31,7 @@
 
 ## Tests Added
 
-### Rust (37 new tests)
+### Rust (42 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -72,6 +72,11 @@
 | models/llm_models.rs | test_provider_settings_base_url_serializes_as_null_when_none | SA-013 #12: base_url always in JSON output |
 | models/llm_models.rs | test_provider_settings_base_url_serializes_when_set | SA-013 #12: base_url present when set |
 | models/llm_models.rs | test_provider_settings_base_url_roundtrip | SA-013 #12: serialize/deserialize roundtrip |
+| tools/validation_helper.rs | test_should_require_validation_auto_mode_skips | SA-012 F8: Auto mode skips low-risk |
+| tools/validation_helper.rs | test_should_require_validation_auto_mode_confirms_high | SA-012 F8: Auto mode confirms high-risk |
+| tools/validation_helper.rs | test_should_require_validation_manual_mode | SA-012 F8: Manual mode always requires |
+| tools/validation_helper.rs | test_should_require_validation_selective_mode | SA-012 F8: Selective mode per-type |
+| tools/validation_helper.rs | test_should_require_validation_selective_auto_approve_low | SA-012 F8: Selective auto-approve low |
 
 ### TypeScript (35 new tests in 3 new files + 1 updated)
 
@@ -212,7 +217,7 @@
 | F5 | HIGH | validation_request.details TYPE object | **DONE** | schema.rs: `TYPE string DEFAULT '{}'`. ValidationRequest uses custom serde. |
 | F6 | MEDIUM | Non-parameterized queries in queries.rs | **DONE** | cascade::delete_by_workflow_id uses `$wf_id` bind param. |
 | F7 | MEDIUM | validation queries not parameterized | **DONE** | Same as SA-001 M1-M5. |
-| F8 | LOW | Redundant validation_helper logic | **PARTIAL** | RiskLevel::Critical handled in should_require_validation, but no full refactor. |
+| F8 | LOW | Redundant validation_helper logic + MCP migration DEFINE FIELD | **DONE** | Full refactor: extracted `should_require_validation()` as pure function, `request_validation()` delegates to `create_and_wait_validation()`, removed `needs_validation()` wrapper, unified event emission via `ValidationRequiredEvent` struct. MCP migration inline code removed from client.rs (redundant with schema.rs DEFINE FIELD OVERWRITE). 5 new tests. TS types updated. |
 | F9 | LOW | agent_state table defined but never written | **DONE** | Removed from schema.rs. |
 | F10 | LOW | workflow_agent table unused | **DONE** | Removed from schema.rs. |
 | F11 | LOW | DBClient::update() unused | **DONE** | Removed from client.rs. |
@@ -293,7 +298,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-20 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 897 tests passed |
+| cargo test --lib | **PASS** | 2026-02-20, 902 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-20, 225 tests passed |

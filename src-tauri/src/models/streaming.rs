@@ -519,15 +519,17 @@ impl WorkflowComplete {
     }
 }
 
-/// Validation request details for human-in-the-loop approval
+/// Validation request details for human-in-the-loop approval.
+///
+/// Used for all validation types: sub-agent, tool, and MCP operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationRequiredEvent {
     /// Validation request ID (for approve/reject calls)
     pub validation_id: String,
     /// Associated workflow ID
     pub workflow_id: String,
-    /// Type of sub-agent operation
-    pub operation_type: SubAgentOperationType,
+    /// Validation type (e.g. "sub_agent", "tool", "mcp", "file_op", "db_op")
+    pub validation_type: String,
     /// Operation description
     pub operation: String,
     /// Risk level assessment

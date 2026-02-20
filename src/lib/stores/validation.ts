@@ -27,7 +27,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import type { ValidationRequest, RiskLevel } from '$types/validation';
+import type { ValidationRequest, RiskLevel, ValidationType } from '$types/validation';
 import { getErrorMessage } from '$lib/utils/error';
 import type { ValidationRequiredEvent } from '$types/sub-agent';
 
@@ -103,17 +103,10 @@ let isInitialized = false;
  * Converts a ValidationRequiredEvent to a ValidationRequest for the modal.
  */
 function convertToValidationRequest(event: ValidationRequiredEvent): ValidationRequest {
-	// Map operation_type to ValidationType
-	const typeMap: Record<string, 'sub_agent'> = {
-		spawn: 'sub_agent',
-		delegate: 'sub_agent',
-		parallel_batch: 'sub_agent'
-	};
-
 	return {
 		id: event.validation_id,
 		workflow_id: event.workflow_id,
-		type: typeMap[event.operation_type] ?? 'sub_agent',
+		type: (event.validation_type as ValidationType) ?? 'sub_agent',
 		operation: event.operation,
 		details: event.details,
 		risk_level: event.risk_level as RiskLevel,

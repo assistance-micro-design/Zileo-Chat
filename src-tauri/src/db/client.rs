@@ -72,17 +72,9 @@ impl DBClient {
             e
         })?;
 
-        // Run MCP HTTP migration to ensure command field supports 'http' value
-        // Must use REMOVE FIELD + DEFINE FIELD to force ASSERT constraint update
-        // (SurrealDB does not update ASSERT constraints on existing fields with just DEFINE)
-        let mcp_http_migration = r#"
-            REMOVE FIELD IF EXISTS command ON TABLE mcp_server;
-            DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
-        "#;
-        self.db.query(mcp_http_migration).await.map_err(|e| {
-            warn!(error = %e, "MCP HTTP migration query failed (may be expected if table doesn't exist yet)");
-            e
-        })?;
+        // Note: MCP HTTP migration (command field ASSERT with 'http') is handled
+        // in SCHEMA_SQL via DEFINE FIELD OVERWRITE (PAT_DB_003 compliant).
+        // The guarded migration in commands/migration.rs handles existing databases.
 
         info!("Database schema initialized successfully");
         Ok(())

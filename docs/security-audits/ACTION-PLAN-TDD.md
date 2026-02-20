@@ -33,7 +33,7 @@
 | **2-E** | Parallel DB Writes | **DONE** | futures::join_all |
 | **2-F** | Dependency Updates NPM | **NOT DONE** | No package.json changes |
 | **2-G** | Fonts self-hosted + Migration Guard | **DONE** | Fonts DONE (4 woff2 + @font-face). Migration guard DONE (migration_log table + guards + 7 tests) |
-| **2-H** | Dead Code Cleanup | **DONE** | 6 items removed |
+| **2-H** | Dead Code Cleanup + Validation Refactor | **DONE** | 6 items removed + validation_helper refactored (SA-012 F8: extracted pure function, unified event emission, 5 tests) |
 | **2-I** | HTTPS Warning Custom Providers | **DONE** | 8 tests |
 | **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests. SA-010 ERR-2 complete: all settings console.error/warn replaced with user-visible messages |
 | **3-B** | Defense-in-Depth | **DONE** | URL scheme (11 tests), depth limit (2 tests), entity limit |

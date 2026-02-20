@@ -236,43 +236,22 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 /**
  * Validation required event payload.
- * Emitted by backend when a sub-agent operation needs user approval.
+ * Emitted by backend when an operation needs user approval.
+ * Supports all validation types: sub_agent, tool, mcp, file_op, db_op.
  */
 export interface ValidationRequiredEvent {
   /** Validation request ID (for approve/reject calls) */
   validation_id: string;
   /** Associated workflow ID */
   workflow_id: string;
-  /** Type of sub-agent operation */
-  operation_type: SubAgentOperationType;
+  /** Validation type (e.g. "sub_agent", "tool", "mcp", "file_op", "db_op") */
+  validation_type: string;
   /** Human-readable operation description */
   operation: string;
   /** Risk level assessment */
   risk_level: RiskLevel;
-  /** Additional details about the operation */
-  details: {
-    /** Sub-agent name (for spawn) */
-    sub_agent_name?: string;
-    /** Prompt preview (truncated) */
-    prompt_preview?: string;
-    /** Full prompt length */
-    prompt_length?: number;
-    /** Tools requested */
-    tools?: string[];
-    /** MCP servers requested */
-    mcp_servers?: string[];
-    /** Target agent ID (for delegate) */
-    target_agent_id?: string;
-    /** Target agent name (for delegate) */
-    target_agent_name?: string;
-    /** Number of tasks (for parallel batch) */
-    task_count?: number;
-    /** Task details (for parallel batch) */
-    tasks?: Array<{
-      agent_id: string;
-      prompt_preview: string;
-    }>;
-  };
+  /** Additional details about the operation (structure varies by type) */
+  details: Record<string, unknown>;
 }
 
 /**
