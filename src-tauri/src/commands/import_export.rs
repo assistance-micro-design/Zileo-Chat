@@ -24,6 +24,7 @@
 //! - `validate_import` - Validate import file and detect conflicts
 //! - `execute_import` - Execute import with conflict resolutions
 
+use crate::db::client::DBClient;
 use crate::db::sanitize_for_surrealdb;
 use crate::models::import_export::*;
 use crate::models::prompt::Prompt;
@@ -77,16 +78,7 @@ pub async fn prepare_export_preview(
     // Load agent summaries
     for agent_id in &selection.agents {
         let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers FROM agent WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", agent_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query agent: {}", e))?;
-
-        if let Some(row) = results.first() {
+        if let Some(row) = query_entity_by_id(&state.db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
             preview.agents.push(AgentExportSummary {
                 id: Some(row["id"].as_str().unwrap_or("").to_string()),
@@ -103,16 +95,7 @@ pub async fn prepare_export_preview(
     // Load MCP server summaries and env keys
     for server_id in &selection.mcp_servers {
         let query = "SELECT meta::id(id) AS id, name, enabled, command, env FROM mcp_server WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", server_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query MCP server: {}", e))?;
-
-        if let Some(row) = results.first() {
+        if let Some(row) = query_entity_by_id(&state.db, query, server_id, "MCP server").await? {
             let id = row["id"].as_str().unwrap_or("").to_string();
             preview.mcp_servers.push(MCPServerExportSummary {
                 id: Some(id.clone()),
@@ -122,8 +105,7 @@ pub async fn prepare_export_preview(
                 tools_count: 0, // Tools are runtime, not stored in DB
             });
 
-            // Extract env keys for sanitization UI
-            // env is stored as JSON string in DB
+            // Extract env keys for sanitization UI (env stored as JSON string in DB)
             let env_str = row["env"].as_str().unwrap_or("{}");
             if let Ok(env_map) = serde_json::from_str::<HashMap<String, String>>(env_str) {
                 let keys: Vec<String> = env_map.keys().cloned().collect();
@@ -137,16 +119,7 @@ pub async fn prepare_export_preview(
     // Load model summaries
     for model_id in &selection.models {
         let query = "SELECT meta::id(id) AS id, name, provider, api_name, is_builtin FROM llm_model WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", model_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query model: {}", e))?;
-
-        if let Some(row) = results.first() {
+        if let Some(row) = query_entity_by_id(&state.db, query, model_id, "model").await? {
             preview.models.push(LLMModelExportSummary {
                 id: Some(row["id"].as_str().unwrap_or("").to_string()),
                 name: row["name"].as_str().unwrap_or("Unknown").to_string(),
@@ -160,16 +133,7 @@ pub async fn prepare_export_preview(
     // Load prompt summaries
     for prompt_id in &selection.prompts {
         let query = "SELECT meta::id(id) AS id, name, description, category, content FROM prompt WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", prompt_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query prompt: {}", e))?;
-
-        if let Some(row) = results.first() {
+        if let Some(row) = query_entity_by_id(&state.db, query, prompt_id, "prompt").await? {
             let content = row["content"].as_str().unwrap_or("");
             let var_count = content.matches("{{").count();
             preview.prompts.push(PromptExportSummary {
@@ -221,224 +185,11 @@ pub async fn generate_export_file(
         return Err("At least one entity must be selected for export".to_string());
     }
 
-    let mut agents = Vec::new();
-    let mut mcp_servers = Vec::new();
-    let mut models = Vec::new();
-    let mut prompts = Vec::new();
-
-    // Export agents
-    for agent_id in &selection.agents {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", agent_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query agent: {}", e))?;
-
-        if let Some(row) = results.first() {
-            let llm = &row["llm"];
-            // Note: ID is NOT exported - entities are identified by name
-            agents.push(AgentExportData {
-                name: row["name"].as_str().unwrap_or("").to_string(),
-                lifecycle: row["lifecycle"].as_str().unwrap_or("permanent").to_string(),
-                llm: LLMConfigExport {
-                    provider: llm["provider"].as_str().unwrap_or("").to_string(),
-                    model: llm["model"].as_str().unwrap_or("").to_string(),
-                    temperature: llm["temperature"].as_f64().unwrap_or(0.7) as f32,
-                    max_tokens: llm["max_tokens"].as_u64().unwrap_or(4096) as usize,
-                },
-                tools: row["tools"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                mcp_servers: row["mcp_servers"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
-                max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
-                enable_thinking: row["enable_thinking"].as_bool().unwrap_or(true),
-                created_at: if options.include_timestamps {
-                    row["created_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-                updated_at: if options.include_timestamps {
-                    row["updated_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-            });
-        }
-    }
-
-    // Export MCP servers with sanitization
-    for server_id in &selection.mcp_servers {
-        // Check if server should be excluded
-        if let Some(config) = sanitization.get(server_id) {
-            if config.exclude_from_export {
-                continue;
-            }
-        }
-
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, created_at, updated_at FROM mcp_server WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", server_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query MCP server: {}", e))?;
-
-        if let Some(row) = results.first() {
-            // Parse env from JSON string
-            let env_str = row["env"].as_str().unwrap_or("{}");
-            let mut env: HashMap<String, String> =
-                serde_json::from_str(env_str).unwrap_or_default();
-
-            // Apply sanitization
-            if let Some(config) = sanitization.get(server_id) {
-                // Clear specified keys
-                for key in &config.clear_env_keys {
-                    if env.contains_key(key) {
-                        env.insert(key.clone(), String::new());
-                    }
-                }
-                // Apply modifications
-                for (key, value) in &config.modify_env {
-                    env.insert(key.clone(), value.clone());
-                }
-            }
-
-            let args: Vec<String> = if let Some(config) = sanitization.get(server_id) {
-                if !config.modify_args.is_empty() {
-                    config.modify_args.clone()
-                } else {
-                    row["args"]
-                        .as_array()
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect()
-                        })
-                        .unwrap_or_default()
-                }
-            } else {
-                row["args"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            };
-
-            // Note: ID is NOT exported - entities are identified by name
-            mcp_servers.push(MCPServerExportData {
-                name: row["name"].as_str().unwrap_or("").to_string(),
-                enabled: row["enabled"].as_bool().unwrap_or(false),
-                command: row["command"].as_str().unwrap_or("").to_string(),
-                args,
-                env,
-                description: row["description"].as_str().map(String::from),
-                created_at: if options.include_timestamps {
-                    row["created_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-                updated_at: if options.include_timestamps {
-                    row["updated_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-            });
-        }
-    }
-
-    // Export models
-    for model_id in &selection.models {
-        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, input_price_per_mtok, output_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", model_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query model: {}", e))?;
-
-        if let Some(row) = results.first() {
-            // Note: ID is NOT exported - entities are identified by name
-            models.push(LLMModelExportData {
-                provider: row["provider"].as_str().unwrap_or("").to_string(),
-                name: row["name"].as_str().unwrap_or("").to_string(),
-                api_name: row["api_name"].as_str().unwrap_or("").to_string(),
-                context_window: row["context_window"].as_u64().unwrap_or(0) as usize,
-                max_output_tokens: row["max_output_tokens"].as_u64().unwrap_or(0) as usize,
-                temperature_default: row["temperature_default"].as_f64().unwrap_or(0.7) as f32,
-                is_builtin: row["is_builtin"].as_bool().unwrap_or(false),
-                is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
-                input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),
-                output_price_per_mtok: row["output_price_per_mtok"].as_f64().unwrap_or(0.0),
-                created_at: if options.include_timestamps {
-                    row["created_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-                updated_at: if options.include_timestamps {
-                    row["updated_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-            });
-        }
-    }
-
-    // Export prompts
-    for prompt_id in &selection.prompts {
-        let query = "SELECT meta::id(id) AS id, name, description, category, content, created_at, updated_at FROM prompt WHERE meta::id(id) = $id";
-        let results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(query)
-            .bind(("id", prompt_id.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .map_err(|e| format!("Failed to query prompt: {}", e))?;
-
-        if let Some(row) = results.first() {
-            // Note: ID is NOT exported - entities are identified by name
-            prompts.push(PromptExportData {
-                name: row["name"].as_str().unwrap_or("").to_string(),
-                description: row["description"].as_str().unwrap_or("").to_string(),
-                category: row["category"].as_str().unwrap_or("custom").to_string(),
-                content: row["content"].as_str().unwrap_or("").to_string(),
-                created_at: if options.include_timestamps {
-                    row["created_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-                updated_at: if options.include_timestamps {
-                    row["updated_at"].as_str().map(String::from)
-                } else {
-                    None
-                },
-            });
-        }
-    }
+    let ts = options.include_timestamps;
+    let agents = export_agents(&state.db, &selection.agents, ts).await?;
+    let mcp_servers = export_mcp_servers(&state.db, &selection.mcp_servers, ts, &sanitization).await?;
+    let models = export_models(&state.db, &selection.models, ts).await?;
+    let prompts = export_prompts(&state.db, &selection.prompts, ts).await?;
 
     // Build export package
     let package = ExportPackage::new(agents, mcp_servers, models, prompts, None);
@@ -524,159 +275,10 @@ pub async fn validate_import(
     let mut conflicts = Vec::new();
     let mut missing_mcp_env = HashMap::new();
 
-    // Build entity summaries
-    let mut agent_summaries = Vec::new();
-    let mut mcp_summaries = Vec::new();
-    let mut model_summaries = Vec::new();
-    let mut prompt_summaries = Vec::new();
-
-    // Check agent conflicts - by NAME only (IDs are not in the export file)
-    for agent in &package.agents {
-        agent_summaries.push(AgentExportSummary {
-            id: None, // No ID in import file
-            name: agent.name.clone(),
-            lifecycle: agent.lifecycle.clone(),
-            provider: agent.llm.provider.clone(),
-            model: agent.llm.model.clone(),
-            tools_count: agent.tools.len(),
-            mcp_servers_count: agent.mcp_servers.len(),
-        });
-
-        // Check for name conflict - this is the ONLY conflict check
-        let name_query = "SELECT meta::id(id) AS id FROM agent WHERE name = $name";
-        let name_results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(name_query)
-            .bind(("name", agent.name.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .unwrap_or_default();
-
-        if !name_results.is_empty() {
-            let existing = &name_results[0];
-            conflicts.push(ImportConflict {
-                entity_type: "agent".to_string(),
-                entity_name: agent.name.clone(),
-                existing_id: existing["id"].as_str().unwrap_or("").to_string(),
-            });
-        }
-    }
-
-    // Check MCP server conflicts - by NAME only (IDs are not in the export file)
-    for server in &package.mcp_servers {
-        mcp_summaries.push(MCPServerExportSummary {
-            id: None, // No ID in import file
-            name: server.name.clone(),
-            enabled: server.enabled,
-            command: server.command.clone(),
-            tools_count: 0,
-        });
-
-        // Check for sensitive env vars with empty values
-        let mut missing_keys = Vec::new();
-        for (key, value) in &server.env {
-            if is_sensitive_env_key(key) && value.is_empty() {
-                missing_keys.push(key.clone());
-            }
-        }
-        if !missing_keys.is_empty() {
-            // Use server name as key since there's no ID
-            missing_mcp_env.insert(server.name.clone(), missing_keys);
-        }
-
-        // Check for name conflict - this is the ONLY conflict check
-        let name_query = "SELECT meta::id(id) AS id FROM mcp_server WHERE name = $name";
-        let name_results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(name_query)
-            .bind(("name", server.name.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .unwrap_or_default();
-
-        if !name_results.is_empty() {
-            let existing = &name_results[0];
-            conflicts.push(ImportConflict {
-                entity_type: "mcp".to_string(),
-                entity_name: server.name.clone(),
-                existing_id: existing["id"].as_str().unwrap_or("").to_string(),
-            });
-        }
-    }
-
-    // Check model conflicts - by NAME only (IDs are not in the export file)
-    for model in &package.models {
-        model_summaries.push(LLMModelExportSummary {
-            id: None, // No ID in import file
-            name: model.name.clone(),
-            provider: model.provider.clone(),
-            api_name: model.api_name.clone(),
-            is_builtin: model.is_builtin,
-        });
-
-        // Warn about importing builtin models
-        if model.is_builtin {
-            warnings.push(format!(
-                "Model '{}' is a builtin model and may conflict with system defaults",
-                model.name
-            ));
-        }
-
-        // Check for name conflict - this is the ONLY conflict check
-        let name_query = "SELECT meta::id(id) AS id FROM llm_model WHERE name = $name";
-        let name_results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(name_query)
-            .bind(("name", model.name.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .unwrap_or_default();
-
-        if !name_results.is_empty() {
-            let existing = &name_results[0];
-            conflicts.push(ImportConflict {
-                entity_type: "model".to_string(),
-                entity_name: model.name.clone(),
-                existing_id: existing["id"].as_str().unwrap_or("").to_string(),
-            });
-        }
-    }
-
-    // Check prompt conflicts - by NAME only (IDs are not in the export file)
-    for prompt in &package.prompts {
-        let content = &prompt.content;
-        let var_count = content.matches("{{").count();
-        prompt_summaries.push(PromptExportSummary {
-            id: None, // No ID in import file
-            name: prompt.name.clone(),
-            description: prompt.description.clone(),
-            category: prompt.category.clone(),
-            variables_count: var_count,
-        });
-
-        // Check for name conflict - this is the ONLY conflict check
-        let name_query = "SELECT meta::id(id) AS id FROM prompt WHERE name = $name";
-        let name_results: Vec<serde_json::Value> = state
-            .db
-            .db
-            .query(name_query)
-            .bind(("name", prompt.name.clone()))
-            .await
-            .map(|mut r| r.take(0).unwrap_or_default())
-            .unwrap_or_default();
-
-        if !name_results.is_empty() {
-            let existing = &name_results[0];
-            conflicts.push(ImportConflict {
-                entity_type: "prompt".to_string(),
-                entity_name: prompt.name.clone(),
-                existing_id: existing["id"].as_str().unwrap_or("").to_string(),
-            });
-        }
-    }
+    let agent_summaries = validate_agents(&state.db, &package.agents, &mut conflicts).await;
+    let mcp_summaries = validate_mcp_servers(&state.db, &package.mcp_servers, &mut conflicts, &mut missing_mcp_env).await;
+    let model_summaries = validate_models(&state.db, &package.models, &mut conflicts, &mut warnings).await;
+    let prompt_summaries = validate_prompts(&state.db, &package.prompts, &mut conflicts).await;
 
     tracing::info!(
         agents = agent_summaries.len(),
@@ -740,388 +342,11 @@ pub async fn execute_import(
     let mut skipped = ImportCounts::default();
     let mut errors = Vec::new();
 
-    // Import agents - selection and resolution by NAME (no IDs in export file)
-    for agent in &package.agents {
-        // Selection is by name
-        if !selection.agents.contains(&agent.name) {
-            continue;
-        }
-
-        // Resolution keys use format: "entityType:entityName"
-        let resolution_key = format!("agent:{}", agent.name);
-        let resolution = resolutions.get(&resolution_key).cloned();
-        if resolution == Some(ConflictResolution::Skip) {
-            skipped.agents += 1;
-            continue;
-        }
-
-        // For Overwrite, we need to find the existing ID by name
-        let existing_id = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = "SELECT meta::id(id) AS id FROM agent WHERE name = $name";
-            let results: Vec<serde_json::Value> = state
-                .db
-                .db
-                .query(query)
-                .bind(("name", agent.name.clone()))
-                .await
-                .map(|mut r| r.take(0).unwrap_or_default())
-                .unwrap_or_default();
-            results
-                .first()
-                .and_then(|r| r["id"].as_str())
-                .map(String::from)
-        } else {
-            None
-        };
-
-        // Always generate new UUID for new imports
-        let agent_id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Rename adds suffix to name
-        let name = if resolution == Some(ConflictResolution::Rename) {
-            format!("{} (imported)", agent.name)
-        } else {
-            agent.name.clone()
-        };
-
-        // Build parameterized query with bind parameters to prevent injection
-        let data = sanitize_for_surrealdb(serde_json::json!({
-            "name": name,
-            "lifecycle": agent.lifecycle,
-            "llm": {
-                "provider": agent.llm.provider,
-                "model": agent.llm.model,
-                "temperature": agent.llm.temperature,
-                "max_tokens": agent.llm.max_tokens,
-            },
-            "tools": agent.tools,
-            "mcp_servers": agent.mcp_servers,
-            "system_prompt": agent.system_prompt,
-            "max_tool_iterations": agent.max_tool_iterations,
-            "enable_thinking": agent.enable_thinking,
-        }));
-
-        let result = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = format!("UPDATE agent:`{}` CONTENT $data", agent_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        } else {
-            let query = format!("CREATE agent:`{}` CONTENT $data", agent_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        };
-
-        match result {
-            Ok(_) => {
-                // Set timestamps via separate query (time::now() cannot be in CONTENT $data)
-                let ts_query = format!(
-                    "UPDATE agent:`{}` SET created_at = time::now(), updated_at = time::now()",
-                    agent_id
-                );
-                if let Err(e) = state.db.execute(&ts_query).await {
-                    tracing::warn!(agent_id = %agent_id, error = %e, "Failed to set timestamps on imported agent");
-                }
-                imported.agents += 1;
-            }
-            Err(e) => {
-                errors.push(ImportError {
-                    entity_type: "agent".to_string(),
-                    entity_id: agent.name.clone(),
-                    error: e.to_string(),
-                });
-            }
-        }
-    }
-
-    // Import MCP servers - selection and resolution by NAME (no IDs in export file)
-    for server in &package.mcp_servers {
-        // Selection is by name
-        if !selection.mcp_servers.contains(&server.name) {
-            continue;
-        }
-
-        // Resolution keys use format: "entityType:entityName"
-        let resolution_key = format!("mcp:{}", server.name);
-        let resolution = resolutions.get(&resolution_key).cloned();
-        if resolution == Some(ConflictResolution::Skip) {
-            skipped.mcp_servers += 1;
-            continue;
-        }
-
-        // For Overwrite, we need to find the existing ID by name
-        let existing_id = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = "SELECT meta::id(id) AS id FROM mcp_server WHERE name = $name";
-            let results: Vec<serde_json::Value> = state
-                .db
-                .db
-                .query(query)
-                .bind(("name", server.name.clone()))
-                .await
-                .map(|mut r| r.take(0).unwrap_or_default())
-                .unwrap_or_default();
-            results
-                .first()
-                .and_then(|r| r["id"].as_str())
-                .map(String::from)
-        } else {
-            None
-        };
-
-        // Always generate new UUID for new imports
-        let server_id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Rename adds suffix to name
-        let name = if resolution == Some(ConflictResolution::Rename) {
-            format!("{} (imported)", server.name)
-        } else {
-            server.name.clone()
-        };
-
-        // Apply additions (keyed by name now)
-        let mut env = server.env.clone();
-        if let Some(additions) = mcp_additions.get(&server.name) {
-            for (key, value) in &additions.add_env {
-                env.insert(key.clone(), value.clone());
-            }
-        }
-        // env is stored as JSON STRING in SurrealDB (not as object)
-        let env_str = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
-
-        // Build parameterized query with bind parameters to prevent injection
-        let data = sanitize_for_surrealdb(serde_json::json!({
-            "name": name,
-            "enabled": server.enabled,
-            "command": server.command,
-            "args": server.args,
-            "env": env_str,
-            "description": server.description,
-        }));
-
-        let result = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = format!("UPDATE mcp_server:`{}` CONTENT $data", server_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        } else {
-            let query = format!("CREATE mcp_server:`{}` CONTENT $data", server_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        };
-
-        match result {
-            Ok(_) => {
-                // Set timestamps via separate query (time::now() cannot be in CONTENT $data)
-                let ts_query = format!(
-                    "UPDATE mcp_server:`{}` SET created_at = time::now(), updated_at = time::now()",
-                    server_id
-                );
-                if let Err(e) = state.db.execute(&ts_query).await {
-                    tracing::warn!(server_id = %server_id, error = %e, "Failed to set timestamps on imported MCP server");
-                }
-                imported.mcp_servers += 1;
-            }
-            Err(e) => {
-                errors.push(ImportError {
-                    entity_type: "mcp".to_string(),
-                    entity_id: server.name.clone(),
-                    error: e.to_string(),
-                });
-            }
-        }
-    }
-
-    // Import models - selection and resolution by NAME (no IDs in export file)
-    for model in &package.models {
-        // Selection is by name
-        if !selection.models.contains(&model.name) {
-            continue;
-        }
-
-        // Resolution keys use format: "entityType:entityName"
-        let resolution_key = format!("model:{}", model.name);
-        let resolution = resolutions.get(&resolution_key).cloned();
-        if resolution == Some(ConflictResolution::Skip) {
-            skipped.models += 1;
-            continue;
-        }
-
-        // For Overwrite, we need to find the existing ID by name
-        let existing_id = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = "SELECT meta::id(id) AS id FROM llm_model WHERE name = $name";
-            let results: Vec<serde_json::Value> = state
-                .db
-                .db
-                .query(query)
-                .bind(("name", model.name.clone()))
-                .await
-                .map(|mut r| r.take(0).unwrap_or_default())
-                .unwrap_or_default();
-            results
-                .first()
-                .and_then(|r| r["id"].as_str())
-                .map(String::from)
-        } else {
-            None
-        };
-
-        // Always generate new UUID for new imports
-        let model_id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Rename adds suffix to name
-        let name = if resolution == Some(ConflictResolution::Rename) {
-            format!("{} (imported)", model.name)
-        } else {
-            model.name.clone()
-        };
-
-        // Build parameterized query with bind parameters to prevent injection
-        let data = sanitize_for_surrealdb(serde_json::json!({
-            "provider": model.provider,
-            "name": name,
-            "api_name": model.api_name,
-            "context_window": model.context_window,
-            "max_output_tokens": model.max_output_tokens,
-            "temperature_default": model.temperature_default,
-            "is_builtin": model.is_builtin,
-            "is_reasoning": model.is_reasoning,
-            "input_price_per_mtok": model.input_price_per_mtok,
-            "output_price_per_mtok": model.output_price_per_mtok,
-        }));
-
-        let result = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = format!("UPDATE llm_model:`{}` CONTENT $data", model_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        } else {
-            let query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        };
-
-        match result {
-            Ok(_) => {
-                // Set timestamps via separate query (time::now() cannot be in CONTENT $data)
-                let ts_query = format!(
-                    "UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
-                    model_id
-                );
-                if let Err(e) = state.db.execute(&ts_query).await {
-                    tracing::warn!(model_id = %model_id, error = %e, "Failed to set timestamps on imported model");
-                }
-                imported.models += 1;
-            }
-            Err(e) => {
-                errors.push(ImportError {
-                    entity_type: "model".to_string(),
-                    entity_id: model.name.clone(),
-                    error: e.to_string(),
-                });
-            }
-        }
-    }
-
-    // Import prompts - selection and resolution by NAME (no IDs in export file)
-    for prompt in &package.prompts {
-        // Selection is by name
-        if !selection.prompts.contains(&prompt.name) {
-            continue;
-        }
-
-        // Resolution keys use format: "entityType:entityName"
-        let resolution_key = format!("prompt:{}", prompt.name);
-        let resolution = resolutions.get(&resolution_key).cloned();
-        if resolution == Some(ConflictResolution::Skip) {
-            skipped.prompts += 1;
-            continue;
-        }
-
-        // For Overwrite, we need to find the existing ID by name
-        let existing_id = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = "SELECT meta::id(id) AS id FROM prompt WHERE name = $name";
-            let results: Vec<serde_json::Value> = state
-                .db
-                .db
-                .query(query)
-                .bind(("name", prompt.name.clone()))
-                .await
-                .map(|mut r| r.take(0).unwrap_or_default())
-                .unwrap_or_default();
-            results
-                .first()
-                .and_then(|r| r["id"].as_str())
-                .map(String::from)
-        } else {
-            None
-        };
-
-        // Always generate new UUID for new imports
-        let prompt_id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Rename adds suffix to name
-        let name = if resolution == Some(ConflictResolution::Rename) {
-            format!("{} (imported)", prompt.name)
-        } else {
-            prompt.name.clone()
-        };
-
-        // Extract variables from content using the same pattern as create_prompt
-        let variables = Prompt::detect_variables(&prompt.content);
-
-        // Build parameterized query with bind parameters to prevent injection
-        let data = sanitize_for_surrealdb(serde_json::json!({
-            "name": name,
-            "description": prompt.description,
-            "category": prompt.category,
-            "content": prompt.content,
-            "variables": variables,
-        }));
-
-        let result = if resolution == Some(ConflictResolution::Overwrite) {
-            let query = format!("UPDATE prompt:`{}` CONTENT $data", prompt_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        } else {
-            let query = format!("CREATE prompt:`{}` CONTENT $data", prompt_id);
-            state
-                .db
-                .execute_with_params(&query, vec![("data".to_string(), data)])
-                .await
-        };
-
-        match result {
-            Ok(_) => {
-                // Set timestamps via separate query (time::now() cannot be in CONTENT $data)
-                let ts_query = format!(
-                    "UPDATE prompt:`{}` SET created_at = time::now(), updated_at = time::now()",
-                    prompt_id
-                );
-                if let Err(e) = state.db.execute(&ts_query).await {
-                    tracing::warn!(prompt_id = %prompt_id, error = %e, "Failed to set timestamps on imported prompt");
-                }
-                imported.prompts += 1;
-            }
-            Err(e) => {
-                errors.push(ImportError {
-                    entity_type: "prompt".to_string(),
-                    entity_id: prompt.name.clone(),
-                    error: e.to_string(),
-                });
-            }
-        }
-    }
+    let mut tracking = ImportTracking { imported: &mut imported, skipped: &mut skipped, errors: &mut errors };
+    import_agents(&state.db, &package.agents, &selection.agents, &resolutions, &mut tracking).await;
+    import_mcp_servers(&state.db, &package.mcp_servers, &selection.mcp_servers, &resolutions, &mcp_additions, &mut tracking).await;
+    import_models(&state.db, &package.models, &selection.models, &resolutions, &mut tracking).await;
+    import_prompts(&state.db, &package.prompts, &selection.prompts, &resolutions, &mut tracking).await;
 
     let success = errors.is_empty();
 
@@ -1201,4 +426,626 @@ pub async fn save_export_to_file(path: String, content: String) -> Result<usize,
     tracing::info!(path = %path.display(), "Export file saved successfully");
 
     Ok(content.len())
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Queries a single entity by ID using a parameterized bind.
+///
+/// Returns the first result row, or None if the entity doesn't exist.
+async fn query_entity_by_id(
+    db: &DBClient,
+    query: &str,
+    id: &str,
+    entity_label: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    let results: Vec<serde_json::Value> = db
+        .db
+        .query(query)
+        .bind(("id", id.to_string()))
+        .await
+        .map(|mut r| r.take(0).unwrap_or_default())
+        .map_err(|e| format!("Failed to query {}: {}", entity_label, e))?;
+    Ok(results.into_iter().next())
+}
+
+/// Applies MCP sanitization config to env and args from a DB row.
+///
+/// Returns the sanitized (env, args) pair.
+fn apply_mcp_sanitization(
+    row: &serde_json::Value,
+    server_id: &str,
+    sanitization: &HashMap<String, MCPSanitizationConfig>,
+) -> (HashMap<String, String>, Vec<String>) {
+    // Parse env from JSON string
+    let env_str = row["env"].as_str().unwrap_or("{}");
+    let mut env: HashMap<String, String> = serde_json::from_str(env_str).unwrap_or_default();
+
+    // Apply sanitization to env
+    if let Some(config) = sanitization.get(server_id) {
+        for key in &config.clear_env_keys {
+            if env.contains_key(key) {
+                env.insert(key.clone(), String::new());
+            }
+        }
+        for (key, value) in &config.modify_env {
+            env.insert(key.clone(), value.clone());
+        }
+    }
+
+    // Parse args with optional override from sanitization
+    let extract_args = || -> Vec<String> {
+        row["args"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default()
+    };
+
+    let args = if let Some(config) = sanitization.get(server_id) {
+        if !config.modify_args.is_empty() {
+            config.modify_args.clone()
+        } else {
+            extract_args()
+        }
+    } else {
+        extract_args()
+    };
+
+    (env, args)
+}
+
+/// Extracts a timestamp field conditionally based on export options.
+fn extract_optional_timestamp(
+    row: &serde_json::Value,
+    field: &str,
+    include: bool,
+) -> Option<String> {
+    if include {
+        row[field].as_str().map(String::from)
+    } else {
+        None
+    }
+}
+
+/// Checks whether an entity with the given name already exists in the table.
+///
+/// Returns an `ImportConflict` if a name collision is found, None otherwise.
+async fn check_name_conflict(
+    db: &DBClient,
+    table: &str,
+    entity_type: &str,
+    name: &str,
+) -> Option<ImportConflict> {
+    let query = format!(
+        "SELECT meta::id(id) AS id FROM {} WHERE name = $name",
+        table
+    );
+    let results: Vec<serde_json::Value> = db
+        .db
+        .query(&query)
+        .bind(("name", name.to_string()))
+        .await
+        .map(|mut r| r.take(0).unwrap_or_default())
+        .unwrap_or_default();
+
+    let existing = results.first()?;
+    Some(ImportConflict {
+        entity_type: entity_type.to_string(),
+        entity_name: name.to_string(),
+        existing_id: existing["id"].as_str().unwrap_or("").to_string(),
+    })
+}
+
+/// Mutable counters for tracking import progress across entity types.
+struct ImportTracking<'a> {
+    imported: &'a mut ImportCounts,
+    skipped: &'a mut ImportCounts,
+    errors: &'a mut Vec<ImportError>,
+}
+
+/// Result of resolving how to handle an entity during import.
+enum ImportAction {
+    /// Entity not in user selection (do not count as skipped).
+    NotSelected,
+    /// User chose to skip this conflict.
+    Skipped,
+    /// Entity should be imported with the given parameters.
+    Import {
+        id: String,
+        name: String,
+        is_overwrite: bool,
+    },
+}
+
+/// Resolves the import action for a single entity: selection check, conflict
+/// resolution lookup, existing-ID retrieval, and final name computation.
+async fn resolve_import_entity(
+    db: &DBClient,
+    table: &str,
+    entity_type_prefix: &str,
+    entity_name: &str,
+    selected_names: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+) -> ImportAction {
+    if !selected_names.contains(&entity_name.to_string()) {
+        return ImportAction::NotSelected;
+    }
+
+    let resolution_key = format!("{}:{}", entity_type_prefix, entity_name);
+    let resolution = resolutions.get(&resolution_key).cloned();
+
+    if resolution == Some(ConflictResolution::Skip) {
+        return ImportAction::Skipped;
+    }
+
+    // For Overwrite, find the existing ID by name
+    let existing_id = if resolution == Some(ConflictResolution::Overwrite) {
+        let query = format!(
+            "SELECT meta::id(id) AS id FROM {} WHERE name = $name",
+            table
+        );
+        let results: Vec<serde_json::Value> = db
+            .db
+            .query(&query)
+            .bind(("name", entity_name.to_string()))
+            .await
+            .map(|mut r| r.take(0).unwrap_or_default())
+            .unwrap_or_default();
+        results
+            .first()
+            .and_then(|r| r["id"].as_str())
+            .map(String::from)
+    } else {
+        None
+    };
+
+    let id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let name = if resolution == Some(ConflictResolution::Rename) {
+        format!("{} (imported)", entity_name)
+    } else {
+        entity_name.to_string()
+    };
+
+    ImportAction::Import {
+        id,
+        name,
+        is_overwrite: resolution == Some(ConflictResolution::Overwrite),
+    }
+}
+
+// ============================================================================
+// Per-Entity Export Helpers
+// ============================================================================
+
+/// Exports agent entities from the database.
+async fn export_agents(
+    db: &DBClient,
+    agent_ids: &[String],
+    include_timestamps: bool,
+) -> Result<Vec<AgentExportData>, String> {
+    let mut agents = Vec::new();
+    for agent_id in agent_ids {
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, agent_id, "agent").await? {
+            let llm = &row["llm"];
+            agents.push(AgentExportData {
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                lifecycle: row["lifecycle"].as_str().unwrap_or("permanent").to_string(),
+                llm: LLMConfigExport {
+                    provider: llm["provider"].as_str().unwrap_or("").to_string(),
+                    model: llm["model"].as_str().unwrap_or("").to_string(),
+                    temperature: llm["temperature"].as_f64().unwrap_or(0.7) as f32,
+                    max_tokens: llm["max_tokens"].as_u64().unwrap_or(4096) as usize,
+                },
+                tools: row["tools"]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                mcp_servers: row["mcp_servers"]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
+                max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
+                enable_thinking: row["enable_thinking"].as_bool().unwrap_or(true),
+                created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
+                updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
+            });
+        }
+    }
+    Ok(agents)
+}
+
+/// Exports MCP server entities with sanitization applied.
+async fn export_mcp_servers(
+    db: &DBClient,
+    server_ids: &[String],
+    include_timestamps: bool,
+    sanitization: &HashMap<String, MCPSanitizationConfig>,
+) -> Result<Vec<MCPServerExportData>, String> {
+    let mut servers = Vec::new();
+    for server_id in server_ids {
+        if let Some(config) = sanitization.get(server_id) {
+            if config.exclude_from_export {
+                continue;
+            }
+        }
+        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, created_at, updated_at FROM mcp_server WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, server_id, "MCP server").await? {
+            let (env, args) = apply_mcp_sanitization(&row, server_id, sanitization);
+            servers.push(MCPServerExportData {
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                enabled: row["enabled"].as_bool().unwrap_or(false),
+                command: row["command"].as_str().unwrap_or("").to_string(),
+                args,
+                env,
+                description: row["description"].as_str().map(String::from),
+                created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
+                updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
+            });
+        }
+    }
+    Ok(servers)
+}
+
+/// Exports model entities from the database.
+async fn export_models(
+    db: &DBClient,
+    model_ids: &[String],
+    include_timestamps: bool,
+) -> Result<Vec<LLMModelExportData>, String> {
+    let mut models = Vec::new();
+    for model_id in model_ids {
+        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, input_price_per_mtok, output_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, model_id, "model").await? {
+            models.push(LLMModelExportData {
+                provider: row["provider"].as_str().unwrap_or("").to_string(),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                api_name: row["api_name"].as_str().unwrap_or("").to_string(),
+                context_window: row["context_window"].as_u64().unwrap_or(0) as usize,
+                max_output_tokens: row["max_output_tokens"].as_u64().unwrap_or(0) as usize,
+                temperature_default: row["temperature_default"].as_f64().unwrap_or(0.7) as f32,
+                is_builtin: row["is_builtin"].as_bool().unwrap_or(false),
+                is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
+                input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),
+                output_price_per_mtok: row["output_price_per_mtok"].as_f64().unwrap_or(0.0),
+                created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
+                updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
+            });
+        }
+    }
+    Ok(models)
+}
+
+/// Exports prompt entities from the database.
+async fn export_prompts(
+    db: &DBClient,
+    prompt_ids: &[String],
+    include_timestamps: bool,
+) -> Result<Vec<PromptExportData>, String> {
+    let mut prompts = Vec::new();
+    for prompt_id in prompt_ids {
+        let query = "SELECT meta::id(id) AS id, name, description, category, content, created_at, updated_at FROM prompt WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, prompt_id, "prompt").await? {
+            prompts.push(PromptExportData {
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().unwrap_or("").to_string(),
+                category: row["category"].as_str().unwrap_or("custom").to_string(),
+                content: row["content"].as_str().unwrap_or("").to_string(),
+                created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
+                updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
+            });
+        }
+    }
+    Ok(prompts)
+}
+
+// ============================================================================
+// Per-Entity Validation Helpers
+// ============================================================================
+
+/// Builds agent summaries and detects name conflicts.
+async fn validate_agents(
+    db: &DBClient,
+    agents: &[AgentExportData],
+    conflicts: &mut Vec<ImportConflict>,
+) -> Vec<AgentExportSummary> {
+    let mut summaries = Vec::new();
+    for agent in agents {
+        summaries.push(AgentExportSummary {
+            id: None,
+            name: agent.name.clone(),
+            lifecycle: agent.lifecycle.clone(),
+            provider: agent.llm.provider.clone(),
+            model: agent.llm.model.clone(),
+            tools_count: agent.tools.len(),
+            mcp_servers_count: agent.mcp_servers.len(),
+        });
+        if let Some(conflict) = check_name_conflict(db, "agent", "agent", &agent.name).await {
+            conflicts.push(conflict);
+        }
+    }
+    summaries
+}
+
+/// Builds MCP server summaries, detects conflicts, and checks for missing env keys.
+async fn validate_mcp_servers(
+    db: &DBClient,
+    servers: &[MCPServerExportData],
+    conflicts: &mut Vec<ImportConflict>,
+    missing_mcp_env: &mut HashMap<String, Vec<String>>,
+) -> Vec<MCPServerExportSummary> {
+    let mut summaries = Vec::new();
+    for server in servers {
+        summaries.push(MCPServerExportSummary {
+            id: None,
+            name: server.name.clone(),
+            enabled: server.enabled,
+            command: server.command.clone(),
+            tools_count: 0,
+        });
+
+        let missing_keys: Vec<String> = server
+            .env
+            .iter()
+            .filter(|(key, value)| is_sensitive_env_key(key) && value.is_empty())
+            .map(|(key, _)| key.clone())
+            .collect();
+        if !missing_keys.is_empty() {
+            missing_mcp_env.insert(server.name.clone(), missing_keys);
+        }
+
+        if let Some(conflict) = check_name_conflict(db, "mcp_server", "mcp", &server.name).await {
+            conflicts.push(conflict);
+        }
+    }
+    summaries
+}
+
+/// Builds model summaries, detects conflicts, and warns about builtins.
+async fn validate_models(
+    db: &DBClient,
+    models: &[LLMModelExportData],
+    conflicts: &mut Vec<ImportConflict>,
+    warnings: &mut Vec<String>,
+) -> Vec<LLMModelExportSummary> {
+    let mut summaries = Vec::new();
+    for model in models {
+        summaries.push(LLMModelExportSummary {
+            id: None,
+            name: model.name.clone(),
+            provider: model.provider.clone(),
+            api_name: model.api_name.clone(),
+            is_builtin: model.is_builtin,
+        });
+        if model.is_builtin {
+            warnings.push(format!(
+                "Model '{}' is a builtin model and may conflict with system defaults",
+                model.name
+            ));
+        }
+        if let Some(conflict) = check_name_conflict(db, "llm_model", "model", &model.name).await {
+            conflicts.push(conflict);
+        }
+    }
+    summaries
+}
+
+/// Builds prompt summaries and detects name conflicts.
+async fn validate_prompts(
+    db: &DBClient,
+    prompts: &[PromptExportData],
+    conflicts: &mut Vec<ImportConflict>,
+) -> Vec<PromptExportSummary> {
+    let mut summaries = Vec::new();
+    for prompt in prompts {
+        let var_count = prompt.content.matches("{{").count();
+        summaries.push(PromptExportSummary {
+            id: None,
+            name: prompt.name.clone(),
+            description: prompt.description.clone(),
+            category: prompt.category.clone(),
+            variables_count: var_count,
+        });
+        if let Some(conflict) = check_name_conflict(db, "prompt", "prompt", &prompt.name).await {
+            conflicts.push(conflict);
+        }
+    }
+    summaries
+}
+
+// ============================================================================
+// Per-Entity Import Helpers
+// ============================================================================
+
+/// Imports agent entities with conflict resolution.
+async fn import_agents(
+    db: &DBClient,
+    agents: &[AgentExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    t: &mut ImportTracking<'_>,
+) {
+    for agent in agents {
+        match resolve_import_entity(db, "agent", "agent", &agent.name, selected, resolutions).await {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => { t.skipped.agents += 1; continue; }
+            ImportAction::Import { id, name, is_overwrite } => {
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "name": name,
+                    "lifecycle": agent.lifecycle,
+                    "llm": {
+                        "provider": agent.llm.provider,
+                        "model": agent.llm.model,
+                        "temperature": agent.llm.temperature,
+                        "max_tokens": agent.llm.max_tokens,
+                    },
+                    "tools": agent.tools,
+                    "mcp_servers": agent.mcp_servers,
+                    "system_prompt": agent.system_prompt,
+                    "max_tool_iterations": agent.max_tool_iterations,
+                    "enable_thinking": agent.enable_thinking,
+                }));
+                match persist_imported_entity(db, "agent", &id, data, is_overwrite).await {
+                    Ok(()) => t.imported.agents += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "agent".to_string(),
+                        entity_id: agent.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Imports MCP server entities with conflict resolution and env additions.
+async fn import_mcp_servers(
+    db: &DBClient,
+    servers: &[MCPServerExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    mcp_additions: &HashMap<String, MCPAdditions>,
+    t: &mut ImportTracking<'_>,
+) {
+    for server in servers {
+        match resolve_import_entity(db, "mcp_server", "mcp", &server.name, selected, resolutions).await {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => { t.skipped.mcp_servers += 1; continue; }
+            ImportAction::Import { id, name, is_overwrite } => {
+                let mut env = server.env.clone();
+                if let Some(additions) = mcp_additions.get(&server.name) {
+                    for (key, value) in &additions.add_env {
+                        env.insert(key.clone(), value.clone());
+                    }
+                }
+                let env_str = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "name": name,
+                    "enabled": server.enabled,
+                    "command": server.command,
+                    "args": server.args,
+                    "env": env_str,
+                    "description": server.description,
+                }));
+                match persist_imported_entity(db, "mcp_server", &id, data, is_overwrite).await {
+                    Ok(()) => t.imported.mcp_servers += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "mcp".to_string(),
+                        entity_id: server.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Imports model entities with conflict resolution.
+async fn import_models(
+    db: &DBClient,
+    models: &[LLMModelExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    t: &mut ImportTracking<'_>,
+) {
+    for model in models {
+        match resolve_import_entity(db, "llm_model", "model", &model.name, selected, resolutions).await {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => { t.skipped.models += 1; continue; }
+            ImportAction::Import { id, name, is_overwrite } => {
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "provider": model.provider,
+                    "name": name,
+                    "api_name": model.api_name,
+                    "context_window": model.context_window,
+                    "max_output_tokens": model.max_output_tokens,
+                    "temperature_default": model.temperature_default,
+                    "is_builtin": model.is_builtin,
+                    "is_reasoning": model.is_reasoning,
+                    "input_price_per_mtok": model.input_price_per_mtok,
+                    "output_price_per_mtok": model.output_price_per_mtok,
+                }));
+                match persist_imported_entity(db, "llm_model", &id, data, is_overwrite).await {
+                    Ok(()) => t.imported.models += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "model".to_string(),
+                        entity_id: model.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Imports prompt entities with conflict resolution.
+async fn import_prompts(
+    db: &DBClient,
+    prompts: &[PromptExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    t: &mut ImportTracking<'_>,
+) {
+    for prompt in prompts {
+        match resolve_import_entity(db, "prompt", "prompt", &prompt.name, selected, resolutions).await {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => { t.skipped.prompts += 1; continue; }
+            ImportAction::Import { id, name, is_overwrite } => {
+                let variables = Prompt::detect_variables(&prompt.content);
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "name": name,
+                    "description": prompt.description,
+                    "category": prompt.category,
+                    "content": prompt.content,
+                    "variables": variables,
+                }));
+                match persist_imported_entity(db, "prompt", &id, data, is_overwrite).await {
+                    Ok(()) => t.imported.prompts += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "prompt".to_string(),
+                        entity_id: prompt.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Persists an imported entity via CREATE or UPDATE, then sets timestamps.
+async fn persist_imported_entity(
+    db: &DBClient,
+    table: &str,
+    entity_id: &str,
+    data: serde_json::Value,
+    is_overwrite: bool,
+) -> Result<(), String> {
+    let query = if is_overwrite {
+        format!("UPDATE {}:`{}` CONTENT $data", table, entity_id)
+    } else {
+        format!("CREATE {}:`{}` CONTENT $data", table, entity_id)
+    };
+
+    db.execute_with_params(&query, vec![("data".to_string(), data)])
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let ts_query = format!(
+        "UPDATE {}:`{}` SET created_at = time::now(), updated_at = time::now()",
+        table, entity_id
+    );
+    if let Err(e) = db.execute(&ts_query).await {
+        tracing::warn!(
+            table = %table,
+            entity_id = %entity_id,
+            error = %e,
+            "Failed to set timestamps on imported entity"
+        );
+    }
+
+    Ok(())
 }
