@@ -81,7 +81,7 @@ pub struct UserQuestionCreate {
     pub status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserQuestionStreamPayload {
     pub question_id: String,

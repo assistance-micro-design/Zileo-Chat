@@ -17,6 +17,7 @@
 //! This tool allows agents to ask questions to users through a modal interface.
 
 use crate::db::{sanitize_for_surrealdb, DBClient};
+use crate::models::streaming::{events, StreamChunk};
 use crate::models::{QuestionOption, UserQuestionCreate, UserQuestionStreamPayload};
 use crate::tools::constants::user_question as uq_const;
 use crate::tools::user_question::circuit_breaker::UserQuestionCircuitBreaker;
@@ -257,13 +258,9 @@ impl UserQuestionTool {
                 context: input.context.clone(),
             };
 
-            let chunk = json!({
-                "workflow_id": self.workflow_id,
-                "chunk_type": "user_question_start",
-                "user_question": payload
-            });
+            let chunk = StreamChunk::user_question_start(self.workflow_id.clone(), payload);
 
-            if let Err(e) = handle.emit("workflow_stream", &chunk) {
+            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
                 warn!(error = %e, "Failed to emit user_question_start event");
             }
         }
@@ -275,13 +272,12 @@ impl UserQuestionTool {
     /// * `question_id` - UUID of the question
     fn emit_completion_event(&self, question_id: &str) {
         if let Some(ref handle) = self.app_handle {
-            let chunk = json!({
-                "workflow_id": self.workflow_id,
-                "chunk_type": "user_question_complete",
-                "question_id": question_id
-            });
+            let chunk = StreamChunk::user_question_complete(
+                self.workflow_id.clone(),
+                question_id.to_string(),
+            );
 
-            if let Err(e) = handle.emit("workflow_stream", &chunk) {
+            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
                 warn!(error = %e, "Failed to emit user_question_complete event");
             }
         }

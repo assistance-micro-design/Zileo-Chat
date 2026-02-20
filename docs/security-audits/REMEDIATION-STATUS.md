@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 72 | Fix implemented and tested |
-| NOT DONE | 7 | Not yet addressed |
+| DONE | 73 | Fix implemented and tested |
+| NOT DONE | 6 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 34 | 1 |
+| MEDIUM (35) | 35 | 0 |
 | LOW (13) | 5 | 8 |
 | N/A (7) | - | - |
 
@@ -30,7 +30,7 @@
 
 ## Tests Added
 
-### Rust (60 new tests)
+### Rust (64 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -94,6 +94,10 @@
 | security/validation.rs | test_serialize_for_query_special_chars | SA-007 DUP-2: special chars properly escaped |
 | security/validation.rs | test_serialize_for_query_vec | SA-007 DUP-2: vec serializes to JSON array |
 | security/validation.rs | test_serialize_for_query_option_none | SA-007 DUP-2: None serializes to null |
+| models/streaming.rs | test_user_question_chunk_type_serialization | SA-013 #14: ChunkType serialization for UserQuestionStart/Complete |
+| models/streaming.rs | test_stream_chunk_user_question_start | SA-013 #14-15: user_question_start constructor + payload fields |
+| models/streaming.rs | test_stream_chunk_user_question_complete | SA-013 #14-15: user_question_complete constructor + question_id |
+| models/streaming.rs | test_user_question_fields_skipped_when_none | SA-013 #14-15: user_question/question_id absent for other chunk types |
 
 ### TypeScript (67 new tests in 5 new files + 1 updated)
 
@@ -261,7 +265,7 @@
 | #1-4 | HIGH (adj.) | AgentConfig optional vs required mismatch | **DONE** | AgentConfig: both fields already `number`/`boolean`. AgentConfigCreate: `max_tool_iterations: number` (was `number?`), `enable_thinking: boolean` (was `boolean?`). AgentForm.svelte updated to always send `enable_thinking`. Zod schema updated. 2 test mocks updated. |
 | #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
 | #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **DONE** | llm_models.rs: removed `skip_serializing_if` from `base_url`. Now serializes as `null` when None, matching TS `string \| null`. 3 new tests. |
-| #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
+| #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **DONE** | Rust ChunkType: added `UserQuestionStart`/`UserQuestionComplete` variants. Rust StreamChunk: added `user_question`/`question_id` fields + 2 constructors. tool.rs + commands/user_question.rs: replaced manual `json!()` with typed `StreamChunk` constructors. TS StreamChunk: added `question_id` field. `UserQuestionStreamPayload`: added `Deserialize`. 4 new tests. |
 | #16-20 | MEDIUM | Console.* violations (28 instances) | **DONE** | All 28 console.* removed: services (silent return), stores/i18n (silent fallback), agent page (toast notifications), settings pages (error state in UI), components (UI error state or silent guard). 0 remaining. |
 | model_id | - | Workflow.model_id convention | **DONE** | workflow.ts: `model_id: string | null` (was `model_id?: string`). |
 
@@ -311,7 +315,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Function decomposition | SA-007 F1-F13 | 4h |
 | NPM dependency updates | SA-006 DEP-3 | 30min |
 | ~~SurrealDB feature pruning~~ | ~~SA-006 DEP-2~~ | **DONE** |
-| Orphan TS types cleanup | SA-013 #14-15 | 30min |
+| ~~Orphan TS types cleanup~~ | ~~SA-013 #14-15~~ | **DONE** |
 | ~~MCP HTTP validation~~ | ~~SA-002 S2-H3~~ | **DONE** |
 
 ### Deferred (LOW / quality-only)

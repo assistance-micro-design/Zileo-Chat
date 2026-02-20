@@ -19,6 +19,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::UserQuestionStreamPayload;
+
 /// Type of streaming chunk content
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +49,10 @@ pub enum ChunkType {
     TaskUpdate,
     /// Task completed
     TaskComplete,
+    /// User question started (waiting for user response)
+    UserQuestionStart,
+    /// User question completed (answered, skipped, or timed out)
+    UserQuestionComplete,
 }
 
 /// Streaming chunk emitted during workflow execution
@@ -92,6 +98,12 @@ pub struct StreamChunk {
     /// Task priority (for task_* chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_priority: Option<u8>,
+    /// User question payload (for user_question_start chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_question: Option<UserQuestionStreamPayload>,
+    /// Question ID (for user_question_complete chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub question_id: Option<String>,
     /// Token count for this chunk (incremental)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_delta: Option<usize>,
@@ -129,6 +141,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -157,6 +171,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: Some(tokens_delta),
             tokens_total: Some(tokens_total),
         }
@@ -179,6 +195,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -201,6 +219,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -223,6 +243,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -245,6 +267,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -275,6 +299,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -308,6 +334,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -339,6 +367,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -370,6 +400,8 @@ impl StreamChunk {
             task_name: None,
             task_status: None,
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -400,6 +432,8 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some("pending".to_string()),
             task_priority: Some(priority),
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -430,6 +464,8 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some(status.into()),
             task_priority: None,
+            user_question: None,
+            question_id: None,
             tokens_delta: None,
             tokens_total: None,
         }
@@ -460,6 +496,66 @@ impl StreamChunk {
             task_name: Some(task_name.into()),
             task_status: Some("completed".to_string()),
             task_priority: None,
+            user_question: None,
+            question_id: None,
+            tokens_delta: None,
+            tokens_total: None,
+        }
+    }
+
+    /// Creates a user question start chunk.
+    ///
+    /// Emitted when an agent asks a question to the user and waits for response.
+    pub fn user_question_start(
+        workflow_id: String,
+        payload: UserQuestionStreamPayload,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::UserQuestionStart,
+            content: None,
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
+            user_question: Some(payload),
+            question_id: None,
+            tokens_delta: None,
+            tokens_total: None,
+        }
+    }
+
+    /// Creates a user question complete chunk.
+    ///
+    /// Emitted when a user question is answered, skipped, or timed out.
+    pub fn user_question_complete(
+        workflow_id: String,
+        question_id: String,
+    ) -> Self {
+        Self {
+            workflow_id,
+            chunk_type: ChunkType::UserQuestionComplete,
+            content: None,
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
+            user_question: None,
+            question_id: Some(question_id),
             tokens_delta: None,
             tokens_total: None,
         }
@@ -845,5 +941,66 @@ mod tests {
         let json_with_tokens = serde_json::to_string(&chunk_with_tokens).unwrap();
         assert!(json_with_tokens.contains("\"tokens_delta\":5"));
         assert!(json_with_tokens.contains("\"tokens_total\":100"));
+    }
+
+    #[test]
+    fn test_user_question_chunk_type_serialization() {
+        let chunk_type = ChunkType::UserQuestionStart;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"user_question_start\"");
+
+        let chunk_type = ChunkType::UserQuestionComplete;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"user_question_complete\"");
+    }
+
+    #[test]
+    fn test_stream_chunk_user_question_start() {
+        let payload = UserQuestionStreamPayload {
+            question_id: "q_001".to_string(),
+            question: "Which database?".to_string(),
+            question_type: "checkbox".to_string(),
+            options: None,
+            text_placeholder: None,
+            text_required: false,
+            context: Some("We need to choose a DB".to_string()),
+        };
+        let chunk = StreamChunk::user_question_start("wf_001".to_string(), payload);
+        assert_eq!(chunk.chunk_type, ChunkType::UserQuestionStart);
+        assert!(chunk.user_question.is_some());
+        let uq = chunk.user_question.as_ref().unwrap();
+        assert_eq!(uq.question_id, "q_001");
+        assert_eq!(uq.question, "Which database?");
+        assert!(chunk.question_id.is_none());
+        assert!(chunk.content.is_none());
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"user_question_start\""));
+        assert!(json.contains("\"user_question\""));
+        // Inside the payload, fields are camelCase due to UserQuestionStreamPayload serde rename
+        assert!(json.contains("\"questionId\":\"q_001\""));
+    }
+
+    #[test]
+    fn test_stream_chunk_user_question_complete() {
+        let chunk = StreamChunk::user_question_complete(
+            "wf_001".to_string(),
+            "q_001".to_string(),
+        );
+        assert_eq!(chunk.chunk_type, ChunkType::UserQuestionComplete);
+        assert_eq!(chunk.question_id, Some("q_001".to_string()));
+        assert!(chunk.user_question.is_none());
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"user_question_complete\""));
+        assert!(json.contains("\"question_id\":\"q_001\""));
+    }
+
+    #[test]
+    fn test_user_question_fields_skipped_when_none() {
+        let chunk = StreamChunk::token("wf_001".to_string(), "Hello".to_string());
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(!json.contains("user_question"));
+        assert!(!json.contains("question_id"));
     }
 }

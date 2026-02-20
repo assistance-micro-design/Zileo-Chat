@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde_json::json;
 use tauri::{Emitter, State, Window};
 use tracing::{info, warn};
 
 use crate::db::DBClient;
+use crate::models::streaming::{events, StreamChunk};
 use crate::models::UserQuestion;
 use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::state::AppState;
@@ -153,14 +153,13 @@ pub async fn submit_user_response(
         "User submitted response - verified status"
     );
 
-    // Emit event for any listeners
-    let chunk = json!({
-        "chunk_type": "user_question_complete",
-        "question_id": validated_id,
-        "status": "answered"
-    });
+    // Emit typed event for any listeners
+    let chunk = StreamChunk::user_question_complete(
+        String::new(), // workflow_id not available in this command context
+        validated_id.to_string(),
+    );
 
-    if let Err(e) = window.emit("workflow_stream", &chunk) {
+    if let Err(e) = window.emit(events::WORKFLOW_STREAM, &chunk) {
         warn!(error = %e, "Failed to emit user_question_complete event");
     }
 
@@ -255,14 +254,13 @@ pub async fn skip_question(
 
     info!(question_id = %validated_id, "User skipped question");
 
-    // Emit event
-    let chunk = json!({
-        "chunk_type": "user_question_complete",
-        "question_id": validated_id,
-        "status": "skipped"
-    });
+    // Emit typed event
+    let chunk = StreamChunk::user_question_complete(
+        String::new(), // workflow_id not available in this command context
+        validated_id.to_string(),
+    );
 
-    if let Err(e) = window.emit("workflow_stream", &chunk) {
+    if let Err(e) = window.emit(events::WORKFLOW_STREAM, &chunk) {
         warn!(error = %e, "Failed to emit user_question_complete event");
     }
 
