@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 45 | Fix implemented and tested |
+| DONE | 46 | Fix implemented and tested |
 | PARTIAL | 6 | Some aspects done, others remain |
-| NOT DONE | 15 | Not yet addressed |
+| NOT DONE | 14 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 22 | 3 | 2 |
+| HIGH (27) | 23 | 3 | 1 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -67,13 +67,14 @@
 | commands/migration.rs | test_memory_v2_migration_guard | Guard: v2 migration idempotent |
 | commands/migration.rs | test_mcp_http_migration_guard | Guard: MCP HTTP migration idempotent |
 
-### TypeScript (30 new tests in 3 new files)
+### TypeScript (35 new tests in 3 new files + 1 updated)
 
 | File | Tests | Purpose |
 |------|-------|---------|
 | utils/__tests__/error.test.ts | 11 tests | getErrorMessage + formatErrorForDisplay |
 | utils/__tests__/url.test.ts | 11 tests | isAllowedScheme (XSS defense) |
 | stores/__tests__/activity.test.ts | 8 tests | Activity capture guard (SA-011 H-001 race condition) |
+| stores/__tests__/workflows.test.ts | 5 new tests | loadWorkflows retry recovery (SA-011 H-002) |
 
 ### Infrastructure
 
@@ -190,7 +191,7 @@
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
 | H-001 | HIGH | Activity capture race condition | **DONE** | **Frontend**: activity.ts: `lastCapturedWorkflowId` guard prevents duplicate capture. workflowExecutor.service.ts: capture moved to `finally` block (before `streamingStore.reset()`), runs on both success and error paths. 8 new tests in activity.test.ts. **Backend**: CancellationToken now propagated through full chain: streaming.rs -> orchestrator -> Agent trait -> LLMAgent -> AgentToolContext -> sub-agent tools -> SubAgentExecutor. Sub-agents stop promptly on user cancel. Files: agent.rs, orchestrator.rs, llm_agent.rs, context.rs, streaming.rs, workflow.rs, sub_agent_executor.rs. |
-| H-002 | HIGH | No error recovery on loadWorkflows | **NOT DONE** | No error state or retry added. |
+| H-002 | HIGH | No error recovery on loadWorkflows | **DONE** | WorkflowList: error state with retry button. WorkflowSidebar/+page.svelte: pass workflowsError + workflowsLoading + onretry. 5 new store tests. i18n keys added. |
 | H-003 | HIGH | No double-submit protection | **DONE** | workflowExecutor.service.ts: `executingWorkflows` Set guards against concurrent sends. |
 | M-001 to M-012 | MEDIUM | Various quality issues | **NOT DONE** | No changes to chat/workflow components (except MarkdownRenderer URL check). |
 
@@ -250,7 +251,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |---------|-----|--------|
 | ~~SA-005 H3: Migration guard~~ | ~~Memory embeddings can be destroyed by re-running migration~~ | **DONE** |
 | ~~SA-011 H-001: Activity capture race~~ | ~~Activities can be lost during streaming reset~~ | **DONE** (frontend guard + backend cancellation token propagation) |
-| SA-011 H-002: loadWorkflows error recovery | Blank sidebar with no retry on DB failure | 1h |
+| ~~SA-011 H-002: loadWorkflows error recovery~~ | ~~Blank sidebar with no retry on DB failure~~ | **DONE** |
 | SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |
 | SA-013 #6: MessageCreate tokens | Missing field in TS type | 15min |
 | SA-013 #12: ProviderSettings.base_url | Nullability mismatch | 15min |

@@ -373,6 +373,92 @@ describe('Workflow Store', () => {
 		});
 	});
 
+	describe('workflowStore.loadWorkflows retry recovery (SA-011 H-002)', () => {
+		it('should expose error state when loadWorkflows fails', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('DB unavailable'));
+
+			await workflowStore.loadWorkflows();
+
+			expect(get(workflowsError)).toBe('DB unavailable');
+			expect(get(workflows)).toEqual([]);
+			expect(get(workflowsLoading)).toBe(false);
+		});
+
+		it('should recover on retry after failure', async () => {
+			// First call fails
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('DB unavailable'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('DB unavailable');
+
+			// Second call succeeds (retry)
+			const mockWorkflows = [createMockWorkflow('wf1', 'Recovered Workflow')];
+			vi.mocked(invoke).mockResolvedValueOnce(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			expect(get(workflowsError)).toBeNull();
+			expect(get(workflows)).toHaveLength(1);
+			expect(get(workflows)[0].name).toBe('Recovered Workflow');
+		});
+
+		it('should clear error at start of retry attempt', async () => {
+			// First call fails
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('First error'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('First error');
+
+			// On retry start, error should be cleared immediately
+			vi.mocked(invoke).mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						// During the invoke call, error should already be null
+						expect(get(workflowsError)).toBeNull();
+						expect(get(workflowsLoading)).toBe(true);
+						resolve([createMockWorkflow('wf1', 'Test')]);
+					})
+			);
+
+			await workflowStore.loadWorkflows();
+		});
+
+		it('should handle multiple consecutive failures then success', async () => {
+			// Retry 1 fails
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('Network error'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('Network error');
+
+			// Retry 2 fails with different error
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('Timeout'));
+			await workflowStore.loadWorkflows();
+			expect(get(workflowsError)).toBe('Timeout');
+
+			// Retry 3 succeeds
+			const mockWorkflows = [createMockWorkflow('wf1', 'Finally loaded')];
+			vi.mocked(invoke).mockResolvedValueOnce(mockWorkflows);
+			await workflowStore.loadWorkflows();
+
+			expect(get(workflowsError)).toBeNull();
+			expect(get(workflows)).toHaveLength(1);
+			expect(invoke).toHaveBeenCalledTimes(3);
+		});
+
+		it('should preserve workflows from previous successful load on error', async () => {
+			// First load succeeds
+			const mockWorkflows = [createMockWorkflow('wf1', 'Existing Workflow')];
+			vi.mocked(invoke).mockResolvedValueOnce(mockWorkflows);
+			await workflowStore.loadWorkflows();
+			expect(get(workflows)).toHaveLength(1);
+
+			// Subsequent load fails (e.g., transient error during refresh)
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('Transient error'));
+			await workflowStore.loadWorkflows();
+
+			// Error should be set, but existing workflows should remain
+			expect(get(workflowsError)).toBe('Transient error');
+			expect(get(workflows)).toHaveLength(1);
+			expect(get(workflows)[0].name).toBe('Existing Workflow');
+		});
+	});
+
 	describe('store subscription', () => {
 		it('should allow subscribing to store changes', async () => {
 			const states: WorkflowState[] = [];

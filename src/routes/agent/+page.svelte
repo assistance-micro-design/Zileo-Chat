@@ -49,7 +49,9 @@ Uses extracted components, services, and stores for clean architecture.
 		workflows,
 		selectedWorkflow,
 		filteredWorkflows,
-		workflowSearchFilter
+		workflowSearchFilter,
+		workflowsError,
+		workflowsLoading
 	} from '$lib/stores/workflows';
 	import {
 		activityStore,
@@ -445,6 +447,8 @@ Uses extracted components, services, and stores for clean architecture.
 		workflows={$filteredWorkflows}
 		selectedWorkflowId={pageState.selectedWorkflowId}
 		searchFilter={$workflowSearchFilter}
+		error={$workflowsError}
+		loading={$workflowsLoading}
 		runningWorkflowIds={$runningWorkflowIds$}
 		recentlyCompletedIds={$recentlyCompletedIds$}
 		questionPendingIds={$questionPendingIds$}
@@ -453,6 +457,7 @@ Uses extracted components, services, and stores for clean architecture.
 		oncreate={() => modalState = { type: 'new-workflow' }}
 		ondelete={(w) => modalState = { type: 'delete-workflow', workflowId: w.id }}
 		onrename={(w, name) => handleRename(w.id, name)}
+		onretry={() => workflowStore.loadWorkflows()}
 	/>
 
 	<!-- Main Content -->
