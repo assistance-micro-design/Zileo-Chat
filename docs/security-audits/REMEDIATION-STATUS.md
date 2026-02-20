@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 57 | Fix implemented and tested |
-| NOT DONE | 10 | Not yet addressed |
+| DONE | 58 | Fix implemented and tested |
+| NOT DONE | 9 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 19 | 16 |
+| MEDIUM (35) | 20 | 15 |
 | LOW (13) | 5 | 8 |
 | N/A (7) | - | - |
 
@@ -30,7 +30,7 @@
 
 ## Tests Added
 
-### Rust (52 new tests)
+### Rust (56 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -86,6 +86,10 @@
 | mcp/http_handle.rs | test_http_warning_for_remote_http_url | SA-002 S2-H3: Integration - remote HTTP |
 | mcp/http_handle.rs | test_no_http_warning_for_https_url | SA-002 S2-H3: Integration - HTTPS safe |
 | mcp/http_handle.rs | test_no_http_warning_for_localhost | SA-002 S2-H3: Integration - localhost safe |
+| security/validation.rs | test_validate_uuid_field_valid | SA-007 DUP-1: valid UUID returns Ok |
+| security/validation.rs | test_validate_uuid_field_invalid | SA-007 DUP-1: invalid UUID includes field name |
+| security/validation.rs | test_validate_uuid_field_includes_field_name_in_error | SA-007 DUP-1: error contains field name |
+| security/validation.rs | test_validate_uuid_field_trims_whitespace | SA-007 DUP-1: whitespace trimmed |
 
 ### TypeScript (35 new tests in 3 new files + 1 updated)
 
@@ -164,7 +168,7 @@
 
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
-| DUP-1 | MEDIUM | UUID validation repeated 52x | **NOT DONE** | No ResultExt trait extracted. |
+| DUP-1 | MEDIUM | UUID validation repeated 52x | **DONE** | `validate_uuid_field()` helper in `security/validation.rs`. 47 production occurrences replaced across 12 command files. 4 new tests. |
 | DUP-2 | MEDIUM | serde_json escaping repeated 25x | **NOT DONE** | |
 | DUP-3 | MEDIUM | COUNT extraction repeated 16x | **NOT DONE** | |
 | F1-F13 | MEDIUM | 13 oversized functions (>100 lines) | **NOT DONE** | No function decomposition. |
@@ -283,7 +287,8 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|----------|--------|
 | Tauri permissions hardening | SA-005 M2-M3 (M1+M4 DONE) | 30min |
 | Template deduplication | SA-010 DUP-1/2/3 | 3h |
-| Code deduplication (Rust) | SA-007 DUP-1/2/3, SA-008 DUP-1/3/4 | 6h |
+| ~~UUID validation dedup~~ | ~~SA-007 DUP-1~~ | **DONE** |
+| Code deduplication (Rust) | SA-007 DUP-2/3, SA-008 DUP-1/3/4 | 5h |
 | Function decomposition | SA-007 F1-F13 | 4h |
 | NPM dependency updates | SA-006 DEP-3 | 30min |
 | ~~SurrealDB feature pruning~~ | ~~SA-006 DEP-2~~ | **DONE** |
@@ -307,7 +312,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-20 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 912 tests passed |
+| cargo test --lib | **PASS** | 2026-02-20, 916 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-20, 225 tests passed |

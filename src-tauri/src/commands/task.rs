@@ -39,7 +39,7 @@
 
 use crate::{
     models::task::{Task, TaskCreate, TaskUpdate},
-    security::Validator,
+    security::{validate_uuid_field, Validator},
     tools::constants::query_limits,
     AppState,
 };
@@ -79,11 +79,7 @@ pub async fn create_task(
 ) -> Result<String, String> {
     info!("Creating new task");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Validate task name
     let validated_name = Validator::validate_message(&name).map_err(|e| {
@@ -108,10 +104,7 @@ pub async fn create_task(
     // Validate dependencies if provided
     let deps = if let Some(deps) = dependencies {
         for dep in &deps {
-            Validator::validate_uuid(dep).map_err(|e| {
-                warn!(error = %e, dependency = %dep, "Invalid dependency ID");
-                format!("Invalid dependency ID '{}': {}", dep, e)
-            })?;
+            validate_uuid_field(dep, "dependency_id")?;
         }
         deps
     } else {
@@ -160,10 +153,7 @@ pub async fn create_task(
 pub async fn get_task(task_id: String, state: State<'_, AppState>) -> Result<Task, String> {
     info!("Getting task");
 
-    let validated_id = Validator::validate_uuid(&task_id).map_err(|e| {
-        warn!(error = %e, "Invalid task_id");
-        format!("Invalid task_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&task_id, "task_id")?;
 
     // Use meta::id(id) to extract clean UUID from SurrealDB Thing type
     let query = format!(
@@ -210,10 +200,7 @@ pub async fn list_workflow_tasks(
 ) -> Result<Vec<Task>, String> {
     info!("Listing workflow tasks");
 
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = format!(
@@ -274,8 +261,7 @@ pub async fn list_tasks_by_status(
 
     // Add LIMIT to prevent memory explosion (OPT-DB-8)
     let query = if let Some(wf_id) = workflow_id {
-        let validated_wf_id =
-            Validator::validate_uuid(&wf_id).map_err(|e| format!("Invalid workflow_id: {}", e))?;
+        let validated_wf_id = validate_uuid_field(&wf_id, "workflow_id")?;
         format!(
             r#"SELECT
                 meta::id(id) AS id,
@@ -349,10 +335,7 @@ pub async fn update_task(
 ) -> Result<Task, String> {
     info!("Updating task");
 
-    let validated_id = Validator::validate_uuid(&task_id).map_err(|e| {
-        warn!(error = %e, "Invalid task_id");
-        format!("Invalid task_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&task_id, "task_id")?;
 
     // Build SET clause dynamically
     let mut set_parts: Vec<String> = Vec::new();
@@ -447,8 +430,7 @@ pub async fn update_task_status(
 ) -> Result<Task, String> {
     info!("Updating task status");
 
-    let validated_id =
-        Validator::validate_uuid(&task_id).map_err(|e| format!("Invalid task_id: {}", e))?;
+    let validated_id = validate_uuid_field(&task_id, "task_id")?;
 
     let valid_statuses = ["pending", "in_progress", "completed", "blocked"];
     if !valid_statuses.contains(&status.as_str()) {
@@ -496,8 +478,7 @@ pub async fn complete_task(
 ) -> Result<Task, String> {
     info!("Completing task");
 
-    let validated_id =
-        Validator::validate_uuid(&task_id).map_err(|e| format!("Invalid task_id: {}", e))?;
+    let validated_id = validate_uuid_field(&task_id, "task_id")?;
 
     let duration_part = if let Some(d) = duration_ms {
         format!(", duration_ms = {}", d)
@@ -532,8 +513,7 @@ pub async fn complete_task(
 pub async fn delete_task(task_id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting task");
 
-    let validated_id =
-        Validator::validate_uuid(&task_id).map_err(|e| format!("Invalid task_id: {}", e))?;
+    let validated_id = validate_uuid_field(&task_id, "task_id")?;
 
     state
         .db

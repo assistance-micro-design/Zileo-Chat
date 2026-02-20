@@ -26,7 +26,7 @@ use crate::{
         ToolExecutionCreate, Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult,
         WorkflowToolExecution,
     },
-    security::Validator,
+    security::{validate_uuid_field, Validator},
     tools::constants::workflow as wf_const,
     AppState,
 };
@@ -71,10 +71,7 @@ pub async fn execute_workflow_streaming(
     info!("Starting streaming workflow execution");
 
     // Validate inputs
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     let validated_message = Validator::validate_message(&message).map_err(|e| {
         warn!(error = %e, "Invalid message");
@@ -767,11 +764,7 @@ pub async fn cancel_workflow_streaming(
 ) -> Result<(), String> {
     info!("Cancelling streaming workflow");
 
-    // Validate workflow ID
-    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Request cancellation
     state.request_cancellation(&validated_id).await;

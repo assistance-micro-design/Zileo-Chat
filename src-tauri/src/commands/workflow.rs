@@ -18,7 +18,7 @@ use crate::{
         Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
         WorkflowMetrics, WorkflowResult, WorkflowStatus, WorkflowToolExecution,
     },
-    security::Validator,
+    security::{validate_uuid_field, Validator},
     AppState,
 };
 use std::sync::Arc;
@@ -98,10 +98,7 @@ pub async fn execute_workflow(
     info!("Starting workflow execution");
 
     // Validate inputs
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     let validated_message = Validator::validate_message(&message).map_err(|e| {
         warn!(error = %e, "Invalid message");
@@ -283,11 +280,7 @@ pub async fn delete_workflow(
 ) -> Result<(), String> {
     info!("Deleting workflow with cascade");
 
-    // Validate input
-    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // OPT-WF-8: Use centralized cascade delete helper
     // This eliminates 8 Arc clones + 8 ID clones by using a single helper function
@@ -333,11 +326,7 @@ pub async fn load_workflow_full_state(
 
     info!("Loading complete workflow state for recovery");
 
-    // Validate workflow ID
-    let validated_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Clone db Arc for parallel queries
     let db = Arc::clone(&state.db);

@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 use crate::db::DBClient;
 use crate::models::UserQuestion;
-use crate::security::Validator;
+use crate::security::validate_uuid_field;
 use crate::state::AppState;
 
 /// Validate that a question exists and has status "pending"
@@ -136,9 +136,7 @@ pub async fn submit_user_response(
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
-    // Validate question_id is a valid UUID
-    let validated_id = Validator::validate_uuid(&question_id)
-        .map_err(|e| format!("Invalid question_id: {}", e))?;
+    let validated_id = validate_uuid_field(&question_id, "question_id")?;
 
     validate_question_pending(&state.db, &validated_id).await?;
     update_question_answered(
@@ -176,9 +174,7 @@ pub async fn get_pending_questions(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<UserQuestion>, String> {
-    // Validate workflow_id is a valid UUID
-    let validated_id = Validator::validate_uuid(&workflow_id)
-        .map_err(|e| format!("Invalid workflow_id: {}", e))?;
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Use parameterized query to prevent injection
     let query = "SELECT meta::id(id) AS id, workflow_id, agent_id, question, question_type, \
@@ -221,9 +217,7 @@ pub async fn skip_question(
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
-    // Validate question_id is a valid UUID
-    let validated_id = Validator::validate_uuid(&question_id)
-        .map_err(|e| format!("Invalid question_id: {}", e))?;
+    let validated_id = validate_uuid_field(&question_id, "question_id")?;
 
     // Validate question exists and is pending (validated_id is safe UUID)
     let result: Vec<serde_json::Value> = state

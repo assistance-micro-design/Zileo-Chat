@@ -22,7 +22,7 @@
 
 use crate::{
     models::{Memory, MemorySearchResult, MemoryType},
-    security::Validator,
+    security::validate_uuid_field,
     tools::constants::{memory as memory_constants, query_limits},
     tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
     AppState,
@@ -199,11 +199,7 @@ pub async fn list_memories(
 pub async fn get_memory(memory_id: String, state: State<'_, AppState>) -> Result<Memory, String> {
     info!("Getting memory entry");
 
-    // Validate memory ID
-    let validated_id = Validator::validate_uuid(&memory_id).map_err(|e| {
-        warn!(error = %e, "Invalid memory_id");
-        format!("Invalid memory_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&memory_id, "memory_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -235,11 +231,7 @@ pub async fn get_memory(memory_id: String, state: State<'_, AppState>) -> Result
 pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting memory entry");
 
-    // Validate memory ID
-    let validated_id = Validator::validate_uuid(&memory_id).map_err(|e| {
-        warn!(error = %e, "Invalid memory_id");
-        format!("Invalid memory_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&memory_id, "memory_id")?;
 
     // Use execute() with DELETE query to avoid SurrealDB SDK issues with delete() method
     let delete_query = format!("DELETE memory:`{}`", validated_id);

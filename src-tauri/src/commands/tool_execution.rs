@@ -22,7 +22,7 @@
 
 use crate::{
     models::{ToolExecution, ToolExecutionCreate},
-    security::Validator,
+    security::validate_uuid_field,
     tools::constants::commands as cmd_const,
     AppState,
 };
@@ -76,23 +76,9 @@ pub async fn save_tool_execution(
 ) -> Result<String, String> {
     info!("Saving tool execution");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
-
-    // Validate message ID
-    let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message_id");
-        format!("Invalid message_id: {}", e)
-    })?;
-
-    // Validate agent ID
-    let validated_agent_id = Validator::validate_uuid(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent_id");
-        format!("Invalid agent_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_message_id = validate_uuid_field(&message_id, "message_id")?;
+    let validated_agent_id = validate_uuid_field(&agent_id, "agent_id")?;
 
     // Validate tool type
     let validated_tool_type = match tool_type.as_str() {
@@ -190,11 +176,7 @@ pub async fn load_workflow_tool_executions(
 ) -> Result<Vec<ToolExecution>, String> {
     info!("Loading workflow tool executions");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -256,11 +238,7 @@ pub async fn load_message_tool_executions(
 ) -> Result<Vec<ToolExecution>, String> {
     info!("Loading message tool executions");
 
-    // Validate message ID
-    let validated_message_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message_id");
-        format!("Invalid message_id: {}", e)
-    })?;
+    let validated_message_id = validate_uuid_field(&message_id, "message_id")?;
 
     let query = format!(
         r#"SELECT
@@ -317,10 +295,7 @@ pub async fn get_tool_execution(
 ) -> Result<ToolExecution, String> {
     info!("Loading tool execution by ID");
 
-    let validated_id = Validator::validate_uuid(&execution_id).map_err(|e| {
-        warn!(error = %e, "Invalid execution_id");
-        format!("Invalid execution_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&execution_id, "execution_id")?;
 
     let query = format!(
         r#"SELECT
@@ -366,11 +341,7 @@ pub async fn delete_tool_execution(
 ) -> Result<(), String> {
     info!("Deleting tool execution");
 
-    // Validate execution ID
-    let validated_id = Validator::validate_uuid(&execution_id).map_err(|e| {
-        warn!(error = %e, "Invalid execution ID");
-        format!("Invalid execution ID: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&execution_id, "execution_id")?;
 
     // Use execute() with DELETE query to avoid SurrealDB SDK serialization issues
     state
@@ -401,11 +372,7 @@ pub async fn clear_workflow_tool_executions(
 ) -> Result<u64, String> {
     info!("Clearing workflow tool executions");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // First count existing executions
     let count_query = format!(

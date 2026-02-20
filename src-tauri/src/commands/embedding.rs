@@ -24,7 +24,7 @@ use crate::{
         CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat,
         ImportResult, Memory, MemoryStats, MemoryTokenStats, RegenerateResult,
     },
-    security::validation::Validator,
+    security::validate_uuid_field,
     AppState,
 };
 use serde_json::json;
@@ -275,11 +275,7 @@ pub async fn update_memory(
 ) -> Result<Memory, String> {
     info!(memory_id = %memory_id, "Updating memory entry");
 
-    // Validate memory ID format (must be a valid UUID)
-    let memory_id = Validator::validate_uuid(&memory_id).map_err(|e| {
-        warn!(error = %e, "Invalid memory_id");
-        format!("Invalid memory_id: {}", e)
-    })?;
+    let memory_id = validate_uuid_field(&memory_id, "memory_id")?;
 
     // Build update fields
     let mut updates = Vec::new();

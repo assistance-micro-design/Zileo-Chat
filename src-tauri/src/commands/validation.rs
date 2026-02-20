@@ -24,7 +24,7 @@ use crate::{
         ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
         ValidationType,
     },
-    security::Validator,
+    security::{validate_uuid_field, Validator},
     tools::registry::TOOL_REGISTRY,
     AppState,
 };
@@ -61,11 +61,7 @@ pub async fn create_validation_request(
 ) -> Result<ValidationRequest, String> {
     info!("Creating validation request");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Validate operation description
     let validated_operation = Validator::validate_message(&operation).map_err(|e| {
@@ -155,11 +151,7 @@ pub async fn list_workflow_validations(
 ) -> Result<Vec<ValidationRequest>, String> {
     info!("Loading workflow validations");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     let validations: Vec<ValidationRequest> = state
         .db
@@ -197,11 +189,7 @@ pub async fn approve_validation(
 ) -> Result<(), String> {
     info!("Approving validation request");
 
-    // Validate validation ID
-    let validated_id = Validator::validate_uuid(&validation_id).map_err(|e| {
-        warn!(error = %e, "Invalid validation ID");
-        format!("Invalid validation ID: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&validation_id, "validation_id")?;
 
     // Update status to approved using bind param for status value
     state
@@ -237,11 +225,7 @@ pub async fn reject_validation(
 ) -> Result<(), String> {
     info!("Rejecting validation request");
 
-    // Validate validation ID
-    let validated_id = Validator::validate_uuid(&validation_id).map_err(|e| {
-        warn!(error = %e, "Invalid validation ID");
-        format!("Invalid validation ID: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&validation_id, "validation_id")?;
 
     // Validate reason
     let validated_reason = Validator::validate_message(&reason).map_err(|e| {
@@ -284,11 +268,7 @@ pub async fn delete_validation(
 ) -> Result<(), String> {
     info!("Deleting validation request");
 
-    // Validate validation ID
-    let validated_id = Validator::validate_uuid(&validation_id).map_err(|e| {
-        warn!(error = %e, "Invalid validation ID");
-        format!("Invalid validation ID: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&validation_id, "validation_id")?;
 
     state
         .db

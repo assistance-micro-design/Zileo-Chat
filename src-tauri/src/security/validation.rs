@@ -21,6 +21,7 @@
 //! - Invalid data formats
 
 use thiserror::Error;
+use tracing::warn;
 
 /// Maximum allowed length for workflow names
 pub const MAX_WORKFLOW_NAME_LEN: usize = 256;
@@ -319,9 +320,61 @@ impl Validator {
     }
 }
 
+/// Validates a UUID and returns a formatted error with field context.
+///
+/// Combines `Validator::validate_uuid()` with standardized warn logging
+/// and error formatting. Replaces the repeated 4-line boilerplate pattern.
+///
+/// # Arguments
+/// * `value` - The UUID string to validate
+/// * `field_name` - The field name for error context (e.g. "workflow_id")
+///
+/// # Returns
+/// The validated UUID string, or a formatted error string.
+pub fn validate_uuid_field(value: &str, field_name: &str) -> Result<String, String> {
+    Validator::validate_uuid(value).map_err(|e| {
+        warn!(error = %e, "Invalid {}", field_name);
+        format!("Invalid {}: {}", field_name, e)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // validate_uuid_field tests
+    #[test]
+    fn test_validate_uuid_field_valid() {
+        let result = validate_uuid_field("550e8400-e29b-41d4-a716-446655440000", "workflow_id");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn test_validate_uuid_field_invalid() {
+        let result = validate_uuid_field("not-a-uuid", "workflow_id");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Invalid workflow_id"),
+            "Error should contain field name: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_validate_uuid_field_includes_field_name_in_error() {
+        let result = validate_uuid_field("bad", "task_id");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("task_id"));
+    }
+
+    #[test]
+    fn test_validate_uuid_field_trims_whitespace() {
+        let result = validate_uuid_field("  550e8400-e29b-41d4-a716-446655440000  ", "test_id");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "550e8400-e29b-41d4-a716-446655440000");
+    }
 
     // Workflow name validation tests
     #[test]

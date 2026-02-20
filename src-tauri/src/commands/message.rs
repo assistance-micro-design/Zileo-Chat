@@ -22,7 +22,7 @@
 
 use crate::{
     models::{Message, MessageCreate, PaginatedMessages},
-    security::Validator,
+    security::validate_uuid_field,
     tools::constants::commands as cmd_const,
     AppState,
 };
@@ -68,11 +68,7 @@ pub async fn save_message(
 ) -> Result<String, String> {
     info!("Saving message");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Validate role
     let validated_role = match role.as_str() {
@@ -142,11 +138,7 @@ pub async fn load_workflow_messages(
 ) -> Result<Vec<Message>, String> {
     info!("Loading workflow messages");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -214,11 +206,7 @@ pub async fn load_workflow_messages_paginated(
 ) -> Result<PaginatedMessages, String> {
     info!("Loading paginated workflow messages");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     let limit = limit.unwrap_or(50).min(200); // Cap at 200 max
     let offset = offset.unwrap_or(0);
@@ -303,11 +291,7 @@ pub async fn load_workflow_messages_paginated(
 pub async fn delete_message(message_id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting message");
 
-    // Validate message ID
-    let validated_id = Validator::validate_uuid(&message_id).map_err(|e| {
-        warn!(error = %e, "Invalid message_id");
-        format!("Invalid message_id: {}", e)
-    })?;
+    let validated_id = validate_uuid_field(&message_id, "message_id")?;
 
     // Use execute() with DELETE query to avoid SurrealDB SDK serialization issues
     // (see CLAUDE.md - db.delete() has issues with table:id format)
@@ -339,11 +323,7 @@ pub async fn clear_workflow_messages(
 ) -> Result<u64, String> {
     info!("Clearing workflow messages");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // First count existing messages
     let count_query = format!(

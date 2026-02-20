@@ -17,9 +17,9 @@
 //! Provides Tauri commands for retrieving sub-agent execution logs
 //! for workflow state recovery and activity display.
 
-use crate::{models::sub_agent::SubAgentExecution, security::Validator, AppState};
+use crate::{models::sub_agent::SubAgentExecution, security::validate_uuid_field, AppState};
 use tauri::State;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 
 /// Loads all sub-agent executions for a workflow, sorted by creation time (oldest first).
 ///
@@ -36,11 +36,7 @@ pub async fn load_workflow_sub_agent_executions(
 ) -> Result<Vec<SubAgentExecution>, String> {
     info!("Loading workflow sub-agent executions");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -103,11 +99,7 @@ pub async fn clear_workflow_sub_agent_executions(
 ) -> Result<u64, String> {
     info!("Clearing workflow sub-agent executions");
 
-    // Validate workflow ID
-    let validated_workflow_id = Validator::validate_uuid(&workflow_id).map_err(|e| {
-        warn!(error = %e, "Invalid workflow_id");
-        format!("Invalid workflow_id: {}", e)
-    })?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // First count existing executions
     let count_query = format!(
