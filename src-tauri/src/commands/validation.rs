@@ -24,7 +24,7 @@ use crate::{
         ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
         ValidationType,
     },
-    security::{validate_uuid_field, Validator},
+    security::{serialize_for_query, validate_uuid_field, Validator},
     tools::registry::TOOL_REGISTRY,
     AppState,
 };
@@ -382,10 +382,7 @@ pub async fn update_validation_settings(
 
     // Save to database using UPSERT
     // Follow the same pattern as embedding config (CONTENT with id field)
-    let json_config = serde_json::to_string(&current).map_err(|e| {
-        error!(error = %e, "Failed to serialize settings");
-        format!("Failed to serialize settings: {}", e)
-    })?;
+    let json_config = serialize_for_query(&current, "settings")?;
 
     let upsert_query = format!(
         "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",
@@ -415,10 +412,7 @@ pub async fn reset_validation_settings(
     let settings = ValidationSettings::default();
 
     // Save defaults to database (follow embedding config pattern)
-    let json_config = serde_json::to_string(&settings).map_err(|e| {
-        error!(error = %e, "Failed to serialize default settings");
-        format!("Failed to serialize default settings: {}", e)
-    })?;
+    let json_config = serialize_for_query(&settings, "default settings")?;
 
     let upsert_query = format!(
         "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",

@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 use crate::db::DBClient;
 use crate::models::UserQuestion;
-use crate::security::validate_uuid_field;
+use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::state::AppState;
 
 /// Validate that a question exists and has status "pending"
@@ -56,8 +56,7 @@ async fn update_question_answered(
     text_response: Option<&str>,
 ) -> Result<(), String> {
     // Encode selected_options as JSON string (matching the CREATE pattern)
-    let selected_options_json = serde_json::to_string(&selected_options)
-        .map_err(|e| format!("Failed to encode selected_options: {}", e))?;
+    let selected_options_json = serialize_for_query(&selected_options, "selected_options")?;
 
     // Build params for update - use bind parameters for user-provided values
     let mut params: Vec<(String, serde_json::Value)> = vec![

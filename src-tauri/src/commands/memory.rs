@@ -22,7 +22,7 @@
 
 use crate::{
     models::{Memory, MemorySearchResult, MemoryType},
-    security::validate_uuid_field,
+    security::{serialize_for_query, validate_uuid_field},
     tools::constants::{memory as memory_constants, query_limits},
     tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
     AppState,
@@ -130,8 +130,7 @@ pub async fn list_memories(
 
     // Type filter condition (use bind parameter)
     if let Some(ref mtype) = type_filter {
-        let type_str = serde_json::to_string(mtype)
-            .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+        let type_str = serialize_for_query(mtype, "memory type")?
             .trim_matches('"')
             .to_string();
         conditions.push("type = $type".to_string());
@@ -379,8 +378,7 @@ pub async fn clear_memories_by_type(
     info!("Clearing memories by type");
 
     // Convert MemoryType to string for bind parameter
-    let type_str = serde_json::to_string(&memory_type)
-        .map_err(|e| format!("Failed to serialize memory type: {}", e))?
+    let type_str = serialize_for_query(&memory_type, "memory type")?
         .trim_matches('"')
         .to_string();
 

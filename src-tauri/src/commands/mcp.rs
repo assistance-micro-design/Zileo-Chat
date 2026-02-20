@@ -36,6 +36,7 @@
 //! - [`call_mcp_tool`] - Execute a tool on an MCP server
 
 use crate::models::custom_provider::check_http_warning;
+use crate::security::serialize_for_query;
 use crate::models::mcp::{
     MCPDeploymentMethod, MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPServerResponse,
     MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
@@ -873,7 +874,7 @@ pub async fn get_mcp_latency_metrics(
     let query = match &filter {
         Some(name) => {
             // Use JSON string encoding for proper escaping
-            let json_name = serde_json::to_string(name).map_err(|e| e.to_string())?;
+            let json_name = serialize_for_query(name, "server_name")?;
             format!(
                 r#"SELECT
                     server_name,

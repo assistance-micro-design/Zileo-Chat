@@ -29,7 +29,7 @@ use crate::models::llm_models::ProviderType;
 use crate::models::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
 };
-use crate::security::Validator;
+use crate::security::{serialize_for_query, Validator};
 use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
 use crate::tools::context::AgentToolContext;
@@ -201,30 +201,11 @@ struct SerializedAgentFields {
 
 /// Serializes agent configuration fields for database storage
 fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields, String> {
-    let name_json = serde_json::to_string(&config.name).map_err(|e| {
-        error!(error = %e, "Failed to serialize name");
-        format!("Failed to serialize name: {}", e)
-    })?;
-
-    let llm_json = serde_json::to_string(&config.llm).map_err(|e| {
-        error!(error = %e, "Failed to serialize LLM config");
-        format!("Failed to serialize LLM config: {}", e)
-    })?;
-
-    let tools_json = serde_json::to_string(&config.tools).map_err(|e| {
-        error!(error = %e, "Failed to serialize tools");
-        format!("Failed to serialize tools: {}", e)
-    })?;
-
-    let mcp_json = serde_json::to_string(&config.mcp_servers).map_err(|e| {
-        error!(error = %e, "Failed to serialize MCP servers");
-        format!("Failed to serialize MCP servers: {}", e)
-    })?;
-
-    let prompt_json = serde_json::to_string(&config.system_prompt).map_err(|e| {
-        error!(error = %e, "Failed to serialize system prompt");
-        format!("Failed to serialize system prompt: {}", e)
-    })?;
+    let name_json = serialize_for_query(&config.name, "name")?;
+    let llm_json = serialize_for_query(&config.llm, "LLM config")?;
+    let tools_json = serialize_for_query(&config.tools, "tools")?;
+    let mcp_json = serialize_for_query(&config.mcp_servers, "MCP servers")?;
+    let prompt_json = serialize_for_query(&config.system_prompt, "system prompt")?;
 
     Ok(SerializedAgentFields {
         name_json,

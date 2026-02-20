@@ -16,6 +16,7 @@
 //!
 //! Tauri IPC commands for managing prompt templates with variable interpolation.
 
+use crate::security::serialize_for_query;
 use crate::models::prompt::{
     Prompt, PromptCreate, PromptSummary, PromptUpdate, MAX_PROMPT_CONTENT_LEN,
     MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
@@ -212,33 +213,28 @@ pub async fn update_prompt(
 
     if let Some(ref name) = config.name {
         let validated = validate_prompt_name(name)?;
-        let name_json = serde_json::to_string(&validated)
-            .map_err(|e| format!("Failed to serialize name: {}", e))?;
+        let name_json = serialize_for_query(&validated, "name")?;
         set_clauses.push(format!("name = {}", name_json));
     }
 
     if let Some(ref description) = config.description {
         let validated = validate_prompt_description(description)?;
-        let desc_json = serde_json::to_string(&validated)
-            .map_err(|e| format!("Failed to serialize description: {}", e))?;
+        let desc_json = serialize_for_query(&validated, "description")?;
         set_clauses.push(format!("description = {}", desc_json));
     }
 
     if let Some(ref category) = config.category {
-        let cat_json = serde_json::to_string(&category.to_string())
-            .map_err(|e| format!("Failed to serialize category: {}", e))?;
+        let cat_json = serialize_for_query(&category.to_string(), "category")?;
         set_clauses.push(format!("category = {}", cat_json));
     }
 
     if let Some(ref content) = config.content {
         let validated = validate_prompt_content(content)?;
-        let content_json = serde_json::to_string(&validated)
-            .map_err(|e| format!("Failed to serialize content: {}", e))?;
+        let content_json = serialize_for_query(&validated, "content")?;
 
         // Re-detect variables when content changes
         let variables = Prompt::detect_variables(&validated);
-        let variables_json = serde_json::to_string(&variables)
-            .map_err(|e| format!("Failed to serialize variables: {}", e))?;
+        let variables_json = serialize_for_query(&variables, "variables")?;
 
         set_clauses.push(format!("content = {}", content_json));
         set_clauses.push(format!("variables = {}", variables_json));

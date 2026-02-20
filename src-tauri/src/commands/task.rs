@@ -39,7 +39,7 @@
 
 use crate::{
     models::task::{Task, TaskCreate, TaskUpdate},
-    security::{validate_uuid_field, Validator},
+    security::{serialize_for_query, validate_uuid_field, Validator},
     tools::constants::query_limits,
     AppState,
 };
@@ -344,8 +344,7 @@ pub async fn update_task(
         if name.len() > 128 {
             return Err("Task name must be 128 characters or less".to_string());
         }
-        let name_json =
-            serde_json::to_string(name).map_err(|e| format!("Failed to serialize name: {}", e))?;
+        let name_json = serialize_for_query(name, "name")?;
         set_parts.push(format!("name = {}", name_json));
     }
 
@@ -353,14 +352,12 @@ pub async fn update_task(
         if desc.len() > 1000 {
             return Err("Task description must be 1000 characters or less".to_string());
         }
-        let desc_json = serde_json::to_string(desc)
-            .map_err(|e| format!("Failed to serialize description: {}", e))?;
+        let desc_json = serialize_for_query(desc, "description")?;
         set_parts.push(format!("description = {}", desc_json));
     }
 
     if let Some(agent) = &updates.agent_assigned {
-        let agent_json = serde_json::to_string(agent)
-            .map_err(|e| format!("Failed to serialize agent_assigned: {}", e))?;
+        let agent_json = serialize_for_query(agent, "agent_assigned")?;
         set_parts.push(format!("agent_assigned = {}", agent_json));
     }
 
@@ -380,8 +377,7 @@ pub async fn update_task(
     }
 
     if let Some(deps) = &updates.dependencies {
-        let deps_json = serde_json::to_string(deps)
-            .map_err(|e| format!("Failed to serialize dependencies: {}", e))?;
+        let deps_json = serialize_for_query(deps, "dependencies")?;
         set_parts.push(format!("dependencies = {}", deps_json));
     }
 

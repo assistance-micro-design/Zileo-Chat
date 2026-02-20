@@ -20,6 +20,7 @@
 //! - Command injection
 //! - Invalid data formats
 
+use serde::Serialize;
 use thiserror::Error;
 use tracing::warn;
 
@@ -320,6 +321,24 @@ impl Validator {
     }
 }
 
+/// Serializes a value to a JSON string for safe inclusion in SurrealDB queries.
+///
+/// Combines `serde_json::to_string()` with standardized warn logging
+/// and error formatting. Replaces the repeated serialize + map_err boilerplate.
+///
+/// # Arguments
+/// * `value` - The value to serialize (must implement Serialize)
+/// * `field_name` - The field name for error context (e.g. "name", "config")
+///
+/// # Returns
+/// The JSON-encoded string, or a formatted error string.
+pub fn serialize_for_query<T: Serialize + ?Sized>(value: &T, field_name: &str) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|e| {
+        warn!(error = %e, "Failed to serialize {}", field_name);
+        format!("Failed to serialize {}: {}", field_name, e)
+    })
+}
+
 /// Validates a UUID and returns a formatted error with field context.
 ///
 /// Combines `Validator::validate_uuid()` with standardized warn logging
@@ -341,6 +360,43 @@ pub fn validate_uuid_field(value: &str, field_name: &str) -> Result<String, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // serialize_for_query tests
+    #[test]
+    fn test_serialize_for_query_string() {
+        let result = serialize_for_query(&"hello world", "name");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "\"hello world\"");
+    }
+
+    #[test]
+    fn test_serialize_for_query_special_chars() {
+        let result = serialize_for_query(&"l'eau \"quoted\" back\\slash", "content");
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert!(json.starts_with('"'));
+        assert!(json.ends_with('"'));
+        // Verify it's valid JSON
+        let parsed: Result<String, _> = serde_json::from_str(&json);
+        assert!(parsed.is_ok());
+        assert_eq!(parsed.unwrap(), "l'eau \"quoted\" back\\slash");
+    }
+
+    #[test]
+    fn test_serialize_for_query_vec() {
+        let tools = vec!["tool_a", "tool_b"];
+        let result = serialize_for_query(&tools, "tools");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "[\"tool_a\",\"tool_b\"]");
+    }
+
+    #[test]
+    fn test_serialize_for_query_option_none() {
+        let value: Option<String> = None;
+        let result = serialize_for_query(&value, "optional_field");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "null");
+    }
 
     // validate_uuid_field tests
     #[test]

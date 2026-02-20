@@ -17,6 +17,7 @@
 //! Manages user-created OpenAI-compatible providers (RouterLab, OpenRouter, etc.).
 
 use crate::commands::SecureKeyStore;
+use crate::security::serialize_for_query;
 use crate::llm::openai_compatible::OpenAiCompatibleProvider;
 use crate::models::custom_provider::{
     check_http_warning, CustomProvider, CustomProviderResponse, ProviderInfo,
@@ -236,20 +237,14 @@ pub async fn update_custom_provider(
         if dn.trim().is_empty() || dn.len() > 128 {
             return Err("Display name must be 1-128 characters".into());
         }
-        set_parts.push(format!(
-            "display_name = {}",
-            serde_json::to_string(dn).map_err(|e| e.to_string())?
-        ));
+        set_parts.push(format!("display_name = {}", serialize_for_query(dn, "display_name")?));
     }
     if let Some(ref url) = base_url {
         if url.trim().is_empty() || url.len() > 512 {
             return Err("Base URL must be 1-512 characters".into());
         }
         let normalized = url.trim_end_matches('/');
-        set_parts.push(format!(
-            "base_url = {}",
-            serde_json::to_string(normalized).map_err(|e| e.to_string())?
-        ));
+        set_parts.push(format!("base_url = {}", serialize_for_query(normalized, "base_url")?));
     }
     if let Some(en) = enabled {
         set_parts.push(format!("enabled = {}", en));

@@ -24,7 +24,7 @@ use crate::{
         CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat,
         ImportResult, Memory, MemoryStats, MemoryTokenStats, RegenerateResult,
     },
-    security::validate_uuid_field,
+    security::{serialize_for_query, validate_uuid_field},
     AppState,
 };
 use serde_json::json;
@@ -110,10 +110,7 @@ pub async fn save_embedding_config(
     // Serialize config to JSON string for embedding in query
     // Note: Using raw query instead of query_with_params due to SurrealDB SDK 2.x
     // serialization issues with complex types (see CLAUDE.md SurrealDB patterns)
-    let config_json_str = serde_json::to_string(&config).map_err(|e| {
-        error!(error = %e, "Failed to serialize embedding config");
-        format!("Failed to serialize config: {}", e)
-    })?;
+    let config_json_str = serialize_for_query(&config, "config")?;
 
     // Upsert configuration using raw query with embedded JSON
     // Use execute() to avoid SurrealDB SDK serialization issues with UPSERT return type
@@ -289,13 +286,12 @@ pub async fn update_memory(
             return Err("Content exceeds maximum length".to_string());
         }
         // Use JSON string encoding to properly escape all special characters
-        let content_json =
-            serde_json::to_string(trimmed).map_err(|e| format!("Invalid content: {}", e))?;
+        let content_json = serialize_for_query(trimmed, "content")?;
         updates.push(format!("content = {}", content_json));
     }
 
     if let Some(ref m) = metadata {
-        let meta_str = serde_json::to_string(m).map_err(|e| format!("Invalid metadata: {}", e))?;
+        let meta_str = serialize_for_query(m, "metadata")?;
         updates.push(format!("metadata = {}", meta_str));
     }
 
