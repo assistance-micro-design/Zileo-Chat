@@ -17,6 +17,7 @@
 //! Provides Tauri commands for running database migrations,
 //! particularly for the Memory Tool vector search schema.
 
+use crate::db::DBClient;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -33,6 +34,41 @@ pub struct MigrationResult {
     pub records_affected: usize,
 }
 
+/// Migration name constants
+const MIGRATION_MEMORY_SCHEMA_V1: &str = "memory_schema_v1";
+const MIGRATION_MEMORY_V2_SCHEMA: &str = "memory_v2_schema";
+const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
+
+/// Checks if a migration has already been applied.
+///
+/// Queries the `migration_log` table for a record with the given name.
+/// Returns `true` if the migration was already applied.
+async fn check_migration_applied(db: &DBClient, migration_name: &str) -> Result<bool, String> {
+    let results: Vec<serde_json::Value> = db
+        .query_json(&format!(
+            "SELECT name FROM migration_log WHERE name = '{}'",
+            migration_name
+        ))
+        .await
+        .map_err(|e| format!("Failed to check migration status: {}", e))?;
+
+    Ok(!results.is_empty())
+}
+
+/// Records a migration as applied in the `migration_log` table.
+///
+/// Creates a record with the migration name and current timestamp.
+async fn record_migration_applied(db: &DBClient, migration_name: &str) -> Result<(), String> {
+    db.execute(&format!(
+        "CREATE migration_log SET name = '{}', applied_at = time::now()",
+        migration_name
+    ))
+    .await
+    .map_err(|e| format!("Failed to record migration: {}", e))?;
+
+    Ok(())
+}
+
 /// SQL for migrating memory table to new schema (Phase 2)
 ///
 /// Changes:
@@ -45,7 +81,7 @@ const MEMORY_SCHEMA_MIGRATION: &str = r#"
 REMOVE INDEX IF EXISTS memory_vec_idx ON TABLE memory;
 
 -- Step 2: Define the optional embedding field (allows null for migration)
-DEFINE FIELD embedding ON memory TYPE option<array<float>>;
+DEFINE FIELD OVERWRITE embedding ON memory TYPE option<array<float>>;
 
 -- Step 3: Add workflow_id field for workflow scoping
 DEFINE FIELD IF NOT EXISTS workflow_id ON memory TYPE option<string>;
@@ -72,12 +108,22 @@ UPDATE memory SET embedding = NONE WHERE embedding IS NOT NONE;
 /// Migration result with affected record count
 ///
 /// # Safety
-/// This migration is idempotent and can be run multiple times.
-/// Existing memory content is preserved, only embeddings are cleared.
+/// SA-005 H3: Guarded by migration_log to prevent re-execution.
+/// First run clears embeddings; subsequent runs are no-ops.
 #[tauri::command]
 #[instrument(name = "migrate_memory_schema", skip(state))]
 pub async fn migrate_memory_schema(state: State<'_, AppState>) -> Result<MigrationResult, String> {
     info!("Starting memory schema migration (Phase 2)");
+
+    // SA-005 H3: Check if migration was already applied
+    if check_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1).await? {
+        info!("Memory schema migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: memory_schema_v1".to_string(),
+            records_affected: 0,
+        });
+    }
 
     // Count memories before migration
     let count_query = "SELECT count() FROM memory GROUP ALL";
@@ -109,6 +155,9 @@ pub async fn migrate_memory_schema(state: State<'_, AppState>) -> Result<Migrati
         warn!(error = %e, "Could not verify migration");
         format!("Could not verify migration: {}", e)
     })?;
+
+    // Record migration as applied
+    record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1).await?;
 
     let message = if total_memories > 0 {
         format!(
@@ -210,10 +259,10 @@ pub async fn get_memory_schema_status(
 /// - Set importance for existing records to 0.5
 const MEMORY_V2_MIGRATION: &str = r#"
 -- Step 1: Add importance field with default
-DEFINE FIELD importance ON memory TYPE float DEFAULT 0.5;
+DEFINE FIELD OVERWRITE importance ON memory TYPE float DEFAULT 0.5;
 
 -- Step 2: Add expires_at field for TTL
-DEFINE FIELD expires_at ON memory TYPE option<datetime>;
+DEFINE FIELD OVERWRITE expires_at ON memory TYPE option<datetime>;
 
 -- Step 3: Set importance for existing records
 UPDATE memory SET importance = 0.5 WHERE importance IS NONE;
@@ -230,13 +279,23 @@ UPDATE memory SET importance = 0.5 WHERE importance IS NONE;
 /// Migration result with affected record count
 ///
 /// # Safety
-/// This migration is idempotent and can be run multiple times.
+/// Guarded by migration_log to prevent redundant re-execution.
 #[tauri::command]
 #[instrument(name = "migrate_memory_v2_schema", skip(state))]
 pub async fn migrate_memory_v2_schema(
     state: State<'_, AppState>,
 ) -> Result<MigrationResult, String> {
     info!("Starting memory v2 schema migration (importance + TTL)");
+
+    // Check if migration was already applied
+    if check_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA).await? {
+        info!("Memory v2 schema migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: memory_v2_schema".to_string(),
+            records_affected: 0,
+        });
+    }
 
     // Count memories before migration
     let count_query = "SELECT count() FROM memory GROUP ALL";
@@ -261,6 +320,9 @@ pub async fn migrate_memory_v2_schema(
         error!(error = %e, "Memory v2 schema migration failed");
         format!("Memory v2 schema migration failed: {}", e)
     })?;
+
+    // Record migration as applied
+    record_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA).await?;
 
     let message = if total_memories > 0 {
         format!(
@@ -289,13 +351,16 @@ pub async fn migrate_memory_v2_schema(
 /// enabling HTTP-based MCP server connections (SaaS, remote servers).
 const MCP_HTTP_MIGRATION: &str = r#"
 -- Update the command field ASSERT constraint to include 'http'
-DEFINE FIELD command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
+DEFINE FIELD OVERWRITE command ON mcp_server TYPE string ASSERT $value IN ['docker', 'npx', 'uvx', 'http'];
 "#;
 
 /// Migrates MCP server schema to support HTTP deployment method.
 ///
 /// Updates the command field ASSERT constraint to include 'http',
 /// allowing HTTP-based MCP server connections.
+///
+/// # Safety
+/// Guarded by migration_log to prevent redundant re-execution.
 #[tauri::command]
 #[instrument(name = "migrate_mcp_http_schema", skip(state))]
 pub async fn migrate_mcp_http_schema(
@@ -303,11 +368,24 @@ pub async fn migrate_mcp_http_schema(
 ) -> Result<MigrationResult, String> {
     info!("Running MCP HTTP schema migration");
 
+    // Check if migration was already applied
+    if check_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA).await? {
+        info!("MCP HTTP schema migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: mcp_http_schema".to_string(),
+            records_affected: 0,
+        });
+    }
+
     // Run migration query
     let _: Vec<serde_json::Value> = state.db.query(MCP_HTTP_MIGRATION).await.map_err(|e| {
         error!(error = %e, "MCP HTTP schema migration failed");
         format!("MCP HTTP schema migration failed: {}", e)
     })?;
+
+    // Record migration as applied
+    record_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA).await?;
 
     info!("MCP HTTP schema migration completed successfully");
 
@@ -336,6 +414,7 @@ pub struct MemorySchemaStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{seed_test_memory, seed_test_memory_with_embedding, setup_test_state};
 
     #[test]
     fn test_migration_result_serialization() {
@@ -378,5 +457,178 @@ mod tests {
         assert!(MEMORY_SCHEMA_MIGRATION.contains("workflow_id"));
         assert!(MEMORY_SCHEMA_MIGRATION.contains("memory_workflow_idx"));
         assert!(MEMORY_SCHEMA_MIGRATION.contains("embedding = NONE"));
+    }
+
+    // =========================================================================
+    // SA-005 H3: Migration guard tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_check_migration_not_applied() {
+        let state = setup_test_state().await;
+        let applied = check_migration_applied(&state.db, "nonexistent_migration")
+            .await
+            .unwrap();
+        assert!(!applied, "Migration should not be marked as applied");
+    }
+
+    #[tokio::test]
+    async fn test_record_and_check_migration() {
+        let state = setup_test_state().await;
+
+        // Record migration
+        record_migration_applied(&state.db, "test_migration_v1")
+            .await
+            .unwrap();
+
+        // Check it's now applied
+        let applied = check_migration_applied(&state.db, "test_migration_v1")
+            .await
+            .unwrap();
+        assert!(applied, "Migration should be marked as applied");
+    }
+
+    #[tokio::test]
+    async fn test_check_migration_does_not_cross_contaminate() {
+        let state = setup_test_state().await;
+
+        record_migration_applied(&state.db, "migration_a")
+            .await
+            .unwrap();
+
+        let applied_a = check_migration_applied(&state.db, "migration_a")
+            .await
+            .unwrap();
+        let applied_b = check_migration_applied(&state.db, "migration_b")
+            .await
+            .unwrap();
+
+        assert!(applied_a, "migration_a should be applied");
+        assert!(!applied_b, "migration_b should NOT be applied");
+    }
+
+    #[tokio::test]
+    async fn test_memory_migration_first_run_clears_embeddings() {
+        let state = setup_test_state().await;
+
+        // Seed a memory with an embedding
+        seed_test_memory_with_embedding(&state.db).await;
+
+        // Verify embedding exists before migration
+        let before: Vec<serde_json::Value> = state
+            .db
+            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .await
+            .unwrap();
+        assert!(
+            !before.is_empty(),
+            "Should have a memory with embedding before migration"
+        );
+
+        // Run the migration SQL directly (bypassing Tauri State)
+        let _: Vec<serde_json::Value> = state.db.query(MEMORY_SCHEMA_MIGRATION).await.unwrap();
+        record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
+            .await
+            .unwrap();
+
+        // Verify embeddings are cleared
+        let after: Vec<serde_json::Value> = state
+            .db
+            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .await
+            .unwrap();
+        assert!(
+            after.is_empty(),
+            "Embeddings should be cleared after first migration"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_memory_migration_second_run_preserves_embeddings() {
+        let state = setup_test_state().await;
+
+        // First migration: seed, run, record
+        seed_test_memory(&state.db).await;
+        let _: Vec<serde_json::Value> = state.db.query(MEMORY_SCHEMA_MIGRATION).await.unwrap();
+        record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
+            .await
+            .unwrap();
+
+        // Now seed a NEW memory with embedding (simulating regeneration)
+        seed_test_memory_with_embedding(&state.db).await;
+
+        // Verify embedding exists
+        let before: Vec<serde_json::Value> = state
+            .db
+            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .await
+            .unwrap();
+        assert!(
+            !before.is_empty(),
+            "Should have a memory with embedding after regeneration"
+        );
+
+        // Second migration attempt: guard should prevent it
+        let already_applied = check_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
+            .await
+            .unwrap();
+        assert!(already_applied, "Migration should be marked as applied");
+
+        // Embeddings should still be intact
+        let after: Vec<serde_json::Value> = state
+            .db
+            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .await
+            .unwrap();
+        assert!(
+            !after.is_empty(),
+            "Embeddings should survive when migration guard prevents re-run"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_memory_v2_migration_guard() {
+        let state = setup_test_state().await;
+
+        // First run: should not be applied yet
+        let applied = check_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA)
+            .await
+            .unwrap();
+        assert!(!applied);
+
+        // Run the migration
+        let _: Vec<serde_json::Value> = state.db.query(MEMORY_V2_MIGRATION).await.unwrap();
+        record_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA)
+            .await
+            .unwrap();
+
+        // Second run: should be applied
+        let applied = check_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA)
+            .await
+            .unwrap();
+        assert!(applied, "Memory v2 migration should be marked as applied");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_http_migration_guard() {
+        let state = setup_test_state().await;
+
+        // First run: should not be applied yet
+        let applied = check_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA)
+            .await
+            .unwrap();
+        assert!(!applied);
+
+        // Run the migration
+        let _: Vec<serde_json::Value> = state.db.query(MCP_HTTP_MIGRATION).await.unwrap();
+        record_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA)
+            .await
+            .unwrap();
+
+        // Second run: should be applied
+        let applied = check_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA)
+            .await
+            .unwrap();
+        assert!(applied, "MCP HTTP migration should be marked as applied");
     }
 }

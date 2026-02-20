@@ -384,4 +384,14 @@ DEFINE FIELD OVERWRITE answered_at ON user_question TYPE option<datetime>;
 DEFINE INDEX OVERWRITE user_question_workflow_idx ON user_question FIELDS workflow_id;
 DEFINE INDEX OVERWRITE user_question_status_idx ON user_question FIELDS status;
 DEFINE INDEX OVERWRITE user_question_workflow_status_idx ON user_question FIELDS workflow_id, status;
+
+-- =============================================
+-- Table: migration_log
+-- Tracks applied database migrations to prevent re-execution
+-- SA-005 H3: Migration guard for embedding-destructive operations
+-- =============================================
+DEFINE TABLE OVERWRITE migration_log SCHEMAFULL;
+DEFINE FIELD OVERWRITE name ON migration_log TYPE string;
+DEFINE FIELD OVERWRITE applied_at ON migration_log TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE unique_migration_name ON migration_log FIELDS name UNIQUE;
 "#;

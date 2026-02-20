@@ -187,6 +187,35 @@ pub async fn seed_test_memory(db: &DBClient) -> String {
     id
 }
 
+/// Seeds a test memory WITH a 1024-dimension embedding vector.
+///
+/// Used for testing migration guards (SA-005 H3) to verify
+/// that embeddings survive when migrations are re-run.
+pub async fn seed_test_memory_with_embedding(db: &DBClient) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    // Create a 1024-dimension embedding (matching HNSW index)
+    let embedding: Vec<f64> = (0..1024).map(|i| (i as f64) * 0.001).collect();
+    let data = serde_json::json!({
+        "type": "knowledge",
+        "content": "Memory with embedding for migration guard test.",
+        "metadata": {
+            "tags": ["test", "embedding"],
+            "priority": null,
+            "agent_source": null
+        },
+        "importance": 0.7,
+        "embedding": embedding,
+        "workflow_id": null
+    });
+    db.execute_with_params(
+        &format!("CREATE memory:`{}` CONTENT $data", id),
+        vec![("data".to_string(), data)],
+    )
+    .await
+    .expect("Failed to seed test memory with embedding");
+    id
+}
+
 /// Seeds a test LLM model in the database and returns its ID.
 pub async fn seed_test_model(db: &DBClient) -> String {
     let id = uuid::Uuid::new_v4().to_string();

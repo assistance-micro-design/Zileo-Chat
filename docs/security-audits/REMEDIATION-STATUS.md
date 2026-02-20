@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 42 | Fix implemented and tested |
+| DONE | 43 | Fix implemented and tested |
 | PARTIAL | 6 | Some aspects done, others remain |
-| NOT DONE | 18 | Not yet addressed |
+| NOT DONE | 17 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 19 | 3 | 5 |
+| HIGH (27) | 20 | 3 | 4 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -31,7 +31,7 @@
 
 ## Tests Added
 
-### Rust (24 new tests)
+### Rust (31 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -59,6 +59,13 @@
 | models/validation.rs | test_risk_level_deserializes_critical | Deserialization: Critical variant |
 | db/utils.rs | test_sanitize_deeply_nested_json_truncated | DoS: depth limit works |
 | db/utils.rs | test_sanitize_normal_depth_preserved | DoS: normal data preserved |
+| commands/migration.rs | test_check_migration_not_applied | Guard: fresh DB returns false |
+| commands/migration.rs | test_record_and_check_migration | Guard: record + check roundtrip |
+| commands/migration.rs | test_check_migration_does_not_cross_contaminate | Guard: isolation between names |
+| commands/migration.rs | test_memory_migration_first_run_clears_embeddings | Guard: first run works |
+| commands/migration.rs | test_memory_migration_second_run_preserves_embeddings | Guard: SA-005 H3 core test |
+| commands/migration.rs | test_memory_v2_migration_guard | Guard: v2 migration idempotent |
+| commands/migration.rs | test_mcp_http_migration_guard | Guard: MCP HTTP migration idempotent |
 
 ### TypeScript (18 new tests in 2 new files)
 
@@ -71,7 +78,7 @@
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| src-tauri/src/test_utils.rs | 310 | Shared test harness: setup_test_state(), seed helpers |
+| src-tauri/src/test_utils.rs | 340 | Shared test harness: setup_test_state(), seed helpers (incl. seed_test_memory_with_embedding) |
 
 ---
 
@@ -114,7 +121,7 @@
 | C1 | HIGH (adj.) | read_import_file arbitrary paths | **DONE** | Command removed from Tauri registration in main.rs. |
 | H1 | HIGH | Google Fonts blocked by CSP | **DONE** | CDN links removed from +layout.svelte. 4 @font-face in global.css. 4 woff2 files in /static/fonts/. |
 | H2 | HIGH | Missing sanitize_for_surrealdb() in import | **DONE** | Same as S2-M1 above. |
-| H3 | HIGH | migrate_memory_schema destroys embeddings | **NOT DONE** | No migration guard added. No migration_log table. |
+| H3 | HIGH | migrate_memory_schema destroys embeddings | **DONE** | migration_log table in schema.rs. check_migration_applied/record_migration_applied guards all 3 migrations. 7 new tests. |
 | M1 | MEDIUM | opener:default allows any URL | **PARTIAL** | isAllowedScheme() added for markdown links. But Tauri permission scope unchanged. |
 | M2 | MEDIUM | dialog:default grants all types | **NOT DONE** | Tauri capabilities unchanged. |
 | M3 | MEDIUM | No IPC deny patterns | **NOT DONE** | Tauri capabilities unchanged. |
@@ -238,7 +245,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 | Finding | Why | Effort |
 |---------|-----|--------|
-| SA-005 H3: Migration guard | Memory embeddings can be destroyed by re-running migration | 1h |
+| ~~SA-005 H3: Migration guard~~ | ~~Memory embeddings can be destroyed by re-running migration~~ | **DONE** |
 | SA-011 H-001: Activity capture race | Activities can be lost during streaming reset | 2h |
 | SA-011 H-002: loadWorkflows error recovery | Blank sidebar with no retry on DB failure | 1h |
 | SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |

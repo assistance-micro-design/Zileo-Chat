@@ -32,7 +32,7 @@
 | **2-D** | Export/Validation Parameterization | **DONE** | All bind params |
 | **2-E** | Parallel DB Writes | **DONE** | futures::join_all |
 | **2-F** | Dependency Updates NPM | **NOT DONE** | No package.json changes |
-| **2-G** | Fonts self-hosted + Migration Guard | **PARTIAL** | Fonts DONE (4 woff2 + @font-face). Migration guard NOT DONE |
+| **2-G** | Fonts self-hosted + Migration Guard | **DONE** | Fonts DONE (4 woff2 + @font-face). Migration guard DONE (migration_log table + guards + 7 tests) |
 | **2-H** | Dead Code Cleanup | **DONE** | 6 items removed |
 | **2-I** | HTTPS Warning Custom Providers | **DONE** | 8 tests |
 | **3-A** | Error Handling Standardization | **DONE** | 18+ components, 22 TS tests |
