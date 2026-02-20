@@ -116,21 +116,7 @@ pub async fn execute_workflow(
         wf_queries::SELECT_BASIC,
         validated_workflow_id
     );
-
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load workflow");
-        format!("Failed to load workflow: {}", e)
-    })?;
-
-    let workflows: Vec<Workflow> = json_results
-        .into_iter()
-        .map(serde_json::from_value)
-        .collect::<std::result::Result<Vec<Workflow>, _>>()
-        .map_err(|e| {
-            error!(error = %e, "Failed to deserialize workflow");
-            format!("Failed to deserialize workflow: {}", e)
-        })?;
-
+    let workflows: Vec<Workflow> = query_and_deserialize(&state.db, &query, "workflow").await?;
     let _workflow = workflows.first().ok_or_else(|| {
         warn!(workflow_id = %validated_workflow_id, "Workflow not found");
         "Workflow not found".to_string()
@@ -184,40 +170,7 @@ pub async fn execute_workflow(
     };
 
     // 5. Build result
-    // Note: cost_usd calculation requires provider-specific pricing APIs (future enhancement)
-    // Convert tool executions to IPC-friendly format
-    let tool_executions: Vec<WorkflowToolExecution> = report
-        .metrics
-        .tool_executions
-        .iter()
-        .map(|te| WorkflowToolExecution {
-            tool_type: te.tool_type.clone(),
-            tool_name: te.tool_name.clone(),
-            server_name: te.server_name.clone(),
-            input_params: te.input_params.clone(),
-            output_result: te.output_result.clone(),
-            success: te.success,
-            error_message: te.error_message.clone(),
-            duration_ms: te.duration_ms,
-            iteration: te.iteration,
-        })
-        .collect();
-
-    let result = WorkflowResult {
-        report: report.content,
-        response: report.response,
-        metrics: WorkflowMetrics {
-            duration_ms: report.metrics.duration_ms,
-            tokens_input: report.metrics.tokens_input,
-            tokens_output: report.metrics.tokens_output,
-            cost_usd: 0.0,
-            provider,
-            model,
-        },
-        tools_used: report.metrics.tools_used.clone(),
-        mcp_calls: report.metrics.mcp_calls.clone(),
-        tool_executions,
-    };
+    let result = build_workflow_result(report, provider, model);
 
     info!(
         duration_ms = result.metrics.duration_ms,
@@ -328,156 +281,37 @@ pub async fn load_workflow_full_state(
 
     let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
+    // Build query strings for all 4 parallel queries
+    let wf_query = format!("{} WHERE meta::id(id) = '{}'", wf_queries::SELECT_BASE, validated_id);
+    let msg_query = format!(
+        "SELECT meta::id(id) AS id, workflow_id, role, content, tokens, tokens_input, tokens_output, model, provider, cost_usd, duration_ms, timestamp FROM message WHERE workflow_id = '{}' ORDER BY timestamp ASC",
+        validated_id
+    );
+    let tool_query = format!(
+        "SELECT meta::id(id) AS id, workflow_id, message_id, agent_id, tool_type, tool_name, server_name, input_params, output_result, success, error_message, duration_ms, iteration, created_at FROM tool_execution WHERE workflow_id = '{}' ORDER BY created_at ASC",
+        validated_id
+    );
+    let think_query = format!(
+        "SELECT meta::id(id) AS id, workflow_id, message_id, agent_id, step_number, content, duration_ms, tokens, created_at FROM thinking_step WHERE workflow_id = '{}' ORDER BY created_at ASC, step_number ASC",
+        validated_id
+    );
+
     // Clone db Arc for parallel queries
-    let db = Arc::clone(&state.db);
+    let db1 = Arc::clone(&state.db);
     let db2 = Arc::clone(&state.db);
     let db3 = Arc::clone(&state.db);
     let db4 = Arc::clone(&state.db);
 
-    let id1 = validated_id.clone();
-    let id2 = validated_id.clone();
-    let id3 = validated_id.clone();
-    let id4 = validated_id.clone();
-
     // Execute all queries in parallel using tokio::try_join! (OPT-WF-9: with timeout)
     let parallel_queries = async {
         tokio::try_join!(
-            // Query 1: Load workflow (OPT-WF-1: Use centralized query constant)
             async move {
-                let query = format!("{} WHERE meta::id(id) = '{}'", wf_queries::SELECT_BASE, id1);
-
-                let json_results = db.query_json(&query).await.map_err(|e| {
-                    error!(error = %e, "Failed to load workflow");
-                    format!("Failed to load workflow: {}", e)
-                })?;
-
-                let workflows: Vec<Workflow> = json_results
-                    .into_iter()
-                    .map(serde_json::from_value)
-                    .collect::<std::result::Result<Vec<Workflow>, _>>()
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to deserialize workflow");
-                        format!("Failed to deserialize workflow: {}", e)
-                    })?;
-
-                workflows.into_iter().next().ok_or_else(|| {
-                    warn!(workflow_id = %id1, "Workflow not found");
-                    "Workflow not found".to_string()
-                })
+                let wfs: Vec<Workflow> = query_and_deserialize(&db1, &wf_query, "workflow").await?;
+                wfs.into_iter().next().ok_or_else(|| "Workflow not found".to_string())
             },
-            // Query 2: Load messages
-            async move {
-                let query = format!(
-                    r#"SELECT
-                    meta::id(id) AS id,
-                    workflow_id,
-                    role,
-                    content,
-                    tokens,
-                    tokens_input,
-                    tokens_output,
-                    model,
-                    provider,
-                    cost_usd,
-                    duration_ms,
-                    timestamp
-                FROM message
-                WHERE workflow_id = '{}'
-                ORDER BY timestamp ASC"#,
-                    id2
-                );
-
-                let json_results = db2.query_json(&query).await.map_err(|e| {
-                    error!(error = %e, "Failed to load messages");
-                    format!("Failed to load messages: {}", e)
-                })?;
-
-                let messages: Vec<Message> = json_results
-                    .into_iter()
-                    .map(serde_json::from_value)
-                    .collect::<std::result::Result<Vec<Message>, _>>()
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to deserialize messages");
-                        format!("Failed to deserialize messages: {}", e)
-                    })?;
-
-                Ok::<Vec<Message>, String>(messages)
-            },
-            // Query 3: Load tool executions
-            async move {
-                let query = format!(
-                    r#"SELECT
-                    meta::id(id) AS id,
-                    workflow_id,
-                    message_id,
-                    agent_id,
-                    tool_type,
-                    tool_name,
-                    server_name,
-                    input_params,
-                    output_result,
-                    success,
-                    error_message,
-                    duration_ms,
-                    iteration,
-                    created_at
-                FROM tool_execution
-                WHERE workflow_id = '{}'
-                ORDER BY created_at ASC"#,
-                    id3
-                );
-
-                let json_results = db3.query_json(&query).await.map_err(|e| {
-                    error!(error = %e, "Failed to load tool executions");
-                    format!("Failed to load tool executions: {}", e)
-                })?;
-
-                let tools: Vec<ToolExecution> = json_results
-                    .into_iter()
-                    .map(serde_json::from_value)
-                    .collect::<std::result::Result<Vec<ToolExecution>, _>>()
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to deserialize tool executions");
-                        format!("Failed to deserialize tool executions: {}", e)
-                    })?;
-
-                Ok::<Vec<ToolExecution>, String>(tools)
-            },
-            // Query 4: Load thinking steps
-            async move {
-                let query = format!(
-                    r#"SELECT
-                    meta::id(id) AS id,
-                    workflow_id,
-                    message_id,
-                    agent_id,
-                    step_number,
-                    content,
-                    duration_ms,
-                    tokens,
-                    created_at
-                FROM thinking_step
-                WHERE workflow_id = '{}'
-                ORDER BY created_at ASC, step_number ASC"#,
-                    id4
-                );
-
-                let json_results = db4.query_json(&query).await.map_err(|e| {
-                    error!(error = %e, "Failed to load thinking steps");
-                    format!("Failed to load thinking steps: {}", e)
-                })?;
-
-                let steps: Vec<ThinkingStep> = json_results
-                    .into_iter()
-                    .map(serde_json::from_value)
-                    .collect::<std::result::Result<Vec<ThinkingStep>, _>>()
-                    .map_err(|e| {
-                        error!(error = %e, "Failed to deserialize thinking steps");
-                        format!("Failed to deserialize thinking steps: {}", e)
-                    })?;
-
-                Ok::<Vec<ThinkingStep>, String>(steps)
-            }
+            async move { query_and_deserialize::<Message>(&db2, &msg_query, "messages").await },
+            async move { query_and_deserialize::<ToolExecution>(&db3, &tool_query, "tool executions").await },
+            async move { query_and_deserialize::<ThinkingStep>(&db4, &think_query, "thinking steps").await },
         )
     };
 
@@ -513,6 +347,74 @@ pub async fn load_workflow_full_state(
     );
 
     Ok(full_state)
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Executes a query_json call and deserializes the results into a typed Vec.
+///
+/// Shared between execute_workflow, load_workflow_full_state, and similar commands
+/// to eliminate repeated query-then-deserialize boilerplate.
+async fn query_and_deserialize<T: serde::de::DeserializeOwned>(
+    db: &crate::db::DBClient,
+    query: &str,
+    entity_label: &str,
+) -> Result<Vec<T>, String> {
+    let json_results = db.query_json(query).await.map_err(|e| {
+        error!(error = %e, "Failed to load {}", entity_label);
+        format!("Failed to load {}: {}", entity_label, e)
+    })?;
+
+    json_results
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<T>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize {}", entity_label);
+            format!("Failed to deserialize {}: {}", entity_label, e)
+        })
+}
+
+/// Builds a WorkflowResult from an agent execution report.
+fn build_workflow_result(
+    report: crate::agents::core::agent::Report,
+    provider: String,
+    model: String,
+) -> WorkflowResult {
+    let tool_executions: Vec<WorkflowToolExecution> = report
+        .metrics
+        .tool_executions
+        .iter()
+        .map(|te| WorkflowToolExecution {
+            tool_type: te.tool_type.clone(),
+            tool_name: te.tool_name.clone(),
+            server_name: te.server_name.clone(),
+            input_params: te.input_params.clone(),
+            output_result: te.output_result.clone(),
+            success: te.success,
+            error_message: te.error_message.clone(),
+            duration_ms: te.duration_ms,
+            iteration: te.iteration,
+        })
+        .collect();
+
+    WorkflowResult {
+        report: report.content,
+        response: report.response,
+        metrics: WorkflowMetrics {
+            duration_ms: report.metrics.duration_ms,
+            tokens_input: report.metrics.tokens_input,
+            tokens_output: report.metrics.tokens_output,
+            cost_usd: 0.0,
+            provider,
+            model,
+        },
+        tools_used: report.metrics.tools_used.clone(),
+        mcp_calls: report.metrics.mcp_calls.clone(),
+        tool_executions,
+    }
 }
 
 #[cfg(test)]
