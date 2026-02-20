@@ -21,6 +21,7 @@
 //! recovery with full reasoning history.
 
 use crate::{
+    db::extract_count,
     models::{ThinkingStep, ThinkingStepCreate},
     security::validate_uuid_field,
     tools::constants::commands as cmd_const,
@@ -273,11 +274,7 @@ pub async fn clear_workflow_thinking_steps(
     let count_result: Vec<serde_json::Value> =
         state.db.query(&count_query).await.unwrap_or_default();
 
-    let count = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0);
+    let count = extract_count(&count_result);
 
     // Delete all thinking steps for the workflow
     state

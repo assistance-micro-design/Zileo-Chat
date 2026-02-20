@@ -21,6 +21,7 @@
 //! Full RAG with embeddings will be implemented in a future phase.
 
 use crate::{
+    db::extract_count,
     models::{Memory, MemorySearchResult, MemoryType},
     security::{serialize_for_query, validate_uuid_field},
     tools::constants::{memory as memory_constants, query_limits},
@@ -395,11 +396,7 @@ pub async fn clear_memories_by_type(
             format!("Failed to count memories: {}", e)
         })?;
 
-    let count = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let count = extract_count(&count_result) as usize;
 
     // Delete all memories of the specified type using parameterized query
     state

@@ -17,7 +17,7 @@
 //! Provides Tauri commands for running database migrations,
 //! particularly for the Memory Tool vector search schema.
 
-use crate::db::DBClient;
+use crate::db::{extract_count, DBClient};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -132,11 +132,7 @@ pub async fn migrate_memory_schema(state: State<'_, AppState>) -> Result<Migrati
         format!("Failed to count memories: {}", e)
     })?;
 
-    let total_memories = count_before
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let total_memories = extract_count(&count_before) as usize;
 
     info!(
         total_memories = total_memories,
@@ -201,11 +197,7 @@ pub async fn get_memory_schema_status(
         format!("Failed to count memories: {}", e)
     })?;
 
-    let total_memories = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let total_memories = extract_count(&count_result) as usize;
 
     // Count memories with embeddings
     let with_embedding_query = "SELECT count() FROM memory WHERE embedding IS NOT NONE GROUP ALL";
@@ -215,11 +207,7 @@ pub async fn get_memory_schema_status(
             format!("Failed to count memories with embeddings: {}", e)
         })?;
 
-    let with_embeddings = with_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let with_embeddings = extract_count(&with_result) as usize;
 
     // Count memories with workflow_id
     let with_workflow_query = "SELECT count() FROM memory WHERE workflow_id IS NOT NONE GROUP ALL";
@@ -229,11 +217,7 @@ pub async fn get_memory_schema_status(
             format!("Failed to count memories with workflow_id: {}", e)
         })?;
 
-    let with_workflow_id = workflow_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let with_workflow_id = extract_count(&workflow_result) as usize;
 
     info!(
         total = total_memories,
@@ -304,11 +288,7 @@ pub async fn migrate_memory_v2_schema(
         format!("Failed to count memories: {}", e)
     })?;
 
-    let total_memories = count_before
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let total_memories = extract_count(&count_before) as usize;
 
     info!(
         total_memories = total_memories,

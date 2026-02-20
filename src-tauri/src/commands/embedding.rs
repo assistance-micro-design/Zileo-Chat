@@ -19,6 +19,7 @@
 
 use crate::{
     commands::SecureKeyStore,
+    db::extract_count,
     llm::embedding::{EmbeddingProvider, EmbeddingService},
     models::{
         CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat,
@@ -187,11 +188,7 @@ pub async fn get_memory_stats(state: State<'_, AppState>) -> Result<MemoryStats,
         format!("Failed to get memory count: {}", e)
     })?;
 
-    let total = total_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let total = extract_count(&total_result) as usize;
 
     // Get count with embeddings
     let with_embeddings_query =
@@ -202,11 +199,7 @@ pub async fn get_memory_stats(state: State<'_, AppState>) -> Result<MemoryStats,
         .await
         .unwrap_or_default();
 
-    let with_embeddings = with_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as usize;
+    let with_embeddings = extract_count(&with_result) as usize;
 
     // Get count by type
     let by_type_query = "SELECT type, count() AS count FROM memory GROUP BY type";

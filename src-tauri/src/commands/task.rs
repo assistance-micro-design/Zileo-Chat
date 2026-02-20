@@ -131,7 +131,7 @@ pub async fn create_task(
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to create task");
-            format!("Database error: {}", e)
+            format!("Failed to create task: {}", e)
         })?;
 
     info!(task_id = %task_id, "Task created successfully");
@@ -176,7 +176,7 @@ pub async fn get_task(task_id: String, state: State<'_, AppState>) -> Result<Tas
 
     let results: Vec<Task> = state.db.query(&query).await.map_err(|e| {
         error!(error = %e, "Failed to query task");
-        format!("Database error: {}", e)
+        format!("Failed to query task: {}", e)
     })?;
 
     results
@@ -226,7 +226,7 @@ pub async fn list_workflow_tasks(
 
     let tasks: Vec<Task> = state.db.query(&query).await.map_err(|e| {
         error!(error = %e, "Failed to list tasks");
-        format!("Database error: {}", e)
+        format!("Failed to list tasks: {}", e)
     })?;
 
     info!(count = tasks.len(), "Workflow tasks loaded");
@@ -308,7 +308,7 @@ pub async fn list_tasks_by_status(
 
     let tasks: Vec<Task> = state.db.query(&query).await.map_err(|e| {
         error!(error = %e, "Failed to list tasks by status");
-        format!("Database error: {}", e)
+        format!("Failed to list tasks by status: {}", e)
     })?;
 
     info!(count = tasks.len(), status = %status, "Tasks by status loaded");
@@ -398,7 +398,7 @@ pub async fn update_task(
     // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
     state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to update task");
-        format!("Database error: {}", e)
+        format!("Failed to update task: {}", e)
     })?;
 
     info!(task_id = %validated_id, "Task updated successfully");
@@ -447,7 +447,7 @@ pub async fn update_task_status(
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to update task status");
-            format!("Database error: {}", e)
+            format!("Failed to update task status: {}", e)
         })?;
 
     info!(task_id = %validated_id, status = %status, "Task status updated");
@@ -490,7 +490,7 @@ pub async fn complete_task(
     // Use execute() for UPDATE to avoid SurrealDB SDK serialization issues
     state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to complete task");
-        format!("Database error: {}", e)
+        format!("Failed to complete task: {}", e)
     })?;
 
     info!(task_id = %validated_id, "Task marked as completed");
@@ -517,7 +517,7 @@ pub async fn delete_task(task_id: String, state: State<'_, AppState>) -> Result<
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to delete task");
-            format!("Database error: {}", e)
+            format!("Failed to delete task: {}", e)
         })?;
 
     info!(task_id = %validated_id, "Task deleted");

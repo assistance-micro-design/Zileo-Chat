@@ -92,6 +92,52 @@ fn sanitize_recursive(value: Value, depth: usize) -> Value {
 /// Prevents DoS via extremely large import files.
 pub const MAX_IMPORT_ENTITIES: usize = 100;
 
+/// Extracts a count value from a `SELECT count() ... GROUP ALL` query result.
+///
+/// SurrealDB's `SELECT count() ... GROUP ALL` returns a single-element array
+/// with a JSON object containing a `"count"` field. This helper extracts
+/// the numeric value, returning 0 if the result is empty or malformed.
+///
+/// # Arguments
+///
+/// * `results` - The query result as a `Vec<serde_json::Value>`
+///
+/// # Returns
+///
+/// The count as `u64`, or 0 if the result is empty/malformed.
+///
+/// # Example
+///
+/// ```ignore
+/// let results: Vec<serde_json::Value> = db.query("SELECT count() FROM memory GROUP ALL").await?;
+/// let total = extract_count(&results);
+/// ```
+pub fn extract_count(results: &[Value]) -> u64 {
+    results
+        .first()
+        .and_then(|v| v.get("count"))
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0)
+}
+
+/// Checks whether a `SELECT count() ... GROUP ALL` result indicates at least one record exists.
+///
+/// Convenience wrapper over [`extract_count`] for existence checks.
+///
+/// # Example
+///
+/// ```ignore
+/// let results: Vec<serde_json::Value> = db.query(
+///     "SELECT count() FROM llm_model WHERE api_name = $name GROUP ALL"
+/// ).await?;
+/// if count_exists(&results) {
+///     return Err("Model already exists".to_string());
+/// }
+/// ```
+pub fn count_exists(results: &[Value]) -> bool {
+    extract_count(results) > 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +255,61 @@ mod tests {
             current = &current["nested"];
         }
         assert_eq!(current, &json!("leaftext"));
+    }
+
+    // extract_count tests
+    #[test]
+    fn test_extract_count_valid_result() {
+        let results = vec![json!({"count": 42})];
+        assert_eq!(extract_count(&results), 42);
+    }
+
+    #[test]
+    fn test_extract_count_zero() {
+        let results = vec![json!({"count": 0})];
+        assert_eq!(extract_count(&results), 0);
+    }
+
+    #[test]
+    fn test_extract_count_empty_vec() {
+        let results: Vec<serde_json::Value> = vec![];
+        assert_eq!(extract_count(&results), 0);
+    }
+
+    #[test]
+    fn test_extract_count_missing_field() {
+        let results = vec![json!({"other": 10})];
+        assert_eq!(extract_count(&results), 0);
+    }
+
+    #[test]
+    fn test_extract_count_non_numeric() {
+        let results = vec![json!({"count": "not_a_number"})];
+        assert_eq!(extract_count(&results), 0);
+    }
+
+    #[test]
+    fn test_extract_count_large_value() {
+        let results = vec![json!({"count": 999_999})];
+        assert_eq!(extract_count(&results), 999_999);
+    }
+
+    // count_exists tests
+    #[test]
+    fn test_count_exists_true() {
+        let results = vec![json!({"count": 3})];
+        assert!(count_exists(&results));
+    }
+
+    #[test]
+    fn test_count_exists_false_zero() {
+        let results = vec![json!({"count": 0})];
+        assert!(!count_exists(&results));
+    }
+
+    #[test]
+    fn test_count_exists_false_empty() {
+        let results: Vec<serde_json::Value> = vec![];
+        assert!(!count_exists(&results));
     }
 }

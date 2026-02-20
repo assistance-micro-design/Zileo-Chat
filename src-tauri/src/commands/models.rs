@@ -40,6 +40,7 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::commands::security::SecureKeyStore;
+use crate::db::count_exists;
 use crate::models::llm_models::{
     get_all_builtin_models, ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings,
     ProviderType, UpdateModelRequest,
@@ -144,7 +145,7 @@ pub async fn list_models(
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to query models");
-                format!("Database error: {}", e)
+                format!("Failed to query models: {}", e)
             })?
     } else {
         let query = format!(
@@ -163,7 +164,7 @@ pub async fn list_models(
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to query models");
-                format!("Database error: {}", e)
+                format!("Failed to query models: {}", e)
             })?
             .take(0)
             .map_err(|e| {
@@ -218,7 +219,7 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to query model");
-            format!("Database error: {}", e)
+            format!("Failed to query model: {}", e)
         })?
         .take(0)
         .map_err(|e| {
@@ -283,7 +284,7 @@ pub async fn get_model_by_api_name(
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to query model by api_name");
-            format!("Database error: {}", e)
+            format!("Failed to query model by api_name: {}", e)
         })?;
 
     result.pop().ok_or_else(|| {
@@ -343,19 +344,13 @@ pub async fn create_model(
             ],
         )
         .await
-        .map_err(|e| format!("Database error: {}", e))?;
+        .map_err(|e| format!("Failed to check model uniqueness: {}", e))?;
 
-    let count_result: Option<serde_json::Value> = check_results.into_iter().next();
-
-    if let Some(val) = count_result {
-        if let Some(count) = val.get("count").and_then(|v| v.as_i64()) {
-            if count > 0 {
-                return Err(format!(
-                    "Model with api_name '{}' already exists for provider {}",
-                    data.api_name, data.provider
-                ));
-            }
-        }
+    if count_exists(&check_results) {
+        return Err(format!(
+            "Model with api_name '{}' already exists for provider {}",
+            data.api_name, data.provider
+        ));
     }
 
     // Generate ID and timestamps
@@ -487,17 +482,13 @@ pub async fn update_model(
                 ],
             )
             .await
-            .map_err(|e| format!("Database error: {}", e))?;
+            .map_err(|e| format!("Failed to check model uniqueness: {}", e))?;
 
-        if let Some(val) = check_results.into_iter().next() {
-            if let Some(count) = val.get("count").and_then(|v| v.as_i64()) {
-                if count > 0 {
-                    return Err(format!(
-                        "Model with api_name '{}' already exists for provider {}",
-                        api_name, existing.provider
-                    ));
-                }
-            }
+        if count_exists(&check_results) {
+            return Err(format!(
+                "Model with api_name '{}' already exists for provider {}",
+                api_name, existing.provider
+            ));
         }
         set_parts.push("api_name = $p_api_name".to_string());
         params.push(("p_api_name".to_string(), serde_json::json!(api_name)));
@@ -630,7 +621,7 @@ pub async fn get_provider_settings(
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to query provider settings");
-            format!("Database error: {}", e)
+            format!("Failed to query provider settings: {}", e)
         })?
         .take(0)
         .map_err(|e| {
@@ -947,15 +938,11 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
             .db
             .query(&check_query)
             .await
-            .map_err(|e| format!("Database error: {}", e))?
+            .map_err(|e| format!("Failed to check builtin model existence: {}", e))?
             .take(0)
             .unwrap_or_default();
 
-        let exists = count_result
-            .first()
-            .and_then(|v| v.get("count").and_then(|c| c.as_i64()))
-            .unwrap_or(0)
-            > 0;
+        let exists = count_exists(&count_result);
 
         if !exists {
             // Use parameterized query with CONTENT $data for safe string handling

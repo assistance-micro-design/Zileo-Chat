@@ -21,6 +21,7 @@
 //! after application restart by persisting all messages to SurrealDB.
 
 use crate::{
+    db::extract_count,
     models::{Message, MessageCreate, PaginatedMessages},
     security::validate_uuid_field,
     tools::constants::commands as cmd_const,
@@ -219,11 +220,7 @@ pub async fn load_workflow_messages_paginated(
     let count_result: Vec<serde_json::Value> =
         state.db.query(&count_query).await.unwrap_or_default();
 
-    let total = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0) as u32;
+    let total = extract_count(&count_result) as u32;
 
     // Load paginated messages
     let query = format!(
@@ -333,11 +330,7 @@ pub async fn clear_workflow_messages(
     let count_result: Vec<serde_json::Value> =
         state.db.query(&count_query).await.unwrap_or_default();
 
-    let count = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0);
+    let count = extract_count(&count_result);
 
     // Delete all messages for the workflow
     state

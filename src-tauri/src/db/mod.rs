@@ -44,4 +44,4 @@ pub mod schema;
 pub mod utils;
 
 pub use client::DBClient;
-pub use utils::sanitize_for_surrealdb;
+pub use utils::{count_exists, extract_count, sanitize_for_surrealdb};

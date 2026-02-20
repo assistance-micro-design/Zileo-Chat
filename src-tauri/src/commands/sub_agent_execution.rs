@@ -17,7 +17,7 @@
 //! Provides Tauri commands for retrieving sub-agent execution logs
 //! for workflow state recovery and activity display.
 
-use crate::{models::sub_agent::SubAgentExecution, security::validate_uuid_field, AppState};
+use crate::{db::extract_count, models::sub_agent::SubAgentExecution, security::validate_uuid_field, AppState};
 use tauri::State;
 use tracing::{error, info, instrument};
 
@@ -109,11 +109,7 @@ pub async fn clear_workflow_sub_agent_executions(
     let count_result: Vec<serde_json::Value> =
         state.db.query(&count_query).await.unwrap_or_default();
 
-    let count = count_result
-        .first()
-        .and_then(|v| v.get("count"))
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0);
+    let count = extract_count(&count_result);
 
     // Delete all executions for the workflow
     state
