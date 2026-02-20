@@ -66,6 +66,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let provider = $state('mistral');
 	let model = $state('mistral-large-latest');
 	let maxToolIterations = $state(50);
+	let enableThinking = $state(true);
 	let selectedTools = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
 	let systemPrompt = $state('');
@@ -77,6 +78,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		provider = (agent?.llm.provider ?? 'mistral').toLowerCase();
 		model = agent?.llm.model ?? 'mistral-large-latest';
 		maxToolIterations = agent?.max_tool_iterations ?? 50;
+		enableThinking = agent?.enable_thinking ?? true;
 		selectedTools = agent?.tools ?? [];
 		selectedMcpServers = agent?.mcp_servers ?? [];
 		systemPrompt = agent?.system_prompt ?? '';
@@ -240,7 +242,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
 			system_prompt: systemPrompt.trim(),
-			max_tool_iterations: maxToolIterations
+			max_tool_iterations: maxToolIterations,
+			enable_thinking: enableThinking
 		};
 
 		try {

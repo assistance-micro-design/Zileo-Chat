@@ -150,7 +150,9 @@ describe('Agent Store', () => {
 				},
 				tools: ['MemoryTool'],
 				mcp_servers: [],
-				system_prompt: 'Test prompt'
+				system_prompt: 'Test prompt',
+				max_tool_iterations: 50,
+				enable_thinking: true
 			};
 
 			mockInvoke.mockResolvedValueOnce(newAgentId); // create_agent
@@ -175,7 +177,9 @@ describe('Agent Store', () => {
 				},
 				tools: [],
 				mcp_servers: [],
-				system_prompt: ''
+				system_prompt: '',
+				max_tool_iterations: 50,
+				enable_thinking: true
 			};
 
 			mockInvoke.mockRejectedValueOnce(new Error('Validation failed'));

@@ -102,9 +102,9 @@ export interface AgentConfigCreate {
   /** System prompt (1-10000 chars) */
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
-  max_tool_iterations?: number;
+  max_tool_iterations: number;
   /** Enable thinking mode for supported models (default: true) */
-  enable_thinking?: boolean;
+  enable_thinking: boolean;
 }
 
 /**

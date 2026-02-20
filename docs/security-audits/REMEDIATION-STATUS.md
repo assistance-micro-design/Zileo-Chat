@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 48 | Fix implemented and tested |
-| PARTIAL | 6 | Some aspects done, others remain |
+| DONE | 49 | Fix implemented and tested |
+| PARTIAL | 5 | Some aspects done, others remain |
 | NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 25 | 2 | 0 |
+| HIGH (27) | 26 | 1 | 0 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -222,7 +222,7 @@
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
 | #13 | CRITICAL | RiskLevel missing 'critical' variant | **DONE** | validation.rs: `RiskLevel::Critical` added. Schema ASSERT updated. 1 test. validation_helper.rs updated. |
-| #1-4 | HIGH (adj.) | AgentConfig optional vs required mismatch | **PARTIAL** | enable_thinking: `boolean` (was `boolean?`) in agent.ts. But max_tool_iterations not changed in TS. |
+| #1-4 | HIGH (adj.) | AgentConfig optional vs required mismatch | **DONE** | AgentConfig: both fields already `number`/`boolean`. AgentConfigCreate: `max_tool_iterations: number` (was `number?`), `enable_thinking: boolean` (was `boolean?`). AgentForm.svelte updated to always send `enable_thinking`. Zod schema updated. 2 test mocks updated. |
 | #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
 | #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **DONE** | llm_models.rs: removed `skip_serializing_if` from `base_url`. Now serializes as `null` when None, matching TS `string \| null`. 3 new tests. |
 | #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
@@ -258,7 +258,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | ~~SA-005 H3: Migration guard~~ | ~~Memory embeddings can be destroyed by re-running migration~~ | **DONE** |
 | ~~SA-011 H-001: Activity capture race~~ | ~~Activities can be lost during streaming reset~~ | **DONE** (frontend guard + backend cancellation token propagation) |
 | ~~SA-011 H-002: loadWorkflows error recovery~~ | ~~Blank sidebar with no retry on DB failure~~ | **DONE** |
-| SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |
+| ~~SA-013 #1-4: max_tool_iterations TS type~~ | ~~Still optional in TS, always present from Rust~~ | **DONE** |
 | ~~SA-013 #6: MessageCreate tokens~~ | ~~Missing field in TS type~~ | **DONE** |
 | ~~SA-013 #12: ProviderSettings.base_url~~ | ~~Nullability mismatch~~ | **DONE** |
 

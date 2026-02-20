@@ -20,7 +20,7 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | SA-010 | [Settings & Forms Quality](./SA-010-settings-forms-quality.md) | 2026-02-19 | Quality audit | **Error handling DONE, 4 a11y DONE**, templates deferred |
 | SA-011 | [Chat & Workflow Components](./SA-011-chat-workflow-components.md) | 2026-02-19 | 0C, 3H, 12M, 26L | **H-001 DONE, H-002 DONE, H-003 DONE** |
 | SA-012 | [DB Layer & Migrations](./SA-012-db-layer-migrations.md) | 2026-02-19 | 4H, 4M, 4L | **4H DONE, 2M DONE, 5L DONE** |
-| SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE, 3H DONE**, 1H partial (#1-4 max_tool_iterations) |
+| SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE, 4H DONE** |
 
 **Evaluation report**: [EVALUATION-2026-02-19.md](./EVALUATION-2026-02-19.md)
 **Remediation status**: [REMEDIATION-STATUS.md](./REMEDIATION-STATUS.md) (2026-02-20, branch `security/audit-remediation-tdd`)

@@ -63,7 +63,7 @@ export const AgentConfigSchema = z.object({
 	mcp_servers: z.array(z.string()),
 	system_prompt: z.string(),
 	max_tool_iterations: z.number().min(1).max(200),
-	enable_thinking: z.boolean().optional()
+	enable_thinking: z.boolean()
 });
 
 export const AgentSummarySchema = z.object({
