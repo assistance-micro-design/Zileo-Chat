@@ -12,16 +12,16 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 73 | Fix implemented and tested |
-| NOT DONE | 6 | Not yet addressed |
+| DONE | 76 | Fix implemented and tested |
+| NOT DONE | 3 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
 | HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 35 | 0 |
-| LOW (13) | 5 | 8 |
+| MEDIUM (35) | 37 | 0 |
+| LOW (13) | 6 | 7 |
 | N/A (7) | - | - |
 
 **All 4 CRITICAL findings are remediated.**
@@ -180,9 +180,9 @@
 |----|----------|---------|--------|----------|
 | DUP-1 | MEDIUM | UUID validation repeated 52x | **DONE** | `validate_uuid_field()` helper in `security/validation.rs`. 47 production occurrences replaced across 12 command files. 4 new tests. |
 | DUP-2 | MEDIUM | serde_json escaping repeated 25x | **DONE** | `serialize_for_query()` helper in `security/validation.rs`. 25 occurrences replaced across 9 command files. 4 new tests (920 total pass). |
-| DUP-3 | MEDIUM | COUNT extraction repeated 16x | **NOT DONE** | |
-| F1-F13 | MEDIUM | 13 oversized functions (>100 lines) | **NOT DONE** | No function decomposition. |
-| F14 | LOW | 15 generic "Database error" messages | **NOT DONE** | |
+| DUP-3 | MEDIUM | COUNT extraction repeated 16x | **DONE** | `extract_count()` helper in `db/utils.rs`. 16 occurrences replaced across 7 command files. |
+| F1-F13 | MEDIUM | 13 oversized functions (>100 lines) | **DONE** | All 12 remaining functions decomposed below 100 lines (1 already removed). streaming.rs: 6 sub-functions. import_export.rs: 17+ helpers. workflow.rs: generic query+deserialize. models.rs: connection_test_outcome + test_mistral_api + check_model_uniqueness. custom_provider.rs: build_provider_update_clauses + reconfigure_provider_runtime. agent.rs: merge_agent_config. tool_execution.rs: validate_tool_fields. |
+| F14 | LOW | 15 generic "Database error" messages | **DONE** | All 15 "Database error" replaced with contextual messages (e.g., "Failed to list models", "Failed to update task status"). |
 | COMPLIANT | - | 0 .unwrap() in production | **CONFIRMED** | Still true. |
 
 ### SA-008: Agent System Quality & Performance
@@ -311,8 +311,9 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Template deduplication | SA-010 DUP-1/2/3 | 3h |
 | ~~UUID validation dedup~~ | ~~SA-007 DUP-1~~ | **DONE** |
 | ~~serde_json escaping dedup~~ | ~~SA-007 DUP-2~~ | **DONE** |
-| Code deduplication (Rust) | SA-007 DUP-3, SA-008 DUP-1/3/4 | 4h |
-| Function decomposition | SA-007 F1-F13 | 4h |
+| ~~COUNT extraction dedup~~ | ~~SA-007 DUP-3~~ | **DONE** |
+| ~~Function decomposition~~ | ~~SA-007 F1-F13~~ | **DONE** |
+| Code deduplication (Rust) | SA-008 DUP-1/3/4 | 3h |
 | NPM dependency updates | SA-006 DEP-3 | 30min |
 | ~~SurrealDB feature pruning~~ | ~~SA-006 DEP-2~~ | **DONE** |
 | ~~Orphan TS types cleanup~~ | ~~SA-013 #14-15~~ | **DONE** |
@@ -324,7 +325,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|----------|--------|
 | UUID bind params for validated IDs | SA-001 L1-L18 | Defense-in-depth, IDs from DB |
 | ~~Chat/workflow component quality~~ | ~~SA-011 M-001 to M-012~~ | **DONE** - 9 new fixes + 3 already done (M-002/M-006 in SA-013, M-010 existing guard) |
-| Error message context | SA-007 F14 | Quality improvement |
+| ~~Error message context~~ | ~~SA-007 F14~~ | **DONE** |
 | ~~Remaining console.* (non-settings)~~ | ~~SA-013 #16-20~~ | **DONE** - All 22 remaining removed |
 
 ---

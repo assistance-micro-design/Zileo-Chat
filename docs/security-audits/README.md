@@ -14,7 +14,7 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | ~~SA-004~~ | ~~Secret Management / Logging~~ | - | Merged into SA-002 | - |
 | SA-005 | [CSP / Tauri Permissions](./SA-005-csp-tauri-permissions.md) | 2026-02-19 | **0C**, 4H, 4M, 3L | **4H DONE, 2M DONE**, 2M open, 3L deferred |
 | SA-006 | [Dependency Vulnerabilities](./SA-006-dependency-vulnerabilities.md) | 2026-02-19 | 3H, 4M, 5L, 2I (7 CVEs N/A) | **2H DONE** (DEP-1 rig-core + DEP-2 SurrealDB), 1H open (DEP-3 NPM) |
-| SA-007 | [Commands Control Flow](./SA-007-commands-control-flow.md) | 2026-02-19 | Quality audit | **DUP-1+DUP-2 DONE** (UUID validation + serde_json escaping dedup), rest deferred |
+| SA-007 | [Commands Control Flow](./SA-007-commands-control-flow.md) | 2026-02-19 | Quality audit | **ALL DONE** (DUP-1/2/3 dedup, F1-F13 decomposition, F14 error messages) |
 | SA-008 | [Agent System Quality](./SA-008-agent-system-quality.md) | 2026-02-19 | Quality audit | **PERF-1 DONE, PERF-2 DONE**, duplication deferred |
 | SA-009 | [Svelte Stores Quality](./SA-009-stores-quality-audit.md) | 2026-02-19 | Quality audit | **F1/F2/F4 DONE, dead code DONE** |
 | SA-010 | [Settings & Forms Quality](./SA-010-settings-forms-quality.md) | 2026-02-19 | Quality audit | **Error handling DONE (ERR-1+ERR-2), 4 a11y DONE, DUP-1/2/3 DONE** (template dedup) |
