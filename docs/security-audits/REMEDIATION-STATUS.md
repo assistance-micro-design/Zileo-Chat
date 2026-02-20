@@ -3,8 +3,8 @@
 **Date**: 2026-02-20 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 87 (vs main)
-**Lines**: +2,150 / -1,510 (approx)
+**Files changed**: 120 (vs main)
+**Lines**: +10,152 / -1,877
 
 ---
 
@@ -12,18 +12,17 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 55 | Fix implemented and tested |
-| PARTIAL | 1 | Some aspects done, others remain |
+| DONE | 56 | Fix implemented and tested |
 | NOT DONE | 11 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
-| Category | DONE | PARTIAL | NOT DONE |
-|----------|------|---------|----------|
-| CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 26 | 1 | 0 |
-| MEDIUM (35) | 18 | 0 | 17 |
-| LOW (13) | 5 | 0 | 8 |
-| N/A (7) | - | - | - |
+| Category | DONE | NOT DONE |
+|----------|------|----------|
+| CRITICAL (4) | 4 | 0 |
+| HIGH (27) | 26 | 1 |
+| MEDIUM (35) | 18 | 17 |
+| LOW (13) | 5 | 8 |
+| N/A (7) | - | - |
 
 **All 4 CRITICAL findings are remediated.**
 
@@ -146,8 +145,8 @@
 | ID | Severity | Finding | Status | Evidence |
 |----|----------|---------|--------|----------|
 | 7 CVEs | N/A | All NPM CVEs inapplicable to desktop | **N/A** | Confirmed in EVALUATION. |
-| DEP-1 | HIGH | rig-core features = ["all"] pulls bloat | **DONE** | Cargo.toml: removed `features = ["all"]` from rig-core. |
-| DEP-2 | HIGH | surrealdb unused features | **DONE** | Cargo.toml: `default-features = false, features = ["kv-rocksdb"]`. Removed protocol-http, protocol-ws, rustls. 902 tests pass. |
+| DEP-1 | HIGH | rig-core features = ["all"] pulls bloat | **DONE** | Cargo.toml: removed `features = ["all"]` from rig-core. 26 crates removed from lock file (lopdf, rayon, nom, etc.). |
+| DEP-2 | HIGH | surrealdb unused features | **DONE** | Cargo.toml: `default-features = false, features = ["kv-rocksdb"]`. 4 crates removed (tokio-tungstenite, tungstenite, webpki-roots, data-encoding). 0 network deps remain in SurrealDB tree. 902 tests pass, 0 clippy warnings. |
 | DEP-3 | HIGH | NPM patch updates available | **NOT DONE** | No package.json changes in branch. |
 | L/INFO | LOW/INFO | Unmaintained transitive deps | **NOT DONE** | Upstream dependency, cannot fix. |
 

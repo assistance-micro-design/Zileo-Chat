@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-19
 **Scope**: All direct and transitive dependencies (NPM + Rust/Cargo)
-**Status**: Documented (no fixes applied)
+**Status**: Partially remediated (DEP-1 rig-core + DEP-2 SurrealDB DONE, DEP-3 NPM updates pending)
 **Cross-references**: SA-002 (DOMPurify, XSS), SA-005 (Tauri permissions), SA-008 (rig-core architecture)
 
 ## Summary
@@ -109,6 +109,8 @@ These are entirely dev-time and do not affect the production Tauri binary.
 
 **Recommendation**: Replace `features = ["all"]` with `features = ["derive"]` (or the minimal set needed for provider support). This removes `lopdf` and `rayon` from the dependency tree, reducing attack surface and compile time.
 
+**REMEDIATED (2026-02-20)**: Removed `features = ["all"]` from rig-core. Now uses default features only (`rig-core = "0.30.0"`). Removed lopdf, rayon, pdf feature from dependency tree.
+
 ### B.3 reqwest 0.12.28
 
 | Metric | Value |
@@ -181,6 +183,8 @@ No unmaintained packages detected in the NPM dependency tree.
 | `rayon` | **NO** | Parallel processing - unused in this codebase |
 
 **Recommendation**: `features = ["derive"]` should suffice. This removes ~5 unnecessary transitive dependencies.
+
+**REMEDIATED (2026-02-20)**: Removed `features = ["all"]`, now uses default features. `pdf` and `rayon` no longer resolved.
 
 ### D.2 surrealdb `features = ["kv-rocksdb", "protocol-http"]`
 
@@ -331,7 +335,7 @@ All three platform backends are enabled. For a Linux-only build, only `sync-secr
 
 ### G.2 SA-008: rig-core Architecture
 
-**Status**: rig-core 0.30.0 with `features = ["all"]` confirms feature bloat concern. The `pdf` and `rayon` features add unnecessary attack surface. Recommendation to switch to minimal features is reinforced.
+**Status**: rig-core 0.30.0 with `features = ["all"]` confirmed feature bloat concern. The `pdf` and `rayon` features added unnecessary attack surface. **REMEDIATED**: Now uses default features only.
 
 ### G.3 Cargo.toml comment: CVE-2025-31477
 
