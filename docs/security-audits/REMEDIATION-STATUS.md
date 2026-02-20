@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 47 | Fix implemented and tested |
+| DONE | 48 | Fix implemented and tested |
 | PARTIAL | 6 | Some aspects done, others remain |
-| NOT DONE | 13 | Not yet addressed |
+| NOT DONE | 12 | Not yet addressed |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | PARTIAL | NOT DONE |
 |----------|------|---------|----------|
 | CRITICAL (4) | 4 | 0 | 0 |
-| HIGH (27) | 24 | 3 | 0 |
+| HIGH (27) | 25 | 2 | 0 |
 | MEDIUM (34) | 14 | 3 | 17 |
 | LOW (13) | 4 | 0 | 9 |
 | N/A (7) | - | - | - |
@@ -31,7 +31,7 @@
 
 ## Tests Added
 
-### Rust (34 new tests)
+### Rust (37 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -69,6 +69,9 @@
 | models/message.rs | test_message_create_always_serializes_tokens | SA-013 #6: tokens always in JSON output |
 | models/message.rs | test_message_create_deserializes_without_tokens | SA-013 #6: defense-in-depth default |
 | models/message.rs | test_message_create_tokens_roundtrip | SA-013 #6: roundtrip preservation |
+| models/llm_models.rs | test_provider_settings_base_url_serializes_as_null_when_none | SA-013 #12: base_url always in JSON output |
+| models/llm_models.rs | test_provider_settings_base_url_serializes_when_set | SA-013 #12: base_url present when set |
+| models/llm_models.rs | test_provider_settings_base_url_roundtrip | SA-013 #12: serialize/deserialize roundtrip |
 
 ### TypeScript (35 new tests in 3 new files + 1 updated)
 
@@ -221,7 +224,7 @@
 | #13 | CRITICAL | RiskLevel missing 'critical' variant | **DONE** | validation.rs: `RiskLevel::Critical` added. Schema ASSERT updated. 1 test. validation_helper.rs updated. |
 | #1-4 | HIGH (adj.) | AgentConfig optional vs required mismatch | **PARTIAL** | enable_thinking: `boolean` (was `boolean?`) in agent.ts. But max_tool_iterations not changed in TS. |
 | #6 | HIGH | MessageCreate missing tokens field | **DONE** | message.ts: `tokens: number` added to MessageCreate. 3 helper functions updated. Rust: `#[serde(default)]` added for defense-in-depth. 3 new tests. |
-| #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **NOT DONE** | No changes to ProviderSettings type. |
+| #12 | HIGH | ProviderSettings.base_url skip_serializing vs null | **DONE** | llm_models.rs: removed `skip_serializing_if` from `base_url`. Now serializes as `null` when None, matching TS `string \| null`. 3 new tests. |
 | #14-15 | MEDIUM (adj.) | Orphan ChunkType variants, user_question field | **NOT DONE** | ChunkType unchanged. |
 | #16-20 | MEDIUM | Console.* violations (28 instances) | **PARTIAL** | Many console.error replaced with getErrorMessage(). Some remain. |
 | model_id | - | Workflow.model_id convention | **DONE** | workflow.ts: `model_id: string | null` (was `model_id?: string`). |
@@ -257,7 +260,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | ~~SA-011 H-002: loadWorkflows error recovery~~ | ~~Blank sidebar with no retry on DB failure~~ | **DONE** |
 | SA-013 #1-4: max_tool_iterations TS type | Still optional in TS, always present from Rust | 15min |
 | ~~SA-013 #6: MessageCreate tokens~~ | ~~Missing field in TS type~~ | **DONE** |
-| SA-013 #12: ProviderSettings.base_url | Nullability mismatch | 15min |
+| ~~SA-013 #12: ProviderSettings.base_url~~ | ~~Nullability mismatch~~ | **DONE** |
 
 ### Should Do (MEDIUM unresolved, grouped)
 
@@ -289,7 +292,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-20 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 894 tests passed |
+| cargo test --lib | **PASS** | 2026-02-20, 897 tests passed |
 | npm run lint | **PASS** | 2026-02-20, 0 errors |
 | npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-20, 225 tests passed |

@@ -26,7 +26,7 @@
 | **1-D** | DB Schema TYPE object Fixes | **DONE** | 3 tests (MCP serde cycle + backward compat) |
 | **1-E** | Filesystem Access | **DONE** | read_import_file removed, save path validated |
 | **1-F** | models.rs + task.rs Injection | **DONE** | 3 tests |
-| **2-A** | Type Mismatches TS/Rust | **PARTIAL** | RiskLevel::Critical DONE (1 test), enable_thinking DONE, MessageCreate.tokens DONE (3 tests). max_tool_iterations/#12/#14-15 NOT DONE |
+| **2-A** | Type Mismatches TS/Rust | **PARTIAL** | RiskLevel::Critical DONE (1 test), enable_thinking DONE, MessageCreate.tokens DONE (3 tests), ProviderSettings.base_url #12 DONE (3 tests). max_tool_iterations/#14-15 NOT DONE |
 | **2-B** | Performance messages.clone() | **DONE** | Signatures changed to &[Value] |
 | **2-C** | Frontend Robustness | **DONE** | H-003 double-submit DONE. H-001 race DONE (8 TS tests + backend cancellation token propagation through 7 Rust files). H-002 retry DONE (5 store tests + WorkflowList error state + retry button + i18n) |
 | **2-D** | Export/Validation Parameterization | **DONE** | All bind params |

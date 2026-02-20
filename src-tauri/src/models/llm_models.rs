@@ -457,7 +457,7 @@ pub struct ProviderSettings {
     #[serde(default)]
     pub api_key_configured: bool,
     /// Custom base URL (primarily for Ollama, e.g., "http://localhost:11434")
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub base_url: Option<String>,
     /// Last update timestamp
     pub updated_at: DateTime<Utc>,
@@ -734,5 +734,53 @@ mod tests {
         let ollama = ProviderSettings::default_for(ProviderType::Ollama);
         assert!(ollama.enabled);
         assert_eq!(ollama.base_url, Some("http://localhost:11434".into()));
+    }
+
+    /// SA-013 #12: base_url must always be present in serialized JSON.
+    /// When None, it should serialize as `null` (not be absent),
+    /// because TS declares `base_url: string | null`.
+    #[test]
+    fn test_provider_settings_base_url_serializes_as_null_when_none() {
+        let settings = ProviderSettings::default_for(ProviderType::Mistral);
+        assert!(settings.base_url.is_none());
+
+        let json = serde_json::to_value(&settings).unwrap();
+        assert!(
+            json.get("base_url").is_some(),
+            "base_url must be present in JSON output even when None"
+        );
+        assert!(
+            json.get("base_url").unwrap().is_null(),
+            "base_url should be null, not absent"
+        );
+    }
+
+    /// SA-013 #12: base_url serializes correctly when set.
+    #[test]
+    fn test_provider_settings_base_url_serializes_when_set() {
+        let settings = ProviderSettings::default_for(ProviderType::Ollama);
+        assert!(settings.base_url.is_some());
+
+        let json = serde_json::to_value(&settings).unwrap();
+        assert_eq!(
+            json.get("base_url").unwrap().as_str().unwrap(),
+            "http://localhost:11434"
+        );
+    }
+
+    /// SA-013 #12: base_url roundtrip (serialize then deserialize).
+    #[test]
+    fn test_provider_settings_base_url_roundtrip() {
+        // With base_url = None (Mistral)
+        let original = ProviderSettings::default_for(ProviderType::Mistral);
+        let json_str = serde_json::to_string(&original).unwrap();
+        let restored: ProviderSettings = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(restored.base_url, None);
+
+        // With base_url = Some (Ollama)
+        let original = ProviderSettings::default_for(ProviderType::Ollama);
+        let json_str = serde_json::to_string(&original).unwrap();
+        let restored: ProviderSettings = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(restored.base_url, Some("http://localhost:11434".into()));
     }
 }
