@@ -205,13 +205,13 @@ impl SubAgentCircuitBreaker {
     }
 
     /// Returns the current state of the circuit.
-    #[allow(dead_code)] // Used in tests and by external code
+    #[allow(dead_code)] // Test-only: production uses record_failure/record_success/should_allow
     pub fn state(&self) -> CircuitState {
         self.state
     }
 
     /// Returns the current failure count.
-    #[allow(dead_code)] // Used in tests and by external code
+    #[allow(dead_code)] // Test-only: used for test assertions on circuit state
     pub fn failure_count(&self) -> u32 {
         self.failure_count
     }

@@ -1,6 +1,6 @@
 # Remediation Status - Security Audit Findings
 
-**Date**: 2026-02-20 (updated)
+**Date**: 2026-02-21 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
 **Files changed**: 133 (vs main)
@@ -27,6 +27,7 @@
 
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
+**SA-015 Phase 1 DONE: dead code annotation cleanup (7 false annotations removed, 24 item-level added, 7 comments corrected).**
 
 ---
 
@@ -361,6 +362,33 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 - P12: Fixed "failed" to "error" to match SubAgentStatus serde
 - P13: ID-based dedup in message enrichment (name-based caused token swap for duplicate agents)
 - 10 new tests (3 Rust + 8 TypeScript)
+
+---
+
+## SA-015: Dead Code Cleanup (`#[allow(dead_code)]`)
+
+**Document:** [SA-015-dead-code-cleanup.md](SA-015-dead-code-cleanup.md)
+
+### Phase 1: Remove False Positive Annotations -- DONE
+
+| Action | Count | Details |
+|--------|-------|---------|
+| Module-level annotations removed | 2 | `tools/factory.rs`, `llm/embedding.rs` |
+| Item-level annotations removed | 5 | `state.rs` fields (x2), `db/client.rs`, `models/mcp.rs` (x2) |
+| Item-level annotations added | 24 | `llm/embedding.rs` (compiler-verified replacements for module-level) |
+| Comments corrected (test-only) | 7 | `state.rs` (x5), `sub_agent_circuit_breaker.rs` (x2) |
+| Stale doc/comments removed | 3 | factory.rs "Phase 6", embedding.rs "Phase 3", mcp.rs "Phase 2/3" |
+
+**Key finding**: Initial spec classified 23 items as false positives. Compiler verification revealed only 7 were true false positives (production callers). The other 7 spec items were test-only (spec confused callers on different types, e.g., `ToolFactory::set_app_handle` vs `AppState::set_app_handle`). 9 spec items in embedding.rs were actually reachable via call chains and didn't need annotations, while 16 additional items the spec missed were genuinely dead.
+
+### Phases 2-5: Pending
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| Phase 2 | Remove superseded code (4 items) | Pending |
+| Phase 3 | Remove dead getters/methods (7 items) | Pending |
+| Phase 4 | Remove speculative code (8 items) | Pending |
+| Phase 5 | Final audit and count | Pending |
 
 ---
 

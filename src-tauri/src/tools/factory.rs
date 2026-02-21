@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Allow dead code until Phase 6: Full Agent Integration with tools
-#![allow(dead_code)]
-
 //! Tool Factory for dynamic tool instantiation.
 //!
 //! This module provides a factory pattern for creating tool instances

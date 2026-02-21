@@ -254,7 +254,6 @@ impl DBClient {
     ///     vec![("data".to_string(), json!({"name": "test"}))]
     /// ).await?;
     /// ```
-    #[allow(dead_code)] // May be used by future tools
     #[instrument(name = "db_query_with_params", skip(self, params), fields(query_len = query.len()))]
     pub async fn query_with_params<T>(
         &self,

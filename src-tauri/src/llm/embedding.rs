@@ -14,9 +14,6 @@
 
 //! # Embedding Service Module
 //!
-//! This module is prepared for Phase 3 (MemoryTool implementation).
-//! The `#[allow(dead_code)]` attribute is used until the module is integrated.
-//!
 //! This module provides vector embedding generation for semantic search and RAG operations.
 //! It supports multiple providers (Mistral, Ollama) with a unified interface.
 //!
@@ -40,9 +37,6 @@
 //! let embedding = service.embed("Hello, world!").await?;
 //! ```
 
-// Allow dead code until MemoryTool integration in Phase 3
-#![allow(dead_code)]
-
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -58,12 +52,14 @@ use tracing::{debug, info, instrument, warn};
 const MISTRAL_EMBEDDING_URL: &str = "https://api.mistral.ai/v1/embeddings";
 
 /// Default Mistral embedding model
+#[allow(dead_code)] // API constant, used by EmbeddingProvider constructors (test-only path)
 pub const MISTRAL_EMBED_MODEL: &str = "mistral-embed";
 
 /// Mistral embed model dimension (1024D)
 pub const MISTRAL_EMBED_DIMENSION: usize = 1024;
 
 /// Default Ollama embedding endpoint
+#[allow(dead_code)] // Used by EmbeddingProvider::ollama() constructor (test-only path)
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 /// Ollama nomic-embed-text dimension (768D)
@@ -73,12 +69,14 @@ pub const OLLAMA_NOMIC_DIMENSION: usize = 768;
 pub const OLLAMA_MXBAI_DIMENSION: usize = 1024;
 
 /// Default embedding model for Ollama
+#[allow(dead_code)] // Used by EmbeddingProvider::ollama() constructor (test-only path)
 pub const DEFAULT_OLLAMA_EMBED_MODEL: &str = "nomic-embed-text";
 
 /// Maximum text length for embedding (characters)
 pub const MAX_EMBEDDING_TEXT_LENGTH: usize = 50_000;
 
 /// Maximum batch size for embedding requests
+#[allow(dead_code)] // Used by embed_batch() (test-only path)
 pub const MAX_BATCH_SIZE: usize = 96;
 
 /// Default timeout for embedding requests (milliseconds)
@@ -109,6 +107,7 @@ pub enum EmbeddingError {
 
     /// Batch size exceeded
     #[error("Batch size exceeded: {0} items, max {1}")]
+    #[allow(dead_code)] // Error variant for embed_batch() validation (test-only path)
     BatchTooLarge(usize, usize),
 
     /// Model not available for embedding
@@ -125,10 +124,12 @@ pub enum EmbeddingError {
 
     /// Dimension mismatch (expected vs actual)
     #[error("Dimension mismatch: expected {0}, got {1}")]
+    #[allow(dead_code)] // Error variant for dimension validation
     DimensionMismatch(usize, usize),
 
     /// Internal error
     #[error("Internal error: {0}")]
+    #[allow(dead_code)] // General error variant
     Internal(String),
 }
 
@@ -169,6 +170,7 @@ pub enum EmbeddingProvider {
 
 impl EmbeddingProvider {
     /// Creates a Mistral provider with default model
+    #[allow(dead_code)] // Convenience constructor, used in tests
     pub fn mistral(api_key: &str) -> Self {
         EmbeddingProvider::Mistral {
             api_key: api_key.to_string(),
@@ -185,6 +187,7 @@ impl EmbeddingProvider {
     }
 
     /// Creates an Ollama provider with default URL and model
+    #[allow(dead_code)] // Convenience constructor, used in tests
     pub fn ollama() -> Self {
         EmbeddingProvider::Ollama {
             base_url: DEFAULT_OLLAMA_URL.to_string(),
@@ -219,6 +222,7 @@ impl EmbeddingProvider {
     }
 
     /// Returns the provider name as string
+    #[allow(dead_code)] // API surface for EmbeddingProvider
     pub fn name(&self) -> &'static str {
         match self {
             EmbeddingProvider::Mistral { .. } => "mistral",
@@ -227,6 +231,7 @@ impl EmbeddingProvider {
     }
 
     /// Returns the model name
+    #[allow(dead_code)] // API surface for EmbeddingProvider
     pub fn model(&self) -> &str {
         match self {
             EmbeddingProvider::Mistral { model, .. } => model,
@@ -241,6 +246,7 @@ impl EmbeddingProvider {
 
 /// Embedding configuration for persistence
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Config struct used by EmbeddingService configuration (test-only path)
 pub struct EmbeddingConfig {
     /// Provider name: "mistral" or "ollama"
     pub provider: String,
@@ -271,11 +277,13 @@ impl Default for EmbeddingConfig {
 
 impl EmbeddingConfig {
     /// Creates config for Mistral embed
+    #[allow(dead_code)] // Convenience constructor
     pub fn mistral() -> Self {
         Self::default()
     }
 
     /// Creates config for Ollama nomic-embed-text
+    #[allow(dead_code)] // Convenience constructor
     pub fn ollama_nomic() -> Self {
         Self {
             provider: "ollama".to_string(),
@@ -288,6 +296,7 @@ impl EmbeddingConfig {
     }
 
     /// Creates config for Ollama mxbai-embed-large
+    #[allow(dead_code)] // Convenience constructor
     pub fn ollama_mxbai() -> Self {
         Self {
             provider: "ollama".to_string(),
@@ -390,6 +399,7 @@ pub struct EmbeddingService {
     /// Expected embedding dimension
     dimension: Arc<RwLock<usize>>,
     /// Request timeout in milliseconds
+    #[allow(dead_code)] // Stored for potential future use (timeout reconfiguration)
     timeout_ms: u64,
 }
 
@@ -437,6 +447,7 @@ impl EmbeddingService {
     ///
     /// # Arguments
     /// * `provider` - The new embedding provider configuration
+    #[allow(dead_code)] // API surface for runtime reconfiguration
     pub async fn configure(&self, provider: EmbeddingProvider) {
         let dimension = provider.dimension();
         *self.provider.write().await = Some(provider);
@@ -445,12 +456,14 @@ impl EmbeddingService {
     }
 
     /// Clears the provider configuration
+    #[allow(dead_code)] // API surface for runtime reconfiguration
     pub async fn clear(&self) {
         *self.provider.write().await = None;
         info!("Embedding service cleared");
     }
 
     /// Checks if the service is configured
+    #[allow(dead_code)] // API surface for service state inspection
     pub fn is_configured(&self) -> bool {
         self.provider
             .try_read()
@@ -459,6 +472,7 @@ impl EmbeddingService {
     }
 
     /// Returns the expected embedding dimension
+    #[allow(dead_code)] // API surface, used in tests
     pub async fn dimension(&self) -> usize {
         *self.dimension.read().await
     }
@@ -522,6 +536,7 @@ impl EmbeddingService {
     ///
     /// # Errors
     /// Returns an error if the batch is too large or any embedding fails
+    #[allow(dead_code)] // Batch embedding API, not yet called from production
     #[instrument(
         name = "embed_batch",
         skip(self, texts),
@@ -623,6 +638,7 @@ impl EmbeddingService {
     }
 
     /// Embeds batch using Mistral API (native batch support)
+    #[allow(dead_code)] // Called by embed_batch() which is not yet used in production
     async fn embed_batch_mistral(
         &self,
         texts: &[&str],
@@ -743,6 +759,7 @@ impl EmbeddingService {
     }
 
     /// Embeds batch using Ollama API (sequential, no native batch support)
+    #[allow(dead_code)] // Called by embed_batch() which is not yet used in production
     async fn embed_batch_ollama(
         &self,
         texts: &[&str],
@@ -771,6 +788,7 @@ impl EmbeddingService {
     ///
     /// # Returns
     /// Ok(dimension) if successful, Err if connection fails
+    #[allow(dead_code)] // Used by commands/embedding.rs test_embedding_connection (test-only path)
     pub async fn test_connection(&self) -> Result<usize, EmbeddingError> {
         let test_text = "test";
         let embedding = self.embed(test_text).await?;

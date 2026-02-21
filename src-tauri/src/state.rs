@@ -36,15 +36,13 @@ pub struct AppState {
     pub llm_manager: Arc<ProviderManager>,
     /// MCP server manager
     pub mcp_manager: Arc<MCPManager>,
-    /// Tool factory for agent tool instantiation (used in Phase 6)
-    #[allow(dead_code)]
+    /// Tool factory for agent tool instantiation
     pub tool_factory: Arc<ToolFactory>,
     /// Embedding service for semantic search (configured via Settings UI)
     ///
     /// NOTE (OPT-DB-9): This uses a double-Arc pattern `Arc<RwLock<Option<Arc<T>>>>`.
     /// Could be simplified to `Arc<RwLock<Option<T>>>` if EmbeddingService implements Clone.
     /// Deferred as Nice-to-Have due to 12+ files affected. See optimization-db.md for details.
-    #[allow(dead_code)]
     pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
     /// Cancellation tokens for streaming workflows (workflow_id -> CancellationToken)
     pub streaming_cancellations: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -105,7 +103,7 @@ impl AppState {
     ///
     /// This should be called in the Tauri setup hook after the app is built.
     /// Uses std::sync::RwLock for synchronous access.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Test-only: production uses ToolFactory::set_app_handle via main.rs
     pub fn set_app_handle(&self, handle: AppHandle) {
         if let Ok(mut guard) = self.app_handle.write() {
             *guard = Some(handle);
@@ -113,7 +111,7 @@ impl AppState {
     }
 
     /// Gets the app handle if available.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Test-only: production uses ToolFactory::get_app_handle via llm_agent.rs
     pub fn get_app_handle(&self) -> Option<AppHandle> {
         self.app_handle.read().ok().and_then(|guard| guard.clone())
     }
@@ -122,7 +120,7 @@ impl AppState {
     ///
     /// Called when user configures embedding settings in the Settings UI.
     /// This will update the tool factory to use the new embedding service.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Test-only: production accesses embedding_service field directly
     pub async fn set_embedding_service(&self, service: Option<Arc<EmbeddingService>>) {
         *self.embedding_service.write().await = service.clone();
         // Note: Tool instances already created won't be updated.
@@ -130,7 +128,7 @@ impl AppState {
     }
 
     /// Gets the current embedding service if configured.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Test-only: production accesses embedding_service field directly
     pub async fn get_embedding_service(&self) -> Option<Arc<EmbeddingService>> {
         self.embedding_service.read().await.clone()
     }
@@ -158,7 +156,7 @@ impl AppState {
 
     /// Checks if a workflow has been requested to cancel
     /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly (OPT-WF-7)
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Test-only: production uses CancellationToken::is_cancelled() directly
     pub async fn is_cancelled(&self, workflow_id: &str) -> bool {
         self.streaming_cancellations
             .lock()

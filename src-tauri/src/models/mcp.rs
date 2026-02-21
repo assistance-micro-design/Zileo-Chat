@@ -288,7 +288,6 @@ pub struct MCPCallLogCreate {
 /// IMPORTANT: `env` is stored as a JSON string (not an object) to work around
 /// SurrealDB SCHEMAFULL filtering of nested object fields. The string is
 /// deserialized back to HashMap when reading from the database.
-#[allow(dead_code)] // Will be used in Phase 2/3 for database operations
 #[derive(Debug, Clone, Serialize)]
 pub struct MCPServerCreate {
     /// Server name
@@ -308,7 +307,6 @@ pub struct MCPServerCreate {
 
 impl MCPServerCreate {
     /// Creates a new MCPServerCreate from MCPServerConfig
-    #[allow(dead_code)] // Will be used in Phase 2/3 for database operations
     pub fn from_config(config: &MCPServerConfig) -> Self {
         Self {
             name: config.name.clone(),
