@@ -25,8 +25,7 @@ use rig::completion::Prompt;
 use rig::providers::mistral;
 use serde::{Deserialize, Serialize};
 
-// Import trait to bring completion_model method into scope
-#[allow(unused_imports)]
+// Trait required for .agent() method on rig::client::Client
 use rig::client::CompletionClient;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};

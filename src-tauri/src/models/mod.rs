@@ -103,15 +103,14 @@ pub use sub_agent::{
 #[allow(unused_imports)]
 pub use sub_agent::constants;
 
-// Re-export LLM model types for CRUD operations (Phase 2 will use these)
+// Re-export LLM model types for CRUD operations
+#[allow(unused_imports)]
+pub use llm_models::get_all_builtin_models;
 #[allow(unused_imports)]
 pub use llm_models::{
-    BuiltinModelParams, ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings,
-    ProviderType, UpdateModelRequest,
+    ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, ProviderType,
+    UpdateModelRequest,
 };
-// Re-export builtin model data (Phase 2 will use these for seeding)
-#[allow(unused_imports)]
-pub use llm_models::{get_all_builtin_models, MISTRAL_BUILTIN_MODELS, OLLAMA_BUILTIN_MODELS};
 
 // Re-export embedding settings types for Phase 5 implementation
 pub use embedding::{

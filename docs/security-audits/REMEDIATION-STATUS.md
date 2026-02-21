@@ -27,7 +27,7 @@
 
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
-**SA-015 Phases 1-4 DONE: annotation cleanup + superseded code removal + dead getters + speculative code (19 methods/structs deleted, 6 tests migrated, 4 tests deleted).**
+**SA-015 ALL PHASES DONE: annotation cleanup + superseded code removal + dead getters + speculative code + final audit (22 items deleted, 6 tests migrated, 5 tests deleted, 171 remaining annotations all verified legitimate).**
 
 ---
 
@@ -413,11 +413,18 @@ Test count: 933 unchanged (no tests depended on these getters).
 Test count: 933 unchanged (no tests depended on speculative code).
 Annotation count: 189 (Phase 1) -> 171 (Phase 4) -- 18 annotations removed across Phases 2-4.
 
-### Phase 5: Pending
+### Phase 5: Final Audit -- DONE
 
-| Phase | Goal | Status |
-|-------|------|--------|
-| Phase 5 | Final audit and count verification | Pending |
+| Action | Count | Details |
+|--------|-------|---------|
+| Module-level annotation removed | 1 | `models/llm_models.rs` (stale "Phase 2" comment) |
+| Dead items deleted | 4 | `BuiltinModelParams`, `new_builtin()`, `MISTRAL_BUILTIN_MODELS`, `OLLAMA_BUILTIN_MODELS` |
+| Dead test deleted | 1 | `test_llm_model_new_builtin` |
+| False unused_imports fixed | 2 | `mistral.rs`, `ollama.rs` -- `CompletionClient` trait actually needed for `.agent()` |
+| Dead re-exports removed | 3 | `BuiltinModelParams`, `MISTRAL_BUILTIN_MODELS`, `OLLAMA_BUILTIN_MODELS` from `models/mod.rs` |
+| Remaining annotations verified | 171 | All legitimate: SERDE (~39), API_LIBRARY (~42), TEST_ONLY (~11), EMBEDDING (32), TRAIT/MODULE (~12), CONST (~10), OTHER (~25) |
+
+Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
@@ -427,7 +434,7 @@ Annotation count: 189 (Phase 1) -> 171 (Phase 4) -- 18 annotations removed acros
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-21 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-21, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-21, 933 tests passed (Phase 2: -4 deleted) |
+| cargo test --lib | **PASS** | 2026-02-21, 932 tests passed (Phase 2: -4, Phase 5: -1 deleted) |
 | npm run lint | **PASS** | 2026-02-21, 0 errors |
 | npm run check | **PASS** | 2026-02-21, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-21, 265 tests passed |

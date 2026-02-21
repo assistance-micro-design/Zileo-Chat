@@ -21,8 +21,7 @@ use rig::client::Nothing;
 use rig::completion::Prompt;
 use rig::providers::ollama;
 
-// Import trait to bring completion_model method into scope
-#[allow(unused_imports)]
+// Trait required for .agent() method on rig::client::Client
 use rig::client::CompletionClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

@@ -17,8 +17,7 @@
 //! This module defines the data structures for managing LLM models (both builtin and custom)
 //! and provider configuration settings. It supports Mistral and Ollama providers in Phase 1.
 
-// Allow dead code temporarily - these types will be used in Phase 2 (Commands CRUD)
-#![allow(dead_code)]
+// Module-level dead_code removed in SA-015 Phase 5 (Phase 2 is complete).
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -143,23 +142,6 @@ pub struct LLMModel {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Parameters for creating a new builtin model.
-#[derive(Debug, Clone)]
-pub struct BuiltinModelParams {
-    /// Provider type (Mistral or Ollama)
-    pub provider: ProviderType,
-    /// Human-readable display name
-    pub name: String,
-    /// Model identifier used in API calls
-    pub api_name: String,
-    /// Maximum context length in tokens
-    pub context_window: usize,
-    /// Maximum generation length in tokens
-    pub max_output_tokens: usize,
-    /// Whether this is a reasoning/thinking model
-    pub is_reasoning: bool,
-}
-
 impl LLMModel {
     /// Creates a new custom LLM model from a create request.
     ///
@@ -180,28 +162,6 @@ impl LLMModel {
             is_reasoning: request.is_reasoning,
             input_price_per_mtok: request.input_price_per_mtok,
             output_price_per_mtok: request.output_price_per_mtok,
-            created_at: now,
-            updated_at: now,
-        }
-    }
-
-    /// Creates a new builtin LLM model.
-    ///
-    /// Builtin models use their api_name as the id and cannot be deleted.
-    pub fn new_builtin(params: BuiltinModelParams) -> Self {
-        let now = Utc::now();
-        Self {
-            id: params.api_name.clone(),
-            provider: params.provider,
-            name: params.name,
-            api_name: params.api_name,
-            context_window: params.context_window,
-            max_output_tokens: params.max_output_tokens,
-            temperature_default: 0.7,
-            is_builtin: true,
-            is_reasoning: params.is_reasoning,
-            input_price_per_mtok: 0.0,
-            output_price_per_mtok: 0.0,
             created_at: now,
             updated_at: now,
         }
@@ -532,16 +492,6 @@ impl ConnectionTestResult {
     }
 }
 
-// ============================================================================
-// Builtin Models Data
-// ============================================================================
-
-/// Mistral builtin models: empty - users add their own models
-pub const MISTRAL_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[];
-
-/// Ollama builtin models: empty - users add their own models
-pub const OLLAMA_BUILTIN_MODELS: &[(&str, &str, usize, usize)] = &[];
-
 /// Returns all builtin models for seeding the database.
 /// Currently returns empty - users add their own custom models.
 pub fn get_all_builtin_models() -> Vec<LLMModel> {
@@ -681,23 +631,6 @@ mod tests {
         assert_eq!(model.provider, ProviderType::Ollama);
         assert_eq!(model.input_price_per_mtok, 0.0);
         assert_eq!(model.output_price_per_mtok, 0.0);
-    }
-
-    #[test]
-    fn test_llm_model_new_builtin() {
-        let model = LLMModel::new_builtin(BuiltinModelParams {
-            provider: ProviderType::Mistral,
-            name: "Mistral Large".into(),
-            api_name: "mistral-large-latest".into(),
-            context_window: 128000,
-            max_output_tokens: 8192,
-            is_reasoning: false,
-        });
-
-        assert_eq!(model.id, "mistral-large-latest");
-        assert!(model.is_builtin);
-        assert!(!model.is_reasoning);
-        assert_eq!(model.temperature_default, 0.7);
     }
 
     #[test]
