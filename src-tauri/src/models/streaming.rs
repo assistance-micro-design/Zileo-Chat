@@ -306,41 +306,6 @@ impl StreamChunk {
         }
     }
 
-    /// Creates a sub-agent progress event chunk.
-    ///
-    /// Emitted periodically during sub-agent execution to report progress.
-    /// Currently not used but defined for future implementation.
-    #[allow(dead_code)]
-    pub fn sub_agent_progress(
-        workflow_id: String,
-        sub_agent_id: String,
-        sub_agent_name: String,
-        parent_agent_id: String,
-        progress: u8,
-        status_message: Option<String>,
-    ) -> Self {
-        Self {
-            workflow_id,
-            chunk_type: ChunkType::SubAgentProgress,
-            content: status_message,
-            tool: None,
-            duration: None,
-            sub_agent_id: Some(sub_agent_id),
-            sub_agent_name: Some(sub_agent_name),
-            parent_agent_id: Some(parent_agent_id),
-            metrics: None,
-            progress: Some(progress.min(100)),
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-        }
-    }
-
     /// Creates a sub-agent complete event chunk.
     ///
     /// Emitted when a sub-agent successfully completes execution with its report.
@@ -821,32 +786,6 @@ mod tests {
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(json.contains("\"chunk_type\":\"sub_agent_start\""));
         assert!(json.contains("\"sub_agent_id\":\"sub_123\""));
-    }
-
-    #[test]
-    fn test_stream_chunk_sub_agent_progress() {
-        let chunk = StreamChunk::sub_agent_progress(
-            "wf_001".to_string(),
-            "sub_123".to_string(),
-            "Analyzer".to_string(),
-            "parent_456".to_string(),
-            50,
-            Some("Processing files...".to_string()),
-        );
-        assert_eq!(chunk.chunk_type, ChunkType::SubAgentProgress);
-        assert_eq!(chunk.progress, Some(50));
-        assert_eq!(chunk.content, Some("Processing files...".to_string()));
-
-        // Test clamping to 100
-        let chunk_over = StreamChunk::sub_agent_progress(
-            "wf_001".to_string(),
-            "sub_123".to_string(),
-            "Analyzer".to_string(),
-            "parent_456".to_string(),
-            150,
-            None,
-        );
-        assert_eq!(chunk_over.progress, Some(100));
     }
 
     #[test]

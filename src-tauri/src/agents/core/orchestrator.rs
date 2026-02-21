@@ -32,24 +32,6 @@ impl AgentOrchestrator {
         Self { registry }
     }
 
-    /// Executes a task via a specific agent (legacy, without MCP)
-    ///
-    /// This method is maintained for backward compatibility with tests.
-    /// Production code should use `execute_with_mcp`.
-    #[allow(dead_code)]
-    #[instrument(
-        name = "orchestrator_execute",
-        skip(self, task),
-        fields(
-            task_id = %task.id,
-            agent_id = %agent_id,
-            task_description_len = task.description.len()
-        )
-    )]
-    pub async fn execute(&self, agent_id: &str, task: Task) -> anyhow::Result<Report> {
-        self.execute_with_mcp(agent_id, task, None, None).await
-    }
-
     /// Executes a task via a specific agent with MCP tool support
     ///
     /// # Arguments
@@ -108,62 +90,6 @@ impl AgentOrchestrator {
         );
 
         Ok(report)
-    }
-
-    /// Executes multiple tasks in parallel (if independent).
-    ///
-    /// Note: ParallelTasksTool now uses JoinSet directly for better per-task control (OPT-SA-6).
-    /// This method is kept for potential future use and testing.
-    ///
-    /// All tasks execute using `futures::join_all`, making total time
-    /// approximately equal to the slowest individual task.
-    ///
-    /// # Arguments
-    /// * `tasks` - Vector of (agent_id, task) pairs to execute in parallel
-    ///
-    /// # Returns
-    /// Vector of results in the same order as input tasks
-    #[allow(dead_code)] // Method kept for future use; ParallelTasksTool uses JoinSet (OPT-SA-6)
-    #[instrument(
-        name = "orchestrator_execute_parallel",
-        skip(self, tasks),
-        fields(task_count = tasks.len())
-    )]
-    pub async fn execute_parallel(
-        &self,
-        tasks: Vec<(String, Task)>, // Vec<(agent_id, task)>
-    ) -> Vec<anyhow::Result<Report>> {
-        use futures::future::join_all;
-
-        info!(task_count = tasks.len(), "Starting parallel execution");
-
-        let futures = tasks.into_iter().map(|(agent_id, task)| {
-            let registry = self.registry.clone();
-            let task_id = task.id.clone();
-            async move {
-                debug!(task_id = %task_id, agent_id = %agent_id, "Executing parallel task");
-
-                let agent = registry.get(&agent_id).await.ok_or_else(|| {
-                    warn!(agent_id = %agent_id, "Agent not found for parallel task");
-                    anyhow::anyhow!("Agent not found: {}", agent_id)
-                })?;
-
-                agent.execute(task).await
-            }
-        });
-
-        let results = join_all(futures).await;
-
-        let success_count = results.iter().filter(|r| r.is_ok()).count();
-        let failure_count = results.iter().filter(|r| r.is_err()).count();
-
-        info!(
-            success_count = success_count,
-            failure_count = failure_count,
-            "Parallel execution completed"
-        );
-
-        results
     }
 }
 
@@ -327,7 +253,9 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let report = orchestrator.execute("test_agent", task).await;
+        let report = orchestrator
+            .execute_with_mcp("test_agent", task, None, None)
+            .await;
         assert!(report.is_ok());
 
         let report = report.unwrap();
@@ -346,7 +274,9 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let result = orchestrator.execute("nonexistent", task).await;
+        let result = orchestrator
+            .execute_with_mcp("nonexistent", task, None, None)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Agent not found"));
     }
@@ -366,112 +296,13 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let result = orchestrator.execute("failing_agent", task).await;
+        let result = orchestrator
+            .execute_with_mcp("failing_agent", task, None, None)
+            .await;
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("Intentional test failure"));
-    }
-
-    #[tokio::test]
-    async fn test_orchestrator_execute_parallel() {
-        let registry = Arc::new(AgentRegistry::new());
-
-        let agent1 = Arc::new(OrchestratorTestAgent::new("agent_1", 50));
-        let agent2 = Arc::new(OrchestratorTestAgent::new("agent_2", 50));
-
-        registry.register("agent_1".to_string(), agent1).await;
-        registry.register("agent_2".to_string(), agent2).await;
-
-        let orchestrator = AgentOrchestrator::new(registry);
-
-        let tasks = vec![
-            (
-                "agent_1".to_string(),
-                Task {
-                    id: "task_1".to_string(),
-                    description: "Task for agent 1".to_string(),
-                    context: serde_json::json!({}),
-                },
-            ),
-            (
-                "agent_2".to_string(),
-                Task {
-                    id: "task_2".to_string(),
-                    description: "Task for agent 2".to_string(),
-                    context: serde_json::json!({}),
-                },
-            ),
-        ];
-
-        let start = std::time::Instant::now();
-        let results = orchestrator.execute_parallel(tasks).await;
-        let duration = start.elapsed().as_millis();
-
-        // Parallel execution should be faster than sequential (50+50=100ms)
-        // Allow some margin for test overhead
-        assert!(
-            duration < 150,
-            "Parallel execution took too long: {}ms",
-            duration
-        );
-
-        assert_eq!(results.len(), 2);
-        assert!(results[0].is_ok());
-        assert!(results[1].is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_orchestrator_execute_parallel_with_failure() {
-        let registry = Arc::new(AgentRegistry::new());
-
-        let good_agent = Arc::new(OrchestratorTestAgent::new("good_agent", 10));
-        let bad_agent = Arc::new(FailingTestAgent::new("bad_agent"));
-
-        registry
-            .register("good_agent".to_string(), good_agent)
-            .await;
-        registry.register("bad_agent".to_string(), bad_agent).await;
-
-        let orchestrator = AgentOrchestrator::new(registry);
-
-        let tasks = vec![
-            (
-                "good_agent".to_string(),
-                Task {
-                    id: "task_1".to_string(),
-                    description: "Good task".to_string(),
-                    context: serde_json::json!({}),
-                },
-            ),
-            (
-                "bad_agent".to_string(),
-                Task {
-                    id: "task_2".to_string(),
-                    description: "Bad task".to_string(),
-                    context: serde_json::json!({}),
-                },
-            ),
-        ];
-
-        let results = orchestrator.execute_parallel(tasks).await;
-
-        assert_eq!(results.len(), 2);
-        // One should succeed, one should fail
-        let successes = results.iter().filter(|r| r.is_ok()).count();
-        let failures = results.iter().filter(|r| r.is_err()).count();
-
-        assert_eq!(successes, 1);
-        assert_eq!(failures, 1);
-    }
-
-    #[tokio::test]
-    async fn test_orchestrator_execute_parallel_empty() {
-        let registry = Arc::new(AgentRegistry::new());
-        let orchestrator = AgentOrchestrator::new(registry);
-
-        let results = orchestrator.execute_parallel(vec![]).await;
-        assert!(results.is_empty());
     }
 }

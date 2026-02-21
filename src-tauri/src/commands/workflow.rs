@@ -568,7 +568,10 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let result = state.orchestrator.execute("test_agent", task).await;
+        let result = state
+            .orchestrator
+            .execute_with_mcp("test_agent", task, None, None)
+            .await;
         assert!(result.is_ok(), "Orchestrator execution should succeed");
 
         let report = result.unwrap();
@@ -587,7 +590,10 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let result = state.orchestrator.execute("nonexistent_agent", task).await;
+        let result = state
+            .orchestrator
+            .execute_with_mcp("nonexistent_agent", task, None, None)
+            .await;
         assert!(result.is_err(), "Should fail for nonexistent agent");
     }
 

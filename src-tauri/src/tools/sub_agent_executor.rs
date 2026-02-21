@@ -45,8 +45,8 @@
 //!     "Task prompt"
 //! ).await?;
 //!
-//! // Execute with metrics
-//! let result = executor.execute_with_metrics(&sub_agent_id, task).await;
+//! // Execute with retry and heartbeat monitoring
+//! let result = executor.execute_with_retry(&sub_agent_id, task, None).await;
 //!
 //! // Update record and emit events
 //! executor.update_execution_record(&execution_id, &result).await;
@@ -253,8 +253,7 @@ pub struct SubAgentExecutor {
 impl SubAgentExecutor {
     /// Creates a new executor without cancellation token or circuit breaker.
     ///
-    /// For most use cases, prefer `with_resilience()` to support graceful shutdown
-    /// and circuit breaker protection.
+    /// For most use cases, prefer `with_cancellation()` to support graceful shutdown.
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
@@ -286,8 +285,8 @@ impl SubAgentExecutor {
 
     /// Creates a new executor with cancellation token support (OPT-SA-7).
     ///
-    /// Note: This constructor does not include circuit breaker. Use `with_resilience()`
-    /// for full resilience features including circuit breaker protection.
+    /// Circuit breaker can be configured separately via the `circuit_breaker` field
+    /// if needed after construction.
     ///
     /// # Arguments
     /// * `db` - Database client for persistence
@@ -324,55 +323,6 @@ impl SubAgentExecutor {
             parent_agent_id,
             cancellation_token,
             circuit_breaker: None,
-        }
-    }
-
-    /// Creates a new executor with full resilience features (OPT-SA-7, OPT-SA-8).
-    ///
-    /// This is the recommended constructor for production use as it supports:
-    /// - Graceful cancellation via CancellationToken
-    /// - Circuit breaker protection via SubAgentCircuitBreaker
-    ///
-    /// # Arguments
-    /// * `db` - Database client for persistence
-    /// * `orchestrator` - Agent orchestrator for execution
-    /// * `mcp_manager` - Optional MCP manager for tool routing
-    /// * `app_handle` - Optional app handle for event emission
-    /// * `workflow_id` - Workflow ID for scoping
-    /// * `parent_agent_id` - ID of parent agent calling sub-agent tools
-    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
-    /// * `circuit_breaker` - Optional circuit breaker for execution resilience (OPT-SA-8)
-    ///
-    /// # Example
-    /// ```ignore
-    /// let executor = SubAgentExecutor::with_resilience(
-    ///     db, orchestrator, mcp_manager, app_handle,
-    ///     workflow_id, parent_agent_id,
-    ///     Some(cancellation_token),
-    ///     Some(circuit_breaker),
-    /// );
-    /// ```
-    #[allow(dead_code)] // Will be used when tools are updated to use resilience
-    #[allow(clippy::too_many_arguments)]
-    pub fn with_resilience(
-        db: Arc<DBClient>,
-        orchestrator: Arc<AgentOrchestrator>,
-        mcp_manager: Option<Arc<MCPManager>>,
-        app_handle: Option<tauri::AppHandle>,
-        workflow_id: String,
-        parent_agent_id: String,
-        cancellation_token: Option<CancellationToken>,
-        circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
-    ) -> Self {
-        Self {
-            db,
-            orchestrator,
-            mcp_manager,
-            app_handle,
-            workflow_id,
-            parent_agent_id,
-            cancellation_token,
-            circuit_breaker,
         }
     }
 
@@ -524,71 +474,6 @@ impl SubAgentExecutor {
         }
 
         Ok(execution_id)
-    }
-
-    /// Executes an agent and collects metrics (without heartbeat monitoring).
-    ///
-    /// This is the legacy method. For new code, prefer `execute_with_heartbeat_timeout`.
-    ///
-    /// # Arguments
-    /// * `agent_id` - Agent ID to execute
-    /// * `task` - Task to execute
-    ///
-    /// # Returns
-    /// * `ExecutionResult` - Result with success, report, metrics, and optional error
-    #[allow(dead_code)] // Kept for backward compatibility
-    pub async fn execute_with_metrics(&self, agent_id: &str, task: Task) -> ExecutionResult {
-        let start_time = Instant::now();
-
-        let result = self
-            .orchestrator
-            .execute_with_mcp(agent_id, task, self.mcp_manager.clone(), None)
-            .await;
-
-        let duration_ms = start_time.elapsed().as_millis() as u64;
-
-        match result {
-            Ok(report) => {
-                info!(
-                    agent_id = %agent_id,
-                    duration_ms = duration_ms,
-                    "Sub-agent execution completed successfully"
-                );
-                ExecutionResult {
-                    success: true,
-                    report: report.content,
-                    metrics: SubAgentMetrics {
-                        duration_ms,
-                        tokens_input: report.metrics.tokens_input as u64,
-                        tokens_output: report.metrics.tokens_output as u64,
-                    },
-                    error_message: None,
-                    tool_executions: report.metrics.tool_executions,
-                    reasoning_steps: report.metrics.reasoning_steps,
-                }
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                error!(
-                    agent_id = %agent_id,
-                    duration_ms = duration_ms,
-                    error = %error_msg,
-                    "Sub-agent execution failed"
-                );
-                ExecutionResult {
-                    success: false,
-                    report: format!("# Sub-Agent Error\n\nExecution failed: {}", error_msg),
-                    metrics: SubAgentMetrics {
-                        duration_ms,
-                        tokens_input: 0,
-                        tokens_output: 0,
-                    },
-                    error_message: Some(error_msg),
-                    tool_executions: Vec::new(),
-                    reasoning_steps: Vec::new(),
-                }
-            }
-        }
     }
 
     /// Updates the execution record with the result.
@@ -866,7 +751,7 @@ impl SubAgentExecutor {
 
     /// Executes an agent with inactivity timeout monitoring, cancellation, and circuit breaker.
     ///
-    /// This method wraps `execute_with_metrics` with a monitoring loop that
+    /// Runs agent execution with a monitoring loop that
     /// detects genuine hangs by tracking activity. Unlike simple timeouts,
     /// this approach allows long-running but active executions to continue
     /// while catching agents that have truly stopped responding.

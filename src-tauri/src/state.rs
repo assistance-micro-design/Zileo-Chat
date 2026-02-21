@@ -397,7 +397,10 @@ mod tests {
             context: serde_json::json!({}),
         };
 
-        let result = state.orchestrator.execute("state_test_agent", task).await;
+        let result = state
+            .orchestrator
+            .execute_with_mcp("state_test_agent", task, None, None)
+            .await;
         assert!(
             result.is_ok(),
             "Orchestrator should execute via shared registry"

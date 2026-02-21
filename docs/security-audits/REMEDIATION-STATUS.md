@@ -27,7 +27,7 @@
 
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
-**SA-015 Phase 1 DONE: dead code annotation cleanup (7 false annotations removed, 24 item-level added, 7 comments corrected).**
+**SA-015 Phases 1-2 DONE: annotation cleanup + superseded code removal (5 methods deleted, 6 tests migrated, 4 tests deleted).**
 
 ---
 
@@ -379,13 +379,21 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Comments corrected (test-only) | 7 | `state.rs` (x5), `sub_agent_circuit_breaker.rs` (x2) |
 | Stale doc/comments removed | 3 | factory.rs "Phase 6", embedding.rs "Phase 3", mcp.rs "Phase 2/3" |
 
-**Key finding**: Initial spec classified 23 items as false positives. Compiler verification revealed only 7 were true false positives (production callers). The other 7 spec items were test-only (spec confused callers on different types, e.g., `ToolFactory::set_app_handle` vs `AppState::set_app_handle`). 9 spec items in embedding.rs were actually reachable via call chains and didn't need annotations, while 16 additional items the spec missed were genuinely dead.
+### Phase 2: Remove Superseded Code -- DONE
 
-### Phases 2-5: Pending
+| Action | Count | Details |
+|--------|-------|---------|
+| Methods deleted | 5 | `execute()`, `execute_parallel()`, `with_resilience()`, `execute_with_metrics()`, `sub_agent_progress()` |
+| Tests migrated | 6 | `execute()` -> `execute_with_mcp()` in orchestrator, workflow, state tests |
+| Tests deleted | 4 | 3 parallel execution tests + 1 sub_agent_progress test |
+| Doc comments updated | 4 | Module example, `new()` doc, `with_cancellation()` doc, `execute_with_heartbeat_timeout` doc |
+
+Test count: 937 (Phase 1) -> 933 (Phase 2) -- 4 tests deleted, 6 migrated.
+
+### Phases 3-5: Pending
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| Phase 2 | Remove superseded code (4 items) | Pending |
 | Phase 3 | Remove dead getters/methods (7 items) | Pending |
 | Phase 4 | Remove speculative code (8 items) | Pending |
 | Phase 5 | Final audit and count | Pending |
@@ -398,7 +406,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-21 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-21, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-21, 937 tests passed |
+| cargo test --lib | **PASS** | 2026-02-21, 933 tests passed (Phase 2: -4 deleted) |
 | npm run lint | **PASS** | 2026-02-21, 0 errors |
 | npm run check | **PASS** | 2026-02-21, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-21, 265 tests passed |

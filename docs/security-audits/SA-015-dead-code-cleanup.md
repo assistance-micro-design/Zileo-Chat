@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: 172 `#[allow(dead_code)]` annotations across 46 Rust files
 **Branch**: `security/audit-remediation-tdd`
-**Status**: Phase 1 DONE -- compiler-verified annotation cleanup
+**Status**: Phase 1 + Phase 2 DONE -- annotation cleanup + superseded code removal
 
 ## Context
 
@@ -131,51 +131,59 @@ cargo test --lib      -- PASS (937 tests, 0 failures)
 
 ---
 
-### Phase 2: Remove Superseded Code
+### Phase 2: Remove Superseded Code -- DONE
 
 **Goal**: Delete code that has been replaced by better implementations. Handle associated tests.
 
-**2.1 Orchestrator methods**
+**Status**: DONE (2026-02-21). All 5 methods removed, 6 tests migrated, 4 tests deleted.
 
-| Item | File:Line | Superseded by | Tests |
-|------|-----------|---------------|-------|
-| `execute()` | `orchestrator.rs:49` | `execute_with_mcp()` | 6 tests -- **MIGRATE** |
-| `execute_parallel()` | `orchestrator.rs:132` | `ParallelTasksTool` (JoinSet) | 3 tests -- **DELETE** |
+**2.1 Orchestrator methods -- DONE**
 
-**CRITICAL -- Test migration for `execute()`**:
+| Item | Superseded by | Action |
+|------|---------------|--------|
+| `execute()` | `execute_with_mcp()` | **DELETED** -- 6 tests migrated to `execute_with_mcp(id, task, None, None)` |
+| `execute_parallel()` | `ParallelTasksTool` (JoinSet) | **DELETED** -- 3 tests deleted (coverage exists in ParallelTasksTool) |
 
-`execute()` is a wrapper around `execute_with_mcp(id, task, None, None)`. There are **zero tests** on `execute_with_mcp()` directly. Deleting `execute()` without migrating tests would leave the orchestrator **untested**.
+Test migration (6 tests updated):
+- `orchestrator.rs` : `test_orchestrator_execute_single` -- now calls `execute_with_mcp`
+- `orchestrator.rs` : `test_orchestrator_execute_nonexistent_agent` -- now calls `execute_with_mcp`
+- `orchestrator.rs` : `test_orchestrator_execute_failing_agent` -- now calls `execute_with_mcp`
+- `commands/workflow.rs` : `test_orchestrator_execute_task` -- now calls `execute_with_mcp`
+- `commands/workflow.rs` : `test_orchestrator_execute_nonexistent_agent` -- now calls `execute_with_mcp`
+- `state.rs` : `test_appstate_registry_shared` -- now calls `execute_with_mcp`
 
-Migration: replace `orchestrator.execute(id, task)` with `orchestrator.execute_with_mcp(id, task, None, None)` in these 6 tests:
-- `orchestrator.rs` : `test_orchestrator_execute_single` (line 316)
-- `orchestrator.rs` : `test_orchestrator_execute_nonexistent_agent` (line 339)
-- `orchestrator.rs` : `test_orchestrator_execute_failing_agent` (line 355)
-- `commands/workflow.rs` : `test_orchestrator_execute_task` (line 560)
-- `commands/workflow.rs` : `test_orchestrator_execute_nonexistent_agent` (line 579)
-- `state.rs` : `test_appstate_registry_shared` (line 390)
+Tests deleted (3):
+- `test_orchestrator_execute_parallel` -- covered by ParallelTasksTool tests
+- `test_orchestrator_execute_parallel_with_failure` -- covered by ParallelTasksTool tests
+- `test_orchestrator_execute_parallel_empty` -- covered by ParallelTasksTool tests
 
-**DELETE (ParallelTasksTool already covers parallel execution, failure isolation, empty list):**
-- `orchestrator.rs` : `test_orchestrator_execute_parallel` (line 378)
-- `orchestrator.rs` : `test_orchestrator_execute_parallel_with_failure` (line 426)
-- `orchestrator.rs` : `test_orchestrator_execute_parallel_empty` (line 470)
+**2.2 SubAgentExecutor -- DONE**
 
-**2.2 SubAgentExecutor**
+| Item | Superseded by | Action |
+|------|---------------|--------|
+| `with_resilience()` | `with_cancellation()` (3 production callers) | **DELETED** -- 0 callers (production + test) |
+| `execute_with_metrics()` | `execute_with_retry()` | **DELETED** -- 0 callers (production + test) |
 
-| Item | File:Line | Superseded by |
-|------|-----------|---------------|
-| `with_resilience()` | `sub_agent_executor.rs:357` | `with_cancellation()` (3 production callers) |
-| `execute_with_metrics()` | `sub_agent_executor.rs:540` | `execute_with_retry()` |
+Doc comments updated: module example now references `execute_with_retry`, `new()` doc references `with_cancellation()`.
 
-Both have 0 callers (production + test). Safe to delete.
+**2.3 Streaming -- DONE**
 
-**2.3 Streaming**
+| Item | Action |
+|------|--------|
+| `sub_agent_progress()` constructor | **DELETED** -- event never emitted in production |
+| `test_stream_chunk_sub_agent_progress` | **DELETED** -- tested a never-used constructor |
 
-| Item | File:Line | Reason |
-|------|-----------|--------|
-| `sub_agent_progress()` | `streaming.rs:314` | Event never emitted in production |
-| Test `test_stream_chunk_sub_agent_progress` | `streaming.rs:814` | Tests a never-used constructor |
+Note: `ChunkType::SubAgentProgress` variant and `SUB_AGENT_PROGRESS` event constant kept (serde contract with frontend).
 
-**Validation**: `cargo check` + `cargo clippy -- -D warnings` + `cargo test`
+**2.4 Validation -- PASS**
+
+```
+cargo fmt --check     -- PASS
+cargo clippy -D warnings -- PASS (0 warnings)
+cargo test --lib      -- PASS (933 tests, 0 failures)
+```
+
+937 (Phase 1) - 4 deleted tests = 933 tests
 
 ---
 
