@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: 172 `#[allow(dead_code)]` annotations across 46 Rust files
 **Branch**: `security/audit-remediation-tdd`
-**Status**: Phase 1 + Phase 2 DONE -- annotation cleanup + superseded code removal
+**Status**: Phase 1 + Phase 2 + Phase 3 DONE -- annotation cleanup + superseded code removal + dead getters
 
 ## Context
 
@@ -187,33 +187,43 @@ cargo test --lib      -- PASS (933 tests, 0 failures)
 
 ---
 
-### Phase 3: Remove Dead Getters and Methods
+### Phase 3: Remove Dead Getters and Methods -- DONE
 
 **Goal**: Delete getters/methods with **verified zero callers**.
 
+**Status**: DONE (2026-02-21). All 7 dead getters removed after double-verification (grep + contextual analysis).
+
 **3.1 SubAgentExecutor getters (ALL VERIFIED DEAD -- 0 callers, direct field access used instead)**
 
-| Getter | File:Line |
-|--------|-----------|
-| `workflow_id()` | `sub_agent_executor.rs:786` |
-| `parent_agent_id()` | `sub_agent_executor.rs:792` |
-| `db()` | `sub_agent_executor.rs:798` |
-| `orchestrator()` | `sub_agent_executor.rs:804` |
-| `mcp_manager()` | `sub_agent_executor.rs:810` |
+| Getter | Original Location | Action |
+|--------|-------------------|--------|
+| `workflow_id()` | `sub_agent_executor.rs` | **DELETED** -- 0 callers |
+| `parent_agent_id()` | `sub_agent_executor.rs` | **DELETED** -- 0 callers |
+| `db()` | `sub_agent_executor.rs` | **DELETED** -- 0 callers |
+| `orchestrator()` | `sub_agent_executor.rs` | **DELETED** -- 0 callers |
+| `mcp_manager()` | `sub_agent_executor.rs` | **DELETED** -- 0 callers |
 
 **3.2 State method (VERIFIED DEAD -- 0 callers)**
 
-| Method | File:Line |
-|--------|-----------|
-| `get_cancellation_token()` | `state.rs:151` |
+| Method | Original Location | Action |
+|--------|-------------------|--------|
+| `get_cancellation_token()` | `state.rs` | **DELETED** -- 0 callers (production uses direct map access) |
 
 **3.3 UserQuestionCircuitBreaker (VERIFIED DEAD -- 0 callers)**
 
-| Method | File:Line |
-|--------|-----------|
-| `timeout_threshold()` | `user_question/circuit_breaker.rs:220` |
+| Method | Original Location | Action |
+|--------|-------------------|--------|
+| `timeout_threshold()` | `user_question/circuit_breaker.rs` | **DELETED** -- 0 callers |
 
-**Validation**: `cargo check` + `cargo test`
+**3.4 Validation -- PASS**
+
+```
+cargo fmt --check     -- PASS
+cargo clippy -D warnings -- PASS (0 warnings)
+cargo test --lib      -- PASS (933 tests, 0 failures)
+```
+
+933 tests unchanged from Phase 2 (no tests depended on these getters).
 
 ---
 
@@ -315,11 +325,11 @@ Reference constants for pricing, tool limits, query limits.
 
 ## Summary by Phase
 
-| Phase | Annotations removed | Code deleted | Tests affected |
-|-------|--------------------:|-------------:|---------------:|
-| 1 -- False positives | 23 | 0 | 0 |
-| 2 -- Superseded | 6 | 4 methods + 1 constructor | 6 migrated, 4 deleted |
-| 3 -- Dead getters | 7 | 7 methods | 0 |
-| 4 -- Speculative | 7 | 7 methods + 1 struct | 0 |
-| 5 -- Verification | 0 | 0 | 0 |
-| **Total** | **~43** | **~18 items** | **6 migrated, 4 deleted** |
+| Phase | Annotations removed | Code deleted | Tests affected | Status |
+|-------|--------------------:|-------------:|---------------:|--------|
+| 1 -- False positives | 23 | 0 | 0 | DONE |
+| 2 -- Superseded | 6 | 4 methods + 1 constructor | 6 migrated, 4 deleted | DONE |
+| 3 -- Dead getters | 7 | 7 methods | 0 | DONE |
+| 4 -- Speculative | 7 | 7 methods + 1 struct | 0 | TODO |
+| 5 -- Verification | 0 | 0 | 0 | TODO |
+| **Total** | **~43** | **~18 items** | **6 migrated, 4 deleted** | |

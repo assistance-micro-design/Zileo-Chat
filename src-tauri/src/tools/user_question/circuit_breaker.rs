@@ -215,12 +215,6 @@ impl UserQuestionCircuitBreaker {
         self.timeout_count
     }
 
-    /// Returns the configured timeout threshold.
-    #[allow(dead_code)]
-    pub fn timeout_threshold(&self) -> u32 {
-        self.timeout_threshold
-    }
-
     /// Returns the configured cooldown duration.
     #[allow(dead_code)]
     pub fn cooldown(&self) -> Duration {

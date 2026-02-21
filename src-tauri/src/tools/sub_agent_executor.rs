@@ -666,36 +666,6 @@ impl SubAgentExecutor {
         format!("sub_{}", Uuid::new_v4())
     }
 
-    /// Gets the workflow ID.
-    #[allow(dead_code)]
-    pub fn workflow_id(&self) -> &str {
-        &self.workflow_id
-    }
-
-    /// Gets the parent agent ID.
-    #[allow(dead_code)]
-    pub fn parent_agent_id(&self) -> &str {
-        &self.parent_agent_id
-    }
-
-    /// Gets the database client.
-    #[allow(dead_code)]
-    pub fn db(&self) -> &Arc<DBClient> {
-        &self.db
-    }
-
-    /// Gets the orchestrator.
-    #[allow(dead_code)]
-    pub fn orchestrator(&self) -> &Arc<AgentOrchestrator> {
-        &self.orchestrator
-    }
-
-    /// Gets the MCP manager.
-    #[allow(dead_code)]
-    pub fn mcp_manager(&self) -> &Option<Arc<MCPManager>> {
-        &self.mcp_manager
-    }
-
     // =========================================================================
     // OPT-SA-8: Circuit Breaker Integration
     // =========================================================================

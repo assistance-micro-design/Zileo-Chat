@@ -144,16 +144,6 @@ impl AppState {
         token
     }
 
-    /// Gets the cancellation token for a workflow if it exists.
-    #[allow(dead_code)]
-    pub async fn get_cancellation_token(&self, workflow_id: &str) -> Option<CancellationToken> {
-        self.streaming_cancellations
-            .lock()
-            .await
-            .get(workflow_id)
-            .cloned()
-    }
-
     /// Checks if a workflow has been requested to cancel
     /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly (OPT-WF-7)
     #[allow(dead_code)] // Test-only: production uses CancellationToken::is_cancelled() directly

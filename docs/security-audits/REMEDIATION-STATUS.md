@@ -27,7 +27,7 @@
 
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
-**SA-015 Phases 1-2 DONE: annotation cleanup + superseded code removal (5 methods deleted, 6 tests migrated, 4 tests deleted).**
+**SA-015 Phases 1-3 DONE: annotation cleanup + superseded code removal + dead getters (12 methods deleted, 6 tests migrated, 4 tests deleted).**
 
 ---
 
@@ -390,11 +390,20 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 Test count: 937 (Phase 1) -> 933 (Phase 2) -- 4 tests deleted, 6 migrated.
 
-### Phases 3-5: Pending
+### Phase 3: Remove Dead Getters -- DONE
+
+| Action | Count | Details |
+|--------|-------|---------|
+| Getters deleted | 5 | `SubAgentExecutor`: `workflow_id()`, `parent_agent_id()`, `db()`, `orchestrator()`, `mcp_manager()` |
+| Methods deleted | 1 | `AppState::get_cancellation_token()` |
+| Methods deleted | 1 | `UserQuestionCircuitBreaker::timeout_threshold()` |
+
+Test count: 933 unchanged (no tests depended on these getters).
+
+### Phases 4-5: Pending
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| Phase 3 | Remove dead getters/methods (7 items) | Pending |
 | Phase 4 | Remove speculative code (8 items) | Pending |
 | Phase 5 | Final audit and count | Pending |
 
