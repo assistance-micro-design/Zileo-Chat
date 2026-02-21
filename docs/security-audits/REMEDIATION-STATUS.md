@@ -12,19 +12,21 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 76 | Fix implemented and tested |
+| DONE | 86 | Fix implemented and tested |
 | NOT DONE | 3 | Not yet addressed |
+| DOCUMENTED | 3 | Analyzed, documented as non-issue or by-design |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
-| HIGH (27) | 26 | 1 |
-| MEDIUM (35) | 37 | 0 |
-| LOW (13) | 6 | 7 |
+| HIGH (30) | 29 | 1 |
+| MEDIUM (39) | 41 | 0 |
+| LOW (19) | 12 | 7 |
 | N/A (7) | - | - |
 
 **All 4 CRITICAL findings are remediated.**
+**SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
 
 ---
 
@@ -287,6 +289,7 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 | Agent test update | agents.test.ts | Added `enable_thinking: true` to mock config |
 | Workflow test update | workflows.test.ts | Added `model_id: null` to mock workflow |
 | serde_utils consolidation | serde_utils.rs, tool_execution.rs | Moved shared serializers to serde_utils, removed duplicates |
+| Sub-agent token separation (P3 revised) | schema.rs, queries.rs, workflow.rs, streaming.rs, tokens.ts, TokenDisplay.svelte, workflow.ts, en/fr.json | Separate DB fields for sub-agent tokens; frontend AGENT/TOTAL sections; context gauge shows cumulative main agent |
 
 ---
 
@@ -330,16 +333,48 @@ These changes were implemented but were not explicitly listed in the TDD plan:
 
 ---
 
+## SA-014: Data Persistence & Display After Restart
+
+**Document:** [SA-014-data-persistence-restart.md](SA-014-data-persistence-restart.md)
+
+| ID | Severity | Finding | Status |
+|----|----------|---------|--------|
+| P1 | HIGH | Sub-agent tool executions never persisted | **DONE** |
+| P2 | HIGH | Sub-agent reasoning steps never persisted | **DONE** |
+| P3 | MEDIUM | Sub-agent tokens separated from main agent | **DONE** |
+| P4 | MEDIUM | SubAgentActivity only accepts live data | **DOCUMENTED** (unused component, pipeline works) |
+| P5 | MEDIUM | Message enrichment missing cancelled agents | **DONE** |
+| P6 | LOW | parent_execution_id dropped by SCHEMAFULL | **DONE** |
+| P7 | LOW | Undefined task_description + missing agentId | **DONE** |
+| P8 | LOW | Activity IDs differ live vs historical | **DOCUMENTED** (by-design, no user impact) |
+| P9 | LOW | activeToolToActivity missing executionId | **DOCUMENTED** (intentional during streaming) |
+| P10 | LOW | Cancelled sub-agents shown as error | **DONE** |
+| P11 | HIGH | update_execution_record format!() silent SQL failures | **DONE** |
+| P12 | LOW | "failed" status doesn't match SubAgentStatus enum | **DONE** |
+| P13 | MEDIUM | Message enrichment dedup uses name instead of ID | **DONE** |
+
+**Key changes:**
+- NEW `src-tauri/src/db/persistence.rs` - shared persistence module
+- Extended `ExecutionResult` with `tool_executions` + `reasoning_steps`
+- `aggregate_sub_agent_tokens()` stores sub-agent tokens in separate fields; TokenDisplay shows AGENT + TOTAL sections
+- P11: Parameterized queries in `update_execution_record()` (format!() was causing silent SQL failures)
+- P12: Fixed "failed" to "error" to match SubAgentStatus serde
+- P13: ID-based dedup in message enrichment (name-based caused token swap for duplicate agents)
+- 10 new tests (3 Rust + 8 TypeScript)
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| cargo fmt --check | **PASS** | 2026-02-20 |
-| cargo clippy -- -D warnings | **PASS** | 2026-02-20, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-20, 920 tests passed |
-| npm run lint | **PASS** | 2026-02-20, 0 errors |
-| npm run check | **PASS** | 2026-02-20, 0 errors 0 warnings |
-| npm run test | **PASS** | 2026-02-20, 257 tests passed |
+| cargo fmt --check | **PASS** | 2026-02-21 |
+| cargo clippy -- -D warnings | **PASS** | 2026-02-21, 0 warnings |
+| cargo test --lib | **PASS** | 2026-02-21, 937 tests passed |
+| npm run lint | **PASS** | 2026-02-21, 0 errors |
+| npm run check | **PASS** | 2026-02-21, 0 errors 0 warnings |
+| npm run test | **PASS** | 2026-02-21, 265 tests passed |
+| Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: search prompts | **NOT RUN** | |

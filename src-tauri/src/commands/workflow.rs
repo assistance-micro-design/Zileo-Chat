@@ -282,7 +282,11 @@ pub async fn load_workflow_full_state(
     let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Build query strings for all 4 parallel queries
-    let wf_query = format!("{} WHERE meta::id(id) = '{}'", wf_queries::SELECT_BASE, validated_id);
+    let wf_query = format!(
+        "{} WHERE meta::id(id) = '{}'",
+        wf_queries::SELECT_BASE,
+        validated_id
+    );
     let msg_query = format!(
         "SELECT meta::id(id) AS id, workflow_id, role, content, tokens, tokens_input, tokens_output, model, provider, cost_usd, duration_ms, timestamp FROM message WHERE workflow_id = '{}' ORDER BY timestamp ASC",
         validated_id
@@ -307,11 +311,17 @@ pub async fn load_workflow_full_state(
         tokio::try_join!(
             async move {
                 let wfs: Vec<Workflow> = query_and_deserialize(&db1, &wf_query, "workflow").await?;
-                wfs.into_iter().next().ok_or_else(|| "Workflow not found".to_string())
+                wfs.into_iter()
+                    .next()
+                    .ok_or_else(|| "Workflow not found".to_string())
             },
             async move { query_and_deserialize::<Message>(&db2, &msg_query, "messages").await },
-            async move { query_and_deserialize::<ToolExecution>(&db3, &tool_query, "tool executions").await },
-            async move { query_and_deserialize::<ThinkingStep>(&db4, &think_query, "thinking steps").await },
+            async move {
+                query_and_deserialize::<ToolExecution>(&db3, &tool_query, "tool executions").await
+            },
+            async move {
+                query_and_deserialize::<ThinkingStep>(&db4, &think_query, "thinking steps").await
+            },
         )
     };
 

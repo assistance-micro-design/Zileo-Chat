@@ -404,9 +404,7 @@ fn merge_agent_config(
     let max_tool_iterations = update
         .max_tool_iterations
         .map_or(existing.max_tool_iterations, |m| m.clamp(1, 200));
-    let enable_thinking = update
-        .enable_thinking
-        .unwrap_or(existing.enable_thinking);
+    let enable_thinking = update.enable_thinking.unwrap_or(existing.enable_thinking);
 
     Ok(AgentConfig {
         id: existing.id.clone(),

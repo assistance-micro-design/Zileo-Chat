@@ -506,10 +506,7 @@ impl StreamChunk {
     /// Creates a user question start chunk.
     ///
     /// Emitted when an agent asks a question to the user and waits for response.
-    pub fn user_question_start(
-        workflow_id: String,
-        payload: UserQuestionStreamPayload,
-    ) -> Self {
+    pub fn user_question_start(workflow_id: String, payload: UserQuestionStreamPayload) -> Self {
         Self {
             workflow_id,
             chunk_type: ChunkType::UserQuestionStart,
@@ -535,10 +532,7 @@ impl StreamChunk {
     /// Creates a user question complete chunk.
     ///
     /// Emitted when a user question is answered, skipped, or timed out.
-    pub fn user_question_complete(
-        workflow_id: String,
-        question_id: String,
-    ) -> Self {
+    pub fn user_question_complete(workflow_id: String, question_id: String) -> Self {
         Self {
             workflow_id,
             chunk_type: ChunkType::UserQuestionComplete,
@@ -983,10 +977,7 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_user_question_complete() {
-        let chunk = StreamChunk::user_question_complete(
-            "wf_001".to_string(),
-            "q_001".to_string(),
-        );
+        let chunk = StreamChunk::user_question_complete("wf_001".to_string(), "q_001".to_string());
         assert_eq!(chunk.chunk_type, ChunkType::UserQuestionComplete);
         assert_eq!(chunk.question_id, Some("q_001".to_string()));
         assert!(chunk.user_question.is_none());

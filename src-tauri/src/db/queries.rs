@@ -50,7 +50,10 @@ pub mod workflow {
         (total_tokens_input ?? 0) AS total_tokens_input,
         (total_tokens_output ?? 0) AS total_tokens_output,
         (total_cost_usd ?? 0.0) AS total_cost_usd,
-        model_id
+        model_id,
+        (current_context_tokens ?? 0) AS current_context_tokens,
+        (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
+        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output
     FROM workflow"#;
 
     /// SELECT query for listing all workflows ordered by update time.
@@ -66,7 +69,10 @@ pub mod workflow {
         (total_tokens_input ?? 0) AS total_tokens_input,
         (total_tokens_output ?? 0) AS total_tokens_output,
         (total_cost_usd ?? 0.0) AS total_cost_usd,
-        model_id
+        model_id,
+        (current_context_tokens ?? 0) AS current_context_tokens,
+        (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
+        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output
     FROM workflow
     ORDER BY updated_at DESC"#;
 

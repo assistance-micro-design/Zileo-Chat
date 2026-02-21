@@ -714,6 +714,7 @@
   "workflow_token_context_critical": "Critical: context window almost full",
   "workflow_token_context_full": "Context window full",
   "workflow_token_in_out": "in/out",
+  "workflow_token_agent": "agent",
   "workflow_token_total": "total",
   "workflow_token_speed": "tk/s",
   "workflow_cost_estimate": "(estimate)",

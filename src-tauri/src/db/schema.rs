@@ -36,6 +36,9 @@ DEFINE FIELD OVERWRITE total_cost_usd ON workflow TYPE float DEFAULT 0.0;
 DEFINE FIELD OVERWRITE model_id ON workflow TYPE option<string>;
 -- Current context size (last API call context window usage)
 DEFINE FIELD OVERWRITE current_context_tokens ON workflow TYPE int DEFAULT 0;
+-- Sub-agent token tracking (separate from main agent totals)
+DEFINE FIELD OVERWRITE sub_agent_tokens_input ON workflow TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE sub_agent_tokens_output ON workflow TYPE int DEFAULT 0;
 
 -- Table: message
 -- Extended with metrics fields for Phase 6 persistence
@@ -348,6 +351,7 @@ DEFINE FIELD OVERWRITE tokens_input ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE tokens_output ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE result_summary ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE error_message ON sub_agent_execution TYPE option<string>;
+DEFINE FIELD OVERWRITE parent_execution_id ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE created_at ON sub_agent_execution TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE completed_at ON sub_agent_execution TYPE option<datetime>;
 

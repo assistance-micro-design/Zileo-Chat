@@ -18,13 +18,12 @@
 //! responses via Tauri events.
 
 use crate::{
-    agents::core::agent::{ReasoningStepData, Task},
+    agents::core::agent::Task,
     db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
         llm_models::LLMModel, streaming::events, Message, StreamChunk, ThinkingStepCreate,
-        ToolExecutionCreate, Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult,
-        WorkflowToolExecution,
+        Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
     tools::constants::workflow as wf_const,
@@ -367,6 +366,9 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
+    // SA-014 P3: Aggregate sub-agent tokens into workflow totals
+    aggregate_sub_agent_tokens(&state, &validated_workflow_id).await;
+
     // Convert tool executions to IPC-friendly format (OPT-7: clones necessary for IPC serialization)
     let tool_executions: Vec<WorkflowToolExecution> = report
         .metrics
@@ -386,19 +388,19 @@ pub async fn execute_workflow_streaming(
         .collect();
     // Note: Clones here are necessary as WorkflowToolExecution needs owned data for Tauri IPC
 
-    // Persist tool executions in parallel
-    persist_tool_executions_batch(
-        &state,
-        &tool_executions,
+    // Persist tool executions in parallel (SA-014: use shared persistence module)
+    crate::db::persist_tool_executions(
+        &state.db,
+        &report.metrics.tool_executions,
         &validated_workflow_id,
         &message_id,
         &validated_agent_id,
     )
     .await;
 
-    // Persist intermediate reasoning steps in parallel
-    thinking_step_number = persist_reasoning_steps_batch(
-        &state,
+    // Persist intermediate reasoning steps in parallel (SA-014: use shared persistence module)
+    thinking_step_number = crate::db::persist_reasoning_steps(
+        &state.db,
         &report.metrics.reasoning_steps,
         &validated_workflow_id,
         &message_id,
@@ -668,10 +670,7 @@ async fn stream_content_to_frontend(
                 window,
                 StreamChunk::error(workflow_id.to_string(), "Cancelled by user".to_string()),
             );
-            emit_complete(
-                window,
-                WorkflowComplete::cancelled(workflow_id.to_string()),
-            );
+            emit_complete(window, WorkflowComplete::cancelled(workflow_id.to_string()));
             state.clear_cancellation(workflow_id).await;
             return Err("Workflow cancelled by user".to_string());
         }
@@ -743,85 +742,69 @@ async fn update_workflow_cumulative_metrics(
     }
 }
 
-/// Persists tool execution records in parallel.
-async fn persist_tool_executions_batch(
-    state: &AppState,
-    tool_executions: &[WorkflowToolExecution],
-    workflow_id: &str,
-    message_id: &str,
-    agent_id: &str,
-) {
-    let tool_futures: Vec<_> = tool_executions
-        .iter()
-        .enumerate()
-        .map(|(idx, te)| {
-            let execution_id = Uuid::new_v4().to_string();
-            let execution = ToolExecutionCreate {
-                workflow_id: workflow_id.to_string(),
-                message_id: message_id.to_string(),
-                agent_id: agent_id.to_string(),
-                tool_type: te.tool_type.clone(),
-                tool_name: te.tool_name.clone(),
-                server_name: te.server_name.clone(),
-                input_params: te.input_params.clone(),
-                output_result: te.output_result.clone(),
-                success: te.success,
-                error_message: te.error_message.clone(),
-                duration_ms: te.duration_ms,
-                iteration: te.iteration,
-            };
-            let db = &state.db;
-            let tool_name = te.tool_name.clone();
-            async move {
-                if let Err(e) = db.create("tool_execution", &execution_id, execution).await {
-                    warn!(
-                        error = %e,
-                        tool_name = %tool_name,
-                        index = idx,
-                        "Failed to persist tool execution"
+/// SA-014 P3: Aggregates sub-agent tokens into separate workflow fields.
+///
+/// Queries all completed sub_agent_execution records for this workflow
+/// and stores their token totals in sub_agent_tokens_input/output.
+/// These are kept separate from total_tokens_input/output (main agent only)
+/// so the frontend can display both independently and compute combined totals.
+async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
+    let sum_query = "SELECT math::sum(tokens_input) AS total_in, \
+                            math::sum(tokens_output) AS total_out \
+                     FROM sub_agent_execution \
+                     WHERE workflow_id = $wf_id AND status = 'completed' \
+                     GROUP ALL";
+
+    match state
+        .db
+        .db
+        .query(sum_query)
+        .bind(("wf_id", workflow_id.to_string()))
+        .await
+    {
+        Ok(mut response) => {
+            let result: Option<serde_json::Value> = response.take(0).unwrap_or(None);
+            if let Some(row) = result {
+                let tokens_in = row.get("total_in").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let tokens_out =
+                    row.get("total_out").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+
+                if tokens_in > 0 || tokens_out > 0 {
+                    let update_query = format!(
+                        "UPDATE workflow:`{}` SET \
+                            sub_agent_tokens_input = $tokens_in, \
+                            sub_agent_tokens_output = $tokens_out",
+                        workflow_id
                     );
+
+                    if let Err(e) = state
+                        .db
+                        .db
+                        .query(&update_query)
+                        .bind(("tokens_in", tokens_in))
+                        .bind(("tokens_out", tokens_out))
+                        .await
+                    {
+                        error!(error = %e, "Failed to store sub-agent tokens");
+                    } else {
+                        info!(
+                            workflow_id = %workflow_id,
+                            sub_agent_tokens_in = tokens_in,
+                            sub_agent_tokens_out = tokens_out,
+                            "Stored sub-agent tokens in separate fields"
+                        );
+                    }
                 }
             }
-        })
-        .collect();
-    futures::future::join_all(tool_futures).await;
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to query sub-agent tokens for aggregation");
+        }
+    }
 }
 
-/// Persists reasoning step records in parallel. Returns the next step number.
-async fn persist_reasoning_steps_batch(
-    state: &AppState,
-    reasoning_steps: &[ReasoningStepData],
-    workflow_id: &str,
-    message_id: &str,
-    agent_id: &str,
-    start_step_number: u32,
-) -> u32 {
-    let step_futures: Vec<_> = reasoning_steps
-        .iter()
-        .enumerate()
-        .map(|(idx, rs)| {
-            let step_id = Uuid::new_v4().to_string();
-            let step_num = start_step_number + idx as u32;
-            let step = ThinkingStepCreate {
-                workflow_id: workflow_id.to_string(),
-                message_id: message_id.to_string(),
-                agent_id: agent_id.to_string(),
-                step_number: step_num,
-                content: rs.content.clone(),
-                duration_ms: Some(rs.duration_ms),
-                tokens: None,
-            };
-            let db = &state.db;
-            async move {
-                if let Err(e) = db.create("thinking_step", &step_id, step).await {
-                    warn!(error = %e, step_number = step_num, "Failed to persist intermediate reasoning step");
-                }
-            }
-        })
-        .collect();
-    futures::future::join_all(step_futures).await;
-    start_step_number + reasoning_steps.len() as u32
-}
+// SA-014: persist_tool_executions_batch and persist_reasoning_steps_batch
+// moved to db::persistence module for reuse by sub-agent executor
 
 /// Cancels a streaming workflow execution immediately.
 ///

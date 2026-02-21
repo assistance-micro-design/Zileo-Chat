@@ -47,8 +47,7 @@ use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionComplete, SubAgentExecutionCreate,
-    SubAgentStatus,
+    constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionCreate, SubAgentStatus,
 };
 use crate::models::Lifecycle;
 use crate::tools::context::AgentToolContext;
@@ -353,58 +352,16 @@ impl DelegateTaskTool {
         let report = exec_result.report.clone();
         let metrics = exec_result.metrics.clone();
         let success = exec_result.success;
-        let error_message = exec_result.error_message.clone();
 
-        // 13. Update execution record
-        let completion = if success {
-            SubAgentExecutionComplete::success(
-                metrics.duration_ms,
-                Some(metrics.tokens_input),
-                Some(metrics.tokens_output),
-                report.clone(),
-            )
-        } else {
-            SubAgentExecutionComplete::error(
-                metrics.duration_ms,
-                error_message
-                    .clone()
-                    .unwrap_or_else(|| "Unknown error".to_string()),
-            )
-        };
+        // 13. Update execution record (SA-014: use unified parameterized method)
+        executor
+            .update_execution_record(&execution_id, &exec_result)
+            .await;
 
-        let update_query = format!(
-            "UPDATE sub_agent_execution:`{}` SET \
-             status = '{}', \
-             duration_ms = {}, \
-             tokens_input = {}, \
-             tokens_output = {}, \
-             result_summary = {}, \
-             error_message = {}, \
-             completed_at = time::now()",
-            execution_id,
-            completion.status,
-            completion.duration_ms,
-            completion.tokens_input.unwrap_or(0),
-            completion.tokens_output.unwrap_or(0),
-            completion
-                .result_summary
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-            completion
-                .error_message
-                .as_ref()
-                .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-                .unwrap_or_else(|| "null".to_string()),
-        );
-
-        if let Err(e) = self.db.execute(&update_query).await {
-            warn!(
-                execution_id = %execution_id,
-                error = %e,
-                "Failed to update execution record"
-            );
-        }
+        // 13b. Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+        executor
+            .persist_sub_agent_internals(&execution_id, agent_id, &exec_result)
+            .await;
 
         // 14. Update active delegations status
         {

@@ -37,11 +37,16 @@ interface TokenState {
 		output: number;
 		speed: number | null;
 	};
-	/** Cumulative token metrics (entire workflow) */
+	/** Cumulative token metrics (entire workflow - main agent only) */
 	cumulative: {
 		input: number;
 		output: number;
 		cost: number;
+	};
+	/** Sub-agent cumulative token metrics */
+	subAgent: {
+		input: number;
+		output: number;
 	};
 	/** Model context window size */
 	contextMax: number;
@@ -63,6 +68,7 @@ interface TokenState {
 const initialState: TokenState = {
 	streaming: { input: 0, output: 0, speed: null },
 	cumulative: { input: 0, output: 0, cost: 0 },
+	subAgent: { input: 0, output: 0 },
 	contextMax: 128000,
 	inputPrice: 0,
 	outputPrice: 0,
@@ -99,6 +105,10 @@ export const tokenStore = {
 				input: workflow.total_tokens_input ?? 0,
 				output: workflow.total_tokens_output ?? 0,
 				cost: workflow.total_cost_usd ?? 0
+			},
+			subAgent: {
+				input: workflow.sub_agent_tokens_input ?? 0,
+				output: workflow.sub_agent_tokens_output ?? 0
 			}
 		}));
 	},
@@ -225,6 +235,11 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		? ($s.sessionCost ?? calculatedCost)
 		: $s.cumulative.cost;
 
+	// Estimate sub-agent cost using main agent pricing (approximation)
+	const subAgentCost =
+		($s.subAgent.input * $s.inputPrice) / 1_000_000 +
+		($s.subAgent.output * $s.outputPrice) / 1_000_000;
+
 	return {
 		tokens_input: $s.streaming.input,
 		tokens_output: $s.streaming.output,
@@ -233,6 +248,9 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		context_max: $s.contextMax,
 		cost_usd: displayCost,
 		cumulative_cost_usd: $s.cumulative.cost,
+		sub_agent_input: $s.subAgent.input,
+		sub_agent_output: $s.subAgent.output,
+		workflow_total_cost: $s.cumulative.cost + subAgentCost,
 		speed_tks: $s.streaming.speed ?? undefined,
 		is_streaming: $s.isStreaming
 	};

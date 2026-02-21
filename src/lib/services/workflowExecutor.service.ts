@@ -281,6 +281,7 @@ export const WorkflowExecutorService = {
 				const subAgentSummaries: SubAgentSummary[] = subAgents
 					.filter(a => a.status === 'completed' || a.status === 'error')
 					.map(a => ({
+						id: a.id,
 						name: a.name,
 						status: a.status as 'completed' | 'error',
 						duration_ms: a.metrics?.duration_ms,

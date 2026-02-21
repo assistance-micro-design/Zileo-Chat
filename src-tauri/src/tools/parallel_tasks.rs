@@ -404,6 +404,8 @@ impl ParallelTasksTool {
                                 tokens_output: 0,
                             },
                             error_message: Some(format!("Task panicked: {}", join_error)),
+                            tool_executions: Vec::new(),
+                            reasoning_steps: Vec::new(),
                         },
                     ));
                 }
@@ -448,6 +450,11 @@ impl ParallelTasksTool {
             // Update execution record in database
             executor
                 .update_execution_record(&execution_id, &exec_result)
+                .await;
+
+            // Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+            executor
+                .persist_sub_agent_internals(&execution_id, &task_spec.agent_id, &exec_result)
                 .await;
 
             // Emit completion event

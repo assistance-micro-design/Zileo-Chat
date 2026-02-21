@@ -22,8 +22,8 @@
 /**
  * Format duration in milliseconds to human readable string
  */
-export function formatDuration(ms: number | undefined): string {
-	if (ms === undefined) return '-';
+export function formatDuration(ms: number | undefined | null): string {
+	if (ms === undefined || ms === null) return '-';
 	if (ms < 1000) return `${ms}ms`;
 	if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
 	return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;

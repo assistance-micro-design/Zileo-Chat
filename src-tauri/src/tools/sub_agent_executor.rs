@@ -63,7 +63,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::agents::core::agent::Task;
+use crate::agents::core::agent::{ReasoningStepData, Task, ToolExecutionData};
 use crate::agents::core::orchestrator::AgentOrchestrator;
 use crate::db::DBClient;
 use crate::mcp::manager::MCPManager;
@@ -90,6 +90,10 @@ pub struct ExecutionResult {
     pub metrics: SubAgentMetrics,
     /// Error message if failed
     pub error_message: Option<String>,
+    /// Internal tool executions from sub-agent (SA-014 P1)
+    pub tool_executions: Vec<ToolExecutionData>,
+    /// Internal reasoning steps from sub-agent (SA-014 P2)
+    pub reasoning_steps: Vec<ReasoningStepData>,
 }
 
 impl Default for ExecutionResult {
@@ -103,6 +107,8 @@ impl Default for ExecutionResult {
                 tokens_output: 0,
             },
             error_message: None,
+            tool_executions: Vec::new(),
+            reasoning_steps: Vec::new(),
         }
     }
 }
@@ -557,6 +563,8 @@ impl SubAgentExecutor {
                         tokens_output: report.metrics.tokens_output as u64,
                     },
                     error_message: None,
+                    tool_executions: report.metrics.tool_executions,
+                    reasoning_steps: report.metrics.reasoning_steps,
                 }
             }
             Err(e) => {
@@ -576,6 +584,8 @@ impl SubAgentExecutor {
                         tokens_output: 0,
                     },
                     error_message: Some(error_msg),
+                    tool_executions: Vec::new(),
+                    reasoning_steps: Vec::new(),
                 }
             }
         }
@@ -587,46 +597,112 @@ impl SubAgentExecutor {
     /// * `execution_id` - Execution record ID
     /// * `result` - Execution result with success, report, metrics
     pub async fn update_execution_record(&self, execution_id: &str, result: &ExecutionResult) {
-        let status = if result.success {
-            "completed"
-        } else {
-            "failed"
-        };
-        let result_summary = safe_truncate(&result.report, 200, true);
+        // SA-014: Fix "failed" → "error" to match SubAgentStatus enum variants
+        let status = if result.success { "completed" } else { "error" };
+        let result_summary = safe_truncate(&result.report, 5000, true);
 
-        let result_summary_json =
-            serde_json::to_string(&result_summary).unwrap_or_else(|_| "null".to_string());
-        let error_message_json = result
-            .error_message
-            .as_ref()
-            .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-            .unwrap_or_else(|| "null".to_string());
-
+        // SA-014: Use parameterized queries to avoid SQL injection and silent failures
+        // from special characters in LLM-generated result_summary (quotes, newlines, etc.)
         let update_query = format!(
             "UPDATE sub_agent_execution:`{}` SET \
-             status = '{}', \
-             duration_ms = {}, \
-             tokens_input = {}, \
-             tokens_output = {}, \
-             result_summary = {}, \
-             error_message = {}, \
+             status = $status, \
+             duration_ms = $duration_ms, \
+             tokens_input = $tokens_input, \
+             tokens_output = $tokens_output, \
+             result_summary = $result_summary, \
+             error_message = $error_message, \
              completed_at = time::now()",
             execution_id,
-            status,
-            result.metrics.duration_ms,
-            result.metrics.tokens_input,
-            result.metrics.tokens_output,
-            result_summary_json,
-            error_message_json,
         );
 
-        if let Err(e) = self.db.execute(&update_query).await {
+        let error_message_value = result
+            .error_message
+            .as_ref()
+            .map(|s| serde_json::Value::String(s.clone()))
+            .unwrap_or(serde_json::Value::Null);
+
+        if let Err(e) = self
+            .db
+            .execute_with_params(
+                &update_query,
+                vec![
+                    ("status".to_string(), serde_json::json!(status)),
+                    (
+                        "duration_ms".to_string(),
+                        serde_json::json!(result.metrics.duration_ms),
+                    ),
+                    (
+                        "tokens_input".to_string(),
+                        serde_json::json!(result.metrics.tokens_input),
+                    ),
+                    (
+                        "tokens_output".to_string(),
+                        serde_json::json!(result.metrics.tokens_output),
+                    ),
+                    (
+                        "result_summary".to_string(),
+                        serde_json::Value::String(result_summary),
+                    ),
+                    ("error_message".to_string(), error_message_value),
+                ],
+            )
+            .await
+        {
             warn!(
                 execution_id = %execution_id,
                 error = %e,
                 "Failed to update execution record"
             );
         }
+    }
+
+    /// Persists internal tool executions and reasoning steps from a sub-agent (SA-014 P1/P2).
+    ///
+    /// This captures data that was previously silently dropped in `execute_with_heartbeat_timeout`.
+    /// The data is saved to the same `tool_execution` and `thinking_step` tables as primary agent
+    /// data, but with the sub-agent's ID as `agent_id` for attribution.
+    ///
+    /// # Arguments
+    /// * `execution_id` - Sub-agent execution record ID (used as message_id for correlation)
+    /// * `agent_id` - Sub-agent ID
+    /// * `result` - Execution result containing tool_executions and reasoning_steps
+    pub async fn persist_sub_agent_internals(
+        &self,
+        execution_id: &str,
+        agent_id: &str,
+        result: &ExecutionResult,
+    ) {
+        if result.tool_executions.is_empty() && result.reasoning_steps.is_empty() {
+            return;
+        }
+
+        info!(
+            agent_id = %agent_id,
+            tool_executions = result.tool_executions.len(),
+            reasoning_steps = result.reasoning_steps.len(),
+            "Persisting sub-agent internal data"
+        );
+
+        // Use execution_id as message_id for correlation between sub-agent's
+        // tool executions and its sub_agent_execution record
+        crate::db::persist_tool_executions(
+            &self.db,
+            &result.tool_executions,
+            &self.workflow_id,
+            execution_id,
+            agent_id,
+        )
+        .await;
+
+        crate::db::persist_reasoning_steps(
+            &self.db,
+            &result.reasoning_steps,
+            &self.workflow_id,
+            execution_id,
+            agent_id,
+            0,
+        )
+        .await;
     }
 
     /// Emits a streaming event.
@@ -865,6 +941,8 @@ impl SubAgentExecutor {
                     tokens_output: 0,
                 },
                 error_message: Some(e.to_string()),
+                tool_executions: Vec::new(),
+                reasoning_steps: Vec::new(),
             };
         }
 
@@ -942,6 +1020,8 @@ impl SubAgentExecutor {
                             info!(
                                 agent_id = %agent_id,
                                 duration_ms = duration_ms,
+                                tool_executions = report.metrics.tool_executions.len(),
+                                reasoning_steps = report.metrics.reasoning_steps.len(),
                                 "Sub-agent execution completed successfully (with heartbeat monitoring)"
                             );
                             ExecutionResult {
@@ -953,6 +1033,8 @@ impl SubAgentExecutor {
                                     tokens_output: report.metrics.tokens_output as u64,
                                 },
                                 error_message: None,
+                                tool_executions: report.metrics.tool_executions,
+                                reasoning_steps: report.metrics.reasoning_steps,
                             }
                         }
                         Err(e) => {
@@ -975,6 +1057,8 @@ impl SubAgentExecutor {
                                     tokens_output: 0,
                                 },
                                 error_message: Some(error_msg),
+                                tool_executions: Vec::new(),
+                                reasoning_steps: Vec::new(),
                             }
                         }
                     };
@@ -1008,6 +1092,8 @@ impl SubAgentExecutor {
                             tokens_output: 0,
                         },
                         error_message: Some("Execution cancelled by user".to_string()),
+                        tool_executions: Vec::new(),
+                        reasoning_steps: Vec::new(),
                     };
                 }
 
@@ -1067,6 +1153,8 @@ impl SubAgentExecutor {
                                 inactive_secs,
                                 INACTIVITY_TIMEOUT_SECS
                             )),
+                            tool_executions: Vec::new(),
+                            reasoning_steps: Vec::new(),
                         };
                     }
 
@@ -1397,6 +1485,68 @@ mod tests {
         assert_eq!(result.metrics.duration_ms, 0);
         assert_eq!(result.metrics.tokens_input, 0);
         assert_eq!(result.metrics.tokens_output, 0);
+        // SA-014: New fields default to empty
+        assert!(result.tool_executions.is_empty());
+        assert!(result.reasoning_steps.is_empty());
+    }
+
+    #[test]
+    fn test_execution_result_preserves_tool_executions() {
+        let tool_exec = ToolExecutionData {
+            tool_type: "mcp".to_string(),
+            tool_name: "find_symbol".to_string(),
+            server_name: Some("serena".to_string()),
+            input_params: serde_json::json!({"name": "MyClass"}),
+            output_result: serde_json::json!({"found": true}),
+            success: true,
+            error_message: None,
+            duration_ms: 150,
+            iteration: 0,
+        };
+        let result = ExecutionResult {
+            success: true,
+            report: "Done".to_string(),
+            metrics: SubAgentMetrics {
+                duration_ms: 1000,
+                tokens_input: 500,
+                tokens_output: 200,
+            },
+            error_message: None,
+            tool_executions: vec![tool_exec],
+            reasoning_steps: Vec::new(),
+        };
+        assert_eq!(result.tool_executions.len(), 1);
+        assert_eq!(result.tool_executions[0].tool_name, "find_symbol");
+        assert_eq!(
+            result.tool_executions[0].server_name,
+            Some("serena".to_string())
+        );
+    }
+
+    #[test]
+    fn test_execution_result_preserves_reasoning_steps() {
+        let step = ReasoningStepData {
+            content: "Analyzing the codebase structure".to_string(),
+            duration_ms: 300,
+        };
+        let result = ExecutionResult {
+            success: true,
+            report: "Done".to_string(),
+            metrics: SubAgentMetrics {
+                duration_ms: 1000,
+                tokens_input: 500,
+                tokens_output: 200,
+            },
+            error_message: None,
+            tool_executions: Vec::new(),
+            reasoning_steps: vec![step],
+        };
+        assert_eq!(result.reasoning_steps.len(), 1);
+        assert_eq!(
+            result.reasoning_steps[0].content,
+            "Analyzing the codebase structure"
+        );
+        assert_eq!(result.reasoning_steps[0].duration_ms, 300);
     }
 
     // =========================================================================

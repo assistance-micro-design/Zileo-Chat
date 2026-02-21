@@ -64,6 +64,12 @@ pub struct Workflow {
     /// Current context size (last API call context window usage)
     #[serde(default)]
     pub current_context_tokens: u64,
+    /// Cumulative input tokens from sub-agents only
+    #[serde(default)]
+    pub sub_agent_tokens_input: u64,
+    /// Cumulative output tokens from sub-agents only
+    #[serde(default)]
+    pub sub_agent_tokens_output: u64,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -226,6 +232,8 @@ mod tests {
             total_cost_usd: 0.0,
             model_id: None,
             current_context_tokens: 0,
+            sub_agent_tokens_input: 0,
+            sub_agent_tokens_output: 0,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
@@ -236,6 +244,8 @@ mod tests {
         assert_eq!(deserialized.agent_id, workflow.agent_id);
         assert_eq!(deserialized.total_tokens_input, 0);
         assert_eq!(deserialized.total_tokens_output, 0);
+        assert_eq!(deserialized.sub_agent_tokens_input, 0);
+        assert_eq!(deserialized.sub_agent_tokens_output, 0);
     }
 
     #[test]

@@ -332,7 +332,10 @@ impl Validator {
 ///
 /// # Returns
 /// The JSON-encoded string, or a formatted error string.
-pub fn serialize_for_query<T: Serialize + ?Sized>(value: &T, field_name: &str) -> Result<String, String> {
+pub fn serialize_for_query<T: Serialize + ?Sized>(
+    value: &T,
+    field_name: &str,
+) -> Result<String, String> {
     serde_json::to_string(value).map_err(|e| {
         warn!(error = %e, "Failed to serialize {}", field_name);
         format!("Failed to serialize {}: {}", field_name, e)

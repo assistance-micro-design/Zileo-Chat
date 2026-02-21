@@ -17,7 +17,10 @@
 //! Provides Tauri commands for retrieving sub-agent execution logs
 //! for workflow state recovery and activity display.
 
-use crate::{db::extract_count, models::sub_agent::SubAgentExecution, security::validate_uuid_field, AppState};
+use crate::{
+    db::extract_count, models::sub_agent::SubAgentExecution, security::validate_uuid_field,
+    AppState,
+};
 use tauri::State;
 use tracing::{error, info, instrument};
 

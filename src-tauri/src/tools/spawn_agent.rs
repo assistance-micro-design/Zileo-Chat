@@ -407,6 +407,11 @@ impl SpawnAgentTool {
             .update_execution_record(&execution_id, &exec_result)
             .await;
 
+        // 17b. Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+        executor
+            .persist_sub_agent_internals(&execution_id, &sub_agent_id, &exec_result)
+            .await;
+
         // 18. Update spawned children status
         {
             let mut children = self.spawned_children.write().await;

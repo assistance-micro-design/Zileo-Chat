@@ -16,11 +16,11 @@
 //!
 //! Tauri IPC commands for managing prompt templates with variable interpolation.
 
-use crate::security::serialize_for_query;
 use crate::models::prompt::{
     Prompt, PromptCreate, PromptSummary, PromptUpdate, MAX_PROMPT_CONTENT_LEN,
     MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
+use crate::security::serialize_for_query;
 use crate::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};

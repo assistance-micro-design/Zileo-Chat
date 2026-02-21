@@ -23,7 +23,8 @@ import {
 	formatAbsoluteTimestamp,
 	toolExecutionToActivity,
 	thinkingStepToActivity,
-	activeReasoningToActivity
+	activeReasoningToActivity,
+	subAgentExecutionToActivity
 } from '../activity';
 
 describe('formatTokenCount', () => {
@@ -83,6 +84,11 @@ describe('toolExecutionToActivity', () => {
 		expect(activity.status).toBe('completed');
 	});
 
+	it('SA-014 P7: includes agentId for tool attribution', () => {
+		const activity = toolExecutionToActivity(mockExec, 0);
+		expect(activity.metadata?.agentId).toBe('agent-1');
+	});
+
 	it('sets correct type for failed execution', () => {
 		const failed = { ...mockExec, success: false, error_message: 'timeout' };
 		const activity = toolExecutionToActivity(failed, 0);
@@ -132,6 +138,67 @@ describe('thinkingStepToActivity', () => {
 		const activity = thinkingStepToActivity(step, 0);
 		expect(activity.description?.length).toBeLessThanOrEqual(203); // 200 + '...'
 		expect(activity.metadata?.content).toBe(longContent);
+	});
+});
+
+describe('subAgentExecutionToActivity', () => {
+	const mockExec = {
+		id: 'exec-456',
+		workflow_id: 'wf-1',
+		parent_agent_id: 'agent-1',
+		sub_agent_id: 'sub-1',
+		sub_agent_name: 'ResearchAgent',
+		task_description: 'Analyze the codebase structure',
+		status: 'completed' as const,
+		duration_ms: 3000,
+		tokens_input: 500,
+		tokens_output: 200,
+		created_at: '2025-06-15T14:30:00Z'
+	};
+
+	it('SA-014 P7: handles undefined task_description gracefully', () => {
+		const noDesc = { ...mockExec, task_description: undefined as unknown as string };
+		const activity = subAgentExecutionToActivity(noDesc, 0);
+		// Should not produce "undefined..." string
+		expect(activity.description).toBeUndefined();
+	});
+
+	it('SA-014 P7: truncates long task_description to 200 chars', () => {
+		const longDesc = 'A'.repeat(300);
+		const exec = { ...mockExec, task_description: longDesc };
+		const activity = subAgentExecutionToActivity(exec, 0);
+		expect(activity.description?.length).toBeLessThanOrEqual(203); // 200 + '...'
+	});
+
+	it('SA-014 P7: preserves short task_description without ellipsis', () => {
+		const activity = subAgentExecutionToActivity(mockExec, 0);
+		expect(activity.description).toBe('Analyze the codebase structure');
+	});
+
+	it('SA-014 P10: cancelled sub-agents are not mapped to error', () => {
+		const cancelled = { ...mockExec, status: 'cancelled' as const };
+		const activity = subAgentExecutionToActivity(cancelled, 0);
+		expect(activity.status).toBe('completed');
+		expect(activity.type).toBe('sub_agent_complete');
+	});
+
+	it('maps error status correctly', () => {
+		const errored = { ...mockExec, status: 'error' as const, error_message: 'timeout' };
+		const activity = subAgentExecutionToActivity(errored, 0);
+		expect(activity.status).toBe('error');
+		expect(activity.type).toBe('sub_agent_error');
+		expect(activity.metadata?.error).toBe('timeout');
+	});
+
+	it('preserves token metrics in metadata', () => {
+		const activity = subAgentExecutionToActivity(mockExec, 0);
+		expect(activity.metadata?.tokens).toEqual({ input: 500, output: 200 });
+	});
+
+	it('preserves agent identity in metadata', () => {
+		const activity = subAgentExecutionToActivity(mockExec, 0);
+		expect(activity.metadata?.agentName).toBe('ResearchAgent');
+		expect(activity.metadata?.agentId).toBe('sub-1');
 	});
 });
 

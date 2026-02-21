@@ -858,7 +858,12 @@ pub async fn test_provider_connection(
     match provider_type {
         ProviderType::Ollama => {
             let result = state.llm_manager.ollama().test_connection().await;
-            Ok(connection_test_outcome(result, provider_type, start, "ollama"))
+            Ok(connection_test_outcome(
+                result,
+                provider_type,
+                start,
+                "ollama",
+            ))
         }
         ProviderType::Mistral => {
             let api_key = match keystore.get_key("Mistral") {

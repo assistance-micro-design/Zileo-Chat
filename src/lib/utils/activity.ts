@@ -37,6 +37,10 @@ import { formatDuration as formatDurationUtil } from '$lib/utils/duration';
 
 /**
  * Convert an ActiveTool from streaming store to WorkflowActivityEvent.
+ *
+ * SA-014 P9: executionId is intentionally absent during live streaming
+ * because the DB record doesn't exist yet. After captureStreamingActivities(),
+ * historical tools loaded from DB will have executionId via toolExecutionToActivity().
  */
 export function activeToolToActivity(tool: ActiveTool, index: number): WorkflowActivityEvent {
 	const status = toolStatusToActivityStatus(tool.status);
@@ -323,7 +327,9 @@ export function toolExecutionToActivity(exec: ToolExecution, index: number): Wor
 		toolName: exec.tool_name,
 		iteration: exec.iteration,
 		executionId: exec.id,
-		messageId: exec.message_id
+		messageId: exec.message_id,
+		// SA-014 P7: Include agentId for sub-agent tool attribution
+		agentId: exec.agent_id
 	};
 
 	if (exec.server_name) {
@@ -463,8 +469,12 @@ export function subAgentExecutionToActivity(exec: SubAgentExecution, index: numb
 			type = 'sub_agent_complete';
 			status = 'completed';
 			break;
-		case 'error':
 		case 'cancelled':
+			// SA-014 P10: Cancelled sub-agents are not errors - they were intentionally stopped
+			type = 'sub_agent_complete';
+			status = 'completed';
+			break;
+		case 'error':
 			type = 'sub_agent_error';
 			status = 'error';
 			break;
@@ -494,7 +504,9 @@ export function subAgentExecutionToActivity(exec: SubAgentExecution, index: numb
 		timestamp: new Date(exec.created_at).getTime(),
 		type,
 		title: exec.sub_agent_name,
-		description: exec.task_description?.slice(0, 200) + (exec.task_description?.length > 200 ? '...' : ''),
+		description: exec.task_description
+			? exec.task_description.slice(0, 200) + (exec.task_description.length > 200 ? '...' : '')
+			: undefined,
 		status,
 		duration: exec.duration_ms,
 		metadata

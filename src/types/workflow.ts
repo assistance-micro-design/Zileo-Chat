@@ -54,6 +54,10 @@ export interface Workflow {
   model_id: string | null;
   /** Current context size (last API call context window usage) */
   current_context_tokens: number;
+  /** Cumulative input tokens from sub-agents only */
+  sub_agent_tokens_input: number;
+  /** Cumulative output tokens from sub-agents only */
+  sub_agent_tokens_output: number;
 }
 
 /**
@@ -135,6 +139,12 @@ export interface TokenDisplayData {
   cost_usd: number;
   /** Cumulative cost for workflow (USD) */
   cumulative_cost_usd: number;
+  /** Sub-agent cumulative input tokens */
+  sub_agent_input: number;
+  /** Sub-agent cumulative output tokens */
+  sub_agent_output: number;
+  /** Total workflow cost (main agent + sub-agent estimate) */
+  workflow_total_cost: number;
   /** Token generation speed (tokens/second) - only during streaming */
   speed_tks?: number;
   /** Whether currently streaming */

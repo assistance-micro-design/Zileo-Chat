@@ -55,7 +55,10 @@ function enrichMessagesWithSubAgents(
 	messages: Message[],
 	executions: SubAgentExecution[]
 ): Message[] {
-	const terminal = executions.filter((e) => e.status === 'completed' || e.status === 'error');
+	// SA-014 P5/P10: Include cancelled sub-agents as completed (they were intentionally stopped)
+	const terminal = executions.filter(
+		(e) => e.status === 'completed' || e.status === 'error' || e.status === 'cancelled'
+	);
 	if (terminal.length === 0) return messages;
 
 	const assistantMessages = messages.filter((m) => m.role === 'assistant');
@@ -69,8 +72,10 @@ function enrichMessagesWithSubAgents(
 		if (!target) continue;
 
 		const summary: SubAgentSummary = {
+			id: exec.id,
 			name: exec.sub_agent_name,
-			status: exec.status as 'completed' | 'error',
+			// SA-014 P10: Map cancelled to completed for display
+			status: exec.status === 'cancelled' ? 'completed' : (exec.status as 'completed' | 'error'),
 			duration_ms: exec.duration_ms,
 			tokens_input: exec.tokens_input,
 			tokens_output: exec.tokens_output
@@ -80,7 +85,9 @@ function enrichMessagesWithSubAgents(
 			target.sub_agents = [];
 		}
 
-		const alreadyExists = target.sub_agents.some((s) => s.name === summary.name);
+		// SA-014: Use execution ID for dedup instead of name to support
+		// multiple sub-agents with the same name (e.g., parallel tasks)
+		const alreadyExists = target.sub_agents.some((s) => s.id === summary.id);
 		if (!alreadyExists) {
 			target.sub_agents.push(summary);
 		}

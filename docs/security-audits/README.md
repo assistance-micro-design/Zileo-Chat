@@ -21,6 +21,7 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | SA-011 | [Chat & Workflow Components](./SA-011-chat-workflow-components.md) | 2026-02-19 | 0C, 3H, 12M, 26L | **H-001 DONE, H-002 DONE, H-003 DONE** |
 | SA-012 | [DB Layer & Migrations](./SA-012-db-layer-migrations.md) | 2026-02-19 | 4H, 2M, 5L | **ALL DONE** (4H, 2M, 5L) |
 | SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE, 4H DONE, 2M DONE** (#14-15 ChunkType alignment + #16-20 console.*) |
+| SA-014 | [Data Persistence & Restart](./SA-014-data-persistence-restart.md) | 2026-02-20 | 0C, 3H, 4M, 6L | **3H DONE, 4M DONE** (1M documented), 6L (4 DONE, 2 documented) |
 
 **Evaluation report**: [EVALUATION-2026-02-19.md](./EVALUATION-2026-02-19.md)
 **Remediation status**: [REMEDIATION-STATUS.md](./REMEDIATION-STATUS.md) (2026-02-20, branch `security/audit-remediation-tdd`)

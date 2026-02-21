@@ -714,6 +714,7 @@
   "workflow_token_context_critical": "Critique : fenetre de contexte presque pleine",
   "workflow_token_context_full": "Fenetre de contexte pleine",
   "workflow_token_in_out": "entree/sortie",
+  "workflow_token_agent": "agent",
   "workflow_token_total": "total",
   "workflow_token_speed": "j/s",
   "workflow_cost_estimate": "(estimatif)",

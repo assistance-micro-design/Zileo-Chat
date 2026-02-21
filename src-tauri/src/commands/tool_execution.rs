@@ -140,7 +140,13 @@ pub async fn save_tool_execution(
     validate_uuid_field(&workflow_id, "workflow_id")?;
     validate_uuid_field(&message_id, "message_id")?;
     validate_uuid_field(&agent_id, "agent_id")?;
-    validate_tool_fields(&tool_type, &tool_name, &server_name, &input_params, &output_result)?;
+    validate_tool_fields(
+        &tool_type,
+        &tool_name,
+        &server_name,
+        &input_params,
+        &output_result,
+    )?;
 
     let execution_id = Uuid::new_v4().to_string();
 

@@ -36,11 +36,11 @@
 //! - [`call_mcp_tool`] - Execute a tool on an MCP server
 
 use crate::models::custom_provider::check_http_warning;
-use crate::security::serialize_for_query;
 use crate::models::mcp::{
     MCPDeploymentMethod, MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPServerResponse,
     MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
 };
+use crate::security::serialize_for_query;
 use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
 use tauri::State;

@@ -27,6 +27,8 @@ export type MessageRole = 'user' | 'assistant' | 'system';
  * Captured from StreamingState during current session.
  */
 export interface SubAgentSummary {
+  /** Execution record ID for unique identification */
+  id: string;
   /** Sub-agent name */
   name: string;
   /** Execution status */

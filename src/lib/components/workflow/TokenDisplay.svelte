@@ -58,14 +58,11 @@
 	let { data, compact = false }: Props = $props();
 
 	/**
-	 * Calculate context usage percentage
-	 * Uses tokens_input which represents the actual context size at last API call.
-	 * During streaming, tokens_input is 0 (not yet known), so falls back to
-	 * cumulative_input for a rough estimate of context window usage.
+	 * Calculate context usage percentage.
+	 * Always uses cumulative main agent tokens to show how much context
+	 * the main agent has consumed relative to its context window max.
 	 */
-	const contextUsed = $derived(
-		data.tokens_input > 0 ? data.tokens_input : data.cumulative_input
-	);
+	const contextUsed = $derived(data.cumulative_input);
 	const contextPercentage = $derived(
 		data.context_max > 0 ? Math.min((contextUsed / data.context_max) * 100, 100) : 0
 	);
@@ -111,6 +108,17 @@
 		if (tks === undefined || tks === 0) return '-';
 		return `${tks.toFixed(1)}`;
 	}
+
+	/**
+	 * Whether sub-agents contributed tokens to this workflow
+	 */
+	const hasSubAgents = $derived(data.sub_agent_input > 0 || data.sub_agent_output > 0);
+
+	/**
+	 * Workflow total tokens (main agent + sub-agents)
+	 */
+	const workflowTotalInput = $derived(data.cumulative_input + data.sub_agent_input);
+	const workflowTotalOutput = $derived(data.cumulative_output + data.sub_agent_output);
 </script>
 
 <div
@@ -191,7 +199,7 @@
 		{/if}
 	</div>
 
-	<!-- Cumulative Tokens -->
+	<!-- Agent Cumulative Tokens (main agent only) -->
 	{#if !compact}
 		<div class="metric tokens-metric cumulative">
 			<div class="metric-icon total-icon">
@@ -201,6 +209,21 @@
 				<span class="token-value input-value">{formatTokens(data.cumulative_input)}</span>
 				<span class="token-separator">/</span>
 				<span class="token-value output-value">{formatTokens(data.cumulative_output)}</span>
+			</div>
+			<span class="metric-label">{$i18n('workflow_token_agent')}</span>
+		</div>
+	{/if}
+
+	<!-- Workflow Total (agent + sub-agents) - only shown when sub-agents exist -->
+	{#if !compact && hasSubAgents}
+		<div class="metric tokens-metric workflow-total">
+			<div class="metric-icon workflow-total-icon">
+				<TrendingUp size={14} />
+			</div>
+			<div class="token-pair">
+				<span class="token-value input-value">{formatTokens(workflowTotalInput)}</span>
+				<span class="token-separator">/</span>
+				<span class="token-value output-value">{formatTokens(workflowTotalOutput)}</span>
 			</div>
 			<span class="metric-label">{$i18n('workflow_token_total')}</span>
 		</div>
@@ -214,9 +237,11 @@
 		<div class="metric-icon cost-icon">
 			<CircleDollarSign size={14} />
 		</div>
-		<span class="cost-value">{formatCost(data.cost_usd)}</span>
+		<span class="cost-value">{formatCost(hasSubAgents ? data.workflow_total_cost : data.cost_usd)}</span>
 		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
-		{#if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
+		{#if !compact && hasSubAgents && data.cumulative_cost_usd > 0}
+			<span class="cost-total">({$i18n('workflow_token_agent')}: {formatCost(data.cumulative_cost_usd)})</span>
+		{:else if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
 			<span class="cost-total">({formatCost(data.cumulative_cost_usd)})</span>
 		{/if}
 	</div>
@@ -307,6 +332,14 @@
 
 	.total-icon {
 		color: var(--color-text-tertiary);
+	}
+
+	.workflow-total-icon {
+		color: var(--color-secondary);
+	}
+
+	.tokens-metric.workflow-total {
+		opacity: 0.9;
 	}
 
 	.cost-icon {
@@ -570,7 +603,8 @@
 			display: none;
 		}
 
-		.tokens-metric.cumulative {
+		.tokens-metric.cumulative,
+		.tokens-metric.workflow-total {
 			display: none;
 		}
 

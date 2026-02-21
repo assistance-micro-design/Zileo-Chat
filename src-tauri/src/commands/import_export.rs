@@ -172,7 +172,8 @@ pub async fn generate_export_file(
 
     let ts = options.include_timestamps;
     let agents = export_agents(&state.db, &selection.agents, ts).await?;
-    let mcp_servers = export_mcp_servers(&state.db, &selection.mcp_servers, ts, &sanitization).await?;
+    let mcp_servers =
+        export_mcp_servers(&state.db, &selection.mcp_servers, ts, &sanitization).await?;
     let models = export_models(&state.db, &selection.models, ts).await?;
     let prompts = export_prompts(&state.db, &selection.prompts, ts).await?;
 
@@ -261,8 +262,15 @@ pub async fn validate_import(
     let mut missing_mcp_env = HashMap::new();
 
     let agent_summaries = validate_agents(&state.db, &package.agents, &mut conflicts).await;
-    let mcp_summaries = validate_mcp_servers(&state.db, &package.mcp_servers, &mut conflicts, &mut missing_mcp_env).await;
-    let model_summaries = validate_models(&state.db, &package.models, &mut conflicts, &mut warnings).await;
+    let mcp_summaries = validate_mcp_servers(
+        &state.db,
+        &package.mcp_servers,
+        &mut conflicts,
+        &mut missing_mcp_env,
+    )
+    .await;
+    let model_summaries =
+        validate_models(&state.db, &package.models, &mut conflicts, &mut warnings).await;
     let prompt_summaries = validate_prompts(&state.db, &package.prompts, &mut conflicts).await;
 
     tracing::info!(
@@ -327,11 +335,44 @@ pub async fn execute_import(
     let mut skipped = ImportCounts::default();
     let mut errors = Vec::new();
 
-    let mut tracking = ImportTracking { imported: &mut imported, skipped: &mut skipped, errors: &mut errors };
-    import_agents(&state.db, &package.agents, &selection.agents, &resolutions, &mut tracking).await;
-    import_mcp_servers(&state.db, &package.mcp_servers, &selection.mcp_servers, &resolutions, &mcp_additions, &mut tracking).await;
-    import_models(&state.db, &package.models, &selection.models, &resolutions, &mut tracking).await;
-    import_prompts(&state.db, &package.prompts, &selection.prompts, &resolutions, &mut tracking).await;
+    let mut tracking = ImportTracking {
+        imported: &mut imported,
+        skipped: &mut skipped,
+        errors: &mut errors,
+    };
+    import_agents(
+        &state.db,
+        &package.agents,
+        &selection.agents,
+        &resolutions,
+        &mut tracking,
+    )
+    .await;
+    import_mcp_servers(
+        &state.db,
+        &package.mcp_servers,
+        &selection.mcp_servers,
+        &resolutions,
+        &mcp_additions,
+        &mut tracking,
+    )
+    .await;
+    import_models(
+        &state.db,
+        &package.models,
+        &selection.models,
+        &resolutions,
+        &mut tracking,
+    )
+    .await;
+    import_prompts(
+        &state.db,
+        &package.prompts,
+        &selection.prompts,
+        &resolutions,
+        &mut tracking,
+    )
+    .await;
 
     let success = errors.is_empty();
 
@@ -495,7 +536,11 @@ fn apply_mcp_sanitization(
     let extract_args = || -> Vec<String> {
         row["args"]
             .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default()
     };
 
@@ -658,11 +703,19 @@ async fn export_agents(
                 },
                 tools: row["tools"]
                     .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 mcp_servers: row["mcp_servers"]
                     .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
                 max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
@@ -886,10 +939,18 @@ async fn import_agents(
     t: &mut ImportTracking<'_>,
 ) {
     for agent in agents {
-        match resolve_import_entity(db, "agent", "agent", &agent.name, selected, resolutions).await {
+        match resolve_import_entity(db, "agent", "agent", &agent.name, selected, resolutions).await
+        {
             ImportAction::NotSelected => continue,
-            ImportAction::Skipped => { t.skipped.agents += 1; continue; }
-            ImportAction::Import { id, name, is_overwrite } => {
+            ImportAction::Skipped => {
+                t.skipped.agents += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "name": name,
                     "lifecycle": agent.lifecycle,
@@ -928,10 +989,19 @@ async fn import_mcp_servers(
     t: &mut ImportTracking<'_>,
 ) {
     for server in servers {
-        match resolve_import_entity(db, "mcp_server", "mcp", &server.name, selected, resolutions).await {
+        match resolve_import_entity(db, "mcp_server", "mcp", &server.name, selected, resolutions)
+            .await
+        {
             ImportAction::NotSelected => continue,
-            ImportAction::Skipped => { t.skipped.mcp_servers += 1; continue; }
-            ImportAction::Import { id, name, is_overwrite } => {
+            ImportAction::Skipped => {
+                t.skipped.mcp_servers += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
                 let mut env = server.env.clone();
                 if let Some(additions) = mcp_additions.get(&server.name) {
                     for (key, value) in &additions.add_env {
@@ -969,10 +1039,19 @@ async fn import_models(
     t: &mut ImportTracking<'_>,
 ) {
     for model in models {
-        match resolve_import_entity(db, "llm_model", "model", &model.name, selected, resolutions).await {
+        match resolve_import_entity(db, "llm_model", "model", &model.name, selected, resolutions)
+            .await
+        {
             ImportAction::NotSelected => continue,
-            ImportAction::Skipped => { t.skipped.models += 1; continue; }
-            ImportAction::Import { id, name, is_overwrite } => {
+            ImportAction::Skipped => {
+                t.skipped.models += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "provider": model.provider,
                     "name": name,
@@ -1007,10 +1086,19 @@ async fn import_prompts(
     t: &mut ImportTracking<'_>,
 ) {
     for prompt in prompts {
-        match resolve_import_entity(db, "prompt", "prompt", &prompt.name, selected, resolutions).await {
+        match resolve_import_entity(db, "prompt", "prompt", &prompt.name, selected, resolutions)
+            .await
+        {
             ImportAction::NotSelected => continue,
-            ImportAction::Skipped => { t.skipped.prompts += 1; continue; }
-            ImportAction::Import { id, name, is_overwrite } => {
+            ImportAction::Skipped => {
+                t.skipped.prompts += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
                 let variables = Prompt::detect_variables(&prompt.content);
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "name": name,

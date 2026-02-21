@@ -39,9 +39,11 @@
 //! - `task` - Task decomposition tracking
 
 pub mod client;
+pub mod persistence;
 pub mod queries;
 pub mod schema;
 pub mod utils;
 
 pub use client::DBClient;
+pub use persistence::{persist_reasoning_steps, persist_tool_executions};
 pub use utils::{count_exists, extract_count, sanitize_for_surrealdb};
