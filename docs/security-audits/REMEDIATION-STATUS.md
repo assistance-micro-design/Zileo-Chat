@@ -27,7 +27,7 @@
 
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
-**SA-015 Phases 1-3 DONE: annotation cleanup + superseded code removal + dead getters (12 methods deleted, 6 tests migrated, 4 tests deleted).**
+**SA-015 Phases 1-4 DONE: annotation cleanup + superseded code removal + dead getters + speculative code (19 methods/structs deleted, 6 tests migrated, 4 tests deleted).**
 
 ---
 
@@ -400,12 +400,24 @@ Test count: 937 (Phase 1) -> 933 (Phase 2) -- 4 tests deleted, 6 migrated.
 
 Test count: 933 unchanged (no tests depended on these getters).
 
-### Phases 4-5: Pending
+### Phase 4: Remove Speculative Code -- DONE
+
+| Action | Count | Details |
+|--------|-------|---------|
+| Struct deleted | 1 | `QueryStats` (db/client.rs) |
+| DB methods deleted | 3 | `transaction()`, `query_with_stats()`, `transaction_with_params()` |
+| LLM agent methods deleted | 3 | `build_prompt_with_tools()`, `call_mcp_tool()`, `get_available_mcp_tools()` |
+| Unused import removed | 1 | `warn` from `tracing` in db/client.rs |
+| Items kept (test-only) | 2 | `cleanup_temporary()`, `Prompt::interpolate()` |
+
+Test count: 933 unchanged (no tests depended on speculative code).
+Annotation count: 189 (Phase 1) -> 171 (Phase 4) -- 18 annotations removed across Phases 2-4.
+
+### Phase 5: Pending
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| Phase 4 | Remove speculative code (8 items) | Pending |
-| Phase 5 | Final audit and count | Pending |
+| Phase 5 | Final audit and count verification | Pending |
 
 ---
 

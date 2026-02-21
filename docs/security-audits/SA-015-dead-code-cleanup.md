@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: 172 `#[allow(dead_code)]` annotations across 46 Rust files
 **Branch**: `security/audit-remediation-tdd`
-**Status**: Phase 1 + Phase 2 + Phase 3 DONE -- annotation cleanup + superseded code removal + dead getters
+**Status**: Phase 1 + Phase 2 + Phase 3 + Phase 4 DONE -- annotation cleanup + superseded code removal + dead getters + speculative code removal
 
 ## Context
 
@@ -227,40 +227,52 @@ cargo test --lib      -- PASS (933 tests, 0 failures)
 
 ---
 
-### Phase 4: Remove Speculative Code
+### Phase 4: Remove Speculative Code -- DONE
 
 **Goal**: Delete code written for unplanned future phases with **verified zero callers**.
 
-**4.1 Database client (3 methods + 1 struct -- ALL VERIFIED DEAD)**
+**Status**: DONE (2026-02-21). All 7 speculative methods and 1 struct removed after exhaustive verification (grep + find_referencing_symbols + frontend search + mod.rs re-export check).
 
-| Item | File:Line | Comment |
-|------|-----------|---------|
-| `transaction()` | `db/client.rs:395` | "Prepared for future use" -- 0 callers |
-| `query_with_stats()` | `db/client.rs:450` | "Prepared for monitoring" -- 0 callers |
-| `transaction_with_params()` | `db/client.rs:511` | "Prepared for future use" -- 0 callers |
-| `QueryStats` struct | `db/client.rs:31` | Only used inside `query_with_stats()` |
+**4.1 Database client (3 methods + 1 struct -- ALL DELETED)**
 
-**4.2 LLM Agent MCP methods (ALL VERIFIED DEAD)**
+| Item | Original Location | Verification | Action |
+|------|-------------------|--------------|--------|
+| `QueryStats` struct | `db/client.rs:31` | Only used inside `query_with_stats()`, not re-exported in `db/mod.rs`, 0 external refs | **DELETED** |
+| `transaction()` | `db/client.rs:395` | 0 callers (production + test), 0 Tauri commands, 0 trait impls | **DELETED** |
+| `query_with_stats()` | `db/client.rs:450` | 0 callers (production + test), 0 re-exports | **DELETED** |
+| `transaction_with_params()` | `db/client.rs:511` | 0 callers (production + test), 0 Tauri commands | **DELETED** |
 
-| Item | File:Line | Note |
-|------|-----------|------|
-| `build_prompt_with_tools()` | `agents/llm_agent.rs:268` | 0 callers |
-| `call_mcp_tool()` | `agents/llm_agent.rs:292` | 0 callers (separate Tauri command `call_mcp_tool` in `commands/mcp.rs` is a DIFFERENT function) |
-| `get_available_mcp_tools()` | `agents/llm_agent.rs:323` | 0 callers |
+Unused import `warn` from `tracing` also removed (was only used by transaction error handling).
 
-**4.3 Agent registry (VERIFIED TEST_ONLY)**
+**4.2 LLM Agent MCP methods (ALL DELETED)**
+
+| Item | Original Location | Verification | Action |
+|------|-------------------|--------------|--------|
+| `build_prompt_with_tools()` | `agents/llm_agent.rs:268` | Private method, 0 callers anywhere | **DELETED** |
+| `call_mcp_tool()` | `agents/llm_agent.rs:292` | Private method, 0 callers. Note: separate Tauri command `call_mcp_tool` in `commands/mcp.rs` is UNRELATED (different signature, actively used by frontend) | **DELETED** |
+| `get_available_mcp_tools()` | `agents/llm_agent.rs:323` | Private method, 0 callers. Note: `get_mcp_tool_definitions()` (different method, returns full metadata) is the production replacement | **DELETED** |
+
+**4.3 Agent registry (VERIFIED TEST_ONLY -- KEPT)**
 
 | Item | File:Line | Decision |
 |------|-----------|----------|
 | `cleanup_temporary()` | `agents/core/registry.rs:119` | **KEEP** -- test at line 321 verifies real cleanup behavior |
 
-**4.4 Prompt (VERIFIED TEST_ONLY)**
+**4.4 Prompt (VERIFIED TEST_ONLY -- KEPT)**
 
 | Item | File:Line | Decision |
 |------|-----------|----------|
 | `Prompt::interpolate()` | `models/prompt.rs:164` | **KEEP** -- 4 tests verify template interpolation logic |
 
-**Validation**: `cargo check` + `cargo clippy -- -D warnings` + `cargo test`
+**4.5 Validation -- PASS**
+
+```
+cargo fmt --check     -- PASS
+cargo clippy -D warnings -- PASS (0 warnings)
+cargo test --lib      -- PASS (933 tests, 0 failures)
+```
+
+933 tests unchanged from Phase 3 (no tests depended on speculative code).
 
 ---
 
