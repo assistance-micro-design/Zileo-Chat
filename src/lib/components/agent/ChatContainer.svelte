@@ -25,6 +25,7 @@ Main chat area with message display, streaming content, and input controls.
 <script lang="ts">
 	import { StopCircle, Bot } from '@lucide/svelte';
 	import { Button, Spinner, HelpButton } from '$lib/components/ui';
+	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
@@ -88,9 +89,8 @@ Main chat area with message display, streaming content, and input controls.
 						<span>{$i18n('chat_assistant')}</span>
 						<Spinner size="sm" />
 					</div>
-					<div class="streaming-content">
-						{streamContent}
-						<span class="cursor"></span>
+					<div class="streaming-content streaming-cursor">
+						<MarkdownRenderer content={streamContent} />
 					</div>
 				</div>
 			</div>
@@ -170,11 +170,12 @@ Main chat area with message display, streaming content, and input controls.
 		font-size: var(--font-size-md);
 		line-height: 1.6;
 		color: var(--color-text-primary);
-		white-space: pre-wrap;
 		word-break: break-word;
 	}
 
-	.streaming-content .cursor {
+	/* Blinking cursor on last element of rendered markdown */
+	.streaming-cursor :global(*:last-child)::after {
+		content: '';
 		display: inline-block;
 		width: 2px;
 		height: 1.2em;
