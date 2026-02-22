@@ -71,6 +71,39 @@ pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
     }
 }
 
+/// Validates a trimmed name with configurable field name and max length.
+///
+/// SA-017/OPT-7: Centralized validation extracted from agent.rs and mcp.rs.
+/// Trims whitespace, checks emptiness, length, and control characters.
+///
+/// # Arguments
+/// * `value` - The raw name string to validate
+/// * `field_name` - Human-readable field name for error messages (e.g. "Agent name")
+/// * `max_len` - Maximum allowed length in bytes
+///
+/// # Returns
+/// The trimmed name or an error message
+pub fn validate_trimmed_name(value: &str, field_name: &str, max_len: usize) -> Result<String, String> {
+    let trimmed = value.trim();
+
+    if trimmed.is_empty() {
+        return Err(format!("{} cannot be empty", field_name));
+    }
+
+    if trimmed.len() > max_len {
+        return Err(format!(
+            "{} exceeds maximum length of {} characters",
+            field_name, max_len
+        ));
+    }
+
+    if trimmed.chars().any(|c| c.is_control() && c != '\n') {
+        return Err(format!("{} cannot contain control characters", field_name));
+    }
+
+    Ok(trimmed.to_string())
+}
+
 /// Checks if validation is required based on settings for any operation type.
 ///
 /// Pure logic function (no I/O) that evaluates the validation mode, operation type,
@@ -875,6 +908,71 @@ mod tests {
         let task = &details["tasks"].as_array().unwrap()[0];
         let preview = task["prompt_preview"].as_str().unwrap();
         assert!(preview.ends_with("..."));
+    }
+
+    // SA-017/OPT-7: Tests for validate_trimmed_name
+
+    #[test]
+    fn test_validate_trimmed_name_valid() {
+        let result = validate_trimmed_name("My Agent", "agent name", 64);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "My Agent");
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_trims_whitespace() {
+        let result = validate_trimmed_name("  My Agent  ", "agent name", 64);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "My Agent");
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_empty() {
+        let result = validate_trimmed_name("", "agent name", 64);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_whitespace_only() {
+        let result = validate_trimmed_name("   ", "agent name", 64);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_too_long() {
+        let long = "a".repeat(65);
+        let result = validate_trimmed_name(&long, "agent name", 64);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds maximum length"));
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_exact_max() {
+        let exact = "a".repeat(64);
+        let result = validate_trimmed_name(&exact, "agent name", 64);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_control_chars() {
+        let result = validate_trimmed_name("agent\x00name", "agent name", 64);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("control characters"));
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_allows_newline() {
+        let result = validate_trimmed_name("agent\nname", "agent name", 64);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_trimmed_name_utf8() {
+        let result = validate_trimmed_name("Mon Agent Francais", "agent name", 64);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Mon Agent Francais");
     }
 
     #[test]

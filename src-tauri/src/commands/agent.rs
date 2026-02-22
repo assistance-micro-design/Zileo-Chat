@@ -36,28 +36,12 @@ use crate::tools::context::AgentToolContext;
 use crate::tools::registry::TOOL_REGISTRY;
 use std::sync::Arc;
 use tauri::State;
+use crate::tools::validation_helper::validate_trimmed_name;
 use tracing::{error, info, instrument, warn};
 
-/// Validates agent name
+/// SA-017/OPT-7: Delegates to centralized validate_trimmed_name
 fn validate_agent_name(name: &str) -> Result<String, String> {
-    let trimmed = name.trim();
-
-    if trimmed.is_empty() {
-        return Err("Agent name cannot be empty".to_string());
-    }
-
-    if trimmed.len() > cmd_const::MAX_AGENT_NAME_LEN {
-        return Err(format!(
-            "Agent name exceeds maximum length of {} characters",
-            cmd_const::MAX_AGENT_NAME_LEN
-        ));
-    }
-
-    if trimmed.chars().any(|c| c.is_control() && c != '\n') {
-        return Err("Agent name cannot contain control characters".to_string());
-    }
-
-    Ok(trimmed.to_string())
+    validate_trimmed_name(name, "Agent name", cmd_const::MAX_AGENT_NAME_LEN)
 }
 
 /// Validates system prompt

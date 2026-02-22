@@ -43,6 +43,7 @@ use crate::models::mcp::{
 use crate::security::serialize_for_query;
 use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
+use crate::tools::validation_helper::validate_trimmed_name;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
@@ -79,31 +80,9 @@ fn validate_mcp_server_id(id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// Validates an MCP server display name.
-///
-/// Rules:
-/// - Cannot be empty
-/// - Maximum 64 characters
-/// - No control characters (except newline)
+/// SA-017/OPT-7: Delegates to centralized validate_trimmed_name
 fn validate_mcp_server_display_name(name: &str) -> Result<String, String> {
-    let trimmed = name.trim();
-
-    if trimmed.is_empty() {
-        return Err("Server name cannot be empty".to_string());
-    }
-
-    if trimmed.len() > cmd_const::MAX_MCP_SERVER_NAME_LEN {
-        return Err(format!(
-            "Server name exceeds maximum length of {} characters",
-            cmd_const::MAX_MCP_SERVER_NAME_LEN
-        ));
-    }
-
-    if trimmed.chars().any(|c| c.is_control() && c != '\n') {
-        return Err("Server name cannot contain control characters".to_string());
-    }
-
-    Ok(trimmed.to_string())
+    validate_trimmed_name(name, "Server name", cmd_const::MAX_MCP_SERVER_NAME_LEN)
 }
 
 /// Validates an MCP server description.
