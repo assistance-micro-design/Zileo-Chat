@@ -25,7 +25,7 @@
 <script lang="ts">
 	import type { Workflow } from '$types/workflow';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
-	import { X } from '@lucide/svelte';
+	import { X, Pencil } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { tick } from 'svelte';
 
@@ -76,8 +76,8 @@
 	/**
 	 * Start inline editing
 	 */
-	function startEdit(event: MouseEvent): void {
-		event.stopPropagation();
+	function startEdit(event?: MouseEvent): void {
+		event?.stopPropagation();
 		editing = true;
 		editName = workflow.name;
 		tick().then(() => nameInputRef?.focus());
@@ -121,6 +121,9 @@
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			handleSelect();
+		} else if (event.key === 'F2') {
+			event.preventDefault();
+			startEdit();
 		}
 	}
 </script>
@@ -157,14 +160,25 @@
 	{:else}
 		<span class="workflow-name">{workflow.name}</span>
 	{/if}
-	<button
-		type="button"
-		class="workflow-delete"
-		onclick={handleDelete}
-		aria-label={$i18n('workflow_delete_arialabel').replace('{name}', workflow.name)}
-	>
-		<X size={14} />
-	</button>
+	<div class="item-actions">
+		<button
+			type="button"
+			class="action-btn edit-btn"
+			onclick={startEdit}
+			title={$i18n('workflow_rename')}
+			aria-label={$i18n('workflow_rename')}
+		>
+			<Pencil size={14} />
+		</button>
+		<button
+			type="button"
+			class="action-btn delete-btn"
+			onclick={handleDelete}
+			aria-label={$i18n('workflow_delete_arialabel').replace('{name}', workflow.name)}
+		>
+			<X size={14} />
+		</button>
+	</div>
 </div>
 
 <style>
@@ -220,8 +234,19 @@
 		outline: none;
 	}
 
-	.workflow-delete {
+	.item-actions {
+		display: flex;
+		align-items: center;
+		gap: 2px;
 		opacity: 0;
+		transition: opacity var(--transition-fast);
+	}
+
+	.workflow-item:hover .item-actions {
+		opacity: 1;
+	}
+
+	.action-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -234,11 +259,12 @@
 		transition: all var(--transition-fast);
 	}
 
-	.workflow-item:hover .workflow-delete {
-		opacity: 1;
+	.edit-btn:hover {
+		background: var(--color-accent-light);
+		color: var(--color-accent);
 	}
 
-	.workflow-delete:hover {
+	.delete-btn:hover {
 		background: var(--color-error-light);
 		color: var(--color-error);
 	}

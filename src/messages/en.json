@@ -624,6 +624,7 @@
   "workflow_load_retry": "Retry",
   "workflow_load_retrying": "Retrying...",
   "workflow_name_arialabel": "Workflow name",
+  "workflow_rename": "Rename",
   "workflow_delete_arialabel": "Delete {name}",
   "workflow_section_running": "Running",
   "workflow_section_recently_completed": "Recently completed",

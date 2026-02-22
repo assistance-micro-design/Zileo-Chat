@@ -624,6 +624,7 @@
   "workflow_load_retry": "Reessayer",
   "workflow_load_retrying": "Chargement...",
   "workflow_name_arialabel": "Nom du flux de travail",
+  "workflow_rename": "Renommer",
   "workflow_delete_arialabel": "Supprimer {name}",
   "workflow_section_running": "En cours",
   "workflow_section_recently_completed": "Termine recemment",
