@@ -46,7 +46,18 @@ Shows prompt summary with actions for edit and delete.
 
 	// Filter state
 	let searchQuery = $state('');
+	let debouncedQuery = $state('');
 	let categoryFilter = $state<PromptCategory | ''>('');
+
+	// SA-017/PERF-5: Debounce search like MemoryList (300ms)
+	let searchTimeout: ReturnType<typeof setTimeout>;
+	function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
+		searchQuery = event.currentTarget.value;
+		clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			debouncedQuery = searchQuery;
+		}, 300);
+	}
 
 	// Category labels mapping for i18n
 	const categoryI18nKeys: Record<PromptCategory, string> = {
@@ -67,12 +78,12 @@ Shows prompt summary with actions for edit and delete.
 		}))
 	]);
 
-	// Filtered prompts
+	// Filtered prompts (uses debouncedQuery for performance)
 	let filteredPrompts = $derived.by(() => {
 		let result = prompts;
 
-		if (searchQuery.trim()) {
-			const query = searchQuery.toLowerCase();
+		if (debouncedQuery.trim()) {
+			const query = debouncedQuery.toLowerCase();
 			result = result.filter(
 				(p) =>
 					p.name.toLowerCase().includes(query) ||
@@ -112,7 +123,7 @@ Shows prompt summary with actions for edit and delete.
 		<Input
 			placeholder={$i18n('prompts_search_placeholder')}
 			value={searchQuery}
-			oninput={(e) => (searchQuery = e.currentTarget.value)}
+			oninput={handleSearchInput}
 		/>
 		<Select
 			value={categoryFilter}
@@ -265,6 +276,7 @@ Shows prompt summary with actions for edit and delete.
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 		gap: var(--spacing-lg);
+		contain: layout style; /* SA-017/PERF-2: Isolate layout recalculations */
 	}
 
 	.prompt-card {

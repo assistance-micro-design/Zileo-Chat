@@ -749,6 +749,7 @@ Displays memories with filtering, search, and action buttons.
 	.virtual-table-body {
 		height: 400px;
 		overflow: hidden;
+		contain: layout style; /* SA-017/PERF-4: Isolate virtual list layout */
 	}
 
 	/* Virtual list wrapper styles - replicate library's positioning logic */
@@ -807,7 +808,7 @@ Displays memories with filtering, search, and action buttons.
 		gap: 0;
 		border-bottom: 1px solid var(--color-border-light);
 		font-size: var(--font-size-sm);
-		transition: background-color 0.15s ease;
+		/* SA-017/PERF-4: Removed transition - instant hover is more responsive during scroll */
 	}
 
 	.virtual-row:hover {

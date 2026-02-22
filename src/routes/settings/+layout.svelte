@@ -60,7 +60,7 @@ Each section is now a separate route for better performance and UX.
 		clearTimeout(scrollTimeout);
 		scrollTimeout = setTimeout(() => {
 			isScrolling = false;
-		}, 100);
+		}, 250); /* SA-017/PERF-3: Extended for momentum scroll in WebKit2GTK */
 	}
 
 	$effect(() => {
@@ -297,12 +297,9 @@ Each section is now a separate route for better performance and UX.
 	 * OPT-SCROLL-FIX: Disable pointer events during scroll
 	 * This prevents expensive hover state recalculations in WebKit2GTK
 	 * The technique is used by major apps like Twitter/X for smooth scrolling
+	 * SA-017/PERF-3: Removed :global(*) selector - parent is sufficient
 	 */
 	.content-area.is-scrolling {
 		pointer-events: none;
-	}
-
-	.content-area.is-scrolling :global(*) {
-		pointer-events: none !important;
 	}
 </style>
