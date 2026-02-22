@@ -28,6 +28,7 @@
 **All 4 CRITICAL findings are remediated.**
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
 **SA-015 ALL PHASES DONE: annotation cleanup + superseded code removal + dead getters + speculative code + final audit (22 items deleted, 6 tests migrated, 5 tests deleted, 171 remaining annotations all verified legitimate).**
+**SA-016 UX REMEDIATION: 7 phases DONE + 3 additional bug fixes. Phase 8 cancelled (architectural complexity, moved to Out of Scope).**
 
 ---
 
@@ -428,19 +429,61 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
+## SA-016: Agent Page UX Remediation
+
+**Document:** [SA-016-agent-page-ux-remediation.md](SA-016-agent-page-ux-remediation.md)
+
+### Phases 1-7 (DONE)
+
+| Phase | Problem | Status |
+|-------|---------|--------|
+| 1 | Double scroll (ChatContainer + MessageList) | **DONE** |
+| 2 | Filter labels in expanded sidebar | **DONE** |
+| 3 | Remove double filtering of workflows | **DONE** |
+| 4 | Markdown in streaming | **DONE** |
+| 5 | Rename discoverability (pencil icon + F2) | **DONE** |
+| 6 | Informative round separators | **DONE** |
+| 7 | Temporal grouping of workflows | **DONE** |
+
+### Phase 8 (CANCELLED)
+
+| Phase | Problem | Status | Reason |
+|-------|---------|--------|--------|
+| 8 | Progressive activity display + thinking in chat | **CANCELLED** | `isStillViewed()` guard prevents streaming state reset; fix attempt broke workflow switching. Moved to Out of Scope. |
+
+### Additional Bug Fixes
+
+| ID | Problem | Status |
+|----|---------|--------|
+| BF1 | Missing `rename_workflow` Tauri command | **DONE** |
+| BF2 | Space key not working in workflow rename input | **DONE** |
+| BF3 | ConfirmDeleteModal not using standard Modal | **DONE** |
+
+**Key changes:**
+- NEW `rename_workflow` command in `src-tauri/src/commands/workflow.rs` (UUID + name validation, parameterized query)
+- Registered `rename_workflow` in `src-tauri/src/main.rs`
+- `WorkflowItem.svelte`: `event.stopPropagation()` in `handleEditKeydown()`
+- `ConfirmDeleteModal.svelte`: rewritten to use standard `Modal` component
+- New TS tests: `activityUtils.test.ts` (6 tests), `dateGrouping.test.ts` (9 tests)
+- New Rust test: `rename_workflow` validation (1 test via cargo test)
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| cargo fmt --check | **PASS** | 2026-02-21 |
-| cargo clippy -- -D warnings | **PASS** | 2026-02-21, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-21, 932 tests passed (Phase 2: -4, Phase 5: -1 deleted) |
-| npm run lint | **PASS** | 2026-02-21, 0 errors |
-| npm run check | **PASS** | 2026-02-21, 0 errors 0 warnings |
-| npm run test | **PASS** | 2026-02-21, 265 tests passed |
+| cargo fmt --check | **PASS** | 2026-02-22 |
+| cargo clippy -- -D warnings | **PASS** | 2026-02-22, 0 warnings |
+| cargo test --lib | **PASS** | 2026-02-22, 932 tests passed |
+| npm run lint | **PASS** | 2026-02-22, 0 errors |
+| npm run check | **PASS** | 2026-02-22, 0 errors 0 warnings |
+| npm run test | **PASS** | 2026-02-22, 283 tests passed (+18 from SA-016) |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
+| Manual test: workflow rename | **PASS** | 2026-02-22, user confirmed rename + space key works |
+| Manual test: workflow delete modal | **PASS** | 2026-02-22, user confirmed standard modal design |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
 | Manual test: custom provider HTTP warning | **NOT RUN** | |
