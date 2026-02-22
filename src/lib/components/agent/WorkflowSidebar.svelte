@@ -83,12 +83,6 @@ Left sidebar for workflow management with search and CRUD operations.
 		onsearchchange?.(value);
 	}, 300);
 
-	// Filter workflows locally for display
-	const filteredWorkflows = $derived.by(() => {
-		if (!searchFilter.trim()) return workflows;
-		const filter = searchFilter.toLowerCase();
-		return workflows.filter((w) => w.name.toLowerCase().includes(filter));
-	});
 </script>
 
 <Sidebar bind:collapsed={collapsed}>
@@ -136,7 +130,7 @@ Left sidebar for workflow management with search and CRUD operations.
 
 	{#snippet nav(isCollapsed)}
 		<WorkflowList
-			workflows={filteredWorkflows}
+			{workflows}
 			selectedId={selectedWorkflowId ?? undefined}
 			collapsed={isCollapsed}
 			{error}
