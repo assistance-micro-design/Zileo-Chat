@@ -160,6 +160,9 @@
 				onclick={() => handleFilterChange(f.id)}
 			>
 				<IconComponent size={16} />
+				{#if !collapsed}
+					<span class="filter-label">{f.label}</span>
+				{/if}
 				{#if counts[f.id] > 0}
 					<span class="filter-badge">{counts[f.id]}</span>
 				{/if}
@@ -287,6 +290,11 @@
 		background: var(--color-accent);
 		border-color: var(--color-accent);
 		color: var(--color-text-inverse, white);
+	}
+
+	.filter-label {
+		font-size: var(--font-size-xs);
+		white-space: nowrap;
 	}
 
 	.filter-badge {
