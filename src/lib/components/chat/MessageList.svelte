@@ -26,7 +26,6 @@
 	import type { Message } from '$types/message';
 	import MessageBubble from './MessageBubble.svelte';
 	import MessageMetrics from './MessageMetrics.svelte';
-	import { tick } from 'svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -35,44 +34,21 @@
 	interface Props {
 		/** Array of messages to display */
 		messages: Message[];
-		/** Whether to auto-scroll to new messages */
-		autoScroll?: boolean;
 		/** Threshold for enabling performance optimizations (default: 50 messages) */
 		performanceThreshold?: number;
 	}
 
-	let { messages, autoScroll = true, performanceThreshold = 50 }: Props = $props();
-
-	let containerRef: HTMLDivElement;
+	let { messages, performanceThreshold = 50 }: Props = $props();
 
 	/**
 	 * Enable performance mode for long lists
 	 */
 	const enablePerformanceMode = $derived(messages.length > performanceThreshold);
-
-	/**
-	 * Scroll to the bottom of the message list
-	 */
-	async function scrollToBottom(): Promise<void> {
-		if (!autoScroll || !containerRef) return;
-		await tick();
-		containerRef.scrollTop = containerRef.scrollHeight;
-	}
-
-	/**
-	 * Watch for new messages and auto-scroll
-	 */
-	$effect(() => {
-		if (messages.length > 0) {
-			scrollToBottom();
-		}
-	});
 </script>
 
 <div
 	class="message-list"
 	class:performance-mode={enablePerformanceMode}
-	bind:this={containerRef}
 	role="log"
 	aria-live="polite"
 	aria-label={$i18n('chat_messages_arialabel')}
@@ -98,10 +74,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
-		flex: 1;
-		overflow-y: auto;
 		padding: var(--spacing-lg);
-		scroll-behavior: smooth;
 	}
 
 	/* Performance mode: enable CSS containment for long lists */
@@ -141,10 +114,6 @@
 
 	/* Respect reduced motion preference */
 	@media (prefers-reduced-motion: reduce) {
-		.message-list {
-			scroll-behavior: auto;
-		}
-
 		.message-wrapper {
 			animation: none;
 		}
