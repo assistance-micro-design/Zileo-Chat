@@ -123,6 +123,9 @@ pub struct LLMConfig {
     pub temperature: f32,
     /// Maximum tokens to generate
     pub max_tokens: usize,
+    /// Whether the model is a reasoning/thinking model (from DB)
+    #[serde(default)]
+    pub is_reasoning: bool,
 }
 
 /// Agent configuration for creation (without ID, timestamps)
@@ -275,6 +278,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 temperature: 0.7,
                 max_tokens: 4096,
+                is_reasoning: false,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
@@ -300,6 +304,7 @@ mod tests {
             model: "llama3".to_string(),
             temperature: 0.5,
             max_tokens: 2000,
+            is_reasoning: false,
         };
 
         let json = serde_json::to_string(&llm_config).unwrap();
@@ -322,6 +327,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 temperature: 0.7,
                 max_tokens: 4096,
+                is_reasoning: false,
             },
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
@@ -345,6 +351,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 temperature: 0.7,
                 max_tokens: 4096,
+                is_reasoning: false,
             },
             tools: vec![
                 "MemoryTool".to_string(),
@@ -375,6 +382,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 temperature: 0.7,
                 max_tokens: 4096,
+                is_reasoning: false,
             },
             tools: vec![
                 "MemoryTool".to_string(),

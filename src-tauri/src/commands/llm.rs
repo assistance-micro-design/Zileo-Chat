@@ -149,17 +149,6 @@ pub async fn set_default_model(
         .parse()
         .map_err(|_| format!("Invalid provider: {}", provider))?;
 
-    // Validate model is in available list
-    let available = state
-        .llm_manager
-        .get_available_models(provider_type.clone());
-    if !available.contains(&model) {
-        return Err(format!(
-            "Model '{}' not in available models for {}: {:?}",
-            model, provider, available
-        ));
-    }
-
     state
         .llm_manager
         .set_default_model(provider_type.clone(), &model)
@@ -254,6 +243,7 @@ pub async fn test_llm_completion(
                 model.as_deref(),
                 0.7,
                 1000,
+                false,
             )
             .await
     } else {
@@ -265,6 +255,7 @@ pub async fn test_llm_completion(
                 model.as_deref(),
                 0.7,
                 1000,
+                false,
             )
             .await
     };

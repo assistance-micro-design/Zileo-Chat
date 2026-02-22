@@ -224,22 +224,6 @@ where
     deserializer.deserialize_any(ContentVisitor)
 }
 
-/// Available Mistral models
-pub const MISTRAL_MODELS: &[&str] = &[
-    "mistral-large-latest",
-    "mistral-medium-latest",
-    "mistral-small-latest",
-    "magistral-small-latest",
-    "magistral-medium-latest",
-    "open-mistral-7b",
-    "open-mixtral-8x7b",
-    "open-mixtral-8x22b",
-    "codestral-latest",
-];
-
-/// Default Mistral model
-pub const DEFAULT_MISTRAL_MODEL: &str = "mistral-large-latest";
-
 /// Mistral AI provider implementation
 pub struct MistralProvider {
     /// Mistral client (wrapped in RwLock for interior mutability)
@@ -252,9 +236,6 @@ pub struct MistralProvider {
 
 /// Mistral API base URL
 const MISTRAL_API_URL: &str = "https://api.mistral.ai/v1/chat/completions";
-
-/// Models that are reasoning models and require custom HTTP handling
-const REASONING_MODELS: &[&str] = &["magistral-small-latest", "magistral-medium-latest"];
 
 #[allow(dead_code)]
 impl MistralProvider {
@@ -314,13 +295,6 @@ impl MistralProvider {
     /// Gets the API key if configured
     pub async fn get_api_key(&self) -> Option<String> {
         self.api_key.read().await.clone()
-    }
-
-    /// Checks if a model is a reasoning model (Magistral)
-    fn is_reasoning_model(model: &str) -> bool {
-        REASONING_MODELS
-            .iter()
-            .any(|m| model.contains(m) || m.contains(model))
     }
 
     /// Makes a direct HTTP call to Mistral API
@@ -589,11 +563,11 @@ impl LLMProvider for MistralProvider {
     }
 
     fn available_models(&self) -> Vec<String> {
-        MISTRAL_MODELS.iter().map(|s| s.to_string()).collect()
+        Vec::new()
     }
 
     fn default_model(&self) -> String {
-        DEFAULT_MISTRAL_MODEL.to_string()
+        String::new()
     }
 
     fn is_configured(&self) -> bool {
@@ -609,7 +583,7 @@ impl LLMProvider for MistralProvider {
         skip(self, prompt, system_prompt),
         fields(
             provider = "mistral",
-            model = %model.unwrap_or(DEFAULT_MISTRAL_MODEL),
+            model = %model.unwrap_or("unknown"),
             prompt_len = prompt.len()
         )
     )]
@@ -620,12 +594,14 @@ impl LLMProvider for MistralProvider {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError> {
-        let model_name = model.unwrap_or(DEFAULT_MISTRAL_MODEL);
+        let model_name = model.unwrap_or("mistral-large-latest");
 
-        // Use custom HTTP client for reasoning models (Magistral)
-        // because rig-core doesn't support their response format
-        if Self::is_reasoning_model(model_name) {
+        // Use custom HTTP client for reasoning models (e.g. Magistral)
+        // because rig-core doesn't support their response format.
+        // is_reasoning comes from the DB (set by user when creating the model).
+        if is_reasoning {
             debug!(
                 model = model_name,
                 "Using custom HTTP client for reasoning model"
@@ -692,7 +668,7 @@ impl LLMProvider for MistralProvider {
         skip(self, prompt, system_prompt),
         fields(
             provider = "mistral",
-            model = %model.unwrap_or(DEFAULT_MISTRAL_MODEL)
+            model = %model.unwrap_or("unknown")
         )
     )]
     async fn complete_stream(
@@ -702,11 +678,19 @@ impl LLMProvider for MistralProvider {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
         // For now, we'll simulate streaming by chunking the non-streaming response
         // True streaming will require updates to rig-core's streaming API
         let response = self
-            .complete(prompt, system_prompt, model, temperature, max_tokens)
+            .complete(
+                prompt,
+                system_prompt,
+                model,
+                temperature,
+                max_tokens,
+                is_reasoning,
+            )
             .await?;
 
         Ok(simulate_streaming(response.content, None, None))
@@ -718,31 +702,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mistral_models() {
-        assert!(MISTRAL_MODELS.contains(&"mistral-large-latest"));
-        assert!(MISTRAL_MODELS.contains(&"mistral-small-latest"));
-        assert!(MISTRAL_MODELS.len() >= 5);
-    }
-
-    #[test]
     fn test_mistral_provider_new() {
         let provider = MistralProvider::default();
         assert_eq!(provider.provider_type(), ProviderType::Mistral);
-        assert_eq!(provider.default_model(), DEFAULT_MISTRAL_MODEL);
     }
 
     #[test]
-    fn test_mistral_provider_default() {
-        let provider = MistralProvider::default();
-        assert_eq!(provider.provider_type(), ProviderType::Mistral);
-    }
-
-    #[test]
-    fn test_mistral_available_models() {
+    fn test_mistral_available_models_empty() {
+        // Models are now managed in DB, not hardcoded
         let provider = MistralProvider::default();
         let models = provider.available_models();
-        assert!(!models.is_empty());
-        assert!(models.contains(&"mistral-large-latest".to_string()));
+        assert!(models.is_empty());
+    }
+
+    #[test]
+    fn test_mistral_default_model_empty() {
+        // Default model is now managed in DB, not hardcoded
+        let provider = MistralProvider::default();
+        assert!(provider.default_model().is_empty());
     }
 
     #[tokio::test]
@@ -783,30 +760,15 @@ mod tests {
     async fn test_mistral_provider_complete_not_configured() {
         let provider = MistralProvider::default();
 
-        let result = provider.complete("Hello", None, None, 0.7, 1000).await;
+        let result = provider
+            .complete("Hello", None, None, 0.7, 1000, false)
+            .await;
 
         assert!(result.is_err());
         match result {
             Err(LLMError::NotConfigured(_)) => {}
             _ => panic!("Expected NotConfigured error"),
         }
-    }
-
-    #[test]
-    fn test_is_reasoning_model() {
-        // Reasoning models (Magistral)
-        assert!(MistralProvider::is_reasoning_model(
-            "magistral-small-latest"
-        ));
-        assert!(MistralProvider::is_reasoning_model(
-            "magistral-medium-latest"
-        ));
-
-        // Standard models
-        assert!(!MistralProvider::is_reasoning_model("mistral-large-latest"));
-        assert!(!MistralProvider::is_reasoning_model("mistral-small-latest"));
-        assert!(!MistralProvider::is_reasoning_model("codestral-latest"));
-        assert!(!MistralProvider::is_reasoning_model("open-mistral-7b"));
     }
 
     #[test]

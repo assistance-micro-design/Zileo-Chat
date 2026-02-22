@@ -43,8 +43,8 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             active_provider: ProviderType::Ollama, // Default to local
-            mistral_model: super::mistral::DEFAULT_MISTRAL_MODEL.to_string(),
-            ollama_model: super::ollama::DEFAULT_OLLAMA_MODEL.to_string(),
+            mistral_model: String::new(),
+            ollama_model: String::new(),
             ollama_url: super::ollama::DEFAULT_OLLAMA_URL.to_string(),
         }
     }
@@ -423,6 +423,7 @@ impl ProviderManager {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError> {
         let (provider_type, model_to_use) = {
             let config = self.config.read().await;
@@ -463,7 +464,14 @@ impl ProviderManager {
                         let provider = mistral.clone();
                         async move {
                             provider
-                                .complete(&p, sp.as_deref(), Some(&m), temperature, max_tokens)
+                                .complete(
+                                    &p,
+                                    sp.as_deref(),
+                                    Some(&m),
+                                    temperature,
+                                    max_tokens,
+                                    is_reasoning,
+                                )
                                 .await
                         }
                     },
@@ -481,7 +489,14 @@ impl ProviderManager {
                         let provider = ollama.clone();
                         async move {
                             provider
-                                .complete(&p, sp.as_deref(), Some(&m), temperature, max_tokens)
+                                .complete(
+                                    &p,
+                                    sp.as_deref(),
+                                    Some(&m),
+                                    temperature,
+                                    max_tokens,
+                                    is_reasoning,
+                                )
                                 .await
                         }
                     },
@@ -528,6 +543,7 @@ impl ProviderManager {
     ///
     /// This method wraps the provider completion with retry logic (OPT-LLM-4)
     /// and circuit breaker protection (OPT-LLM-6).
+    #[allow(clippy::too_many_arguments)]
     pub async fn complete_with_provider(
         &self,
         provider: ProviderType,
@@ -536,6 +552,7 @@ impl ProviderManager {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError> {
         // Check circuit breaker before making request (OPT-LLM-6)
         self.check_circuit_breaker(provider.clone()).await?;
@@ -555,8 +572,15 @@ impl ProviderManager {
                         let m = model_owned.clone();
                         let prov = mistral.clone();
                         async move {
-                            prov.complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
-                                .await
+                            prov.complete(
+                                &p,
+                                sp.as_deref(),
+                                m.as_deref(),
+                                temperature,
+                                max_tokens,
+                                is_reasoning,
+                            )
+                            .await
                         }
                     },
                     &self.retry_config,
@@ -572,8 +596,15 @@ impl ProviderManager {
                         let m = model_owned.clone();
                         let prov = ollama.clone();
                         async move {
-                            prov.complete(&p, sp.as_deref(), m.as_deref(), temperature, max_tokens)
-                                .await
+                            prov.complete(
+                                &p,
+                                sp.as_deref(),
+                                m.as_deref(),
+                                temperature,
+                                max_tokens,
+                                is_reasoning,
+                            )
+                            .await
                         }
                     },
                     &self.retry_config,
@@ -751,6 +782,7 @@ impl ProviderManager {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<tokio::sync::mpsc::Receiver<Result<String, LLMError>>, LLMError> {
         let (provider_type, model_to_use) = {
             let config = self.config.read().await;
@@ -777,6 +809,7 @@ impl ProviderManager {
                         Some(&model_to_use),
                         temperature,
                         max_tokens,
+                        is_reasoning,
                     )
                     .await
             }
@@ -788,6 +821,7 @@ impl ProviderManager {
                         Some(&model_to_use),
                         temperature,
                         max_tokens,
+                        is_reasoning,
                     )
                     .await
             }
@@ -849,16 +883,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_available_models() {
+    async fn test_get_available_models_empty() {
+        // Models are now managed in DB, not hardcoded in providers
         let manager = ProviderManager::new();
 
         let mistral_models = manager.get_available_models(ProviderType::Mistral);
-        assert!(!mistral_models.is_empty());
-        assert!(mistral_models.contains(&"mistral-large-latest".to_string()));
+        assert!(mistral_models.is_empty());
 
         let ollama_models = manager.get_available_models(ProviderType::Ollama);
-        assert!(!ollama_models.is_empty());
-        assert!(ollama_models.contains(&"llama3.2".to_string()));
+        assert!(ollama_models.is_empty());
     }
 
     #[tokio::test]
@@ -968,7 +1001,9 @@ mod tests {
     async fn test_complete_no_provider_configured() {
         let manager = ProviderManager::new();
 
-        let result = manager.complete("Hello", None, None, 0.7, 1000).await;
+        let result = manager
+            .complete("Hello", None, None, 0.7, 1000, false)
+            .await;
 
         assert!(result.is_err());
     }

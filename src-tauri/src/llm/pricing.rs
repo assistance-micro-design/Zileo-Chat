@@ -73,28 +73,6 @@ pub fn calculate_cost(
     (total * 1_000_000.0).round() / 1_000_000.0
 }
 
-/// Reference pricing for Mistral models (November 2025)
-///
-/// Note: Prices are subject to change. Users should verify current pricing
-/// at https://mistral.ai/technology/#pricing
-#[allow(dead_code)] // Reference constants for cost calculations
-pub mod mistral_pricing {
-    /// Mistral Large pricing
-    pub const LARGE_INPUT_PER_MTOK: f64 = 2.0;
-    pub const LARGE_OUTPUT_PER_MTOK: f64 = 6.0;
-
-    /// Mistral Small pricing
-    pub const SMALL_INPUT_PER_MTOK: f64 = 0.2;
-    pub const SMALL_OUTPUT_PER_MTOK: f64 = 0.6;
-
-    /// Codestral pricing
-    pub const CODESTRAL_INPUT_PER_MTOK: f64 = 0.2;
-    pub const CODESTRAL_OUTPUT_PER_MTOK: f64 = 0.6;
-
-    /// Mistral Embed pricing (input only)
-    pub const EMBED_INPUT_PER_MTOK: f64 = 0.1;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,23 +128,5 @@ mod tests {
         // Output: (50/1M)*6 = 0.0003
         // Total: 0.0005
         assert!((cost - 0.0005).abs() < 0.000001);
-    }
-
-    #[test]
-    fn test_reference_pricing_values() {
-        // Verify reference pricing constants are reasonable
-        let large_input = mistral_pricing::LARGE_INPUT_PER_MTOK;
-        let large_output = mistral_pricing::LARGE_OUTPUT_PER_MTOK;
-        let small_input = mistral_pricing::SMALL_INPUT_PER_MTOK;
-
-        assert!(large_input > 0.0, "Large input pricing should be positive");
-        assert!(
-            large_output > large_input,
-            "Output should cost more than input"
-        );
-        assert!(
-            small_input < large_input,
-            "Small model should be cheaper than large"
-        );
     }
 }

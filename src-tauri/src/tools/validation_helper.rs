@@ -83,7 +83,11 @@ pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
 ///
 /// # Returns
 /// The trimmed name or an error message
-pub fn validate_trimmed_name(value: &str, field_name: &str, max_len: usize) -> Result<String, String> {
+pub fn validate_trimmed_name(
+    value: &str,
+    field_name: &str,
+    max_len: usize,
+) -> Result<String, String> {
     let trimmed = value.trim();
 
     if trimmed.is_empty() {

@@ -83,6 +83,8 @@ export interface LLMConfig {
   temperature: number;
   /** Maximum tokens to generate */
   max_tokens: number;
+  /** Whether the model is a reasoning/thinking model (from DB) */
+  is_reasoning: boolean;
 }
 
 /**

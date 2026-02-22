@@ -332,6 +332,7 @@ impl SpawnAgentTool {
                 model: model.unwrap_or(&parent_config.llm.model).to_string(),
                 temperature: parent_config.llm.temperature,
                 max_tokens: parent_config.llm.max_tokens,
+                is_reasoning: parent_config.llm.is_reasoning,
             },
             tools: sub_agent_tools,
             mcp_servers: mcp_servers.unwrap_or_else(|| parent_config.mcp_servers.clone()),

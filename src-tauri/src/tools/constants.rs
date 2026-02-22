@@ -254,6 +254,4 @@ pub mod commands {
     // ----- Models -----
     /// Maximum length for model IDs
     pub const MAX_MODEL_ID_LEN: usize = 128;
-    /// Valid model providers (lowercase)
-    pub const VALID_MODEL_PROVIDERS: &[&str] = &["mistral", "ollama"];
 }

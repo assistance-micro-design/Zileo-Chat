@@ -136,6 +136,7 @@ mod tests {
                 model: "simple".to_string(),
                 temperature: 0.7,
                 max_tokens: 2000,
+                is_reasoning: false,
             },
             tools: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_servers: vec!["mcp_server1".to_string()],

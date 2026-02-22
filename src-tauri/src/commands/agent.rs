@@ -34,9 +34,9 @@ use crate::state::AppState;
 use crate::tools::constants::commands as cmd_const;
 use crate::tools::context::AgentToolContext;
 use crate::tools::registry::TOOL_REGISTRY;
+use crate::tools::validation_helper::validate_trimmed_name;
 use std::sync::Arc;
 use tauri::State;
-use crate::tools::validation_helper::validate_trimmed_name;
 use tracing::{error, info, instrument, warn};
 
 /// SA-017/OPT-7: Delegates to centralized validate_trimmed_name
@@ -102,6 +102,7 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
         model: model.to_string(),
         temperature: llm.temperature,
         max_tokens: llm.max_tokens,
+        is_reasoning: llm.is_reasoning,
     })
 }
 
@@ -576,6 +577,7 @@ mod tests {
                 model: "test".to_string(),
                 temperature: 0.7,
                 max_tokens: 1000,
+                is_reasoning: false,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
@@ -608,6 +610,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 temperature: 0.5,
                 max_tokens: 2000,
+                is_reasoning: false,
             },
             tools: vec!["tool_a".to_string(), "tool_b".to_string()],
             mcp_servers: vec!["serena".to_string()],
@@ -652,6 +655,7 @@ mod tests {
                 model: "llama3".to_string(),
                 temperature: 0.8,
                 max_tokens: 4096,
+                is_reasoning: false,
             },
             tools: vec![],
             mcp_servers: vec![],
@@ -698,6 +702,7 @@ mod tests {
                     model: "test".to_string(),
                     temperature: 0.7,
                     max_tokens: 1000,
+                    is_reasoning: false,
                 },
                 tools: vec![],
                 mcp_servers: vec![],

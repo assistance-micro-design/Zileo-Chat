@@ -458,6 +458,7 @@ async fn main() -> anyhow::Result<()> {
                         model: llm_value["model"].as_str().unwrap_or("mistral-large-latest").to_string(),
                         temperature: llm_value["temperature"].as_f64().unwrap_or(0.7) as f32,
                         max_tokens: llm_value["max_tokens"].as_u64().unwrap_or(4096) as usize,
+                        is_reasoning: llm_value["is_reasoning"].as_bool().unwrap_or(false),
                     };
 
                     let tools: Vec<String> = row["tools"]

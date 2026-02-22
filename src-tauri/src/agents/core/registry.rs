@@ -169,6 +169,7 @@ mod tests {
                         model: "test-model".to_string(),
                         temperature: 0.7,
                         max_tokens: 100,
+                        is_reasoning: false,
                     },
                     tools: vec![],
                     mcp_servers: vec![],

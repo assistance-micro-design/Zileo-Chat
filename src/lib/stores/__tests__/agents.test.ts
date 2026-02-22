@@ -67,7 +67,8 @@ describe('Agent Store', () => {
 			provider: 'Mistral',
 			model: 'mistral-large-latest',
 			temperature: 0.7,
-			max_tokens: 4096
+			max_tokens: 4096,
+			is_reasoning: false
 		},
 		tools: ['MemoryTool', 'TodoTool'],
 		mcp_servers: ['serena'],
@@ -146,7 +147,8 @@ describe('Agent Store', () => {
 					provider: 'Mistral',
 					model: 'mistral-large-latest',
 					temperature: 0.7,
-					max_tokens: 4096
+					max_tokens: 4096,
+					is_reasoning: false
 				},
 				tools: ['MemoryTool'],
 				mcp_servers: [],
@@ -173,7 +175,8 @@ describe('Agent Store', () => {
 					provider: 'Mistral',
 					model: 'mistral-large-latest',
 					temperature: 0.7,
-					max_tokens: 4096
+					max_tokens: 4096,
+					is_reasoning: false
 				},
 				tools: [],
 				mcp_servers: [],

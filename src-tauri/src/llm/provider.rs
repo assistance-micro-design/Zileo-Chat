@@ -170,6 +170,7 @@ pub trait LLMProvider: Send + Sync {
     /// * `model` - Model to use (None for default)
     /// * `temperature` - Sampling temperature (0.0-1.0)
     /// * `max_tokens` - Maximum tokens to generate
+    /// * `is_reasoning` - Whether the model is a reasoning/thinking model (from DB)
     ///
     /// # Returns
     /// LLMResponse with the generated content and metrics
@@ -180,6 +181,7 @@ pub trait LLMProvider: Send + Sync {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError>;
 
     /// Generates a streaming completion
@@ -198,6 +200,7 @@ pub trait LLMProvider: Send + Sync {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
+        is_reasoning: bool,
     ) -> Result<tokio::sync::mpsc::Receiver<Result<String, LLMError>>, LLMError>;
 }
 

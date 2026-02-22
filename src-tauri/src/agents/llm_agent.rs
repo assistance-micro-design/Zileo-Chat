@@ -799,6 +799,7 @@ impl Agent for LLMAgent {
                 Some(&self.config.llm.model),
                 self.config.llm.temperature,
                 self.config.llm.max_tokens,
+                self.config.llm.is_reasoning,
             )
             .await;
 
@@ -1495,6 +1496,7 @@ mod tests {
                 model: "llama3.2".to_string(),
                 temperature: 0.7,
                 max_tokens: 2000,
+                is_reasoning: false,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
