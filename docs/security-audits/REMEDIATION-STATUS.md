@@ -30,7 +30,7 @@
 **SA-015 ALL PHASES DONE: annotation cleanup + superseded code removal + dead getters + speculative code + final audit (22 items deleted, 6 tests migrated, 5 tests deleted, 171 remaining annotations all verified legitimate).**
 **SA-016 UX REMEDIATION: 7 phases DONE + 3 additional bug fixes. Phase 8 cancelled (architectural complexity, moved to Out of Scope).**
 **SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
-**SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs + pricing dead code removed, is_reasoning propagation from DB). P2/P3 in progress.**
+**SA-018 HARDCODED ELEMENTS: ALL 3 PHASES DONE. P1: model IDs + pricing dead code removed, is_reasoning from DB. P2: DEFAULT_OLLAMA_URL centralized. P3: 27 i18n keys added.**
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
 
 ---
@@ -541,9 +541,24 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Net change**: 22 files, -376 lines, +148 lines. Tests: 1918 Rust + 283 TS passing.
 
-### P2: URLs - TODO
+### P2: Centralize DEFAULT_OLLAMA_URL - DONE
 
-### P3: i18n - TODO
+| Action | Files | Details |
+|--------|-------|---------|
+| Removed duplicate constant | embedding.rs | Import from ollama.rs via `use super::ollama::DEFAULT_OLLAMA_URL` |
+| Re-exported constant | llm/mod.rs | `pub use ollama::DEFAULT_OLLAMA_URL` |
+| Replaced hardcoded URL | llm_models.rs | `ProviderSettings::default_for()` uses constant |
+| Added sync comment | llm.ts | Points to Rust source of truth |
+
+### P3: i18n Messages Settings - DONE
+
+| Action | Files | Details |
+|--------|-------|---------|
+| Added 27 i18n keys | en.json, fr.json | Prefixed with `settings_` |
+| APIKeysSection | 6 strings | Validation, save/delete success/error, confirm |
+| LLMSection | 12 strings | Load, CRUD success/error, confirm, set default + reuse `providers_all` |
+| MCPSection | 6 strings | Load, save, delete, toggle errors, confirm, test title |
+| CustomProviderForm | 1 string | Base URL help text |
 
 ---
 
