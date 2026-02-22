@@ -41,6 +41,7 @@
 	import type { WorkflowActivityEvent, ActivityFilter } from '$types/activity';
 	import { ACTIVITY_FILTERS } from '$types/activity';
 	import { countActivitiesByType } from '$lib/utils/activity';
+	import { computeRoundMetadata, formatRoundSeparator } from '$lib/utils/activityUtils';
 	import ActivityItem from './ActivityItem.svelte';
 	import { Activity, Wrench, Bot, Brain, ListTodo, Loader2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -123,19 +124,25 @@
 	 */
 	type FeedItem =
 		| { kind: 'activity'; data: WorkflowActivityEvent }
-		| { kind: 'separator'; messageId: string };
+		| { kind: 'separator'; messageId: string; round: number; agentName?: string; count: number };
 
 	/**
 	 * Group activities by messageId and produce a flat list with separator items
 	 */
+	const roundMetadata = $derived(computeRoundMetadata(activities));
+
 	const feedItems = $derived.by(() => {
+		const roundMap = new Map(roundMetadata.map((r) => [r.messageId, r]));
 		const items: FeedItem[] = [];
 		let lastMessageId: string | null = null;
 
 		for (const activity of activities) {
 			const msgId = activity.metadata?.messageId ?? null;
 			if (msgId && lastMessageId !== null && msgId !== lastMessageId) {
-				items.push({ kind: 'separator', messageId: msgId });
+				const meta = roundMap.get(msgId);
+				if (meta) {
+					items.push({ kind: 'separator', ...meta });
+				}
 			}
 			items.push({ kind: 'activity', data: activity });
 			if (msgId) lastMessageId = msgId;
@@ -197,7 +204,7 @@
 					>
 						{#snippet renderItem(item)}
 							{#if item.kind === "separator"}
-								<div class="round-separator">Round</div>
+								<div class="round-separator">{formatRoundSeparator(item.round, item.agentName, item.count)}</div>
 							{:else}
 								<ActivityItem activity={item.data} />
 							{/if}
@@ -215,7 +222,7 @@
 				<div class="standard-list-container">
 					{#each feedItems as item (item.kind === "activity" ? item.data.id : "sep-" + item.messageId)}
 						{#if item.kind === "separator"}
-							<div class="round-separator">Round</div>
+							<div class="round-separator">{formatRoundSeparator(item.round, item.agentName, item.count)}</div>
 						{:else}
 							<ActivityItem activity={item.data} />
 						{/if}
