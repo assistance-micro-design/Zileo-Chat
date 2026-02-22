@@ -71,7 +71,7 @@ Manages API key configuration modal for LLM providers.
 	 */
 	async function handleSaveApiKey(): Promise<void> {
 		if (!apiKey.trim()) {
-			message = { type: 'error', text: 'API key cannot be empty' };
+			message = { type: 'error', text: $i18n('settings_api_key_empty') };
 			return;
 		}
 
@@ -92,10 +92,10 @@ Manages API key configuration modal for LLM providers.
 			});
 			apiKey = '';
 			onReload();
-			message = { type: 'success', text: 'API key saved securely' };
+			message = { type: 'success', text: $i18n('settings_api_key_saved') };
 			onclose();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to save: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_api_key_save_failed', { error: getErrorMessage(err) }) };
 		} finally {
 			saving = false;
 		}
@@ -105,7 +105,7 @@ Manages API key configuration modal for LLM providers.
 	 * Deletes API key for the provider
 	 */
 	async function handleDeleteApiKey(): Promise<void> {
-		if (!confirm(`Are you sure you want to delete the API key for ${provider}?`)) {
+		if (!confirm($i18n('settings_api_key_delete_confirm', { provider }))) {
 			return;
 		}
 
@@ -116,9 +116,9 @@ Manages API key configuration modal for LLM providers.
 			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 			await invoke('delete_api_key', { provider: providerName });
 			onReload();
-			message = { type: 'success', text: 'API key deleted' };
+			message = { type: 'success', text: $i18n('settings_api_key_deleted') };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_api_key_delete_failed', { error: getErrorMessage(err) }) };
 		} finally {
 			saving = false;
 		}

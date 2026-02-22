@@ -67,7 +67,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to load MCP servers: ${getErrorMessage(err)}`);
+			mcpState = setMCPError(mcpState, $i18n('settings_mcp_load_failed', { error: getErrorMessage(err) }));
 		}
 	}
 
@@ -104,7 +104,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			}
 			mcpModal.close();
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to save server: ${getErrorMessage(err)}`);
+			mcpState = setMCPError(mcpState, $i18n('settings_mcp_save_failed', { error: getErrorMessage(err) }));
 		} finally {
 			mcpSaving = false;
 		}
@@ -114,7 +114,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	 * Deletes an MCP server
 	 */
 	async function handleDeleteServer(server: MCPServer): Promise<void> {
-		if (!confirm(`Are you sure you want to delete "${server.name}"?`)) {
+		if (!confirm($i18n('settings_mcp_delete_confirm', { name: server.name }))) {
 			return;
 		}
 
@@ -122,7 +122,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			await deleteServer(server.id);
 			mcpState = removeServer(mcpState, server.id);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to delete server: ${getErrorMessage(err)}`);
+			mcpState = setMCPError(mcpState, $i18n('settings_mcp_delete_failed', { error: getErrorMessage(err) }));
 		}
 	}
 
@@ -197,7 +197,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			}
 			mcpState = updateServer(mcpState, server.id, updatedServer);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, `Failed to toggle server: ${getErrorMessage(err)}`);
+			mcpState = setMCPError(mcpState, $i18n('settings_mcp_toggle_failed', { error: getErrorMessage(err) }));
 		}
 	}
 
@@ -303,7 +303,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 <!-- MCP Server Test Modal -->
 <Modal
 	open={showTestModal}
-	title={`Test: ${testingServerConfig?.name ?? 'Server'}`}
+	title={$i18n('settings_mcp_test_title', { name: testingServerConfig?.name ?? 'Server' })}
 	onclose={closeTestModal}
 >
 	{#snippet body()}

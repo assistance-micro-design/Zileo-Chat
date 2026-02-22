@@ -99,7 +99,7 @@
 		placeholder="https://api.routerlab.ch/v1"
 		bind:value={baseUrl}
 		disabled={saving}
-		help="OpenAI-compatible API endpoint (without /chat/completions)"
+		help={$i18n('settings_custom_provider_base_url_help')}
 		required
 	/>
 

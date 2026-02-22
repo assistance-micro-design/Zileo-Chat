@@ -6,7 +6,7 @@
 - **Branch**: security/audit-remediation-tdd
 - **Stack**: SvelteKit 2.49.1 + Svelte 5.49.1 | Rust 1.93.0 + Tauri 2.10.2 | SurrealDB 2.5.0
 - **Impact**: Maintenabilite / i18n / Code mort
-- **Status**: EN COURS (P1 FAIT)
+- **Status**: EN COURS (P1+P2 FAIT)
 
 ## Resume Executif
 
@@ -204,7 +204,7 @@ Le dossier `.zileo` est hardcode dans `$HOME` au lieu de suivre les conventions 
 | Phase | Description | Effort | Status |
 |-------|-------------|--------|--------|
 | P1 | Supprimer model IDs hardcodes (Rust) | 3h | FAIT |
-| P2 | Centraliser DEFAULT_OLLAMA_URL | 20min | A FAIRE |
+| P2 | Centraliser DEFAULT_OLLAMA_URL | 20min | FAIT |
 | P3 | i18n messages settings | 1.5h | A FAIRE |
 | P4 | Chemin .zileo (XDG) | REPORTE | - |
 
@@ -234,9 +234,10 @@ npm run lint && npm run check && npm run test
 - [x] Mettre a jour tests (22 fichiers, -376/+148 lignes)
 - [x] Propager is_reasoning: bool dans LLMConfig (agent.rs, agent.ts, AgentForm.svelte, main.rs, spawn_agent.rs)
 
-### P2: URLs
-- [ ] Centraliser DEFAULT_OLLAMA_URL (embedding.rs, llm_models.rs → import)
-- [ ] Ajouter commentaire sync dans llm.ts
+### P2: URLs - FAIT (commit 7c4be8c)
+- [x] Centraliser DEFAULT_OLLAMA_URL (embedding.rs -> import from ollama.rs, llm_models.rs -> import from llm mod)
+- [x] Re-export DEFAULT_OLLAMA_URL dans llm/mod.rs
+- [x] Ajouter commentaire sync dans llm.ts
 
 ### P3: i18n
 - [ ] Ajouter cles en.json / fr.json

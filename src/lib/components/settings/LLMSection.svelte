@@ -78,7 +78,7 @@ Combines Providers and Models sections.
 
 	/** Provider filter options for models section (dynamic from providerList) */
 	const modelsProviderOptions: SelectOption[] = $derived([
-		{ value: 'all', label: 'All Providers' },
+		{ value: 'all', label: $i18n('providers_all') },
 		...providerList.map((p) => ({ value: p.id, label: p.displayName }))
 	]);
 
@@ -95,7 +95,7 @@ Combines Providers and Models sections.
 			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
-			llmState = setLLMError(llmState, `Failed to load LLM data: ${getErrorMessage(err)}`);
+			llmState = setLLMError(llmState, $i18n('settings_llm_load_failed', { error: getErrorMessage(err) }));
 		}
 	}
 
@@ -108,10 +108,10 @@ Combines Providers and Models sections.
 		}
 		try {
 			await deleteCustomProvider(providerInfo.id);
-			message = { type: 'success', text: `Provider "${providerInfo.displayName}" deleted` };
+			message = { type: 'success', text: $i18n('settings_provider_deleted', { name: providerInfo.displayName }) };
 			await loadLLMData();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete provider: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }) };
 		}
 	}
 
@@ -138,15 +138,15 @@ Combines Providers and Models sections.
 			if (modelModal.mode === 'create') {
 				const model = await createModel(data as CreateModelRequest);
 				llmState = addModelToState(llmState, model);
-				message = { type: 'success', text: `Model "${model.name}" created successfully` };
+				message = { type: 'success', text: $i18n('settings_model_created', { name: model.name }) };
 			} else if (modelModal.editing) {
 				const model = await updateModel(modelModal.editing.id, data as UpdateModelRequest);
 				llmState = updateModelInState(llmState, modelModal.editing.id, model);
-				message = { type: 'success', text: `Model "${model.name}" updated successfully` };
+				message = { type: 'success', text: $i18n('settings_model_updated', { name: model.name }) };
 			}
 			modelModal.close();
 		} catch (err) {
-			message = { type: 'error', text: `Failed to save model: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_model_save_failed', { error: getErrorMessage(err) }) };
 		} finally {
 			modelSaving = false;
 		}
@@ -156,16 +156,16 @@ Combines Providers and Models sections.
 	 * Handles model deletion
 	 */
 	async function handleDeleteModel(model: LLMModel): Promise<void> {
-		if (!confirm(`Are you sure you want to delete "${model.name}"?`)) {
+		if (!confirm($i18n('settings_model_delete_confirm', { name: model.name }))) {
 			return;
 		}
 
 		try {
 			await deleteModel(model.id);
 			llmState = removeModel(llmState, model.id);
-			message = { type: 'success', text: `Model "${model.name}" deleted successfully` };
+			message = { type: 'success', text: $i18n('settings_model_deleted', { name: model.name }) };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to delete model: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }) };
 		}
 	}
 
@@ -181,9 +181,9 @@ Combines Providers and Models sections.
 				undefined
 			);
 			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
-			message = { type: 'success', text: `"${model.name}" set as default` };
+			message = { type: 'success', text: $i18n('settings_model_set_default', { name: model.name }) };
 		} catch (err) {
-			message = { type: 'error', text: `Failed to set default model: ${getErrorMessage(err)}` };
+			message = { type: 'error', text: $i18n('settings_model_set_default_failed', { error: getErrorMessage(err) }) };
 		}
 	}
 
