@@ -34,8 +34,8 @@ Provides CRUD operations for prompts with list view and form modal.
 	} from '$lib/stores/prompts';
 	import PromptList from './PromptList.svelte';
 	import PromptForm from './PromptForm.svelte';
-	import { Button, Modal, HelpButton } from '$lib/components/ui';
-	import { Plus } from '@lucide/svelte';
+	import { Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
+	import SettingsSectionHeader from '../SettingsSectionHeader.svelte';
 	import type { PromptCreate } from '$types/prompt';
 	import { i18n } from '$lib/i18n';
 	/** Form modal saving state */
@@ -133,35 +133,24 @@ Provides CRUD operations for prompts with list view and form modal.
 </script>
 
 <div class="prompt-settings">
-	<!-- Header with title and create button -->
-	<header class="settings-header">
-		<div class="header-content">
-			<div class="header-title-row">
-				<h3 class="header-title">{$i18n('prompts_title')}</h3>
-				<HelpButton
-					titleKey="help_prompts_title"
-					descriptionKey="help_prompts_description"
-					tutorialKey="help_prompts_tutorial"
-				/>
-			</div>
-			<p class="header-description">
-				{$i18n('prompts_description')}
-			</p>
-		</div>
-		<Button variant="primary" size="sm" onclick={handleCreate}>
-			<Plus size={16} />
-			<span>{$i18n('prompts_create')}</span>
-		</Button>
-	</header>
+	<!-- SA-017/OPT-2: Shared settings section header -->
+	<SettingsSectionHeader
+		titleKey="prompts_title"
+		descriptionKey="prompts_description"
+		helpTitleKey="help_prompts_title"
+		helpDescriptionKey="help_prompts_description"
+		helpTutorialKey="help_prompts_tutorial"
+		createLabelKey="prompts_create"
+		onCreate={handleCreate}
+	/>
 
-	<!-- Error display -->
+	<!-- SA-017/OPT-1: Shared error banner -->
 	{#if $promptError}
-		<div class="error-banner">
-			<span class="error-text">{$promptError}</span>
-			<button type="button" class="dismiss-btn" onclick={handleDismissError}>
-				{$i18n('prompts_dismiss')}
-			</button>
-		</div>
+		<ErrorBanner
+			message={$promptError}
+			onDismiss={handleDismissError}
+			dismissLabel={$i18n('prompts_dismiss')}
+		/>
 	{/if}
 
 	<!-- Prompt list (always visible) -->
@@ -190,110 +179,21 @@ Provides CRUD operations for prompts with list view and form modal.
 	{/snippet}
 </Modal>
 
-<!-- Delete confirmation modal -->
-<Modal
+<!-- SA-017/OPT-3: Shared delete confirmation modal -->
+<DeleteConfirmModal
 	open={showDeleteConfirm}
-	title={$i18n('prompts_delete_title')}
-	onclose={cancelDelete}
->
-	{#snippet body()}
-		<p class="confirm-text">
-			{$i18n('prompts_delete_confirm')}
-		</p>
-	{/snippet}
-	{#snippet footer()}
-		<div class="modal-actions">
-			<Button variant="ghost" onclick={cancelDelete} disabled={deleting}>
-				{$i18n('common_cancel')}
-			</Button>
-			<Button variant="danger" onclick={confirmDelete} disabled={deleting}>
-				{deleting ? $i18n('prompts_deleting') : $i18n('common_delete')}
-			</Button>
-		</div>
-	{/snippet}
-</Modal>
+	titleKey="prompts_delete_title"
+	confirmMessageKey="prompts_delete_confirm"
+	{deleting}
+	deletingLabelKey="prompts_deleting"
+	onConfirm={confirmDelete}
+	onCancel={cancelDelete}
+/>
 
 <style>
 	.prompt-settings {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-lg);
-	}
-
-	.settings-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: var(--spacing-lg);
-	}
-
-	.header-content {
-		flex: 1;
-	}
-
-	.header-title-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.header-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.header-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-	}
-
-	.settings-header :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.error-banner {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
-		border-radius: var(--border-radius-md);
-	}
-
-	.error-text {
-		font-size: var(--font-size-sm);
-	}
-
-	.dismiss-btn {
-		background: transparent;
-		border: none;
-		color: var(--color-error);
-		cursor: pointer;
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--border-radius-sm);
-	}
-
-	.dismiss-btn:hover {
-		background: rgba(0, 0, 0, 0.1);
-	}
-
-	.confirm-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin: 0;
-		line-height: var(--line-height-relaxed);
-	}
-
-	.modal-actions {
-		display: flex;
-		gap: var(--spacing-sm);
-		justify-content: flex-end;
 	}
 </style>
