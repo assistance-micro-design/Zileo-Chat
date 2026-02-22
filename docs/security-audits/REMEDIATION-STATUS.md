@@ -29,6 +29,7 @@
 **SA-014 added: 13 findings (3H/4M/6L), 10 DONE + 3 DOCUMENTED.**
 **SA-015 ALL PHASES DONE: annotation cleanup + superseded code removal + dead getters + speculative code + final audit (22 items deleted, 6 tests migrated, 5 tests deleted, 171 remaining annotations all verified legitimate).**
 **SA-016 UX REMEDIATION: 7 phases DONE + 3 additional bug fixes. Phase 8 cancelled (architectural complexity, moved to Out of Scope).**
+**SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
 
 ---
 
@@ -469,13 +470,38 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
+## SA-017: Settings Page Optimization
+
+**Document:** [SA-017-settings-page-optimization.md](SA-017-settings-page-optimization.md)
+
+### All Phases (DONE)
+
+| Phase | Items | Status | Commit |
+|-------|-------|--------|--------|
+| 0: Scroll Performance | PERF-1 to PERF-5 | **DONE** | `7f2c37e` |
+| 1: Component Extraction | OPT-1 to OPT-3 | **DONE** | `bc58204` |
+| 2: MemorySettings Decomposition | OPT-4 to OPT-6 | **DONE** | `c87bd85` |
+| 3: Backend Validation | OPT-7, OPT-8 (N/A) | **DONE** | `0188ae8` |
+| 4: Pattern Harmonization | OPT-9, OPT-10 | **DONE** | `bde6149` |
+
+**Key changes:**
+- **PERF-1-5**: GPU layer promotion on `.card`, CSS containment, scroll timeout 250ms, virtual-row transition removed, search debounce 300ms
+- **OPT-1-3**: `ErrorBanner`, `SettingsSectionHeader`, `DeleteConfirmModal` shared components (-168 duplicated lines)
+- **OPT-4-6**: `MemorySettings` decomposed into `EmbeddingConfigCard`, `EmbeddingTestCard`, `MemoryStatsCard` (1082 -> ~380 lines)
+- **OPT-7**: `validate_trimmed_name()` centralized in `validation_helper.rs` with 9 TDD tests
+- **OPT-8**: N/A (logging already correct, audit referenced non-existent pattern)
+- **OPT-9**: `ErrorBanner` in MemorySettings + fix: errors from load/refresh/delete now visible (were hidden behind modal gate)
+- **OPT-10**: `ErrorBanner` in ValidationSettings + try/catch on `onMount` for unhandled rejections
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-22 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-22, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-22, 932 tests passed |
+| cargo test --lib | **PASS** | 2026-02-22, 941 tests passed (+9 from SA-017/OPT-7) |
 | npm run lint | **PASS** | 2026-02-22, 0 errors |
 | npm run check | **PASS** | 2026-02-22, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-22, 283 tests passed (+18 from SA-016) |
