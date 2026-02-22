@@ -25,7 +25,7 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { Button, Select, Card, StatusIndicator, Modal } from '$lib/components/ui';
+	import { Button, Select, Card, StatusIndicator, Modal, ErrorBanner } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
@@ -69,7 +69,8 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 	/** UI state */
 	let loading = $state(true);
 	let saving = $state(false);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+	let errorMessage = $state<string | null>(null);
+	let modalError = $state<string | null>(null);
 	let configExists = $state(false);
 
 	/** Modal state */
@@ -118,7 +119,7 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 			tokenStats = loadedTokenStats;
 			configExists = Boolean(loadedConfig.provider && loadedConfig.model);
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_load').replace('{error}', getErrorMessage(err)) };
+			errorMessage = t('memory_failed_load').replace('{error}', getErrorMessage(err));
 			configExists = false;
 		} finally {
 			loading = false;
@@ -137,7 +138,7 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_refresh_stats').replace('{error}', getErrorMessage(err)) };
+			errorMessage = t('memory_failed_refresh_stats').replace('{error}', getErrorMessage(err));
 		}
 	}
 
@@ -146,7 +147,7 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 	 */
 	function openConfigModal(): void {
 		editConfig = { ...config };
-		message = null;
+		modalError = null;
 		showConfigModal = true;
 	}
 
@@ -162,17 +163,17 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 	 */
 	async function handleSave(): Promise<void> {
 		saving = true;
-		message = null;
+		modalError = null;
 
 		try {
 			await invoke('save_embedding_config', { config: editConfig });
 			config = { ...editConfig };
 			configExists = true;
-			message = { type: 'success', text: t('memory_config_saved') };
 			showConfigModal = false;
+			errorMessage = null;
 			onsave?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_save').replace('{error}', getErrorMessage(err)) };
+			modalError = t('memory_failed_save').replace('{error}', getErrorMessage(err));
 		} finally {
 			saving = false;
 		}
@@ -192,9 +193,9 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 			config = { ...defaultConfig };
 			editConfig = { ...defaultConfig };
 			configExists = false;
-			message = { type: 'success', text: t('memory_config_deleted') };
+			errorMessage = null;
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_delete').replace('{error}', getErrorMessage(err)) };
+			errorMessage = t('memory_failed_delete').replace('{error}', getErrorMessage(err));
 		} finally {
 			saving = false;
 		}
@@ -248,6 +249,10 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 </script>
 
 <div class="memory-settings">
+	{#if errorMessage}
+		<ErrorBanner message={errorMessage} onDismiss={() => (errorMessage = null)} />
+	{/if}
+
 	{#if loading}
 		<Card>
 			{#snippet body()}
@@ -358,9 +363,9 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 				/>
 			</div>
 
-			{#if message && showConfigModal}
-				<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-					{message.text}
+			{#if modalError}
+				<div class="modal-error">
+					{modalError}
 				</div>
 			{/if}
 		</div>
@@ -490,19 +495,11 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 		gap: var(--spacing-md);
 	}
 
-	.message {
+	.modal-error {
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
 		text-align: center;
-	}
-
-	.message.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message.error {
 		background: var(--color-error-light);
 		color: var(--color-error);
 	}

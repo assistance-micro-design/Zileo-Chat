@@ -26,7 +26,7 @@
    */
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Button } from '$lib/components/ui';
+  import { Button, ErrorBanner } from '$lib/components/ui';
   import { i18n } from '$lib/i18n';
   import { getErrorMessage } from '$lib/utils/error';
   import {
@@ -60,7 +60,8 @@
   let loadingResources = $state(false);
 
   // UI state
-  let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+  let errorMessage = $state<string | null>(null);
+  let successMessage = $state<string | null>(null);
   let hasChanges = $state(false);
 
   // Mode options for card selector (using translation keys)
@@ -90,10 +91,14 @@
 
   // Load settings and resources on mount
   onMount(async () => {
-    await Promise.all([
-      validationSettingsStore.loadSettings(),
-      loadAvailableResources()
-    ]);
+    try {
+      await Promise.all([
+        validationSettingsStore.loadSettings(),
+        loadAvailableResources()
+      ]);
+    } catch (err) {
+      errorMessage = $i18n('validation_load_resources_failed').replace('{error}', getErrorMessage(err));
+    }
   });
 
   // Load available tools and MCP servers
@@ -107,7 +112,7 @@
       availableTools = tools;
       mcpServers = servers;
     } catch (err) {
-      message = { type: 'error', text: $i18n('validation_load_resources_failed').replace('{error}', getErrorMessage(err)) };
+      errorMessage = $i18n('validation_load_resources_failed').replace('{error}', getErrorMessage(err));
     } finally {
       loadingResources = false;
     }
@@ -129,9 +134,7 @@
   // Track changes
   function markChanged(): void {
     hasChanges = true;
-    if (message?.type === 'success') {
-      message = null;
-    }
+    successMessage = null;
   }
 
   // Handle mode selection
@@ -142,7 +145,8 @@
 
   // Handle save
   async function handleSave(): Promise<void> {
-    message = null;
+    errorMessage = null;
+    successMessage = null;
     try {
       const updateRequest: UpdateValidationSettingsRequest = {
         mode: localMode,
@@ -156,28 +160,29 @@
         riskThresholds: localRiskThresholds
       };
       await validationSettingsStore.updateSettings(updateRequest);
-      message = { type: 'success', text: $i18n('validation_saved') };
+      successMessage = $i18n('validation_saved');
       hasChanges = false;
       setTimeout(() => {
-        if (message?.type === 'success') message = null;
+        successMessage = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: $i18n('validation_save_failed').replace('{error}', getErrorMessage(err)) };
+      errorMessage = $i18n('validation_save_failed').replace('{error}', getErrorMessage(err));
     }
   }
 
   // Handle reset to defaults
   async function handleReset(): Promise<void> {
-    message = null;
+    errorMessage = null;
+    successMessage = null;
     try {
       await validationSettingsStore.resetToDefaults();
-      message = { type: 'success', text: $i18n('validation_reset_success') };
+      successMessage = $i18n('validation_reset_success');
       hasChanges = false;
       setTimeout(() => {
-        if (message?.type === 'success') message = null;
+        successMessage = null;
       }, 3000);
     } catch (err) {
-      message = { type: 'error', text: $i18n('validation_reset_failed').replace('{error}', getErrorMessage(err)) };
+      errorMessage = $i18n('validation_reset_failed').replace('{error}', getErrorMessage(err));
     }
   }
 </script>
@@ -216,6 +221,10 @@
 {/snippet}
 
 <div class="validation-settings">
+  {#if errorMessage}
+    <ErrorBanner message={errorMessage} onDismiss={() => (errorMessage = null)} />
+  {/if}
+
   {#if $isLoading}
     <div class="loading-state">
       <span class="spinner"></span>
@@ -367,10 +376,10 @@
       </div>
     </div>
 
-    <!-- Message -->
-    {#if message}
-      <div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-        {message.text}
+    <!-- Success Message -->
+    {#if successMessage}
+      <div class="message success">
+        {successMessage}
       </div>
     {/if}
 
@@ -663,23 +672,14 @@
     font-style: italic;
   }
 
-  /* Message */
-  .message {
+  /* Success Message */
+  .message.success {
     padding: var(--spacing-md);
     border-radius: var(--border-radius-md);
     font-size: var(--font-size-sm);
-  }
-
-  .message.success {
     background: color-mix(in srgb, var(--color-success) 15%, transparent);
     color: var(--color-success);
     border: 1px solid var(--color-success);
-  }
-
-  .message.error {
-    background: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
-    border: 1px solid var(--color-error);
   }
 
   /* Actions */
