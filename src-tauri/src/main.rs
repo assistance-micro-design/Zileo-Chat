@@ -198,6 +198,7 @@ async fn main() -> anyhow::Result<()> {
             commands::workflow::create_workflow,
             commands::workflow::execute_workflow,
             commands::workflow::load_workflows,
+            commands::workflow::rename_workflow,
             commands::workflow::delete_workflow,
             commands::workflow::load_workflow_full_state,
             // Agent commands (CRUD)

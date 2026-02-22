@@ -104,6 +104,8 @@
 			editing = false;
 			editName = workflow.name;
 		}
+		// Stop propagation to prevent parent div from intercepting keys (e.g. space)
+		event.stopPropagation();
 	}
 
 	/**

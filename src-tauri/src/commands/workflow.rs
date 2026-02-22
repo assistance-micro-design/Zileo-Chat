@@ -214,6 +214,56 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
     Ok(workflows)
 }
 
+/// Renames a workflow.
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to rename
+/// * `name` - The new workflow name
+///
+/// # Returns
+/// The updated Workflow entity
+#[tauri::command]
+#[instrument(name = "rename_workflow", skip(state), fields(workflow_id = %workflow_id, new_name = %name))]
+pub async fn rename_workflow(
+    workflow_id: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Workflow, String> {
+    info!("Renaming workflow");
+
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_name = Validator::validate_workflow_name(&name).map_err(|e| {
+        warn!(error = %e, "Invalid workflow name");
+        format!("Invalid workflow name: {}", e)
+    })?;
+
+    let name_json = crate::security::serialize_for_query(&validated_name, "name")?;
+
+    let query = format!(
+        "UPDATE workflow:`{}` SET name = {} RETURN meta::id(id) AS id, name, agent_id, status, created_at, updated_at, total_tokens_input, total_tokens_output, total_cost_usd",
+        validated_id, name_json
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to rename workflow");
+        format!("Failed to rename workflow: {}", e)
+    })?;
+
+    let workflow: Workflow = json_results
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Workflow not found".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v).map_err(|e| {
+                error!(error = %e, "Failed to deserialize renamed workflow");
+                format!("Failed to deserialize workflow: {}", e)
+            })
+        })?;
+
+    info!("Workflow renamed successfully");
+    Ok(workflow)
+}
+
 /// Deletes a workflow and all related entities (cascade delete).
 ///
 /// Deletes in order:
