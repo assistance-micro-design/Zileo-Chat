@@ -19,6 +19,7 @@
 
 // Module-level dead_code removed in SA-015 Phase 5 (Phase 2 is complete).
 
+use crate::llm::DEFAULT_OLLAMA_URL;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -432,7 +433,7 @@ impl ProviderSettings {
     /// Creates default settings for a provider.
     pub fn default_for(provider: ProviderType) -> Self {
         let base_url = match &provider {
-            ProviderType::Ollama => Some("http://localhost:11434".into()),
+            ProviderType::Ollama => Some(DEFAULT_OLLAMA_URL.into()),
             ProviderType::Mistral => None,
             ProviderType::Custom(_) => None,
         };

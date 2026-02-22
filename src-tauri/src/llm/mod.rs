@@ -63,6 +63,7 @@ pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 pub use mistral::MistralProvider;
 #[allow(unused_imports)]
 pub use ollama::OllamaProvider;
+pub use ollama::DEFAULT_OLLAMA_URL;
 #[allow(unused_imports)]
 pub use provider::{LLMProvider, LLMResponse};
 

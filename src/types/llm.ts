@@ -77,7 +77,8 @@ export interface LLMConfigResponse {
 }
 
 /**
- * Default Ollama server URL
+ * Default Ollama server URL.
+ * Keep in sync with Rust: src-tauri/src/llm/ollama.rs::DEFAULT_OLLAMA_URL
  */
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 

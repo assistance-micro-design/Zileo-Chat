@@ -58,9 +58,8 @@ pub const MISTRAL_EMBED_MODEL: &str = "mistral-embed";
 /// Mistral embed model dimension (1024D)
 pub const MISTRAL_EMBED_DIMENSION: usize = 1024;
 
-/// Default Ollama embedding endpoint
-#[allow(dead_code)] // Used by EmbeddingProvider::ollama() constructor (test-only path)
-pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+// DEFAULT_OLLAMA_URL imported from ollama.rs (single source of truth, SA-018 HC-2)
+use super::ollama::DEFAULT_OLLAMA_URL;
 
 /// Ollama nomic-embed-text dimension (768D)
 pub const OLLAMA_NOMIC_DIMENSION: usize = 768;

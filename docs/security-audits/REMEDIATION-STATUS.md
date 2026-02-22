@@ -30,6 +30,8 @@
 **SA-015 ALL PHASES DONE: annotation cleanup + superseded code removal + dead getters + speculative code + final audit (22 items deleted, 6 tests migrated, 5 tests deleted, 171 remaining annotations all verified legitimate).**
 **SA-016 UX REMEDIATION: 7 phases DONE + 3 additional bug fixes. Phase 8 cancelled (architectural complexity, moved to Out of Scope).**
 **SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
+**SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs + pricing dead code removed, is_reasoning propagation from DB). P2/P3 in progress.**
+**SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
 
 ---
 
@@ -492,6 +494,56 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - **OPT-8**: N/A (logging already correct, audit referenced non-existent pattern)
 - **OPT-9**: `ErrorBanner` in MemorySettings + fix: errors from load/refresh/delete now visible (were hidden behind modal gate)
 - **OPT-10**: `ErrorBanner` in ValidationSettings + try/catch on `onMount` for unhandled rejections
+
+---
+
+## SA-018: Hardcoded Elements Audit
+
+**Document:** [SA-018-hardcoded-elements-audit.md](SA-018-hardcoded-elements-audit.md)
+
+### P1: Remove Hardcoded Model IDs -- DONE
+
+| Action | Count | Details |
+|--------|-------|---------|
+| Model lists removed | 4 | `MISTRAL_MODELS`, `OLLAMA_MODELS`, `DEFAULT_MISTRAL_MODEL`, `DEFAULT_OLLAMA_MODEL` |
+| Reasoning detection removed | 4 | `REASONING_MODELS`, `OLLAMA_THINKING_MODELS`, `is_thinking_model()`, `is_thinking_model_name()` |
+| Dead code removed | 3 | `complete_with_thinking()`, `get_think_param()`, `OllamaChatResponse`/`OllamaMessageResponse` |
+| Pricing dead code removed | 1 | `mod mistral_pricing` (7 constants) |
+| Other dead code removed | 1 | `VALID_MODEL_PROVIDERS` (0 references) |
+| Trait adapted | 2 | `available_models()` -> `Vec::new()`, `default_model()` -> `String::new()` |
+| is_reasoning propagated | 7 | provider.rs trait, mistral.rs, ollama.rs, manager.rs, agent.rs, llm_agent.rs, spawn_agent.rs |
+| TS types synced | 2 | `agent.ts` (LLMConfig.is_reasoning), `AgentForm.svelte` |
+| Validation removed | 1 | `set_default_model()` no longer validates against hardcoded list |
+| Tests updated | 22 files | -376/+148 lines, 1918 Rust + 283 TS tests passing |
+
+### P2: Centralize DEFAULT_OLLAMA_URL -- A FAIRE
+
+### P3: i18n Messages Settings -- A FAIRE
+
+---
+
+## SA-018: Hardcoded Elements Audit
+
+**Document:** [SA-018-hardcoded-elements-audit.md](SA-018-hardcoded-elements-audit.md)
+
+### P1: Model IDs Hardcodes - DONE
+
+| Action | Files | Details |
+|--------|-------|---------|
+| Removed MISTRAL_MODELS, DEFAULT_MISTRAL_MODEL, REASONING_MODELS | mistral.rs | Dead code, models from DB |
+| Removed OLLAMA_MODELS, DEFAULT_OLLAMA_MODEL, OLLAMA_THINKING_MODELS | ollama.rs | Dead code + is_thinking_model(), complete_with_thinking() |
+| Removed mistral_pricing module | pricing.rs | #[allow(dead_code)], 0 production usage |
+| Removed VALID_MODEL_PROVIDERS | constants.rs | 0 references |
+| Removed set_default_model validation | commands/llm.rs | Was validating against hardcoded list |
+| Adapted LLMProvider trait | provider.rs, manager.rs | available_models() -> empty, default_model() -> empty, complete() + is_reasoning param |
+| Propagated is_reasoning: bool | agent.rs, agent.ts, AgentForm.svelte, main.rs, spawn_agent.rs, llm_agent.rs | From DB through LLMConfig to provider |
+| Updated 17+ test files | Multiple | Added is_reasoning: false to all LLMConfig test constructions |
+
+**Net change**: 22 files, -376 lines, +148 lines. Tests: 1918 Rust + 283 TS passing.
+
+### P2: URLs - TODO
+
+### P3: i18n - TODO
 
 ---
 
