@@ -629,6 +629,10 @@
   "workflow_section_running": "Running",
   "workflow_section_recently_completed": "Recently completed",
   "workflow_section_workflows": "Workflows",
+  "workflow_group_today": "Today",
+  "workflow_group_yesterday": "Yesterday",
+  "workflow_group_last_7_days": "Last 7 days",
+  "workflow_group_older": "Older",
 
   "toast_workflow_completed": "Workflow completed",
   "toast_workflow_failed": "Workflow failed",

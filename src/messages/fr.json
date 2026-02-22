@@ -629,6 +629,10 @@
   "workflow_section_running": "En cours",
   "workflow_section_recently_completed": "Termine recemment",
   "workflow_section_workflows": "Flux de travail",
+  "workflow_group_today": "Aujourd'hui",
+  "workflow_group_yesterday": "Hier",
+  "workflow_group_last_7_days": "7 derniers jours",
+  "workflow_group_older": "Plus ancien",
 
   "toast_workflow_completed": "Flux termine",
   "toast_workflow_failed": "Flux echoue",

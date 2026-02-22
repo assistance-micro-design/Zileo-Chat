@@ -29,6 +29,14 @@
 	import WorkflowItemCompact from './WorkflowItemCompact.svelte';
 	import { AlertTriangle, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { groupByDate } from '$lib/utils/dateGrouping';
+
+	const DATE_GROUP_I18N: Record<string, string> = {
+		today: 'workflow_group_today',
+		yesterday: 'workflow_group_yesterday',
+		last_7_days: 'workflow_group_last_7_days',
+		older: 'workflow_group_older'
+	};
 
 	/**
 	 * WorkflowList props
@@ -89,6 +97,9 @@
 	const remainingWorkflows = $derived(
 		workflows.filter((w) => !runningWorkflowIds.has(w.id) && !recentlyCompletedIds.has(w.id))
 	);
+
+	/** Remaining workflows grouped by date (for expanded mode) */
+	const dateGroups = $derived(groupByDate(remainingWorkflows, 'updated_at'));
 </script>
 
 <div class="workflow-list" class:collapsed role="listbox" aria-label={$i18n('workflow_list_arialabel')}>
@@ -183,20 +194,20 @@
 				/>
 			{/each}
 		{/if}
-		{#if remainingWorkflows.length > 0}
-			{#if runningWorkflows.length > 0 || completedWorkflows.length > 0}
+		{#each dateGroups as group (group.label)}
+			{#if runningWorkflows.length > 0 || completedWorkflows.length > 0 || dateGroups.indexOf(group) > 0}
 				<div class="section-divider"></div>
 			{/if}
-			<h3 class="section-header">{$i18n('workflow_section_workflows')}</h3>
-		{/if}
-		{#each remainingWorkflows as workflow (workflow.id)}
-			<WorkflowItem
-				{workflow}
-				active={workflow.id === selectedId}
-				{onselect}
-				{ondelete}
-				{onrename}
-			/>
+			<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>
+			{#each group.items as workflow (workflow.id)}
+				<WorkflowItem
+					{workflow}
+					active={workflow.id === selectedId}
+					{onselect}
+					{ondelete}
+					{onrename}
+				/>
+			{/each}
 		{/each}
 	{/if}
 </div>
