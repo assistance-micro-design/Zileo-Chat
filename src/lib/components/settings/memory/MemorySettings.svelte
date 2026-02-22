@@ -20,22 +20,24 @@ SPDX-License-Identifier: Apache-2.0
 
 MemorySettings - Embedding configuration for Memory Tool.
 Allows users to configure embedding provider, model, and chunking settings via modal.
+SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 -->
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { Button, Select, Card, StatusIndicator, Textarea, Badge, ProgressBar, Modal } from '$lib/components/ui';
+	import { Button, Select, Card, StatusIndicator, Modal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
 		EmbeddingProviderType,
 		MemoryStats,
-		EmbeddingTestResult,
 		MemoryTokenStats
 	} from '$types/embedding';
-	import { Settings, Pencil, Trash2, Plus } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
+	import EmbeddingTestCard from './EmbeddingTestCard.svelte';
+	import MemoryStatsCard from './MemoryStatsCard.svelte';
 
 	/** Props */
 	interface Props {
@@ -72,11 +74,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 
 	/** Modal state */
 	let showConfigModal = $state(false);
-
-	/** Test embedding state */
-	let testText = $state('');
-	let testingEmbedding = $state(false);
-	let testResult = $state<EmbeddingTestResult | null>(null);
 
 	/** Provider options (reactive to locale) */
 	const providerOptions = $derived<SelectOption[]>([
@@ -119,7 +116,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			editConfig = { ...loadedConfig };
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
-			// Config exists if backend returns a valid config (provider and model are set)
 			configExists = Boolean(loadedConfig.provider && loadedConfig.model);
 		} catch (err) {
 			message = { type: 'error', text: t('memory_failed_load').replace('{error}', getErrorMessage(err)) };
@@ -192,7 +188,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 
 		saving = true;
 		try {
-			// Save default config to reset
 			await invoke('save_embedding_config', { config: defaultConfig });
 			config = { ...defaultConfig };
 			editConfig = { ...defaultConfig };
@@ -212,7 +207,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		const provider = event.currentTarget.value as EmbeddingProviderType;
 		editConfig.provider = provider;
 
-		// Set default model for the selected provider
 		const models: Record<EmbeddingProviderType, { value: string; label: string; dimension: number }[]> = {
 			mistral: [{ value: 'mistral-embed', label: 'Mistral Embed (1024D)', dimension: 1024 }],
 			ollama: [
@@ -247,74 +241,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		editConfig.strategy = event.currentTarget.value as 'fixed' | 'semantic' | 'recursive';
 	}
 
-	/**
-	 * Format large numbers for display
-	 */
-	function formatNumber(n: number): string {
-		if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-		if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-		return n.toString();
-	}
-
-	/**
-	 * Get badge variant based on memory type
-	 */
-	function getTypeVariant(type: string): 'primary' | 'success' | 'warning' | 'error' {
-		switch (type) {
-			case 'knowledge':
-				return 'warning';
-			case 'context':
-				return 'success';
-			case 'decision':
-				return 'error';
-			case 'user_pref':
-				return 'primary';
-			default:
-				return 'primary';
-		}
-	}
-
-	/**
-	 * Get provider display name
-	 */
-	function getProviderLabel(provider: string): string {
-		return providerOptions.find((p) => p.value === provider)?.label || provider;
-	}
-
-	/**
-	 * Get strategy display name
-	 */
-	function getStrategyLabel(strategy: string): string {
-		return strategyOptions.find((s) => s.value === strategy)?.label || strategy;
-	}
-
-	/**
-	 * Tests embedding generation with sample text
-	 */
-	async function handleTestEmbedding(): Promise<void> {
-		if (!testText.trim()) {
-			message = { type: 'error', text: t('memory_enter_test_text') };
-			return;
-		}
-
-		testingEmbedding = true;
-		testResult = null;
-		message = null;
-
-		try {
-			testResult = await invoke<EmbeddingTestResult>('test_embedding', { text: testText });
-			if (testResult.success) {
-				message = { type: 'success', text: t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms)) };
-			} else {
-				message = { type: 'error', text: testResult.error || t('common_error') };
-			}
-		} catch (err) {
-			message = { type: 'error', text: t('memory_test_failed').replace('{error}', getErrorMessage(err)) };
-		} finally {
-			testingEmbedding = false;
-		}
-	}
-
 	// Load config on mount
 	$effect(() => {
 		loadConfig();
@@ -332,210 +258,21 @@ Allows users to configure embedding provider, model, and chunking settings via m
 			{/snippet}
 		</Card>
 	{:else}
-		<!-- Embedding Configuration Card -->
-		<Card>
-			{#snippet header()}
-				<div class="card-header-row">
-					<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
-					{#if configExists}
-						<div class="header-actions">
-							<button type="button" class="icon-btn" onclick={openConfigModal} title={$i18n('common_edit')} aria-label={$i18n('common_edit')}>
-								<Pencil size={16} />
-							</button>
-							<button type="button" class="icon-btn danger" onclick={handleDelete} title={$i18n('common_delete')} aria-label={$i18n('common_delete')}>
-								<Trash2 size={16} />
-							</button>
-						</div>
-					{/if}
-				</div>
-			{/snippet}
-			{#snippet body()}
-				{#if configExists}
-					<div class="config-display">
-						<div class="config-grid">
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_provider')}</span>
-								<span class="config-value">{getProviderLabel(config.provider)}</span>
-							</div>
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_model')}</span>
-								<span class="config-value">{config.model}</span>
-							</div>
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_dimensions')}</span>
-								<span class="config-value">{config.dimension}D</span>
-							</div>
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_strategy')}</span>
-								<span class="config-value">{getStrategyLabel(config.strategy || 'fixed')}</span>
-							</div>
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_chunk_size')}</span>
-								<span class="config-value">{config.chunk_size} {$i18n('memory_chars')}</span>
-							</div>
-							<div class="config-item">
-								<span class="config-label">{$i18n('memory_overlap')}</span>
-								<span class="config-value">{config.chunk_overlap} {$i18n('memory_chars')}</span>
-							</div>
-						</div>
-					</div>
-				{:else}
-					<div class="empty-state">
-						<Settings size={48} strokeWidth={1} />
-						<h4>{$i18n('memory_no_config')}</h4>
-						<p>{$i18n('memory_no_config_description')}</p>
-						<Button variant="primary" onclick={openConfigModal}>
-							<Plus size={16} />
-							{$i18n('memory_add_config')}
-						</Button>
-					</div>
-				{/if}
-			{/snippet}
-		</Card>
+		<!-- SA-017/OPT-4: Embedding Configuration Card -->
+		<EmbeddingConfigCard
+			{config}
+			{configExists}
+			{providerOptions}
+			{strategyOptions}
+			onOpenConfigModal={openConfigModal}
+			onDelete={handleDelete}
+		/>
 
-		<!-- Test Embedding Section -->
-		<Card>
-			{#snippet header()}
-				<h3 class="card-title">{$i18n('memory_test_title')}</h3>
-			{/snippet}
-			{#snippet body()}
-				<div class="test-section">
-					<Textarea
-						label={$i18n('memory_test_text_label')}
-						value={testText}
-						placeholder={$i18n('memory_test_text_placeholder')}
-						rows={3}
-						oninput={(e) => (testText = e.currentTarget.value)}
-					/>
-					<div class="test-actions">
-						<Button
-							variant="secondary"
-							onclick={handleTestEmbedding}
-							disabled={!testText.trim() || testingEmbedding || !configExists}
-						>
-							{testingEmbedding ? $i18n('memory_testing') : $i18n('memory_test_button')}
-						</Button>
-						{#if !configExists}
-							<span class="test-hint">{$i18n('memory_configure_first')}</span>
-						{/if}
-					</div>
+		<!-- SA-017/OPT-5: Embedding Test Card -->
+		<EmbeddingTestCard {configExists} />
 
-					{#if testResult}
-						<div
-							class="test-result"
-							class:success={testResult.success}
-							class:error={!testResult.success}
-						>
-							{#if testResult.success}
-								<div class="result-row">
-									<span class="result-label">{$i18n('memory_dimension')}</span>
-									<span class="result-value">{testResult.dimension}</span>
-								</div>
-								<div class="result-row">
-									<span class="result-label">{$i18n('memory_duration')}</span>
-									<span class="result-value">{testResult.duration_ms}ms</span>
-								</div>
-								<div class="result-row">
-									<span class="result-label">{$i18n('memory_provider')}</span>
-									<span class="result-value">{testResult.provider}</span>
-								</div>
-								<div class="result-row">
-									<span class="result-label">{$i18n('memory_model')}</span>
-									<span class="result-value">{testResult.model}</span>
-								</div>
-								<div class="result-row">
-									<span class="result-label">{$i18n('memory_preview')}</span>
-									<span class="result-value preview"
-										>[{testResult.preview
-											.slice(0, 3)
-											.map((v) => v.toFixed(4))
-											.join(', ')}...]</span
-									>
-								</div>
-							{:else}
-								<p class="error-text">{testResult.error}</p>
-							{/if}
-						</div>
-					{/if}
-
-					{#if message && !showConfigModal}
-						<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-							{message.text}
-						</div>
-					{/if}
-				</div>
-			{/snippet}
-		</Card>
-
-		<!-- Memory Statistics -->
-		{#if stats || tokenStats}
-			<Card>
-				{#snippet header()}
-					<h3 class="card-title">{$i18n('memory_stats_title')}</h3>
-				{/snippet}
-				{#snippet body()}
-					<div class="unified-stats">
-						<!-- Summary Row -->
-						<div class="summary-stats">
-							<div class="summary-item">
-								<span class="summary-value">{formatNumber(stats?.total ?? tokenStats?.total_memories ?? 0)}</span>
-								<span class="summary-label">{$i18n('memory_total_memories')}</span>
-							</div>
-							<div class="summary-item">
-								<span class="summary-value">{formatNumber(tokenStats?.total_chars ?? 0)}</span>
-								<span class="summary-label">{$i18n('memory_total_characters')}</span>
-							</div>
-							<div class="summary-item">
-								<span class="summary-value">{formatNumber(tokenStats?.total_estimated_tokens ?? 0)}</span>
-								<span class="summary-label">{$i18n('memory_est_tokens')}</span>
-							</div>
-							<div class="summary-item">
-								<span class="summary-value">{stats?.with_embeddings ?? 0}/{stats?.total ?? 0}</span>
-								<span class="summary-label">{$i18n('memory_with_embeddings')}</span>
-							</div>
-						</div>
-
-						<!-- Category Breakdown -->
-						{#if tokenStats && tokenStats.categories.length > 0}
-							<div class="categories-section">
-								<h4 class="section-title">{$i18n('memory_by_category')}</h4>
-								<div class="categories-list">
-									{#each tokenStats.categories as cat (cat.memory_type)}
-										<div class="category-item">
-											<div class="category-header">
-												<Badge variant={getTypeVariant(cat.memory_type)}>{cat.memory_type}</Badge>
-												<span class="category-count">{cat.count} {$i18n('memory_memories_count')}</span>
-												<span class="embedding-status">{cat.with_embeddings}/{cat.count} {$i18n('memory_embedded')}</span>
-											</div>
-											<div class="category-details">
-												<span class="token-count">{formatNumber(cat.estimated_tokens)} {$i18n('memory_tokens')}</span>
-												<span class="char-count">({formatNumber(cat.total_chars)} {$i18n('memory_chars')})</span>
-											</div>
-											<ProgressBar
-												value={tokenStats.total_chars > 0 ? (cat.total_chars / tokenStats.total_chars) * 100 : 0}
-												showLabel={false}
-											/>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{:else if stats && Object.keys(stats.by_type).length > 0}
-							<div class="categories-section">
-								<h4 class="section-title">{$i18n('memory_by_type')}</h4>
-								<div class="type-list">
-									{#each Object.entries(stats.by_type) as [type, count] (type)}
-										<div class="type-item">
-											<Badge variant={getTypeVariant(type)}>{type}</Badge>
-											<span class="type-count">{count}</span>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/snippet}
-			</Card>
-		{/if}
+		<!-- SA-017/OPT-6: Memory Statistics Card -->
+		<MemoryStatsCard {stats} {tokenStats} />
 	{/if}
 </div>
 
@@ -655,107 +392,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		padding: var(--spacing-xl);
 	}
 
-	.card-title {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-	}
-
-	.card-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-	}
-
-	.header-actions {
-		display: flex;
-		gap: var(--spacing-xs);
-	}
-
-	.icon-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: var(--spacing-xs);
-		background: transparent;
-		border: none;
-		border-radius: var(--border-radius-sm);
-		color: var(--color-text-secondary);
-		cursor: pointer;
-		transition: color 0.2s, background 0.2s;
-	}
-
-	.icon-btn:hover {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
-	}
-
-	.icon-btn.danger:hover {
-		color: var(--color-error);
-	}
-
-	/* Config Display */
-	.config-display {
-		padding: var(--spacing-sm);
-	}
-
-	.config-grid {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-md);
-	}
-
-	.config-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-2xs);
-	}
-
-	.config-label {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.config-value {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-primary);
-	}
-
-	/* Empty State */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-2xl);
-		text-align: center;
-		color: var(--color-text-secondary);
-	}
-
-	.empty-state h4 {
-		font-size: var(--font-size-lg);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-		color: var(--color-text-primary);
-	}
-
-	.empty-state p {
-		font-size: var(--font-size-sm);
-		margin: 0;
-		max-width: 300px;
-	}
-
-	.empty-state :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
 	/* Modal Form */
 	.modal-form {
 		display: flex;
@@ -854,67 +490,6 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		gap: var(--spacing-md);
 	}
 
-	/* Test Section */
-	.test-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.test-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.test-hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-tertiary);
-		font-style: italic;
-	}
-
-	.test-result {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-	}
-
-	.test-result.success {
-		background: var(--color-success-light);
-		border: 1px solid var(--color-success);
-	}
-
-	.test-result.error {
-		background: var(--color-error-light);
-		border: 1px solid var(--color-error);
-	}
-
-	.result-row {
-		display: flex;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.result-label {
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-secondary);
-		min-width: 80px;
-	}
-
-	.result-value {
-		color: var(--color-text-primary);
-	}
-
-	.result-value.preview {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-	}
-
-	.error-text {
-		color: var(--color-error);
-		margin: 0;
-	}
-
 	.message {
 		padding: var(--spacing-md);
 		border-radius: var(--border-radius-md);
@@ -932,151 +507,9 @@ Allows users to configure embedding provider, model, and chunking settings via m
 		color: var(--color-error);
 	}
 
-	/* Statistics */
-	.unified-stats {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-lg);
-	}
-
-	.summary-stats {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: var(--spacing-md);
-		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-md);
-	}
-
-	.summary-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-	}
-
-	.summary-value {
-		font-size: var(--font-size-xl);
-		font-weight: var(--font-weight-bold);
-		color: var(--color-accent);
-	}
-
-	.summary-label {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
-	}
-
-	.categories-section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
-	}
-
-	.section-title {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		margin: 0;
-		color: var(--color-text-secondary);
-	}
-
-	.categories-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-
-	.category-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm);
-		background: var(--color-bg-tertiary);
-		border-radius: var(--border-radius-sm);
-	}
-
-	.category-header {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		flex-wrap: wrap;
-	}
-
-	.category-count {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.embedding-status {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-tertiary);
-		margin-left: auto;
-	}
-
-	.category-details {
-		display: flex;
-		gap: var(--spacing-sm);
-		font-size: var(--font-size-sm);
-	}
-
-	.token-count {
-		color: var(--color-text-primary);
-	}
-
-	.char-count {
-		color: var(--color-text-secondary);
-	}
-
-	.type-list {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-sm);
-	}
-
-	.type-item {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-tertiary);
-		border-radius: var(--border-radius-sm);
-		font-size: var(--font-size-sm);
-	}
-
-	.type-count {
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-primary);
-	}
-
 	@media (max-width: 768px) {
 		.form-row {
 			grid-template-columns: 1fr;
-		}
-
-		.config-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-
-		.summary-stats {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-
-	@media (max-width: 480px) {
-		.config-grid {
-			grid-template-columns: 1fr;
-		}
-
-		.summary-stats {
-			grid-template-columns: 1fr;
-		}
-
-		.category-header {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		.embedding-status {
-			margin-left: 0;
 		}
 	}
 </style>
