@@ -1,10 +1,10 @@
 # Remediation Status - Security Audit Findings
 
-**Date**: 2026-02-21 (updated)
+**Date**: 2026-02-23 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 133 (vs main)
-**Lines**: +10,647 / -2,542
+**Files changed**: 149 (vs main)
+**Lines**: +11,217 / -2,729
 
 ---
 
@@ -562,13 +562,48 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
+## SA-019: Agent Chat Refactoring - Block-by-Block
+
+**Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
+**Status:** P1 DONE
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| P1 | Backend: vrais tokens + thinking extraction + events enrichis | **DONE** |
+| P2 | Backend: load_message_blocks command | **NOT STARTED** |
+| P3 | Frontend: types + store + composants blocks inline | **NOT STARTED** |
+| P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **NOT STARTED** |
+| P5 | Nettoyage code mort (simulate_streaming, estimate_tokens, etc.) | **NOT STARTED** |
+
+### P1: Backend - Block-by-Block Events - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| B1 | `thinking_content: Option<String>` on LLMResponse | **DONE** |
+| B2 | Mistral thinking extraction via ParsedContent | **DONE** |
+| B4 | `sequence: u32` + `ReasoningSource` enum on data structs | **DONE** |
+| B5 | New ChunkTypes (ThinkingBlock, ToolCallComplete, ResponseBlock) + 5 enriched fields | **DONE** |
+| B6 | Tool loop refactored: global sequence, thinking extraction, tool_call_complete with I/O JSON | **DONE** |
+| B7 | Fake streaming removed: no more token chunks, response_block with real tokens | **DONE** |
+| B8 | DB schema: `sequence` on tool_execution/thinking_step, `source` on thinking_step | **DONE** |
+| B10 | Persistence propagates sequence + source | **DONE** |
+
+**Key changes:**
+- `ParsedContent` struct replaces String for `MistralResponseMessage.content` (collects thinking blocks)
+- `stream_content_to_frontend()` removed (was 50-char/10ms fake streaming)
+- `StreamChunk::token()` and `token_with_counts()` removed (dead code after B7)
+- `ProviderToolAdapter` trait extended with `extract_thinking()` default method
+- 16 files changed, +570/-187 lines. Tests: 942 passing, clippy clean.
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| cargo fmt --check | **PASS** | 2026-02-22 |
-| cargo clippy -- -D warnings | **PASS** | 2026-02-22, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-22, 941 tests passed (+9 from SA-017/OPT-7) |
+| cargo fmt --check | **PASS** | 2026-02-23 |
+| cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
+| cargo test --lib | **PASS** | 2026-02-23, 942 tests passed (+1 from SA-019/P1) |
 | npm run lint | **PASS** | 2026-02-22, 0 errors |
 | npm run check | **PASS** | 2026-02-22, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-22, 283 tests passed (+18 from SA-016) |
