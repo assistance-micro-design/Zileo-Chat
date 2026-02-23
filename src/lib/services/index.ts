@@ -28,3 +28,4 @@ export * from './message.service';
 export * from './activity.service';
 export * from './localStorage.service';
 export * from './workflowExecutor.service';
+export * from './block.service';

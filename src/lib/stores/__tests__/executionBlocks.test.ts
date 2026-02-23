@@ -1,0 +1,330 @@
+/**
+ * Copyright 2025 Assistance Micro Design
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Tests for executionBlocksStore - block-by-block execution display.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { get } from 'svelte/store';
+import {
+	executionBlocksStore,
+	executionBlocks,
+	isExecuting,
+	spinnerContext,
+	executionResponse,
+	executionError
+} from '../executionBlocks';
+import type { StreamChunk } from '$types/streaming';
+import type { ChatBlock } from '$types/chat-block';
+
+describe('executionBlocksStore', () => {
+	beforeEach(() => {
+		executionBlocksStore.reset();
+	});
+
+	describe('start', () => {
+		it('sets workflowId and isExecuting', () => {
+			executionBlocksStore.start('wf-123');
+			expect(get(isExecuting)).toBe(true);
+			expect(get(executionBlocks)).toEqual([]);
+			expect(get(executionResponse)).toBeNull();
+		});
+	});
+
+	describe('processChunk - thinking_block', () => {
+		it('adds thinking block from thinking_block chunk', () => {
+			executionBlocksStore.start('wf-123');
+			const chunk: StreamChunk = {
+				workflow_id: 'wf-123',
+				chunk_type: 'thinking_block',
+				content: 'Let me analyze this problem...'
+			};
+			executionBlocksStore.processChunk(chunk);
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(1);
+			expect(blocks[0].block_type).toBe('thinking');
+			expect(blocks[0].data).toEqual({
+				content: 'Let me analyze this problem...',
+				source: 'model_thinking'
+			});
+			expect(blocks[0].sequence).toBe(1);
+		});
+	});
+
+	describe('processChunk - tool_start', () => {
+		it('updates spinner context on tool_start', () => {
+			executionBlocksStore.start('wf-123');
+			const chunk: StreamChunk = {
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_start',
+				tool: 'MemoryTool'
+			};
+			executionBlocksStore.processChunk(chunk);
+
+			expect(get(spinnerContext)).toBe('MemoryTool');
+		});
+	});
+
+	describe('processChunk - tool_call_complete', () => {
+		it('adds tool call block from tool_call_complete chunk', () => {
+			executionBlocksStore.start('wf-123');
+			const chunk: StreamChunk = {
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'SearchTool',
+				duration: 1500,
+				tool_input: '{"query":"test"}',
+				tool_output: '{"results":[]}',
+				tool_success: true
+			};
+			executionBlocksStore.processChunk(chunk);
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(1);
+			expect(blocks[0].block_type).toBe('tool_call');
+			expect(blocks[0].data).toEqual({
+				tool_name: 'SearchTool',
+				tool_type: 'local',
+				input_params: '{"query":"test"}',
+				output_result: '{"results":[]}',
+				success: true,
+				duration_ms: 1500
+			});
+		});
+
+		it('clears spinner context after tool_call_complete', () => {
+			executionBlocksStore.start('wf-123');
+
+			// Set spinner with tool_start
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_start',
+				tool: 'SearchTool'
+			});
+			expect(get(spinnerContext)).toBe('SearchTool');
+
+			// Complete tool
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'SearchTool',
+				duration: 500,
+				tool_input: '{}',
+				tool_output: '{}',
+				tool_success: true
+			});
+			expect(get(spinnerContext)).toBeNull();
+		});
+
+		it('handles failed tool calls', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'FailTool',
+				duration: 200,
+				tool_input: '{"x":1}',
+				tool_output: '{"error":"timeout"}',
+				tool_success: false
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks[0].data).toMatchObject({
+				tool_name: 'FailTool',
+				success: false
+			});
+		});
+	});
+
+	describe('processChunk - response_block', () => {
+		it('sets response with content and tokens', () => {
+			executionBlocksStore.start('wf-123');
+			const chunk: StreamChunk = {
+				workflow_id: 'wf-123',
+				chunk_type: 'response_block',
+				content: 'Here is the final response.',
+				tokens_input: 150,
+				tokens_output: 42
+			};
+			executionBlocksStore.processChunk(chunk);
+
+			const response = get(executionResponse);
+			expect(response).toEqual({
+				content: 'Here is the final response.',
+				tokensInput: 150,
+				tokensOutput: 42
+			});
+		});
+	});
+
+	describe('processChunk - sub_agent_complete', () => {
+		it('adds sub_agent block from sub_agent_complete chunk', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'sub_agent_complete',
+				sub_agent_name: 'ResearchAgent',
+				content: 'Research completed.',
+				duration: 3000,
+				metrics: {
+					duration_ms: 3000,
+					tokens_input: 500,
+					tokens_output: 200
+				}
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(1);
+			expect(blocks[0].block_type).toBe('sub_agent');
+			expect(blocks[0].data).toMatchObject({
+				agent_name: 'ResearchAgent',
+				status: 'completed',
+				duration_ms: 3000,
+				tokens_input: 500,
+				tokens_output: 200,
+				report_summary: 'Research completed.'
+			});
+		});
+	});
+
+	describe('processChunk - error', () => {
+		it('sets error and stops executing', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'error',
+				content: 'API rate limit exceeded'
+			});
+
+			expect(get(executionError)).toBe('API rate limit exceeded');
+			expect(get(isExecuting)).toBe(false);
+		});
+	});
+
+	describe('sequence ordering', () => {
+		it('increments sequence for each block added', () => {
+			executionBlocksStore.start('wf-123');
+
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'thinking_block',
+				content: 'Step 1'
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'Tool1',
+				duration: 100,
+				tool_input: '{}',
+				tool_output: '{}',
+				tool_success: true
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'thinking_block',
+				content: 'Step 3'
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(3);
+			expect(blocks[0].sequence).toBe(1);
+			expect(blocks[1].sequence).toBe(2);
+			expect(blocks[2].sequence).toBe(3);
+		});
+	});
+
+	describe('complete', () => {
+		it('stops executing on complete', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.complete();
+
+			expect(get(isExecuting)).toBe(false);
+		});
+	});
+
+	describe('cancel', () => {
+		it('stops executing and sets cancelled', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.cancel();
+
+			expect(get(isExecuting)).toBe(false);
+		});
+	});
+
+	describe('restoreFromBlocks', () => {
+		it('restores blocks from persisted data', () => {
+			const persisted: ChatBlock[] = [
+				{
+					block_type: 'thinking',
+					sequence: 1,
+					data: { content: 'Thinking...', source: 'model_thinking' }
+				},
+				{
+					block_type: 'tool_call',
+					sequence: 2,
+					data: {
+						tool_name: 'Search',
+						tool_type: 'local',
+						input_params: '{}',
+						output_result: '{"results":[]}',
+						success: true,
+						duration_ms: 500
+					}
+				}
+			];
+
+			executionBlocksStore.restoreFromBlocks(persisted);
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(2);
+			expect(blocks[0].block_type).toBe('thinking');
+			expect(blocks[1].block_type).toBe('tool_call');
+			expect(get(isExecuting)).toBe(false);
+		});
+	});
+
+	describe('reset', () => {
+		it('resets all state', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'thinking_block',
+				content: 'test'
+			});
+
+			executionBlocksStore.reset();
+
+			expect(get(executionBlocks)).toEqual([]);
+			expect(get(isExecuting)).toBe(false);
+			expect(get(spinnerContext)).toBeNull();
+			expect(get(executionResponse)).toBeNull();
+			expect(get(executionError)).toBeNull();
+		});
+	});
+
+	describe('passthrough chunks', () => {
+		it('ignores token chunks (deprecated)', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'token',
+				content: 'some token'
+			});
+
+			expect(get(executionBlocks)).toEqual([]);
+		});
+
+		it('ignores reasoning chunks (legacy)', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'reasoning',
+				content: 'old reasoning'
+			});
+
+			expect(get(executionBlocks)).toEqual([]);
+		});
+	});
+});

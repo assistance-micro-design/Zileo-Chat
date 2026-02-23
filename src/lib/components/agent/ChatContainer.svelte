@@ -18,25 +18,42 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-ChatContainer Component - Phase C Component Extraction
-Main chat area with message display, streaming content, and input controls.
+ChatContainer Component - SA-019 P3 Block-by-Block Refactoring
+Main chat area with message display, execution blocks inline, and input controls.
 -->
 
 <script lang="ts">
 	import { StopCircle, Bot } from '@lucide/svelte';
-	import { Button, Spinner, HelpButton } from '$lib/components/ui';
+	import { Button, HelpButton } from '$lib/components/ui';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
+	import ThinkingBlock from '$lib/components/chat/ThinkingBlock.svelte';
+	import ToolCallBlock from '$lib/components/chat/ToolCallBlock.svelte';
+	import SubAgentBlock from '$lib/components/chat/SubAgentBlock.svelte';
+	import ExecutionSpinner from '$lib/components/chat/ExecutionSpinner.svelte';
 	import { i18n } from '$lib/i18n';
 	import type { Message } from '$types/message';
+	import type { ChatBlock, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData } from '$types/chat-block';
 
 	interface Props {
 		messages: Message[];
 		messagesLoading: boolean;
-		streamContent: string;
-		isStreaming: boolean;
+		/** Persisted blocks per message (message_id -> blocks) */
+		messageBlocks?: Map<string, ChatBlock[]>;
+		/** Real-time execution blocks (current execution) */
+		executionBlocks?: ChatBlock[];
+		/** Whether an execution is currently active */
+		isExecuting?: boolean;
+		/** Contextual spinner text */
+		spinnerContext?: string | null;
+		/** Final response from the current execution */
+		executionResponse?: {
+			content: string;
+			tokensInput: number;
+			tokensOutput: number;
+		} | null;
 		disabled: boolean;
 		onsend: (message: string) => void;
 		oncancel?: () => void;
@@ -45,8 +62,11 @@ Main chat area with message display, streaming content, and input controls.
 	let {
 		messages,
 		messagesLoading,
-		streamContent,
-		isStreaming,
+		messageBlocks,
+		executionBlocks = [],
+		isExecuting = false,
+		spinnerContext = null,
+		executionResponse = null,
 		disabled,
 		onsend,
 		oncancel
@@ -54,12 +74,23 @@ Main chat area with message display, streaming content, and input controls.
 
 	let messagesContainer: HTMLDivElement | null = $state(null);
 
-	// Auto-scroll to bottom when new messages or streaming content arrives
+	// Auto-scroll to bottom when new messages, blocks, or response arrives
 	$effect(() => {
-		if (messagesContainer && (messages.length > 0 || streamContent)) {
+		if (messagesContainer && (
+			messages.length > 0 ||
+			executionBlocks.length > 0 ||
+			executionResponse
+		)) {
 			messagesContainer.scrollTop = messagesContainer.scrollHeight;
 		}
 	});
+
+	/**
+	 * Get persisted blocks for a specific message.
+	 */
+	function getBlocksForMessage(messageId: string): ChatBlock[] {
+		return messageBlocks?.get(messageId) ?? [];
+	}
 </script>
 
 <div class="chat-container">
@@ -77,29 +108,118 @@ Main chat area with message display, streaming content, and input controls.
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
-			<MessageList {messages} />
-		{/if}
+			<!-- Message List with Persisted Blocks -->
+			<div class="message-list-with-blocks">
+				{#each messages as message (message.id)}
+					<div class="message-wrapper">
+						<div class="message-item">
+							<MessageList messages={[message]} />
+						</div>
 
-		<!-- Streaming Text (shown during generation) -->
-		{#if isStreaming && streamContent}
-			<div class="streaming-text-container">
-				<div class="streaming-text-bubble">
-					<div class="streaming-header">
-						<Bot size={16} class="bot-icon" />
-						<span>{$i18n('chat_assistant')}</span>
-						<Spinner size="sm" />
+						<!-- Persisted blocks for assistant messages -->
+						{#if message.role === 'assistant'}
+							{@const blocks = getBlocksForMessage(message.id)}
+							{#if blocks.length > 0}
+								<div class="persisted-blocks">
+									{#each blocks as block (block.sequence)}
+										{#if block.block_type === 'thinking'}
+											{@const data = block.data as ThinkingBlockData}
+											<ThinkingBlock
+												content={data.content}
+												source={data.source}
+											/>
+										{:else if block.block_type === 'tool_call'}
+											{@const data = block.data as ToolCallBlockData}
+											<ToolCallBlock
+												toolName={data.tool_name}
+												toolType={data.tool_type}
+												serverName={data.server_name}
+												inputParams={data.input_params}
+												outputResult={data.output_result}
+												success={data.success}
+												errorMessage={data.error_message}
+												durationMs={data.duration_ms}
+											/>
+										{:else if block.block_type === 'sub_agent'}
+											{@const data = block.data as SubAgentBlockData}
+											<SubAgentBlock
+												agentName={data.agent_name}
+												status={data.status}
+												durationMs={data.duration_ms}
+												tokensInput={data.tokens_input}
+												tokensOutput={data.tokens_output}
+												reportSummary={data.report_summary}
+											/>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						{/if}
 					</div>
-					<div class="streaming-content streaming-cursor">
-						<MarkdownRenderer content={streamContent} />
+				{/each}
+			</div>
+
+			<!-- Real-time execution blocks (current execution) -->
+			{#if isExecuting || executionBlocks.length > 0}
+				<div class="execution-blocks">
+					{#each executionBlocks as block (block.sequence)}
+						{#if block.block_type === 'thinking'}
+							{@const data = block.data as ThinkingBlockData}
+							<ThinkingBlock
+								content={data.content}
+								source={data.source}
+							/>
+						{:else if block.block_type === 'tool_call'}
+							{@const data = block.data as ToolCallBlockData}
+							<ToolCallBlock
+								toolName={data.tool_name}
+								toolType={data.tool_type}
+								serverName={data.server_name}
+								inputParams={data.input_params}
+								outputResult={data.output_result}
+								success={data.success}
+								errorMessage={data.error_message}
+								durationMs={data.duration_ms}
+							/>
+						{:else if block.block_type === 'sub_agent'}
+							{@const data = block.data as SubAgentBlockData}
+							<SubAgentBlock
+								agentName={data.agent_name}
+								status={data.status}
+								durationMs={data.duration_ms}
+								tokensInput={data.tokens_input}
+								tokensOutput={data.tokens_output}
+								reportSummary={data.report_summary}
+							/>
+						{/if}
+					{/each}
+
+					{#if isExecuting}
+						<ExecutionSpinner context={spinnerContext} active={true} />
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Final response (pending persistence) -->
+			{#if executionResponse}
+				<div class="execution-response">
+					<div class="response-bubble">
+						<div class="response-header">
+							<Bot size={16} class="bot-icon" />
+							<span>{$i18n('chat_assistant')}</span>
+						</div>
+						<div class="response-content">
+							<MarkdownRenderer content={executionResponse.content} />
+						</div>
 					</div>
 				</div>
-			</div>
+			{/if}
 		{/if}
 	</div>
 
 	<!-- Chat Input with Cancel Button -->
 	<div class="input-area">
-		{#if isStreaming}
+		{#if isExecuting}
 			<div class="chat-input-wrapper">
 				<ChatInput disabled={true} loading={true} onsend={() => {}} />
 				<Button variant="danger" size="sm" onclick={oncancel} ariaLabel={$i18n('chat_cancel_arialabel')}>
@@ -108,7 +228,7 @@ Main chat area with message display, streaming content, and input controls.
 				</Button>
 			</div>
 		{:else}
-			<ChatInput {disabled} loading={isStreaming} {onsend} />
+			<ChatInput {disabled} loading={isExecuting} {onsend} />
 		{/if}
 	</div>
 </div>
@@ -138,12 +258,37 @@ Main chat area with message display, streaming content, and input controls.
 		min-height: 0;
 	}
 
-	/* Streaming Text Display */
-	.streaming-text-container {
+	.message-list-with-blocks {
+		display: flex;
+		flex-direction: column;
+		padding: var(--spacing-lg);
+		gap: var(--spacing-sm);
+	}
+
+	.message-wrapper {
+		animation: fadeIn 200ms ease-out;
+	}
+
+	.message-item :global(.message-list) {
+		padding: 0;
+		gap: 0;
+	}
+
+	.persisted-blocks {
+		padding: 0 var(--spacing-md);
+	}
+
+	/* Execution Blocks (real-time) */
+	.execution-blocks {
+		padding: var(--spacing-sm) var(--spacing-lg);
+	}
+
+	/* Execution Response (pending persistence) */
+	.execution-response {
 		padding: var(--spacing-md) var(--spacing-lg);
 	}
 
-	.streaming-text-bubble {
+	.response-bubble {
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
@@ -152,7 +297,7 @@ Main chat area with message display, streaming content, and input controls.
 		animation: fadeIn 0.3s ease-in;
 	}
 
-	.streaming-header {
+	.response-header {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
@@ -162,27 +307,15 @@ Main chat area with message display, streaming content, and input controls.
 		color: var(--color-text-secondary);
 	}
 
-	.streaming-header :global(.bot-icon) {
+	.response-header :global(.bot-icon) {
 		color: var(--color-accent);
 	}
 
-	.streaming-content {
+	.response-content {
 		font-size: var(--font-size-md);
 		line-height: 1.6;
 		color: var(--color-text-primary);
 		word-break: break-word;
-	}
-
-	/* Blinking cursor on last element of rendered markdown */
-	.streaming-cursor :global(*:last-child)::after {
-		content: '';
-		display: inline-block;
-		width: 2px;
-		height: 1.2em;
-		background: var(--color-accent);
-		margin-left: 2px;
-		vertical-align: text-bottom;
-		animation: blink 1s step-end infinite;
 	}
 
 	@keyframes fadeIn {
@@ -193,16 +326,6 @@ Main chat area with message display, streaming content, and input controls.
 		to {
 			opacity: 1;
 			transform: translateY(0);
-		}
-	}
-
-	@keyframes blink {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0;
 		}
 	}
 
@@ -219,5 +342,13 @@ Main chat area with message display, streaming content, and input controls.
 
 	.chat-input-wrapper :global(.chat-input-container) {
 		flex: 1;
+	}
+
+	/* Respect reduced motion preference */
+	@media (prefers-reduced-motion: reduce) {
+		.message-wrapper,
+		.response-bubble {
+			animation: none;
+		}
 	}
 </style>

@@ -247,6 +247,51 @@ function handleTaskComplete(s: ChunkableState, c: StreamChunk): ChunkableState {
 }
 
 /**
+ * Handle thinking_block chunk - add as reasoning step (backward compat).
+ * The executionBlocksStore handles the full block display separately.
+ */
+function handleThinkingBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
+	return {
+		...s,
+		reasoning: [
+			...s.reasoning,
+			{
+				content: c.content ?? '',
+				timestamp: Date.now(),
+				stepNumber: s.reasoning.length + 1
+			}
+		]
+	};
+}
+
+/**
+ * Handle tool_call_complete chunk - mark tool as completed (backward compat).
+ * The executionBlocksStore handles the full block display separately.
+ */
+function handleToolCallComplete(s: ChunkableState, c: StreamChunk): ChunkableState {
+	return {
+		...s,
+		tools: s.tools.map((t) =>
+			t.name === c.tool && t.status === 'running'
+				? { ...t, status: 'completed' as const, duration: c.duration }
+				: t
+		)
+	};
+}
+
+/**
+ * Handle response_block chunk - set final content and token counts (backward compat).
+ * The executionBlocksStore handles the full response display separately.
+ */
+function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
+	return {
+		...s,
+		content: c.content ?? s.content,
+		tokensReceived: c.tokens_output ?? s.tokensReceived
+	};
+}
+
+/**
  * Registry mapping chunk types to their handler functions.
  */
 const chunkHandlers: Record<string, ChunkHandler> = {
@@ -261,7 +306,10 @@ const chunkHandlers: Record<string, ChunkHandler> = {
 	sub_agent_error: handleSubAgentError,
 	task_create: handleTaskCreate,
 	task_update: handleTaskUpdate,
-	task_complete: handleTaskComplete
+	task_complete: handleTaskComplete,
+	thinking_block: handleThinkingBlock,
+	tool_call_complete: handleToolCallComplete,
+	response_block: handleResponseBlock
 };
 
 /**

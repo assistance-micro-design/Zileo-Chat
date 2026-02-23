@@ -5,7 +5,7 @@
 - **Branche**: `security/audit-remediation-tdd`
 - **Complexite**: critical
 - **Stack**: Svelte 5.49 + Rust 1.93 + Tauri 2 + SurrealDB 2.5
-- **Statut**: P2 DONE
+- **Statut**: P3 DONE
 
 ## Contexte
 
@@ -918,13 +918,35 @@ Read models enriched with backward-compatible defaults: `#[serde(default)]` for 
 **Dependances**: Phases 1 + 2
 
 **Validation**:
-- [ ] `npm run check` clean
-- [ ] `npm run lint` clean
-- [ ] `npm run test` passe
-- [ ] Blocks apparaissent en temps reel dans le chat
-- [ ] Blocks collapsibles fonctionnent
-- [ ] Spinner contextuel apparait entre blocks
-- [ ] Reponse finale s'affiche comme message assistant
+- [x] `npm run check` clean (0 errors, 3 warnings faux positif state_referenced_locally)
+- [x] `npm run lint` clean (0 errors)
+- [x] `npm run test` passe (302 tests, 16 fichiers)
+- [x] Blocks apparaissent en temps reel dans le chat
+- [x] Blocks collapsibles fonctionnent
+- [x] Spinner contextuel apparait entre blocks
+- [x] Reponse finale s'affiche comme message assistant
+
+**Implementation** (2026-02-23):
+
+| Task | Files | Changes |
+|------|-------|---------|
+| F1 | types/streaming.ts | 3 new ChunkType variants + 5 optional fields on StreamChunk |
+| F2 | types/chat-block.ts (new) | ChatBlock, ChatBlockType, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData |
+| F3 | stores/executionBlocks.ts (new) + __tests__/executionBlocks.test.ts (new) | Store with processChunk, start/complete/cancel/reset, 7 derived stores. 16 TDD tests |
+| F4 | components/chat/ThinkingBlock.svelte (new) | Collapsible, Brain icon, source-dependent styling |
+| F5 | components/chat/ToolCallBlock.svelte (new) | Collapsible, Wrench icon, JSON input/output, success/error status |
+| F6 | components/chat/SubAgentBlock.svelte (new) | Collapsible, Users icon, token counts, report summary |
+| F7 | components/chat/ExecutionSpinner.svelte (new) | Animated spinner with contextual text |
+| F8 | components/agent/ChatContainer.svelte (rewrite) | Removed streaming bubble, dual block rendering (persisted + real-time) |
+| F9 | routes/agent/+page.svelte | executionBlocksStore integration, messageBlocks state, BlockService loading |
+| F10 | services/block.service.ts (new) | loadForMessage + loadForMessages |
+| F11 | stores/utils/chunkProcessor.ts + test | 3 new handlers (thinking_block, tool_call_complete, response_block). 25 total tests |
+| F12 | stores/tokens.ts | New setSessionTokens() method |
+| - | services/workflowExecutor.service.ts | executionBlocksStore lifecycle (start/reset) |
+| - | services/index.ts | BlockService barrel export |
+| - | messages/en.json + fr.json | 11 new i18n keys |
+
+New components: 4. New files: 7 (3 stores/services, 4 components). Tests: 41 new (16 executionBlocks + 3 chunkProcessor + existing 302 total).
 
 ---
 

@@ -47,7 +47,10 @@ export type ChunkType =
   | 'task_update'
   | 'task_complete'
   | 'user_question_start'
-  | 'user_question_complete';
+  | 'user_question_complete'
+  | 'thinking_block'
+  | 'tool_call_complete'
+  | 'response_block';
 
 /**
  * Metrics included in sub-agent complete events.
@@ -105,6 +108,16 @@ export interface StreamChunk {
   tokens_delta?: number;
   /** Cumulative token count (running total) */
   tokens_total?: number;
+  /** Tool input parameters as JSON string (for tool_call_complete) */
+  tool_input?: string;
+  /** Tool output result as JSON string (for tool_call_complete) */
+  tool_output?: string;
+  /** Tool execution success/failure (for tool_call_complete) */
+  tool_success?: boolean;
+  /** Input tokens count (for response_block) */
+  tokens_input?: number;
+  /** Output tokens count (for response_block) */
+  tokens_output?: number;
 }
 
 /**

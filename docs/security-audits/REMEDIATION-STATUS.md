@@ -3,7 +3,7 @@
 **Date**: 2026-02-23 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
-**Files changed**: 149 (vs main)
+**Files changed**: 166 (vs main)
 **Lines**: +11,217 / -2,729
 
 ---
@@ -565,13 +565,13 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-019: Agent Chat Refactoring - Block-by-Block
 
 **Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
-**Status:** P2 DONE
+**Status:** P3 DONE
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | P1 | Backend: vrais tokens + thinking extraction + events enrichis | **DONE** |
 | P2 | Backend: load_message_blocks command + ChatBlock model | **DONE** |
-| P3 | Frontend: types + store + composants blocks inline | **NOT STARTED** |
+| P3 | Frontend: types + store + composants blocks inline | **DONE** |
 | P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **NOT STARTED** |
 | P5 | Nettoyage code mort (simulate_streaming, estimate_tokens, etc.) | **NOT STARTED** |
 
@@ -612,6 +612,30 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - All SELECT queries updated to ORDER BY sequence ASC
 - 11 files changed, +538/-26 lines. Tests: 956 passing (14 new), clippy clean.
 
+### P3: Frontend - Block-by-Block Display - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| F1 | Enriched StreamChunk types (3 new ChunkTypes + 5 new fields) | **DONE** |
+| F2 | ChatBlock TS types synchronized with Rust model | **DONE** |
+| F3 | executionBlocksStore (processChunk, lifecycle, derived stores) + 16 TDD tests | **DONE** |
+| F4-F7 | ThinkingBlock, ToolCallBlock, SubAgentBlock, ExecutionSpinner components | **DONE** |
+| F8 | ChatContainer rewrite (persisted + real-time blocks, spinner, response) | **DONE** |
+| F9 | Agent page integration (executionBlocksStore, BlockService, messageBlocks) | **DONE** |
+| F10 | BlockService (loadForMessage, loadForMessages) | **DONE** |
+| F11 | chunkProcessor backward compat (3 new handlers) + 3 tests | **DONE** |
+| F12 | tokenStore setSessionTokens method | **DONE** |
+
+**Key changes:**
+- NEW `executionBlocksStore` with 7 derived stores
+- NEW 4 Svelte components (ThinkingBlock, ToolCallBlock, SubAgentBlock, ExecutionSpinner)
+- NEW `BlockService` for loading persisted blocks via IPC
+- ChatContainer rewritten: dual rendering (persisted blocks per message + real-time execution blocks)
+- chunkProcessor.ts extended with backward-compatible handlers
+- workflowExecutor.service.ts manages executionBlocksStore lifecycle
+- 11 new i18n keys in en.json + fr.json
+- 7 new files, 4 new components, 41 new tests (302 total TS)
+
 ---
 
 ## Verification Status
@@ -621,14 +645,15 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
 | cargo test --lib | **PASS** | 2026-02-23, 956 tests passed (+14 from SA-019/P2) |
-| npm run lint | **PASS** | 2026-02-22, 0 errors |
-| npm run check | **PASS** | 2026-02-22, 0 errors 0 warnings |
-| npm run test | **PASS** | 2026-02-22, 283 tests passed (+18 from SA-016) |
+| npm run lint | **PASS** | 2026-02-23, 0 errors |
+| npm run check | **PASS** | 2026-02-23, 0 errors, 3 warnings (state_referenced_locally faux positif) |
+| npm run test | **PASS** | 2026-02-23, 302 tests passed (+19 from SA-019/P3) |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: workflow rename | **PASS** | 2026-02-22, user confirmed rename + space key works |
 | Manual test: workflow delete modal | **PASS** | 2026-02-22, user confirmed standard modal design |
+| Manual test: block-by-block display | **PASS** | 2026-02-23, user confirmed blocks inline, spinner, collapse, cancel |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
 | Manual test: custom provider HTTP warning | **NOT RUN** | |

@@ -46,6 +46,7 @@ import { tokenStore } from '$lib/stores/tokens';
 import { activityStore } from '$lib/stores/activity';
 import { workflowStore } from '$lib/stores/workflows';
 import { backgroundWorkflowsStore } from '$lib/stores/backgroundWorkflows';
+import { executionBlocksStore } from '$lib/stores/executionBlocks';
 import { toastStore } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { getErrorMessage } from '$lib/utils/error';
@@ -244,8 +245,9 @@ export const WorkflowExecutorService = {
 				selectedWorkflow?.name ?? 'Workflow'
 			);
 
-			// Step 2: Start streaming (for the viewed workflow)
+			// Step 2: Start streaming and execution blocks (for the viewed workflow)
 			tokenStore.startStreaming();
+			executionBlocksStore.start(workflowId);
 			await streamingStore.start(workflowId);
 
 			// Step 3: Execute workflow (long-running IPC - user may switch workflows)
@@ -344,6 +346,7 @@ export const WorkflowExecutorService = {
 				activityStore.captureStreamingActivities(workflowId);
 
 				streamingStore.reset();
+				executionBlocksStore.reset();
 				tokenStore.stopStreaming();
 			}
 		}

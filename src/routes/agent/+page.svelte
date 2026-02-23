@@ -41,7 +41,8 @@ Uses extracted components, services, and stores for clean architecture.
 	import { i18n } from '$lib/i18n';
 
 	// Service imports
-	import { WorkflowService, MessageService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
+	import { WorkflowService, MessageService, BlockService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
+	import type { ChatBlock } from '$types/chat-block';
 
 	// Store imports
 	import {
@@ -64,7 +65,14 @@ Uses extracted components, services, and stores for clean architecture.
 		tokenDisplayData
 	} from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
-	import { streamingStore, isStreaming, streamContent } from '$lib/stores/streaming';
+	import { streamingStore, isStreaming } from '$lib/stores/streaming';
+	import {
+		executionBlocksStore,
+		executionBlocks as executionBlocks$,
+		isExecuting as isExecuting$,
+		spinnerContext as spinnerContext$,
+		executionResponse as executionResponse$
+	} from '$lib/stores/executionBlocks';
 	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
 	import { userQuestionStore } from '$lib/stores/userQuestion';
@@ -121,12 +129,15 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Aggregated page state (OPT-FA-9) */
 	let pageState = $state<PageState>(initialPageState);
 
+	/** Persisted blocks per message (SA-019 P3) */
+	let messageBlocks = $state<Map<string, ChatBlock[]>>(new Map());
+
 	// ============================================================================
 	// Data Loading Functions (simplified using services)
 	// ============================================================================
 
 	/**
-	 * Load workflow data (messages and historical activities).
+	 * Load workflow data (messages, historical activities, and persisted blocks).
 	 */
 	async function loadWorkflowData(workflowId: string): Promise<void> {
 		pageState.messagesLoading = true;
@@ -143,6 +154,13 @@ Uses extracted components, services, and stores for clean architecture.
 					persistent: false,
 					duration: 5000
 				});
+			}
+
+			// Load persisted execution blocks for all messages (SA-019 P3)
+			try {
+				messageBlocks = await BlockService.loadForMessages(result.messages);
+			} catch {
+				messageBlocks = new Map();
 			}
 
 			// Load historical activities (store handles internally)
@@ -191,14 +209,16 @@ Uses extracted components, services, and stores for clean architecture.
 		if (bgExecution && bgExecution.status === 'running') {
 			// Restore streaming state from background execution
 			streamingStore.restoreFrom(bgExecution);
+			executionBlocksStore.start(workflowId);
 			tokenStore.startStreaming();
 			tokenStore.updateStreamingTokens(bgExecution.tokensReceived);
 
 			// Open user question modal if there are pending questions for this workflow
 			userQuestionStore.openForWorkflow(workflowId);
 		} else {
-			// Not running in background - reset streaming state
+			// Not running in background - reset streaming and execution state
 			streamingStore.reset();
+			executionBlocksStore.reset();
 		}
 
 		// Update token store with workflow cumulative metrics
@@ -347,6 +367,7 @@ Uses extracted components, services, and stores for clean architecture.
 		if (pageState.selectedWorkflowId) {
 			WorkflowService.cancel(pageState.selectedWorkflowId);
 			streamingStore.reset();
+			executionBlocksStore.cancel();
 			tokenStore.stopStreaming();
 		}
 	}
@@ -389,8 +410,14 @@ Uses extracted components, services, and stores for clean architecture.
 		// Initialize background workflows store (owns event listeners)
 		await backgroundWorkflowsStore.init();
 		backgroundWorkflowsStore.setForwardCallbacks(
-			(chunk) => streamingStore.processChunkDirect(chunk),
-			(complete) => streamingStore.processCompleteDirect(complete),
+			(chunk) => {
+				streamingStore.processChunkDirect(chunk);
+				executionBlocksStore.processChunk(chunk);
+			},
+			(complete) => {
+				streamingStore.processCompleteDirect(complete);
+				executionBlocksStore.complete();
+			},
 			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
 		);
 
@@ -485,8 +512,11 @@ Uses extracted components, services, and stores for clean architecture.
 			<ChatContainer
 				messages={pageState.messages}
 				messagesLoading={pageState.messagesLoading}
-				streamContent={$streamContent}
-				isStreaming={$isStreaming}
+				{messageBlocks}
+				executionBlocks={$executionBlocks$}
+				isExecuting={$isExecuting$}
+				spinnerContext={$spinnerContext$}
+				executionResponse={$executionResponse$}
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
 				oncancel={handleCancel}

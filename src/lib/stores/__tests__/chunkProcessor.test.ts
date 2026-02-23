@@ -388,6 +388,53 @@ describe('applyChunkToState', () => {
 		});
 	});
 
+	describe('thinking_block (SA-019)', () => {
+		it('should add reasoning step from thinking_block chunk', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'thinking_block',
+				content: 'Let me analyze...'
+			}));
+
+			expect(result.reasoning).toHaveLength(1);
+			expect(result.reasoning[0].content).toBe('Let me analyze...');
+			expect(result.reasoning[0].stepNumber).toBe(1);
+		});
+	});
+
+	describe('tool_call_complete (SA-019)', () => {
+		it('should mark matching running tool as completed', () => {
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'tool_start',
+				tool: 'SearchTool'
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'tool_call_complete',
+				tool: 'SearchTool',
+				duration: 500,
+				tool_input: '{"q":"test"}',
+				tool_output: '{"r":[]}',
+				tool_success: true
+			}));
+
+			expect(s.tools[0].status).toBe('completed');
+			expect(s.tools[0].duration).toBe(500);
+		});
+	});
+
+	describe('response_block (SA-019)', () => {
+		it('should set content and token count from response_block', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				content: 'Final answer.',
+				tokens_input: 100,
+				tokens_output: 50
+			}));
+
+			expect(result.content).toBe('Final answer.');
+			expect(result.tokensReceived).toBe(50);
+		});
+	});
+
 	describe('extended state preservation', () => {
 		it('should preserve extra fields in extended state types', () => {
 			interface ExtendedState extends ChunkableState {

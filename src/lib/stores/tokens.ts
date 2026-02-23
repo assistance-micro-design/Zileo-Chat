@@ -178,6 +178,25 @@ export const tokenStore = {
 	},
 
 	/**
+	 * Set session tokens from a response_block event.
+	 * Sets both input and output tokens at once without speed calculation.
+	 * Used with the new block-by-block execution model (SA-019).
+	 *
+	 * @param tokensIn - Input tokens consumed
+	 * @param tokensOut - Output tokens generated
+	 */
+	setSessionTokens(tokensIn: number, tokensOut: number): void {
+		store.update((s) => ({
+			...s,
+			streaming: {
+				input: tokensIn,
+				output: tokensOut,
+				speed: null
+			}
+		}));
+	},
+
+	/**
 	 * Stop streaming mode.
 	 * Clears streaming state but preserves metrics.
 	 */
