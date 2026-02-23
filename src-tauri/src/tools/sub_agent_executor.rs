@@ -1284,6 +1284,7 @@ pub fn is_retryable_error(error_message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agents::core::agent::ReasoningSource;
 
     #[test]
     fn test_check_primary_permission_allowed() {
@@ -1357,6 +1358,7 @@ mod tests {
             error_message: None,
             duration_ms: 150,
             iteration: 0,
+            sequence: 0,
         };
         let result = ExecutionResult {
             success: true,
@@ -1383,6 +1385,8 @@ mod tests {
         let step = ReasoningStepData {
             content: "Analyzing the codebase structure".to_string(),
             duration_ms: 300,
+            sequence: 0,
+            source: ReasoningSource::AgentFlow,
         };
         let result = ExecutionResult {
             success: true,

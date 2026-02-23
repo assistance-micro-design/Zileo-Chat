@@ -93,6 +93,8 @@ pub async fn save_thinking_step(
         content,
         duration_ms,
         tokens,
+        sequence: 0,
+        source: "agent_flow".to_string(),
     };
 
     // Insert into database

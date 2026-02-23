@@ -417,6 +417,7 @@ impl OpenAiCompatibleProvider {
             model: model.to_string(),
             provider: ProviderType::Custom(self.provider_name.clone()),
             finish_reason,
+            thinking_content: None,
         })
     }
 

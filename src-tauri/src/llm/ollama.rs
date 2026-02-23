@@ -361,6 +361,7 @@ impl LLMProvider for OllamaProvider {
             model: model_name.to_string(),
             provider: ProviderType::Ollama,
             finish_reason: Some("stop".to_string()),
+            thinking_content: None,
         })
     }
 

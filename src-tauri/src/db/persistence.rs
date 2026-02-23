@@ -67,6 +67,7 @@ pub async fn persist_tool_executions(
                 error_message: te.error_message.clone(),
                 duration_ms: te.duration_ms,
                 iteration: te.iteration,
+                sequence: te.sequence,
             };
             let tool_name = te.tool_name.clone();
             async move {
@@ -122,6 +123,8 @@ pub async fn persist_reasoning_steps(
                 content: rs.content.clone(),
                 duration_ms: Some(rs.duration_ms),
                 tokens: None,
+                sequence: rs.sequence,
+                source: rs.source.to_string(),
             };
             async move {
                 if let Err(e) = db.create("thinking_step", &step_id, step).await {

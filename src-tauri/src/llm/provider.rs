@@ -97,6 +97,10 @@ pub struct LLMResponse {
     pub provider: ProviderType,
     /// Finish reason (if available)
     pub finish_reason: Option<String>,
+    /// Thinking content from reasoning models (e.g. Mistral Magistral)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub thinking_content: Option<String>,
 }
 
 /// LLM error types
@@ -272,6 +276,7 @@ mod tests {
             model: "mistral-large".to_string(),
             provider: ProviderType::Mistral,
             finish_reason: Some("stop".to_string()),
+            thinking_content: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -282,6 +287,47 @@ mod tests {
         assert_eq!(deserialized.tokens_output, response.tokens_output);
         assert_eq!(deserialized.model, response.model);
         assert_eq!(deserialized.provider, response.provider);
+        assert_eq!(deserialized.thinking_content, None);
+    }
+
+    #[test]
+    fn test_llm_response_with_thinking_content() {
+        let response = LLMResponse {
+            content: "The answer is 42.".to_string(),
+            tokens_input: 15,
+            tokens_output: 8,
+            model: "mistral-magistral".to_string(),
+            provider: ProviderType::Mistral,
+            finish_reason: Some("stop".to_string()),
+            thinking_content: Some("Let me reason about this...".to_string()),
+        };
+
+        // When Some, thinking_content IS serialized
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("thinking_content"));
+        assert!(json.contains("Let me reason about this..."));
+
+        let deserialized: LLMResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            deserialized.thinking_content,
+            Some("Let me reason about this...".to_string())
+        );
+    }
+
+    #[test]
+    fn test_llm_response_thinking_none_omitted_from_json() {
+        let response = LLMResponse {
+            content: "Hello".to_string(),
+            tokens_input: 5,
+            tokens_output: 1,
+            model: "test".to_string(),
+            provider: ProviderType::Ollama,
+            finish_reason: None,
+            thinking_content: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(!json.contains("thinking_content"));
     }
 
     #[test]

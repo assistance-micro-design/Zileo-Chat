@@ -28,7 +28,8 @@
 //! 7. Loop continues until no more tool calls or max iterations reached
 
 use crate::agents::core::agent::{
-    Agent, ReasoningStepData, Report, ReportMetrics, ReportStatus, Task, ToolExecutionData,
+    Agent, ReasoningSource, ReasoningStepData, Report, ReportMetrics, ReportStatus, Task,
+    ToolExecutionData,
 };
 use crate::db::DBClient;
 use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
@@ -1133,6 +1134,8 @@ impl Agent for LLMAgent {
         // Tool execution loop
         let mut final_response_content = String::new();
         let mut iteration = 0;
+        // SA-019: Global sequence counter for block ordering
+        let mut global_sequence: u32 = 0;
 
         // Use agent config max_tool_iterations, clamped to valid range [1, 200]
         let max_iterations = self.config.max_tool_iterations.clamp(1, 200);
@@ -1148,6 +1151,7 @@ impl Agent for LLMAgent {
                     "Max tool iterations ({}) reached, stopping execution",
                     max_iterations
                 );
+                global_sequence += 1;
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
                     reasoning_content.clone(),
@@ -1155,6 +1159,8 @@ impl Agent for LLMAgent {
                 reasoning_steps_data.push(ReasoningStepData {
                     content: reasoning_content,
                     duration_ms: start.elapsed().as_millis() as u64,
+                    sequence: global_sequence,
+                    source: ReasoningSource::AgentFlow,
                 });
                 break;
             }
@@ -1163,6 +1169,7 @@ impl Agent for LLMAgent {
             if iteration > 1 {
                 let reasoning_content =
                     format!("Tool iteration {} - Processing tool results...", iteration);
+                global_sequence += 1;
                 self.emit_progress(StreamChunk::reasoning(
                     event_workflow_id.clone(),
                     reasoning_content.clone(),
@@ -1170,6 +1177,8 @@ impl Agent for LLMAgent {
                 reasoning_steps_data.push(ReasoningStepData {
                     content: reasoning_content,
                     duration_ms: start.elapsed().as_millis() as u64,
+                    sequence: global_sequence,
+                    source: ReasoningSource::AgentFlow,
                 });
             }
 
@@ -1254,6 +1263,23 @@ impl Agent for LLMAgent {
                 }
             };
 
+            // SA-019: Extract and emit thinking content from reasoning models
+            if let Some(thinking) = adapter.extract_thinking(&response) {
+                if !thinking.trim().is_empty() {
+                    global_sequence += 1;
+                    self.emit_progress(StreamChunk::thinking_block(
+                        event_workflow_id.clone(),
+                        thinking.clone(),
+                    ));
+                    reasoning_steps_data.push(ReasoningStepData {
+                        content: thinking,
+                        duration_ms: start.elapsed().as_millis() as u64,
+                        sequence: global_sequence,
+                        source: ReasoningSource::ModelThinking,
+                    });
+                }
+            }
+
             // Parse tool calls from response using the adapter (JSON function calling)
             let function_calls = adapter.parse_tool_calls(&response);
 
@@ -1297,6 +1323,7 @@ impl Agent for LLMAgent {
                 function_calls.len(),
                 tool_names.join(", ")
             );
+            global_sequence += 1;
             self.emit_progress(StreamChunk::reasoning(
                 event_workflow_id.clone(),
                 reasoning_content.clone(),
@@ -1304,6 +1331,8 @@ impl Agent for LLMAgent {
             reasoning_steps_data.push(ReasoningStepData {
                 content: reasoning_content,
                 duration_ms: start.elapsed().as_millis() as u64,
+                sequence: global_sequence,
+                source: ReasoningSource::AgentFlow,
             });
 
             // Add assistant message with tool calls to messages array
@@ -1344,9 +1373,10 @@ impl Agent for LLMAgent {
                         (None, call.name.clone())
                     };
 
+                global_sequence += 1;
                 tool_executions_data.push(ToolExecutionData {
                     tool_type: tool_type.to_string(),
-                    tool_name: tool_name_for_data,
+                    tool_name: tool_name_for_data.clone(),
                     server_name,
                     input_params: call.arguments.clone(),
                     output_result: result.result.clone(),
@@ -1354,13 +1384,21 @@ impl Agent for LLMAgent {
                     error_message: result.error.clone(),
                     duration_ms: exec_duration,
                     iteration: iteration as u32,
+                    sequence: global_sequence,
                 });
 
-                // Emit tool_end event
-                self.emit_progress(StreamChunk::tool_end(
+                // SA-019: Emit tool_call_complete with full input/output details
+                let input_json = serde_json::to_string(&call.arguments)
+                    .unwrap_or_else(|_| "{}".to_string());
+                let output_json = serde_json::to_string(&result.result)
+                    .unwrap_or_else(|_| "{}".to_string());
+                self.emit_progress(StreamChunk::tool_call_complete(
                     event_workflow_id.clone(),
-                    call.name.clone(),
+                    tool_name_for_data,
                     exec_duration,
+                    input_json,
+                    output_json,
+                    result.success,
                 ));
 
                 // Format and add tool result to messages using adapter

@@ -15,6 +15,7 @@
 use crate::mcp::MCPManager;
 use crate::models::{AgentConfig, Lifecycle};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -62,6 +63,25 @@ pub enum ReportStatus {
     Partial,
 }
 
+/// Source of a reasoning step
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningSource {
+    /// Synthetic descriptions from agent flow (e.g. "Analyzing task...", "Calling tool X...")
+    AgentFlow,
+    /// Real thinking content from reasoning models (e.g. Mistral Magistral)
+    ModelThinking,
+}
+
+impl std::fmt::Display for ReasoningSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReasoningSource::AgentFlow => write!(f, "agent_flow"),
+            ReasoningSource::ModelThinking => write!(f, "model_thinking"),
+        }
+    }
+}
+
 /// Intermediate reasoning step data for persistence
 #[derive(Debug, Clone)]
 pub struct ReasoningStepData {
@@ -69,6 +89,10 @@ pub struct ReasoningStepData {
     pub content: String,
     /// Duration in milliseconds (from start of execution to this step)
     pub duration_ms: u64,
+    /// Global ordering sequence within the execution
+    pub sequence: u32,
+    /// Source of this reasoning step
+    pub source: ReasoningSource,
 }
 
 /// Detailed tool execution data for persistence
@@ -92,6 +116,8 @@ pub struct ToolExecutionData {
     pub duration_ms: u64,
     /// Iteration number in the tool loop
     pub iteration: u32,
+    /// Global ordering sequence within the execution
+    pub sequence: u32,
 }
 
 /// Metrics collected during task execution

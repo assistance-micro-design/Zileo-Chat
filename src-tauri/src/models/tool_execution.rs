@@ -114,6 +114,8 @@ pub struct ToolExecutionCreate {
     pub duration_ms: u64,
     /// Iteration number
     pub iteration: u32,
+    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    pub sequence: u32,
 }
 
 impl ToolExecutionCreate {
@@ -145,6 +147,7 @@ impl ToolExecutionCreate {
             error_message,
             duration_ms,
             iteration,
+            sequence: 0,
         }
     }
 
@@ -177,6 +180,7 @@ impl ToolExecutionCreate {
             error_message,
             duration_ms,
             iteration,
+            sequence: 0,
         }
     }
 }

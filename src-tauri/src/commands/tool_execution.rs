@@ -163,6 +163,7 @@ pub async fn save_tool_execution(
         error_message,
         duration_ms,
         iteration,
+        sequence: 0,
     };
 
     let id = state

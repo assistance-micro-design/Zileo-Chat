@@ -69,6 +69,15 @@ struct MistralChoice {
     finish_reason: Option<String>,
 }
 
+/// Parsed content from Mistral API response, separating text from thinking blocks
+#[derive(Debug, Clone)]
+pub struct ParsedContent {
+    /// The text content (final answer)
+    pub text: String,
+    /// Thinking content from reasoning models (if present)
+    pub thinking: Option<String>,
+}
+
 /// Response message - content can be string or array of content blocks
 #[derive(Debug, Deserialize)]
 struct MistralResponseMessage {
@@ -76,7 +85,7 @@ struct MistralResponseMessage {
     role: String,
     /// Content can be a simple string or an array of content blocks (reasoning models)
     #[serde(deserialize_with = "deserialize_content")]
-    content: String,
+    content: ParsedContent,
 }
 
 /// Content block for reasoning models (thinking or text)
@@ -163,8 +172,9 @@ struct MistralToolResponseMessage {
     tool_calls: Option<Vec<serde_json::Value>>,
 }
 
-/// Custom deserializer for content field that handles both string and array formats
-fn deserialize_content<'de, D>(deserializer: D) -> Result<String, D::Error>
+/// Custom deserializer for content field that handles both string and array formats.
+/// Returns ParsedContent with separated text and thinking content.
+fn deserialize_content<'de, D>(deserializer: D) -> Result<ParsedContent, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -173,7 +183,7 @@ where
     struct ContentVisitor;
 
     impl<'de> Visitor<'de> for ContentVisitor {
-        type Value = String;
+        type Value = ParsedContent;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a string or an array of content blocks")
@@ -184,14 +194,20 @@ where
         where
             E: de::Error,
         {
-            Ok(value.to_string())
+            Ok(ParsedContent {
+                text: value.to_string(),
+                thinking: None,
+            })
         }
 
         fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
         where
             E: de::Error,
         {
-            Ok(value)
+            Ok(ParsedContent {
+                text: value,
+                thinking: None,
+            })
         }
 
         // Reasoning models: content is an array of blocks
@@ -199,25 +215,37 @@ where
         where
             A: de::SeqAccess<'de>,
         {
-            let mut result = String::new();
+            let mut text_parts = String::new();
+            let mut thinking_parts = String::new();
 
             while let Some(block) = seq.next_element::<ContentBlock>()? {
                 match block {
                     ContentBlock::Thinking { thinking } => {
-                        // Optionally include thinking content (could be configurable)
-                        // For now, we skip thinking and only return the final answer
+                        for tb in &thinking {
+                            if !thinking_parts.is_empty() {
+                                thinking_parts.push('\n');
+                            }
+                            thinking_parts.push_str(&tb.text);
+                        }
                         debug!("Reasoning model thinking blocks: {} items", thinking.len());
                     }
                     ContentBlock::Text { text } => {
-                        if !result.is_empty() {
-                            result.push('\n');
+                        if !text_parts.is_empty() {
+                            text_parts.push('\n');
                         }
-                        result.push_str(&text);
+                        text_parts.push_str(&text);
                     }
                 }
             }
 
-            Ok(result)
+            Ok(ParsedContent {
+                text: text_parts,
+                thinking: if thinking_parts.is_empty() {
+                    None
+                } else {
+                    Some(thinking_parts)
+                },
+            })
         }
     }
 
@@ -390,7 +418,9 @@ impl MistralProvider {
             .next()
             .ok_or_else(|| LLMError::RequestFailed("No choices in response".to_string()))?;
 
-        let content = choice.message.content;
+        let parsed = choice.message.content;
+        let content = parsed.text;
+        let thinking_content = parsed.thinking;
         let finish_reason = choice.finish_reason;
 
         // Get token counts from usage if available, otherwise estimate
@@ -405,12 +435,22 @@ impl MistralProvider {
             (estimate(prompt) + estimate(system_text), estimate(&content))
         };
 
-        info!(
-            tokens_input = tokens_input,
-            tokens_output = tokens_output,
-            response_len = content.len(),
-            "Mistral reasoning model completion successful"
-        );
+        if thinking_content.is_some() {
+            info!(
+                tokens_input = tokens_input,
+                tokens_output = tokens_output,
+                response_len = content.len(),
+                thinking_len = thinking_content.as_ref().map_or(0, |t| t.len()),
+                "Mistral reasoning model completion with thinking"
+            );
+        } else {
+            info!(
+                tokens_input = tokens_input,
+                tokens_output = tokens_output,
+                response_len = content.len(),
+                "Mistral reasoning model completion successful"
+            );
+        }
 
         Ok(LLMResponse {
             content,
@@ -419,6 +459,7 @@ impl MistralProvider {
             model: model.to_string(),
             provider: ProviderType::Mistral,
             finish_reason,
+            thinking_content,
         })
     }
 
@@ -660,6 +701,7 @@ impl LLMProvider for MistralProvider {
             model: model_name.to_string(),
             provider: ProviderType::Mistral,
             finish_reason: Some("stop".to_string()),
+            thinking_content: None,
         })
     }
 
@@ -773,15 +815,16 @@ mod tests {
 
     #[test]
     fn test_deserialize_standard_content() {
-        // Test standard string content
+        // Test standard string content - no thinking
         let json = r#"{"role": "assistant", "content": "Hello world"}"#;
         let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
-        assert_eq!(msg.content, "Hello world");
+        assert_eq!(msg.content.text, "Hello world");
+        assert!(msg.content.thinking.is_none());
     }
 
     #[test]
-    fn test_deserialize_reasoning_content() {
-        // Test reasoning model content (array format)
+    fn test_deserialize_reasoning_content_extracts_thinking() {
+        // Test reasoning model content (array format) - thinking is now captured
         let json = r#"{
             "role": "assistant",
             "content": [
@@ -790,12 +833,35 @@ mod tests {
             ]
         }"#;
         let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
-        assert_eq!(msg.content, "The answer is 42");
+        assert_eq!(msg.content.text, "The answer is 42");
+        assert_eq!(
+            msg.content.thinking,
+            Some("Let me think...".to_string())
+        );
+    }
+
+    #[test]
+    fn test_deserialize_reasoning_multiple_thinking_blocks() {
+        // Test reasoning model with multiple thinking blocks concatenated
+        let json = r#"{
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": [{"type": "text", "text": "Step 1: analyze"}]},
+                {"type": "thinking", "thinking": [{"type": "text", "text": "Step 2: compute"}]},
+                {"type": "text", "text": "The result is 7"}
+            ]
+        }"#;
+        let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content.text, "The result is 7");
+        assert_eq!(
+            msg.content.thinking,
+            Some("Step 1: analyze\nStep 2: compute".to_string())
+        );
     }
 
     #[test]
     fn test_deserialize_reasoning_multiple_text_blocks() {
-        // Test reasoning model with multiple text blocks
+        // Test reasoning model with multiple text blocks, no thinking
         let json = r#"{
             "role": "assistant",
             "content": [
@@ -804,6 +870,28 @@ mod tests {
             ]
         }"#;
         let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
-        assert_eq!(msg.content, "First part\nSecond part");
+        assert_eq!(msg.content.text, "First part\nSecond part");
+        assert!(msg.content.thinking.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_thinking_with_multiple_sub_blocks() {
+        // Test thinking block with multiple text sub-blocks
+        let json = r#"{
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": [
+                    {"type": "text", "text": "First thought"},
+                    {"type": "text", "text": "Second thought"}
+                ]},
+                {"type": "text", "text": "Final answer"}
+            ]
+        }"#;
+        let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content.text, "Final answer");
+        assert_eq!(
+            msg.content.thinking,
+            Some("First thought\nSecond thought".to_string())
+        );
     }
 }

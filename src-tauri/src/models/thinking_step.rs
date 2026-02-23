@@ -72,6 +72,10 @@ pub struct ThinkingStepCreate {
     /// Token count (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<u64>,
+    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    pub sequence: u32,
+    /// Source of this reasoning step (SA-019 P1/B8): "agent_flow" or "model_thinking"
+    pub source: String,
 }
 
 impl ThinkingStepCreate {
@@ -99,6 +103,8 @@ impl ThinkingStepCreate {
             content,
             duration_ms: None,
             tokens: None,
+            sequence: 0,
+            source: "agent_flow".to_string(),
         }
     }
 
@@ -130,6 +136,8 @@ impl ThinkingStepCreate {
             content,
             duration_ms,
             tokens,
+            sequence: 0,
+            source: "agent_flow".to_string(),
         }
     }
 }

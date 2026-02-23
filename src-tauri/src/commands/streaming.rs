@@ -155,15 +155,6 @@ pub async fn execute_workflow_streaming(
         StreamChunk::reasoning(validated_workflow_id.clone(), initial_reasoning.clone()),
     );
 
-    // Emit initial content to show user something is happening
-    emit_chunk(
-        &window,
-        StreamChunk::token(
-            validated_workflow_id.clone(),
-            "Processing your request...\n\n".to_string(),
-        ),
-    );
-
     // Persist the initial thinking step
     let initial_step = ThinkingStepCreate {
         workflow_id: validated_workflow_id.clone(),
@@ -173,6 +164,8 @@ pub async fn execute_workflow_streaming(
         content: initial_reasoning,
         duration_ms: None,
         tokens: None,
+        sequence: 0,
+        source: "agent_flow".to_string(),
     };
     let step_id = Uuid::new_v4().to_string();
     if let Err(e) = state
@@ -318,6 +311,8 @@ pub async fn execute_workflow_streaming(
         content: completion_reasoning,
         duration_ms: Some(duration),
         tokens: None,
+        sequence: 0,
+        source: "agent_flow".to_string(),
     };
     let completion_step_id = Uuid::new_v4().to_string();
     if let Err(e) = state
@@ -329,22 +324,16 @@ pub async fn execute_workflow_streaming(
     }
     thinking_step_number += 1;
 
-    // Clear the placeholder and stream the actual response content
-    // First, emit a newline to visually separate from placeholder
+    // SA-019 P1/B7: Emit complete response as a single block with real token counts
     emit_chunk(
         &window,
-        StreamChunk::token(validated_workflow_id.clone(), "\n".to_string()),
+        StreamChunk::response_block(
+            validated_workflow_id.clone(),
+            report.response.clone(),
+            report.metrics.tokens_input,
+            report.metrics.tokens_output,
+        ),
     );
-
-    // Stream the response content in chunks (with cancellation support)
-    stream_content_to_frontend(
-        &window,
-        &cancellation_token,
-        &state,
-        &report.content,
-        &validated_workflow_id,
-    )
-    .await?;
 
     // Load agent config, model pricing, and calculate cost
     let pricing = load_model_pricing_info(
@@ -650,45 +639,6 @@ async fn load_model_pricing_info(
     }
 }
 
-/// Streams response content to the frontend in chunks, checking for cancellation.
-///
-/// Returns `Ok(())` if streaming completed, `Err` if cancelled by user.
-async fn stream_content_to_frontend(
-    window: &Window,
-    cancellation_token: &tokio_util::sync::CancellationToken,
-    state: &AppState,
-    content: &str,
-    workflow_id: &str,
-) -> Result<(), String> {
-    let chunk_size = 50;
-    let chars: Vec<char> = content.chars().collect();
-
-    for (i, chunk) in chars.chunks(chunk_size).enumerate() {
-        if cancellation_token.is_cancelled() {
-            warn!(workflow_id = %workflow_id, "Streaming cancelled by user during response display");
-            emit_chunk(
-                window,
-                StreamChunk::error(workflow_id.to_string(), "Cancelled by user".to_string()),
-            );
-            emit_complete(window, WorkflowComplete::cancelled(workflow_id.to_string()));
-            state.clear_cancellation(workflow_id).await;
-            return Err("Workflow cancelled by user".to_string());
-        }
-
-        let chunk_text: String = chunk.iter().collect();
-        emit_chunk(
-            window,
-            StreamChunk::token(workflow_id.to_string(), chunk_text),
-        );
-
-        if i < chars.len() / chunk_size {
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        }
-    }
-
-    Ok(())
-}
-
 /// Updates workflow cumulative token counts, cost, model, and context size.
 async fn update_workflow_cumulative_metrics(
     state: &AppState,
@@ -839,7 +789,7 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_creation() {
-        let chunk = StreamChunk::token("wf_001".to_string(), "Hello".to_string());
+        let chunk = StreamChunk::reasoning("wf_001".to_string(), "Analyzing...".to_string());
         assert_eq!(chunk.workflow_id, "wf_001");
         assert!(chunk.content.is_some());
 

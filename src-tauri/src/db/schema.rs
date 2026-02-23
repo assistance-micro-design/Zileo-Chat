@@ -299,6 +299,7 @@ DEFINE FIELD OVERWRITE success ON tool_execution TYPE bool;
 DEFINE FIELD OVERWRITE error_message ON tool_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE duration_ms ON tool_execution TYPE int;
 DEFINE FIELD OVERWRITE iteration ON tool_execution TYPE int;
+DEFINE FIELD OVERWRITE sequence ON tool_execution TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE created_at ON tool_execution TYPE datetime DEFAULT time::now();
 
 -- Indexes for efficient querying
@@ -323,6 +324,9 @@ DEFINE FIELD OVERWRITE content ON thinking_step TYPE string
     ASSERT string::len($value) >= 1 AND string::len($value) <= 50000;
 DEFINE FIELD OVERWRITE duration_ms ON thinking_step TYPE option<int>;
 DEFINE FIELD OVERWRITE tokens ON thinking_step TYPE option<int>;
+DEFINE FIELD OVERWRITE sequence ON thinking_step TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE source ON thinking_step TYPE string DEFAULT 'agent_flow'
+    ASSERT $value IN ['agent_flow', 'model_thinking'];
 DEFINE FIELD OVERWRITE created_at ON thinking_step TYPE datetime DEFAULT time::now();
 
 -- Indexes for efficient querying
