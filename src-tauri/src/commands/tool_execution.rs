@@ -213,10 +213,11 @@ pub async fn load_workflow_tool_executions(
             error_message,
             duration_ms,
             iteration,
+            sequence,
             created_at
         FROM tool_execution
         WHERE workflow_id = '{}'
-        ORDER BY created_at ASC"#,
+        ORDER BY sequence ASC, created_at ASC"#,
         validated_workflow_id
     );
 
@@ -273,10 +274,11 @@ pub async fn load_message_tool_executions(
             error_message,
             duration_ms,
             iteration,
+            sequence,
             created_at
         FROM tool_execution
         WHERE message_id = '{}'
-        ORDER BY created_at ASC"#,
+        ORDER BY sequence ASC, created_at ASC"#,
         validated_message_id
     );
 
@@ -320,7 +322,7 @@ pub async fn get_tool_execution(
             meta::id(id) AS id,
             workflow_id, message_id, agent_id, tool_type, tool_name,
             server_name, input_params, output_result, success,
-            error_message, duration_ms, iteration, created_at
+            error_message, duration_ms, iteration, sequence, created_at
         FROM tool_execution
         WHERE meta::id(id) = '{}'"#,
         validated_id

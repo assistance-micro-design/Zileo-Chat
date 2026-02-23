@@ -1388,10 +1388,10 @@ impl Agent for LLMAgent {
                 });
 
                 // SA-019: Emit tool_call_complete with full input/output details
-                let input_json = serde_json::to_string(&call.arguments)
-                    .unwrap_or_else(|_| "{}".to_string());
-                let output_json = serde_json::to_string(&result.result)
-                    .unwrap_or_else(|_| "{}".to_string());
+                let input_json =
+                    serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
+                let output_json =
+                    serde_json::to_string(&result.result).unwrap_or_else(|_| "{}".to_string());
                 self.emit_progress(StreamChunk::tool_call_complete(
                     event_workflow_id.clone(),
                     tool_name_for_data,

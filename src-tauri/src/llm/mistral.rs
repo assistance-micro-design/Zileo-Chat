@@ -834,10 +834,7 @@ mod tests {
         }"#;
         let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
         assert_eq!(msg.content.text, "The answer is 42");
-        assert_eq!(
-            msg.content.thinking,
-            Some("Let me think...".to_string())
-        );
+        assert_eq!(msg.content.thinking, Some("Let me think...".to_string()));
     }
 
     #[test]

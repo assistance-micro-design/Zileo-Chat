@@ -77,6 +77,9 @@ pub struct ToolExecution {
     pub duration_ms: u64,
     /// Iteration number within the tool execution loop (0-indexed)
     pub iteration: u32,
+    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    #[serde(default)]
+    pub sequence: u32,
     /// Timestamp when the execution was recorded
     pub created_at: DateTime<Utc>,
 }
@@ -231,6 +234,7 @@ mod tests {
             error_message: None,
             duration_ms: 150,
             iteration: 0,
+            sequence: 0,
             created_at: Utc::now(),
         };
 
@@ -257,6 +261,7 @@ mod tests {
             error_message: None,
             duration_ms: 500,
             iteration: 1,
+            sequence: 0,
             created_at: Utc::now(),
         };
 
@@ -281,6 +286,7 @@ mod tests {
             error_message: Some("Task not found".to_string()),
             duration_ms: 10,
             iteration: 0,
+            sequence: 0,
             created_at: Utc::now(),
         };
 

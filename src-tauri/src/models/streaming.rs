@@ -1033,20 +1033,32 @@ mod tests {
     #[test]
     fn test_new_chunk_type_serialization() {
         let chunk_type = ChunkType::ThinkingBlock;
-        assert_eq!(serde_json::to_string(&chunk_type).unwrap(), "\"thinking_block\"");
+        assert_eq!(
+            serde_json::to_string(&chunk_type).unwrap(),
+            "\"thinking_block\""
+        );
 
         let chunk_type = ChunkType::ToolCallComplete;
-        assert_eq!(serde_json::to_string(&chunk_type).unwrap(), "\"tool_call_complete\"");
+        assert_eq!(
+            serde_json::to_string(&chunk_type).unwrap(),
+            "\"tool_call_complete\""
+        );
 
         let chunk_type = ChunkType::ResponseBlock;
-        assert_eq!(serde_json::to_string(&chunk_type).unwrap(), "\"response_block\"");
+        assert_eq!(
+            serde_json::to_string(&chunk_type).unwrap(),
+            "\"response_block\""
+        );
     }
 
     #[test]
     fn test_stream_chunk_thinking_block() {
         let chunk = StreamChunk::thinking_block("wf_001", "Let me reason about this...");
         assert_eq!(chunk.chunk_type, ChunkType::ThinkingBlock);
-        assert_eq!(chunk.content, Some("Let me reason about this...".to_string()));
+        assert_eq!(
+            chunk.content,
+            Some("Let me reason about this...".to_string())
+        );
         assert!(chunk.tool.is_none());
         assert!(chunk.tool_input.is_none());
 
@@ -1071,8 +1083,14 @@ mod tests {
         assert_eq!(chunk.chunk_type, ChunkType::ToolCallComplete);
         assert_eq!(chunk.tool, Some("MemoryTool".to_string()));
         assert_eq!(chunk.duration, Some(150));
-        assert_eq!(chunk.tool_input, Some(r#"{"query": "find docs"}"#.to_string()));
-        assert_eq!(chunk.tool_output, Some(r#"{"results": ["doc1", "doc2"]}"#.to_string()));
+        assert_eq!(
+            chunk.tool_input,
+            Some(r#"{"query": "find docs"}"#.to_string())
+        );
+        assert_eq!(
+            chunk.tool_output,
+            Some(r#"{"results": ["doc1", "doc2"]}"#.to_string())
+        );
         assert_eq!(chunk.tool_success, Some(true));
         assert!(chunk.tokens_input.is_none());
 
@@ -1098,12 +1116,7 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_response_block() {
-        let chunk = StreamChunk::response_block(
-            "wf_001",
-            "The answer is 42.",
-            100,
-            25,
-        );
+        let chunk = StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25);
         assert_eq!(chunk.chunk_type, ChunkType::ResponseBlock);
         assert_eq!(chunk.content, Some("The answer is 42.".to_string()));
         assert_eq!(chunk.tokens_input, Some(100));

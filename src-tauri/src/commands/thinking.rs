@@ -140,10 +140,12 @@ pub async fn load_workflow_thinking_steps(
             content,
             duration_ms,
             tokens,
+            sequence,
+            source,
             created_at
         FROM thinking_step
         WHERE workflow_id = '{}'
-        ORDER BY created_at ASC, step_number ASC"#,
+        ORDER BY sequence ASC, step_number ASC"#,
         validated_workflow_id
     );
 
@@ -195,10 +197,12 @@ pub async fn load_message_thinking_steps(
             content,
             duration_ms,
             tokens,
+            sequence,
+            source,
             created_at
         FROM thinking_step
         WHERE message_id = '{}'
-        ORDER BY step_number ASC"#,
+        ORDER BY sequence ASC, step_number ASC"#,
         validated_message_id
     );
 

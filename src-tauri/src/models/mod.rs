@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod agent;
+pub mod chat_block;
 pub mod custom_provider;
 pub mod embedding;
 pub mod function_calling;
@@ -90,6 +91,12 @@ pub use tool_execution::ToolType;
 
 // Re-export thinking step types for Phase 4 Thinking Steps Persistence
 pub use thinking_step::{ThinkingStep, ThinkingStepCreate};
+
+// Re-export chat block types for SA-019 Phase 2 (block-by-block display)
+pub use chat_block::{merge_into_chat_blocks, ChatBlock};
+// ChatBlockType will be used by frontend via IPC in Phase 3
+#[allow(unused_imports)]
+pub use chat_block::ChatBlockType;
 
 // Re-export sub-agent types for Phase 6A Sub-Agent System Infrastructure
 // These will be used in Phase B/C/D when tools are implemented
