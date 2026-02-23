@@ -18,73 +18,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * @fileoverview Activity service for encapsulating activity-related Tauri IPC calls.
+ * @fileoverview Activity service for sub-agent execution loading.
  *
  * @module lib/services/activity
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { ToolExecution } from '$types/tool';
-import type { ThinkingStep } from '$types/thinking';
 import type { SubAgentExecution } from '$types/sub-agent';
-import type { Task } from '$types/task';
-import type { WorkflowActivityEvent } from '$types/activity';
-import {
-	toolExecutionToActivity,
-	thinkingStepToActivity,
-	subAgentExecutionToActivity,
-	taskToActivity
-} from '$lib/utils/activity';
-
-/**
- * Result of loading all activity types for a workflow.
- */
-interface LoadAllResult {
-	/** Tool executions */
-	tools: ToolExecution[];
-	/** Thinking/reasoning steps */
-	thinking: ThinkingStep[];
-	/** Sub-agent executions */
-	subAgents: SubAgentExecution[];
-	/** Tasks */
-	tasks: Task[];
-}
 
 /**
  * Service for activity operations.
  *
- * Encapsulates all activity-related Tauri IPC commands and provides
- * conversion to unified WorkflowActivityEvent format.
+ * Provides loading of sub-agent executions for message enrichment.
  */
 export const ActivityService = {
-	/**
-	 * Load tool executions for a workflow.
-	 *
-	 * @param workflowId - Workflow ID
-	 * @returns Array of tool executions
-	 */
-	async loadToolExecutions(workflowId: string): Promise<ToolExecution[]> {
-		try {
-			return await invoke<ToolExecution[]>('load_workflow_tool_executions', { workflowId });
-		} catch {
-			return [];
-		}
-	},
-
-	/**
-	 * Load thinking steps for a workflow.
-	 *
-	 * @param workflowId - Workflow ID
-	 * @returns Array of thinking steps
-	 */
-	async loadThinkingSteps(workflowId: string): Promise<ThinkingStep[]> {
-		try {
-			return await invoke<ThinkingStep[]>('load_workflow_thinking_steps', { workflowId });
-		} catch {
-			return [];
-		}
-	},
-
 	/**
 	 * Load sub-agent executions for a workflow.
 	 *
@@ -97,53 +44,5 @@ export const ActivityService = {
 		} catch {
 			return [];
 		}
-	},
-
-	/**
-	 * Load tasks for a workflow.
-	 *
-	 * @param workflowId - Workflow ID
-	 * @returns Array of tasks
-	 */
-	async loadTasks(workflowId: string): Promise<Task[]> {
-		try {
-			return await invoke<Task[]>('list_workflow_tasks', { workflowId });
-		} catch {
-			return [];
-		}
-	},
-
-	/**
-	 * Load all activity types for a workflow in parallel.
-	 *
-	 * @param workflowId - Workflow ID
-	 * @returns Object containing all activity types
-	 */
-	async loadAll(workflowId: string): Promise<LoadAllResult> {
-		const [tools, thinking, subAgents, tasks] = await Promise.all([
-			this.loadToolExecutions(workflowId),
-			this.loadThinkingSteps(workflowId),
-			this.loadSubAgentExecutions(workflowId),
-			this.loadTasks(workflowId)
-		]);
-		return { tools, thinking, subAgents, tasks };
-	},
-
-	/**
-	 * Convert loaded activity data to unified activity events.
-	 *
-	 * @param data - Result from loadAll()
-	 * @returns Array of unified activity events sorted by timestamp (most recent first)
-	 */
-	convertToActivities(data: LoadAllResult): WorkflowActivityEvent[] {
-		const activities: WorkflowActivityEvent[] = [
-			...data.tools.map((t, i) => toolExecutionToActivity(t, i)),
-			...data.thinking.map((t, i) => thinkingStepToActivity(t, i)),
-			...data.subAgents.map((s, i) => subAgentExecutionToActivity(s, i)),
-			...data.tasks.map((t, i) => taskToActivity(t, i))
-		];
-
-		// Sort by timestamp descending (most recent first)
-		return activities.sort((a, b) => b.timestamp - a.timestamp);
 	}
 };

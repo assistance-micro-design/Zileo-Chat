@@ -32,7 +32,6 @@ Uses extracted components, services, and stores for clean architecture.
 	import {
 		AgentHeader,
 		WorkflowSidebar,
-		ActivitySidebar,
 		ChatContainer
 	} from '$lib/components/agent';
 	import { TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
@@ -55,17 +54,11 @@ Uses extracted components, services, and stores for clean architecture.
 		workflowsLoading
 	} from '$lib/stores/workflows';
 	import {
-		activityStore,
-		allActivities,
-		filteredActivities,
-		activityFilter
-	} from '$lib/stores/activity';
-	import {
 		tokenStore,
 		tokenDisplayData
 	} from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
-	import { streamingStore, isStreaming } from '$lib/stores/streaming';
+	import { streamingStore } from '$lib/stores/streaming';
 	import {
 		executionBlocksStore,
 		executionBlocks as executionBlocks$,
@@ -98,7 +91,6 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	interface PageState {
 		leftSidebarCollapsed: boolean;
-		rightSidebarCollapsed: boolean;
 		selectedWorkflowId: string | null;
 		selectedAgentId: string | null;
 		currentMaxIterations: number;
@@ -110,7 +102,6 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Initial page state with localStorage restoration */
 	const initialPageState: PageState = {
 		leftSidebarCollapsed: false,
-		rightSidebarCollapsed: LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false),
 		selectedWorkflowId: null,
 		selectedAgentId: null,
 		currentMaxIterations: 50,
@@ -137,7 +128,7 @@ Uses extracted components, services, and stores for clean architecture.
 	// ============================================================================
 
 	/**
-	 * Load workflow data (messages, historical activities, and persisted blocks).
+	 * Load workflow data (messages and persisted blocks).
 	 */
 	async function loadWorkflowData(workflowId: string): Promise<void> {
 		pageState.messagesLoading = true;
@@ -162,9 +153,6 @@ Uses extracted components, services, and stores for clean architecture.
 			} catch {
 				messageBlocks = new Map();
 			}
-
-			// Load historical activities (store handles internally)
-			await activityStore.loadHistorical(workflowId);
 		} finally {
 			pageState.messagesLoading = false;
 		}
@@ -246,7 +234,6 @@ Uses extracted components, services, and stores for clean architecture.
 			if (pageState.selectedWorkflowId === workflowId) {
 				pageState.selectedWorkflowId = null;
 				pageState.messages = [];
-				activityStore.reset();
 			}
 
 			modalState = { type: 'none' };
@@ -443,13 +430,6 @@ Uses extracted components, services, and stores for clean architecture.
 	});
 
 	/**
-	 * Persist right sidebar state to localStorage.
-	 */
-	$effect(() => {
-		LocalStorage.set(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, pageState.rightSidebarCollapsed);
-	});
-
-	/**
 	 * React to pending validation requests.
 	 * Opens the validation modal when a new validation request arrives.
 	 */
@@ -558,16 +538,6 @@ Uses extracted components, services, and stores for clean architecture.
 			</div>
 		{/if}
 	</main>
-
-	<!-- Right Sidebar - Activity Feed (OPT-FA-13: Memoized filtering via store) -->
-	<ActivitySidebar
-		bind:collapsed={pageState.rightSidebarCollapsed}
-		activities={$filteredActivities}
-		allActivities={$allActivities}
-		isStreaming={$isStreaming}
-		filter={$activityFilter}
-		onfilterchange={(f) => activityStore.setFilter(f)}
-	/>
 
 	<!-- Modals (lazy-loaded for bundle optimization - OPT-FA-11) -->
 	{#if modalState.type === 'new-workflow'}

@@ -28,6 +28,4 @@ export { default as MessageMetrics } from './MessageMetrics.svelte';
 export { default as ChatInput } from './ChatInput.svelte';
 export { default as ToolExecution } from './ToolExecution.svelte';
 export type { ToolStatus } from './ToolExecution.svelte';
-export { default as ReasoningStep } from './ReasoningStep.svelte';
-export { default as StreamingMessage } from './StreamingMessage.svelte';
 export { default as MessageListSkeleton } from './MessageListSkeleton.svelte';

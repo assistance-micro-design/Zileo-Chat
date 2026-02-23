@@ -29,7 +29,6 @@ export * from './mcp';
 export * from './llm';
 export * from './streaming';
 export * from './prompts';
-export * from './activity';
 export * from './tokens';
 export * from './locale';
 export * from './onboarding';

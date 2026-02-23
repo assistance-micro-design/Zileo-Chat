@@ -112,10 +112,10 @@
 |------|-------|---------|
 | utils/__tests__/error.test.ts | 11 tests | getErrorMessage + formatErrorForDisplay |
 | utils/__tests__/url.test.ts | 11 tests | isAllowedScheme (XSS defense) |
-| stores/__tests__/activity.test.ts | 8 tests | Activity capture guard (SA-011 H-001 race condition) |
+| stores/__tests__/activity.test.ts | ~~8 tests~~ | ~~Activity capture guard (SA-011 H-001 race condition)~~ **DELETED** (SA-019/P4: activityStore removed) |
 | stores/__tests__/workflows.test.ts | 5 new tests | loadWorkflows retry recovery (SA-011 H-002) |
 | stores/__tests__/chunkProcessor.test.ts | 22 tests | Shared chunk processor (SA-009 F1: all 12 chunk types + immutability + extended state) |
-| utils/__tests__/panel-merge.test.ts | 10 tests | Panel merge utilities (SA-011 M-003/M-004: reasoning step merge + tool execution merge) |
+| utils/__tests__/panel-merge.test.ts | ~~10 tests~~ | ~~Panel merge utilities (SA-011 M-003/M-004)~~ **DELETED** (SA-019/P4: panel components removed) |
 
 ### Infrastructure
 
@@ -565,14 +565,14 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-019: Agent Chat Refactoring - Block-by-Block
 
 **Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
-**Status:** P3 DONE
+**Status:** P4 DONE
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | P1 | Backend: vrais tokens + thinking extraction + events enrichis | **DONE** |
 | P2 | Backend: load_message_blocks command + ChatBlock model | **DONE** |
 | P3 | Frontend: types + store + composants blocks inline | **DONE** |
-| P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **NOT STARTED** |
+| P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **DONE** |
 | P5 | Nettoyage code mort (simulate_streaming, estimate_tokens, etc.) | **NOT STARTED** |
 
 ### P1: Backend - Block-by-Block Events - DONE
@@ -636,6 +636,29 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - 11 new i18n keys in en.json + fr.json
 - 7 new files, 4 new components, 41 new tests (302 total TS)
 
+### P4: Frontend - Suppression ActivitySidebar + Layout 2 colonnes - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| F9 | Remove ActivitySidebar from agent page, layout 2 colonnes | **DONE** |
+| Stores | Remove activityStore + derived stores | **DONE** |
+| Components | Remove 11 components (ActivitySidebar, ActivityFeed, ActivityItem, ActivityItemDetails, SubAgentActivity, ReasoningPanel, ToolExecutionPanel, ReasoningDetailsPanel, ToolDetailsPanel, StreamingMessage, ReasoningStep) + RightSidebar layout | **DONE** |
+| Utils | Remove activity conversion utils, activityUtils, activity-icons, panel-merge | **DONE** |
+| Types | Remove types/activity.ts (no more consumers) | **DONE** |
+| Services | Trim activity.service.ts to loadSubAgentExecutions only | **DONE** |
+| Barrels | Update 6 barrel index files (agent, workflow, chat, layout, stores, utils) | **DONE** |
+| workflowExecutor | Remove activityStore.captureStreamingActivities() | **DONE** |
+| localStorage | Remove RIGHT_SIDEBAR_COLLAPSED key | **DONE** |
+
+**Key changes:**
+- 12 component files deleted, 1 store deleted, 4 utils deleted, 1 type file deleted, 4 test files deleted
+- activity.service.ts trimmed: only `loadSubAgentExecutions()` remains (used by message.service.ts)
+- utils/activity.ts trimmed: only `formatTokenCount()` remains (used by MessageMetrics.svelte)
+- `@humanspeak/svelte-virtual-list` NOT removed (still used by MemoryList.svelte)
+- `streamingStore` kept (still used by backgroundWorkflows, executor, tokens)
+- Agent page: 2-column layout (WorkflowSidebar + Chat), no right sidebar
+- Tests: 254 total TS (48 tests removed with deleted files), lint + check clean
+
 ---
 
 ## Verification Status
@@ -647,7 +670,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | cargo test --lib | **PASS** | 2026-02-23, 956 tests passed (+14 from SA-019/P2) |
 | npm run lint | **PASS** | 2026-02-23, 0 errors |
 | npm run check | **PASS** | 2026-02-23, 0 errors, 3 warnings (state_referenced_locally faux positif) |
-| npm run test | **PASS** | 2026-02-23, 302 tests passed (+19 from SA-019/P3) |
+| npm run test | **PASS** | 2026-02-23, 254 tests passed (-48 from SA-019/P4 deleted files) |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |

@@ -5,7 +5,7 @@
 - **Branche**: `security/audit-remediation-tdd`
 - **Complexite**: critical
 - **Stack**: Svelte 5.49 + Rust 1.93 + Tauri 2 + SurrealDB 2.5
-- **Statut**: P3 DONE
+- **Statut**: P4 DONE
 
 ## Contexte
 
@@ -976,10 +976,28 @@ New components: 4. New files: 7 (3 stores/services, 4 components). Tests: 41 new
 **Dependances**: Phase 3
 
 **Validation**:
-- [ ] Layout 2 colonnes fonctionne
-- [ ] Aucun import mort
-- [ ] `npm run check` + `npm run lint` clean
-- [ ] Plus de reference a ActivitySidebar dans le code
+- [x] Layout 2 colonnes fonctionne
+- [x] Aucun import mort
+- [x] `npm run check` + `npm run lint` clean
+- [x] Plus de reference a ActivitySidebar dans le code
+
+**Implementation** (2026-02-23):
+
+| Task | Files | Changes |
+|------|-------|---------|
+| F9 | routes/agent/+page.svelte | Removed ActivitySidebar, activityStore, rightSidebarCollapsed, 2-column layout |
+| Stores | stores/activity.ts (deleted), stores/index.ts | Removed activityStore + barrel export |
+| Components | 12 files deleted | ActivitySidebar, ActivityFeed, ActivityItem, ActivityItemDetails, SubAgentActivity, ReasoningPanel, ToolExecutionPanel, ReasoningDetailsPanel, ToolDetailsPanel, StreamingMessage, ReasoningStep, RightSidebar |
+| Utils | 4 files deleted + activity.ts trimmed | activityUtils.ts, activity-icons.ts, panel-merge.ts deleted. activity.ts: only formatTokenCount() remains |
+| Types | types/activity.ts (deleted) | No more consumers |
+| Services | activity.service.ts (trimmed), workflowExecutor.service.ts | Only loadSubAgentExecutions() kept. Removed captureStreamingActivities() call |
+| Barrels | 6 index.ts files updated | agent, workflow, chat, layout, stores, utils |
+| localStorage | localStorage.service.ts | Removed RIGHT_SIDEBAR_COLLAPSED key |
+| Tests | 4 test files deleted | activity.test.ts (store), activity.test.ts (utils), activityUtils.test.ts, panel-merge.test.ts |
+
+Deleted: 12 components, 1 store, 4 utils, 1 type file, 4 test files = 22 files removed.
+Kept: `@humanspeak/svelte-virtual-list` (MemoryList.svelte uses it), `streamingStore` (still active).
+Tests: 254 TS (was 302, -48 from deleted files). lint + check clean.
 
 ---
 

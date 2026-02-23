@@ -22,7 +22,6 @@
  */
 
 const KEYS = {
-	RIGHT_SIDEBAR_COLLAPSED: 'zileo_right_sidebar_collapsed',
 	LEFT_SIDEBAR_COLLAPSED: 'zileo_left_sidebar_collapsed',
 	SELECTED_WORKFLOW_ID: 'zileo_last_workflow_id'
 } as const;

@@ -29,9 +29,8 @@
  * 3. Execute workflow via WorkflowService
  * 4. Update tokens
  * 5. Save assistant response
- * 6. Capture activities
- * 7. Refresh workflows
- * 8. Return result with metrics
+ * 6. Refresh workflows
+ * 7. Return result with metrics
  *
  * @module lib/services/workflowExecutor
  */
@@ -43,7 +42,6 @@ import { WorkflowService } from './workflow.service';
 import { streamingStore, activeSubAgents } from '$lib/stores/streaming';
 import { get } from 'svelte/store';
 import { tokenStore } from '$lib/stores/tokens';
-import { activityStore } from '$lib/stores/activity';
 import { workflowStore } from '$lib/stores/workflows';
 import { backgroundWorkflowsStore } from '$lib/stores/backgroundWorkflows';
 import { executionBlocksStore } from '$lib/stores/executionBlocks';
@@ -161,15 +159,14 @@ function createErrorMessage(workflowId: string, error: string): Message {
 /**
  * Service for orchestrating workflow execution.
  *
- * Encapsulates the 8-step message sending and streaming logic:
+ * Encapsulates the 7-step message sending and streaming logic:
  * 1. Save user message to database
  * 2. Start streaming state
  * 3. Execute workflow via backend
  * 4. Update token counts and cost
  * 5. Save assistant response to database
- * 6. Capture streaming activities to historical
- * 7. Refresh workflows and update cumulative tokens
- * 8. Return execution result
+ * 6. Refresh workflows and update cumulative tokens
+ * 7. Return execution result
  */
 /** Tracks workflow IDs currently being executed to prevent double-submit */
 const executingWorkflows = new Set<string>();
@@ -296,11 +293,7 @@ export const WorkflowExecutorService = {
 				callbacks?.onAssistantMessage?.(assistantMessage);
 			}
 
-			// Step 6: Activity capture moved to finally block (SA-011 H-001)
-			// This ensures capture happens on both success AND error paths,
-			// always before streamingStore.reset().
-
-			// Step 7: Refresh workflows (always reload list)
+			// Step 6: Refresh workflows (always reload list)
 			await workflowStore.loadWorkflows();
 			if (isStillViewed()) {
 				const workflow = workflowStore.getSelected();
@@ -310,7 +303,7 @@ export const WorkflowExecutorService = {
 				callbacks?.onWorkflowRefresh?.(workflow);
 			}
 
-			// Step 8: Return success result
+			// Step 7: Return success result
 			return {
 				success: true,
 				userMessageId,
@@ -339,12 +332,6 @@ export const WorkflowExecutorService = {
 
 			// Only cleanup streaming/token UI if still viewing this workflow
 			if (isStillViewed()) {
-				// SA-011 H-001: Capture streaming activities BEFORE reset.
-				// This runs on both success and error paths, preserving partial
-				// activities (tools, reasoning) even when execution fails.
-				// The capture guard in activityStore prevents duplicates.
-				activityStore.captureStreamingActivities(workflowId);
-
 				streamingStore.reset();
 				executionBlocksStore.reset();
 				tokenStore.stopStreaming();

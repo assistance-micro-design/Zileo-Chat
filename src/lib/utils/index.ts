@@ -21,16 +21,7 @@
  * Utility functions barrel export
  */
 export { debounce, throttle } from './debounce';
-export {
-	activeToolToActivity,
-	activeSubAgentToActivity,
-	activeReasoningToActivity,
-	formatActivityTime,
-	formatActivityDuration,
-	combineActivities,
-	filterActivities,
-	countActivitiesByType
-} from './activity';
+export { formatTokenCount } from './activity';
 export { getErrorMessage, isTauriError, formatErrorForDisplay } from './error';
 export {
 	createAsyncHandler,
