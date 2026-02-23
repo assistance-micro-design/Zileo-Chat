@@ -565,12 +565,12 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-019: Agent Chat Refactoring - Block-by-Block
 
 **Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
-**Status:** P1 DONE
+**Status:** P2 DONE
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | P1 | Backend: vrais tokens + thinking extraction + events enrichis | **DONE** |
-| P2 | Backend: load_message_blocks command | **NOT STARTED** |
+| P2 | Backend: load_message_blocks command + ChatBlock model | **DONE** |
 | P3 | Frontend: types + store + composants blocks inline | **NOT STARTED** |
 | P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **NOT STARTED** |
 | P5 | Nettoyage code mort (simulate_streaming, estimate_tokens, etc.) | **NOT STARTED** |
@@ -595,6 +595,23 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - `ProviderToolAdapter` trait extended with `extract_thinking()` default method
 - 16 files changed, +570/-187 lines. Tests: 942 passing, clippy clean.
 
+### P2: Backend - load_message_blocks + ChatBlock - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| B9 | `load_message_blocks` Tauri command (queries tool_execution + thinking_step, merges by sequence) | **DONE** |
+| ChatBlock model | `ChatBlock`, `ChatBlockType` structs + `merge_into_chat_blocks()` pure function | **DONE** |
+| Read models | `sequence` on ToolExecution, `sequence` + `source` on ThinkingStep (with serde defaults) | **DONE** |
+| SELECT queries | Updated tool_execution.rs + thinking.rs queries to include sequence/source, ORDER BY sequence | **DONE** |
+| Tests | 14 unit tests for merge_into_chat_blocks (interleaved, empty, same-sequence, data fields) | **DONE** |
+
+**Key changes:**
+- New file `models/chat_block.rs`: ChatBlock, ChatBlockType, merge_into_chat_blocks()
+- Read models enriched with backward-compatible defaults (sequence=0, source="agent_flow")
+- `load_message_blocks` registered in main.rs invoke_handler
+- All SELECT queries updated to ORDER BY sequence ASC
+- 11 files changed, +538/-26 lines. Tests: 956 passing (14 new), clippy clean.
+
 ---
 
 ## Verification Status
@@ -603,7 +620,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-23, 942 tests passed (+1 from SA-019/P1) |
+| cargo test --lib | **PASS** | 2026-02-23, 956 tests passed (+14 from SA-019/P2) |
 | npm run lint | **PASS** | 2026-02-22, 0 errors |
 | npm run check | **PASS** | 2026-02-22, 0 errors 0 warnings |
 | npm run test | **PASS** | 2026-02-22, 283 tests passed (+18 from SA-016) |

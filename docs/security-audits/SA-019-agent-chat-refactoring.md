@@ -5,7 +5,7 @@
 - **Branche**: `security/audit-remediation-tdd`
 - **Complexite**: critical
 - **Stack**: Svelte 5.49 + Rust 1.93 + Tauri 2 + SurrealDB 2.5
-- **Statut**: P1 DONE
+- **Statut**: P2 DONE
 
 ## Contexte
 
@@ -853,8 +853,19 @@ Dead code removed: `StreamChunk::token()`, `token_with_counts()` + 2 dedicated t
 **Dependances**: Phase 1
 
 **Validation**:
-- [ ] `cargo test` incluant tests de la nouvelle commande
+- [x] `cargo test` incluant tests de la nouvelle commande
 - [ ] Response correcte via invoke() depuis le frontend
+
+**Implementation** (2026-02-23, commit `dfe138e`):
+
+| Task | Files | Changes |
+|------|-------|---------)|
+| B9 | commands/message.rs, main.rs | `load_message_blocks` command + registration |
+| ChatBlock model | models/chat_block.rs (new) | `ChatBlock`, `ChatBlockType`, `merge_into_chat_blocks()` + 14 tests |
+| Read models | models/tool_execution.rs, models/thinking_step.rs | `sequence` + `source` with serde defaults |
+| SELECT queries | commands/tool_execution.rs, commands/thinking.rs | Include sequence/source, ORDER BY sequence ASC |
+
+Read models enriched with backward-compatible defaults: `#[serde(default)]` for sequence (0), `#[serde(default = "default_source")]` for source ("agent_flow"). Existing DB records work without migration.
 
 ---
 
