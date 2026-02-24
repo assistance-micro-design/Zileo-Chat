@@ -566,6 +566,7 @@
   "chat_assistant": "Assistant",
   "chat_cancel": "Cancel",
   "chat_cancel_arialabel": "Cancel generation",
+  "chat_scroll_to_bottom": "Scroll to bottom",
   "chat_input_placeholder": "Type your message...",
   "chat_input_arialabel": "Message input",
   "chat_send_arialabel": "Send message",

@@ -1246,3 +1246,32 @@ Aucune nouvelle dependance necessaire.
 - PAT_DB_004 (migration guard)
 - PAT_PERSIST_001 (shared persistence module)
 - ERR_SURREAL_011, ERR_SEC_001, ERR_SVELTE_001, ERR_SVELTE_005
+
+---
+
+## Follow-up: Auto-Scroll Fix (2026-02-24)
+
+### Problemes identifies
+
+| Probleme | Cause | Impact |
+|----------|-------|--------|
+| Short-circuit `\|\|` dans `$effect` | `messages.length > 0 \|\| executionBlocks.length > 0 \|\| executionResponse` — JS short-circuite, Svelte 5 ne tracke pas les 2e/3e deps | Auto-scroll ne fire pas pendant execution |
+| Timing `loadWorkflowData()` | `$effect` fire entre 2 awaits quand messages.length change, mais skeleton encore affiche | Switch conversation = scroll au top |
+| Pas de smart scroll | Aucune detection `isNearBottom` | Auto-scroll ecrase la position de lecture |
+
+### Solution
+
+1. **`$derived` contentSignal**: `messages.length + executionBlocks.length + (executionResponse ? 1 : 0)` — addition force le tracking de toutes les deps
+2. **`$effect` transition loading**: detecte `messagesLoading: true -> false` via `untrack(wasLoading)`, puis `tick() + scrollToBottom('instant')`
+3. **Smart scroll**: `isNearBottom()` (seuil 80px), `handleScroll()` throttle via rAF, bouton ArrowDown positionne absolument, `prefers-reduced-motion` respecte
+
+### Fichiers modifies
+
+| Fichier | Changement |
+|---------|-----------|
+| `ChatContainer.svelte` | Script (smart scroll + contentSignal + loading transition) + template (onscroll + bouton) + CSS |
+| `en.json` / `fr.json` | +1 cle i18n `chat_scroll_to_bottom` |
+
+### Patterns/Errors documentes
+- ERR_SVELTE_009: Short-circuit `\|\|` in `$effect` prevents Svelte 5 dependency tracking
+- PAT_SVELTE_003: Smart auto-scroll with `$derived` content signal

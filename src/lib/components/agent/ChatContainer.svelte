@@ -23,7 +23,8 @@ Main chat area with message display, execution blocks inline, and input controls
 -->
 
 <script lang="ts">
-	import { StopCircle, Bot } from '@lucide/svelte';
+	import { tick, untrack } from 'svelte';
+	import { StopCircle, Bot, ArrowDown } from '@lucide/svelte';
 	import { Button, HelpButton } from '$lib/components/ui';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
@@ -74,15 +75,69 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	let messagesContainer: HTMLDivElement | null = $state(null);
 
-	// Auto-scroll to bottom when new messages, blocks, or response arrives
-	$effect(() => {
-		if (messagesContainer && (
-			messages.length > 0 ||
-			executionBlocks.length > 0 ||
-			executionResponse
-		)) {
-			messagesContainer.scrollTop = messagesContainer.scrollHeight;
+	// Smart scroll state
+	let userHasScrolledUp = $state(false);
+	let wasLoading = $state(false);
+	let scrollRafPending = false;
+	const SCROLL_BOTTOM_THRESHOLD = 80;
+
+	// Content signal: uses addition to force Svelte 5 to track ALL dependencies
+	// (avoids short-circuit with || where only the first truthy stops evaluation)
+	let contentSignal = $derived(
+		messages.length + executionBlocks.length + (executionResponse ? 1 : 0)
+	);
+
+	function isNearBottom(container: HTMLElement): boolean {
+		const { scrollTop, scrollHeight, clientHeight } = container;
+		return scrollHeight - scrollTop - clientHeight <= SCROLL_BOTTOM_THRESHOLD;
+	}
+
+	function scrollToBottom(behavior: 'auto' | 'instant' | 'smooth' = 'smooth'): void {
+		if (messagesContainer) {
+			messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior });
 		}
+	}
+
+	function handleScroll(): void {
+		if (scrollRafPending) return;
+		scrollRafPending = true;
+		requestAnimationFrame(() => {
+			scrollRafPending = false;
+			if (!messagesContainer) return;
+			userHasScrolledUp = !isNearBottom(messagesContainer);
+		});
+	}
+
+	function handleScrollToBottomClick(): void {
+		scrollToBottom();
+		userHasScrolledUp = false;
+	}
+
+	// Auto-scroll when content changes (unless user scrolled up)
+	$effect(() => {
+		const _signal = contentSignal;
+		if (messagesContainer && _signal > 0 && !userHasScrolledUp) {
+			tick().then(() => {
+				if (messagesContainer && !userHasScrolledUp) {
+					scrollToBottom();
+				}
+			});
+		}
+	});
+
+	// Scroll to bottom after skeleton -> content transition
+	$effect(() => {
+		const currentlyLoading = messagesLoading;
+		const previouslyLoading = untrack(() => wasLoading);
+		if (previouslyLoading && !currentlyLoading && messagesContainer) {
+			tick().then(() => {
+				if (messagesContainer) {
+					scrollToBottom('instant');
+					userHasScrolledUp = false;
+				}
+			});
+		}
+		wasLoading = currentlyLoading;
 	});
 
 	/**
@@ -104,7 +159,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	</div>
 
 	<!-- Messages Area -->
-	<div class="messages-area" bind:this={messagesContainer}>
+	<div class="messages-area" bind:this={messagesContainer} onscroll={handleScroll}>
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
@@ -213,6 +268,18 @@ Main chat area with message display, execution blocks inline, and input controls
 			{/if}
 		{/if}
 	</div>
+
+	<!-- Scroll to bottom button -->
+	{#if userHasScrolledUp}
+		<button
+			class="scroll-to-bottom"
+			onclick={handleScrollToBottomClick}
+			aria-label={$i18n('chat_scroll_to_bottom')}
+			title={$i18n('chat_scroll_to_bottom')}
+		>
+			<ArrowDown size={18} />
+		</button>
+	{/if}
 
 	<!-- Chat Input with Cancel Button -->
 	<div class="input-area">
@@ -326,6 +393,31 @@ Main chat area with message display, execution blocks inline, and input controls
 		}
 	}
 
+	.scroll-to-bottom {
+		position: absolute;
+		bottom: 80px;
+		right: var(--spacing-lg);
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		border: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
+		color: var(--color-text-secondary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		z-index: 5;
+		animation: fadeIn 200ms ease-out;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	.scroll-to-bottom:hover {
+		background: var(--color-accent);
+		color: var(--color-text-on-accent, #fff);
+		border-color: var(--color-accent);
+	}
+
 	.input-area {
 		padding: 0 var(--spacing-md) var(--spacing-md);
 	}
@@ -344,7 +436,8 @@ Main chat area with message display, execution blocks inline, and input controls
 	/* Respect reduced motion preference */
 	@media (prefers-reduced-motion: reduce) {
 		.message-wrapper,
-		.response-bubble {
+		.response-bubble,
+		.scroll-to-bottom {
 			animation: none;
 		}
 	}
