@@ -80,7 +80,7 @@
 	{#if message.sub_agents && message.sub_agents.length > 0}
 		<div class="sub-agents-bar">
 			<Users size={12} />
-			{#each message.sub_agents as agent (agent.name)}
+			{#each message.sub_agents as agent, i (`${agent.id}-${i}`)}
 				<span class="sub-agent-chip" class:error={agent.status === 'error'}>
 					<span class="agent-name">{agent.name}</span>
 					{#if agent.tokens_input || agent.tokens_output}

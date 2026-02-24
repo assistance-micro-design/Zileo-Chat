@@ -32,6 +32,7 @@
 **SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
 **SA-018 HARDCODED ELEMENTS: ALL 3 PHASES DONE. P1: model IDs + pricing dead code removed, is_reasoning from DB. P2: DEFAULT_OLLAMA_URL centralized. P3: 27 i18n keys added.**
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
+**SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes (message_id chain, reactive blocks, duplicate keys, serde_json::Value serialization).**
 
 ---
 
@@ -565,7 +566,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-019: Agent Chat Refactoring - Block-by-Block
 
 **Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
-**Status:** P4 DONE
+**Status:** P5 DONE (ALL PHASES COMPLETE)
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -573,7 +574,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | P2 | Backend: load_message_blocks command + ChatBlock model | **DONE** |
 | P3 | Frontend: types + store + composants blocks inline | **DONE** |
 | P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **DONE** |
-| P5 | Nettoyage code mort (simulate_streaming, estimate_tokens, etc.) | **NOT STARTED** |
+| P5 | Nettoyage code mort + bug fixes block-by-block display | **DONE** |
 
 ### P1: Backend - Block-by-Block Events - DONE
 
@@ -659,6 +660,28 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - Agent page: 2-column layout (WorkflowSidebar + Chat), no right sidebar
 - Tests: 254 total TS (48 tests removed with deleted files), lint + check clean
 
+### P5: Nettoyage code mort + Bug fixes - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Backend dead code | Remove `simulate_streaming()`, `estimate_tokens()`, `complete_stream()` trait methods, Token ChunkType | **DONE** |
+| Frontend dead code | Simplify streamingStore, trim chunkProcessor, remove old handlers | **DONE** |
+| Bug fix: message_id chain | `createAssistantMessage` used `crypto.randomUUID()` instead of `result.message_id` | **DONE** |
+| Bug fix: reactive blocks | `{@const}` in Svelte 5 not reactive with SvelteMap updates → inline expressions | **DONE** |
+| Bug fix: duplicate keys | `each_key_duplicate` crash from `sequence: 0` duplicates → composite keys | **DONE** |
+| Bug fix: sub_agents keys | `each_key_duplicate` in MessageMetrics when same sub-agent used twice → composite `${agent.id}-${i}` keys | **DONE** |
+| Bug fix: [object Object] | `serde_json::Value` in `json!()` macro → serialize to strings | **DONE** |
+
+**Key changes:**
+- Backend: `simulate_streaming()` (-127 lines from utils.rs), `estimate_tokens()`, `complete_stream()` removed from all 4 providers. `Token` ChunkType removed. Old `StreamChunk::token()` constructors removed.
+- Frontend: streamingStore trimmed (removed Token/ToolEnd handlers), chunkProcessor simplified (removed old chunk type handlers).
+- Bug fix 1: `workflowExecutor.service.ts` - `createAssistantMessage` now uses `result.message_id` from backend (was `crypto.randomUUID()`), fixing message_id chain for block association.
+- Bug fix 2: `ChatContainer.svelte` - replaced `{@const blocks = getBlocksForMessage(id)}` with inline function calls, since `{@const}` evaluates once per `{#each}` item creation and is NOT reactive to SvelteMap updates.
+- Bug fix 3: `ChatContainer.svelte` - replaced `block.sequence` keys with composite keys `` `${block.block_type}-${i}` `` to avoid `each_key_duplicate` crash when multiple blocks share `sequence: 0`.
+- Bug fix 5: `MessageMetrics.svelte` - replaced `agent.name` key with `` `${agent.id}-${i}` `` to avoid `each_key_duplicate` when same sub-agent is invoked multiple times in one execution.
+- Bug fix 4: `chat_block.rs` - `merge_into_chat_blocks()` now serializes `serde_json::Value` fields to JSON strings via `serde_json::to_string()`, so frontend `formatJson()` receives strings instead of nested objects.
+- 27 files changed, +207/-611 lines. Tests: 951 Rust, 250 TS. lint + check + clippy clean.
+
 ---
 
 ## Verification Status
@@ -667,16 +690,18 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-23, 956 tests passed (+14 from SA-019/P2) |
+| cargo test --lib | **PASS** | 2026-02-23, 951 tests passed (-5 dead code tests removed in P5) |
 | npm run lint | **PASS** | 2026-02-23, 0 errors |
 | npm run check | **PASS** | 2026-02-23, 0 errors, 3 warnings (state_referenced_locally faux positif) |
-| npm run test | **PASS** | 2026-02-23, 254 tests passed (-48 from SA-019/P4 deleted files) |
+| npm run test | **PASS** | 2026-02-23, 250 tests passed (-4 from SA-019/P5 dead code cleanup) |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
 | Manual test: workflow rename | **PASS** | 2026-02-22, user confirmed rename + space key works |
 | Manual test: workflow delete modal | **PASS** | 2026-02-22, user confirmed standard modal design |
 | Manual test: block-by-block display | **PASS** | 2026-02-23, user confirmed blocks inline, spinner, collapse, cancel |
+| Manual test: blocks persist on nav | **PASS** | 2026-02-23, user confirmed blocks reload when switching workflows |
+| Manual test: tool call data display | **PASS** | 2026-02-23, user confirmed no [object Object], proper JSON in tool blocks |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
 | Manual test: custom provider HTTP warning | **NOT RUN** | |
