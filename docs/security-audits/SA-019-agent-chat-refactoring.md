@@ -5,7 +5,7 @@
 - **Branche**: `security/audit-remediation-tdd`
 - **Complexite**: critical
 - **Stack**: Svelte 5.49 + Rust 1.93 + Tauri 2 + SurrealDB 2.5
-- **Statut**: P5 DONE (ALL PHASES COMPLETE)
+- **Statut**: P6 DONE (ALL PHASES COMPLETE)
 
 ## Contexte
 
@@ -1246,6 +1246,46 @@ Aucune nouvelle dependance necessaire.
 - PAT_DB_004 (migration guard)
 - PAT_PERSIST_001 (shared persistence module)
 - ERR_SURREAL_011, ERR_SEC_001, ERR_SVELTE_001, ERR_SVELTE_005
+
+---
+
+## Phase 6: TodoTool Tasks Display + Persistence (2026-02-24)
+
+### Objectif
+Afficher les taches TodoTool dans la conversation, groupees par agent, avec persistence DB et resolution des noms d'agents.
+
+### Implementation
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Types | `TodoTaskDisplay` interface in chat-block.ts | **DONE** |
+| Streaming | `task_agent_name` field on StreamChunk (TS + Rust) | **DONE** |
+| Store | `tasks: TodoTaskDisplay[]` + 3 handlers + `executionTasks` derived | **DONE** |
+| Tests | 9 TDD tests for executionBlocksStore task handlers | **DONE** |
+| Component | `TodoTasksBlock.svelte`: grouped by agent, status icons, priority badges | **DONE** |
+| Integration | ChatContainer: independent `.tasks-section` div | **DONE** |
+| Persistence | `persistedTasks` + `resolvedTasks` $derived + DB reload via `list_workflow_tasks` | **DONE** |
+| Agent names | UUID -> display name resolution via `$agents.find()` | **DONE** |
+
+### Bug fixes
+
+| Bug | Cause | Fix |
+|-----|-------|-----|
+| Tasks disappear after execution | `executionBlocksStore.reset()` clears tasks, `resolvedTasks` falls back to empty `persistedTasks` | Reload `persistedTasks` from DB in `handleSend()` after execution |
+| Tasks disappear on conversation switch | `loadWorkflowData()` never loaded tasks | Added `invoke('list_workflow_tasks')` in `loadWorkflowData()` |
+| Tasks hidden when execution ends | TodoTasksBlock was inside `{#if isExecuting \|\| executionBlocks.length > 0}` | Moved to independent `.tasks-section` div |
+| Agent shows UUID instead of name | `agent_assigned` stores agent ID, not name | `resolvedTasks` $derived resolves UUIDs via `$agents.find()` |
+
+### Key changes
+- `PersistedTask` interface in +page.svelte for Rust IPC (snake_case fields)
+- `resolvedTasks` $derived: real-time tasks during execution of CURRENT workflow, persisted tasks otherwise
+- `loadWorkflowData()`: loads tasks from DB via `list_workflow_tasks`
+- `handleSend()`: reloads tasks from DB after execution completes
+- ChatContainer: `.tasks-section` CSS + independent conditional rendering
+
+### Fichiers modifies
+- `src/routes/agent/+page.svelte` (+75 lines: PersistedTask, persistedTasks, resolvedTasks, task loading)
+- `src/lib/components/agent/ChatContainer.svelte` (+8 lines: moved TodoTasksBlock, added .tasks-section CSS)
 
 ---
 

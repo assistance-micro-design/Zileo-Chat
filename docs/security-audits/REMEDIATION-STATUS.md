@@ -32,7 +32,7 @@
 **SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
 **SA-018 HARDCODED ELEMENTS: ALL 3 PHASES DONE. P1: model IDs + pricing dead code removed, is_reasoning from DB. P2: DEFAULT_OLLAMA_URL centralized. P3: 27 i18n keys added.**
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
-**SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests). Follow-up: auto-scroll fix.**
+**SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
 
 ---
 
@@ -692,16 +692,18 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Store | `tasks: TodoTaskDisplay[]` state + 3 handlers (create/update/complete) + `executionTasks` derived | **DONE** |
 | Tests | 9 TDD tests for executionBlocksStore task handlers (25 total) | **DONE** |
 | Component | `TodoTasksBlock.svelte`: grouped by agent, status icons, priority badges, duration, animations | **DONE** |
-| Integration | ChatContainer: `executionTasks` prop, positioned after spinner. +page.svelte: store binding | **DONE** |
+| Integration | ChatContainer: independent `.tasks-section`, `+page.svelte`: `resolvedTasks` $derived with DB persistence + agent name resolution | **DONE** |
 | i18n | +2 keys (chat_tasks_title, chat_tasks_arialabel) in en.json/fr.json | **DONE** |
 
 **Key changes:**
 - NEW `TodoTasksBlock.svelte` component: task list grouped by agent with status icons (Circle/Loader/CheckCircle/Ban), priority badges (P1/P2 high), duration display, hover effects, spinning animation for in_progress
 - `StreamChunk.task_agent_name: Option<String>` added to Rust backend, propagated through `task_create` constructor to frontend
 - `executionBlocksStore` extended: `tasks` state array, `handleTaskCreate`/`handleTaskUpdate`/`handleTaskComplete` handlers, `executionTasks` derived store
-- ChatContainer: `executionTasks` prop + `TodoTasksBlock` rendered after spinner, `contentSignal` includes tasks for auto-scroll
+- ChatContainer: `executionTasks` prop + `TodoTasksBlock` rendered in independent `.tasks-section` div (outside execution-blocks conditional), `contentSignal` includes tasks for auto-scroll
 - Lint rule: `svelte/prefer-svelte-reactivity` requires non-Map grouping - used Record+array instead of Map
-- 10 files changed, +328 lines. Tests: 1952 Rust, 260 TS (9 new). lint + check + clippy clean.
+- **Persistence fix**: TodoTasksBlock was inside `{#if isExecuting || executionBlocks.length > 0}` - moved to independent section. Added `persistedTasks` state loaded from DB via `list_workflow_tasks`. `resolvedTasks` $derived switches between real-time (`executionTasks$`) during execution and persisted tasks after completion. Tasks reloaded from DB after each execution in `handleSend()`.
+- **Agent name resolution**: Agent UUIDs resolved to display names via `$agents.find()` in `resolvedTasks` derived. Falls back to raw UUID if agent not found.
+- 10 files changed, +328 lines (+83 persistence fix). Tests: 1952 Rust, 260 TS (9 new). lint + check + clippy clean.
 
 ---
 
@@ -722,6 +724,8 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Manual test: workflow delete modal | **PASS** | 2026-02-22, user confirmed standard modal design |
 | Manual test: block-by-block display | **PASS** | 2026-02-23, user confirmed blocks inline, spinner, collapse, cancel |
 | Manual test: blocks persist on nav | **PASS** | 2026-02-23, user confirmed blocks reload when switching workflows |
+| Manual test: tasks persist on nav | **PASS** | 2026-02-24, user confirmed tasks visible after execution, on conversation switch, and after restart |
+| Manual test: agent name resolution | **PASS** | 2026-02-24, user confirmed agent display names instead of UUIDs |
 | Manual test: tool call data display | **PASS** | 2026-02-23, user confirmed no [object Object], proper JSON in tool blocks |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
