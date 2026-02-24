@@ -146,6 +146,7 @@ impl TodoTool {
             &task_id,
             name,
             priority,
+            Some(self.agent_id.clone()),
         ));
 
         Ok(ResponseBuilder::ok(

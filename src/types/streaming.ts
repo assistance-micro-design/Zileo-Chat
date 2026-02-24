@@ -99,6 +99,8 @@ export interface StreamChunk {
   task_status?: 'pending' | 'in_progress' | 'completed' | 'blocked';
   /** Task priority (for task_* chunks) */
   task_priority?: 1 | 2 | 3 | 4 | 5;
+  /** Agent name associated with task (for task_* chunks) */
+  task_agent_name?: string;
   /** User question payload (for user_question_start chunks) */
   user_question?: UserQuestionStreamPayload;
   /** Question ID (for user_question_complete chunks) */

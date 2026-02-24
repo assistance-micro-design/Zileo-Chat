@@ -99,3 +99,26 @@ export interface SubAgentBlockData {
 	/** Summary of the sub-agent report */
 	report_summary?: string;
 }
+
+/**
+ * Display data for a single task in the TodoTasksBlock.
+ *
+ * Used for both real-time display (from stream events) and persisted display (from DB).
+ * Real-time data may have fewer fields populated than persisted data.
+ */
+export interface TodoTaskDisplay {
+	/** Task ID */
+	id: string;
+	/** Task name */
+	name: string;
+	/** Task description (available in persisted view) */
+	description?: string;
+	/** Current task status */
+	status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+	/** Priority level (1=critical, 5=low) */
+	priority: number;
+	/** Agent or sub-agent name that owns this task */
+	agent_name?: string;
+	/** Execution duration in milliseconds (for completed tasks) */
+	duration_ms?: number;
+}

@@ -28,7 +28,7 @@
 
 import { writable, derived } from 'svelte/store';
 import type { StreamChunk } from '$types/streaming';
-import type { ChatBlock, ChatBlockType, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData } from '$types/chat-block';
+import type { ChatBlock, ChatBlockType, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
 
 // ============================================================================
 // Types
@@ -42,6 +42,8 @@ export interface ExecutionBlocksState {
 	workflowId: string | null;
 	/** Blocks received in real-time */
 	blocks: ChatBlock[];
+	/** Active tasks from TodoTool (separate from blocks, displayed after spinner) */
+	tasks: TodoTaskDisplay[];
 	/** Whether execution is currently active */
 	isExecuting: boolean;
 	/** Contextual spinner text (e.g., "MemoryTool") */
@@ -67,6 +69,7 @@ export interface ExecutionBlocksState {
 const initialState: ExecutionBlocksState = {
 	workflowId: null,
 	blocks: [],
+	tasks: [],
 	isExecuting: false,
 	spinnerContext: null,
 	response: null,
@@ -225,6 +228,52 @@ function handleError(state: ExecutionBlocksState, chunk: StreamChunk): Execution
 }
 
 /**
+ * Process a task_create chunk - add new task to the tasks array.
+ * Tasks are tracked separately from blocks and displayed after the spinner.
+ */
+function handleTaskCreate(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	const task: TodoTaskDisplay = {
+		id: chunk.task_id ?? '',
+		name: chunk.task_name ?? '',
+		status: (chunk.task_status as TodoTaskDisplay['status']) ?? 'pending',
+		priority: chunk.task_priority ?? 3,
+		agent_name: chunk.task_agent_name
+	};
+	return {
+		...state,
+		tasks: [...state.tasks, task]
+	};
+}
+
+/**
+ * Process a task_update chunk - update task status in the tasks array.
+ */
+function handleTaskUpdate(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	return {
+		...state,
+		tasks: state.tasks.map((t) =>
+			t.id === chunk.task_id
+				? { ...t, status: (chunk.task_status as TodoTaskDisplay['status']) ?? t.status }
+				: t
+		)
+	};
+}
+
+/**
+ * Process a task_complete chunk - mark task as completed with optional duration.
+ */
+function handleTaskComplete(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	return {
+		...state,
+		tasks: state.tasks.map((t) =>
+			t.id === chunk.task_id
+				? { ...t, status: 'completed' as const, duration_ms: chunk.duration }
+				: t
+		)
+	};
+}
+
+/**
  * Chunk type to handler mapping for the execution blocks store.
  */
 const chunkHandlers: Partial<Record<string, (state: ExecutionBlocksState, chunk: StreamChunk) => ExecutionBlocksState>> = {
@@ -235,6 +284,9 @@ const chunkHandlers: Partial<Record<string, (state: ExecutionBlocksState, chunk:
 	response_block: handleResponseBlock,
 	sub_agent_complete: handleSubAgentComplete,
 	sub_agent_error: handleSubAgentError,
+	task_create: handleTaskCreate,
+	task_update: handleTaskUpdate,
+	task_complete: handleTaskComplete,
 	error: handleError
 };
 
@@ -345,3 +397,6 @@ export const executionCancelled = derived(store, (s) => s.cancelled);
 
 /** Current workflow ID being executed */
 export const executionWorkflowId = derived(store, (s) => s.workflowId);
+
+/** Active tasks from TodoTool (displayed after spinner in ChatContainer) */
+export const executionTasks = derived(store, (s) => s.tasks);

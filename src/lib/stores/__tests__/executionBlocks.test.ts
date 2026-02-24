@@ -13,7 +13,8 @@ import {
 	isExecuting,
 	spinnerContext,
 	executionResponse,
-	executionError
+	executionError,
+	executionTasks
 } from '../executionBlocks';
 import type { StreamChunk } from '$types/streaming';
 import type { ChatBlock } from '$types/chat-block';
@@ -321,6 +322,214 @@ describe('executionBlocksStore', () => {
 				source: 'agent_flow'
 			});
 			expect(blocks[0].sequence).toBe(1);
+		});
+	});
+
+	describe('processChunk - task_create', () => {
+		it('adds task to tasks array', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Analyze codebase',
+				task_status: 'pending',
+				task_priority: 2
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks).toHaveLength(1);
+			expect(tasks[0]).toMatchObject({
+				id: 'task-001',
+				name: 'Analyze codebase',
+				status: 'pending',
+				priority: 2
+			});
+		});
+
+		it('adds task with agent name', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Research',
+				task_status: 'pending',
+				task_priority: 3,
+				task_agent_name: 'ResearchAgent'
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks[0].agent_name).toBe('ResearchAgent');
+		});
+
+		it('appends to existing tasks without replacing', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-002',
+				task_name: 'Task 2',
+				task_priority: 1
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks).toHaveLength(2);
+			expect(tasks[0].id).toBe('task-001');
+			expect(tasks[1].id).toBe('task-002');
+		});
+
+		it('does not add blocks array entry (tasks are separate)', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(0);
+		});
+	});
+
+	describe('processChunk - task_update', () => {
+		it('updates task status', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_update',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_status: 'in_progress'
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks[0].status).toBe('in_progress');
+		});
+
+		it('does not affect other tasks', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-002',
+				task_name: 'Task 2',
+				task_priority: 2
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_update',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_status: 'completed'
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks[0].status).toBe('completed');
+			expect(tasks[1].status).toBe('pending');
+		});
+	});
+
+	describe('processChunk - task_complete', () => {
+		it('marks task as completed', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_complete',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				duration: 1500
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks[0].status).toBe('completed');
+			expect(tasks[0].duration_ms).toBe(1500);
+		});
+	});
+
+	describe('tasks lifecycle', () => {
+		it('tasks from different agents are tracked separately', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Plan',
+				task_priority: 1,
+				task_agent_name: 'PlannerAgent'
+			});
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-002',
+				task_name: 'Research',
+				task_priority: 2,
+				task_agent_name: 'ResearchAgent'
+			});
+
+			const tasks = get(executionTasks);
+			expect(tasks).toHaveLength(2);
+			expect(tasks[0].agent_name).toBe('PlannerAgent');
+			expect(tasks[1].agent_name).toBe('ResearchAgent');
+		});
+
+		it('start resets tasks', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+			expect(get(executionTasks)).toHaveLength(1);
+
+			executionBlocksStore.start('wf-456');
+			expect(get(executionTasks)).toHaveLength(0);
+		});
+
+		it('reset clears tasks', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: 'task-001',
+				task_name: 'Task 1',
+				task_priority: 3
+			});
+
+			executionBlocksStore.reset();
+			expect(get(executionTasks)).toHaveLength(0);
 		});
 	});
 });
