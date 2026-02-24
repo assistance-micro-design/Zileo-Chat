@@ -38,6 +38,8 @@ interface MessageCreate {
 	role: 'user' | 'assistant' | 'system';
 	content: string;
 	metrics?: WorkflowMetrics;
+	/** Pre-generated message ID for block association (SA-019 P5) */
+	messageId?: string;
 }
 
 /**
@@ -153,7 +155,8 @@ export const MessageService = {
 			tokensOutput: params.metrics?.tokens_output ?? null,
 			model: params.metrics?.model ?? null,
 			provider: params.metrics?.provider ?? null,
-			durationMs: params.metrics?.duration_ms ?? null
+			durationMs: params.metrics?.duration_ms ?? null,
+			messageId: params.messageId ?? null
 		});
 	},
 
@@ -176,8 +179,8 @@ export const MessageService = {
 	 * @param metrics - Optional workflow execution metrics
 	 * @returns ID of the saved message
 	 */
-	async saveAssistant(workflowId: string, content: string, metrics?: WorkflowMetrics): Promise<string> {
-		return this.save({ workflowId, role: 'assistant', content, metrics });
+	async saveAssistant(workflowId: string, content: string, metrics?: WorkflowMetrics, messageId?: string): Promise<string> {
+		return this.save({ workflowId, role: 'assistant', content, metrics, messageId });
 	},
 
 	/**

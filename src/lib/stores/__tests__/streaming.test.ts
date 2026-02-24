@@ -30,21 +30,20 @@ vi.mock('@tauri-apps/api/event', () => ({
 	listen: vi.fn().mockResolvedValue(() => {})
 }));
 
-import {
-	streamingStore,
-	isStreaming,
-	streamContent,
-	activeTools,
-	reasoningSteps,
-	streamError,
-	isCancelled,
-	isCompleted,
-	hasStreamingActivities,
-	tokensReceived,
-	runningTools,
-	completedTools,
-	activeSubAgents
-} from '../streaming';
+import { streamingStore, activeSubAgents } from '../streaming';
+
+/** Helper: check if streaming state has visible activities */
+function hasActivities(): boolean {
+	const s = streamingStore.getState();
+	return (
+		s.isStreaming ||
+		(s.completed &&
+			(s.tools.length > 0 ||
+				s.reasoning.length > 0 ||
+				s.subAgents.length > 0 ||
+				s.tasks.length > 0))
+	);
+}
 
 describe('streamingStore', () => {
 	beforeEach(async () => {
@@ -54,30 +53,31 @@ describe('streamingStore', () => {
 
 	describe('initial state', () => {
 		it('should have correct initial values', () => {
-			expect(get(isStreaming)).toBe(false);
-			expect(get(streamContent)).toBe('');
-			expect(get(activeTools)).toEqual([]);
-			expect(get(reasoningSteps)).toEqual([]);
-			expect(get(streamError)).toBe(null);
-			expect(get(isCancelled)).toBe(false);
-			expect(get(tokensReceived)).toBe(0);
+			const state = streamingStore.getState();
+			expect(state.isStreaming).toBe(false);
+			expect(state.content).toBe('');
+			expect(state.tools).toEqual([]);
+			expect(state.reasoning).toEqual([]);
+			expect(state.error).toBe(null);
+			expect(state.cancelled).toBe(false);
+			expect(state.tokensReceived).toBe(0);
 		});
 	});
 
 	describe('appendToken', () => {
 		it('should append tokens to content', () => {
 			streamingStore.appendToken('Hello');
-			expect(get(streamContent)).toBe('Hello');
+			expect(streamingStore.getState().content).toBe('Hello');
 
 			streamingStore.appendToken(' World');
-			expect(get(streamContent)).toBe('Hello World');
+			expect(streamingStore.getState().content).toBe('Hello World');
 		});
 
 		it('should increment token count', () => {
 			streamingStore.appendToken('a');
 			streamingStore.appendToken('b');
 			streamingStore.appendToken('c');
-			expect(get(tokensReceived)).toBe(3);
+			expect(streamingStore.getState().tokensReceived).toBe(3);
 		});
 	});
 
@@ -85,7 +85,7 @@ describe('streamingStore', () => {
 		it('should track tool start', () => {
 			streamingStore.addToolStart('MemoryTool');
 
-			const tools = get(activeTools);
+			const tools = streamingStore.getState().tools;
 			expect(tools).toHaveLength(1);
 			expect(tools[0].name).toBe('MemoryTool');
 			expect(tools[0].status).toBe('running');
@@ -96,7 +96,7 @@ describe('streamingStore', () => {
 			streamingStore.addToolStart('MemoryTool');
 			streamingStore.completeToolEnd('MemoryTool', 150);
 
-			const tools = get(activeTools);
+			const tools = streamingStore.getState().tools;
 			expect(tools[0].status).toBe('completed');
 			expect(tools[0].duration).toBe(150);
 		});
@@ -106,8 +106,9 @@ describe('streamingStore', () => {
 			streamingStore.addToolStart('TodoTool');
 			streamingStore.completeToolEnd('MemoryTool', 100);
 
-			const running = get(runningTools);
-			const completed = get(completedTools);
+			const tools = streamingStore.getState().tools;
+			const running = tools.filter((t) => t.status === 'running');
+			const completed = tools.filter((t) => t.status === 'completed');
 
 			expect(running).toHaveLength(1);
 			expect(running[0].name).toBe('TodoTool');
@@ -119,7 +120,7 @@ describe('streamingStore', () => {
 			streamingStore.addToolStart('MemoryTool');
 			streamingStore.failTool('MemoryTool', 'Connection failed');
 
-			const tools = get(activeTools);
+			const tools = streamingStore.getState().tools;
 			expect(tools[0].status).toBe('error');
 			expect(tools[0].error).toBe('Connection failed');
 		});
@@ -130,7 +131,7 @@ describe('streamingStore', () => {
 			streamingStore.addReasoning('Analyzing request...');
 			streamingStore.addReasoning('Planning response...');
 
-			const steps = get(reasoningSteps);
+			const steps = streamingStore.getState().reasoning;
 			expect(steps).toHaveLength(2);
 			expect(steps[0].content).toBe('Analyzing request...');
 			expect(steps[0].stepNumber).toBe(1);
@@ -146,8 +147,9 @@ describe('streamingStore', () => {
 
 			streamingStore.setError('Network error');
 
-			expect(get(streamError)).toBe('Network error');
-			expect(get(isStreaming)).toBe(false);
+			const state = streamingStore.getState();
+			expect(state.error).toBe('Network error');
+			expect(state.isStreaming).toBe(false);
 		});
 	});
 
@@ -157,10 +159,9 @@ describe('streamingStore', () => {
 			streamingStore.addToolStart('MemoryTool');
 			streamingStore.complete();
 
-			// isStreaming stays true until reset, but completed is set
-			expect(get(isCompleted)).toBe(true);
-			// hasStreamingActivities should be true because we have activities
-			expect(get(hasStreamingActivities)).toBe(true);
+			const state = streamingStore.getState();
+			expect(state.completed).toBe(true);
+			expect(hasActivities()).toBe(true);
 		});
 
 		it('should keep activities visible until explicitly reset', async () => {
@@ -168,14 +169,13 @@ describe('streamingStore', () => {
 			streamingStore.addReasoning('Step 1');
 			streamingStore.complete();
 
-			// Activities should still be accessible
-			expect(get(reasoningSteps)).toHaveLength(1);
-			expect(get(hasStreamingActivities)).toBe(true);
+			expect(streamingStore.getState().reasoning).toHaveLength(1);
+			expect(hasActivities()).toBe(true);
 
 			// After reset, activities are cleared
 			await streamingStore.reset();
-			expect(get(reasoningSteps)).toHaveLength(0);
-			expect(get(hasStreamingActivities)).toBe(false);
+			expect(streamingStore.getState().reasoning).toHaveLength(0);
+			expect(hasActivities()).toBe(false);
 		});
 	});
 
@@ -184,8 +184,9 @@ describe('streamingStore', () => {
 			streamingStore.appendToken('Test');
 			streamingStore.cancel();
 
-			expect(get(isCancelled)).toBe(true);
-			expect(get(isStreaming)).toBe(false);
+			const state = streamingStore.getState();
+			expect(state.cancelled).toBe(true);
+			expect(state.isStreaming).toBe(false);
 		});
 	});
 
@@ -219,11 +220,12 @@ describe('streamingStore', () => {
 
 			await streamingStore.reset();
 
-			expect(get(streamContent)).toBe('');
-			expect(get(activeTools)).toEqual([]);
-			expect(get(reasoningSteps)).toEqual([]);
-			expect(get(streamError)).toBe(null);
-			expect(get(tokensReceived)).toBe(0);
+			const state = streamingStore.getState();
+			expect(state.content).toBe('');
+			expect(state.tools).toEqual([]);
+			expect(state.reasoning).toEqual([]);
+			expect(state.error).toBe(null);
+			expect(state.tokensReceived).toBe(0);
 		});
 	});
 

@@ -19,7 +19,6 @@
 //! that requires custom HTTP handling.
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
-use super::utils::simulate_streaming;
 use async_trait::async_trait;
 use rig::completion::Prompt;
 use rig::providers::mistral;
@@ -28,7 +27,7 @@ use serde::{Deserialize, Serialize};
 // Trait required for .agent() method on rig::client::Client
 use rig::client::CompletionClient;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
 // ============================================================================
@@ -703,39 +702,6 @@ impl LLMProvider for MistralProvider {
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
         })
-    }
-
-    #[instrument(
-        name = "mistral_complete_stream",
-        skip(self, prompt, system_prompt),
-        fields(
-            provider = "mistral",
-            model = %model.unwrap_or("unknown")
-        )
-    )]
-    async fn complete_stream(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        is_reasoning: bool,
-    ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
-        // For now, we'll simulate streaming by chunking the non-streaming response
-        // True streaming will require updates to rig-core's streaming API
-        let response = self
-            .complete(
-                prompt,
-                system_prompt,
-                model,
-                temperature,
-                max_tokens,
-                is_reasoning,
-            )
-            .await?;
-
-        Ok(simulate_streaming(response.content, None, None))
     }
 }
 

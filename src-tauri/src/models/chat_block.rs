@@ -80,12 +80,16 @@ pub fn merge_into_chat_blocks(
 
     // Convert tool executions to ChatBlocks
     for te in tool_executions {
+        // Serialize Value fields back to JSON strings (frontend expects strings, not objects)
+        let input_str = serde_json::to_string(&te.input_params).unwrap_or_default();
+        let output_str = serde_json::to_string(&te.output_result).unwrap_or_default();
+
         let data = serde_json::json!({
             "tool_name": te.tool_name,
             "tool_type": te.tool_type,
             "server_name": te.server_name,
-            "input_params": te.input_params,
-            "output_result": te.output_result,
+            "input_params": input_str,
+            "output_result": output_str,
             "success": te.success,
             "error_message": te.error_message,
             "duration_ms": te.duration_ms,
@@ -275,8 +279,8 @@ mod tests {
         assert_eq!(data["tool_type"], "local");
         assert_eq!(data["success"], true);
         assert_eq!(data["duration_ms"], 100);
-        assert!(data["input_params"].is_object());
-        assert!(data["output_result"].is_object());
+        assert!(data["input_params"].is_string());
+        assert!(data["output_result"].is_string());
     }
 
     #[test]

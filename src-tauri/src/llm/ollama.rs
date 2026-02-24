@@ -15,7 +15,6 @@
 //! Ollama local provider implementation using rig-core
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
-use super::utils::simulate_streaming;
 use async_trait::async_trait;
 use rig::client::Nothing;
 use rig::completion::Prompt;
@@ -24,7 +23,7 @@ use rig::providers::ollama;
 // Trait required for .agent() method on rig::client::Client
 use rig::client::CompletionClient;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
 /// Default Ollama server URL
@@ -363,38 +362,6 @@ impl LLMProvider for OllamaProvider {
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
         })
-    }
-
-    #[instrument(
-        name = "ollama_complete_stream",
-        skip(self, prompt, system_prompt),
-        fields(
-            provider = "ollama",
-            model = %model.unwrap_or("unknown")
-        )
-    )]
-    async fn complete_stream(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        is_reasoning: bool,
-    ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
-        // Simulate streaming by chunking non-streaming response
-        let response = self
-            .complete(
-                prompt,
-                system_prompt,
-                model,
-                temperature,
-                max_tokens,
-                is_reasoning,
-            )
-            .await?;
-
-        Ok(simulate_streaming(response.content, None, None))
     }
 }
 

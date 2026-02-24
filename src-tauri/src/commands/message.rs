@@ -68,6 +68,7 @@ pub async fn save_message(
     model: Option<String>,
     provider: Option<String>,
     duration_ms: Option<u64>,
+    message_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     info!("Saving message");
@@ -97,7 +98,11 @@ pub async fn save_message(
         ));
     }
 
-    let message_id = Uuid::new_v4().to_string();
+    // Use provided message_id (for block association) or generate new one
+    let message_id = match message_id {
+        Some(id) => validate_uuid_field(&id, "message_id")?,
+        None => Uuid::new_v4().to_string(),
+    };
 
     // Build MessageCreate payload
     let message = MessageCreate {

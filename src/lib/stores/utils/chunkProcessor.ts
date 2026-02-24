@@ -51,17 +51,6 @@ export interface ChunkableState {
 type ChunkHandler = (state: ChunkableState, chunk: StreamChunk) => ChunkableState;
 
 /**
- * Handle token chunk - append content and increment counter.
- */
-function handleToken(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		content: s.content + (c.content ?? ''),
-		tokensReceived: s.tokensReceived + 1
-	};
-}
-
-/**
  * Handle tool_start chunk - add new tool with running status.
  */
 function handleToolStart(s: ChunkableState, c: StreamChunk): ChunkableState {
@@ -295,7 +284,6 @@ function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState 
  * Registry mapping chunk types to their handler functions.
  */
 const chunkHandlers: Record<string, ChunkHandler> = {
-	token: handleToken,
 	tool_start: handleToolStart,
 	tool_end: handleToolEnd,
 	reasoning: handleReasoning,

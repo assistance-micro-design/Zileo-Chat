@@ -16,9 +16,8 @@
 		collapsed?: boolean;
 	}
 
-	let { content, source, collapsed: initialCollapsed = true }: Props = $props();
+	let { content, source, collapsed = true }: Props = $props();
 
-	let isCollapsed = $state(initialCollapsed);
 	const blockId = `thinking-${crypto.randomUUID().slice(0, 8)}`;
 
 	const preview = $derived(
@@ -26,7 +25,7 @@
 	);
 
 	function toggle(): void {
-		isCollapsed = !isCollapsed;
+		collapsed = !collapsed;
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
@@ -48,7 +47,7 @@
 		class="thinking-header"
 		onclick={toggle}
 		onkeydown={handleKeydown}
-		aria-expanded={!isCollapsed}
+		aria-expanded={!collapsed}
 		aria-controls={blockId}
 		type="button"
 	>
@@ -56,16 +55,16 @@
 		<span class="thinking-title">
 			{source === 'model_thinking' ? $i18n('chat_thinking_model') : $i18n('chat_thinking_agent')}
 		</span>
-		{#if isCollapsed}
+		{#if collapsed}
 			<span class="thinking-preview">{preview}</span>
 		{/if}
 		<ChevronDown
 			size={14}
-			class="chevron {isCollapsed ? '' : 'expanded'}"
+			class="chevron {collapsed ? '' : 'expanded'}"
 		/>
 	</button>
 
-	{#if !isCollapsed}
+	{#if !collapsed}
 		<div class="thinking-body" id={blockId}>
 			<pre class="thinking-content">{content}</pre>
 		</div>

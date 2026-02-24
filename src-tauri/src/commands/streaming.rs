@@ -419,6 +419,7 @@ pub async fn execute_workflow_streaming(
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
         tool_executions,
+        message_id: message_id.clone(),
     };
 
     // Emit completion

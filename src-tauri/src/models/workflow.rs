@@ -148,6 +148,8 @@ pub struct WorkflowResult {
     pub mcp_calls: Vec<String>,
     /// Detailed tool execution data for persistence
     pub tool_executions: Vec<WorkflowToolExecution>,
+    /// Pre-generated message ID used for block persistence (SA-019 P5)
+    pub message_id: String,
 }
 
 /// Metrics collected during workflow execution
@@ -264,6 +266,7 @@ mod tests {
             tools_used: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_calls: vec!["mcp_call1".to_string()],
             tool_executions: vec![],
+            message_id: "test-message-id".to_string(),
         };
 
         let json = serde_json::to_string(&result).unwrap();

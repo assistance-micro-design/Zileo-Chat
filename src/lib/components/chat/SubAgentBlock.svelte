@@ -27,10 +27,9 @@
 		tokensInput,
 		tokensOutput,
 		reportSummary,
-		collapsed: initialCollapsed = true
+		collapsed = true
 	}: Props = $props();
 
-	let isCollapsed = $state(initialCollapsed);
 	const blockId = `subagent-${crypto.randomUUID().slice(0, 8)}`;
 
 	const formattedDuration = $derived(
@@ -50,7 +49,7 @@
 	);
 
 	function toggle(): void {
-		isCollapsed = !isCollapsed;
+		collapsed = !collapsed;
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
@@ -72,7 +71,7 @@
 		class="sub-agent-header"
 		onclick={toggle}
 		onkeydown={handleKeydown}
-		aria-expanded={!isCollapsed}
+		aria-expanded={!collapsed}
 		aria-controls={blockId}
 		type="button"
 	>
@@ -93,11 +92,11 @@
 
 		<ChevronDown
 			size={14}
-			class="chevron {isCollapsed ? '' : 'expanded'}"
+			class="chevron {collapsed ? '' : 'expanded'}"
 		/>
 	</button>
 
-	{#if !isCollapsed}
+	{#if !collapsed}
 		<div class="sub-agent-body" id={blockId}>
 			{#if tokensInput || tokensOutput}
 				<div class="agent-tokens">

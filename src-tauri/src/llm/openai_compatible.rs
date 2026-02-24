@@ -22,10 +22,9 @@
 //! a polymorphic content deserializer (string or array of content blocks).
 
 use super::provider::{LLMError, LLMResponse, ProviderType};
-use super::utils::simulate_streaming;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
 // ============================================================================
@@ -529,21 +528,6 @@ impl OpenAiCompatibleProvider {
         }
 
         Ok(json_response)
-    }
-
-    /// Streaming completion via simulate_streaming (consistent with Mistral/Ollama).
-    pub async fn complete_stream(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: &str,
-        temperature: f32,
-        max_tokens: usize,
-    ) -> Result<mpsc::Receiver<Result<String, LLMError>>, LLMError> {
-        let response = self
-            .complete(prompt, system_prompt, model, temperature, max_tokens)
-            .await?;
-        Ok(simulate_streaming(response.content, None, None))
     }
 
     /// Tests connection by making a GET request to `{base_url}/models`.

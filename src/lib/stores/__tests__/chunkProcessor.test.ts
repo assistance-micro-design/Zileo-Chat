@@ -19,7 +19,7 @@
 
 /**
  * Unit tests for the shared chunk processor.
- * Tests all 12 chunk types and verifies state transformations are correct.
+ * Tests chunk types and verifies state transformations are correct.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -52,7 +52,7 @@ function createState(): ChunkableState {
 function makeChunk(overrides: Partial<StreamChunk>): StreamChunk {
 	return {
 		workflow_id: 'wf-1',
-		chunk_type: 'token',
+		chunk_type: 'reasoning',
 		...overrides
 	};
 }
@@ -62,37 +62,6 @@ describe('applyChunkToState', () => {
 
 	beforeEach(() => {
 		state = createState();
-	});
-
-	describe('token', () => {
-		it('should append content and increment counter', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'token',
-				content: 'Hello'
-			}));
-
-			expect(result.content).toBe('Hello');
-			expect(result.tokensReceived).toBe(1);
-		});
-
-		it('should accumulate multiple tokens', () => {
-			let s = state;
-			s = applyChunkToState(s, makeChunk({ chunk_type: 'token', content: 'Hello' }));
-			s = applyChunkToState(s, makeChunk({ chunk_type: 'token', content: ' World' }));
-
-			expect(s.content).toBe('Hello World');
-			expect(s.tokensReceived).toBe(2);
-		});
-
-		it('should handle null content gracefully', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'token',
-				content: undefined
-			}));
-
-			expect(result.content).toBe('');
-			expect(result.tokensReceived).toBe(1);
-		});
 	});
 
 	describe('tool_start', () => {
@@ -379,12 +348,12 @@ describe('applyChunkToState', () => {
 			const frozen = { ...original };
 
 			applyChunkToState(original, makeChunk({
-				chunk_type: 'token',
-				content: 'test'
+				chunk_type: 'reasoning',
+				content: 'test reasoning'
 			}));
 
+			expect(original.reasoning.length).toBe(frozen.reasoning.length);
 			expect(original.content).toBe(frozen.content);
-			expect(original.tokensReceived).toBe(frozen.tokensReceived);
 		});
 	});
 
@@ -449,13 +418,13 @@ describe('applyChunkToState', () => {
 			};
 
 			const result = applyChunkToState(extended, makeChunk({
-				chunk_type: 'token',
-				content: 'Hello'
+				chunk_type: 'reasoning',
+				content: 'Analyzing...'
 			}));
 
 			expect(result.workflowId).toBe('wf-123');
 			expect(result.isStreaming).toBe(true);
-			expect(result.content).toBe('Hello');
+			expect(result.reasoning).toHaveLength(1);
 		});
 	});
 });

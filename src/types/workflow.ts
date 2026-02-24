@@ -76,6 +76,8 @@ export interface WorkflowResult {
   mcp_calls: string[];
   /** Detailed tool execution data for persistence and display */
   tool_executions: WorkflowToolExecution[];
+  /** Pre-generated message ID for block association (SA-019 P5) */
+  message_id: string;
 }
 
 /**

@@ -304,27 +304,23 @@ describe('executionBlocksStore', () => {
 		});
 	});
 
-	describe('passthrough chunks', () => {
-		it('ignores token chunks (deprecated)', () => {
-			executionBlocksStore.start('wf-123');
-			executionBlocksStore.processChunk({
-				workflow_id: 'wf-123',
-				chunk_type: 'token',
-				content: 'some token'
-			});
-
-			expect(get(executionBlocks)).toEqual([]);
-		});
-
-		it('ignores reasoning chunks (legacy)', () => {
+	describe('processChunk - reasoning', () => {
+		it('adds thinking block with agent_flow source from reasoning chunk', () => {
 			executionBlocksStore.start('wf-123');
 			executionBlocksStore.processChunk({
 				workflow_id: 'wf-123',
 				chunk_type: 'reasoning',
-				content: 'old reasoning'
+				content: 'Analyzing the user request...'
 			});
 
-			expect(get(executionBlocks)).toEqual([]);
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(1);
+			expect(blocks[0].block_type).toBe('thinking');
+			expect(blocks[0].data).toEqual({
+				content: 'Analyzing the user request...',
+				source: 'agent_flow'
+			});
+			expect(blocks[0].sequence).toBe(1);
 		});
 	});
 });

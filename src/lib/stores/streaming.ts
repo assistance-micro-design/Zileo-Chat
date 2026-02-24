@@ -26,7 +26,6 @@
 
 import { writable, derived, get } from 'svelte/store';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
-import { tokenStore } from './tokens';
 import { applyChunkToState } from './utils/chunkProcessor';
 
 // ============================================================================
@@ -189,7 +188,6 @@ const store = writable<StreamingState>(initialState);
 /**
  * Process a stream chunk with streaming-specific side-effects.
  * Delegates common state updates to applyChunkToState, then applies:
- * - token: syncs tokenStore for real-time display
  * - error: sets isStreaming to false
  *
  * @param state - Current streaming state
@@ -201,11 +199,6 @@ function processChunk(state: StreamingState, chunk: StreamChunk): StreamingState
 	const updated = applyChunkToState(state, chunk);
 
 	// Streaming-specific side-effects
-	if (chunk.chunk_type === 'token') {
-		const outputTokens = chunk.tokens_total ?? updated.tokensReceived;
-		tokenStore.updateStreamingTokens(outputTokens);
-	}
-
 	if (chunk.chunk_type === 'error') {
 		return { ...updated, isStreaming: false };
 	}
@@ -463,98 +456,7 @@ export const streamingStore = {
 // ============================================================================
 
 /**
- * Derived store: whether streaming is active
- */
-export const isStreaming = derived(store, (s) => s.isStreaming);
-
-/**
- * Derived store: current streaming content
- */
-export const streamContent = derived(store, (s) => s.content);
-
-/**
- * Derived store: active tools being executed
- */
-export const activeTools = derived(store, (s) => s.tools);
-
-/**
- * Derived store: tools currently running
- * Use direct check for boolean: runningTools.length > 0 (replaces hasRunningTools)
- */
-export const runningTools = derived(store, (s) => s.tools.filter((t) => t.status === 'running'));
-
-/**
- * Derived store: tools that have completed
- */
-export const completedTools = derived(store, (s) =>
-	s.tools.filter((t) => t.status === 'completed')
-);
-
-/**
- * Derived store: reasoning steps captured
- */
-export const reasoningSteps = derived(store, (s) => s.reasoning);
-
-/**
- * Derived store: current error message
- */
-export const streamError = derived(store, (s) => s.error);
-
-/**
- * Derived store: whether workflow was cancelled
- */
-export const isCancelled = derived(store, (s) => s.cancelled);
-
-/**
- * Derived store: whether streaming has completed (but activities may not yet be captured)
- */
-export const isCompleted = derived(store, (s) => s.completed);
-
-/**
- * Derived store: whether activities should be shown from streaming store
- * True when streaming is active OR when completed but not yet reset
- */
-export const hasStreamingActivities = derived(
-	store,
-	(s) => s.isStreaming || (s.completed && (s.tools.length > 0 || s.reasoning.length > 0 || s.subAgents.length > 0 || s.tasks.length > 0))
-);
-
-/**
- * Derived store: total tokens received
- */
-export const tokensReceived = derived(store, (s) => s.tokensReceived);
-
-/**
- * Derived store: current workflow ID
- */
-export const currentWorkflowId = derived(store, (s) => s.workflowId);
-
-// ============================================================================
-// Sub-Agent Derived Stores
-// ============================================================================
-
-/**
- * Derived store: all active sub-agents
- * Use direct checks for filtering/counting:
- * - Running: activeSubAgents.filter(a => a.status === 'running')
- * - Completed: activeSubAgents.filter(a => a.status === 'completed')
- * - Errored: activeSubAgents.filter(a => a.status === 'error')
- * - Has any: activeSubAgents.length > 0
- * - Count: activeSubAgents.length
+ * Derived store: all active sub-agents.
+ * Used by workflowExecutor.service.ts for sub-agent metrics capture.
  */
 export const activeSubAgents = derived(store, (s) => s.subAgents);
-
-// ============================================================================
-// Task Derived Stores
-// ============================================================================
-
-/**
- * Derived store: all active tasks
- * Use direct checks for filtering/counting:
- * - Pending: activeTasks.filter(t => t.status === 'pending')
- * - In progress: activeTasks.filter(t => t.status === 'in_progress')
- * - Completed: activeTasks.filter(t => t.status === 'completed')
- * - Has any: activeTasks.length > 0
- * - Count: activeTasks.length
- */
-export const activeTasks = derived(store, (s) => s.tasks);

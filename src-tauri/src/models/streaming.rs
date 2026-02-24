@@ -25,8 +25,6 @@ use super::UserQuestionStreamPayload;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChunkType {
-    /// Token from LLM response
-    Token,
     /// Tool execution started
     ToolStart,
     /// Tool execution completed
@@ -68,7 +66,7 @@ pub struct StreamChunk {
     pub workflow_id: String,
     /// Type of chunk content
     pub chunk_type: ChunkType,
-    /// Text content (for token/reasoning/error chunks)
+    /// Text content (for reasoning/error/thinking_block/response_block chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     /// Tool name (for tool_start/tool_end chunks)
@@ -377,7 +375,6 @@ impl StreamChunk {
     /// Creates a task create event chunk.
     ///
     /// Emitted when a new task is created.
-    #[allow(dead_code)]
     pub fn task_create(
         workflow_id: impl Into<String>,
         task_id: impl Into<String>,
@@ -414,7 +411,6 @@ impl StreamChunk {
     /// Creates a task update event chunk.
     ///
     /// Emitted when a task status is updated.
-    #[allow(dead_code)]
     pub fn task_update(
         workflow_id: impl Into<String>,
         task_id: impl Into<String>,
@@ -451,7 +447,6 @@ impl StreamChunk {
     /// Creates a task complete event chunk.
     ///
     /// Emitted when a task is completed.
-    #[allow(dead_code)]
     pub fn task_complete(
         workflow_id: impl Into<String>,
         task_id: impl Into<String>,
@@ -787,10 +782,6 @@ mod tests {
 
     #[test]
     fn test_chunk_type_serialization() {
-        let chunk_type = ChunkType::Token;
-        let json = serde_json::to_string(&chunk_type).unwrap();
-        assert_eq!(json, "\"token\"");
-
         let chunk_type = ChunkType::ToolStart;
         let json = serde_json::to_string(&chunk_type).unwrap();
         assert_eq!(json, "\"tool_start\"");
@@ -798,6 +789,10 @@ mod tests {
         let chunk_type = ChunkType::ToolEnd;
         let json = serde_json::to_string(&chunk_type).unwrap();
         assert_eq!(json, "\"tool_end\"");
+
+        let chunk_type = ChunkType::ThinkingBlock;
+        let json = serde_json::to_string(&chunk_type).unwrap();
+        assert_eq!(json, "\"thinking_block\"");
     }
 
     #[test]

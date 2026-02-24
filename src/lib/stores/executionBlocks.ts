@@ -196,6 +196,23 @@ function handleSubAgentError(state: ExecutionBlocksState, chunk: StreamChunk): E
 }
 
 /**
+ * Process a reasoning chunk into a ThinkingBlock with agent_flow source.
+ */
+function handleReasoning(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	const data: ThinkingBlockData = {
+		content: chunk.content ?? '',
+		source: 'agent_flow'
+	};
+	const block = createBlock('thinking', state.nextSequence, data);
+	return {
+		...state,
+		blocks: [...state.blocks, block],
+		nextSequence: state.nextSequence + 1,
+		spinnerContext: null
+	};
+}
+
+/**
  * Process an error chunk.
  */
 function handleError(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
@@ -212,6 +229,7 @@ function handleError(state: ExecutionBlocksState, chunk: StreamChunk): Execution
  */
 const chunkHandlers: Partial<Record<string, (state: ExecutionBlocksState, chunk: StreamChunk) => ExecutionBlocksState>> = {
 	thinking_block: handleThinkingBlock,
+	reasoning: handleReasoning,
 	tool_start: handleToolStart,
 	tool_call_complete: handleToolCallComplete,
 	response_block: handleResponseBlock,

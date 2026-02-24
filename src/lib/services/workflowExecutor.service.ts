@@ -37,6 +37,7 @@
 
 import type { Message, SubAgentSummary } from '$types/message';
 import type { Workflow, WorkflowMetrics, WorkflowResult } from '$types/workflow';
+import type { ChatBlock } from '$types/chat-block';
 import { MessageService } from './message.service';
 import { WorkflowService } from './workflow.service';
 import { streamingStore, activeSubAgents } from '$lib/stores/streaming';
@@ -44,7 +45,7 @@ import { get } from 'svelte/store';
 import { tokenStore } from '$lib/stores/tokens';
 import { workflowStore } from '$lib/stores/workflows';
 import { backgroundWorkflowsStore } from '$lib/stores/backgroundWorkflows';
-import { executionBlocksStore } from '$lib/stores/executionBlocks';
+import { executionBlocksStore, executionBlocks } from '$lib/stores/executionBlocks';
 import { toastStore } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { getErrorMessage } from '$lib/utils/error';
@@ -71,7 +72,7 @@ export interface ExecutionResult {
 	success: boolean;
 	/** ID of the saved user message */
 	userMessageId?: string;
-	/** ID of the saved assistant message */
+	/** ID of the saved assistant message (matches backend message_id for block association) */
 	assistantMessageId?: string;
 	/** Error message if execution failed */
 	error?: string;
@@ -79,6 +80,8 @@ export interface ExecutionResult {
 	metrics?: WorkflowMetrics;
 	/** The full workflow result */
 	workflowResult?: WorkflowResult;
+	/** Snapshot of execution blocks captured before reset (SA-019 P5) */
+	blocks?: ChatBlock[];
 }
 
 /**
@@ -124,7 +127,7 @@ function createUserMessage(workflowId: string, content: string): Message {
  */
 function createAssistantMessage(workflowId: string, result: WorkflowResult): Message {
 	return {
-		id: crypto.randomUUID(),
+		id: result.message_id,
 		workflow_id: workflowId,
 		role: 'assistant',
 		content: result.response,
@@ -267,10 +270,12 @@ export const WorkflowExecutorService = {
 			callbacks?.onTokenUpdate?.(workflowResult.metrics);
 
 			// Step 5: Save assistant response (always persist to DB)
+			// Use backend-generated message_id to match persisted blocks (SA-019 P5)
 			const assistantMessageId = await MessageService.saveAssistant(
 				workflowId,
 				workflowResult.response,
-				workflowResult.metrics
+				workflowResult.metrics,
+				workflowResult.message_id
 			);
 			// Only push to UI if still viewing this workflow
 			if (isStillViewed()) {
@@ -304,12 +309,14 @@ export const WorkflowExecutorService = {
 			}
 
 			// Step 7: Return success result
+			// Capture blocks snapshot BEFORE finally{} resets the store (SA-019 P5)
 			return {
 				success: true,
 				userMessageId,
 				assistantMessageId,
 				metrics: workflowResult.metrics,
-				workflowResult
+				workflowResult,
+				blocks: get(executionBlocks)
 			};
 		} catch (error) {
 			// Handle execution errors - always save to DB

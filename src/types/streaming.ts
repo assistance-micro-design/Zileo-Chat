@@ -34,7 +34,6 @@ import type { UserQuestionStreamPayload } from './user-question';
  * Synchronized with Rust `ChunkType` enum in `src-tauri/src/models/streaming.rs`.
  */
 export type ChunkType =
-  | 'token'
   | 'tool_start'
   | 'tool_end'
   | 'reasoning'

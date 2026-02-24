@@ -24,6 +24,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { Message } from '$types/message';
 	import type { ModalState } from '$types/services';
 	import type { ValidationRequest } from '$types/validation';
@@ -121,7 +122,7 @@ Uses extracted components, services, and stores for clean architecture.
 	let pageState = $state<PageState>(initialPageState);
 
 	/** Persisted blocks per message (SA-019 P3) */
-	let messageBlocks = $state<Map<string, ChatBlock[]>>(new Map());
+	let messageBlocks = new SvelteMap<string, ChatBlock[]>();
 
 	// ============================================================================
 	// Data Loading Functions (simplified using services)
@@ -148,10 +149,14 @@ Uses extracted components, services, and stores for clean architecture.
 			}
 
 			// Load persisted execution blocks for all messages (SA-019 P3)
+			messageBlocks.clear();
 			try {
-				messageBlocks = await BlockService.loadForMessages(result.messages);
+				const blocks = await BlockService.loadForMessages(result.messages);
+				for (const [id, b] of blocks) {
+					messageBlocks.set(id, b);
+				}
 			} catch {
-				messageBlocks = new Map();
+				// Already cleared above
 			}
 		} finally {
 			pageState.messagesLoading = false;
@@ -326,7 +331,7 @@ Uses extracted components, services, and stores for clean architecture.
 	async function handleSend(message: string): Promise<void> {
 		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
 
-		await WorkflowExecutorService.execute(
+		const result = await WorkflowExecutorService.execute(
 			{
 				workflowId: pageState.selectedWorkflowId,
 				message,
@@ -345,6 +350,13 @@ Uses extracted components, services, and stores for clean architecture.
 				}
 			}
 		);
+
+		// Transfer execution blocks to persisted messageBlocks (SA-019 P5)
+		// Blocks snapshot is captured in execute() before the store reset.
+		// No ID patching needed: createAssistantMessage uses result.message_id directly.
+		if (result.success && result.assistantMessageId && result.blocks && result.blocks.length > 0) {
+			messageBlocks.set(result.assistantMessageId, result.blocks);
+		}
 	}
 
 	/**

@@ -187,25 +187,6 @@ pub trait LLMProvider: Send + Sync {
         max_tokens: usize,
         is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError>;
-
-    /// Generates a streaming completion
-    ///
-    /// Returns a receiver for streaming chunks. Each chunk contains partial content.
-    ///
-    /// # Arguments
-    /// Same as `complete`
-    ///
-    /// # Returns
-    /// A channel receiver for streaming text chunks
-    async fn complete_stream(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        is_reasoning: bool,
-    ) -> Result<tokio::sync::mpsc::Receiver<Result<String, LLMError>>, LLMError>;
 }
 
 #[cfg(test)]

@@ -443,6 +443,7 @@ fn build_workflow_result(
     provider: String,
     model: String,
 ) -> WorkflowResult {
+    use uuid::Uuid;
     let tool_executions: Vec<WorkflowToolExecution> = report
         .metrics
         .tool_executions
@@ -474,6 +475,7 @@ fn build_workflow_result(
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
         tool_executions,
+        message_id: Uuid::new_v4().to_string(),
     }
 }
 
@@ -594,6 +596,7 @@ mod tests {
             tools_used: vec!["tool1".to_string()],
             mcp_calls: vec![],
             tool_executions: vec![],
+            message_id: "test-message-id".to_string(),
         };
 
         // Verify serialization works
