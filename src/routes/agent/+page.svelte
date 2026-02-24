@@ -65,7 +65,8 @@ Uses extracted components, services, and stores for clean architecture.
 		executionBlocks as executionBlocks$,
 		isExecuting as isExecuting$,
 		spinnerContext as spinnerContext$,
-		executionResponse as executionResponse$
+		executionResponse as executionResponse$,
+		executionTasks as executionTasks$
 	} from '$lib/stores/executionBlocks';
 	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
@@ -508,6 +509,7 @@ Uses extracted components, services, and stores for clean architecture.
 				executionBlocks={$executionBlocks$}
 				isExecuting={$isExecuting$}
 				spinnerContext={$spinnerContext$}
+				executionTasks={$executionTasks$}
 				executionResponse={$executionResponse$}
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}

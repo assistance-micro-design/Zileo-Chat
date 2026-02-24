@@ -567,6 +567,8 @@
   "chat_cancel": "Annuler",
   "chat_cancel_arialabel": "Annuler la generation",
   "chat_scroll_to_bottom": "Defiler vers le bas",
+  "chat_tasks_title": "Taches",
+  "chat_tasks_arialabel": "Taches du workflow",
   "chat_input_placeholder": "Saisissez votre message...",
   "chat_input_arialabel": "Champ de saisie du message",
   "chat_send_arialabel": "Envoyer le message",

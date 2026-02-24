@@ -34,9 +34,10 @@ Main chat area with message display, execution blocks inline, and input controls
 	import ToolCallBlock from '$lib/components/chat/ToolCallBlock.svelte';
 	import SubAgentBlock from '$lib/components/chat/SubAgentBlock.svelte';
 	import ExecutionSpinner from '$lib/components/chat/ExecutionSpinner.svelte';
+	import TodoTasksBlock from '$lib/components/chat/TodoTasksBlock.svelte';
 	import { i18n } from '$lib/i18n';
 	import type { Message } from '$types/message';
-	import type { ChatBlock, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData } from '$types/chat-block';
+	import type { ChatBlock, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
 
 	interface Props {
 		messages: Message[];
@@ -49,6 +50,8 @@ Main chat area with message display, execution blocks inline, and input controls
 		isExecuting?: boolean;
 		/** Contextual spinner text */
 		spinnerContext?: string | null;
+		/** Active tasks from TodoTool (displayed after spinner) */
+		executionTasks?: TodoTaskDisplay[];
 		/** Final response from the current execution */
 		executionResponse?: {
 			content: string;
@@ -67,6 +70,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		executionBlocks = [],
 		isExecuting = false,
 		spinnerContext = null,
+		executionTasks = [],
 		executionResponse = null,
 		disabled,
 		onsend,
@@ -84,7 +88,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	// Content signal: uses addition to force Svelte 5 to track ALL dependencies
 	// (avoids short-circuit with || where only the first truthy stops evaluation)
 	let contentSignal = $derived(
-		messages.length + executionBlocks.length + (executionResponse ? 1 : 0)
+		messages.length + executionBlocks.length + executionTasks.length + (executionResponse ? 1 : 0)
 	);
 
 	function isNearBottom(container: HTMLElement): boolean {
@@ -248,6 +252,10 @@ Main chat area with message display, execution blocks inline, and input controls
 
 					{#if isExecuting}
 						<ExecutionSpinner context={spinnerContext} active={true} />
+					{/if}
+
+					{#if executionTasks.length > 0}
+						<TodoTasksBlock tasks={executionTasks} />
 					{/if}
 				</div>
 			{/if}

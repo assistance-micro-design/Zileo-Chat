@@ -32,7 +32,7 @@
 **SA-017 SETTINGS OPTIMIZATION: All 5 phases DONE (PERF-1-5, OPT-1-10). Scroll performance, component extraction, MemorySettings decomposition, backend validation centralization, error handling harmonization.**
 **SA-018 HARDCODED ELEMENTS: ALL 3 PHASES DONE. P1: model IDs + pricing dead code removed, is_reasoning from DB. P2: DEFAULT_OLLAMA_URL centralized. P3: 27 i18n keys added.**
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
-**SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes (message_id chain, reactive blocks, duplicate keys, serde_json::Value serialization). Follow-up: auto-scroll fix (short-circuit ||, loading transition, smart scroll with button).**
+**SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests). Follow-up: auto-scroll fix.**
 
 ---
 
@@ -566,7 +566,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-019: Agent Chat Refactoring - Block-by-Block
 
 **Document:** [SA-019-agent-chat-refactoring.md](SA-019-agent-chat-refactoring.md)
-**Status:** P5 DONE (ALL PHASES COMPLETE)
+**Status:** P6 DONE (ALL PHASES COMPLETE)
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -575,6 +575,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | P3 | Frontend: types + store + composants blocks inline | **DONE** |
 | P4 | Frontend: suppression sidebar activity + layout 2 colonnes | **DONE** |
 | P5 | Nettoyage code mort + bug fixes block-by-block display | **DONE** |
+| P6 | TodoTool tasks display: inline task list grouped by agent | **DONE** |
 
 ### P1: Backend - Block-by-Block Events - DONE
 
@@ -682,6 +683,26 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - Bug fix 4: `chat_block.rs` - `merge_into_chat_blocks()` now serializes `serde_json::Value` fields to JSON strings via `serde_json::to_string()`, so frontend `formatJson()` receives strings instead of nested objects.
 - 27 files changed, +207/-611 lines. Tests: 951 Rust, 250 TS. lint + check + clippy clean.
 
+### P6: TodoTool Tasks Display - DONE
+
+| Task | Description | Status |
+|------|-------------|--------|
+| Types | `TodoTaskDisplay` interface in chat-block.ts (id, name, status, priority, agent_name, duration_ms) | **DONE** |
+| Streaming | `task_agent_name` field on StreamChunk (TS + Rust), `task_create` constructor updated | **DONE** |
+| Store | `tasks: TodoTaskDisplay[]` state + 3 handlers (create/update/complete) + `executionTasks` derived | **DONE** |
+| Tests | 9 TDD tests for executionBlocksStore task handlers (25 total) | **DONE** |
+| Component | `TodoTasksBlock.svelte`: grouped by agent, status icons, priority badges, duration, animations | **DONE** |
+| Integration | ChatContainer: `executionTasks` prop, positioned after spinner. +page.svelte: store binding | **DONE** |
+| i18n | +2 keys (chat_tasks_title, chat_tasks_arialabel) in en.json/fr.json | **DONE** |
+
+**Key changes:**
+- NEW `TodoTasksBlock.svelte` component: task list grouped by agent with status icons (Circle/Loader/CheckCircle/Ban), priority badges (P1/P2 high), duration display, hover effects, spinning animation for in_progress
+- `StreamChunk.task_agent_name: Option<String>` added to Rust backend, propagated through `task_create` constructor to frontend
+- `executionBlocksStore` extended: `tasks` state array, `handleTaskCreate`/`handleTaskUpdate`/`handleTaskComplete` handlers, `executionTasks` derived store
+- ChatContainer: `executionTasks` prop + `TodoTasksBlock` rendered after spinner, `contentSignal` includes tasks for auto-scroll
+- Lint rule: `svelte/prefer-svelte-reactivity` requires non-Map grouping - used Record+array instead of Map
+- 10 files changed, +328 lines. Tests: 1952 Rust, 260 TS (9 new). lint + check + clippy clean.
+
 ---
 
 ## Verification Status
@@ -690,10 +711,10 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-23, 951 tests passed (-5 dead code tests removed in P5) |
-| npm run lint | **PASS** | 2026-02-23, 0 errors |
-| npm run check | **PASS** | 2026-02-23, 0 errors, 3 warnings (state_referenced_locally faux positif) |
-| npm run test | **PASS** | 2026-02-23, 250 tests passed (-4 from SA-019/P5 dead code cleanup) |
+| cargo test --lib | **PASS** | 2026-02-24, 951 tests passed |
+| npm run lint | **PASS** | 2026-02-24, 0 errors |
+| npm run check | **PASS** | 2026-02-24, 0 errors |
+| npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |
