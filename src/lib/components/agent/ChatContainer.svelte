@@ -253,10 +253,13 @@ Main chat area with message display, execution blocks inline, and input controls
 					{#if isExecuting}
 						<ExecutionSpinner context={spinnerContext} active={true} />
 					{/if}
+				</div>
+			{/if}
 
-					{#if executionTasks.length > 0}
-						<TodoTasksBlock tasks={executionTasks} />
-					{/if}
+			<!-- Tasks block (independent of execution-blocks, persists after execution) -->
+			{#if executionTasks.length > 0}
+				<div class="tasks-section">
+					<TodoTasksBlock tasks={executionTasks} />
 				</div>
 			{/if}
 
@@ -352,6 +355,11 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	/* Execution Blocks (real-time) */
 	.execution-blocks {
+		padding: var(--spacing-sm) var(--spacing-lg);
+	}
+
+	/* Tasks section (independent of execution blocks, persists after execution) */
+	.tasks-section {
 		padding: var(--spacing-sm) var(--spacing-lg);
 	}
 

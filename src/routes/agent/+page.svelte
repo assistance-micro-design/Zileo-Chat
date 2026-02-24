@@ -41,8 +41,9 @@ Uses extracted components, services, and stores for clean architecture.
 	import { i18n } from '$lib/i18n';
 
 	// Service imports
+	import { invoke } from '@tauri-apps/api/core';
 	import { WorkflowService, MessageService, BlockService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
-	import type { ChatBlock } from '$types/chat-block';
+	import type { ChatBlock, TodoTaskDisplay } from '$types/chat-block';
 
 	// Store imports
 	import {
@@ -66,7 +67,8 @@ Uses extracted components, services, and stores for clean architecture.
 		isExecuting as isExecuting$,
 		spinnerContext as spinnerContext$,
 		executionResponse as executionResponse$,
-		executionTasks as executionTasks$
+		executionTasks as executionTasks$,
+		executionWorkflowId as executionWorkflowId$
 	} from '$lib/stores/executionBlocks';
 	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
@@ -91,6 +93,17 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Aggregated page state interface for cleaner state management.
 	 * Groups 8 related UI/data variables into single reactive object.
 	 */
+	/** Task as returned by Rust list_workflow_tasks command (snake_case fields) */
+	interface PersistedTask {
+		id: string;
+		name: string;
+		description: string;
+		agent_assigned: string | null;
+		priority: number;
+		status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+		duration_ms: number | null;
+	}
+
 	interface PageState {
 		leftSidebarCollapsed: boolean;
 		selectedWorkflowId: string | null;
@@ -125,6 +138,23 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Persisted blocks per message (SA-019 P3) */
 	let messageBlocks = new SvelteMap<string, ChatBlock[]>();
 
+	/** Persisted tasks for the current workflow (SA-019 P6) */
+	let persistedTasks = $state<TodoTaskDisplay[]>([]);
+
+	/** Resolved tasks: real-time store during execution of THIS workflow, persisted otherwise.
+	 *  Resolves agent UUIDs to display names via $agents store. */
+	let resolvedTasks = $derived(
+		($isExecuting$ && $executionWorkflowId$ === pageState.selectedWorkflowId
+			? $executionTasks$
+			: persistedTasks
+		).map((t) => ({
+			...t,
+			agent_name: t.agent_name
+				? ($agents.find((a) => a.id === t.agent_name)?.name ?? t.agent_name)
+				: undefined
+		}))
+	);
+
 	// ============================================================================
 	// Data Loading Functions (simplified using services)
 	// ============================================================================
@@ -158,6 +188,23 @@ Uses extracted components, services, and stores for clean architecture.
 				}
 			} catch {
 				// Already cleared above
+			}
+
+			// Load persisted tasks for this workflow (SA-019 P6)
+			persistedTasks = [];
+			try {
+				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
+				persistedTasks = tasks.map((t) => ({
+					id: t.id,
+					name: t.name,
+					description: t.description,
+					status: t.status,
+					priority: t.priority,
+					agent_name: t.agent_assigned ?? undefined,
+					duration_ms: t.duration_ms ?? undefined
+				}));
+			} catch {
+				// Tasks are optional; silently continue if loading fails
 			}
 		} finally {
 			pageState.messagesLoading = false;
@@ -358,6 +405,28 @@ Uses extracted components, services, and stores for clean architecture.
 		if (result.success && result.assistantMessageId && result.blocks && result.blocks.length > 0) {
 			messageBlocks.set(result.assistantMessageId, result.blocks);
 		}
+
+		// Reload persisted tasks from DB after execution completes (SA-019 P6)
+		// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
+		// switches to persistedTasks which must be fresh from DB.
+		if (pageState.selectedWorkflowId) {
+			try {
+				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', {
+					workflowId: pageState.selectedWorkflowId
+				});
+				persistedTasks = tasks.map((t) => ({
+					id: t.id,
+					name: t.name,
+					description: t.description,
+					status: t.status,
+					priority: t.priority,
+					agent_name: t.agent_assigned ?? undefined,
+					duration_ms: t.duration_ms ?? undefined
+				}));
+			} catch {
+				// Tasks are optional; silently continue
+			}
+		}
 	}
 
 	/**
@@ -509,7 +578,7 @@ Uses extracted components, services, and stores for clean architecture.
 				executionBlocks={$executionBlocks$}
 				isExecuting={$isExecuting$}
 				spinnerContext={$spinnerContext$}
-				executionTasks={$executionTasks$}
+				executionTasks={resolvedTasks}
 				executionResponse={$executionResponse$}
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
