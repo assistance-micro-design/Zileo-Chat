@@ -710,7 +710,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1 DONE, P2-P7 remaining)
+**Status**: IN PROGRESS (P1-P2 DONE, P3-P7 remaining)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -726,6 +726,16 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Files modified**: `db/schema.rs` (1 line), `commands/agent.rs` (+50 impl, +80 tests), `test_utils.rs` (10 seeders rewritten)
 
+### Phase 2: AgentRegistry.get_by_name() - DONE
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| No name lookup in registry | MEDIUM | DONE | `get_by_name()` method on `AgentRegistry`, case-insensitive + trim, O(n) scan |
+
+**Tests added (5)**: `test_get_by_name_found`, `test_get_by_name_case_insensitive`, `test_get_by_name_trimmed`, `test_get_by_name_not_found`, `test_get_by_name_empty`
+
+**Files modified**: `agents/core/registry.rs` (+22 impl, +55 tests)
+
 ---
 
 ## Verification Status
@@ -734,7 +744,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-25, 954 tests passed (+3 SA-020/P1) |
+| cargo test --lib | **PASS** | 2026-02-25, 959 tests passed (+3 SA-020/P1, +5 SA-020/P2) |
 | npm run lint | **PASS** | 2026-02-24, 0 errors |
 | npm run check | **PASS** | 2026-02-24, 0 errors |
 | npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |

@@ -110,6 +110,32 @@ impl AgentRegistry {
         }
     }
 
+    /// Retrieves an agent by name (case-insensitive, trimmed).
+    ///
+    /// Iterates the in-memory HashMap (O(n), negligible for <20 agents).
+    /// Returns `(agent_id, Arc<dyn Agent>)` or `None`.
+    #[instrument(name = "registry_get_by_name", skip(self), fields(agent_name = %name))]
+    pub async fn get_by_name(&self, name: &str) -> Option<(String, Arc<dyn Agent>)> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            debug!("Empty name, returning None");
+            return None;
+        }
+
+        let needle = trimmed.to_lowercase();
+        let agents = self.agents.read().await;
+
+        for (id, agent) in agents.iter() {
+            if agent.config().name.to_lowercase() == needle {
+                debug!(agent_id = %id, "Agent found by name");
+                return Some((id.clone(), Arc::clone(agent)));
+            }
+        }
+
+        debug!("Agent not found by name");
+        None
+    }
+
     /// Cleans up all temporary agents.
     ///
     /// This method removes all agents with Lifecycle::Temporary from the registry.
@@ -330,5 +356,63 @@ mod tests {
     async fn test_registry_default() {
         let registry = AgentRegistry::default();
         assert!(registry.list().await.is_empty());
+    }
+
+    // SA-020/P2: get_by_name tests
+
+    #[tokio::test]
+    async fn test_get_by_name_found() {
+        let registry = AgentRegistry::new();
+        let agent = Arc::new(TestAgent::new("agent1", Lifecycle::Permanent));
+        registry.register("agent1".to_string(), agent).await;
+
+        let result = registry.get_by_name("Test Agent agent1").await;
+        assert!(result.is_some());
+        let (id, _agent) = result.unwrap();
+        assert_eq!(id, "agent1");
+    }
+
+    #[tokio::test]
+    async fn test_get_by_name_case_insensitive() {
+        let registry = AgentRegistry::new();
+        let agent = Arc::new(TestAgent::new("agent1", Lifecycle::Permanent));
+        registry.register("agent1".to_string(), agent).await;
+
+        let result = registry.get_by_name("test agent agent1").await;
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "agent1");
+    }
+
+    #[tokio::test]
+    async fn test_get_by_name_trimmed() {
+        let registry = AgentRegistry::new();
+        let agent = Arc::new(TestAgent::new("agent1", Lifecycle::Permanent));
+        registry.register("agent1".to_string(), agent).await;
+
+        let result = registry.get_by_name("  Test Agent agent1  ").await;
+        assert!(result.is_some());
+        let (id, _) = result.unwrap();
+        assert_eq!(id, "agent1");
+    }
+
+    #[tokio::test]
+    async fn test_get_by_name_not_found() {
+        let registry = AgentRegistry::new();
+        let agent = Arc::new(TestAgent::new("agent1", Lifecycle::Permanent));
+        registry.register("agent1".to_string(), agent).await;
+
+        let result = registry.get_by_name("Nonexistent").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_by_name_empty() {
+        let registry = AgentRegistry::new();
+        let agent = Arc::new(TestAgent::new("agent1", Lifecycle::Permanent));
+        registry.register("agent1".to_string(), agent).await;
+
+        let result = registry.get_by_name("").await;
+        assert!(result.is_none());
     }
 }
