@@ -56,6 +56,42 @@ use tracing::{debug, error, info, instrument, warn};
 #[allow(dead_code)]
 const DEFAULT_MAX_TOOL_ITERATIONS: usize = 50;
 
+/// Prompt sent to the LLM when a generic completion message is detected,
+/// requesting a proper markdown report of what was accomplished.
+const REPORT_ENFORCEMENT_PROMPT: &str = "You have completed your task using tools. However, you did not provide a summary of what you accomplished. Please provide a concise report in markdown format that describes:\n\n1. What actions you performed\n2. The key results or outcomes\n3. Any important details the user should know\n\nBe specific and reference the actual work done based on the tool calls you made. Respond in the same language as the original task.";
+
+/// Checks whether the given response content is a generic completion message
+/// (i.e., the LLM did not provide a meaningful report).
+///
+/// Returns `true` if the content matches known generic fallback patterns,
+/// indicating that a follow-up report request should be made.
+fn is_generic_completion_message(content: &str) -> bool {
+    let trimmed = content.trim();
+
+    // Pattern 1: "Task completed after N iteration(s). Tool executions completed successfully."
+    if trimmed.starts_with("Task completed after ")
+        && trimmed.contains("iteration")
+        && trimmed.contains("Tool executions completed successfully")
+    {
+        return true;
+    }
+
+    // Pattern 2: "Max tool iterations (N) reached, stopping execution"
+    if trimmed.starts_with("Max tool iterations")
+        && trimmed.contains("reached")
+        && trimmed.contains("stopping execution")
+    {
+        return true;
+    }
+
+    // Pattern 3: Empty or whitespace-only
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    false
+}
+
 /// Summary of an MCP server for documentation in system prompt
 ///
 /// Used to provide high-level information about available MCP servers
@@ -1407,6 +1443,84 @@ impl Agent for LLMAgent {
             }
         }
 
+        // Report enforcement: if the LLM finished without providing a meaningful report,
+        // make one additional call asking for a proper summary.
+        // Guard: iteration > 1 ensures the agent actually executed tools (iteration 1 = first LLM call,
+        // iteration 2+ = LLM was called again after tool execution, meaning tools were used).
+        if is_generic_completion_message(&final_response_content) && iteration > 1 {
+            info!(
+                original_response = %final_response_content,
+                "Generic completion detected, requesting report from LLM"
+            );
+
+            // Check cancellation before the follow-up call
+            let cancelled = cancellation_token
+                .as_ref()
+                .is_some_and(|t| t.is_cancelled());
+
+            if !cancelled {
+                // Emit reasoning step about the follow-up
+                global_sequence += 1;
+                let enforcement_reasoning =
+                    "Agent completed tools without a report. Requesting summary...".to_string();
+                self.emit_progress(StreamChunk::reasoning(
+                    event_workflow_id.clone(),
+                    enforcement_reasoning.clone(),
+                ));
+                reasoning_steps_data.push(ReasoningStepData {
+                    content: enforcement_reasoning,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    sequence: global_sequence,
+                    source: ReasoningSource::AgentFlow,
+                });
+
+                // Add the report enforcement prompt as a user message
+                messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": REPORT_ENFORCEMENT_PROMPT
+                }));
+
+                // Use an empty tools array to prevent tool calls in the follow-up.
+                // ToolChoiceMode::None is ignored by some providers (e.g. Ollama),
+                // so sending no tools is the most reliable way to force a text response.
+                let empty_tools: Vec<serde_json::Value> = vec![];
+
+                match self
+                    .provider_manager
+                    .complete_with_tools(
+                        provider_type.clone(),
+                        &messages,
+                        &empty_tools,
+                        None,
+                        &self.config.llm.model,
+                        self.config.llm.temperature,
+                        self.config.llm.max_tokens,
+                    )
+                    .await
+                {
+                    Ok(response) => {
+                        let (input_tokens, output_tokens) = adapter.extract_usage(&response);
+                        total_tokens_input = input_tokens;
+                        total_tokens_output += output_tokens;
+
+                        if let Some(content) = adapter.extract_content(&response) {
+                            if !content.trim().is_empty() {
+                                info!("Report enforcement successful, received meaningful response");
+                                final_response_content = content;
+                            } else {
+                                warn!("Report enforcement returned empty content, keeping generic message");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Report enforcement LLM call failed, keeping generic message");
+                    }
+                }
+            } else {
+                debug!("Skipping report enforcement: workflow cancelled");
+            }
+        }
+
         let duration_ms = start.elapsed().as_millis() as u64;
 
         info!(
@@ -1695,4 +1809,65 @@ mod tests {
     // - src/llm/adapters/tests.rs (adapter parsing)
     // - src/models/function_calling.rs (type tests)
     // - Integration tests in tests/ directory
+
+    // --- Report Enforcement Tests ---
+
+    #[test]
+    fn test_is_generic_completion_message_standard_pattern() {
+        assert!(is_generic_completion_message(
+            "Task completed after 2 iteration(s). Tool executions completed successfully."
+        ));
+        assert!(is_generic_completion_message(
+            "Task completed after 1 iteration(s). Tool executions completed successfully."
+        ));
+        assert!(is_generic_completion_message(
+            "Task completed after 15 iteration(s). Tool executions completed successfully."
+        ));
+    }
+
+    #[test]
+    fn test_is_generic_completion_message_max_iterations_pattern() {
+        assert!(is_generic_completion_message(
+            "Max tool iterations (50) reached, stopping execution"
+        ));
+        assert!(is_generic_completion_message(
+            "Max tool iterations (200) reached, stopping execution"
+        ));
+    }
+
+    #[test]
+    fn test_is_generic_completion_message_empty() {
+        assert!(is_generic_completion_message(""));
+        assert!(is_generic_completion_message("   "));
+        assert!(is_generic_completion_message("\n\t  "));
+    }
+
+    #[test]
+    fn test_is_generic_completion_message_real_reports() {
+        // Real markdown reports should NOT be detected as generic
+        assert!(!is_generic_completion_message(
+            "## Summary\n\nI analyzed the data and found 3 key insights."
+        ));
+        assert!(!is_generic_completion_message(
+            "The task has been completed. Here are the results:\n- Item 1\n- Item 2"
+        ));
+        assert!(!is_generic_completion_message(
+            "I successfully created the new component with the following structure..."
+        ));
+    }
+
+    #[test]
+    fn test_is_generic_completion_message_with_whitespace() {
+        // Trimming should work
+        assert!(is_generic_completion_message(
+            "  Task completed after 3 iteration(s). Tool executions completed successfully.  "
+        ));
+    }
+
+    #[test]
+    fn test_report_enforcement_prompt_is_valid() {
+        assert!(!REPORT_ENFORCEMENT_PROMPT.is_empty());
+        assert!(REPORT_ENFORCEMENT_PROMPT.contains("markdown"));
+        assert!(REPORT_ENFORCEMENT_PROMPT.contains("report"));
+    }
 }
