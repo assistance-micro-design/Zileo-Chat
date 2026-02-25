@@ -50,7 +50,7 @@ use crate::models::sub_agent::{
 };
 use crate::tools::context::AgentToolContext;
 use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
-use crate::tools::utils::sub_agent_description_template;
+use crate::tools::utils::{resolve_agent_ref, sub_agent_description_template};
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -66,8 +66,10 @@ use uuid::Uuid;
 /// Task specification for parallel execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParallelTaskSpec {
-    /// Agent ID to execute this task
+    /// Resolved agent ID (UUID) for this task
     pub agent_id: String,
+    /// Resolved agent display name
+    pub agent_name: String,
     /// Complete prompt for the agent
     pub prompt: String,
 }
@@ -83,6 +85,87 @@ struct PreparedExecution {
     execution_ids: Vec<String>,
     /// Tasks prepared for orchestrator execution
     orchestrator_tasks: Vec<(String, Task)>,
+}
+
+/// Validates a single parallel task item: requires prompt + (agent_id OR agent_name).
+///
+/// Pure function for testability. Used by `ParallelTasksTool::validate_input`.
+fn validate_parallel_task_item(task: &Value, index: usize) -> ToolResult<()> {
+    if !task.is_object() {
+        return Err(ToolError::InvalidInput(format!(
+            "Task {} must be an object with 'prompt' and either 'agent_id' or 'agent_name'",
+            index
+        )));
+    }
+
+    let has_agent_id = task
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| !s.trim().is_empty());
+    let has_agent_name = task
+        .get("agent_name")
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| !s.trim().is_empty());
+
+    if !has_agent_id && !has_agent_name {
+        return Err(ToolError::InvalidInput(format!(
+            "Task {} missing 'agent_id' or 'agent_name'. \
+             Provide at least one. Use 'list_agents' to find available agents.",
+            index
+        )));
+    }
+    if task.get("prompt").is_none() {
+        return Err(ToolError::InvalidInput(format!(
+            "Task {} missing 'prompt'",
+            index
+        )));
+    }
+    Ok(())
+}
+
+/// Returns the input schema for ParallelTasksTool.
+///
+/// Pure function for testability. Used by `ParallelTasksTool::definition`.
+fn parallel_tasks_input_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "enum": ["execute_batch"],
+                "description": "Operation: 'execute_batch' runs multiple tasks concurrently across different agents"
+            },
+            "tasks": {
+                "type": "array",
+                "maxItems": 3,
+                "description": "Array of agent-prompt pairs (max 3)",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "agent_id": {
+                            "type": "string",
+                            "description": "Target agent ID (UUID). Either agent_id or agent_name is required."
+                        },
+                        "agent_name": {
+                            "type": "string",
+                            "description": "Target agent name (case-insensitive). Alternative to agent_id. If both provided, agent_id takes priority."
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": "COMPLETE prompt for this agent"
+                        }
+                    },
+                    "required": ["prompt"]
+                }
+            },
+            "wait_all": {
+                "type": "boolean",
+                "default": true,
+                "description": "Wait for all tasks to complete (currently always true)"
+            }
+        },
+        "required": ["operation", "tasks"]
+    })
 }
 
 /// Tool for parallel batch execution across multiple agents.
@@ -177,7 +260,7 @@ impl ParallelTasksTool {
     /// Checks:
     /// - Task array is not empty
     /// - Task count does not exceed MAX_SUB_AGENTS
-    /// - Each task has a non-empty agent_id
+    /// - Each task has a non-empty resolved agent_id (already resolved from ID or name)
     /// - Each task has a non-empty prompt
     /// - No task delegates to self
     fn validate_tasks(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
@@ -205,7 +288,7 @@ impl ParallelTasksTool {
             if task.prompt.trim().is_empty() {
                 return Err(ToolError::ValidationFailed(format!(
                     "Task {} for agent '{}' has empty prompt. Each task must have a prompt.",
-                    i, task.agent_id
+                    i, task.agent_name
                 )));
             }
             if task.agent_id == self.current_agent_id {
@@ -247,9 +330,10 @@ impl ParallelTasksTool {
     /// Blocks until validation is approved or returns error if rejected.
     async fn request_human_validation(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
+        // SA-020/P5: Use agent_name for display in validation prompt
         let task_pairs: Vec<(String, String)> = tasks
             .iter()
-            .map(|t| (t.agent_id.clone(), t.prompt.clone()))
+            .map(|t| (t.agent_name.clone(), t.prompt.clone()))
             .collect();
         let details = ValidationHelper::parallel_details(&task_pairs);
         let risk_level =
@@ -295,11 +379,12 @@ impl ParallelTasksTool {
             execution_ids.push(execution_id.clone());
 
             // Create execution record with batch_id as parent for hierarchical tracing (OPT-SA-11)
+            // SA-020/P5: Use real agent name instead of "Parallel task for {uuid}"
             let mut execution_create = SubAgentExecutionCreate::with_parent(
                 self.workflow_id.clone(),
                 self.current_agent_id.clone(),
                 task_spec.agent_id.clone(),
-                format!("Parallel task for {}", task_spec.agent_id),
+                task_spec.agent_name.clone(),
                 task_spec.prompt.clone(),
                 Some(batch_id.clone()), // OPT-SA-11: Link parallel tasks to batch
             );
@@ -333,8 +418,12 @@ impl ParallelTasksTool {
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
 
             // Emit sub_agent_start event via unified executor (OPT-SA-4)
-            let agent_name = format!("Parallel task for {}", task_spec.agent_id);
-            executor.emit_start_event(&task_spec.agent_id, &agent_name, &task_spec.prompt);
+            // SA-020/P5: Use real agent name
+            executor.emit_start_event(
+                &task_spec.agent_id,
+                &task_spec.agent_name,
+                &task_spec.prompt,
+            );
         }
 
         Ok(PreparedExecution {
@@ -457,17 +546,17 @@ impl ParallelTasksTool {
                 .persist_sub_agent_internals(&execution_id, &task_spec.agent_id, &exec_result)
                 .await;
 
-            // Emit completion event
-            let agent_name = format!("Parallel task for {}", task_spec.agent_id);
-            executor.emit_complete_event(&task_spec.agent_id, &agent_name, &exec_result);
+            // Emit completion event (SA-020/P5: use real agent name)
+            executor.emit_complete_event(&task_spec.agent_id, &task_spec.agent_name, &exec_result);
 
             // Build task result
             let task_result = if exec_result.success {
                 completed_count += 1;
 
+                // SA-020/P5: Use real agent name in reports
                 aggregated_reports.push(format!(
                     "## Agent: {}\n\n{}\n",
-                    task_spec.agent_id, exec_result.report
+                    task_spec.agent_name, exec_result.report
                 ));
 
                 ParallelTaskResult {
@@ -489,9 +578,10 @@ impl ParallelTasksTool {
                     "Parallel task failed"
                 );
 
+                // SA-020/P5: Use real agent name in error reports
                 aggregated_reports.push(format!(
                     "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
-                    task_spec.agent_id, error_msg
+                    task_spec.agent_name, error_msg
                 ));
 
                 ParallelTaskResult {
@@ -641,20 +731,28 @@ CONSTRAINTS:
 
 OPERATIONS:
 - execute_batch: Run multiple tasks in parallel
-  Required: tasks (array of {agent_id, prompt})
+  Required: tasks (array of {(agent_id OR agent_name), prompt})
 
 PROMPT GUIDELINES:
 1. Each prompt must be fully self-contained
 2. Specify expected report format in each prompt
 3. Include all data each agent needs to process
 
-EXAMPLE:
+EXAMPLE (by name - preferred):
 {
   "operation": "execute_batch",
   "tasks": [
-    {"agent_id": "db_agent", "prompt": "TASK: Analyze database performance.\n\nCONTEXT: Production DB, 50k users.\n\nFOCUS: Slow queries, missing indexes.\n\nREPORT: Summary + findings with severity."},
-    {"agent_id": "security_agent", "prompt": "TASK: Review API security.\n\nCONTEXT: REST API, JWT auth.\n\nFOCUS: Auth bypass, injection risks.\n\nREPORT: Summary + vulnerabilities with severity."},
-    {"agent_id": "ui_agent", "prompt": "TASK: Check accessibility.\n\nCONTEXT: React frontend.\n\nFOCUS: WCAG 2.1 compliance.\n\nREPORT: Summary + violations with fixes."}
+    {"agent_name": "Database Agent", "prompt": "TASK: Analyze database performance.\n\nCONTEXT: Production DB, 50k users.\n\nFOCUS: Slow queries, missing indexes.\n\nREPORT: Summary + findings with severity."},
+    {"agent_name": "Security Agent", "prompt": "TASK: Review API security.\n\nCONTEXT: REST API, JWT auth.\n\nFOCUS: Auth bypass, injection risks.\n\nREPORT: Summary + vulnerabilities with severity."},
+    {"agent_name": "UI Agent", "prompt": "TASK: Check accessibility.\n\nCONTEXT: React frontend.\n\nFOCUS: WCAG 2.1 compliance.\n\nREPORT: Summary + violations with fixes."}
+  ]
+}
+
+EXAMPLE (by ID):
+{
+  "operation": "execute_batch",
+  "tasks": [
+    {"agent_id": "550e8400-e29b-41d4-a716-446655440000", "prompt": "TASK: Analyze..."}
   ]
 }
 
@@ -670,41 +768,7 @@ Returns aggregated results with:
             name: "Parallel Tasks".to_string(),
             description: sub_agent_description_template(tool_specific_desc),
 
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["execute_batch"],
-                        "description": "Operation: 'execute_batch' runs multiple tasks concurrently across different agents"
-                    },
-                    "tasks": {
-                        "type": "array",
-                        "maxItems": 3,
-                        "description": "Array of agent-prompt pairs (max 3)",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "agent_id": {
-                                    "type": "string",
-                                    "description": "Target agent ID"
-                                },
-                                "prompt": {
-                                    "type": "string",
-                                    "description": "COMPLETE prompt for this agent"
-                                }
-                            },
-                            "required": ["agent_id", "prompt"]
-                        }
-                    },
-                    "wait_all": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "Wait for all tasks to complete (currently always true)"
-                    }
-                },
-                "required": ["operation", "tasks"]
-            }),
+            input_schema: parallel_tasks_input_schema(),
 
             output_schema: serde_json::json!({
                 "type": "object",
@@ -760,20 +824,41 @@ Returns aggregated results with:
                 })?;
 
                 let mut tasks: Vec<ParallelTaskSpec> = Vec::new();
-                for t in tasks_array {
-                    let agent_id = t["agent_id"]
+                for (i, t) in tasks_array.iter().enumerate() {
+                    // SA-020/P5: Resolve agent_ref from agent_id (priority) or agent_name
+                    let agent_ref = t["agent_id"]
                         .as_str()
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| t["agent_name"].as_str().filter(|s| !s.trim().is_empty()))
                         .ok_or_else(|| {
-                            ToolError::InvalidInput("Task missing 'agent_id'".to_string())
-                        })?
-                        .to_string();
+                            ToolError::InvalidInput(format!(
+                                "Task {} missing 'agent_id' or 'agent_name'",
+                                i
+                            ))
+                        })?;
                     let prompt = t["prompt"]
                         .as_str()
                         .ok_or_else(|| {
-                            ToolError::InvalidInput("Task missing 'prompt'".to_string())
+                            ToolError::InvalidInput(format!("Task {} missing 'prompt'", i))
                         })?
                         .to_string();
-                    tasks.push(ParallelTaskSpec { agent_id, prompt });
+
+                    // Resolve via ID or name lookup
+                    let resolved_id = resolve_agent_ref(&self.registry, agent_ref).await?;
+
+                    // Look up real agent name from registry
+                    let agent_name = self
+                        .registry
+                        .get(&resolved_id)
+                        .await
+                        .map(|a| a.config().name.clone())
+                        .unwrap_or_else(|| resolved_id.clone());
+
+                    tasks.push(ParallelTaskSpec {
+                        agent_id: resolved_id,
+                        agent_name,
+                        prompt,
+                    });
                 }
 
                 let wait_all = input["wait_all"].as_bool().unwrap_or(true);
@@ -830,24 +915,7 @@ Returns aggregated results with:
                 }
 
                 for (i, task) in tasks_array.iter().enumerate() {
-                    if !task.is_object() {
-                        return Err(ToolError::InvalidInput(format!(
-                            "Task {} must be an object with 'agent_id' and 'prompt'",
-                            i
-                        )));
-                    }
-                    if task.get("agent_id").is_none() {
-                        return Err(ToolError::InvalidInput(format!(
-                            "Task {} missing 'agent_id'",
-                            i
-                        )));
-                    }
-                    if task.get("prompt").is_none() {
-                        return Err(ToolError::InvalidInput(format!(
-                            "Task {} missing 'prompt'",
-                            i
-                        )));
-                    }
+                    validate_parallel_task_item(task, i)?;
                 }
             }
             _ => {
@@ -890,15 +958,18 @@ mod tests {
     fn test_parallel_task_spec_serialization() {
         let spec = ParallelTaskSpec {
             agent_id: "db_agent".to_string(),
+            agent_name: "Database Agent".to_string(),
             prompt: "Analyze schema".to_string(),
         };
 
         let json = serde_json::to_string(&spec).unwrap();
         assert!(json.contains("db_agent"));
+        assert!(json.contains("Database Agent"));
         assert!(json.contains("Analyze schema"));
 
         let deserialized: ParallelTaskSpec = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.agent_id, "db_agent");
+        assert_eq!(deserialized.agent_name, "Database Agent");
     }
 
     #[test]
@@ -994,5 +1065,65 @@ mod tests {
     #[test]
     fn test_max_sub_agents_constant() {
         assert_eq!(MAX_SUB_AGENTS, 15);
+    }
+
+    // --- SA-020/P5: ParallelTasksTool accepts agent_name ---
+
+    #[test]
+    fn test_validate_parallel_task_accepts_agent_id() {
+        let task = serde_json::json!({
+            "agent_id": "some-uuid-123",
+            "prompt": "Analyze the database"
+        });
+        let result = validate_parallel_task_item(&task, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_parallel_task_accepts_agent_name() {
+        let task = serde_json::json!({
+            "agent_name": "Database Agent",
+            "prompt": "Analyze the database"
+        });
+        let result = validate_parallel_task_item(&task, 0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_parallel_task_rejects_missing_both() {
+        let task = serde_json::json!({
+            "prompt": "Analyze the database"
+        });
+        let result = validate_parallel_task_item(&task, 0);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ToolError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn test_definition_has_agent_name_property() {
+        let schema = parallel_tasks_input_schema();
+        let items = schema["properties"]["tasks"]["items"]["properties"]
+            .as_object()
+            .unwrap();
+        assert!(
+            items.contains_key("agent_name"),
+            "Schema items must contain agent_name property"
+        );
+        assert!(
+            items.contains_key("agent_id"),
+            "Schema items must still contain agent_id property"
+        );
+    }
+
+    #[test]
+    fn test_parallel_task_spec_includes_agent_name() {
+        let spec = ParallelTaskSpec {
+            agent_id: "uuid-123".to_string(),
+            agent_name: "Database Agent".to_string(),
+            prompt: "Analyze schema".to_string(),
+        };
+        assert_eq!(spec.agent_name, "Database Agent");
+        assert_eq!(spec.agent_id, "uuid-123");
     }
 }

@@ -710,7 +710,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1-P4 DONE, P5-P7 remaining)
+**Status**: IN PROGRESS (P1-P5 DONE, P6-P7 remaining)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -762,15 +762,30 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Files modified**: `tools/delegate_task.rs` (+60 impl, +40 tests)
 
+### Phase 5: ParallelTasksTool accepts agent_name + fix noms - DONE
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| ParallelTasks requires agent_id (UUID) only | MEDIUM | DONE | `validate_parallel_task_item()` accepts agent_id OR agent_name; `execute()` resolves via `resolve_agent_ref()` |
+| Tool schema missing agent_name property | LOW | DONE | `parallel_tasks_input_schema()` with agent_name documented; examples updated |
+| "Parallel task for {uuid}" instead of real name | MEDIUM | DONE | `prepare_execution()` and `process_results()` use real agent names from registry |
+| Human validation shows UUIDs | LOW | DONE | `request_human_validation()` uses agent_name for display |
+
+**Tests added (5)**: `test_validate_parallel_task_accepts_agent_id`, `test_validate_parallel_task_accepts_agent_name`, `test_validate_parallel_task_rejects_missing_both`, `test_definition_has_agent_name_property`, `test_parallel_task_spec_includes_agent_name`
+
+**Design**: Same pattern as P4 - pure functions extracted (`validate_parallel_task_item`, `parallel_tasks_input_schema`) for testability. `ParallelTaskSpec` extended with `agent_name` field. Real agent names resolved from registry during `execute()` and propagated through all events, DB records, and reports.
+
+**Files modified**: `tools/parallel_tasks.rs` (+80 impl, +50 tests)
+
 ---
 
 ## Verification Status
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| cargo fmt --check | **PASS** | 2026-02-23 |
-| cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-25, 967 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4) |
+| cargo fmt --check | **PASS** | 2026-02-25 |
+| cargo clippy -- -D warnings | **PASS** | 2026-02-25, 0 warnings |
+| cargo test --lib | **PASS** | 2026-02-25, 972 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4, +5 SA-020/P5) |
 | npm run lint | **PASS** | 2026-02-24, 0 errors |
 | npm run check | **PASS** | 2026-02-24, 0 errors |
 | npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |

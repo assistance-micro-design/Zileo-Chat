@@ -56,8 +56,8 @@ Les tools `DelegateTask` et `ParallelTasks` exigent un `agent_id` (UUID v4 brut)
 - [x] `get_by_name()` fonctionne case-insensitive avec trim
 - [x] `resolve_agent_ref()` resout par ID ou par nom
 - [x] DelegateTask accepte `agent_name` comme alternative a `agent_id`
-- [ ] ParallelTasks accepte `agent_name` comme alternative a `agent_id`
-- [ ] ParallelTasks affiche les vrais noms d'agents dans events/rapports
+- [x] ParallelTasks accepte `agent_name` comme alternative a `agent_id`
+- [x] ParallelTasks affiche les vrais noms d'agents dans events/rapports
 - [x] Index UNIQUE sur agent name en DB
 - [x] `create_agent` et `update_agent` rejettent les noms dupliques
 - [ ] AgentForm.svelte valide le nom duplique cote frontend
