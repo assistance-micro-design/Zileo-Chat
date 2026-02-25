@@ -23,6 +23,12 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | SA-013 | [Tools + Types Coherence](./SA-013-types-tools-coherence.md) | 2026-02-19 | **1C**, 4H, 7M, 2L | **1C DONE, 4H DONE, 2M DONE** (#14-15 ChunkType alignment + #16-20 console.*) |
 | SA-014 | [Data Persistence & Restart](./SA-014-data-persistence-restart.md) | 2026-02-20 | 0C, 3H, 4M, 6L | **3H DONE, 4M DONE** (1M documented), 6L (4 DONE, 2 documented) |
 | SA-015 | [Dead Code Cleanup](./SA-015-dead-code-cleanup.md) | 2026-02-21 | Quality audit | **ALL PHASES DONE**: 22 items deleted, 6 tests migrated, 5 tests deleted. 171 remaining annotations all verified legitimate. |
+| SA-016 | [Agent Page UX Remediation](./SA-016-agent-page-ux-remediation.md) | 2026-02-22 | UX audit | **7 PHASES DONE**, Phase 8 out of scope |
+| SA-017 | [Settings Page Optimization](./SA-017-settings-page-optimization.md) | 2026-02-22 | Quality audit | **ALL 5 PHASES DONE** (PERF-1-5, OPT-1-10) |
+| SA-018 | [Hardcoded Elements Audit](./SA-018-hardcoded-elements-audit.md) | 2026-02-23 | Quality audit | **ALL 3 PHASES DONE** |
+| SA-019 | [Agent Chat Refactoring](./SA-019-agent-chat-refactoring.md) | 2026-02-23 | Quality audit | **ALL 6 PHASES DONE** |
+| SA-020 | [Agent Name Resolution](./SA-020-agent-name-resolution.md) | 2026-02-25 | Quality audit | **ALL 7 PHASES DONE** |
+| SA-021 | [Report Enforcement](./SA-021-report-enforcement.md) | 2026-02-25 | Quality audit | **DONE**: report enforcement mechanism for agents without reports |
 
 **Evaluation report**: [EVALUATION-2026-02-19.md](./EVALUATION-2026-02-19.md)
 **Remediation status**: [REMEDIATION-STATUS.md](./REMEDIATION-STATUS.md) (2026-02-20, branch `security/audit-remediation-tdd`)

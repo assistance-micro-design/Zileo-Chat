@@ -34,12 +34,13 @@
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
 **SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
+**SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
 
 ---
 
 ## Tests Added
 
-### Rust (86 new tests)
+### Rust (92 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -129,6 +130,12 @@
 | tools/parallel_tasks.rs | test_definition_has_agent_name_property | SA-020/P5: schema includes agent_name |
 | tools/parallel_tasks.rs | test_parallel_task_spec_includes_agent_name | SA-020/P5: ParallelTaskSpec has agent_name field |
 | tools/parallel_tasks.rs | test_parallel_task_spec_serialization | SA-020/P5: spec serialization includes agent_name |
+| agents/llm_agent.rs | test_is_generic_completion_message_standard_pattern | SA-021: detects "Task completed after N iteration(s)" |
+| agents/llm_agent.rs | test_is_generic_completion_message_max_iterations_pattern | SA-021: detects "Max tool iterations (N) reached" |
+| agents/llm_agent.rs | test_is_generic_completion_message_empty | SA-021: detects empty/whitespace content |
+| agents/llm_agent.rs | test_is_generic_completion_message_real_reports | SA-021: does NOT flag real markdown reports |
+| agents/llm_agent.rs | test_is_generic_completion_message_with_whitespace | SA-021: handles whitespace trimming |
+| agents/llm_agent.rs | test_report_enforcement_prompt_is_valid | SA-021: prompt is valid and contains keywords |
 
 ### TypeScript (67 new tests in 5 new files + 1 updated)
 
@@ -820,6 +827,23 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
+### SA-021: Report Enforcement
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| Generic "Task completed" message when agent has no report | MEDIUM | **DONE** | `is_generic_completion_message()` detection + follow-up LLM call with empty tools array |
+
+**Implementation**:
+- `REPORT_ENFORCEMENT_PROMPT` constant for follow-up request
+- `is_generic_completion_message()` pure function (3 detection patterns)
+- Follow-up logic in `execute_with_mcp()` with cancellation check and fallback
+- Empty tools array (not `ToolChoiceMode::None`) for Ollama compatibility
+
+**Files modified**: `src-tauri/src/agents/llm_agent.rs` (+175 lines)
+**Tests**: 6 TDD tests
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |
@@ -840,6 +864,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Manual test: tasks persist on nav | **PASS** | 2026-02-24, user confirmed tasks visible after execution, on conversation switch, and after restart |
 | Manual test: agent name resolution | **PASS** | 2026-02-24, user confirmed agent display names instead of UUIDs |
 | Manual test: tool call data display | **PASS** | 2026-02-23, user confirmed no [object Object], proper JSON in tool blocks |
+| Manual test: report enforcement | **NOT RUN** | SA-021: verify agent provides markdown report instead of generic message |
 | Manual test: search prompts | **NOT RUN** | |
 | Manual test: import/export | **NOT RUN** | |
 | Manual test: custom provider HTTP warning | **NOT RUN** | |
