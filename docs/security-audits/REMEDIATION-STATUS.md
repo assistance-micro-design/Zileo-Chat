@@ -1,6 +1,6 @@
 # Remediation Status - Security Audit Findings
 
-**Date**: 2026-02-23 (updated)
+**Date**: 2026-02-25 (updated)
 **Branch**: `security/audit-remediation-tdd`
 **Base**: `main` (commit 1d8fc29)
 **Files changed**: 166 (vs main)
@@ -33,12 +33,13 @@
 **SA-018 HARDCODED ELEMENTS: ALL 3 PHASES DONE. P1: model IDs + pricing dead code removed, is_reasoning from DB. P2: DEFAULT_OLLAMA_URL centralized. P3: 27 i18n keys added.**
 **SA-018 HARDCODED ELEMENTS: P1 DONE (model IDs removed, is_reasoning propagated from DB). P2/P3 remaining.**
 **SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
+**SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 
 ---
 
 ## Tests Added
 
-### Rust (64 new tests)
+### Rust (86 new tests)
 
 | File | Test | Purpose |
 |------|------|---------|
@@ -106,6 +107,28 @@
 | models/streaming.rs | test_stream_chunk_user_question_start | SA-013 #14-15: user_question_start constructor + payload fields |
 | models/streaming.rs | test_stream_chunk_user_question_complete | SA-013 #14-15: user_question_complete constructor + question_id |
 | models/streaming.rs | test_user_question_fields_skipped_when_none | SA-013 #14-15: user_question/question_id absent for other chunk types |
+| commands/agent.rs | test_create_agent_rejects_duplicate_name | SA-020/P1: duplicate name rejected on create |
+| commands/agent.rs | test_update_agent_allows_keeping_own_name | SA-020/P1: update without name change succeeds |
+| commands/agent.rs | test_update_agent_rejects_collision_with_other | SA-020/P1: rename to existing name rejected |
+| agents/core/registry.rs | test_get_by_name_found | SA-020/P2: exact name lookup works |
+| agents/core/registry.rs | test_get_by_name_case_insensitive | SA-020/P2: case-insensitive lookup |
+| agents/core/registry.rs | test_get_by_name_trimmed | SA-020/P2: whitespace-trimmed lookup |
+| agents/core/registry.rs | test_get_by_name_not_found | SA-020/P2: returns None for unknown name |
+| agents/core/registry.rs | test_get_by_name_empty | SA-020/P2: returns None for empty string |
+| tools/utils.rs | test_resolve_agent_ref_by_id | SA-020/P3: resolve by UUID fast path |
+| tools/utils.rs | test_resolve_agent_ref_by_name | SA-020/P3: resolve by name slow path |
+| tools/utils.rs | test_resolve_agent_ref_not_found | SA-020/P3: NotFound error for unknown ref |
+| tools/utils.rs | test_resolve_agent_ref_empty_input | SA-020/P3: error on empty input |
+| tools/delegate_task.rs | test_validate_input_accepts_agent_id | SA-020/P4: agent_id accepted |
+| tools/delegate_task.rs | test_validate_input_accepts_agent_name | SA-020/P4: agent_name accepted |
+| tools/delegate_task.rs | test_validate_input_rejects_missing_both | SA-020/P4: error when neither provided |
+| tools/delegate_task.rs | test_definition_has_agent_name_property | SA-020/P4: schema includes agent_name |
+| tools/parallel_tasks.rs | test_validate_parallel_task_accepts_agent_id | SA-020/P5: agent_id accepted per task |
+| tools/parallel_tasks.rs | test_validate_parallel_task_accepts_agent_name | SA-020/P5: agent_name accepted per task |
+| tools/parallel_tasks.rs | test_validate_parallel_task_rejects_missing_both | SA-020/P5: error when neither provided |
+| tools/parallel_tasks.rs | test_definition_has_agent_name_property | SA-020/P5: schema includes agent_name |
+| tools/parallel_tasks.rs | test_parallel_task_spec_includes_agent_name | SA-020/P5: ParallelTaskSpec has agent_name field |
+| tools/parallel_tasks.rs | test_parallel_task_spec_serialization | SA-020/P5: spec serialization includes agent_name |
 
 ### TypeScript (67 new tests in 5 new files + 1 updated)
 
@@ -710,7 +733,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1-P6 DONE, P7 remaining)
+**Status**: DONE (ALL 7 PHASES)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -786,6 +809,15 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Files modified**: `AgentForm.svelte` (+8 lines), `en.json` (+1 key), `fr.json` (+1 key)
 
+### Phase 7: Documentation - DONE
+
+- SA-020 spec: statut DONE, criteres coches, tests reels (22), fichiers reels
+- REMEDIATION-STATUS: summary + section SA-020 complete
+- Learnings: ERR_DELEGATE_001, PAT_AGENT_002 ajoutés
+- Inventory: fonctions utilitaires ajoutées
+
+**Total SA-020**: 12 fichiers, +1225/-268 lignes, 22 TDD tests, 7 phases
+
 ---
 
 ## Verification Status
@@ -794,7 +826,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-25 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-25, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-25, 972 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4, +5 SA-020/P5) |
+| cargo test --lib | **PASS** | 2026-02-25, 972 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4, +6 SA-020/P5) |
 | npm run lint | **PASS** | 2026-02-25, 0 errors |
 | npm run check | **PASS** | 2026-02-25, 0 errors |
 | npm run test | **PASS** | 2026-02-25, 260 tests passed |

@@ -5,7 +5,7 @@
 - **Branche**: `security/audit-remediation-tdd`
 - **Complexite**: medium
 - **Stack**: Rust 1.93 + Tauri 2 + SvelteKit + SurrealDB 2.5
-- **Statut**: EN COURS
+- **Statut**: DONE (P1-P7)
 
 ## Contexte
 
@@ -62,9 +62,9 @@ Les tools `DelegateTask` et `ParallelTasks` exigent un `agent_id` (UUID v4 brut)
 - [x] `create_agent` et `update_agent` rejettent les noms dupliques
 - [x] AgentForm.svelte valide le nom duplique cote frontend
 - [x] Cles i18n `agents_name_duplicate` en FR et EN
-- [ ] Tous les tests existants passent (regression)
-- [ ] ~18 nouveaux tests Rust
-- [ ] `cargo clippy -- -D warnings` et `npm run check` passent
+- [x] Tous les tests existants passent (972 total, 0 failed)
+- [x] 22 nouveaux tests Rust (3 P1 + 5 P2 + 4 P3 + 4 P4 + 6 P5)
+- [x] `cargo clippy -- -D warnings` et `npm run check` passent
 
 ---
 
@@ -193,10 +193,14 @@ Modifications:
 - Validation inline dans `validate()` contre liste des agents en memoire
 - Exclut self en mode edit (`a.id !== agent?.id`)
 
-### Phase 7: Documentation
+### Phase 7: Documentation - DONE
 
-- Ce fichier (`SA-020-agent-name-resolution.md`)
-- `REMEDIATION-STATUS.md`: ajouter SA-020
+- Ce fichier (`SA-020-agent-name-resolution.md`): statut DONE, criteres coches, tests reels (22)
+- `REMEDIATION-STATUS.md`: section SA-020 complete, summary mis a jour
+- `.claude/learning/patterns.yml`: PAT_AGENT_002 (hybrid resolution)
+- `.claude/learning/errors.yml`: ERR_DELEGATE_001 (agent ref not found)
+- `.claude/learning/changelog.yml`: entree SA-020
+- `.claude/registry/inventory.yml`: nouvelles fonctions utilitaires
 
 ---
 
@@ -206,10 +210,10 @@ Modifications:
 |-------|---------|-------|------|
 | 1 | commands/agent.rs | 3 | TDD unit |
 | 2 | agents/core/registry.rs | 5 | TDD unit |
-| 3 | tools/utils.rs | 3 | TDD unit |
+| 3 | tools/utils.rs | 4 | TDD unit |
 | 4 | tools/delegate_task.rs | 4 | TDD unit |
-| 5 | tools/parallel_tasks.rs | 3 | TDD unit |
-| **Total** | | **18** | |
+| 5 | tools/parallel_tasks.rs | 6 | TDD unit |
+| **Total** | | **22** | |
 
 ## Error/Pattern codes
 
@@ -218,17 +222,20 @@ Modifications:
 | ERR_DELEGATE_001 | error | Agent reference not found (neither UUID nor name) |
 | PAT_AGENT_002 | pattern | Hybrid resolution: accept UUID or name, resolve via registry scan |
 
-## Fichiers modifies
+## Fichiers modifies (reel)
 
-| Fichier | Lignes estimees |
-|---------|----------------|
-| `src-tauri/src/db/schema.rs` | ~1 |
-| `src-tauri/src/agents/core/registry.rs` | ~30 (impl) + ~60 (tests) |
-| `src-tauri/src/tools/utils.rs` | ~30 (impl) + ~60 (tests) |
-| `src-tauri/src/tools/delegate_task.rs` | ~40 (impl) + ~40 (tests) |
-| `src-tauri/src/tools/parallel_tasks.rs` | ~40 (impl) + ~30 (tests) |
-| `src-tauri/src/commands/agent.rs` | ~30 (impl) + ~40 (tests) |
-| `src/lib/components/settings/agents/AgentForm.svelte` | ~10 |
-| `src/messages/en.json` | ~1 |
-| `src/messages/fr.json` | ~1 |
-| `docs/security-audits/REMEDIATION-STATUS.md` | ~5 |
+| Fichier | Changements |
+|---------|-------------|
+| `src-tauri/src/db/schema.rs` | +1/-1 (UNIQUE index) |
+| `src-tauri/src/agents/core/registry.rs` | +84 (impl + 5 tests) |
+| `src-tauri/src/tools/utils.rs` | +169 (impl + 4 tests) |
+| `src-tauri/src/tools/delegate_task.rs` | +182/-42 (impl + 4 tests) |
+| `src-tauri/src/tools/parallel_tasks.rs` | +287/-91 (impl + 6 tests) |
+| `src-tauri/src/commands/agent.rs` | +135 (impl + 3 tests) |
+| `src-tauri/src/test_utils.rs` | +/-294 (seeders rewritten for ERR_SURREAL_007) |
+| `src/lib/components/settings/agents/AgentForm.svelte` | +11/-1 |
+| `src/messages/en.json` | +1 |
+| `src/messages/fr.json` | +1 |
+| `docs/security-audits/SA-020-agent-name-resolution.md` | +234 |
+| `docs/security-audits/REMEDIATION-STATUS.md` | +93 |
+| **Total** | **12 fichiers, +1225/-268** |
