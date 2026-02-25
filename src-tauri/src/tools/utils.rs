@@ -488,9 +488,7 @@ mod tests {
     async fn test_resolve_agent_ref_by_id() {
         let registry = AgentRegistry::new();
         let agent = Arc::new(TestAgent::new("agent-uuid-1", Lifecycle::Permanent));
-        registry
-            .register("agent-uuid-1".to_string(), agent)
-            .await;
+        registry.register("agent-uuid-1".to_string(), agent).await;
 
         let result = resolve_agent_ref(&registry, "agent-uuid-1").await;
         assert!(result.is_ok());
@@ -501,9 +499,7 @@ mod tests {
     async fn test_resolve_agent_ref_by_name() {
         let registry = AgentRegistry::new();
         let agent = Arc::new(TestAgent::new("agent-uuid-2", Lifecycle::Permanent));
-        registry
-            .register("agent-uuid-2".to_string(), agent)
-            .await;
+        registry.register("agent-uuid-2".to_string(), agent).await;
 
         let result = resolve_agent_ref(&registry, "Test Agent agent-uuid-2").await;
         assert!(result.is_ok());
@@ -514,9 +510,7 @@ mod tests {
     async fn test_resolve_agent_ref_not_found() {
         let registry = AgentRegistry::new();
         let agent = Arc::new(TestAgent::new("agent-uuid-3", Lifecycle::Permanent));
-        registry
-            .register("agent-uuid-3".to_string(), agent)
-            .await;
+        registry.register("agent-uuid-3".to_string(), agent).await;
 
         let result = resolve_agent_ref(&registry, "ghost").await;
         assert!(result.is_err());

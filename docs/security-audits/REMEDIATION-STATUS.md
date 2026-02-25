@@ -710,7 +710,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1-P3 DONE, P4-P7 remaining)
+**Status**: IN PROGRESS (P1-P4 DONE, P5-P7 remaining)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -748,6 +748,20 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Note**: `cargo clippy` reports 2 dead-code warnings (`get_by_name` from P2, `resolve_agent_ref` from P3) because neither is called from production code yet. These will resolve in P4 when `DelegateTaskTool` consumes `resolve_agent_ref()`.
 
+### Phase 4: DelegateTaskTool accepts agent_name - DONE
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| DelegateTask requires agent_id (UUID) only | MEDIUM | DONE | `validate_delegate_operation()` accepts agent_id OR agent_name; `execute()` resolves via `resolve_agent_ref()` |
+| Tool schema missing agent_name property | LOW | DONE | `delegate_task_input_schema()` with agent_name documented; description updated |
+| Misleading examples with slug-like IDs | LOW | DONE | Examples corrected: by-name preferred, by-UUID as alternative |
+
+**Tests added (4)**: `test_validate_input_accepts_agent_id`, `test_validate_input_accepts_agent_name`, `test_validate_input_rejects_missing_both`, `test_definition_has_agent_name_property`
+
+**Design**: Pure functions extracted (`validate_delegate_operation`, `delegate_task_input_schema`) for testability. `resolve_agent_ref()` from P3 now consumed, resolving dead-code warnings from P2/P3.
+
+**Files modified**: `tools/delegate_task.rs` (+60 impl, +40 tests)
+
 ---
 
 ## Verification Status
@@ -756,7 +770,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-25, 963 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3) |
+| cargo test --lib | **PASS** | 2026-02-25, 967 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4) |
 | npm run lint | **PASS** | 2026-02-24, 0 errors |
 | npm run check | **PASS** | 2026-02-24, 0 errors |
 | npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |
