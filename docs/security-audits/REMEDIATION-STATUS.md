@@ -710,7 +710,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1-P5 DONE, P6-P7 remaining)
+**Status**: IN PROGRESS (P1-P6 DONE, P7 remaining)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -777,6 +777,15 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Files modified**: `tools/parallel_tasks.rs` (+80 impl, +50 tests)
 
+### Phase 6: Frontend validation nom duplique + i18n - DONE
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| No frontend duplicate name check | LOW | DONE | `validate()` in AgentForm.svelte checks against `$agents` list, case-insensitive, excludes self in edit mode |
+| Missing i18n keys for duplicate error | LOW | DONE | `agents_name_duplicate` added in en.json and fr.json |
+
+**Files modified**: `AgentForm.svelte` (+8 lines), `en.json` (+1 key), `fr.json` (+1 key)
+
 ---
 
 ## Verification Status
@@ -786,9 +795,9 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | cargo fmt --check | **PASS** | 2026-02-25 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-25, 0 warnings |
 | cargo test --lib | **PASS** | 2026-02-25, 972 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3, +4 SA-020/P4, +5 SA-020/P5) |
-| npm run lint | **PASS** | 2026-02-24, 0 errors |
-| npm run check | **PASS** | 2026-02-24, 0 errors |
-| npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |
+| npm run lint | **PASS** | 2026-02-25, 0 errors |
+| npm run check | **PASS** | 2026-02-25, 0 errors |
+| npm run test | **PASS** | 2026-02-25, 260 tests passed |
 | Manual test: token display separation | **PASS** | 2026-02-21, user confirmed AGENT/TOTAL sections correct |
 | Manual test: streaming + cancel | **PASS** | 2026-02-20, user confirmed no bugs |
 | Manual test: memory compact mode | **PASS** | 2026-02-20, French text no longer panics |

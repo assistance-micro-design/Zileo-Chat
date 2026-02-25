@@ -464,6 +464,7 @@
   "agents_name_placeholder": "My Custom Agent",
   "agents_name_help": "A unique name for this agent (1-64 characters)",
   "agents_name_error": "Name must be 1-64 characters",
+  "agents_name_duplicate": "An agent with this name already exists",
   "agents_lifecycle": "Lifecycle",
   "agents_lifecycle_permanent_desc": "Persists across sessions",
   "agents_lifecycle_temporary_desc": "Deleted after session ends",

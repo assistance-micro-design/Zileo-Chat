@@ -464,6 +464,7 @@
   "agents_name_placeholder": "Mon agent personnalise",
   "agents_name_help": "Un nom unique pour cet agent (1-64 caracteres)",
   "agents_name_error": "Le nom doit contenir entre 1 et 64 caracteres",
+  "agents_name_duplicate": "Un agent avec ce nom existe deja",
   "agents_lifecycle": "Cycle de vie",
   "agents_lifecycle_permanent_desc": "Persiste entre les sessions",
   "agents_lifecycle_temporary_desc": "Supprime a la fin de la session",

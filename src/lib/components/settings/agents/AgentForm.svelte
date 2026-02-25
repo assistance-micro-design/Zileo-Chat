@@ -23,7 +23,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 -->
 
 <script lang="ts">
-	import { agentStore } from '$lib/stores/agents';
+	import { agentStore, agents } from '$lib/stores/agents';
 	import {
 		loadServers,
 		type MCPState,
@@ -195,6 +195,15 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 		if (!name.trim() || name.length < 1 || name.length > 64) {
 			errors.name = t('agents_name_error');
+		} else {
+			// SA-020/P6: Check for duplicate name (case-insensitive)
+			const trimmedLower = name.trim().toLowerCase();
+			const isDuplicate = $agents.some(
+				(a) => a.name.toLowerCase() === trimmedLower && a.id !== agent?.id
+			);
+			if (isDuplicate) {
+				errors.name = t('agents_name_duplicate');
+			}
 		}
 
 		if (availableModels.length === 0) {

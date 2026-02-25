@@ -60,8 +60,8 @@ Les tools `DelegateTask` et `ParallelTasks` exigent un `agent_id` (UUID v4 brut)
 - [x] ParallelTasks affiche les vrais noms d'agents dans events/rapports
 - [x] Index UNIQUE sur agent name en DB
 - [x] `create_agent` et `update_agent` rejettent les noms dupliques
-- [ ] AgentForm.svelte valide le nom duplique cote frontend
-- [ ] Cles i18n `agents_name_duplicate` en FR et EN
+- [x] AgentForm.svelte valide le nom duplique cote frontend
+- [x] Cles i18n `agents_name_duplicate` en FR et EN
 - [ ] Tous les tests existants passent (regression)
 - [ ] ~18 nouveaux tests Rust
 - [ ] `cargo clippy -- -D warnings` et `npm run check` passent
