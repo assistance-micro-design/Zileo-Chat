@@ -270,6 +270,42 @@ pub async fn get_agent_config(
     Ok(config)
 }
 
+/// SA-020/P1: Checks that agent name is unique (case-insensitive, trimmed).
+///
+/// - `exclude_id`: If Some, excludes this agent from the check (for update_agent).
+async fn check_agent_name_unique(
+    db: &crate::db::DBClient,
+    name: &str,
+    exclude_id: Option<&str>,
+) -> Result<(), String> {
+    let trimmed = name.trim();
+
+    let (query, params) = match exclude_id {
+        Some(id) => (
+            "SELECT meta::id(id) AS id FROM agent WHERE string::lowercase(name) = string::lowercase($name) AND meta::id(id) != $id LIMIT 1",
+            vec![
+                ("name".to_string(), serde_json::json!(trimmed)),
+                ("id".to_string(), serde_json::json!(id)),
+            ],
+        ),
+        None => (
+            "SELECT meta::id(id) AS id FROM agent WHERE string::lowercase(name) = string::lowercase($name) LIMIT 1",
+            vec![("name".to_string(), serde_json::json!(trimmed))],
+        ),
+    };
+
+    let results: Vec<serde_json::Value> = db
+        .query_with_params(query, params)
+        .await
+        .map_err(|e| format!("Failed to check agent name uniqueness: {}", e))?;
+
+    if !results.is_empty() {
+        return Err(format!("An agent with name '{}' already exists", trimmed));
+    }
+
+    Ok(())
+}
+
 /// Creates a new agent
 ///
 /// Validates the configuration, persists to database, and registers in memory.
@@ -286,6 +322,14 @@ pub async fn create_agent(
         warn!(error = %e, "Agent validation failed");
         e
     })?;
+
+    // SA-020/P1: Check name uniqueness (case-insensitive)
+    check_agent_name_unique(&state.db, &validated.name, None)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Agent name uniqueness check failed");
+            e
+        })?;
 
     // Generate UUID for new agent
     let agent_id = uuid::Uuid::new_v4().to_string();
@@ -428,6 +472,14 @@ pub async fn update_agent(
 
     let mut updated_config = merge_agent_config(&config, existing.config())?;
     updated_config.id = validated_id.clone();
+
+    // SA-020/P1: Check name uniqueness (excluding self)
+    check_agent_name_unique(&state.db, &updated_config.name, Some(&validated_id))
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Agent name uniqueness check failed on update");
+            e
+        })?;
 
     // Serialize and persist to database
     let fields = serialize_agent_fields(&updated_config)?;
@@ -720,5 +772,88 @@ mod tests {
 
         let agents = state.registry.list().await;
         assert_eq!(agents.len(), 5);
+    }
+
+    // ========================================================================
+    // SA-020/P1: Agent name uniqueness tests
+    // ========================================================================
+
+    /// Seeds an agent with a given name in the database, returns its UUID.
+    /// Note: omit created_at/updated_at - schema defaults to time::now() (ERR_SURREAL_007).
+    async fn seed_agent_in_db(db: &DBClient, name: &str) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE agent:`{}` SET \
+                id = '{}', \
+                name = $name, \
+                lifecycle = 'permanent', \
+                llm = {{ provider: 'mistral', model: 'large', temperature: 0.7, max_tokens: 1000 }}, \
+                tools = [], \
+                mcp_servers = [], \
+                system_prompt = 'Test agent.', \
+                max_tool_iterations = 50, \
+                enable_thinking = false, \
+                created_at = time::now(), \
+                updated_at = time::now()",
+            id, id
+        );
+        let mut response = db
+            .db
+            .query(&query)
+            .bind(("name", name.to_string()))
+            .await
+            .expect("Query execution failed");
+        response.check().expect("CREATE agent failed validation");
+        id
+    }
+
+    #[tokio::test]
+    async fn test_create_agent_rejects_duplicate_name() {
+        let state = setup_test_state().await;
+        // Seed an agent named "Database Agent"
+        seed_agent_in_db(&state.db, "Database Agent").await;
+
+        // Attempt to check same name (case-insensitive) => should fail
+        let result = super::check_agent_name_unique(&state.db, "database agent", None).await;
+        assert!(
+            result.is_err(),
+            "Should reject duplicate name (case-insensitive)"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("already exists"),
+            "Error should mention 'already exists', got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_agent_allows_keeping_own_name() {
+        let state = setup_test_state().await;
+        // Seed agent
+        let agent_id = seed_agent_in_db(&state.db, "My Agent").await;
+
+        // Check uniqueness excluding self => should pass
+        let result = super::check_agent_name_unique(&state.db, "My Agent", Some(&agent_id)).await;
+        assert!(
+            result.is_ok(),
+            "Should allow keeping own name, got: {:?}",
+            result
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_agent_rejects_collision_with_other() {
+        let state = setup_test_state().await;
+        // Seed two agents
+        let _agent_a = seed_agent_in_db(&state.db, "Agent Alpha").await;
+        let agent_b = seed_agent_in_db(&state.db, "Agent Beta").await;
+
+        // Try to rename Agent Beta to "Agent Alpha" => should fail
+        let result = super::check_agent_name_unique(&state.db, "Agent Alpha", Some(&agent_b)).await;
+        assert!(
+            result.is_err(),
+            "Should reject renaming to existing agent's name"
+        );
     }
 }

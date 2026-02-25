@@ -275,7 +275,7 @@ DEFINE FIELD OVERWRITE updated_at ON agent TYPE datetime DEFAULT time::now();
 
 -- Indexes
 DEFINE INDEX OVERWRITE unique_agent_id ON agent FIELDS id UNIQUE;
-DEFINE INDEX OVERWRITE agent_name_idx ON agent FIELDS name;
+DEFINE INDEX OVERWRITE agent_name_idx ON agent FIELDS name UNIQUE;
 DEFINE INDEX OVERWRITE agent_provider_idx ON agent FIELDS llm.provider;
 
 -- =============================================
