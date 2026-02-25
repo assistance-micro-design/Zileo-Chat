@@ -797,7 +797,7 @@ mod tests {
                 updated_at = time::now()",
             id, id
         );
-        let mut response = db
+        let response = db
             .db
             .query(&query)
             .bind(("name", name.to_string()))

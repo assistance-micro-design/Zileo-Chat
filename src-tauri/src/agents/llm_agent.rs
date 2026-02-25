@@ -1505,7 +1505,9 @@ impl Agent for LLMAgent {
 
                         if let Some(content) = adapter.extract_content(&response) {
                             if !content.trim().is_empty() {
-                                info!("Report enforcement successful, received meaningful response");
+                                info!(
+                                    "Report enforcement successful, received meaningful response"
+                                );
                                 final_response_content = content;
                             } else {
                                 warn!("Report enforcement returned empty content, keeping generic message");
