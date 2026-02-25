@@ -710,7 +710,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 ## SA-020: Agent Name Resolution - Hybrid ID/Name
 
 **Spec**: `docs/security-audits/SA-020-agent-name-resolution.md`
-**Status**: IN PROGRESS (P1-P2 DONE, P3-P7 remaining)
+**Status**: IN PROGRESS (P1-P3 DONE, P4-P7 remaining)
 
 ### Phase 1: Schema UNIQUE + validation unicite backend - DONE
 
@@ -736,6 +736,18 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Files modified**: `agents/core/registry.rs` (+22 impl, +55 tests)
 
+### Phase 3: resolve_agent_ref() shared function - DONE
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| No shared resolution function for agent ID or name | MEDIUM | DONE | `resolve_agent_ref()` in `tools/utils.rs`: trim, fast path (ID), slow path (name), NotFound error |
+
+**Tests added (4)**: `test_resolve_agent_ref_by_id`, `test_resolve_agent_ref_by_name`, `test_resolve_agent_ref_not_found`, `test_resolve_agent_ref_empty_input`
+
+**Files modified**: `tools/utils.rs` (+37 impl, +120 tests)
+
+**Note**: `cargo clippy` reports 2 dead-code warnings (`get_by_name` from P2, `resolve_agent_ref` from P3) because neither is called from production code yet. These will resolve in P4 when `DelegateTaskTool` consumes `resolve_agent_ref()`.
+
 ---
 
 ## Verification Status
@@ -744,7 +756,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |-------|--------|-------|
 | cargo fmt --check | **PASS** | 2026-02-23 |
 | cargo clippy -- -D warnings | **PASS** | 2026-02-23, 0 warnings |
-| cargo test --lib | **PASS** | 2026-02-25, 959 tests passed (+3 SA-020/P1, +5 SA-020/P2) |
+| cargo test --lib | **PASS** | 2026-02-25, 963 tests passed (+3 SA-020/P1, +5 SA-020/P2, +4 SA-020/P3) |
 | npm run lint | **PASS** | 2026-02-24, 0 errors |
 | npm run check | **PASS** | 2026-02-24, 0 errors |
 | npm run test | **PASS** | 2026-02-24, 260 tests passed (+10 from SA-019/P6 task handlers) |
