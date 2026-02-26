@@ -165,9 +165,9 @@ impl Default for ToolRegistry {
     }
 }
 
-// Global singleton (OPT-8: migrated from lazy_static to once_cell)
-use once_cell::sync::Lazy;
-pub static TOOL_REGISTRY: Lazy<ToolRegistry> = Lazy::new(ToolRegistry::new);
+// Global singleton
+use std::sync::LazyLock;
+pub static TOOL_REGISTRY: LazyLock<ToolRegistry> = LazyLock::new(ToolRegistry::new);
 
 #[cfg(test)]
 mod tests {

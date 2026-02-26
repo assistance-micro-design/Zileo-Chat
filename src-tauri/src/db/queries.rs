@@ -105,6 +105,7 @@ pub mod workflow {
 /// Cascade delete helpers (OPT-WF-8).
 pub mod cascade {
     use crate::db::DBClient;
+    use futures_util::future::join_all;
     use std::sync::Arc;
     use tracing::{info, warn};
 
@@ -162,7 +163,7 @@ pub mod cascade {
             .collect();
 
         // Execute all in parallel using join_all
-        futures::future::join_all(futures).await;
+        join_all(futures).await;
 
         info!(workflow_id = %workflow_id, "Cascade delete completed for all related tables");
     }

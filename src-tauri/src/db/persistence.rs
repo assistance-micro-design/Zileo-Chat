@@ -24,6 +24,7 @@
 use crate::agents::core::agent::{ReasoningStepData, ToolExecutionData};
 use crate::db::DBClient;
 use crate::models::{ThinkingStepCreate, ToolExecutionCreate};
+use futures_util::future::join_all;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -83,7 +84,7 @@ pub async fn persist_tool_executions(
             }
         })
         .collect();
-    futures::future::join_all(tool_futures).await;
+    join_all(tool_futures).await;
 }
 
 /// Persists reasoning step records from agent-level `ReasoningStepData` in parallel.
@@ -139,7 +140,7 @@ pub async fn persist_reasoning_steps(
             }
         })
         .collect();
-    futures::future::join_all(step_futures).await;
+    join_all(step_futures).await;
     start_step_number + reasoning_steps.len() as u32
 }
 

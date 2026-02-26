@@ -39,23 +39,23 @@ use crate::mcp::{
 };
 use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
-use once_cell::sync::Lazy;
 use reqwest::Client;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::LazyLock;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 /// Default timeout for HTTP operations (30 seconds)
 const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
 
-/// Shared HTTP client for connection pooling (OPT-8: migrated from lazy_static to once_cell)
+/// Shared HTTP client for connection pooling
 ///
 /// Reuses TCP/TLS connections across all MCPHttpHandle instances.
 /// Configured with:
 /// - 5 idle connections per host
 /// - 90 second idle timeout
 /// - 30 second request timeout
-static SHARED_HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
+static SHARED_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
         .pool_max_idle_per_host(5)
         .pool_idle_timeout(Duration::from_secs(90))
