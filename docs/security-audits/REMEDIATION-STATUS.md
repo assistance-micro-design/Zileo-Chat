@@ -868,6 +868,26 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 ---
 
+### SA-023: Backend Structure & Naming Audit
+
+| Finding | Severity | Status | Fix |
+|---------|----------|--------|-----|
+| H1: `ProviderType` duplicated in `llm/provider.rs` and `models/llm_models.rs` | HIGH | **DONE** | Removed duplicate from `models/llm_models.rs`, canonical location `llm/provider.rs`, re-export from `models/mod.rs` (P1) |
+| H2: `commands/models.rs` naming ambiguity | HIGH | PENDING | Rename to `commands/llm_models.rs` (P2) |
+| M1: `tools/validation_helper.rs` mixes unrelated concerns | MEDIUM | PENDING | Extract `safe_truncate()` to `tools/utils.rs` (P3) |
+| M2: `tools/constants.rs` scope exceeds its module | MEDIUM | PENDING | Create top-level `constants.rs`, move app-wide constants (P4) |
+| M3: Large files candidates for decomposition | MEDIUM | DEFERRED | Well-structured internally, decompose when next modifying |
+| L1: Excessive `#[allow(dead_code)]` annotations | LOW | DEFERRED | Periodic audit recommended |
+| L2: Minor naming asymmetries commands/ vs models/ | LOW | **NO ACTION** | Commands=actions, models=entities is a reasonable convention |
+
+**Phase 1 DONE**: Consolidated `ProviderType` into `llm/provider.rs`. Removed enum + 4 impls + 2 redundant tests from `models/llm_models.rs`. Updated imports in `commands/models.rs`, `commands/agent.rs`. Re-export from `models/mod.rs`.
+**Files modified**: 4 Rust files (-89 lines)
+**Tests**: 2002 pass (cargo test), 0 failures
+
+**Details**: `docs/security-audits/SA-023-backend-structure-naming.md`
+
+---
+
 ## Verification Status
 
 | Check | Status | Notes |

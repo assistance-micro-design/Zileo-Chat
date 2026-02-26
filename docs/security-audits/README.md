@@ -29,6 +29,8 @@ Each audit is run in a dedicated session for focused attention and thoroughness.
 | SA-019 | [Agent Chat Refactoring](./SA-019-agent-chat-refactoring.md) | 2026-02-23 | Quality audit | **ALL 6 PHASES DONE** |
 | SA-020 | [Agent Name Resolution](./SA-020-agent-name-resolution.md) | 2026-02-25 | Quality audit | **ALL 7 PHASES DONE** |
 | SA-021 | [Report Enforcement](./SA-021-report-enforcement.md) | 2026-02-25 | Quality audit | **DONE**: report enforcement mechanism for agents without reports |
+| SA-022 | [Frontend Structure & Naming](./SA-022-frontend-structure-naming.md) | 2026-02-26 | Quality audit | **ALL 7 PHASES DONE**: naming normalization, dead code removal, barrel exports, modal consolidation, provider components |
+| SA-023 | [Backend Structure & Naming](./SA-023-backend-structure-naming.md) | 2026-02-26 | Quality audit | **P1 DONE** (H1 ProviderType consolidated). P2-P4 pending. |
 
 **Evaluation report**: [EVALUATION-2026-02-19.md](./EVALUATION-2026-02-19.md)
 **Remediation status**: [REMEDIATION-STATUS.md](./REMEDIATION-STATUS.md) (2026-02-20, branch `security/audit-remediation-tdd`)
