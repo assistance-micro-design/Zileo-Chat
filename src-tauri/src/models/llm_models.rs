@@ -17,77 +17,9 @@
 //! This module defines the data structures for managing LLM models (both builtin and custom)
 //! and provider configuration settings.
 
-use crate::llm::DEFAULT_OLLAMA_URL;
+use crate::llm::{ProviderType, DEFAULT_OLLAMA_URL};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-// ============================================================================
-// Provider Type
-// ============================================================================
-
-/// LLM provider type supported by the application.
-///
-/// Mistral and Ollama are builtin providers with dedicated implementations.
-/// Custom(String) represents user-created OpenAI-compatible providers
-/// (RouterLab, OpenRouter, Together AI, etc.).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ProviderType {
-    /// Mistral AI cloud API
-    Mistral,
-    /// Ollama local inference server
-    Ollama,
-    /// User-created OpenAI-compatible provider (e.g., Custom("routerlab"))
-    Custom(String),
-}
-
-impl Serialize for ProviderType {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        match self {
-            ProviderType::Mistral => s.serialize_str("mistral"),
-            ProviderType::Ollama => s.serialize_str("ollama"),
-            ProviderType::Custom(name) => s.serialize_str(name),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ProviderType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Ok(match s.as_str() {
-            "mistral" => ProviderType::Mistral,
-            "ollama" => ProviderType::Ollama,
-            other => ProviderType::Custom(other.to_string()),
-        })
-    }
-}
-
-impl std::fmt::Display for ProviderType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProviderType::Mistral => write!(f, "mistral"),
-            ProviderType::Ollama => write!(f, "ollama"),
-            ProviderType::Custom(name) => write!(f, "{}", name),
-        }
-    }
-}
-
-impl std::str::FromStr for ProviderType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "mistral" => Ok(ProviderType::Mistral),
-            "ollama" => Ok(ProviderType::Ollama),
-            other => {
-                if other.is_empty() {
-                    Err(format!("Unknown provider type: {}", s))
-                } else {
-                    Ok(ProviderType::Custom(other.to_string()))
-                }
-            }
-        }
-    }
-}
 
 // ============================================================================
 // LLM Model
@@ -505,32 +437,8 @@ pub fn get_all_builtin_models() -> Vec<LLMModel> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_provider_type_display() {
-        assert_eq!(ProviderType::Mistral.to_string(), "mistral");
-        assert_eq!(ProviderType::Ollama.to_string(), "ollama");
-        assert_eq!(
-            ProviderType::Custom("routerlab".to_string()).to_string(),
-            "routerlab"
-        );
-    }
-
-    #[test]
-    fn test_provider_type_from_str() {
-        assert_eq!(
-            "mistral".parse::<ProviderType>().unwrap(),
-            ProviderType::Mistral
-        );
-        assert_eq!(
-            "OLLAMA".parse::<ProviderType>().unwrap(),
-            ProviderType::Ollama
-        );
-        assert_eq!(
-            "routerlab".parse::<ProviderType>().unwrap(),
-            ProviderType::Custom("routerlab".to_string())
-        );
-        assert!("".parse::<ProviderType>().is_err());
-    }
+    // ProviderType Display and FromStr tests are in llm/provider.rs
+    // (canonical location after SA-023/P1 consolidation)
 
     #[test]
     fn test_create_model_request_validation() {

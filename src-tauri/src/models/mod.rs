@@ -112,9 +112,11 @@ pub use sub_agent::constants;
 pub use llm_models::get_all_builtin_models;
 #[allow(unused_imports)]
 pub use llm_models::{
-    ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, ProviderType,
-    UpdateModelRequest,
+    ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, UpdateModelRequest,
 };
+// ProviderType canonical location: llm/provider.rs (SA-023/P1)
+#[allow(unused_imports)]
+pub use crate::llm::ProviderType;
 
 // Re-export embedding settings types
 pub use embedding::{

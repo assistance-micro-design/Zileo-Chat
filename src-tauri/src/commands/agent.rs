@@ -25,7 +25,7 @@
 //! - [`delete_agent`] - Delete an agent
 
 use crate::agents::LLMAgent;
-use crate::models::llm_models::ProviderType;
+use crate::llm::ProviderType;
 use crate::models::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
 };

@@ -41,9 +41,10 @@ use uuid::Uuid;
 
 use crate::commands::security::SecureKeyStore;
 use crate::db::count_exists;
+use crate::llm::ProviderType;
 use crate::models::llm_models::{
     get_all_builtin_models, ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings,
-    ProviderType, UpdateModelRequest,
+    UpdateModelRequest,
 };
 use crate::state::AppState;
 use crate::tools::constants::{commands as cmd_const, query_limits};
