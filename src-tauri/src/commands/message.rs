@@ -21,13 +21,13 @@
 //! by persisting all messages to SurrealDB.
 
 use crate::{
+    constants::commands as cmd_const,
     db::extract_count,
     models::{
         merge_into_chat_blocks, ChatBlock, Message, MessageCreate, PaginatedMessages, ThinkingStep,
         ToolExecution,
     },
     security::validate_uuid_field,
-    tools::constants::commands as cmd_const,
     AppState,
 };
 use tauri::State;

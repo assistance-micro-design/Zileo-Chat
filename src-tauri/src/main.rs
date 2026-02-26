@@ -16,6 +16,7 @@
 
 mod agents;
 mod commands;
+mod constants;
 mod db;
 mod llm;
 mod mcp;

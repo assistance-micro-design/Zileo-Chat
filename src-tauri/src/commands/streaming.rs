@@ -19,6 +19,7 @@
 
 use crate::{
     agents::core::agent::Task,
+    constants::workflow as wf_const,
     db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
@@ -26,7 +27,6 @@ use crate::{
         Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
-    tools::constants::workflow as wf_const,
     AppState,
 };
 use tauri::{Emitter, State, Window};

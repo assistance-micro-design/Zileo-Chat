@@ -21,10 +21,11 @@
 //! Full RAG with embeddings will be implemented in a future phase.
 
 use crate::{
+    constants::query_limits,
     db::extract_count,
     models::{Memory, MemorySearchResult, MemoryType},
     security::{serialize_for_query, validate_uuid_field},
-    tools::constants::{memory as memory_constants, query_limits},
+    tools::constants::memory as memory_constants,
     tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
     AppState,
 };

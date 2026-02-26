@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 91 | Fix implemented and tested |
-| NOT DONE | 11 | Not yet addressed |
+| DONE | 92 | Fix implemented and tested |
+| NOT DONE | 10 | Not yet addressed |
 | DOCUMENTED | 3 | Analyzed, documented as non-issue or by-design |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -36,7 +36,7 @@
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
 **SA-022 ALL PHASES DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion. P6: Service & directory cleanup + sub-agent blocks bug fix. P7: Settings providers restructuration (3 components moved to providers/ subdirectory).**
-**SA-023 P1-P3 DONE: Backend structure & naming audit. P1: ProviderType consolidated into llm/provider.rs. P2: commands/models.rs renamed to commands/llm_models.rs. P3: safe_truncate() moved to tools/utils.rs. P4 pending.**
+**SA-023 P1-P4 DONE: Backend structure & naming audit. P1: ProviderType consolidated into llm/provider.rs. P2: commands/models.rs renamed to commands/llm_models.rs. P3: safe_truncate() moved to tools/utils.rs. P4: App-wide constants moved to top-level constants.rs.**
 
 ---
 
@@ -876,7 +876,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | H1: `ProviderType` duplicated in `llm/provider.rs` and `models/llm_models.rs` | HIGH | **DONE** | Removed duplicate from `models/llm_models.rs`, canonical location `llm/provider.rs`, re-export from `models/mod.rs` (P1) |
 | H2: `commands/models.rs` naming ambiguity | HIGH | **DONE** | Renamed to `commands/llm_models.rs`, updated `mod.rs` + `main.rs` (P2) |
 | M1: `tools/validation_helper.rs` mixes unrelated concerns | MEDIUM | **DONE** | Moved `safe_truncate()` to `tools/utils.rs`, updated 4 import sites (P3) |
-| M2: `tools/constants.rs` scope exceeds its module | MEDIUM | PENDING | Create top-level `constants.rs`, move app-wide constants (P4) |
+| M2: `tools/constants.rs` scope exceeds its module | MEDIUM | **DONE** | Created top-level `constants.rs`, moved `workflow`/`query_limits`/`commands` modules, updated 11 files (P4) |
 | M3: Large files candidates for decomposition | MEDIUM | DEFERRED | Well-structured internally, decompose when next modifying |
 | L1: Excessive `#[allow(dead_code)]` annotations | LOW | DEFERRED | Periodic audit recommended |
 | L2: Minor naming asymmetries commands/ vs models/ | LOW | **NO ACTION** | Commands=actions, models=entities is a reasonable convention |
@@ -892,6 +892,10 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 **Phase 3 DONE**: Moved `safe_truncate()` from `validation_helper.rs` to `utils.rs`. Updated imports in `sub_agent_executor.rs`, `spawn_agent.rs`, `memory/tool.rs`, `validation_helper.rs`.
 **Files modified**: 5 Rust files (move + 4 import updates)
 **Tests**: 976 pass (cargo test), 0 failures
+
+**Phase 4 DONE**: Created `src/constants.rs` with `workflow`, `query_limits`, `commands` modules. Registered in `lib.rs` and `main.rs`. Updated imports in 11 Rust files. Cleaned `tools/constants.rs` (now tool-specific only: memory, todo, user_question, sub_agent, calculator). Updated `.claude/rules/surrealdb.md`.
+**Files modified**: 14 (1 new + 13 updated)
+**Tests**: 1976 pass (cargo test), 0 failures
 
 **Details**: `docs/security-audits/SA-023-backend-structure-naming.md`
 

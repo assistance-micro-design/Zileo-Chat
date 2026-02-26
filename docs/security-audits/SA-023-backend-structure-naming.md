@@ -102,7 +102,7 @@ src-tauri/src/
 | HIGH | H1 | `ProviderType` duplicated in two modules | DONE |
 | HIGH | H2 | `commands/models.rs` naming ambiguity | DONE |
 | MEDIUM | M1 | `tools/validation_helper.rs` mixes unrelated concerns | DONE |
-| MEDIUM | M2 | `tools/constants.rs` scope exceeds its module | PENDING |
+| MEDIUM | M2 | `tools/constants.rs` scope exceeds its module | DONE |
 | MEDIUM | M3 | Large files candidates for decomposition | DEFERRED |
 | LOW | L1 | Excessive `#[allow(dead_code)]` annotations | DEFERRED |
 | LOW | L2 | Minor naming asymmetries commands/ vs models/ | NO-ACTION |
@@ -206,12 +206,16 @@ The last three groups are app-wide constants accessed as `crate::tools::constant
 **Remediation**: Create top-level `src/constants.rs` module. Move `workflow`, `query_limits`, and `commands` constants there. Keep only tool-specific constants in `tools/constants.rs`.
 
 **Checklist**:
-- [ ] Create `src-tauri/src/constants.rs`
-- [ ] Move `workflow`, `query_limits`, `commands` sub-modules to new file
-- [ ] Register module in `lib.rs`
-- [ ] Update all `crate::tools::constants::{workflow,query_limits,commands}` -> `crate::constants::{...}`
-- [ ] Keep tool-specific constants in `tools/constants.rs`
-- [ ] `cargo clippy` + `cargo test`
+- [x] Create `src-tauri/src/constants.rs`
+- [x] Move `workflow`, `query_limits`, `commands` sub-modules to new file
+- [x] Register module in `lib.rs` and `main.rs`
+- [x] Update all `crate::tools::constants::{workflow,query_limits,commands}` -> `crate::constants::{...}` (11 files)
+- [x] Keep tool-specific constants in `tools/constants.rs` (memory, todo, user_question, sub_agent, calculator)
+- [x] Update `tools/constants.rs` doc comment to reference `crate::constants`
+- [x] Update `.claude/rules/surrealdb.md` import reference
+- [x] `cargo fmt --check` PASS
+- [x] `cargo clippy -- -D warnings` PASS
+- [x] `cargo test` PASS (1976 tests, 0 failures)
 
 ---
 

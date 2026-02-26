@@ -35,6 +35,7 @@
 //! - [`list_mcp_tools`] - List available tools from a server
 //! - [`call_mcp_tool`] - Execute a tool on an MCP server
 
+use crate::constants::commands as cmd_const;
 use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{
     MCPDeploymentMethod, MCPLatencyMetrics, MCPServer, MCPServerConfig, MCPServerResponse,
@@ -42,7 +43,6 @@ use crate::models::mcp::{
 };
 use crate::security::serialize_for_query;
 use crate::state::AppState;
-use crate::tools::constants::commands as cmd_const;
 use crate::tools::validation_helper::validate_trimmed_name;
 use tauri::State;
 use tracing::{error, info, instrument, warn};

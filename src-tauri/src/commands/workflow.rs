@@ -91,7 +91,7 @@ pub async fn execute_workflow(
     state: State<'_, AppState>,
 ) -> Result<WorkflowResult, String> {
     use crate::agents::core::agent::Task;
-    use crate::tools::constants::workflow as wf_const;
+    use crate::constants::workflow as wf_const;
     use tokio::time::{timeout, Duration};
     use uuid::Uuid;
 
@@ -322,7 +322,7 @@ pub async fn load_workflow_full_state(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkflowFullState, String> {
-    use crate::tools::constants::workflow as wf_const;
+    use crate::constants::workflow as wf_const;
     use tokio::time::{timeout, Duration};
 
     info!("Loading complete workflow state for recovery");
