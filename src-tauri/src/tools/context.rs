@@ -389,7 +389,7 @@ mod tests {
 
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
-        let llm_manager = Arc::new(ProviderManager::new());
+        let llm_manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
         let tool_factory = Arc::new(ToolFactory::new(db.clone(), embedding_service));
 

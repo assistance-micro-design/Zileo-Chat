@@ -29,7 +29,7 @@
 //! ```rust,ignore
 //! use zileo_chat::llm::{ProviderManager, ProviderType};
 //!
-//! let manager = ProviderManager::new();
+//! let manager = ProviderManager::new()?;
 //! manager.set_provider(ProviderType::Mistral, "api-key").await?;
 //! let response = manager.complete("Hello", "mistral-large").await?;
 //! ```

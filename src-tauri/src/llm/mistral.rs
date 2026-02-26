@@ -580,22 +580,6 @@ impl MistralProvider {
     }
 }
 
-impl Default for MistralProvider {
-    /// Creates a default MistralProvider with a new HTTP client.
-    ///
-    /// Note: For production use, prefer using `new()` with a shared HTTP client
-    /// from ProviderManager to benefit from connection pooling.
-    fn default() -> Self {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        Self::new(http_client)
-    }
-}
-
 #[async_trait]
 impl LLMProvider for MistralProvider {
     fn provider_type(&self) -> ProviderType {
@@ -709,16 +693,27 @@ impl LLMProvider for MistralProvider {
 mod tests {
     use super::*;
 
+    /// Creates a MistralProvider with a test HTTP client.
+    fn test_mistral_provider() -> MistralProvider {
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("test HTTP client"),
+        );
+        MistralProvider::new(http_client)
+    }
+
     #[test]
     fn test_mistral_provider_new() {
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
         assert_eq!(provider.provider_type(), ProviderType::Mistral);
     }
 
     #[test]
     fn test_mistral_available_models_empty() {
         // Models are now managed in DB, not hardcoded
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
         let models = provider.available_models();
         assert!(models.is_empty());
     }
@@ -726,13 +721,13 @@ mod tests {
     #[test]
     fn test_mistral_default_model_empty() {
         // Default model is now managed in DB, not hardcoded
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
         assert!(provider.default_model().is_empty());
     }
 
     #[tokio::test]
     async fn test_mistral_provider_configure() {
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
 
         // Initially not configured
         assert!(!provider.is_configured());
@@ -751,7 +746,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mistral_provider_get_api_key() {
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
 
         // Initially no key
         assert!(provider.get_api_key().await.is_none());
@@ -766,7 +761,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mistral_provider_complete_not_configured() {
-        let provider = MistralProvider::default();
+        let provider = test_mistral_provider();
 
         let result = provider
             .complete("Hello", None, None, 0.7, 1000, false)

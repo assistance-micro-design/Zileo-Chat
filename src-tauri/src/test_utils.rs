@@ -44,7 +44,9 @@ pub async fn setup_test_state() -> AppState {
 
     let registry = Arc::new(AgentRegistry::new());
     let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
-    let llm_manager = Arc::new(crate::llm::ProviderManager::new());
+    let llm_manager = Arc::new(
+        crate::llm::ProviderManager::new().expect("Failed to create test provider manager"),
+    );
     let mcp_manager = Arc::new(
         crate::mcp::MCPManager::new(db.clone())
             .await

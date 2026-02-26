@@ -63,7 +63,7 @@ impl AppState {
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
 
         // Initialize LLM provider manager
-        let llm_manager = Arc::new(ProviderManager::new());
+        let llm_manager = Arc::new(ProviderManager::new().map_err(|e| anyhow::anyhow!(e))?);
 
         // Initialize MCP manager
         let mcp_manager = Arc::new(
@@ -317,9 +317,15 @@ impl AppState {
         };
 
         if let Some(provider) = provider {
-            let service = EmbeddingService::with_provider(provider);
-            *self.embedding_service.write().await = Some(Arc::new(service));
-            tracing::info!("Embedding service initialized from saved configuration");
+            match EmbeddingService::with_provider(provider) {
+                Ok(service) => {
+                    *self.embedding_service.write().await = Some(Arc::new(service));
+                    tracing::info!("Embedding service initialized from saved configuration");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize embedding service: {}", e);
+                }
+            }
         }
     }
 }
@@ -471,7 +477,8 @@ mod tests {
 
         // Configure embedding service
         let provider = EmbeddingProvider::ollama();
-        let service = Arc::new(EmbeddingService::with_provider(provider));
+        let service =
+            Arc::new(EmbeddingService::with_provider(provider).expect("test embedding service"));
         state.set_embedding_service(Some(service.clone())).await;
 
         // Verify it's set

@@ -96,14 +96,17 @@ impl ProviderManager {
     ///
     /// Also initializes retry configuration with exponential backoff (OPT-LLM-4)
     /// and circuit breakers for each provider (OPT-LLM-6).
-    pub fn new() -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client fails to initialize.
+    pub fn new() -> Result<Self, String> {
         // Create shared HTTP client with connection pooling
         let http_client = Arc::new(
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
                 .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
                 .build()
-                .expect("Failed to create HTTP client"),
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?,
         );
 
         // Initialize circuit breakers for each provider
@@ -123,7 +126,7 @@ impl ProviderManager {
             ),
         );
 
-        Self {
+        Ok(Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             custom_providers: Arc::new(RwLock::new(HashMap::new())),
@@ -131,18 +134,21 @@ impl ProviderManager {
             http_client,
             retry_config: RetryConfig::default(),
             circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
-        }
+        })
     }
 
     /// Creates a new provider manager with custom retry configuration.
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client fails to initialize.
     #[allow(dead_code)] // API completeness - custom configuration builder
-    pub fn with_retry_config(retry_config: RetryConfig) -> Self {
+    pub fn with_retry_config(retry_config: RetryConfig) -> Result<Self, String> {
         let http_client = Arc::new(
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
                 .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
                 .build()
-                .expect("Failed to create HTTP client"),
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?,
         );
 
         // Initialize circuit breakers for each provider
@@ -162,7 +168,7 @@ impl ProviderManager {
             ),
         );
 
-        Self {
+        Ok(Self {
             mistral: Arc::new(MistralProvider::new(http_client.clone())),
             ollama: Arc::new(OllamaProvider::new(http_client.clone())),
             custom_providers: Arc::new(RwLock::new(HashMap::new())),
@@ -170,7 +176,7 @@ impl ProviderManager {
             http_client,
             retry_config,
             circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
-        }
+        })
     }
 
     /// Returns a reference to the shared HTTP client.
@@ -779,19 +785,13 @@ impl ProviderManager {
     }
 }
 
-impl Default for ProviderManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn test_provider_manager_new() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
         let config = manager.get_config().await;
 
         // Default to Ollama (local)
@@ -799,15 +799,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_provider_manager_default() {
-        let manager = ProviderManager::default();
-        assert_eq!(manager.get_active_provider().await, ProviderType::Ollama);
-    }
-
-    #[tokio::test]
     async fn test_get_available_models_empty() {
         // Models are now managed in DB, not hardcoded in providers
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         let mistral_models = manager.get_available_models(ProviderType::Mistral);
         assert!(mistral_models.is_empty());
@@ -818,7 +812,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_default_model() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         manager
             .set_default_model(ProviderType::Mistral, "mistral-small-latest")
@@ -839,7 +833,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_is_provider_configured() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Initially not configured
         assert!(!manager.is_provider_configured(ProviderType::Mistral));
@@ -848,7 +842,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_configured_providers() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Initially none configured
         let providers = manager.get_configured_providers();
@@ -864,7 +858,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_configure_ollama() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         let result = manager.configure_ollama(None).await;
         assert!(result.is_ok());
@@ -873,7 +867,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_configure_ollama_custom_url() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         let custom_url = "http://192.168.1.100:11434";
         manager.configure_ollama(Some(custom_url)).await.unwrap();
@@ -884,7 +878,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_configure_mistral() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Configure with fake API key (won't make real calls)
         let result = manager.configure_mistral("test-api-key").await;
@@ -894,7 +888,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_active_provider_not_configured() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Try to set Mistral as active without configuring
         let result = manager.set_active_provider(ProviderType::Mistral).await;
@@ -908,7 +902,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_active_provider_configured() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Configure Mistral first
         manager.configure_mistral("test-key").await.unwrap();
@@ -921,7 +915,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_complete_no_provider_configured() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         let result = manager
             .complete("Hello", None, None, 0.7, 1000, false)
@@ -936,7 +930,7 @@ mod tests {
     async fn test_circuit_breaker_initial_status() {
         use super::super::circuit_breaker::CircuitState;
 
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Both providers should start with closed circuit
         let mistral_status = manager
@@ -956,7 +950,7 @@ mod tests {
     async fn test_circuit_breaker_reset() {
         use super::super::circuit_breaker::CircuitState;
 
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Manually record some failures to affect state
         manager.record_circuit_failure(ProviderType::Mistral).await;
@@ -981,7 +975,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_check_allows_closed() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // With closed circuit, check should pass
         let result = manager.check_circuit_breaker(ProviderType::Mistral).await;
@@ -990,7 +984,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_records_success() {
-        let manager = ProviderManager::new();
+        let manager = ProviderManager::new().expect("test provider manager");
 
         // Record a failure then a success
         manager.record_circuit_failure(ProviderType::Ollama).await;

@@ -526,7 +526,8 @@ mod tests {
             .register("test_agent".to_string(), Arc::new(agent))
             .await;
 
-        let llm_manager = Arc::new(crate::llm::ProviderManager::new());
+        let llm_manager =
+            Arc::new(crate::llm::ProviderManager::new().expect("test provider manager"));
         let mcp_manager = Arc::new(
             crate::mcp::MCPManager::new(db.clone())
                 .await

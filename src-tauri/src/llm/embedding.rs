@@ -403,21 +403,26 @@ pub struct EmbeddingService {
 }
 
 impl EmbeddingService {
-    /// Creates a new unconfigured EmbeddingService
+    /// Creates a new unconfigured EmbeddingService (test-only).
     ///
     /// The service must be configured with a provider before use.
-    pub fn new() -> Self {
+    /// Production code should use `with_provider()` instead.
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client fails to initialize.
+    #[cfg(test)]
+    pub fn new() -> Result<Self, String> {
         let client = Client::builder()
             .timeout(std::time::Duration::from_millis(DEFAULT_TIMEOUT_MS))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-        Self {
+        Ok(Self {
             client,
             provider: Arc::new(RwLock::new(None)),
             dimension: Arc::new(RwLock::new(MISTRAL_EMBED_DIMENSION)),
             timeout_ms: DEFAULT_TIMEOUT_MS,
-        }
+        })
     }
 
     /// Creates a new EmbeddingService with the specified provider
@@ -427,19 +432,22 @@ impl EmbeddingService {
     ///
     /// # Returns
     /// A configured EmbeddingService ready for use
-    pub fn with_provider(provider: EmbeddingProvider) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client fails to initialize.
+    pub fn with_provider(provider: EmbeddingProvider) -> Result<Self, String> {
         let dimension = provider.dimension();
         let client = Client::builder()
             .timeout(std::time::Duration::from_millis(DEFAULT_TIMEOUT_MS))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-        Self {
+        Ok(Self {
             client,
             provider: Arc::new(RwLock::new(Some(provider))),
             dimension: Arc::new(RwLock::new(dimension)),
             timeout_ms: DEFAULT_TIMEOUT_MS,
-        }
+        })
     }
 
     /// Configures the service with a new provider
@@ -799,12 +807,6 @@ impl EmbeddingService {
     }
 }
 
-impl Default for EmbeddingService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -909,20 +911,20 @@ mod tests {
 
     #[test]
     fn test_embedding_service_new() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         assert!(!service.is_configured());
     }
 
     #[test]
     fn test_embedding_service_with_provider() {
         let provider = EmbeddingProvider::mistral("test-key");
-        let service = EmbeddingService::with_provider(provider);
+        let service = EmbeddingService::with_provider(provider).expect("test embedding service");
         assert!(service.is_configured());
     }
 
     #[tokio::test]
     async fn test_embedding_service_configure() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         assert!(!service.is_configured());
 
         let provider = EmbeddingProvider::mistral("test-key");
@@ -936,14 +938,14 @@ mod tests {
     #[tokio::test]
     async fn test_embedding_service_dimension() {
         let provider = EmbeddingProvider::mistral("test-key");
-        let service = EmbeddingService::with_provider(provider);
+        let service = EmbeddingService::with_provider(provider).expect("test embedding service");
         assert_eq!(service.dimension().await, MISTRAL_EMBED_DIMENSION);
     }
 
     #[tokio::test]
     async fn test_embedding_service_dimension_ollama() {
         let provider = EmbeddingProvider::ollama();
-        let service = EmbeddingService::with_provider(provider);
+        let service = EmbeddingService::with_provider(provider).expect("test embedding service");
         assert_eq!(service.dimension().await, OLLAMA_NOMIC_DIMENSION);
     }
 
@@ -953,7 +955,7 @@ mod tests {
 
     #[test]
     fn test_validate_text_empty() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let result = service.validate_text("");
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -964,7 +966,7 @@ mod tests {
 
     #[test]
     fn test_validate_text_too_long() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let long_text = "x".repeat(MAX_EMBEDDING_TEXT_LENGTH + 1);
         let result = service.validate_text(&long_text);
         assert!(result.is_err());
@@ -979,7 +981,7 @@ mod tests {
 
     #[test]
     fn test_validate_text_valid() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let result = service.validate_text("Hello, world!");
         assert!(result.is_ok());
     }
@@ -990,7 +992,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embed_not_configured() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let result = service.embed("test").await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -1001,7 +1003,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embed_batch_not_configured() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let result = service.embed_batch(&["test1", "test2"]).await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -1012,7 +1014,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embed_batch_empty() {
-        let service = EmbeddingService::new();
+        let service = EmbeddingService::new().expect("test embedding service");
         let result = service.embed_batch(&[]).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -1021,7 +1023,7 @@ mod tests {
     #[tokio::test]
     async fn test_embed_batch_too_large() {
         let provider = EmbeddingProvider::mistral("test-key");
-        let service = EmbeddingService::with_provider(provider);
+        let service = EmbeddingService::with_provider(provider).expect("test embedding service");
 
         let texts: Vec<&str> = (0..MAX_BATCH_SIZE + 1).map(|_| "test").collect();
         let result = service.embed_batch(&texts).await;

@@ -60,19 +60,22 @@ impl OllamaProvider {
     ///
     /// Note: For production use, prefer using `new()` with a shared HTTP client
     /// from ProviderManager to benefit from connection pooling.
-    pub fn with_url(url: &str) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client fails to initialize.
+    pub fn with_url(url: &str) -> Result<Self, String> {
         let http_client = Arc::new(
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
                 .build()
-                .expect("Failed to create HTTP client"),
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?,
         );
-        Self {
+        Ok(Self {
             client: Arc::new(RwLock::new(None)),
             server_url: Arc::new(RwLock::new(url.to_string())),
             configured: Arc::new(RwLock::new(false)),
             http_client,
-        }
+        })
     }
 
     /// Configures the provider (connects to the Ollama server)
@@ -244,22 +247,6 @@ impl OllamaProvider {
     }
 }
 
-impl Default for OllamaProvider {
-    /// Creates a default OllamaProvider with a new HTTP client.
-    ///
-    /// Note: For production use, prefer using `new()` with a shared HTTP client
-    /// from ProviderManager to benefit from connection pooling.
-    fn default() -> Self {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        Self::new(http_client)
-    }
-}
-
 #[async_trait]
 impl LLMProvider for OllamaProvider {
     fn provider_type(&self) -> ProviderType {
@@ -369,16 +356,27 @@ impl LLMProvider for OllamaProvider {
 mod tests {
     use super::*;
 
+    /// Creates an OllamaProvider with a test HTTP client.
+    fn test_ollama_provider() -> OllamaProvider {
+        let http_client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("test HTTP client"),
+        );
+        OllamaProvider::new(http_client)
+    }
+
     #[test]
     fn test_ollama_provider_new() {
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
         assert_eq!(provider.provider_type(), ProviderType::Ollama);
     }
 
     #[test]
     fn test_ollama_available_models_empty() {
         // Models are now managed in DB, not hardcoded
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
         let models = provider.available_models();
         assert!(models.is_empty());
     }
@@ -386,13 +384,13 @@ mod tests {
     #[test]
     fn test_ollama_default_model_empty() {
         // Default model is now managed in DB, not hardcoded
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
         assert!(provider.default_model().is_empty());
     }
 
     #[tokio::test]
     async fn test_ollama_provider_configure() {
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
 
         // Initially not configured
         assert!(!provider.is_configured());
@@ -414,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ollama_provider_custom_url() {
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
 
         let custom_url = "http://192.168.1.100:11434";
         provider.configure(Some(custom_url)).await.unwrap();
@@ -424,7 +422,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ollama_provider_complete_not_configured() {
-        let provider = OllamaProvider::default();
+        let provider = test_ollama_provider();
 
         let result = provider
             .complete("Hello", None, None, 0.7, 1000, false)
@@ -440,7 +438,7 @@ mod tests {
     #[test]
     fn test_ollama_with_url() {
         let custom_url = "http://localhost:11435";
-        let provider = OllamaProvider::with_url(custom_url);
+        let provider = OllamaProvider::with_url(custom_url).expect("test with_url");
         assert_eq!(provider.provider_type(), ProviderType::Ollama);
     }
 }

@@ -1660,7 +1660,7 @@ mod tests {
     #[test]
     fn test_llm_agent_new() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config.clone(), manager);
 
         assert_eq!(agent.config().id, "test_llm_agent");
@@ -1670,7 +1670,7 @@ mod tests {
     #[test]
     fn test_llm_agent_capabilities() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let capabilities = agent.capabilities();
@@ -1682,7 +1682,7 @@ mod tests {
     #[test]
     fn test_llm_agent_lifecycle() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         assert!(matches!(agent.lifecycle(), Lifecycle::Permanent));
@@ -1691,7 +1691,7 @@ mod tests {
     #[test]
     fn test_llm_agent_get_provider_type() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let provider = agent.get_provider_type().unwrap();
@@ -1702,7 +1702,7 @@ mod tests {
     fn test_llm_agent_get_provider_type_mistral() {
         let mut config = create_test_config();
         config.llm.provider = "Mistral".to_string();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let provider = agent.get_provider_type().unwrap();
@@ -1712,7 +1712,7 @@ mod tests {
     #[test]
     fn test_llm_agent_build_prompt() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         // Test with empty context
@@ -1758,7 +1758,7 @@ mod tests {
     #[tokio::test]
     async fn test_llm_agent_execute_not_configured() {
         let config = create_test_config();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let task = Task {
@@ -1781,7 +1781,7 @@ mod tests {
         // Empty provider is the only invalid case now (others become Custom)
         let mut config = create_test_config();
         config.llm.provider = String::new();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let result = agent.get_provider_type();
@@ -1792,7 +1792,7 @@ mod tests {
     fn test_llm_agent_custom_provider() {
         let mut config = create_test_config();
         config.llm.provider = "routerlab".to_string();
-        let manager = Arc::new(ProviderManager::new());
+        let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let agent = LLMAgent::new(config, manager);
 
         let result = agent.get_provider_type();

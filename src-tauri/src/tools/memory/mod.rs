@@ -47,7 +47,7 @@
 //!
 //! let embedding_service = EmbeddingService::with_provider(
 //!     EmbeddingProvider::mistral("api-key")
-//! );
+//! )?;
 //!
 //! let tool = MemoryTool::new(
 //!     db.clone(),

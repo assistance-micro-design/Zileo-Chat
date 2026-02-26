@@ -485,7 +485,7 @@ mod agent_tool_context_tests {
 
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
-        let llm_manager = Arc::new(ProviderManager::new());
+        let llm_manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         let embedding_service = Arc::new(RwLock::new(None));
         let tool_factory = Arc::new(ToolFactory::new(db.clone(), embedding_service));
 

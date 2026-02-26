@@ -48,30 +48,42 @@
 
 ---
 
-## Phase 2: Production Robustness (Item 4)
+## Phase 2: Production Robustness (Item 4) - DONE
 
-### 2.1 - Convert `.expect()` to `Result` dans les LLM providers (H1)
+### 2.1 - Convert `.expect()` to `Result` dans les LLM providers (H1) - DONE
 
-**Fichiers** (uniquement les `.expect()` hors startup/infaillible):
-- `src-tauri/src/llm/manager.rs` (~lines 106, 145)
-- `src-tauri/src/llm/embedding.rs` (~lines 413, 435)
-- `src-tauri/src/llm/mistral.rs` (~line 593)
-- `src-tauri/src/llm/ollama.rs` (~lines 68, 257)
+**Fichiers modifies** (7 `.expect()` convertis + 3 `Default` impls supprimes):
 
-**Ne PAS toucher** (startup/infaillible):
+**Conversions `.expect()` -> `.map_err()?`:**
+- `src-tauri/src/llm/manager.rs`: `ProviderManager::new()` et `with_retry_config()` -> `Result<Self, String>`
+- `src-tauri/src/llm/embedding.rs`: `EmbeddingService::with_provider()` -> `Result<Self, String>`, `new()` -> `#[cfg(test)]` only
+- `src-tauri/src/llm/ollama.rs`: `OllamaProvider::with_url()` -> `Result<Self, String>`
+
+**`Default` impls supprimes** (test-only, aucun appelant production):
+- `src-tauri/src/llm/manager.rs`: `impl Default for ProviderManager` supprime
+- `src-tauri/src/llm/ollama.rs`: `impl Default for OllamaProvider` supprime
+- `src-tauri/src/llm/mistral.rs`: `impl Default for MistralProvider` supprime
+- `src-tauri/src/llm/embedding.rs`: `impl Default for EmbeddingService` supprime
+
+**Propagation aux appelants production:**
+- `src-tauri/src/state.rs`: `AppState::new()` -> `.map_err(|e| anyhow::anyhow!(e))?`
+- `src-tauri/src/state.rs`: `load_embedding_config()` -> `match` avec log erreur
+- `src-tauri/src/commands/embedding.rs`: `update_embedding_service_internal()` -> `match` avec log erreur
+
+**Tests mis a jour** (14 fichiers):
+- `manager.rs`, `ollama.rs`, `mistral.rs`, `embedding.rs`: helpers `test_*_provider()` + `.expect("test")`
+- `state.rs`, `test_utils.rs`, `agents/llm_agent.rs`, `tools/context.rs`
+- `commands/agent.rs`, `commands/task.rs`, `commands/memory.rs`, `commands/validation.rs`, `commands/workflow.rs`
+- `tests/sub_agent_tools_integration.rs`
+
+**Ne PAS touche** (startup/infaillible - confirme):
 - `main.rs` (lines 98, 516) - startup init
-- `state.rs` (line 72) - startup init
+- `state.rs` (line 72) - MCPManager startup init
 - `keystore.rs` (lines 281, 283) - base64 infaillible
 - `prompt.rs` (lines 130, 166) - static regex infaillible
 - `http_handle.rs` (line 64) - lazy static init
 
-**Actions**:
-- Identifier les fonctions contenant les `.expect()`
-- Changer les signatures pour retourner `Result<T, String>` si pas deja fait
-- Remplacer `.expect("msg")` par `.map_err(|e| format!("Failed to create HTTP client: {}", e))?`
-- Propager les `Result` aux appelants si necessaire
-
-**Verification**: `cargo clippy -- -D warnings` + `cargo test`
+**Verification**: cargo fmt PASS, cargo clippy PASS (0 warnings), cargo test PASS (2000 tests, 0 failures)
 
 ---
 
@@ -159,7 +171,7 @@ npm run test
 - [x] `once_cell` supprime de Cargo.toml, remplace par `std::sync::LazyLock`
 - [x] `futures` supprime de Cargo.toml, remplace par `futures_util`
 - [x] `surrealdb` version pinnee a `~2.6` (resolu a 2.6.2)
-- [ ] Zero `.expect()` dans les LLM providers (hors startup)
+- [x] Zero `.expect()` dans les LLM providers (hors startup/tests)
 - [ ] `#[allow(dead_code)]` reduit de 120+ a minimum justifie
 - [ ] Zero commentaire `OPT-*` dans le codebase
 - [ ] `total_commands: 123` dans inventory.yml

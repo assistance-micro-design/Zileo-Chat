@@ -168,10 +168,16 @@ async fn update_embedding_service_internal(
     };
 
     if let Some(provider) = provider {
-        let service = EmbeddingService::with_provider(provider);
-        let mut guard = state.embedding_service.write().await;
-        *guard = Some(Arc::new(service));
-        info!("Embedding service updated successfully");
+        match EmbeddingService::with_provider(provider) {
+            Ok(service) => {
+                let mut guard = state.embedding_service.write().await;
+                *guard = Some(Arc::new(service));
+                info!("Embedding service updated successfully");
+            }
+            Err(e) => {
+                error!("Failed to create embedding service: {}", e);
+            }
+        }
     }
 }
 

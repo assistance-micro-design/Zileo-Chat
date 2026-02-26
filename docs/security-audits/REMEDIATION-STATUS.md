@@ -37,7 +37,7 @@
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
 **SA-022 ALL PHASES DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion. P6: Service & directory cleanup + sub-agent blocks bug fix. P7: Settings providers restructuration (3 components moved to providers/ subdirectory).**
 **SA-023 P1-P4 DONE: Backend structure & naming audit. P1: ProviderType consolidated into llm/provider.rs. P2: commands/models.rs renamed to commands/llm_models.rs. P3: safe_truncate() moved to tools/utils.rs. P4: App-wide constants moved to top-level constants.rs.**
-**SA-024 P1 DONE: Dependency cleanup. once_cell replaced by std::sync::LazyLock (2 files). futures replaced by futures_util (2 files). surrealdb pinned to ~2.6 (resolved 2.6.2). 2 deps removed from Cargo.toml.**
+**SA-024 P1-P2 DONE: P1: Dependency cleanup (once_cell, futures, surrealdb pin). P2: Production robustness - 7 .expect() converted to Result in LLM providers (manager, embedding, ollama, mistral). 4 Default impls removed (test-only). 14 files updated for Result propagation. 2000 tests pass.**
 
 ---
 
@@ -908,12 +908,17 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 **Scope**: 8 items (3 HIGH, 5 MEDIUM) across 4 phases
 
 **Phase 1 DONE**: Dependency cleanup.
+**Phase 2 DONE**: Production robustness.
 - H4: `once_cell` replaced by `std::sync::LazyLock` in `http_handle.rs` and `registry.rs`
 - M1: `futures` replaced by `futures_util::future::join_all` in `persistence.rs` and `queries.rs`
 - M7: `surrealdb` version pinned from `"2.5.0"` to `"~2.6"` (resolved to 2.6.2)
 - 2 dependencies removed from Cargo.toml (`once_cell`, `futures`)
-**Files modified**: 5 (Cargo.toml + 4 .rs files)
-**Tests**: 2002 pass (cargo test), 0 failures
+- H1: 7 `.expect()` converted to `Result<Self, String>` in LLM providers (manager, embedding, ollama, mistral)
+- 4 `Default` impls removed (ProviderManager, EmbeddingService, OllamaProvider, MistralProvider) - all test-only
+- `EmbeddingService::new()` moved to `#[cfg(test)]` - no production callers
+- Result propagated to `AppState::new()`, `load_embedding_config()`, `update_embedding_service_internal()`
+**Files modified**: 5 (P1) + 15 (P2)
+**Tests**: 2000 pass (cargo test), 0 failures (-2 tests: removed Default impl tests)
 
 **Details**: `docs/security-audits/SA-024-config-cleanup.md`
 
