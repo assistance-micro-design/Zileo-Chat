@@ -6,6 +6,8 @@
  *
  * These schemas validate data received from Tauri commands to catch
  * type mismatches at runtime, providing better error messages.
+ *
+ * @module lib/utils/validation-schemas
  */
 
 import { z } from 'zod';

@@ -28,7 +28,7 @@ import type { Message, SubAgentSummary } from '$types/message';
 import type { SubAgentExecution } from '$types/sub-agent';
 import type { WorkflowMetrics } from '$types/workflow';
 import { getErrorMessage } from '$lib/utils/error';
-import { ActivityService } from '$lib/services/activity.service';
+import { SubAgentExecutionService } from '$lib/services/sub-agent-execution.service';
 
 /**
  * Parameters for creating a message via save_message command.
@@ -125,15 +125,15 @@ export const MessageService = {
 	 * @param workflowId - Workflow ID to load messages for
 	 * @returns Object containing enriched messages array and optional error message
 	 */
-	async loadWithSubAgents(workflowId: string): Promise<{ messages: Message[]; error?: string }> {
+	async loadWithSubAgents(workflowId: string): Promise<{ messages: Message[]; executions: SubAgentExecution[]; error?: string }> {
 		try {
 			const [messages, executions] = await Promise.all([
 				invoke<Message[]>('load_workflow_messages', { workflowId }),
-				ActivityService.loadSubAgentExecutions(workflowId)
+				SubAgentExecutionService.loadSubAgentExecutions(workflowId)
 			]);
-			return { messages: enrichMessagesWithSubAgents(messages, executions) };
+			return { messages: enrichMessagesWithSubAgents(messages, executions), executions };
 		} catch (e) {
-			return { messages: [], error: getErrorMessage(e) };
+			return { messages: [], executions: [], error: getErrorMessage(e) };
 		}
 	},
 

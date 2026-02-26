@@ -43,7 +43,8 @@ Uses extracted components, services, and stores for clean architecture.
 	// Service imports
 	import { invoke } from '@tauri-apps/api/core';
 	import { WorkflowService, MessageService, BlockService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
-	import type { ChatBlock, TodoTaskDisplay } from '$types/chat-block';
+	import type { ChatBlock, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
+	import type { SubAgentExecution } from '$types/sub-agent';
 
 	// Store imports
 	import {
@@ -163,6 +164,42 @@ Uses extracted components, services, and stores for clean architecture.
 	// ============================================================================
 
 	/**
+	 * Append sub-agent execution blocks to messageBlocks.
+	 *
+	 * Sub-agent executions are stored in a separate table (sub_agent_execution) and
+	 * not loaded by load_message_blocks (which only covers tool_execution/thinking_step).
+	 * This function rebuilds SubAgent ChatBlocks from the enriched message.sub_agents
+	 * data and the raw execution records, then appends them to messageBlocks.
+	 */
+	function appendSubAgentBlocks(messages: Message[], executions: SubAgentExecution[]): void {
+		for (const message of messages) {
+			if (!message.sub_agents || message.sub_agents.length === 0) continue;
+
+			const existingBlocks = messageBlocks.get(message.id) ?? [];
+			const maxSequence = existingBlocks.reduce((max, b) => Math.max(max, b.sequence), 0);
+
+			const subAgentBlocks: ChatBlock[] = message.sub_agents.map((sa, i) => {
+				const execution = executions.find((e) => e.id === sa.id);
+				const data: SubAgentBlockData = {
+					agent_name: sa.name,
+					status: sa.status,
+					duration_ms: sa.duration_ms,
+					tokens_input: sa.tokens_input,
+					tokens_output: sa.tokens_output,
+					report_summary: execution?.result_summary
+				};
+				return {
+					block_type: 'sub_agent' as ChatBlock['block_type'],
+					sequence: maxSequence + 1 + i,
+					data
+				};
+			});
+
+			messageBlocks.set(message.id, [...existingBlocks, ...subAgentBlocks]);
+		}
+	}
+
+	/**
 	 * Load workflow data (messages and persisted blocks).
 	 */
 	async function loadWorkflowData(workflowId: string): Promise<void> {
@@ -192,6 +229,9 @@ Uses extracted components, services, and stores for clean architecture.
 			} catch {
 				// Already cleared above
 			}
+
+			// Rebuild sub-agent blocks from executions (not in tool_execution/thinking_step tables)
+			appendSubAgentBlocks(result.messages, result.executions);
 
 			// Load persisted tasks for this workflow (SA-019 P6)
 			persistedTasks = [];

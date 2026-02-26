@@ -5,6 +5,8 @@
  * @fileoverview Validated invoke wrapper for Tauri IPC.
  *
  * Provides type-safe invoke calls with optional runtime validation.
+ *
+ * @module lib/utils/validation-invoke
  */
 
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';

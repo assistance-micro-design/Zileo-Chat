@@ -25,7 +25,7 @@
 
 export * from './workflow.service';
 export * from './message.service';
-export * from './activity.service';
+export * from './sub-agent-execution.service';
 export * from './localStorage.service';
 export * from './workflowExecutor.service';
 export * from './block.service';

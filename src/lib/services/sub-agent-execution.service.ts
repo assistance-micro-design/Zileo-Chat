@@ -18,20 +18,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * @fileoverview Activity service for sub-agent execution loading.
+ * @fileoverview Sub-agent execution service for loading execution data.
  *
- * @module lib/services/activity
+ * @module lib/services/sub-agent-execution
  */
 
 import { invoke } from '@tauri-apps/api/core';
 import type { SubAgentExecution } from '$types/sub-agent';
 
 /**
- * Service for activity operations.
+ * Service for sub-agent execution operations.
  *
  * Provides loading of sub-agent executions for message enrichment.
  */
-export const ActivityService = {
+export const SubAgentExecutionService = {
 	/**
 	 * Load sub-agent executions for a workflow.
 	 *
