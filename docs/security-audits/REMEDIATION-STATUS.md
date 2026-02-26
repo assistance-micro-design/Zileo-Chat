@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 89 | Fix implemented and tested |
-| NOT DONE | 13 | Not yet addressed |
+| DONE | 90 | Fix implemented and tested |
+| NOT DONE | 12 | Not yet addressed |
 | DOCUMENTED | 3 | Analyzed, documented as non-issue or by-design |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -853,7 +853,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Dead code: `JsonViewer.svelte`, `ToolExecution.svelte`, unused helpers in `thinking.ts`/`tool.ts` | HIGH | **DONE** | Files deleted, helpers integrated into components, unused exports removed (Phase 2) |
 | Incomplete barrel exports across 5 directories | MEDIUM | **NOT DONE** | Complete barrel exports (Phase 5) |
 | Inventory meta counters outdated (88 vs 94 components) | MEDIUM | **DONE** | Updated: total_components 88→94, total_stores 17→18 (Phase 1) |
-| Duplicate delete confirmation modal (`ConfirmDeleteModal` vs `DeleteConfirmModal`) | MEDIUM | **NOT DONE** | Consolidate to `ui/DeleteConfirmModal` (Phase 4) |
+| Duplicate delete confirmation modal (`ConfirmDeleteModal` vs `DeleteConfirmModal`) | MEDIUM | **DONE** | Consolidated: `ConfirmDeleteModal` deleted, `DeleteConfirmModal` enhanced with `itemName`/`warningMessageKey` props (Phase 4) |
 | Types `index.ts` JSDoc uses `$lib/types` instead of `$types` | MEDIUM | **DONE** | Fixed JSDoc: `$lib/types` → `$types` (Phase 1) |
 | Unused helper functions in `tool.ts` and `thinking.ts` | MEDIUM | **DONE** | `formatToolDuration`→ToolCallBlock, `truncateThinkingContent`→ThinkingBlock, 11 unused exports removed (Phase 2) |
 | Missing barrel exports for `legal/` and `settings/` | MEDIUM | **NOT DONE** | Create barrel files (Phase 5) |

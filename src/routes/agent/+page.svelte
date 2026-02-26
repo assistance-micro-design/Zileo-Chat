@@ -132,6 +132,9 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Modal state - single union type instead of 3 booleans */
 	let modalState = $state<ModalState>({ type: 'none' });
 
+	/** Whether a workflow delete operation is in progress */
+	let deletingWorkflow = $state(false);
+
 	/** Aggregated page state (OPT-FA-9) */
 	let pageState = $state<PageState>(initialPageState);
 
@@ -279,6 +282,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Delete a workflow.
 	 */
 	async function handleDeleteWorkflow(workflowId: string): Promise<void> {
+		deletingWorkflow = true;
 		try {
 			await WorkflowService.delete(workflowId);
 			await workflowStore.loadWorkflows();
@@ -298,6 +302,8 @@ Uses extracted components, services, and stores for clean architecture.
 				persistent: false,
 				duration: 5000
 			});
+		} finally {
+			deletingWorkflow = false;
 		}
 	}
 
@@ -636,12 +642,17 @@ Uses extracted components, services, and stores for clean architecture.
 	{:else if modalState.type === 'delete-workflow'}
 		{@const workflowId = modalState.workflowId}
 		{@const workflow = $workflows.find(w => w.id === workflowId)}
-		{#await import('$lib/components/workflow/ConfirmDeleteModal.svelte') then { default: ConfirmDeleteModal }}
-			<ConfirmDeleteModal
+		{#await import('$lib/components/ui/DeleteConfirmModal.svelte') then { default: DeleteConfirmModal }}
+			<DeleteConfirmModal
 				open={true}
-				workflowName={workflow?.name ?? ''}
-				onconfirm={() => handleDeleteWorkflow(workflowId)}
-				oncancel={() => modalState = { type: 'none' }}
+				titleKey="workflow_delete_title"
+				confirmMessageKey="workflow_delete_confirm"
+				itemName={workflow?.name ?? ''}
+				warningMessageKey="workflow_delete_warning"
+				deleting={deletingWorkflow}
+				deletingLabelKey="workflow_deleting"
+				onConfirm={() => handleDeleteWorkflow(workflowId)}
+				onCancel={() => modalState = { type: 'none' }}
 			/>
 		{/await}
 	{:else if modalState.type === 'validation'}

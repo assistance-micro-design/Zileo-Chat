@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 3 DONE
+**Status**: PHASE 4 DONE
 
 ## Context
 
@@ -247,11 +247,13 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 4: Modal Consolidation
+### Phase 4: Modal Consolidation -- DONE
 
-| ID | Action | Files |
-|----|--------|-------|
-| M-003 | Refactor `workflow/ConfirmDeleteModal.svelte` to use `ui/DeleteConfirmModal.svelte` internally, or replace entirely. Update all callers. | `src/lib/components/workflow/ConfirmDeleteModal.svelte`, callers |
+| ID | Action | Files | Status |
+|----|--------|-------|--------|
+| M-003 | Consolidated `workflow/ConfirmDeleteModal.svelte` into `ui/DeleteConfirmModal.svelte`. Added optional `itemName` and `warningMessageKey` props. Updated `+page.svelte` caller with `deleting` state. Deleted `ConfirmDeleteModal.svelte` + barrel export. | `src/lib/components/ui/DeleteConfirmModal.svelte`, `src/routes/agent/+page.svelte`, `src/lib/components/workflow/index.ts` | **DONE** |
+
+**Changes**: 1 dead component deleted, 1 barrel export removed, 2 optional props added to generic modal (`itemName`, `warningMessageKey`), 1 caller updated with proper `deleting` state management. Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 

@@ -37,6 +37,10 @@ SA-017/OPT-3: Extracted from AgentSettings and PromptSettings.
 		deleting: boolean;
 		/** i18n key for the deleting state label (defaults to common_delete) */
 		deletingLabelKey?: string;
+		/** Name of the item being deleted (displayed in bold after confirm message) */
+		itemName?: string;
+		/** i18n key for a warning message displayed below the confirm text */
+		warningMessageKey?: string;
 		/** Callback when delete is confirmed */
 		onConfirm: () => void;
 		/** Callback when delete is cancelled */
@@ -49,6 +53,8 @@ SA-017/OPT-3: Extracted from AgentSettings and PromptSettings.
 		confirmMessageKey,
 		deleting,
 		deletingLabelKey,
+		itemName,
+		warningMessageKey,
 		onConfirm,
 		onCancel
 	}: Props = $props();
@@ -61,8 +67,13 @@ SA-017/OPT-3: Extracted from AgentSettings and PromptSettings.
 >
 	{#snippet body()}
 		<p class="confirm-text">
-			{$i18n(confirmMessageKey)}
+			{$i18n(confirmMessageKey)}{#if itemName} <strong class="item-name">"{itemName}"</strong>?{/if}
 		</p>
+		{#if warningMessageKey}
+			<p class="delete-warning">
+				{$i18n(warningMessageKey)}
+			</p>
+		{/if}
 	{/snippet}
 	{#snippet footer()}
 		<div class="modal-actions">
@@ -82,6 +93,22 @@ SA-017/OPT-3: Extracted from AgentSettings and PromptSettings.
 		color: var(--color-text-secondary);
 		margin: 0;
 		line-height: var(--line-height-relaxed);
+	}
+
+	.item-name {
+		color: var(--color-error);
+		font-weight: var(--font-weight-semibold);
+	}
+
+	.delete-warning {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		margin: 0;
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border-radius: var(--border-radius-md);
+		border-left: 3px solid var(--color-error);
 	}
 
 	.modal-actions {
