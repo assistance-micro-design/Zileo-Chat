@@ -26,7 +26,7 @@ src-tauri/src/
 
   commands/               # Tauri IPC handlers (20 modules)
     agent.rs, custom_provider.rs, embedding.rs, import_export.rs,
-    llm.rs, mcp.rs, memory.rs, message.rs, migration.rs, models.rs,
+    llm.rs, llm_models.rs, mcp.rs, memory.rs, message.rs, migration.rs,
     prompt.rs, security.rs, streaming.rs, sub_agent_execution.rs,
     task.rs, thinking.rs, tool_execution.rs, user_question.rs,
     validation.rs, workflow.rs
@@ -100,7 +100,7 @@ src-tauri/src/
 | Severity | ID | Description | Status |
 |----------|----|-------------|--------|
 | HIGH | H1 | `ProviderType` duplicated in two modules | DONE |
-| HIGH | H2 | `commands/models.rs` naming ambiguity | PENDING |
+| HIGH | H2 | `commands/models.rs` naming ambiguity | DONE |
 | MEDIUM | M1 | `tools/validation_helper.rs` mixes unrelated concerns | PENDING |
 | MEDIUM | M2 | `tools/constants.rs` scope exceeds its module | PENDING |
 | MEDIUM | M3 | Large files candidates for decomposition | DEFERRED |
@@ -155,10 +155,12 @@ src-tauri/src/
 **Remediation**: Rename to `commands/llm_models.rs` to match `models/llm_models.rs` counterpart and eliminate ambiguity.
 
 **Checklist**:
-- [ ] Rename `commands/models.rs` -> `commands/llm_models.rs`
-- [ ] Update `commands/mod.rs` module declaration
-- [ ] Update `main.rs` imports
-- [ ] `cargo clippy` + `cargo test`
+- [x] Rename `commands/models.rs` -> `commands/llm_models.rs`
+- [x] Update `commands/mod.rs` module declaration + doc comment
+- [x] Update `main.rs` imports (10 commands)
+- [x] `cargo fmt --check` PASS
+- [x] `cargo clippy -- -D warnings` PASS
+- [x] `cargo test` PASS (2002 tests, 0 failures)
 
 ---
 
@@ -219,7 +221,7 @@ The last three groups are app-wide constants accessed as `crate::tools::constant
 | `tools/sub_agent_executor.rs` | 1,770 | Sub-agent execution engine with retry, monitoring, persistence |
 | `commands/mcp.rs` | 1,312 | 10 MCP-related Tauri commands |
 | `mcp/manager.rs` | 1,233 | MCPManager with server lifecycle, tool routing |
-| `commands/models.rs` | 1,224 | LLM model CRUD + provider settings |
+| `commands/llm_models.rs` | 1,224 | LLM model CRUD + provider settings |
 | `models/streaming.rs` | 1,157 | Streaming event types + builder |
 | `commands/import_export.rs` | 1,155 | Import/export commands |
 | `tools/parallel_tasks.rs` | 1,123 | ParallelTasksTool with batching |

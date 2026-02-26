@@ -46,7 +46,7 @@
 //! - `test_mistral_connection` - Test Mistral connectivity
 //! - `test_llm_completion` - Test LLM completion
 //!
-//! ### Model Commands ([`models`])
+//! ### Model Commands ([`llm_models`])
 //! - `list_models` - List all LLM models (builtin + custom)
 //! - `get_model` - Get a single model by ID
 //! - `create_model` - Create a custom model
@@ -160,11 +160,11 @@ pub mod custom_provider;
 pub mod embedding;
 pub mod import_export;
 pub mod llm;
+pub mod llm_models;
 pub mod mcp;
 pub mod memory;
 pub mod message;
 pub mod migration;
-pub mod models;
 pub mod prompt;
 pub mod security;
 pub mod streaming;

@@ -36,6 +36,7 @@
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
 **SA-022 ALL PHASES DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion. P6: Service & directory cleanup + sub-agent blocks bug fix. P7: Settings providers restructuration (3 components moved to providers/ subdirectory).**
+**SA-023 P1-P2 DONE: Backend structure & naming audit. P1: ProviderType consolidated into llm/provider.rs. P2: commands/models.rs renamed to commands/llm_models.rs. P3-P4 pending.**
 
 ---
 
@@ -873,7 +874,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Finding | Severity | Status | Fix |
 |---------|----------|--------|-----|
 | H1: `ProviderType` duplicated in `llm/provider.rs` and `models/llm_models.rs` | HIGH | **DONE** | Removed duplicate from `models/llm_models.rs`, canonical location `llm/provider.rs`, re-export from `models/mod.rs` (P1) |
-| H2: `commands/models.rs` naming ambiguity | HIGH | PENDING | Rename to `commands/llm_models.rs` (P2) |
+| H2: `commands/models.rs` naming ambiguity | HIGH | **DONE** | Renamed to `commands/llm_models.rs`, updated `mod.rs` + `main.rs` (P2) |
 | M1: `tools/validation_helper.rs` mixes unrelated concerns | MEDIUM | PENDING | Extract `safe_truncate()` to `tools/utils.rs` (P3) |
 | M2: `tools/constants.rs` scope exceeds its module | MEDIUM | PENDING | Create top-level `constants.rs`, move app-wide constants (P4) |
 | M3: Large files candidates for decomposition | MEDIUM | DEFERRED | Well-structured internally, decompose when next modifying |
@@ -882,6 +883,10 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Phase 1 DONE**: Consolidated `ProviderType` into `llm/provider.rs`. Removed enum + 4 impls + 2 redundant tests from `models/llm_models.rs`. Updated imports in `commands/models.rs`, `commands/agent.rs`. Re-export from `models/mod.rs`.
 **Files modified**: 4 Rust files (-89 lines)
+**Tests**: 2002 pass (cargo test), 0 failures
+
+**Phase 2 DONE**: Renamed `commands/models.rs` -> `commands/llm_models.rs`. Updated `commands/mod.rs` (module declaration + doc), `main.rs` (10 command registrations).
+**Files modified**: 3 Rust files (rename + 2 import updates)
 **Tests**: 2002 pass (cargo test), 0 failures
 
 **Details**: `docs/security-audits/SA-023-backend-structure-naming.md`
