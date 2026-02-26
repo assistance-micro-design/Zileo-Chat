@@ -42,12 +42,10 @@ use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use crate::tools::{
-    constants::sub_agent::TASK_DESC_TRUNCATE_CHARS,
-    context::AgentToolContext,
-    sub_agent_executor::SubAgentExecutor,
-    utils::sub_agent_description_template,
-    validation_helper::{safe_truncate, ValidationHelper},
-    Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
+    constants::sub_agent::TASK_DESC_TRUNCATE_CHARS, context::AgentToolContext,
+    sub_agent_executor::SubAgentExecutor, utils::safe_truncate,
+    utils::sub_agent_description_template, validation_helper::ValidationHelper, Tool,
+    ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

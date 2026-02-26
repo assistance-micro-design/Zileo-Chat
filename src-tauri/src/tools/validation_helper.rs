@@ -45,31 +45,7 @@ use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-/// Safely truncates a string to a maximum number of characters.
-///
-/// This function handles multi-byte UTF-8 characters correctly by working
-/// with char boundaries instead of byte positions.
-///
-/// # Arguments
-/// * `s` - The string to truncate
-/// * `max_chars` - Maximum number of characters to keep
-/// * `ellipsis` - Whether to append "..." if truncated
-///
-/// # Returns
-/// The truncated string
-pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
-    let char_count = s.chars().count();
-    if char_count <= max_chars {
-        s.to_string()
-    } else {
-        let truncated: String = s.chars().take(max_chars).collect();
-        if ellipsis {
-            format!("{}...", truncated)
-        } else {
-            truncated
-        }
-    }
-}
+use super::utils::safe_truncate;
 
 /// Validates a trimmed name with configurable field name and max length.
 ///
@@ -872,32 +848,6 @@ mod tests {
     fn test_validation_timeout_default() {
         use crate::tools::constants::sub_agent::VALIDATION_TIMEOUT_SECS;
         assert_eq!(VALIDATION_TIMEOUT_SECS, 60);
-    }
-
-    #[test]
-    fn test_safe_truncate_utf8_multibyte() {
-        // Test with French accented characters
-        let text = "Ceci est un texte en francais avec des accents: e, a, o, i, u";
-        let truncated = safe_truncate(text, 50, true);
-        assert!(truncated.ends_with("..."));
-        assert!(!truncated.contains("\\u")); // No escaped unicode
-
-        // Test with text where byte 100 is inside a multi-byte char
-        // This is the exact scenario that caused the panic
-        let mission_text = "# MISSION\nRechercher sources fiables sur ACTUALITE pour: Mistral AI nouveautes 2025 actualites recentes lancements produits";
-        let truncated = safe_truncate(mission_text, 100, true);
-        assert!(truncated.ends_with("..."));
-
-        // Test with emojis (4-byte UTF-8)
-        let emoji_text =
-            "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
-        let truncated = safe_truncate(emoji_text, 30, true);
-        assert!(truncated.ends_with("..."));
-
-        // Test short text (no truncation needed)
-        let short_text = "Court";
-        let not_truncated = safe_truncate(short_text, 100, false);
-        assert_eq!(not_truncated, "Court");
     }
 
     #[test]

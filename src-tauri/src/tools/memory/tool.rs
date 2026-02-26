@@ -370,7 +370,7 @@ impl MemoryTool {
             let compact_memories: Vec<serde_json::Value> = memories
                 .into_iter()
                 .map(|m| {
-                    let preview = crate::tools::validation_helper::safe_truncate(
+                    let preview = crate::tools::utils::safe_truncate(
                         &m.content,
                         crate::tools::constants::memory::COMPACT_PREVIEW_LENGTH,
                         true,

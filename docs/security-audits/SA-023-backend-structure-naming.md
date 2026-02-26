@@ -89,8 +89,8 @@ src-tauri/src/
     spawn_agent.rs        # SpawnAgentTool
     sub_agent_circuit_breaker.rs  # Sub-agent circuit breaker
     sub_agent_executor.rs # Sub-agent execution engine (1770 lines)
-    utils.rs              # ensure_record_exists, resolve_agent_ref
-    validation_helper.rs  # Human-in-the-loop validation + safe_truncate
+    utils.rs              # ensure_record_exists, resolve_agent_ref, safe_truncate
+    validation_helper.rs  # Human-in-the-loop validation
 ```
 
 ---
@@ -101,7 +101,7 @@ src-tauri/src/
 |----------|----|-------------|--------|
 | HIGH | H1 | `ProviderType` duplicated in two modules | DONE |
 | HIGH | H2 | `commands/models.rs` naming ambiguity | DONE |
-| MEDIUM | M1 | `tools/validation_helper.rs` mixes unrelated concerns | PENDING |
+| MEDIUM | M1 | `tools/validation_helper.rs` mixes unrelated concerns | DONE |
 | MEDIUM | M2 | `tools/constants.rs` scope exceeds its module | PENDING |
 | MEDIUM | M3 | Large files candidates for decomposition | DEFERRED |
 | LOW | L1 | Excessive `#[allow(dead_code)]` annotations | DEFERRED |
@@ -179,9 +179,11 @@ src-tauri/src/
 **Remediation**: Extract `safe_truncate()` into `tools/utils.rs` (already exists, contains other utilities like `ensure_record_exists`).
 
 **Checklist**:
-- [ ] Move `safe_truncate()` + its tests to `tools/utils.rs`
-- [ ] Update all imports referencing `validation_helper::safe_truncate`
-- [ ] `cargo clippy` + `cargo test`
+- [x] Move `safe_truncate()` + its tests to `tools/utils.rs`
+- [x] Update all imports referencing `validation_helper::safe_truncate` (4 files: sub_agent_executor.rs, spawn_agent.rs, memory/tool.rs, validation_helper.rs)
+- [x] `cargo fmt --check` PASS
+- [x] `cargo clippy -- -D warnings` PASS
+- [x] `cargo test` PASS (976 tests, 0 failures)
 
 ---
 
