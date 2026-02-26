@@ -27,7 +27,7 @@
  *
  * @example
  * ```typescript
- * import type { Workflow, Agent, Message } from '$lib/types';
+ * import type { Workflow, Agent, Message } from '$types';
  *
  * const workflow: Workflow = {
  *   id: 'wf_001',
