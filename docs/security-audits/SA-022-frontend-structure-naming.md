@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 5 DONE
+**Status**: PHASE 6 DONE
 
 ## Context
 
@@ -274,12 +274,15 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 6: Service & Directory Cleanup
+### Phase 6: Service & Directory Cleanup -- DONE
 
-| ID | Action | Files |
-|----|--------|-------|
-| M-007 | Rename `activity.service.ts` to `message-enrichment.service.ts` (or `sub-agent-execution.service.ts`). Update all importers. | `src/lib/services/activity.service.ts` |
-| M-008 | Merge `src/lib/validation/schemas.ts` and `src/lib/validation/invoke.ts` into `src/lib/utils/`. Remove empty `validation/` directory. Update importers. | `src/lib/validation/`, `src/lib/utils/` |
+| ID | Action | Files | Status |
+|----|--------|-------|--------|
+| M-007 | Renamed `activity.service.ts` to `sub-agent-execution.service.ts`. Renamed export `ActivityService` to `SubAgentExecutionService`. Updated 2 importers (`message.service.ts`, `services/index.ts`). | `src/lib/services/sub-agent-execution.service.ts` | **DONE** |
+| M-008 | Merged `src/lib/validation/` into `src/lib/utils/`: `schemas.ts` -> `validation-schemas.ts`, `invoke.ts` -> `validation-invoke.ts`. Updated `utils/index.ts` barrel. Deleted `validation/` directory. Zero external importers affected. | `src/lib/utils/validation-schemas.ts`, `src/lib/utils/validation-invoke.ts` | **DONE** |
+| BUG | Fixed pre-existing bug: SubAgentBlocks missing on reload. `load_message_blocks` only queries `tool_execution` + `thinking_step`, never `sub_agent_execution`. Added `appendSubAgentBlocks()` in `+page.svelte` to rebuild SubAgent ChatBlocks from enriched message data. Modified `MessageService.loadWithSubAgents` to return raw executions. | `src/routes/agent/+page.svelte`, `src/lib/services/message.service.ts` | **DONE** |
+
+**Changes**: 1 service file renamed + export renamed, 2 validation files moved to utils/, 1 directory deleted, 1 barrel updated, 1 pre-existing bug fixed (sub-agent blocks persistence on reload). Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 

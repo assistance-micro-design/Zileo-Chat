@@ -685,7 +685,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 **Key changes:**
 - 12 component files deleted, 1 store deleted, 4 utils deleted, 1 type file deleted, 4 test files deleted
-- activity.service.ts trimmed: only `loadSubAgentExecutions()` remains (used by message.service.ts)
+- activity.service.ts trimmed then renamed to `sub-agent-execution.service.ts` (SA-022/P6): only `loadSubAgentExecutions()` remains (used by message.service.ts)
 - utils/activity.ts trimmed: only `formatTokenCount()` remains (used by MessageMetrics.svelte)
 - `@humanspeak/svelte-virtual-list` NOT removed (still used by MemoryList.svelte)
 - `streamingStore` kept (still used by backgroundWorkflows, executor, tokens)
@@ -857,8 +857,8 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | Types `index.ts` JSDoc uses `$lib/types` instead of `$types` | MEDIUM | **DONE** | Fixed JSDoc: `$lib/types` → `$types` (Phase 1) |
 | Unused helper functions in `tool.ts` and `thinking.ts` | MEDIUM | **DONE** | `formatToolDuration`→ToolCallBlock, `truncateThinkingContent`→ThinkingBlock, 11 unused exports removed (Phase 2) |
 | Missing barrel exports for `legal/` and `settings/` | MEDIUM | **DONE** | Created `legal/index.ts` (LegalModal) and `settings/index.ts` (5 components) (Phase 5) |
-| `activity.service.ts` name misleading after SA-019 refactoring | MEDIUM | **NOT DONE** | Rename to `message-enrichment.service.ts` (Phase 6) |
-| `src/lib/validation/` directory with only 2 files | MEDIUM | **NOT DONE** | Merge into `src/lib/utils/` (Phase 6) |
+| `activity.service.ts` name misleading after SA-019 refactoring | MEDIUM | **DONE** | Renamed to `sub-agent-execution.service.ts`, export `SubAgentExecutionService` (Phase 6) |
+| `src/lib/validation/` directory with only 2 files | MEDIUM | **DONE** | Merged into `src/lib/utils/` as `validation-schemas.ts` + `validation-invoke.ts` (Phase 6) |
 | `ChatContainer` in `agent/` directory | LOW | **NO ACTION** | Acceptable for page-level component |
 | Settings top-level loose files (provider-related) | LOW | **NOT DONE** | Move to `providers/` subdirectory (Phase 7, optional) |
 | `ToolStatus` type duplication | LOW | **DONE** | Resolved: only `streaming.ts` definition remains (Phase 2) |
