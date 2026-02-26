@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { Brain, ChevronDown } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { truncateThinkingContent } from '$types/thinking';
 
 	interface Props {
 		content: string;
@@ -20,9 +21,7 @@
 
 	const blockId = `thinking-${crypto.randomUUID().slice(0, 8)}`;
 
-	const preview = $derived(
-		content.length > 80 ? content.slice(0, 80) + '...' : content
-	);
+	const preview = $derived(truncateThinkingContent(content, 80));
 
 	function toggle(): void {
 		collapsed = !collapsed;

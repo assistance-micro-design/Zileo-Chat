@@ -9,6 +9,7 @@
 <script lang="ts">
 	import { Wrench, ChevronDown, CheckCircle, XCircle, Server } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { formatToolDuration } from '$types/tool';
 
 	interface Props {
 		toolName: string;
@@ -36,11 +37,7 @@
 
 	const blockId = `tool-${crypto.randomUUID().slice(0, 8)}`;
 
-	const formattedDuration = $derived(
-		durationMs >= 1000
-			? `${(durationMs / 1000).toFixed(1)}s`
-			: `${durationMs}ms`
-	);
+	const formattedDuration = $derived(formatToolDuration(durationMs));
 
 	const formattedInput = $derived(formatJson(inputParams));
 	const formattedOutput = $derived(formatJson(outputResult));

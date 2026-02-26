@@ -26,6 +26,4 @@ export { default as MessageBubble } from './MessageBubble.svelte';
 export { default as MessageList } from './MessageList.svelte';
 export { default as MessageMetrics } from './MessageMetrics.svelte';
 export { default as ChatInput } from './ChatInput.svelte';
-export { default as ToolExecution } from './ToolExecution.svelte';
-export type { ToolStatus } from './ToolExecution.svelte';
 export { default as MessageListSkeleton } from './MessageListSkeleton.svelte';

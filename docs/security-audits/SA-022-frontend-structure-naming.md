@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 1 DONE
+**Status**: PHASE 2 DONE
 
 ## Context
 
@@ -215,17 +215,17 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 2: Dead Code Removal
+### Phase 2: Dead Code Removal + Helper Integration -- DONE
 
-| ID | Action | Files |
-|----|--------|-------|
-| H-002a | Remove `JsonViewer.svelte` | `src/lib/components/ui/JsonViewer.svelte` |
-| H-002b | Remove `ToolExecution.svelte` + its barrel export | `src/lib/components/chat/ToolExecution.svelte`, `src/lib/components/chat/index.ts` |
-| M-005a | Integrate unused helper functions from `tool.ts` (`formatToolDuration`, `getToolTypeDisplay`, `getToolIdentifier`, `createToolExecutionFromWorkflow`, `ActiveToolExecution`, `ToolExecutionStatus`) into the components that display tool data (`ToolCallBlock.svelte`, etc.) | `src/types/tool.ts`, `src/lib/components/chat/ToolCallBlock.svelte` |
-| M-005b | Integrate unused helper functions from `thinking.ts` (`formatThinkingDuration`, `truncateThinkingContent`, `groupThinkingStepsByMessage`) into the components that display thinking data (`ThinkingBlock.svelte`, etc.) | `src/types/thinking.ts`, `src/lib/components/chat/ThinkingBlock.svelte` |
-| L-003 | Verify `ToolStatus` duplication resolved after H-002b | `src/lib/stores/streaming.ts` |
+| ID | Action | Files | Status |
+|----|--------|-------|--------|
+| H-002a | Remove `JsonViewer.svelte` (0 importers, only self-references) | `src/lib/components/ui/JsonViewer.svelte` | **DONE** |
+| H-002b | Remove `ToolExecution.svelte` + its barrel export (replaced by `ToolCallBlock` in SA-019/P3) | `src/lib/components/chat/ToolExecution.svelte`, `src/lib/components/chat/index.ts` | **DONE** |
+| M-005a | Integrated `formatToolDuration` into `ToolCallBlock.svelte` (replaces inline logic). Removed unused: `getToolTypeDisplay`, `getToolIdentifier`, `createToolExecutionFromWorkflow`, `ActiveToolExecution`, `ToolExecutionStatus` | `src/types/tool.ts`, `src/lib/components/chat/ToolCallBlock.svelte` | **DONE** |
+| M-005b | Integrated `truncateThinkingContent` into `ThinkingBlock.svelte` (replaces inline logic). Removed unused: `formatThinkingDuration`, `createActiveThinkingStep`, `ActiveThinkingStep`, `groupThinkingStepsByMessage`, `calculateTotalThinkingTokens`, `calculateTotalThinkingDuration` | `src/types/thinking.ts`, `src/lib/components/chat/ThinkingBlock.svelte` | **DONE** |
+| L-003 | `ToolStatus` duplication resolved: only `streaming.ts` definition remains | `src/lib/stores/streaming.ts` | **DONE** |
 
-**Verification**: Run `npm run check` and `npm run lint` after each removal to confirm no regressions.
+**Changes**: 2 dead components deleted, 2 barrel exports removed, 2 helpers integrated into components, 11 unused exports removed from type files. Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 
