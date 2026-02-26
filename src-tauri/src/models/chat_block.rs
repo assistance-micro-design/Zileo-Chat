@@ -18,7 +18,7 @@
 //! tool calls, sub-agent completions) in a unified, ordered format for display
 //! in the chat interface.
 //!
-//! SA-019 Phase 2: Backend - load_message_blocks + ChatBlock
+//! Provides block-level persistence and loading for chat display.
 
 use crate::models::{ThinkingStep, ToolExecution};
 use serde::Serialize;
@@ -31,7 +31,7 @@ pub enum ChatBlockType {
     Thinking,
     /// Tool call execution (local or MCP)
     ToolCall,
-    /// Sub-agent execution completion (used in Phase 3 frontend)
+    /// Sub-agent execution completion
     #[allow(dead_code)]
     SubAgent,
 }

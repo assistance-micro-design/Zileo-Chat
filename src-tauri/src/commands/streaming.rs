@@ -324,7 +324,6 @@ pub async fn execute_workflow_streaming(
     }
     thinking_step_number += 1;
 
-    // SA-019 P1/B7: Emit complete response as a single block with real token counts
     emit_chunk(
         &window,
         StreamChunk::response_block(
@@ -355,7 +354,6 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    // SA-014 P3: Aggregate sub-agent tokens into workflow totals
     aggregate_sub_agent_tokens(&state, &validated_workflow_id).await;
 
     // Convert tool executions to IPC-friendly format (OPT-7: clones necessary for IPC serialization)
@@ -693,7 +691,7 @@ async fn update_workflow_cumulative_metrics(
     }
 }
 
-/// SA-014 P3: Aggregates sub-agent tokens into separate workflow fields.
+/// Aggregates sub-agent tokens into separate workflow fields.
 ///
 /// Queries all completed sub_agent_execution records for this workflow
 /// and stores their token totals in sub_agent_tokens_input/output.
@@ -754,7 +752,7 @@ async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
     }
 }
 
-// SA-014: persist_tool_executions_batch and persist_reasoning_steps_batch
+// persist_tool_executions_batch and persist_reasoning_steps_batch
 // moved to db::persistence module for reuse by sub-agent executor
 
 /// Cancels a streaming workflow execution immediately.

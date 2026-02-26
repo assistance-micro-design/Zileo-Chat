@@ -15,9 +15,7 @@
 //! LLM model and provider settings types for CRUD operations.
 //!
 //! This module defines the data structures for managing LLM models (both builtin and custom)
-//! and provider configuration settings. It supports Mistral and Ollama providers in Phase 1.
-
-// Module-level dead_code removed in SA-015 Phase 5 (Phase 2 is complete).
+//! and provider configuration settings.
 
 use crate::llm::DEFAULT_OLLAMA_URL;
 use chrono::{DateTime, Utc};

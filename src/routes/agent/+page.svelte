@@ -18,7 +18,7 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-Agent Page - Simplified and Refactored (Phase D)
+Agent Page - Simplified and Refactored
 Uses extracted components, services, and stores for clean architecture.
 -->
 

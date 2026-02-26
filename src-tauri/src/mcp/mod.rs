@@ -70,7 +70,6 @@
 //! manager.shutdown().await?;
 //! ```
 
-// Allow dead_code for Phase 2 - methods will be used in Phase 3 (Tauri Commands)
 #[allow(dead_code)]
 pub mod circuit_breaker;
 #[allow(dead_code)]
@@ -98,7 +97,7 @@ pub use protocol::{
     MCP_CLIENT_VERSION, MCP_PROTOCOL_VERSION,
 };
 
-// Re-export high-level types for convenience (will be used in Phase 3)
+// Re-export high-level types for convenience
 #[allow(unused_imports)]
 pub use circuit_breaker::{CircuitBreaker, CircuitState};
 #[allow(unused_imports)]

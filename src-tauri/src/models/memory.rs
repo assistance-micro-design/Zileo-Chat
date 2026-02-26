@@ -119,7 +119,7 @@ impl MemoryCreate {
     }
 
     /// Creates a new MemoryCreate with workflow scope
-    #[allow(dead_code)] // Used by MemoryTool in Phase 3
+    #[allow(dead_code)]
     pub fn with_workflow(
         memory_type: MemoryType,
         content: String,
@@ -158,7 +158,7 @@ impl MemoryCreate {
 
 /// Memory creation payload with embedding vector
 /// Used by MemoryTool for creating memories with vector embeddings
-#[allow(dead_code)] // Used by MemoryTool in Phase 3
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryCreateWithEmbedding {
     /// Type of memory content (as string for SurrealDB)
@@ -182,7 +182,7 @@ pub struct MemoryCreateWithEmbedding {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[allow(dead_code)] // Used by MemoryTool in Phase 3
+#[allow(dead_code)]
 impl MemoryCreateWithEmbedding {
     /// Creates a new MemoryCreateWithEmbedding with the given parameters
     pub fn new(

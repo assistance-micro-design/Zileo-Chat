@@ -92,7 +92,6 @@ fn default_enable_thinking() -> bool {
     true
 }
 
-// Allow dead code until Phase 6: Full Agent Integration
 #[allow(dead_code)]
 impl AgentConfig {
     /// Validates tool names against known tools in the registry.

@@ -107,7 +107,7 @@ export interface WorkflowMetrics {
  * - Tool execution history
  * - Thinking/reasoning steps
  *
- * Used by `load_workflow_full_state` command for Phase 5: Complete State Recovery.
+ * Used by `load_workflow_full_state` command for Complete State Recovery.
  */
 export interface WorkflowFullState {
   /** The workflow entity with metadata */

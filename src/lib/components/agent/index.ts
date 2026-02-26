@@ -18,7 +18,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Agent page components - Phase C Component Extraction
+ * Agent page components
  * Exports autonomous components for the agent interaction page.
  * @module components/agent
  */

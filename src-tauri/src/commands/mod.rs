@@ -77,21 +77,21 @@
 //! - `execute_workflow_streaming` - Execute workflow with real-time events
 //! - `cancel_workflow_streaming` - Cancel streaming execution
 //!
-//! ### Message Commands ([`message`]) - Phase 6
+//! ### Message Commands ([`message`])
 //! - `save_message` - Persist a message to the database
 //! - `load_workflow_messages` - Load all messages for a workflow
 //! - `load_workflow_messages_paginated` - Load messages with pagination
 //! - `delete_message` - Delete a single message
 //! - `clear_workflow_messages` - Delete all messages for a workflow
 //!
-//! ### Tool Execution Commands ([`tool_execution`]) - Phase 3
+//! ### Tool Execution Commands ([`tool_execution`])
 //! - `save_tool_execution` - Persist a tool execution log
 //! - `load_workflow_tool_executions` - Load all tool executions for a workflow
 //! - `load_message_tool_executions` - Load tool executions for a message
 //! - `delete_tool_execution` - Delete a single tool execution
 //! - `clear_workflow_tool_executions` - Delete all tool executions for a workflow
 //!
-//! ### Thinking Step Commands ([`thinking`]) - Phase 4
+//! ### Thinking Step Commands ([`thinking`])
 //! - `save_thinking_step` - Persist a thinking/reasoning step
 //! - `load_workflow_thinking_steps` - Load all thinking steps for a workflow
 //! - `load_message_thinking_steps` - Load thinking steps for a message

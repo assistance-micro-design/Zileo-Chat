@@ -17,8 +17,7 @@
 //! Provides Tauri commands for saving and retrieving tool execution logs
 //! for workflow state recovery and debugging.
 //!
-//! Phase 3: Tool Execution Persistence - Enables complete workflow state
-//! recovery with full tool call history.
+//! Enables complete workflow state recovery with full tool call history.
 
 use crate::{
     db::extract_count,

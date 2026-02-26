@@ -44,8 +44,8 @@ impl std::fmt::Display for MessageRole {
 
 /// Message entity representing a conversation message with metrics.
 ///
-/// Extended in Phase 6 to include token counts, model info, cost, and duration
-/// for analytics and state recovery.
+/// Includes token counts, model info, cost, and duration for analytics
+/// and state recovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     /// Unique identifier (UUID)

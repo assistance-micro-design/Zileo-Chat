@@ -139,7 +139,7 @@ pub struct Task {
 /// Timestamps are handled by database defaults.
 /// Enum fields are converted to strings for SurrealDB compatibility.
 #[derive(Debug, Clone, Serialize)]
-#[allow(dead_code)] // Will be used in Phase 2: Tauri Commands
+#[allow(dead_code)]
 pub struct TaskCreate {
     /// Associated workflow ID
     pub workflow_id: String,
@@ -165,7 +165,7 @@ pub struct TaskCreate {
     pub dependencies: Vec<String>,
 }
 
-#[allow(dead_code)] // Will be used in Phase 2: Tauri Commands
+#[allow(dead_code)]
 impl TaskCreate {
     /// Creates a new TaskCreate with the given parameters.
     ///
@@ -254,7 +254,7 @@ pub struct TaskUpdate {
     pub duration_ms: Option<u64>,
 }
 
-#[allow(dead_code)] // Will be used in Phase 2: Tauri Commands
+#[allow(dead_code)]
 impl TaskUpdate {
     /// Creates a new empty TaskUpdate.
     pub fn new() -> Self {

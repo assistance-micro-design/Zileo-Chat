@@ -132,7 +132,6 @@ impl TodoTool {
         .with_agent(self.agent_id.clone())
         .with_dependencies(dependencies);
 
-        // OPT-TODO-7: Use db_error() for consistency
         self.db
             .create("task", &task_id, task)
             .await
@@ -165,9 +164,6 @@ impl TodoTool {
     async fn update_status(&self, task_id: &str, status: &str) -> ToolResult<Value> {
         validate_enum_value(status, VALID_STATUSES, "status")?;
 
-        // OPT-TODO-5: Reduce N+1 queries (3->1) using UPDATE ... RETURN
-        // Single query: updates status AND returns name for event emission
-        // If result is empty, task doesn't exist (handles existence check)
         let params = vec![
             ("task_id".to_string(), serde_json::json!(task_id)),
             ("status".to_string(), serde_json::json!(status)),
@@ -215,8 +211,6 @@ impl TodoTool {
     /// * `status_filter` - Optional status to filter by
     #[instrument(skip(self))]
     async fn list_tasks(&self, status_filter: Option<&str>) -> ToolResult<Value> {
-        // OPT-TODO-2: Use ParamQueryBuilder for SQL injection safety
-        // OPT-TODO-10: Add LIMIT to prevent memory explosion
         let mut builder = ParamQueryBuilder::new("task")
             .select(&[
                 "name",
@@ -263,8 +257,6 @@ impl TodoTool {
     /// * `task_id` - Task ID to retrieve
     #[instrument(skip(self))]
     async fn get_task(&self, task_id: &str) -> ToolResult<Value> {
-        // OPT-TODO-4: Parameterized query for SQL injection safety
-        // OPT-TODO-9: Use TASK_SELECT_FIELDS constant for DRY
         let params = vec![("task_id".to_string(), serde_json::json!(task_id))];
         let query = format!(
             "SELECT {} FROM task WHERE meta::id(id) = $task_id",
@@ -295,9 +287,6 @@ impl TodoTool {
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
     async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
-        // OPT-TODO-6: Reduce N+1 queries (2->1) using UPDATE ... RETURN
-        // Single query: updates status/completed_at/duration AND returns name for event
-        // If result is empty, task doesn't exist (handles existence check)
         let (update_query, update_params) = match duration_ms {
             Some(duration) => (
                 "UPDATE task SET status = $status, completed_at = time::now(), duration_ms = $duration WHERE meta::id(id) = $task_id RETURN name".to_string(),
@@ -751,7 +740,7 @@ mod tests {
     }
 }
 
-/// Integration tests with real database (OPT-TODO-11).
+/// Integration tests with real database.
 ///
 /// These tests validate the complete TodoTool behavior with a real temporary database.
 #[cfg(test)]
@@ -772,10 +761,6 @@ mod integration_tests {
 
         (tool, temp_dir)
     }
-
-    // =========================================================================
-    // OPT-TODO-11: Integration tests with real DB
-    // =========================================================================
 
     #[tokio::test]
     async fn test_create_task_integration() {
@@ -1164,7 +1149,7 @@ mod integration_tests {
     }
 }
 
-/// SQL injection prevention tests (OPT-TODO-12).
+/// SQL injection prevention tests.
 ///
 /// These tests verify that parameterized queries properly prevent SQL injection attacks.
 #[cfg(test)]
@@ -1185,10 +1170,6 @@ mod sql_injection_tests {
 
         (tool, temp_dir)
     }
-
-    // =========================================================================
-    // OPT-TODO-12: SQL injection prevention tests
-    // =========================================================================
 
     #[tokio::test]
     async fn test_sql_injection_prevention_task_id_get() {

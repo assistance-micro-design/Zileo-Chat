@@ -239,44 +239,37 @@ async fn main() -> anyhow::Result<()> {
             commands::models::update_provider_settings,
             commands::models::test_provider_connection,
             commands::models::seed_builtin_models,
-            // Validation commands (Phase 5)
             commands::validation::create_validation_request,
             commands::validation::list_pending_validations,
             commands::validation::list_workflow_validations,
             commands::validation::approve_validation,
             commands::validation::reject_validation,
             commands::validation::delete_validation,
-            // Validation settings commands (Phase 7A)
             commands::validation::get_validation_settings,
             commands::validation::update_validation_settings,
             commands::validation::reset_validation_settings,
             // Tool discovery for validation settings
             commands::validation::list_available_tools,
-            // Memory commands (Phase 5)
             commands::memory::add_memory,
             commands::memory::list_memories,
             commands::memory::get_memory,
             commands::memory::delete_memory,
             commands::memory::search_memories,
             commands::memory::clear_memories_by_type,
-            // Streaming commands (Phase 5)
             commands::streaming::execute_workflow_streaming,
             commands::streaming::cancel_workflow_streaming,
-            // Message commands (Phase 6 - Message Persistence)
             commands::message::save_message,
             commands::message::load_workflow_messages,
             commands::message::load_workflow_messages_paginated,
             commands::message::delete_message,
             commands::message::clear_workflow_messages,
             commands::message::load_message_blocks,
-            // Tool execution commands (Phase 3 - Tool Execution Persistence)
             commands::tool_execution::save_tool_execution,
             commands::tool_execution::get_tool_execution,
             commands::tool_execution::load_workflow_tool_executions,
             commands::tool_execution::load_message_tool_executions,
             commands::tool_execution::delete_tool_execution,
             commands::tool_execution::clear_workflow_tool_executions,
-            // Thinking step commands (Phase 4 - Thinking Steps Persistence)
             commands::thinking::save_thinking_step,
             commands::thinking::load_workflow_thinking_steps,
             commands::thinking::load_message_thinking_steps,
@@ -294,7 +287,6 @@ async fn main() -> anyhow::Result<()> {
             commands::task::update_task_status,
             commands::task::complete_task,
             commands::task::delete_task,
-            // MCP commands (Phase 3)
             commands::mcp::list_mcp_servers,
             commands::mcp::get_mcp_server,
             commands::mcp::create_mcp_server,
@@ -306,12 +298,10 @@ async fn main() -> anyhow::Result<()> {
             commands::mcp::list_mcp_tools,
             commands::mcp::call_mcp_tool,
             commands::mcp::get_mcp_latency_metrics,
-            // Migration commands (Memory Tool Phase 2 + MCP HTTP + Memory v2)
             commands::migration::migrate_memory_schema,
             commands::migration::get_memory_schema_status,
             commands::migration::migrate_mcp_http_schema,
             commands::migration::migrate_memory_v2_schema,
-            // Embedding commands (Memory Tool Phase 5)
             commands::embedding::get_embedding_config,
             commands::embedding::save_embedding_config,
             commands::embedding::get_memory_stats,
@@ -335,7 +325,6 @@ async fn main() -> anyhow::Result<()> {
             commands::import_export::validate_import,
             commands::import_export::execute_import,
             commands::import_export::save_export_to_file,
-            // User Question commands (Phase 8 - UserQuestionTool)
             commands::user_question::submit_user_response,
             commands::user_question::get_pending_questions,
             commands::user_question::skip_question,

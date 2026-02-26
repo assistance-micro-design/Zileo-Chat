@@ -41,7 +41,7 @@ DEFINE FIELD OVERWRITE sub_agent_tokens_input ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE sub_agent_tokens_output ON workflow TYPE int DEFAULT 0;
 
 -- Table: message
--- Extended with metrics fields for Phase 6 persistence
+-- Extended with metrics fields for persistence
 DEFINE TABLE OVERWRITE message SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON message TYPE string;
 DEFINE FIELD OVERWRITE workflow_id ON message TYPE string;
@@ -160,7 +160,7 @@ DEFINE FIELD OVERWRITE timestamp ON mcp_call_log TYPE datetime DEFAULT time::now
 -- Index trade-off: faster reads vs slower writes
 -- Keep both indexes as they are actively used:
 --   - mcp_call_workflow: Required for workflow-scoped MCP call history
---   - mcp_call_server: Required for Phase 4 latency metrics (get_mcp_latency_metrics)
+--   - mcp_call_server: Required for latency metrics (get_mcp_latency_metrics)
 DEFINE INDEX OVERWRITE mcp_call_workflow ON mcp_call_log FIELDS workflow_id;
 DEFINE INDEX OVERWRITE mcp_call_server ON mcp_call_log FIELDS server_name;
 
@@ -281,7 +281,6 @@ DEFINE INDEX OVERWRITE agent_provider_idx ON agent FIELDS llm.provider;
 -- =============================================
 -- Table: tool_execution
 -- Logs all tool executions (local + MCP)
--- Phase 3: Tool Execution Persistence
 -- =============================================
 DEFINE TABLE OVERWRITE tool_execution SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON tool_execution TYPE string;
@@ -311,7 +310,6 @@ DEFINE INDEX OVERWRITE tool_exec_type_idx ON tool_execution FIELDS tool_type;
 -- =============================================
 -- Table: thinking_step
 -- Captures agent reasoning/thinking steps
--- Phase 4: Thinking Steps Persistence
 -- =============================================
 DEFINE TABLE OVERWRITE thinking_step SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON thinking_step TYPE string;
@@ -337,7 +335,6 @@ DEFINE INDEX OVERWRITE thinking_agent_idx ON thinking_step FIELDS agent_id;
 -- =============================================
 -- Table: sub_agent_execution
 -- Tracks sub-agent spawn/delegate operations
--- Phase 6A: Sub-Agent System Infrastructure
 -- =============================================
 DEFINE TABLE OVERWRITE sub_agent_execution SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON sub_agent_execution TYPE string;
@@ -367,7 +364,6 @@ DEFINE INDEX OVERWRITE sub_agent_status_idx ON sub_agent_execution FIELDS status
 -- =============================================
 -- Table: user_question
 -- Stores user interaction questions for agent clarification
--- Phase 4: UserQuestionTool - Database Schema Setup
 -- =============================================
 DEFINE TABLE OVERWRITE user_question SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON user_question TYPE string;

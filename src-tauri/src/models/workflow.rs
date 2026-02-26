@@ -177,7 +177,7 @@ pub struct WorkflowMetrics {
 /// - Tool execution history
 /// - Thinking/reasoning steps
 ///
-/// Used by `load_workflow_full_state` command for Phase 5: Complete State Recovery.
+/// Used by `load_workflow_full_state` command for complete state recovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowFullState {
     /// The workflow entity with metadata

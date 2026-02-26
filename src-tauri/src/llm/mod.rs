@@ -67,7 +67,7 @@ pub use ollama::DEFAULT_OLLAMA_URL;
 #[allow(unused_imports)]
 pub use provider::{LLMProvider, LLMResponse};
 
-// Embedding service exports (will be used by MemoryTool in Phase 3)
+// Embedding service exports
 #[allow(unused_imports)]
 pub use embedding::{
     EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService, MISTRAL_EMBED_DIMENSION,

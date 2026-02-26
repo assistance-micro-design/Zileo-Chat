@@ -73,7 +73,7 @@ pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
 
 /// Validates a trimmed name with configurable field name and max length.
 ///
-/// SA-017/OPT-7: Centralized validation extracted from agent.rs and mcp.rs.
+/// Centralized validation extracted from agent.rs and mcp.rs.
 /// Trims whitespace, checks emptiness, length, and control characters.
 ///
 /// # Arguments

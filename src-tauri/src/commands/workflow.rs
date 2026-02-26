@@ -311,8 +311,6 @@ pub async fn delete_workflow(
 /// - Tool execution history
 /// - Thinking steps
 ///
-/// Phase 5: Complete State Recovery
-///
 /// # Arguments
 /// * `workflow_id` - The workflow ID to load full state for
 ///

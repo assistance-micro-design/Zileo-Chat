@@ -598,7 +598,6 @@ EXAMPLE (by ID):
 
         match operation {
             "delegate" => {
-                // SA-020/P4: Resolve agent_ref from agent_id (priority) or agent_name
                 let agent_ref = input["agent_id"]
                     .as_str()
                     .filter(|s| !s.trim().is_empty())

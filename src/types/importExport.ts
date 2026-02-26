@@ -50,7 +50,7 @@ export interface ExportSelection {
  * Export configuration options.
  */
 export interface ExportOptions {
-	/** Export format (JSON only in Phase 1) */
+	/** Export format (JSON) */
 	format: 'json';
 	/** Whether to include created_at/updated_at timestamps */
 	includeTimestamps: boolean;

@@ -1170,7 +1170,6 @@ impl Agent for LLMAgent {
         // Tool execution loop
         let mut final_response_content = String::new();
         let mut iteration = 0;
-        // SA-019: Global sequence counter for block ordering
         let mut global_sequence: u32 = 0;
 
         // Use agent config max_tool_iterations, clamped to valid range [1, 200]
@@ -1299,7 +1298,6 @@ impl Agent for LLMAgent {
                 }
             };
 
-            // SA-019: Extract and emit thinking content from reasoning models
             if let Some(thinking) = adapter.extract_thinking(&response) {
                 if !thinking.trim().is_empty() {
                     global_sequence += 1;
@@ -1423,7 +1421,6 @@ impl Agent for LLMAgent {
                     sequence: global_sequence,
                 });
 
-                // SA-019: Emit tool_call_complete with full input/output details
                 let input_json =
                     serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
                 let output_json =

@@ -18,7 +18,7 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-WorkflowSidebar Component - Phase C Component Extraction
+WorkflowSidebar Component
 Left sidebar for workflow management with search and CRUD operations.
 -->
 

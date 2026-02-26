@@ -72,7 +72,7 @@ impl ExportSelection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportOptions {
-    /// Export format (JSON only in Phase 1)
+    /// Export format (JSON)
     pub format: String,
     /// Whether to include created_at/updated_at timestamps
     pub include_timestamps: bool,

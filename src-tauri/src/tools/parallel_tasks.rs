@@ -330,7 +330,6 @@ impl ParallelTasksTool {
     /// Blocks until validation is approved or returns error if rejected.
     async fn request_human_validation(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
         let validation_helper = ValidationHelper::new(self.db.clone(), self.app_handle.clone());
-        // SA-020/P5: Use agent_name for display in validation prompt
         let task_pairs: Vec<(String, String)> = tasks
             .iter()
             .map(|t| (t.agent_name.clone(), t.prompt.clone()))
@@ -379,7 +378,6 @@ impl ParallelTasksTool {
             execution_ids.push(execution_id.clone());
 
             // Create execution record with batch_id as parent for hierarchical tracing (OPT-SA-11)
-            // SA-020/P5: Use real agent name instead of "Parallel task for {uuid}"
             let mut execution_create = SubAgentExecutionCreate::with_parent(
                 self.workflow_id.clone(),
                 self.current_agent_id.clone(),
@@ -418,7 +416,6 @@ impl ParallelTasksTool {
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
 
             // Emit sub_agent_start event via unified executor (OPT-SA-4)
-            // SA-020/P5: Use real agent name
             executor.emit_start_event(
                 &task_spec.agent_id,
                 &task_spec.agent_name,
@@ -553,7 +550,6 @@ impl ParallelTasksTool {
             let task_result = if exec_result.success {
                 completed_count += 1;
 
-                // SA-020/P5: Use real agent name in reports
                 aggregated_reports.push(format!(
                     "## Agent: {}\n\n{}\n",
                     task_spec.agent_name, exec_result.report
@@ -578,7 +574,6 @@ impl ParallelTasksTool {
                     "Parallel task failed"
                 );
 
-                // SA-020/P5: Use real agent name in error reports
                 aggregated_reports.push(format!(
                     "## Agent: {} (ERROR)\n\nExecution failed: {}\n",
                     task_spec.agent_name, error_msg
@@ -825,7 +820,6 @@ Returns aggregated results with:
 
                 let mut tasks: Vec<ParallelTaskSpec> = Vec::new();
                 for (i, t) in tasks_array.iter().enumerate() {
-                    // SA-020/P5: Resolve agent_ref from agent_id (priority) or agent_name
                     let agent_ref = t["agent_id"]
                         .as_str()
                         .filter(|s| !s.trim().is_empty())

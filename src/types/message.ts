@@ -44,8 +44,7 @@ export interface SubAgentSummary {
 /**
  * Message entity representing a conversation message with optional metrics.
  *
- * Extended in Phase 6 to include token counts, model info, cost, and duration
- * for analytics and state recovery.
+ * Includes token counts, model info, cost, and duration for analytics and state recovery.
  */
 export interface Message {
   /** Unique identifier (UUID) */

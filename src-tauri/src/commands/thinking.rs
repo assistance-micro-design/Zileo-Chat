@@ -17,8 +17,7 @@
 //! Provides Tauri commands for saving and retrieving thinking step logs
 //! for workflow state recovery and agent reasoning transparency.
 //!
-//! Phase 4: Thinking Steps Persistence - Enables complete workflow state
-//! recovery with full reasoning history.
+//! Enables complete workflow state recovery with full reasoning history.
 
 use crate::{
     db::extract_count,

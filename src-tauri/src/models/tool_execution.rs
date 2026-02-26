@@ -17,7 +17,7 @@
 //! This module provides types for storing and retrieving tool execution logs
 //! for both local tools (MemoryTool, TodoTool) and MCP tools.
 //!
-//! Phase 3: Tool Execution Persistence
+//! Provides persistence for tool execution logs.
 
 use crate::models::serde_utils::{deserialize_json_string, serialize_as_json_string};
 use chrono::{DateTime, Utc};

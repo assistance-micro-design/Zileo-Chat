@@ -482,12 +482,9 @@ impl SubAgentExecutor {
     /// * `execution_id` - Execution record ID
     /// * `result` - Execution result with success, report, metrics
     pub async fn update_execution_record(&self, execution_id: &str, result: &ExecutionResult) {
-        // SA-014: Fix "failed" → "error" to match SubAgentStatus enum variants
         let status = if result.success { "completed" } else { "error" };
         let result_summary = safe_truncate(&result.report, 5000, true);
 
-        // SA-014: Use parameterized queries to avoid SQL injection and silent failures
-        // from special characters in LLM-generated result_summary (quotes, newlines, etc.)
         let update_query = format!(
             "UPDATE sub_agent_execution:`{}` SET \
              status = $status, \

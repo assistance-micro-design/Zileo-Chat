@@ -49,7 +49,6 @@ Shows prompt summary with actions for edit and delete.
 	let debouncedQuery = $state('');
 	let categoryFilter = $state<PromptCategory | ''>('');
 
-	// SA-017/PERF-5: Debounce search like MemoryList (300ms)
 	let searchTimeout: ReturnType<typeof setTimeout>;
 	function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
 		searchQuery = event.currentTarget.value;

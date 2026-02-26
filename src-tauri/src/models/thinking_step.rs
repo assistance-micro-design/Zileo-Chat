@@ -18,7 +18,7 @@
 //! captured during workflow execution. Thinking steps represent the agent's
 //! internal reasoning process before generating a response.
 //!
-//! Phase 4: Thinking Steps Persistence
+//! Provides persistence for thinking steps.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

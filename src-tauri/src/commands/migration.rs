@@ -69,7 +69,7 @@ async fn record_migration_applied(db: &DBClient, migration_name: &str) -> Result
     Ok(())
 }
 
-/// SQL for migrating memory table to new schema (Phase 2)
+/// SQL for migrating memory table to new schema
 ///
 /// Changes:
 /// - HNSW dimension: 1536 -> 1024 (Mistral/Ollama compatibility)
@@ -96,7 +96,7 @@ DEFINE INDEX IF NOT EXISTS memory_workflow_idx ON memory FIELDS workflow_id;
 UPDATE memory SET embedding = NONE WHERE embedding IS NOT NONE;
 "#;
 
-/// Migrates the memory table schema for Phase 2 (vector search).
+/// Migrates the memory table schema for vector search.
 ///
 /// This migration:
 /// - Drops and recreates the HNSW index with 1024 dimensions
@@ -108,14 +108,13 @@ UPDATE memory SET embedding = NONE WHERE embedding IS NOT NONE;
 /// Migration result with affected record count
 ///
 /// # Safety
-/// SA-005 H3: Guarded by migration_log to prevent re-execution.
+/// Guarded by migration_log to prevent re-execution.
 /// First run clears embeddings; subsequent runs are no-ops.
 #[tauri::command]
 #[instrument(name = "migrate_memory_schema", skip(state))]
 pub async fn migrate_memory_schema(state: State<'_, AppState>) -> Result<MigrationResult, String> {
-    info!("Starting memory schema migration (Phase 2)");
+    info!("Starting memory schema migration");
 
-    // SA-005 H3: Check if migration was already applied
     if check_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1).await? {
         info!("Memory schema migration already applied, skipping");
         return Ok(MigrationResult {

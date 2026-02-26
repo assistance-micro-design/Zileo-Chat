@@ -17,8 +17,8 @@
 //! Provides Tauri commands for saving and retrieving conversation messages
 //! with associated metrics for workflow state recovery.
 //!
-//! Phase 6: Message Persistence - Enables complete workflow state recovery
-//! after application restart by persisting all messages to SurrealDB.
+//! Enables complete workflow state recovery after application restart
+//! by persisting all messages to SurrealDB.
 
 use crate::{
     db::extract_count,

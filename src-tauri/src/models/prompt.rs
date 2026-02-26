@@ -160,7 +160,7 @@ impl Prompt {
     /// let result = Prompt::interpolate(content, &values);
     /// assert_eq!(result, "Hello Alice!");
     /// ```
-    #[allow(dead_code)] // Used in Phase 3 (Frontend)
+    #[allow(dead_code)]
     pub fn interpolate(content: &str, values: &HashMap<String, String>) -> String {
         let pattern =
             Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern");

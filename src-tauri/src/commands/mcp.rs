@@ -80,7 +80,7 @@ fn validate_mcp_server_id(id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// SA-017/OPT-7: Delegates to centralized validate_trimmed_name
+/// Delegates to centralized validate_trimmed_name
 fn validate_mcp_server_display_name(name: &str) -> Result<String, String> {
     validate_trimmed_name(name, "Server name", cmd_const::MAX_MCP_SERVER_NAME_LEN)
 }
@@ -392,7 +392,6 @@ pub async fn create_mcp_server(
         ));
     }
 
-    // SA-002 S2-H3: Check for HTTP security warning on non-localhost URLs
     let warning = check_mcp_http_warning(&validated_config);
     if warning.is_some() {
         warn!(
@@ -466,7 +465,6 @@ pub async fn update_mcp_server(
         return Err(format!("MCP server '{}' not found", validated_id));
     }
 
-    // SA-002 S2-H3: Check for HTTP security warning on non-localhost URLs
     let warning = check_mcp_http_warning(&validated_config);
     if warning.is_some() {
         warn!(

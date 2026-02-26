@@ -24,7 +24,7 @@
  * - src-tauri/src/models/tool_execution.rs (ToolExecution, ToolExecutionCreate)
  * - src-tauri/src/models/workflow.rs (WorkflowToolExecution)
  *
- * Phase 3: Tool Execution Persistence
+ * Tool Execution Persistence
  *
  * @module types/tool
  */

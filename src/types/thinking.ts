@@ -23,7 +23,7 @@
  * These types are synchronized with Rust backend types:
  * - src-tauri/src/models/thinking_step.rs (ThinkingStep, ThinkingStepCreate)
  *
- * Phase 4: Thinking Steps Persistence
+ * Thinking Steps Persistence
  *
  * @module types/thinking
  */

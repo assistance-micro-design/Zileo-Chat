@@ -39,7 +39,7 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
-/// SA-017/OPT-7: Delegates to centralized validate_trimmed_name
+/// Delegates to centralized validate_trimmed_name
 fn validate_agent_name(name: &str) -> Result<String, String> {
     validate_trimmed_name(name, "Agent name", cmd_const::MAX_AGENT_NAME_LEN)
 }
@@ -270,7 +270,7 @@ pub async fn get_agent_config(
     Ok(config)
 }
 
-/// SA-020/P1: Checks that agent name is unique (case-insensitive, trimmed).
+/// Checks that agent name is unique (case-insensitive, trimmed).
 ///
 /// - `exclude_id`: If Some, excludes this agent from the check (for update_agent).
 async fn check_agent_name_unique(
@@ -323,7 +323,6 @@ pub async fn create_agent(
         e
     })?;
 
-    // SA-020/P1: Check name uniqueness (case-insensitive)
     check_agent_name_unique(&state.db, &validated.name, None)
         .await
         .map_err(|e| {
@@ -473,7 +472,6 @@ pub async fn update_agent(
     let mut updated_config = merge_agent_config(&config, existing.config())?;
     updated_config.id = validated_id.clone();
 
-    // SA-020/P1: Check name uniqueness (excluding self)
     check_agent_name_unique(&state.db, &updated_config.name, Some(&validated_id))
         .await
         .map_err(|e| {

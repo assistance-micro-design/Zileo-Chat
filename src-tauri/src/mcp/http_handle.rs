@@ -158,7 +158,6 @@ impl MCPHttpHandle {
             });
         }
 
-        // SA-002 S2-H3: Warn if connecting to remote MCP server over plain HTTP
         if let Some(warning_msg) = check_http_warning(&base_url) {
             warn!(
                 server_id = %config.id,

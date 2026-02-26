@@ -140,7 +140,7 @@ impl AgentRegistry {
     ///
     /// This method removes all agents with Lifecycle::Temporary from the registry.
     /// Used for workflow cleanup after completion.
-    #[allow(dead_code)] // Will be used in Phase D for workflow cleanup
+    #[allow(dead_code)] // Reserved for workflow cleanup
     #[instrument(name = "registry_cleanup_temporary", skip(self))]
     pub async fn cleanup_temporary(&self) {
         let mut agents = self.agents.write().await;
