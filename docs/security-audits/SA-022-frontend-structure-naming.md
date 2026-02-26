@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 4 DONE
+**Status**: PHASE 5 DONE
 
 ## Context
 
@@ -257,19 +257,20 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 5: Barrel Export Completion
+### Phase 5: Barrel Export Completion -- DONE
 
-| ID | Action | Files |
-|----|--------|-------|
-| M-001a | Add missing exports to `src/lib/components/chat/index.ts` | `ThinkingBlock`, `ToolCallBlock`, `SubAgentBlock`, `ExecutionSpinner`, `TodoTasksBlock`, `PromptSelectorModal` |
-| M-001b | Add missing exports to `src/lib/components/ui/index.ts` | `MarkdownRenderer`, `ToastContainer`, `ToastItem` (skip dead `JsonViewer`) |
-| M-001c | Add missing exports to `src/types/index.ts` | `background-workflow`, `chat-block`, `custom-provider`, `i18n`, `services`, `sub-agent`, `user-question` (skip dead `thinking`, `tool` if removed) |
-| M-001d | Add missing exports to `src/lib/utils/index.ts` | `duration`, `dateGrouping`, `url` |
-| M-001e | Add missing exports to `src/lib/stores/index.ts` | `background-workflows`, `execution-blocks`, `toast` |
-| M-006a | Create `src/lib/components/legal/index.ts` barrel | Export `LegalModal` |
-| M-006b | Create `src/lib/components/settings/index.ts` barrel | Export top-level settings components |
+| ID | Action | Files | Status |
+|----|--------|-------|--------|
+| M-001a | Add missing exports to `src/lib/components/chat/index.ts` | `ThinkingBlock`, `ToolCallBlock`, `SubAgentBlock`, `ExecutionSpinner`, `TodoTasksBlock`, `PromptSelectorModal` | **DONE** |
+| M-001b | Add missing exports to `src/lib/components/ui/index.ts` | `MarkdownRenderer`, `ToastContainer`, `ToastItem` (skip dead `JsonViewer`) | **DONE** |
+| M-001c | Add missing exports to `src/types/index.ts` | `background-workflow`, `chat-block`, `custom-provider`, `i18n`, `services`, `sub-agent`, `thinking`, `tool`, `user-question` | **DONE** |
+| M-001d | Add missing exports to `src/lib/utils/index.ts` | `duration`, `dateGrouping`, `url` | **DONE** |
+| M-001e | Add missing exports to `src/lib/stores/index.ts` | `background-workflows`, `execution-blocks`, `toast` | **DONE** |
+| M-006a | Create `src/lib/components/legal/index.ts` barrel | Export `LegalModal` | **DONE** |
+| M-006b | Create `src/lib/components/settings/index.ts` barrel | Export `APIKeysSection`, `CustomProviderForm`, `LLMSection`, `MCPSection`, `SettingsSectionHeader` | **DONE** |
+| fix | Remove duplicate `RiskLevel` from `sub-agent.ts` | Import from `./validation` instead of re-declaring (avoids barrel conflict) | **DONE** |
 
-**Note**: After Phase 3 renames, use the new kebab-case filenames in barrel exports.
+**Changes**: 5 barrel files updated (chat +6, ui +3, types +9, utils +3, stores +3), 2 barrel files created (legal, settings), 1 duplicate type removed (`RiskLevel` in `sub-agent.ts`). `thinking.ts` and `tool.ts` included despite audit note (both have active importers after Phase 2 integration). Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 

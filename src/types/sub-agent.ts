@@ -228,11 +228,7 @@ export const SUB_AGENT_EVENTS = {
  */
 export type SubAgentOperationType = 'spawn' | 'delegate' | 'parallel_batch';
 
-/**
- * Risk level for validation requests.
- * Matches Rust RiskLevel in validation.rs.
- */
-export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+import type { RiskLevel } from './validation';
 
 /**
  * Validation required event payload.

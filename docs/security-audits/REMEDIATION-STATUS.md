@@ -35,7 +35,7 @@
 **SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
-**SA-022 PHASE 3 DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case (6 files renamed: 3 types + 3 stores, 16 import paths updated). 5 MEDIUM + 1 LOW remaining. 4 phases left.**
+**SA-022 PHASE 5 DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion (5 barrels updated, 2 created, 1 duplicate type fixed). 2 MEDIUM + 1 LOW remaining. 2 phases left.**
 
 ---
 
@@ -851,12 +851,12 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 |---------|----------|--------|-----|
 | Mixed naming conventions in `src/types/` (4 styles) and `src/lib/stores/` (3 styles) | HIGH | **DONE** | 6 files renamed to kebab-case, 16 import paths updated (Phase 3) |
 | Dead code: `JsonViewer.svelte`, `ToolExecution.svelte`, unused helpers in `thinking.ts`/`tool.ts` | HIGH | **DONE** | Files deleted, helpers integrated into components, unused exports removed (Phase 2) |
-| Incomplete barrel exports across 5 directories | MEDIUM | **NOT DONE** | Complete barrel exports (Phase 5) |
+| Incomplete barrel exports across 5 directories | MEDIUM | **DONE** | 5 barrels completed + 2 created (legal, settings) + RiskLevel dedup (Phase 5) |
 | Inventory meta counters outdated (88 vs 94 components) | MEDIUM | **DONE** | Updated: total_components 88→94, total_stores 17→18 (Phase 1) |
 | Duplicate delete confirmation modal (`ConfirmDeleteModal` vs `DeleteConfirmModal`) | MEDIUM | **DONE** | Consolidated: `ConfirmDeleteModal` deleted, `DeleteConfirmModal` enhanced with `itemName`/`warningMessageKey` props (Phase 4) |
 | Types `index.ts` JSDoc uses `$lib/types` instead of `$types` | MEDIUM | **DONE** | Fixed JSDoc: `$lib/types` → `$types` (Phase 1) |
 | Unused helper functions in `tool.ts` and `thinking.ts` | MEDIUM | **DONE** | `formatToolDuration`→ToolCallBlock, `truncateThinkingContent`→ThinkingBlock, 11 unused exports removed (Phase 2) |
-| Missing barrel exports for `legal/` and `settings/` | MEDIUM | **NOT DONE** | Create barrel files (Phase 5) |
+| Missing barrel exports for `legal/` and `settings/` | MEDIUM | **DONE** | Created `legal/index.ts` (LegalModal) and `settings/index.ts` (5 components) (Phase 5) |
 | `activity.service.ts` name misleading after SA-019 refactoring | MEDIUM | **NOT DONE** | Rename to `message-enrichment.service.ts` (Phase 6) |
 | `src/lib/validation/` directory with only 2 files | MEDIUM | **NOT DONE** | Merge into `src/lib/utils/` (Phase 6) |
 | `ChatContainer` in `agent/` directory | LOW | **NO ACTION** | Acceptable for page-level component |
