@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 6 DONE
+**Status**: ALL PHASES DONE
 
 ## Context
 
@@ -286,11 +286,13 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 7: Settings Structure (Optional)
+### Phase 7: Settings Structure -- DONE
 
-| ID | Action | Files |
-|----|--------|-------|
-| L-002 | Create `src/lib/components/settings/providers/` subdirectory. Move `APIKeysSection.svelte`, `CustomProviderForm.svelte`, `LLMSection.svelte` into it. Update barrel exports and importers. | `src/lib/components/settings/` |
+| ID | Action | Files | Status |
+|----|--------|-------|--------|
+| L-002 | Created `src/lib/components/settings/providers/` subdirectory. Moved `APIKeysSection.svelte`, `CustomProviderForm.svelte`, `LLMSection.svelte` into it. Created `providers/index.ts` barrel. Updated `settings/index.ts` re-export paths. Updated `src/routes/settings/providers/+page.svelte` import paths. | `src/lib/components/settings/providers/` | **DONE** |
+
+**Changes**: 3 components moved to `providers/` subdirectory, 1 barrel file created (`providers/index.ts`), 1 barrel updated (`settings/index.ts` re-export paths), 1 route page updated (import paths). `LLMSection` relative import of `CustomProviderForm` unchanged (same directory). Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 

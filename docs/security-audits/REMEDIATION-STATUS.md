@@ -12,8 +12,8 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 90 | Fix implemented and tested |
-| NOT DONE | 12 | Not yet addressed |
+| DONE | 91 | Fix implemented and tested |
+| NOT DONE | 11 | Not yet addressed |
 | DOCUMENTED | 3 | Analyzed, documented as non-issue or by-design |
 | N/A | 7 | Not applicable (desktop context) |
 
@@ -22,7 +22,7 @@
 | CRITICAL (4) | 4 | 0 |
 | HIGH (30) | 30 | 0 |
 | MEDIUM (39) | 41 | 0 |
-| LOW (19) | 12 | 7 |
+| LOW (19) | 13 | 6 |
 | N/A (7) | - | - |
 
 **All 4 CRITICAL findings are remediated.**
@@ -35,7 +35,7 @@
 **SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
-**SA-022 PHASE 5 DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion (5 barrels updated, 2 created, 1 duplicate type fixed). 2 MEDIUM + 1 LOW remaining. 2 phases left.**
+**SA-022 ALL PHASES DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion. P6: Service & directory cleanup + sub-agent blocks bug fix. P7: Settings providers restructuration (3 components moved to providers/ subdirectory).**
 
 ---
 
@@ -860,7 +860,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 | `activity.service.ts` name misleading after SA-019 refactoring | MEDIUM | **DONE** | Renamed to `sub-agent-execution.service.ts`, export `SubAgentExecutionService` (Phase 6) |
 | `src/lib/validation/` directory with only 2 files | MEDIUM | **DONE** | Merged into `src/lib/utils/` as `validation-schemas.ts` + `validation-invoke.ts` (Phase 6) |
 | `ChatContainer` in `agent/` directory | LOW | **NO ACTION** | Acceptable for page-level component |
-| Settings top-level loose files (provider-related) | LOW | **NOT DONE** | Move to `providers/` subdirectory (Phase 7, optional) |
+| Settings top-level loose files (provider-related) | LOW | **DONE** | Moved `APIKeysSection`, `CustomProviderForm`, `LLMSection` to `settings/providers/` subdirectory (Phase 7) |
 | `ToolStatus` type duplication | LOW | **DONE** | Resolved: only `streaming.ts` definition remains (Phase 2) |
 
 **Phases**: 7 (Quick fixes -> Dead code -> Naming -> Modal -> Barrel exports -> Service cleanup -> Settings structure)

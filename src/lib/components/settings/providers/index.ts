@@ -15,15 +15,13 @@
  */
 
 /**
- * Settings Components Index
- * Re-exports top-level settings components for easy importing
+ * Provider Settings Components
+ * LLM provider management: configuration, API keys, custom providers.
  *
  * @example
- * import { LLMSection, MCPSection } from '$lib/components/settings';
+ * import { LLMSection, APIKeysSection } from '$lib/components/settings/providers';
  */
 
-export { default as APIKeysSection } from './providers/APIKeysSection.svelte';
-export { default as CustomProviderForm } from './providers/CustomProviderForm.svelte';
-export { default as LLMSection } from './providers/LLMSection.svelte';
-export { default as MCPSection } from './MCPSection.svelte';
-export { default as SettingsSectionHeader } from './SettingsSectionHeader.svelte';
+export { default as APIKeysSection } from './APIKeysSection.svelte';
+export { default as CustomProviderForm } from './CustomProviderForm.svelte';
+export { default as LLMSection } from './LLMSection.svelte';

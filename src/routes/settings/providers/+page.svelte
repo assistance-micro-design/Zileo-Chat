@@ -22,8 +22,8 @@ Manages LLM providers and models configuration.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ProviderType } from '$types/llm';
-	import LLMSection from '$lib/components/settings/LLMSection.svelte';
-	import APIKeysSection from '$lib/components/settings/APIKeysSection.svelte';
+	import LLMSection from '$lib/components/settings/providers/LLMSection.svelte';
+	import APIKeysSection from '$lib/components/settings/providers/APIKeysSection.svelte';
 	import type { ProviderSettings } from '$types/llm';
 
 	/** Component reference for reload capability */
