@@ -69,16 +69,16 @@ Uses extracted components, services, and stores for clean architecture.
 		executionResponse as executionResponse$,
 		executionTasks as executionTasks$,
 		executionWorkflowId as executionWorkflowId$
-	} from '$lib/stores/executionBlocks';
+	} from '$lib/stores/execution-blocks';
 	import { validationStore, pendingValidation } from '$lib/stores/validation';
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
-	import { userQuestionStore } from '$lib/stores/userQuestion';
+	import { userQuestionStore } from '$lib/stores/user-question';
 	import {
 		backgroundWorkflowsStore,
 		runningWorkflowIds as runningWorkflowIds$,
 		recentlyCompletedIds as recentlyCompletedIds$,
 		questionPendingIds as questionPendingIds$
-	} from '$lib/stores/backgroundWorkflows';
+	} from '$lib/stores/background-workflows';
 	import { toastStore, navigationTarget } from '$lib/stores/toast';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';

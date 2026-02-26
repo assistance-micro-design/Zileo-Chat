@@ -26,7 +26,7 @@ Supports bulk resolution with "Apply to all" option.
 <script lang="ts">
 	import { Card, Badge, Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import type { ImportConflict, ConflictResolution } from '$types/importExport';
+	import type { ImportConflict, ConflictResolution } from '$types/import-export';
 
 	/** Props */
 	interface Props {

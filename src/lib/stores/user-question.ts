@@ -21,7 +21,7 @@
  * User question store for managing interactive question-answer sessions during workflow execution.
  * Works in coordination with backgroundWorkflowsStore, which owns all event listeners and
  * dispatches question events to this store with workflow context.
- * @module stores/userQuestion
+ * @module stores/user-question
  */
 
 import { writable, derived, get } from 'svelte/store';
@@ -32,7 +32,7 @@ import type {
 	UserQuestionStreamPayload
 } from '$types/user-question';
 import { getErrorMessage } from '$lib/utils/error';
-import { backgroundWorkflowsStore } from './backgroundWorkflows';
+import { backgroundWorkflowsStore } from './background-workflows';
 import { toastStore } from './toast';
 
 /**

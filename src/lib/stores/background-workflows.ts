@@ -25,7 +25,7 @@
  * in its internal map, forwards chunks for the currently-viewed workflow to the
  * streaming store, and fires toast notifications on completion and user questions.
  *
- * @module stores/backgroundWorkflows
+ * @module stores/background-workflows
  */
 
 import { writable, derived, get } from 'svelte/store';

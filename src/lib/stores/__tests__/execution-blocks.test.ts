@@ -15,7 +15,7 @@ import {
 	executionResponse,
 	executionError,
 	executionTasks
-} from '../executionBlocks';
+} from '../execution-blocks';
 import type { StreamChunk } from '$types/streaming';
 import type { ChatBlock } from '$types/chat-block';
 

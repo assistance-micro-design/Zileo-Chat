@@ -4,7 +4,7 @@
 **Type**: Quality audit
 **Scope**: Frontend file structure, naming conventions, barrel exports, dead code
 **Branch**: `security/audit-remediation-tdd`
-**Status**: PHASE 2 DONE
+**Status**: PHASE 3 DONE
 
 ## Context
 
@@ -229,21 +229,21 @@ Resolves automatically when `ToolExecution.svelte` is removed (H-002).
 
 ---
 
-### Phase 3: Naming Normalization
+### Phase 3: Naming Normalization -- DONE
 
 **Convention choisie**: **kebab-case** (aligns with SvelteKit route naming, already used by 4 files).
 
-| ID | Action | From | To | Importers to update |
-|----|--------|------|----|---------------------|
-| H-001a | Rename type file | `src/types/customProvider.ts` | `src/types/custom-provider.ts` | ~5 importers |
-| H-001b | Rename type file | `src/types/importExport.ts` | `src/types/import-export.ts` | ~2 importers |
-| H-001c | Rename type file | `src/types/function_calling.ts` | `src/types/function-calling.ts` | ~1 importer |
-| H-001d | Rename store file | `src/lib/stores/backgroundWorkflows.ts` | `src/lib/stores/background-workflows.ts` | ~2 importers |
-| H-001e | Rename store file | `src/lib/stores/executionBlocks.ts` | `src/lib/stores/execution-blocks.ts` | ~2 importers |
-| H-001f | Rename store file | `src/lib/stores/userQuestion.ts` | `src/lib/stores/user-question.ts` | ~2 importers |
-| H-001g | Rename store file | `src/lib/stores/validation-settings.ts` | Already kebab-case | No change needed |
+| ID | Action | From | To | Importers updated | Status |
+|----|--------|------|----|-------------------|--------|
+| H-001a | Rename type file | `src/types/customProvider.ts` | `src/types/custom-provider.ts` | 4 (llm.ts, ModelForm, LLMSection, AgentForm) | **DONE** |
+| H-001b | Rename type file | `src/types/importExport.ts` | `src/types/import-export.ts` | 5 + 1 barrel (ConflictResolver, MCPFieldEditor, MCPEnvEditor, ImportPanel, ImportPreview, index.ts) | **DONE** |
+| H-001c | Rename type file | `src/types/function_calling.ts` | `src/types/function-calling.ts` | 1 barrel (index.ts) | **DONE** |
+| H-001d | Rename store file | `src/lib/stores/backgroundWorkflows.ts` | `src/lib/stores/background-workflows.ts` | 3 (userQuestion.ts, workflowExecutor.service.ts, +page.svelte) | **DONE** |
+| H-001e | Rename store file | `src/lib/stores/executionBlocks.ts` | `src/lib/stores/execution-blocks.ts` | 3 + 1 test (workflowExecutor.service.ts, +page.svelte, execution-blocks.test.ts) | **DONE** |
+| H-001f | Rename store file | `src/lib/stores/userQuestion.ts` | `src/lib/stores/user-question.ts` | 3 (UserQuestionModal, +page.svelte, stores/index.ts) | **DONE** |
+| H-001g | Rename store file | `src/lib/stores/validation-settings.ts` | Already kebab-case | N/A | **DONE** |
 
-**Verification**: After each rename, update all importers + barrel exports, then `npm run check`.
+**Changes**: 6 files renamed (3 types + 3 stores), 1 test file renamed, 16 import paths updated, 2 barrel re-exports updated, 6 JSDoc `@module` tags updated. Validation: `npm run lint` + `npm run check` + `npm run test` (260 tests) all pass.
 
 ---
 

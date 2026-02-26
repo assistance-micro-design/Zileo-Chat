@@ -12,15 +12,15 @@
 
 | Status | Count | Description |
 |--------|-------|-------------|
-| DONE | 88 | Fix implemented and tested |
-| NOT DONE | 14 | Not yet addressed |
+| DONE | 89 | Fix implemented and tested |
+| NOT DONE | 13 | Not yet addressed |
 | DOCUMENTED | 3 | Analyzed, documented as non-issue or by-design |
 | N/A | 7 | Not applicable (desktop context) |
 
 | Category | DONE | NOT DONE |
 |----------|------|----------|
 | CRITICAL (4) | 4 | 0 |
-| HIGH (30) | 29 | 1 |
+| HIGH (30) | 30 | 0 |
 | MEDIUM (39) | 41 | 0 |
 | LOW (19) | 12 | 7 |
 | N/A (7) | - | - |
@@ -35,7 +35,7 @@
 **SA-019 ALL PHASES DONE: Block-by-block agent chat refactoring. P1-P2: backend events+persistence. P3-P4: frontend display+sidebar removal. P5: dead code cleanup + 4 bug fixes. P6: TodoTool tasks display (inline task list grouped by agent, 9 TDD tests, persistence fix + agent name resolution). Follow-up: auto-scroll fix.**
 **SA-020 ALL PHASES DONE: Hybrid agent ID/name resolution. P1: UNIQUE index + backend validation. P2: AgentRegistry.get_by_name(). P3: resolve_agent_ref() shared function. P4: DelegateTaskTool accepts agent_name. P5: ParallelTasksTool accepts agent_name + real names in events/reports. P6: Frontend duplicate name validation + i18n. P7: Documentation. 22 TDD tests, 12 files, +1225/-268 lines.**
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
-**SA-022 PHASE 2 DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal (JsonViewer, ToolExecution) + helper integration (formatToolDuration→ToolCallBlock, truncateThinkingContent→ThinkingBlock) + 11 unused exports removed. 1 HIGH + 5 MEDIUM + 1 LOW remaining. 5 phases left.**
+**SA-022 PHASE 3 DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case (6 files renamed: 3 types + 3 stores, 16 import paths updated). 5 MEDIUM + 1 LOW remaining. 4 phases left.**
 
 ---
 
@@ -849,7 +849,7 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 
 | Finding | Severity | Status | Fix |
 |---------|----------|--------|-----|
-| Mixed naming conventions in `src/types/` (4 styles) and `src/lib/stores/` (3 styles) | HIGH | **NOT DONE** | Normalize to kebab-case (Phase 3) |
+| Mixed naming conventions in `src/types/` (4 styles) and `src/lib/stores/` (3 styles) | HIGH | **DONE** | 6 files renamed to kebab-case, 16 import paths updated (Phase 3) |
 | Dead code: `JsonViewer.svelte`, `ToolExecution.svelte`, unused helpers in `thinking.ts`/`tool.ts` | HIGH | **DONE** | Files deleted, helpers integrated into components, unused exports removed (Phase 2) |
 | Incomplete barrel exports across 5 directories | MEDIUM | **NOT DONE** | Complete barrel exports (Phase 5) |
 | Inventory meta counters outdated (88 vs 94 components) | MEDIUM | **DONE** | Updated: total_components 88→94, total_stores 17→18 (Phase 1) |

@@ -29,7 +29,7 @@ Combines Providers and Models sections.
 		UpdateModelRequest,
 		LLMState
 	} from '$types/llm';
-	import type { ProviderInfo } from '$types/customProvider';
+	import type { ProviderInfo } from '$types/custom-provider';
 	import { Card, Button, StatusIndicator, Modal, HelpButton, Select } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';

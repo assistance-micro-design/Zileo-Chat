@@ -23,7 +23,7 @@
  * Replaces the streaming store's content accumulation with discrete blocks
  * (thinking, tool calls, sub-agents) that appear as each step completes.
  *
- * @module stores/executionBlocks
+ * @module stores/execution-blocks
  */
 
 import { writable, derived } from 'svelte/store';

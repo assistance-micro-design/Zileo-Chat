@@ -23,7 +23,7 @@
  * Types for exporting and importing configuration entities (Agents, MCP Servers, Models, Prompts).
  * Synchronized with src-tauri/src/models/import_export.rs
  *
- * @module types/importExport
+ * @module types/import-export
  */
 
 import type { AgentSummary, LLMConfig } from './agent';

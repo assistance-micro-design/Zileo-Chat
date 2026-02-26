@@ -40,7 +40,7 @@
 	import type { SelectOption } from '$lib/components/ui';
 	import { i18n, t } from '$lib/i18n';
 	import type { CreateModelRequest, UpdateModelRequest, LLMModel, ProviderType } from '$types/llm';
-	import type { ProviderInfo } from '$types/customProvider';
+	import type { ProviderInfo } from '$types/custom-provider';
 
 	/**
 	 * ModelForm props

@@ -33,7 +33,7 @@ import type {
 	ConnectionTestResult,
 	ProviderType
 } from '$types/llm';
-import type { ProviderInfo, CustomProviderResponse } from '$types/customProvider';
+import type { ProviderInfo, CustomProviderResponse } from '$types/custom-provider';
 
 // ============================================================================
 // Cache Management (OPT-9)

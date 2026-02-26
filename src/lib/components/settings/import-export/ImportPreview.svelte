@@ -27,7 +27,7 @@ Refactored for SA-010 DUP-2: data-driven loops replace 4 identical summary cards
 <script lang="ts">
 	import { Card, Badge } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import type { ImportValidation, ImportSelection } from '$types/importExport';
+	import type { ImportValidation, ImportSelection } from '$types/import-export';
 
 	/** Props */
 	interface Props {

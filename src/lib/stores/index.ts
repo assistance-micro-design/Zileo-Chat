@@ -32,7 +32,7 @@ export * from './prompts';
 export * from './tokens';
 export * from './locale';
 export * from './onboarding';
-export * from './userQuestion';
+export * from './user-question';
 export * from './validation';
 export * from './factory';
 export {

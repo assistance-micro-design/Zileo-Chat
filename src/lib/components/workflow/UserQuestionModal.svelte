@@ -31,7 +31,7 @@
 		currentQuestion,
 		isSubmitting,
 		isModalOpen
-	} from '$lib/stores/userQuestion';
+	} from '$lib/stores/user-question';
 	import type { UserQuestionResponse } from '$types/user-question';
 
 	let selectedOptions = $state<string[]>([]);

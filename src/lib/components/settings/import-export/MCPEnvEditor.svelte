@@ -26,8 +26,8 @@ Marks sensitive keys as required.
 <script lang="ts">
 	import { Card, Input, Badge } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import type { MCPAdditions } from '$types/importExport';
-	import { SENSITIVE_ENV_PATTERNS } from '$types/importExport';
+	import type { MCPAdditions } from '$types/import-export';
+	import { SENSITIVE_ENV_PATTERNS } from '$types/import-export';
 
 	/** Props */
 	interface Props {

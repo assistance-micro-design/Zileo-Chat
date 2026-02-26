@@ -26,7 +26,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 	import { Badge } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import type { MCPSanitizationConfig } from '$types';
-	import { SENSITIVE_ENV_PATTERNS } from '$types/importExport';
+	import { SENSITIVE_ENV_PATTERNS } from '$types/import-export';
 
 	/** Props */
 	interface Props {

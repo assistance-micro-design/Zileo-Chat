@@ -52,6 +52,6 @@ export * from './mcp';
 export * from './task';
 export * from './embedding';
 export * from './prompt';
-export * from './importExport';
-export * from './function_calling';
+export * from './import-export';
+export * from './function-calling';
 export * from './onboarding';

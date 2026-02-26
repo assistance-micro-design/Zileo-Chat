@@ -39,7 +39,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		setProviderSettings
 	} from '$lib/stores/llm';
 	import type { ProviderType, LLMState } from '$types/llm';
-	import type { ProviderInfo } from '$types/customProvider';
+	import type { ProviderInfo } from '$types/custom-provider';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { onMount } from 'svelte';

@@ -23,7 +23,7 @@
  * These types mirror the Rust types in src-tauri/src/models/function_calling.rs
  * and are used for frontend display of tool execution (if needed).
  *
- * @module function_calling
+ * @module function-calling
  */
 
 /**

@@ -43,8 +43,8 @@ Orchestrates the multi-step import process:
 		MCPAdditions,
 		ConfigImportResult,
 		ExportPackage
-	} from '$types/importExport';
-	import { MAX_IMPORT_FILE_SIZE } from '$types/importExport';
+	} from '$types/import-export';
+	import { MAX_IMPORT_FILE_SIZE } from '$types/import-export';
 	import { Upload, CheckCircle, AlertCircle } from '@lucide/svelte';
 
 	/** Props */

@@ -18,7 +18,7 @@
  * Custom provider types for OpenAI-compatible providers.
  *
  * Synchronized with src-tauri/src/models/custom_provider.rs
- * @module types/customProvider
+ * @module types/custom-provider
  */
 
 /**
