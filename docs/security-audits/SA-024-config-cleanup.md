@@ -115,26 +115,30 @@ Reporte a une phase ulterieure. Les annotations existantes (~165) restent en pla
 
 ---
 
-## Phase 4: Config & Inventory (Items 3, 6)
+## Phase 4: Config & Inventory (Items 3, 6) - DONE
 
-### 4.1 - Fix inventory total_commands (H3)
+### 4.1 - Fix inventory total_commands (H3) - DONE
 
 **Fichier**: `.claude/registry/inventory.yml`
 
-**Action**: Changer `total_commands: 106` en `total_commands: 123`
+**Action realisee**:
+- `total_commands: 106` -> `total_commands: 123`
+- Audit complet: l'inventaire ne listait que **84** commandes (pas 106 comme indique dans le header)
+- **39 commandes ajoutees** (pas 17 comme estime initialement):
+  - 5 modules entiers manquants: `llm` (9 cmd), `thinking` (5), `migration` (4), `user_question` (3), `sub_agent_execution` (2)
+  - 6 modules partiellement documentes: `tool_execution` (+5), `mcp` (+1), `llm_models` (+1), `validation` (+3), `embedding` (+2), `task` (+1)
+- 0 commandes obsoletes trouvees (toutes les commandes listees existent dans le code)
 
-Optionnel: identifier et ajouter les 17 commandes manquantes dans l'inventaire detaille.
+### 4.2 - Move svelte-virtual-list to dependencies (M4) - DONE
 
-### 4.2 - Move svelte-virtual-list to dependencies (M4)
+**Fichiers modifies**: `package.json`, `package-lock.json`
 
-**Fichier**: `package.json`
-
-**Action**:
-1. Verifier que `@humanspeak/svelte-virtual-list` est utilise dans des `.svelte` (production)
-2. Si oui: deplacer de `devDependencies` vers `dependencies`
+**Action realisee**:
+1. Verifie: `@humanspeak/svelte-virtual-list` est importe dans `MemoryList.svelte` (composant production)
+2. Deplace de `devDependencies` vers `dependencies`
 3. `npm install` pour regenerer le lockfile
 
-**Verification**: `npm run check` + `npm run build`
+**Verification**: `npm run lint` PASS, `npm run check` PASS (0 errors, 0 warnings)
 
 ---
 
@@ -175,6 +179,6 @@ npm run test
 - [x] Zero `.expect()` dans les LLM providers (hors startup/tests)
 - [ ] `#[allow(dead_code)]` reduit de 120+ a minimum justifie (DEFERRED)
 - [x] Zero commentaire `OPT-*` dans le codebase (171 supprimes dans 52 fichiers)
-- [ ] `total_commands: 123` dans inventory.yml
-- [ ] `@humanspeak/svelte-virtual-list` dans `dependencies` (si utilise en prod)
+- [x] `total_commands: 123` dans inventory.yml (+ 39 commandes ajoutees a l'inventaire detaille)
+- [x] `@humanspeak/svelte-virtual-list` dans `dependencies` (utilise dans MemoryList.svelte)
 - [ ] Tous les checks passent (fmt, clippy, test, lint, check)

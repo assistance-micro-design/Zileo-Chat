@@ -37,7 +37,7 @@
 **SA-021 DONE: Report enforcement mechanism. Detects generic "Task completed" messages and makes one follow-up LLM call for a proper markdown report. 6 TDD tests, 1 file, +175 lines.**
 **SA-022 ALL PHASES DONE: Frontend structure & naming audit. P1: JSDoc fix + inventory counters. P2: Dead code removal + helper integration. P3: Naming normalization to kebab-case. P4: Modal consolidation. P5: Barrel export completion. P6: Service & directory cleanup + sub-agent blocks bug fix. P7: Settings providers restructuration (3 components moved to providers/ subdirectory).**
 **SA-023 P1-P4 DONE: Backend structure & naming audit. P1: ProviderType consolidated into llm/provider.rs. P2: commands/models.rs renamed to commands/llm_models.rs. P3: safe_truncate() moved to tools/utils.rs. P4: App-wide constants moved to top-level constants.rs.**
-**SA-024 P1-P3 DONE: P1: Dependency cleanup (once_cell, futures, surrealdb pin). P2: Production robustness - 7 .expect() converted to Result in LLM providers. P3: Code hygiene - 171 OPT-* markers removed from 52 files (32 Rust + 20 frontend). dead_code audit deferred.**
+**SA-024 P1-P4 DONE: P1: Dependency cleanup (once_cell, futures, surrealdb pin). P2: Production robustness - 7 .expect() converted to Result in LLM providers. P3: Code hygiene - 171 OPT-* markers removed from 52 files (32 Rust + 20 frontend). dead_code audit deferred. P4: Config & Inventory - total_commands fixed (106->123, 39 commands added to inventory), svelte-virtual-list moved to dependencies.**
 
 ---
 
@@ -920,8 +920,11 @@ Test count: 933 (Phase 4) -> 932 (Phase 5) -- 1 test deleted.
 - Result propagated to `AppState::new()`, `load_embedding_config()`, `update_embedding_service_internal()`
 - M3: 171 OPT-* traceability markers removed from 52 files (32 Rust + 20 frontend)
 - H2: `#[allow(dead_code)]` audit deferred to future phase
-**Files modified**: 5 (P1) + 15 (P2) + 52 (P3)
-**Tests**: 2000 pass (cargo test), 0 failures
+**Phase 4 DONE**: Config & Inventory.
+- H3: `total_commands` fixed from 106 to 123 in `inventory.yml`; 39 missing commands added (5 entire modules + 6 partial modules)
+- M4: `@humanspeak/svelte-virtual-list` moved from `devDependencies` to `dependencies` (used in `MemoryList.svelte`)
+**Files modified**: 5 (P1) + 15 (P2) + 52 (P3) + 3 (P4: inventory.yml, package.json, package-lock.json)
+**Tests**: npm run lint PASS, npm run check PASS (0 errors)
 
 **Details**: `docs/security-audits/SA-024-config-cleanup.md`
 
