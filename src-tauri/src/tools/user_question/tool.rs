@@ -52,14 +52,14 @@ struct AskInput {
 /// - Ask users questions with multiple response types
 /// - Wait for responses with progressive polling (5-minute timeout)
 /// - Receive checkbox selections, text input, or both
-/// - Circuit breaker protection against repeated timeouts (OPT-UQ-12)
+/// - Circuit breaker protection against repeated timeouts
 ///
 /// # Scope
 ///
 /// Each UserQuestionTool instance is scoped to a specific workflow and agent.
 /// Questions created will be associated with the workflow_id provided at construction.
 ///
-/// # Circuit Breaker (OPT-UQ-12)
+/// # Circuit Breaker
 ///
 /// The tool tracks consecutive timeouts per workflow. After 3 consecutive timeouts,
 /// the circuit opens and new questions are rejected immediately for 60 seconds.
@@ -73,7 +73,7 @@ pub struct UserQuestionTool {
     agent_id: String,
     /// Tauri app handle for emitting streaming events
     app_handle: Option<AppHandle>,
-    /// Circuit breaker for timeout resilience (OPT-UQ-12)
+    /// Circuit breaker for timeout resilience
     circuit_breaker: RwLock<UserQuestionCircuitBreaker>,
 }
 
@@ -288,7 +288,7 @@ impl UserQuestionTool {
     /// # Arguments
     /// * `input` - Question details including type, options, and context
     ///
-    /// # Circuit Breaker (OPT-UQ-12)
+    /// # Circuit Breaker
     ///
     /// Before asking, checks if the circuit breaker allows new questions.
     /// If the circuit is open (too many recent timeouts), returns an error immediately.
@@ -298,7 +298,7 @@ impl UserQuestionTool {
     /// - Skip: treated as success (user actively responded)
     #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
     async fn ask_question(&self, input: AskInput) -> ToolResult<Value> {
-        // OPT-UQ-12: Check circuit breaker before asking
+        // Check circuit breaker before asking
         {
             let mut cb = self.circuit_breaker.write().map_err(|e| {
                 ToolError::ExecutionFailed(format!("Circuit breaker lock poisoned: {}", e))
@@ -333,7 +333,7 @@ impl UserQuestionTool {
         // Wait for response and update circuit breaker based on result
         let response = self.wait_for_response(&question_id).await;
 
-        // OPT-UQ-12: Update circuit breaker based on response
+        // Update circuit breaker based on response
         match &response {
             Ok(_) => {
                 if let Ok(mut cb) = self.circuit_breaker.write() {
@@ -380,7 +380,7 @@ impl UserQuestionTool {
         let mut interval_idx = 0;
 
         loop {
-            // Check timeout first (OPT-UQ-7)
+            // Check timeout first
             if start.elapsed() > timeout {
                 warn!(
                     question_id = %question_id,

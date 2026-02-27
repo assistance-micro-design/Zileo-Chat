@@ -864,7 +864,7 @@ mod tests {
         assert!(preview.ends_with("..."));
     }
 
-    // SA-017/OPT-7: Tests for validate_trimmed_name
+    // Tests for validate_trimmed_name
 
     #[test]
     fn test_validate_trimmed_name_valid() {

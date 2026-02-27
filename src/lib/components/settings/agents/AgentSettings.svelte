@@ -137,7 +137,7 @@ Provides CRUD operations for agents with list view and form modal.
 </script>
 
 <div class="agent-settings">
-	<!-- SA-017/OPT-2: Shared settings section header -->
+	<!-- Shared settings section header -->
 	<SettingsSectionHeader
 		titleKey="agents_config_title"
 		descriptionKey="agents_config_description"
@@ -148,7 +148,7 @@ Provides CRUD operations for agents with list view and form modal.
 		onCreate={handleCreate}
 	/>
 
-	<!-- SA-017/OPT-1: Shared error banner -->
+	<!-- Shared error banner -->
 	{#if $error}
 		<ErrorBanner message={$error} onDismiss={handleDismissError} />
 	{/if}
@@ -170,7 +170,7 @@ Provides CRUD operations for agents with list view and form modal.
 	{/if}
 </div>
 
-<!-- SA-017/OPT-3: Shared delete confirmation modal -->
+<!-- Shared delete confirmation modal -->
 <DeleteConfirmModal
 	open={showDeleteConfirm}
 	titleKey="agents_delete_title"

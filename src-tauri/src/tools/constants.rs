@@ -77,12 +77,12 @@ pub mod user_question {
     pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
     pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
 
-    // OPT-UQ-7: Configurable timeout for wait_for_response
+    // Configurable timeout for wait_for_response
     /// Default timeout (seconds) for waiting for user response.
     /// After this duration, the question status is set to "timeout" and an error is returned.
     pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
 
-    // OPT-UQ-12: Circuit Breaker for UserQuestionTool
+    // Circuit Breaker for UserQuestionTool
     /// Number of consecutive timeouts before opening the circuit breaker.
     /// When reached, new questions are rejected until cooldown expires.
     pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;
@@ -97,7 +97,7 @@ pub mod user_question {
 pub mod sub_agent {
     pub use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
 
-    // OPT-SA-1: Inactivity Timeout with Heartbeat
+    // Inactivity Timeout with Heartbeat
     /// Timeout (seconds) without any activity before aborting sub-agent execution.
     /// Activity includes: LLM tokens received, tool calls started/completed, MCP responses.
     pub const INACTIVITY_TIMEOUT_SECS: u64 = 300; // 5 minutes
@@ -105,9 +105,9 @@ pub mod sub_agent {
     /// Interval (seconds) between activity checks in the monitoring loop.
     pub const ACTIVITY_CHECK_INTERVAL_SECS: u64 = 30;
 
-    // OPT-SA-3: Centralized Magic Numbers
+    // Centralized Magic Numbers
     /// Maximum characters for result summaries in sub-agent reports.
-    /// (Used in OPT-SA-4/5 when event emission is unified)
+    /// (Used when event emission is unified)
     #[allow(dead_code)]
     pub const RESULT_SUMMARY_MAX_CHARS: usize = 200;
 
@@ -120,7 +120,7 @@ pub mod sub_agent {
     /// Polling interval for checking validation status (milliseconds).
     pub const VALIDATION_POLL_MS: u64 = 500;
 
-    // OPT-SA-8: Circuit Breaker for Sub-Agent Execution
+    // Circuit Breaker for Sub-Agent Execution
     /// Number of consecutive failures before opening the circuit breaker.
     /// When reached, sub-agent executions are rejected until cooldown expires.
     pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;
@@ -129,7 +129,7 @@ pub mod sub_agent {
     /// After this period, one execution is allowed to test if the system recovered.
     pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
 
-    // OPT-SA-10: Retry with Exponential Backoff
+    // Retry with Exponential Backoff
     /// Maximum number of retry attempts for transient errors.
     /// Set to 2 for a total of 3 attempts (initial + 2 retries).
     pub const MAX_RETRY_ATTEMPTS: u32 = 2;

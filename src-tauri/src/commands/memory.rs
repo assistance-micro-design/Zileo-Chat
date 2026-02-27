@@ -154,7 +154,7 @@ pub async fn list_memories(
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
-    // Add LIMIT to prevent memory explosion (OPT-DB-8)
+    // Add LIMIT to prevent memory explosion
     let query = format!(
         "SELECT meta::id(id) AS id, type, content, workflow_id, metadata, created_at \
          FROM memory{} ORDER BY created_at DESC LIMIT {}",

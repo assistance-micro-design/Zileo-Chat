@@ -98,7 +98,7 @@ pub async fn execute_workflow_streaming(
         .create_cancellation_token(&validated_workflow_id)
         .await;
 
-    // OPT-WF-1: Use centralized query constant with bind param
+    // Use centralized query constant with bind param
     let query = format!("{} WHERE meta::id(id) = $wf_id", wf_queries::SELECT_BASIC);
 
     let json_results = state
@@ -356,7 +356,7 @@ pub async fn execute_workflow_streaming(
 
     aggregate_sub_agent_tokens(&state, &validated_workflow_id).await;
 
-    // Convert tool executions to IPC-friendly format (OPT-7: clones necessary for IPC serialization)
+    // Convert tool executions to IPC-friendly format (clones necessary for IPC serialization)
     let tool_executions: Vec<WorkflowToolExecution> = report
         .metrics
         .tool_executions

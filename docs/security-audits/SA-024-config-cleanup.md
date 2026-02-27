@@ -87,30 +87,31 @@
 
 ---
 
-## Phase 3: Code Hygiene (Items 5, 7)
+## Phase 3: Code Hygiene (Item 7) - DONE
 
-### 3.1 - Clean OPT-* comments (M3)
+### 3.1 - Clean OPT-* comments (M3) - DONE
 
-**Action**: Supprimer TOUS les commentaires OPT-* du codebase.
+**Action**: Supprimer TOUS les marqueurs OPT-* du codebase tout en gardant le texte descriptif utile.
 
-**Pattern a chercher**: `// OPT-` dans tous les fichiers `.rs`, `.ts`, `.svelte`
+**171 marqueurs supprimes** dans 52 fichiers (32 Rust + 20 frontend).
 
-**Methode**: `grep -rn "// OPT-"` puis suppression systematique des lignes ou nettoyage du commentaire.
+**Patterns traites**:
+- `(OPT-XXX)` en fin de commentaire -> supprime
+- `(OPT-XXX: texte)` -> garde `(texte)`
+- `// OPT-XXX: texte` -> `// texte`
+- `(OPT-XXX, OPT-YYY)` -> supprime
+- `-- OPT-XXX: texte` (SQL) -> `-- texte`
+- `OPT-XXX` inline apres du code -> supprime
 
-**Verification**: `grep -rn "OPT-" src-tauri/src/ src/` doit retourner 0 resultats
+**Fichiers modifies (Rust - 32)**: commands/ (agent, llm_models, mcp, memory, streaming, task, user_question, workflow), constants.rs, db/ (queries, schema), llm/ (manager, mistral, mod, ollama), mcp/manager.rs, models/sub_agent.rs, security/validation.rs, state.rs, tools/ (constants, context, delegate_task, memory/tool, parallel_tasks, spawn_agent, sub_agent_circuit_breaker, sub_agent_executor, user_question/circuit_breaker, user_question/mod, user_question/tool, utils, validation_helper)
 
-### 3.2 - Audit `#[allow(dead_code)]` (H2)
+**Fichiers modifies (Frontend - 20)**: components/settings/ (MCPSection, SettingsSectionHeader, agents/, memory/, prompts/, providers/), components/ui/ (DeleteConfirmModal, ErrorBanner), stores/ (llm, mcp, user-question), routes/ (agent, settings), styles/global.css
 
-**Approche en 3 etapes**:
+**Verification**: `grep -rn "OPT-" src-tauri/src/ src/` retourne 0 resultats. cargo clippy PASS (0 warnings), cargo test PASS.
 
-1. **Inventaire**: Lister tous les `#[allow(dead_code)]` hors `#[cfg(test)]`
-2. **Categoriser**:
-   - **Supprimer**: Code vraiment mort, jamais appele -> supprimer le code ET l'annotation
-   - **Convertir**: Code test-only -> deplacer sous `#[cfg(test)]`
-   - **Garder**: API surface intentionnelle documentee (avec commentaire justificatif)
-3. **Nettoyer**: Meme traitement pour `#[allow(unused_imports)]` dans les `mod.rs`
+### 3.2 - Audit `#[allow(dead_code)]` (H2) - DEFERRED
 
-**Verification**: `cargo clippy -- -D warnings` + `cargo test` + count avant/apres
+Reporte a une phase ulterieure. Les annotations existantes (~165) restent en place.
 
 ---
 
@@ -172,8 +173,8 @@ npm run test
 - [x] `futures` supprime de Cargo.toml, remplace par `futures_util`
 - [x] `surrealdb` version pinnee a `~2.6` (resolu a 2.6.2)
 - [x] Zero `.expect()` dans les LLM providers (hors startup/tests)
-- [ ] `#[allow(dead_code)]` reduit de 120+ a minimum justifie
-- [ ] Zero commentaire `OPT-*` dans le codebase
+- [ ] `#[allow(dead_code)]` reduit de 120+ a minimum justifie (DEFERRED)
+- [x] Zero commentaire `OPT-*` dans le codebase (171 supprimes dans 52 fichiers)
 - [ ] `total_commands: 123` dans inventory.yml
 - [ ] `@humanspeak/svelte-virtual-list` dans `dependencies` (si utilise en prod)
 - [ ] Tous les checks passent (fmt, clippy, test, lint, check)

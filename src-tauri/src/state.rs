@@ -40,7 +40,7 @@ pub struct AppState {
     pub tool_factory: Arc<ToolFactory>,
     /// Embedding service for semantic search (configured via Settings UI)
     ///
-    /// NOTE (OPT-DB-9): This uses a double-Arc pattern `Arc<RwLock<Option<Arc<T>>>>`.
+    /// NOTE: This uses a double-Arc pattern `Arc<RwLock<Option<Arc<T>>>>`.
     /// Could be simplified to `Arc<RwLock<Option<T>>>` if EmbeddingService implements Clone.
     /// Deferred as Nice-to-Have due to 12+ files affected. See optimization-db.md for details.
     pub embedding_service: Arc<RwLock<Option<Arc<EmbeddingService>>>>,
@@ -145,7 +145,7 @@ impl AppState {
     }
 
     /// Checks if a workflow has been requested to cancel
-    /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly (OPT-WF-7)
+    /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly
     #[allow(dead_code)] // Test-only: production uses CancellationToken::is_cancelled() directly
     pub async fn is_cancelled(&self, workflow_id: &str) -> bool {
         self.streaming_cancellations

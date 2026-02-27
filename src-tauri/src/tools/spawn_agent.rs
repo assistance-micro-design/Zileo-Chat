@@ -116,7 +116,7 @@ pub struct SpawnAgentTool {
     tool_factory: Arc<ToolFactory>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
-    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    /// Cancellation token for graceful shutdown
     cancellation_token: Option<CancellationToken>,
     /// Parent agent ID
     parent_agent_id: String,
@@ -138,7 +138,7 @@ impl SpawnAgentTool {
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
     ///
-    /// # Cancellation Token (OPT-SA-7)
+    /// # Cancellation Token
     ///
     /// The cancellation token is extracted from the `AgentToolContext`. If provided,
     /// sub-agents spawned by this tool will monitor the token and abort execution
@@ -271,7 +271,7 @@ impl SpawnAgentTool {
         }
 
         // 5. Request human-in-the-loop validation
-        // OPT-SA-7: Create executor with cancellation token for graceful shutdown
+        // Create executor with cancellation token for graceful shutdown
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
@@ -348,7 +348,7 @@ impl SpawnAgentTool {
             .create_execution_record(&sub_agent_id, name, prompt)
             .await?;
 
-        // OPT-SA-11: Include execution_id in creation log for hierarchical tracing
+        // Include execution_id in creation log for hierarchical tracing
         info!(
             sub_agent_id = %sub_agent_id,
             execution_id = %execution_id,
@@ -395,7 +395,7 @@ impl SpawnAgentTool {
             }),
         };
 
-        // 15. Execute sub-agent with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10)
+        // 15. Execute sub-agent with retry and heartbeat monitoring
         let exec_result = executor.execute_with_retry(&sub_agent_id, task, None).await;
 
         // 16. Emit completion or error event
@@ -432,7 +432,7 @@ impl SpawnAgentTool {
             );
         }
 
-        // OPT-SA-11: Include execution_id for hierarchical tracing
+        // Include execution_id for hierarchical tracing
         info!(
             sub_agent_id = %sub_agent_id,
             execution_id = %execution_id,

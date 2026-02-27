@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_validate_api_key_rejects_newlines() {
-        // OPT-4: Reject newlines (HTTP header injection prevention)
+        // Reject newlines (HTTP header injection prevention)
         let result = Validator::validate_api_key("sk-1234567890abcdef\nInjection");
         assert!(matches!(
             result,

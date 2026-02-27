@@ -15,7 +15,7 @@
 -->
 
 <!--
-Settings Layout - Route-based navigation with sidebar (OPT-SCROLL-ROUTES)
+Settings Layout - Route-based navigation with sidebar
 Each section is now a separate route for better performance and UX.
 -->
 
@@ -48,7 +48,7 @@ Each section is now a separate route for better performance and UX.
 	let isScrolling = $state(false);
 
 	/**
-	 * OPT-SCROLL-FIX: Disable pointer events during scroll to prevent
+	 * Disable pointer events during scroll to prevent
 	 * expensive hover state recalculations in WebKit2GTK
 	 */
 	let scrollTimeout: ReturnType<typeof setTimeout>;
@@ -288,13 +288,13 @@ Each section is now a separate route for better performance and UX.
 		overflow-y: auto;
 		padding: var(--spacing-xl);
 		-webkit-overflow-scrolling: touch;
-		/* OPT-SCROLL-FIX: contain: content instead of will-change */
+		/* contain: content instead of will-change */
 		/* will-change: scroll-position causes GPU overhead in WebKit2GTK */
 		contain: content;
 	}
 
 	/**
-	 * OPT-SCROLL-FIX: Disable pointer events during scroll
+	 * Disable pointer events during scroll
 	 * This prevents expensive hover state recalculations in WebKit2GTK
 	 * The technique is used by major apps like Twitter/X for smooth scrolling
 	 * SA-017/PERF-3: Removed :global(*) selector - parent is sufficient

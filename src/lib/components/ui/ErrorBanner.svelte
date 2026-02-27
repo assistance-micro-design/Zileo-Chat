@@ -19,7 +19,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 ErrorBanner - Reusable error display banner with dismiss button.
-SA-017/OPT-1: Extracted from AgentSettings and PromptSettings.
+Extracted from AgentSettings and PromptSettings.
 -->
 
 <script lang="ts">

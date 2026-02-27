@@ -100,7 +100,7 @@ pub struct SubAgentExecution {
     pub result_summary: Option<String>,
     /// Error message if status is Error
     pub error_message: Option<String>,
-    /// Parent execution ID for hierarchical tracing (OPT-SA-11).
+    /// Parent execution ID for hierarchical tracing.
     /// Links this execution to a parent execution record (e.g., batch operations).
     /// None for top-level executions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -131,7 +131,7 @@ pub struct SubAgentExecutionCreate {
     pub task_description: String,
     /// Initial status (as string for SurrealDB)
     pub status: String,
-    /// Parent execution ID for hierarchical tracing (OPT-SA-11).
+    /// Parent execution ID for hierarchical tracing.
     /// Links to a parent execution record for correlation tracking.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_execution_id: Option<String>,
@@ -165,7 +165,7 @@ impl SubAgentExecutionCreate {
         }
     }
 
-    /// Creates a new SubAgentExecutionCreate with a parent execution ID (OPT-SA-11).
+    /// Creates a new SubAgentExecutionCreate with a parent execution ID.
     ///
     /// Use this method when creating a sub-execution that should be linked
     /// to a parent execution for hierarchical tracing.
@@ -491,7 +491,7 @@ mod tests {
         assert_eq!(constants::MAX_SUB_AGENTS, 15);
     }
 
-    // OPT-SA-11: Tests for parent_execution_id (Correlation ID for Hierarchical Tracing)
+    // Tests for parent_execution_id (Correlation ID for Hierarchical Tracing)
 
     #[test]
     fn test_sub_agent_execution_create_with_parent() {

@@ -19,7 +19,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 EmbeddingTestCard - Test embedding generation with sample text.
-SA-017/OPT-5: Extracted from MemorySettings.svelte.
+Extracted from MemorySettings.svelte.
 -->
 
 <script lang="ts">

@@ -1010,7 +1010,7 @@ mod tests {
 
     #[test]
     fn test_validate_mcp_env_shell_injection() {
-        // OPT-6: Shell injection prevention tests
+        // Shell injection prevention tests
         let test_cases = vec![
             ("PIPE", "value|cmd", "pipe"),
             ("SEMI", "value;cmd", "semicolon"),

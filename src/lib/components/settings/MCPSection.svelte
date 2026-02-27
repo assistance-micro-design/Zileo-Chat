@@ -15,7 +15,7 @@
 -->
 
 <!--
-MCP Servers Section - Extracted from Settings page (OPT-6a)
+MCP Servers Section - Extracted from Settings page
 Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 -->
 
@@ -366,7 +366,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
-		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
+		contain: layout style; /* Isolate layout recalculations */
 	}
 
 	.mcp-loading {

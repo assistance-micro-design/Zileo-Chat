@@ -62,12 +62,12 @@ const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 /// Handles provider configuration, switching, and completion requests.
 ///
 /// The manager maintains a shared HTTP client for all providers to benefit
-/// from connection pooling and avoid repeated TLS handshakes (OPT-LLM-2).
+/// from connection pooling and avoid repeated TLS handshakes.
 ///
-/// Retry mechanism with exponential backoff (OPT-LLM-4) handles transient
+/// Retry mechanism with exponential backoff handles transient
 /// failures automatically.
 ///
-/// Circuit breaker pattern (OPT-LLM-6) protects against cascading failures
+/// Circuit breaker pattern protects against cascading failures
 /// when providers are unavailable.
 pub struct ProviderManager {
     /// Mistral provider instance
@@ -81,9 +81,9 @@ pub struct ProviderManager {
     /// Shared HTTP client for all providers (connection pooling)
     #[allow(dead_code)] // Stored for http_client() accessor
     http_client: Arc<reqwest::Client>,
-    /// Retry configuration for API calls (OPT-LLM-4)
+    /// Retry configuration for API calls
     retry_config: RetryConfig,
-    /// Circuit breakers for each provider (OPT-LLM-6)
+    /// Circuit breakers for each provider
     circuit_breakers: Arc<RwLock<HashMap<ProviderType, CircuitBreaker>>>,
 }
 
@@ -92,10 +92,10 @@ impl ProviderManager {
     ///
     /// Initializes a shared HTTP client with connection pooling for all providers.
     /// This improves performance by reusing connections and avoiding TLS handshake
-    /// overhead on subsequent requests (OPT-LLM-2).
+    /// overhead on subsequent requests.
     ///
-    /// Also initializes retry configuration with exponential backoff (OPT-LLM-4)
-    /// and circuit breakers for each provider (OPT-LLM-6).
+    /// Also initializes retry configuration with exponential backoff
+    /// and circuit breakers for each provider.
     ///
     /// # Errors
     /// Returns an error if the HTTP client fails to initialize.
@@ -188,7 +188,7 @@ impl ProviderManager {
         &self.http_client
     }
 
-    /// Checks if the circuit breaker allows requests to the given provider (OPT-LLM-6).
+    /// Checks if the circuit breaker allows requests to the given provider.
     ///
     /// Returns Ok(()) if the circuit is available, or CircuitOpen error if not.
     async fn check_circuit_breaker(&self, provider: ProviderType) -> Result<(), LLMError> {
@@ -209,7 +209,7 @@ impl ProviderManager {
         }
     }
 
-    /// Records a successful request for the circuit breaker (OPT-LLM-6).
+    /// Records a successful request for the circuit breaker.
     async fn record_circuit_success(&self, provider: ProviderType) {
         let breakers = self.circuit_breakers.read().await;
         if let Some(breaker) = breakers.get(&provider) {
@@ -217,7 +217,7 @@ impl ProviderManager {
         }
     }
 
-    /// Records a failed request for the circuit breaker (OPT-LLM-6).
+    /// Records a failed request for the circuit breaker.
     async fn record_circuit_failure(&self, provider: ProviderType) {
         let breakers = self.circuit_breakers.read().await;
         if let Some(breaker) = breakers.get(&provider) {
@@ -410,8 +410,8 @@ impl ProviderManager {
 
     /// Completes a prompt using the active provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
-    /// and circuit breaker protection (OPT-LLM-6).
+    /// This method wraps the provider completion with retry logic
+    /// and circuit breaker protection.
     ///
     /// Transient errors (network issues, rate limits) are retried with exponential
     /// backoff, while non-recoverable errors (auth failures, bad requests) fail immediately.
@@ -444,7 +444,7 @@ impl ProviderManager {
             (provider, model_str)
         };
 
-        // Check circuit breaker before making request (OPT-LLM-6)
+        // Check circuit breaker before making request
         self.check_circuit_breaker(provider_type.clone()).await?;
 
         debug!(
@@ -458,7 +458,7 @@ impl ProviderManager {
         let system_prompt_owned = system_prompt.map(|s| s.to_string());
         let model_owned = model_to_use.clone();
 
-        // Execute with retry (OPT-LLM-4)
+        // Execute with retry
         let result = match &provider_type {
             ProviderType::Mistral => {
                 let mistral = self.mistral.clone();
@@ -536,7 +536,7 @@ impl ProviderManager {
             }
         };
 
-        // Record result for circuit breaker (OPT-LLM-6)
+        // Record result for circuit breaker
         match &result {
             Ok(_) => self.record_circuit_success(provider_type).await,
             Err(_) => self.record_circuit_failure(provider_type).await,
@@ -547,8 +547,8 @@ impl ProviderManager {
 
     /// Completes a prompt using a specific provider with automatic retry.
     ///
-    /// This method wraps the provider completion with retry logic (OPT-LLM-4)
-    /// and circuit breaker protection (OPT-LLM-6).
+    /// This method wraps the provider completion with retry logic
+    /// and circuit breaker protection.
     #[allow(clippy::too_many_arguments)]
     pub async fn complete_with_provider(
         &self,
@@ -560,7 +560,7 @@ impl ProviderManager {
         max_tokens: usize,
         is_reasoning: bool,
     ) -> Result<LLMResponse, LLMError> {
-        // Check circuit breaker before making request (OPT-LLM-6)
+        // Check circuit breaker before making request
         self.check_circuit_breaker(provider.clone()).await?;
 
         // Clone values for the retry closure
@@ -643,7 +643,7 @@ impl ProviderManager {
             }
         };
 
-        // Record result for circuit breaker (OPT-LLM-6)
+        // Record result for circuit breaker
         match &result {
             Ok(_) => self.record_circuit_success(provider).await,
             Err(_) => self.record_circuit_failure(provider).await,
@@ -655,8 +655,8 @@ impl ProviderManager {
     /// Completes with tools using a specific provider with automatic retry.
     ///
     /// This method is used for JSON function calling with tool definitions.
-    /// Includes retry logic with exponential backoff (OPT-LLM-4) and circuit
-    /// breaker protection (OPT-LLM-6).
+    /// Includes retry logic with exponential backoff and circuit
+    /// breaker protection.
     ///
     /// # Arguments
     /// * `provider` - Which provider to use
@@ -685,7 +685,7 @@ impl ProviderManager {
         temperature: f32,
         max_tokens: usize,
     ) -> Result<serde_json::Value, LLMError> {
-        // Check circuit breaker before making request (OPT-LLM-6)
+        // Check circuit breaker before making request
         self.check_circuit_breaker(provider.clone()).await?;
 
         debug!(
@@ -765,7 +765,7 @@ impl ProviderManager {
             }
         };
 
-        // Record result for circuit breaker (OPT-LLM-6)
+        // Record result for circuit breaker
         match &result {
             Ok(_) => self.record_circuit_success(provider).await,
             Err(_) => self.record_circuit_failure(provider).await,
@@ -924,7 +924,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // Circuit breaker tests (OPT-LLM-6)
+    // Circuit breaker tests
 
     #[tokio::test]
     async fn test_circuit_breaker_initial_status() {

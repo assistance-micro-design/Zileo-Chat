@@ -18,15 +18,15 @@
 //! (commands, workflows, database queries). Tool-specific constants remain
 //! in [`crate::tools::constants`].
 
-// ===== Workflow Constants (OPT-WF-3, OPT-WF-9) =====
+// ===== Workflow Constants =====
 /// Constants for workflow execution and streaming.
 #[allow(dead_code)]
 pub mod workflow {
-    /// Maximum number of messages to include in LLM context (OPT-WF-3).
+    /// Maximum number of messages to include in LLM context.
     /// Prevents context overflow while maintaining conversation coherence.
     pub const MESSAGE_HISTORY_LIMIT: usize = 50;
 
-    // OPT-WF-9: Tokio Timeout Constants
+    // Tokio Timeout Constants
     /// Timeout (seconds) for LLM execution operations.
     /// Default: 5 minutes - generous for complex reasoning tasks.
     pub const LLM_EXECUTION_TIMEOUT_SECS: u64 = 300;
@@ -40,7 +40,7 @@ pub mod workflow {
     pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
 }
 
-// ===== Query Limits (OPT-DB-8) =====
+// ===== Query Limits =====
 /// Default limits for database queries to prevent memory explosion.
 #[allow(dead_code)] // Some constants prepared for future use
 pub mod query_limits {
@@ -56,7 +56,7 @@ pub mod query_limits {
     pub const DEFAULT_MODELS_LIMIT: usize = 100;
 }
 
-// ===== Command Validation Constants (OPT-2) =====
+// ===== Command Validation Constants =====
 /// Centralized validation constants for Tauri commands.
 /// These constants define limits and valid values across the application.
 #[allow(dead_code)]

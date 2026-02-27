@@ -15,7 +15,7 @@
 -->
 
 <!--
-API Keys Section - Extracted from Settings page (OPT-6c)
+API Keys Section - Extracted from Settings page
 Manages API key configuration modal for LLM providers.
 -->
 
@@ -75,7 +75,7 @@ Manages API key configuration modal for LLM providers.
 			return;
 		}
 
-		// OPT-10: Confirmation before saving API key
+		// Confirmation before saving API key
 		if (!confirm($i18n('api_key_confirm_save'))) {
 			return;
 		}

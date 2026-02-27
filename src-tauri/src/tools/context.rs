@@ -83,13 +83,13 @@ pub struct AgentToolContext {
     pub tool_factory: Arc<ToolFactory>,
     /// Tauri app handle for emitting events (optional, for validation)
     pub app_handle: Option<AppHandle>,
-    /// Cancellation token for graceful shutdown of sub-agent execution (OPT-SA-7)
+    /// Cancellation token for graceful shutdown of sub-agent execution
     ///
     /// When provided, sub-agents will monitor this token and abort execution
     /// if cancellation is requested. This enables the user to cancel long-running
     /// workflows and have sub-agents respond immediately.
     pub cancellation_token: Option<CancellationToken>,
-    /// Circuit breaker for sub-agent execution resilience (OPT-SA-8)
+    /// Circuit breaker for sub-agent execution resilience
     ///
     /// When provided, sub-agent tools will check the circuit state before execution
     /// and record success/failure after execution. This prevents cascade failures
@@ -110,7 +110,7 @@ impl AgentToolContext {
     /// * `mcp_manager` - Optional MCP manager for tool routing
     /// * `tool_factory` - Factory for creating tools
     /// * `app_handle` - Optional Tauri app handle for event emission
-    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown
     ///
     /// # Example
     /// ```ignore
@@ -141,7 +141,7 @@ impl AgentToolContext {
             tool_factory,
             app_handle,
             cancellation_token,
-            circuit_breaker: None, // OPT-SA-8: Default to None for backward compatibility
+            circuit_breaker: None, // Default to None for backward compatibility
         }
     }
 
@@ -177,7 +177,7 @@ impl AgentToolContext {
         }
     }
 
-    /// Creates an AgentToolContext from AppState with cancellation token support (OPT-SA-7).
+    /// Creates an AgentToolContext from AppState with cancellation token support.
     ///
     /// This constructor should be used when executing workflows that need graceful
     /// cancellation support for sub-agents.
@@ -217,7 +217,7 @@ impl AgentToolContext {
         }
     }
 
-    /// Creates an AgentToolContext from AppState with full resilience features (OPT-SA-7, OPT-SA-8).
+    /// Creates an AgentToolContext from AppState with full resilience features.
     ///
     /// This constructor should be used when executing workflows that need both
     /// graceful cancellation and circuit breaker protection for sub-agents.
@@ -226,8 +226,8 @@ impl AgentToolContext {
     /// * `app_state` - The application state containing all managers
     /// * `mcp_manager` - Optional MCP manager
     /// * `app_handle` - Optional Tauri app handle for event emission
-    /// * `cancellation_token` - Optional cancellation token for graceful shutdown (OPT-SA-7)
-    /// * `circuit_breaker` - Optional circuit breaker for execution resilience (OPT-SA-8)
+    /// * `cancellation_token` - Optional cancellation token for graceful shutdown
+    /// * `circuit_breaker` - Optional circuit breaker for execution resilience
     ///
     /// # Example
     /// ```ignore
@@ -410,7 +410,7 @@ mod tests {
         assert!(Arc::ptr_eq(&context.tool_factory, &tool_factory));
         assert!(context.app_handle.is_none());
         assert!(context.cancellation_token.is_none());
-        assert!(context.circuit_breaker.is_none()); // OPT-SA-8
+        assert!(context.circuit_breaker.is_none());
     }
 
     #[tokio::test]
@@ -452,7 +452,7 @@ mod tests {
     }
 
     // =========================================================================
-    // OPT-SA-8: Circuit Breaker Tests
+    // Circuit Breaker Tests
     // =========================================================================
 
     #[tokio::test]

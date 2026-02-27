@@ -125,7 +125,7 @@ pub async fn list_models(
 
     // Build query based on filter
     // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
-    // Add LIMIT to prevent memory explosion (OPT-DB-8)
+    // Add LIMIT to prevent memory explosion
     // Use bind params for provider filter to prevent SurrealQL injection (Custom providers have user-supplied names)
     let result: Vec<LLMModel> = if let Some(ref pt) = provider_filter {
         let query = format!(

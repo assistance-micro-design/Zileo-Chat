@@ -20,7 +20,7 @@ SPDX-License-Identifier: Apache-2.0
 
 MemorySettings - Embedding configuration for Memory Tool.
 Allows users to configure embedding provider, model, and chunking settings via modal.
-SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
+Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 -->
 
 <script lang="ts">
@@ -263,7 +263,7 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 			{/snippet}
 		</Card>
 	{:else}
-		<!-- SA-017/OPT-4: Embedding Configuration Card -->
+		<!-- Embedding Configuration Card -->
 		<EmbeddingConfigCard
 			{config}
 			{configExists}
@@ -273,10 +273,10 @@ SA-017/OPT-4-6: Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemorySt
 			onDelete={handleDelete}
 		/>
 
-		<!-- SA-017/OPT-5: Embedding Test Card -->
+		<!-- Embedding Test Card -->
 		<EmbeddingTestCard {configExists} />
 
-		<!-- SA-017/OPT-6: Memory Statistics Card -->
+		<!-- Memory Statistics Card -->
 		<MemoryStatsCard {stats} {tokenStats} />
 	{/if}
 </div>

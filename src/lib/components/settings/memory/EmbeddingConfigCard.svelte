@@ -19,7 +19,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 EmbeddingConfigCard - Displays current embedding configuration with edit/delete actions.
-SA-017/OPT-4: Extracted from MemorySettings.svelte.
+Extracted from MemorySettings.svelte.
 -->
 
 <script lang="ts">

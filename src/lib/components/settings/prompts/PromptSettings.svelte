@@ -133,7 +133,7 @@ Provides CRUD operations for prompts with list view and form modal.
 </script>
 
 <div class="prompt-settings">
-	<!-- SA-017/OPT-2: Shared settings section header -->
+	<!-- Shared settings section header -->
 	<SettingsSectionHeader
 		titleKey="prompts_title"
 		descriptionKey="prompts_description"
@@ -144,7 +144,7 @@ Provides CRUD operations for prompts with list view and form modal.
 		onCreate={handleCreate}
 	/>
 
-	<!-- SA-017/OPT-1: Shared error banner -->
+	<!-- Shared error banner -->
 	{#if $promptError}
 		<ErrorBanner
 			message={$promptError}
@@ -179,7 +179,7 @@ Provides CRUD operations for prompts with list view and form modal.
 	{/snippet}
 </Modal>
 
-<!-- SA-017/OPT-3: Shared delete confirmation modal -->
+<!-- Shared delete confirmation modal -->
 <DeleteConfirmModal
 	open={showDeleteConfirm}
 	titleKey="prompts_delete_title"

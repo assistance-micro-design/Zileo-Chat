@@ -172,7 +172,7 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
 }
 
 // ============================================================================
-// Database Serialization Helpers (OPT-5)
+// Database Serialization Helpers
 // ============================================================================
 
 /// Serialized agent configuration fields for database operations
@@ -333,7 +333,7 @@ pub async fn create_agent(
     // Generate UUID for new agent
     let agent_id = uuid::Uuid::new_v4().to_string();
 
-    // Build full AgentConfig (OPT-7: destructure instead of cloning individual fields)
+    // Build full AgentConfig (destructure instead of cloning individual fields)
     let AgentConfigCreate {
         name,
         lifecycle,
@@ -363,7 +363,7 @@ pub async fn create_agent(
         enable_thinking,
     };
 
-    // Serialize fields for database (OPT-5 refactoring)
+    // Serialize fields for database
     let fields = serialize_agent_fields(&agent_config)?;
 
     let query = format!(
@@ -397,7 +397,7 @@ pub async fn create_agent(
         format!("Failed to persist agent: {}", e)
     })?;
 
-    // Register agent in runtime (OPT-5 refactoring)
+    // Register agent in runtime
     register_agent_runtime(state.inner(), &agent_id, agent_config).await;
 
     info!(agent_id = %agent_id, "Agent created successfully");

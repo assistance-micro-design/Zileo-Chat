@@ -244,13 +244,13 @@ impl MCPManager {
             clients.insert(name.clone(), client);
         }
 
-        // Add ID -> Name lookup for O(1) access (OPT-7)
+        // Add ID -> Name lookup for O(1) access
         {
             let mut id_lookup = self.id_to_name.write().await;
             id_lookup.insert(id.clone(), name.clone());
         }
 
-        // Create circuit breaker for this server (OPT-6)
+        // Create circuit breaker for this server
         {
             let mut breakers = self.circuit_breakers.write().await;
             breakers.insert(name.clone(), CircuitBreaker::with_defaults(name.clone()));
@@ -282,7 +282,7 @@ impl MCPManager {
     pub async fn stop_server(&self, id: &str) -> MCPResult<()> {
         info!(server_id = %id, "Stopping MCP server");
 
-        // O(1) lookup via id_to_name table (OPT-7)
+        // O(1) lookup via id_to_name table
         let name = {
             let id_lookup = self.id_to_name.read().await;
             id_lookup.get(id).cloned()
@@ -329,7 +329,7 @@ impl MCPManager {
     ///
     /// Returns the server state if found (running or stopped).
     pub async fn get_server(&self, id: &str) -> Option<MCPServer> {
-        // O(1) lookup via id_to_name table (OPT-7)
+        // O(1) lookup via id_to_name table
         let name = {
             let id_lookup = self.id_to_name.read().await;
             id_lookup.get(id).cloned()
@@ -442,7 +442,7 @@ impl MCPManager {
             "Calling MCP tool"
         );
 
-        // Check circuit breaker before making the call (OPT-6)
+        // Check circuit breaker before making the call
         {
             let mut breakers = self.circuit_breakers.write().await;
             if let Some(breaker) = breakers.get_mut(server_name) {
@@ -980,7 +980,7 @@ impl MCPManager {
     pub async fn restart_server(&self, id: &str) -> MCPResult<MCPServer> {
         info!(server_id = %id, "Restarting MCP server");
 
-        // O(1) lookup via id_to_name table (OPT-7)
+        // O(1) lookup via id_to_name table
         let name = {
             let id_lookup = self.id_to_name.read().await;
             id_lookup.get(id).cloned()
@@ -1038,7 +1038,7 @@ impl MCPManager {
         }
     }
 
-    /// Starts periodic health checks for all connected servers (OPT-8)
+    /// Starts periodic health checks for all connected servers
     ///
     /// Spawns a background task that periodically checks server health
     /// using `list_tools()` as a health probe. Unhealthy servers will have

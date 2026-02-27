@@ -254,7 +254,7 @@ impl MemoryTool {
     /// * `memory_id` - Memory ID to retrieve
     #[instrument(skip(self), fields(memory_id = %memory_id))]
     async fn get_memory(&self, memory_id: &str) -> ToolResult<Value> {
-        // OPT-MEM-5: Parameterized query for security
+        // Parameterized query for security
         let query = r#"SELECT
                 meta::id(id) AS id,
                 type,
@@ -521,7 +521,7 @@ impl MemoryTool {
 
         let workflow_id = self.resolve_query_workflow_id(input);
 
-        // OPT-MEM-5: Use execute_with_params() for parameterized DELETE
+        // Use execute_with_params() for parameterized DELETE
         let (delete_query, params) = if let Some(ref wf_id) = workflow_id {
             (
                 "DELETE FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id"
@@ -748,7 +748,7 @@ EXAMPLES:
     /// Executes the tool with JSON input.
     #[instrument(skip(self, input), fields(agent_id = %self.agent_id))]
     async fn execute(&self, input: Value) -> ToolResult<Value> {
-        // Parse and validate input once using MemoryInput (OPT-MEM-8)
+        // Parse and validate input once using MemoryInput
         let params = MemoryInput::from_json(&input)?;
         params.validate()?;
 
@@ -824,7 +824,7 @@ EXAMPLES:
 
     /// Validates input before execution (trait requirement).
     ///
-    /// Note: After OPT-MEM-8, `execute()` performs its own parsing and validation
+    /// Note: After refactoring, `execute()` performs its own parsing and validation
     /// using `MemoryInput`. This method is kept for trait compliance and can be
     /// used for external validation.
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
@@ -839,7 +839,7 @@ EXAMPLES:
 }
 
 // =============================================================================
-// MemoryInput - Structured input parsing and validation (OPT-MEM-7)
+// MemoryInput - Structured input parsing and validation
 // =============================================================================
 
 /// Parsed and typed memory operation input.
@@ -847,7 +847,7 @@ EXAMPLES:
 /// This struct reduces the cyclomatic complexity of `validate_input()` and `execute()` by:
 /// 1. Extracting JSON parsing into `from_json()`
 /// 2. Delegating validation to per-operation methods
-/// 3. Providing typed fields for direct use in `execute()` (OPT-MEM-8)
+/// 3. Providing typed fields for direct use in `execute()`
 ///
 /// CC reduced from ~18 to ~8 in validate_input(), ~15 to ~7 in execute().
 #[derive(Debug)]

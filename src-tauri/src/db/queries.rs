@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Centralized Query Constants (OPT-WF-1)
+//! # Centralized Query Constants
 //!
 //! Contains SQL query templates for SurrealDB to eliminate duplication
 //! and ensure consistent field selection across commands.
@@ -88,7 +88,7 @@ pub mod workflow {
         completed_at
     FROM workflow"#;
 
-    /// Tables that have workflow_id foreign key and need cascade delete (OPT-WF-8).
+    /// Tables that have workflow_id foreign key and need cascade delete.
     /// Order doesn't matter as these are deleted in parallel.
     pub const CASCADE_DELETE_TABLES: &[&str] = &[
         "task",
@@ -102,7 +102,7 @@ pub mod workflow {
     ];
 }
 
-/// Cascade delete helpers (OPT-WF-8).
+/// Cascade delete helpers.
 pub mod cascade {
     use crate::db::DBClient;
     use futures_util::future::join_all;

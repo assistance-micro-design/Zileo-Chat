@@ -36,7 +36,7 @@ import { backgroundWorkflowsStore } from './background-workflows';
 import { toastStore } from './toast';
 
 /**
- * Maximum number of pending questions to prevent memory issues (OPT-UQ-4)
+ * Maximum number of pending questions to prevent memory issues
  */
 const MAX_PENDING_QUESTIONS = 50;
 
@@ -113,7 +113,7 @@ export const userQuestionStore = {
 		};
 
 		store.update((s) => {
-			// Limit queue size to prevent memory issues (OPT-UQ-4)
+			// Limit queue size to prevent memory issues
 			const newPending = [...s.pendingQuestions, question].slice(-MAX_PENDING_QUESTIONS);
 			return {
 				...s,

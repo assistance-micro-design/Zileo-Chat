@@ -46,7 +46,7 @@ impl OllamaProvider {
     /// Creates a new Ollama provider with default settings and a shared HTTP client.
     ///
     /// The HTTP client is used for direct API calls (thinking models, tool calls)
-    /// and provides connection pooling for better performance (OPT-LLM-2).
+    /// and provides connection pooling for better performance.
     pub fn new(http_client: Arc<reqwest::Client>) -> Self {
         Self {
             client: Arc::new(RwLock::new(None)),

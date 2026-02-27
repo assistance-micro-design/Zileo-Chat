@@ -202,7 +202,7 @@ pub async fn list_workflow_tasks(
 
     let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
-    // Add LIMIT to prevent memory explosion (OPT-DB-8)
+    // Add LIMIT to prevent memory explosion
     let query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -259,7 +259,7 @@ pub async fn list_tasks_by_status(
         ));
     }
 
-    // Add LIMIT to prevent memory explosion (OPT-DB-8)
+    // Add LIMIT to prevent memory explosion
     let query = if let Some(wf_id) = workflow_id {
         let validated_wf_id = validate_uuid_field(&wf_id, "workflow_id")?;
         format!(

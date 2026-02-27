@@ -57,7 +57,7 @@ DEFINE FIELD OVERWRITE duration_ms ON message TYPE option<int>;
 DEFINE FIELD OVERWRITE timestamp ON message TYPE datetime DEFAULT time::now();
 
 -- =============================================
--- Index Review (OPT-DB-11): Write-Heavy Table Analysis
+-- Index Review: Write-Heavy Table Analysis
 -- =============================================
 -- message is a write-heavy table (every LLM response creates a record)
 -- Index trade-off: faster reads vs slower writes
@@ -87,9 +87,9 @@ DEFINE FIELD OVERWRITE created_at ON memory TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
 -- Index for workflow scoping
 DEFINE INDEX OVERWRITE memory_workflow_idx ON memory FIELDS workflow_id;
--- OPT-MEM-4: Composite index for search_memories() with type + workflow_id
+-- Composite index for search_memories() with type + workflow_id
 DEFINE INDEX OVERWRITE memory_type_workflow_idx ON memory FIELDS type, workflow_id;
--- OPT-MEM-4: Composite index for TTL cleanup preparation (type + created_at)
+-- Composite index for TTL cleanup preparation (type + created_at)
 DEFINE INDEX OVERWRITE memory_type_created_idx ON memory FIELDS type, created_at;
 
 -- Table: validation_request
@@ -154,7 +154,7 @@ DEFINE FIELD OVERWRITE success ON mcp_call_log TYPE bool;
 DEFINE FIELD OVERWRITE duration_ms ON mcp_call_log TYPE int;
 DEFINE FIELD OVERWRITE timestamp ON mcp_call_log TYPE datetime DEFAULT time::now();
 -- =============================================
--- Index Review (OPT-DB-11): Write-Heavy Table Analysis
+-- Index Review: Write-Heavy Table Analysis
 -- =============================================
 -- mcp_call_log is write-heavy (every MCP tool call creates a record)
 -- Index trade-off: faster reads vs slower writes

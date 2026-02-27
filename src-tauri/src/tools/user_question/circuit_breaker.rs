@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Circuit Breaker for UserQuestionTool Timeout Resilience (OPT-UQ-12)
+//! Circuit Breaker for UserQuestionTool Timeout Resilience
 //!
 //! Implements the circuit breaker pattern to prevent repeated questions when
 //! users are unresponsive. Opens after 3 consecutive timeouts, preventing

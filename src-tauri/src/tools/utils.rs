@@ -128,7 +128,7 @@ pub fn validate_enum_value(value: &str, valid_values: &[&str], field_name: &str)
     Ok(())
 }
 
-/// OPT-MEM-9: Parameterized query builder for SQL-injection safe queries.
+/// Parameterized query builder for SQL-injection safe queries.
 /// Returns both the query string and the bind parameters.
 #[allow(dead_code)]
 pub struct ParamQueryBuilder {

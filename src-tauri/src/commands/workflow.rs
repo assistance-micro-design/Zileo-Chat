@@ -110,7 +110,7 @@ pub async fn execute_workflow(
         format!("Invalid agent_id: {}", e)
     })?;
 
-    // 1. Load workflow (OPT-WF-1: Use centralized query constant)
+    // 1. Load workflow (Use centralized query constant)
     let query = format!(
         "{} WHERE meta::id(id) = '{}'",
         wf_queries::SELECT_BASIC,
@@ -132,7 +132,7 @@ pub async fn execute_workflow(
         context: serde_json::json!({}),
     };
 
-    // 3. Execute via orchestrator with MCP support (OPT-WF-9: with timeout)
+    // 3. Execute via orchestrator with MCP support (with timeout)
     let execution_future = state.orchestrator.execute_with_mcp(
         &validated_agent_id,
         task,
@@ -192,7 +192,7 @@ pub async fn execute_workflow(
 pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>, String> {
     info!("Loading workflows");
 
-    // OPT-WF-1: Use centralized query constant
+    // Use centralized query constant
     let query = wf_queries::SELECT_LIST;
 
     let json_results = state.db.query_json(query).await.map_err(|e| {
@@ -285,7 +285,7 @@ pub async fn delete_workflow(
 
     let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
-    // OPT-WF-8: Use centralized cascade delete helper
+    // Use centralized cascade delete helper
     // This eliminates 8 Arc clones + 8 ID clones by using a single helper function
     cascade::delete_workflow_related(&state.db, &validated_id).await;
 
@@ -354,7 +354,7 @@ pub async fn load_workflow_full_state(
     let db3 = Arc::clone(&state.db);
     let db4 = Arc::clone(&state.db);
 
-    // Execute all queries in parallel using tokio::try_join! (OPT-WF-9: with timeout)
+    // Execute all queries in parallel using tokio::try_join! (with timeout)
     let parallel_queries = async {
         tokio::try_join!(
             async move {

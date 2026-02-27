@@ -87,7 +87,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
-	// PageState Interface (OPT-FA-9: Aggregate UI state)
+	// PageState Interface
 	// ============================================================================
 
 	/**
@@ -136,7 +136,7 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Whether a workflow delete operation is in progress */
 	let deletingWorkflow = $state(false);
 
-	/** Aggregated page state (OPT-FA-9) */
+	/** Aggregated page state */
 	let pageState = $state<PageState>(initialPageState);
 
 	/** Persisted blocks per message (SA-019 P3) */
@@ -668,7 +668,7 @@ Uses extracted components, services, and stores for clean architecture.
 		{/if}
 	</main>
 
-	<!-- Modals (lazy-loaded for bundle optimization - OPT-FA-11) -->
+	<!-- Modals (lazy-loaded for bundle optimization) -->
 	{#if modalState.type === 'new-workflow'}
 		{#await import('$lib/components/workflow/NewWorkflowModal.svelte') then { default: NewWorkflowModal }}
 			<NewWorkflowModal

@@ -33,7 +33,7 @@ Displays memories with filtering, search, and action buttons.
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
-	// OPT-SCROLL-7: Virtual scrolling for large memory lists
+	// Virtual scrolling for large memory lists
 	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 	/** Props */
@@ -438,7 +438,7 @@ Displays memories with filtering, search, and action buttons.
 			{/snippet}
 		</Card>
 	{:else}
-		<!-- OPT-SCROLL-7: Virtual scrolling for large memory lists -->
+		<!-- Virtual scrolling for large memory lists -->
 		<div class="virtual-table-container">
 			<!-- Sticky header row (outside virtual list) -->
 			<div class="virtual-table-header">
@@ -640,7 +640,7 @@ Displays memories with filtering, search, and action buttons.
 		margin: 0;
 	}
 
-	/* Note: Old table styles removed (OPT-SCROLL-7) - replaced by virtual table */
+	/* Note: Old table styles removed - replaced by virtual table */
 
 	.scope-badge {
 		display: inline-block;
@@ -657,7 +657,7 @@ Displays memories with filtering, search, and action buttons.
 		color: var(--color-accent);
 	}
 
-	/* Note: .actions-cell removed (OPT-SCROLL-7) - replaced by .cell-actions */
+	/* Note: .actions-cell removed - replaced by .cell-actions */
 
 	.action-btn {
 		display: flex;
@@ -710,7 +710,7 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/* ============================================
-	   OPT-SCROLL-7: Virtual Table Styles
+	   Virtual Table Styles
 	   Uses CSS Grid to simulate table layout with virtual scrolling
 	   ============================================ */
 
@@ -868,7 +868,7 @@ Displays memories with filtering, search, and action buttons.
 			justify-content: center;
 		}
 
-		/* OPT-SCROLL-7: Responsive virtual table */
+		/* Responsive virtual table */
 		.virtual-table-header,
 		.virtual-row {
 			grid-template-columns: 80px 80px 1fr 100px 80px;

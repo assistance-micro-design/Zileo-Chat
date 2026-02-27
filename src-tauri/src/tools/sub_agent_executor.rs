@@ -115,7 +115,7 @@ impl Default for ExecutionResult {
 }
 
 // =============================================================================
-// OPT-SA-1: ActivityMonitor for Inactivity Timeout with Heartbeat
+// ActivityMonitor for Inactivity Timeout with Heartbeat
 // =============================================================================
 
 /// Callback type for activity notification.
@@ -217,13 +217,13 @@ impl Default for ActivityMonitor {
 /// Centralizes shared logic across SpawnAgentTool, DelegateTaskTool, and ParallelTasksTool
 /// to reduce code duplication and ensure consistent behavior.
 ///
-/// # Cancellation Support (OPT-SA-7)
+/// # Cancellation Support
 ///
 /// The executor supports graceful cancellation via `CancellationToken`. When a token
 /// is provided and cancelled, execution aborts immediately with a "cancelled" result.
 /// This enables users to cancel long-running workflows and have sub-agents respond.
 ///
-/// # Circuit Breaker Support (OPT-SA-8)
+/// # Circuit Breaker Support
 ///
 /// The executor supports circuit breaker protection via `SubAgentCircuitBreaker`.
 /// When provided, the executor will:
@@ -245,9 +245,9 @@ pub struct SubAgentExecutor {
     workflow_id: String,
     /// Parent agent ID (caller of sub-agent tools)
     parent_agent_id: String,
-    /// Optional cancellation token for graceful shutdown (OPT-SA-7)
+    /// Optional cancellation token for graceful shutdown
     cancellation_token: Option<CancellationToken>,
-    /// Optional circuit breaker for execution resilience (OPT-SA-8)
+    /// Optional circuit breaker for execution resilience
     circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
 }
 
@@ -284,7 +284,7 @@ impl SubAgentExecutor {
         }
     }
 
-    /// Creates a new executor with cancellation token support (OPT-SA-7).
+    /// Creates a new executor with cancellation token support.
     ///
     /// Circuit breaker can be configured separately via the `circuit_breaker` field
     /// if needed after construction.
@@ -419,7 +419,7 @@ impl SubAgentExecutor {
             .await
     }
 
-    /// Creates an execution record with optional parent execution ID for hierarchical tracing (OPT-SA-11).
+    /// Creates an execution record with optional parent execution ID for hierarchical tracing.
     ///
     /// # Arguments
     /// * `child_agent_id` - Sub-agent ID
@@ -456,7 +456,7 @@ impl SubAgentExecutor {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
             })?;
 
-        // OPT-SA-11: Log with parent_execution_id for hierarchical tracing
+        // Log with parent_execution_id for hierarchical tracing
         if let Some(ref parent_id) = parent_execution_id {
             debug!(
                 execution_id = %execution_id,
@@ -665,7 +665,7 @@ impl SubAgentExecutor {
     }
 
     // =========================================================================
-    // OPT-SA-8: Circuit Breaker Integration
+    // Circuit Breaker Integration
     // =========================================================================
 
     /// Checks if the circuit breaker allows execution.
@@ -712,9 +712,9 @@ impl SubAgentExecutor {
     }
 
     // =========================================================================
-    // OPT-SA-1: Execution with Heartbeat-based Inactivity Timeout
-    // OPT-SA-7: Cancellation Support
-    // OPT-SA-8: Circuit Breaker Protection
+    // Execution with Heartbeat-based Inactivity Timeout
+    // Cancellation Support
+    // Circuit Breaker Protection
     // =========================================================================
 
     /// Executes an agent with inactivity timeout monitoring, cancellation, and circuit breaker.
@@ -738,7 +738,7 @@ impl SubAgentExecutor {
     /// - Timeout threshold: 300 seconds / 5 minutes (INACTIVITY_TIMEOUT_SECS)
     /// - If no activity for 5 minutes, execution is aborted with an error
     ///
-    /// # Cancellation Behavior (OPT-SA-7)
+    /// # Cancellation Behavior
     ///
     /// If a cancellation token was provided when creating the executor (via
     /// `with_cancellation`), the execution will abort immediately when the
@@ -773,7 +773,7 @@ impl SubAgentExecutor {
         task: Task,
         on_activity: Option<ActivityCallback>,
     ) -> ExecutionResult {
-        // OPT-SA-8: Check circuit breaker before execution
+        // Check circuit breaker before execution
         if let Err(e) = self.check_circuit().await {
             warn!(
                 agent_id = %agent_id,
@@ -847,7 +847,7 @@ impl SubAgentExecutor {
         // Pin the future for use in select!
         tokio::pin!(execution_future);
 
-        // OPT-SA-7: Create cancellation future based on whether token is present
+        // Create cancellation future based on whether token is present
         // If no token, create a future that never completes
         let cancellation_future = async {
             if let Some(ref token) = self.cancellation_token {
@@ -867,7 +867,7 @@ impl SubAgentExecutor {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
                     return match result {
                         Ok(report) => {
-                            // OPT-SA-8: Record success with circuit breaker
+                            // Record success with circuit breaker
                             self.record_success().await;
 
                             info!(
@@ -891,7 +891,7 @@ impl SubAgentExecutor {
                             }
                         }
                         Err(e) => {
-                            // OPT-SA-8: Record failure with circuit breaker
+                            // Record failure with circuit breaker
                             self.record_failure().await;
 
                             let error_msg = e.to_string();
@@ -917,7 +917,7 @@ impl SubAgentExecutor {
                     };
                 }
 
-                // Branch 2: Cancellation requested (OPT-SA-7)
+                // Branch 2: Cancellation requested
                 // Note: Cancellation is user-initiated, not a system failure - don't record as failure
                 _ = &mut cancellation_future => {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
@@ -964,7 +964,7 @@ impl SubAgentExecutor {
                     let inactive_secs = monitor.seconds_since_last_activity();
 
                     if inactive_secs > INACTIVITY_TIMEOUT_SECS {
-                        // OPT-SA-8: Record timeout as failure with circuit breaker
+                        // Record timeout as failure with circuit breaker
                         // Inactivity timeouts indicate system issues, so record as failure
                         self.record_failure().await;
 
@@ -1024,7 +1024,7 @@ impl SubAgentExecutor {
     }
 
     // =========================================================================
-    // OPT-SA-10: Retry with Exponential Backoff
+    // Retry with Exponential Backoff
     // =========================================================================
 
     /// Executes with automatic retry on transient errors using exponential backoff.
@@ -1265,7 +1265,7 @@ impl SubAgentExecutor {
 }
 
 // =============================================================================
-// OPT-SA-10: Retryable Error Helper (standalone function for external use)
+// Retryable Error Helper (standalone function for external use)
 // =============================================================================
 
 /// Checks if an error message indicates a retryable transient error.
@@ -1407,7 +1407,7 @@ mod tests {
     }
 
     // =========================================================================
-    // OPT-SA-1: ActivityMonitor Tests
+    // ActivityMonitor Tests
     // =========================================================================
 
     #[test]
@@ -1488,7 +1488,7 @@ mod tests {
     }
 
     // =========================================================================
-    // OPT-SA-7: CancellationToken Tests
+    // CancellationToken Tests
     // =========================================================================
 
     #[test]
@@ -1552,7 +1552,7 @@ mod tests {
     }
 
     // =========================================================================
-    // OPT-SA-10: Retry with Exponential Backoff Tests
+    // Retry with Exponential Backoff Tests
     // =========================================================================
 
     #[test]
@@ -1697,7 +1697,7 @@ mod tests {
     }
 
     // =========================================================================
-    // OPT-SA-11: Correlation ID (parent_execution_id) Tests
+    // Correlation ID (parent_execution_id) Tests
     // =========================================================================
 
     #[test]

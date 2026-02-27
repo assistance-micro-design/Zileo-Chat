@@ -166,7 +166,7 @@ pub struct DelegateTaskTool {
     mcp_manager: Option<Arc<MCPManager>>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
-    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    /// Cancellation token for graceful shutdown
     cancellation_token: Option<CancellationToken>,
     /// Current agent ID (parent agent)
     current_agent_id: String,
@@ -188,7 +188,7 @@ impl DelegateTaskTool {
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
     ///
-    /// # Cancellation Token (OPT-SA-7)
+    /// # Cancellation Token
     ///
     /// The cancellation token is extracted from the `AgentToolContext`. If provided,
     /// delegated agents will monitor the token and abort execution when cancellation
@@ -344,7 +344,7 @@ impl DelegateTaskTool {
             agent_id.to_string(),
             agent_name.clone(),
             prompt.to_string(),
-            None, // OPT-SA-11: No parent for top-level delegations
+            None, // No parent for top-level delegations
         );
         // Set status to running (new() defaults to pending)
         execution_create.status = "running".to_string();
@@ -357,7 +357,7 @@ impl DelegateTaskTool {
                 ToolError::DatabaseError(format!("Failed to create execution record: {}", e))
             })?;
 
-        // OPT-SA-11: Log execution creation with tracing ID
+        // Log execution creation with tracing ID
         debug!(
             execution_id = %execution_id,
             agent_id = %agent_id,
@@ -375,8 +375,8 @@ impl DelegateTaskTool {
         };
         self.active_delegations.write().await.push(delegation);
 
-        // 9b. Create executor for unified event emission (OPT-SA-4)
-        // OPT-SA-7: Use with_cancellation for graceful shutdown support
+        // 9b. Create executor for unified event emission
+        // Use with_cancellation for graceful shutdown support
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
@@ -401,10 +401,10 @@ impl DelegateTaskTool {
             }),
         };
 
-        // 11. Execute via unified executor with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10)
+        // 11. Execute via unified executor with retry and heartbeat monitoring
         let exec_result = executor.execute_with_retry(agent_id, task, None).await;
 
-        // 12. Emit sub_agent_complete or sub_agent_error event via unified executor (OPT-SA-4)
+        // 12. Emit sub_agent_complete or sub_agent_error event via unified executor
         executor.emit_complete_event(agent_id, &agent_name, &exec_result);
 
         // Extract values for subsequent processing
@@ -434,7 +434,7 @@ impl DelegateTaskTool {
             }
         }
 
-        // OPT-SA-11: Include execution_id for hierarchical tracing
+        // Include execution_id for hierarchical tracing
         info!(
             agent_id = %agent_id,
             execution_id = %execution_id,

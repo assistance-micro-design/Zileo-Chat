@@ -67,7 +67,7 @@ async fn update_question_answered(
         ("status".to_string(), serde_json::json!("answered")),
     ];
 
-    // Validate text_response length if provided (OPT-UQ-1)
+    // Validate text_response length if provided
     if let Some(text) = text_response {
         if text.len() > crate::tools::constants::user_question::MAX_TEXT_RESPONSE_LENGTH {
             return Err(format!(
@@ -273,7 +273,7 @@ mod tests {
     use crate::tools::constants::user_question as uq_const;
 
     // ============================================================================
-    // OPT-UQ-6: SQL Injection Tests
+    // SQL Injection Tests
     // ============================================================================
 
     #[test]
@@ -320,7 +320,7 @@ mod tests {
     }
 
     // ============================================================================
-    // OPT-UQ-1: Text Response Length Validation Tests
+    // Text Response Length Validation Tests
     // ============================================================================
 
     #[test]
@@ -368,7 +368,7 @@ mod tests {
     }
 
     // ============================================================================
-    // OPT-UQ-2: Option ID Validation Tests (validates constant exists)
+    // Option ID Validation Tests (validates constant exists)
     // ============================================================================
 
     #[test]
@@ -425,7 +425,7 @@ mod tests {
     }
 
     // ============================================================================
-    // OPT-UQ-9: Additional Integration Tests
+    // Additional Integration Tests
     // ============================================================================
 
     #[test]

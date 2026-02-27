@@ -19,7 +19,7 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 SettingsSectionHeader - Reusable header for settings sections.
-SA-017/OPT-2: Extracted from AgentSettings and PromptSettings.
+Extracted from AgentSettings and PromptSettings.
 -->
 
 <script lang="ts">

@@ -15,7 +15,7 @@
 -->
 
 <!--
-LLM Section - Extracted from Settings page (OPT-6b)
+LLM Section - Extracted from Settings page
 Manages LLM providers and models: list, create, edit, delete, set default.
 Combines Providers and Models sections.
 -->
@@ -196,7 +196,7 @@ Combines Providers and Models sections.
 
 	/**
 	 * Gets filtered models for the selected provider (or all if 'all' selected).
-	 * Uses memoized selector to prevent recalculation during scroll (OPT-SCROLL-6).
+	 * Uses memoized selector to prevent recalculation during scroll.
 	 */
 	const filteredModels = $derived(
 		getFilteredModelsMemoized(llmState, selectedModelsProvider)
@@ -465,7 +465,7 @@ Combines Providers and Models sections.
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
 		margin-bottom: var(--spacing-lg);
-		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
+		contain: layout style; /* Isolate layout recalculations */
 	}
 
 	.custom-provider-actions {
@@ -546,7 +546,7 @@ Combines Providers and Models sections.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
-		contain: layout style; /* OPT-SCROLL-5: Isolate layout recalculations */
+		contain: layout style; /* Isolate layout recalculations */
 	}
 
 	.models-empty {

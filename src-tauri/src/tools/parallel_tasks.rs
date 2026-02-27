@@ -36,7 +36,7 @@
 //!
 //! - All tasks execute concurrently using `tokio::task::JoinSet`
 //! - Total time is approximately the slowest agent, not sum of all
-//! - Per-task control allows for future cancellation support (OPT-SA-7)
+//! - Per-task control allows for future cancellation support
 //! - Ideal for independent analyses that can run in parallel
 
 use crate::agents::core::agent::Task;
@@ -75,7 +75,7 @@ pub struct ParallelTaskSpec {
 }
 
 /// Prepared execution context containing all resources needed for parallel execution.
-/// Used to pass data between helper functions during execute_batch() (OPT-SA-9).
+/// Used to pass data between helper functions during execute_batch().
 struct PreparedExecution {
     /// Unified executor for event emission and DB updates
     executor: SubAgentExecutor,
@@ -195,7 +195,7 @@ pub struct ParallelTasksTool {
     mcp_manager: Option<Arc<MCPManager>>,
     /// Tauri app handle for event emission (optional, for validation)
     app_handle: Option<AppHandle>,
-    /// Cancellation token for graceful shutdown (OPT-SA-7)
+    /// Cancellation token for graceful shutdown
     cancellation_token: Option<CancellationToken>,
     /// Current agent ID (parent agent)
     current_agent_id: String,
@@ -215,7 +215,7 @@ impl ParallelTasksTool {
     /// * `workflow_id` - Workflow ID for scoping
     /// * `is_primary_agent` - Whether this is the primary workflow agent
     ///
-    /// # Cancellation Token (OPT-SA-7)
+    /// # Cancellation Token
     ///
     /// The cancellation token is extracted from the `AgentToolContext`. If provided,
     /// parallel tasks will monitor the token and abort execution when cancellation
@@ -252,7 +252,7 @@ impl ParallelTasksTool {
     }
 
     // =========================================================================
-    // Helper functions for execute_batch() - OPT-SA-9: Reduce Cyclomatic Complexity
+    // Helper functions for execute_batch() - Reduce Cyclomatic Complexity
     // =========================================================================
 
     /// Validates task specifications for batch execution.
@@ -357,8 +357,8 @@ impl ParallelTasksTool {
     /// - Task objects for orchestrator
     /// - Emits start events for each task
     async fn prepare_execution(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<PreparedExecution> {
-        // Create executor for unified event emission (OPT-SA-4)
-        // OPT-SA-7: Use with_cancellation for graceful shutdown support
+        // Create executor for unified event emission
+        // Use with_cancellation for graceful shutdown support
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
@@ -377,14 +377,14 @@ impl ParallelTasksTool {
             let execution_id = Uuid::new_v4().to_string();
             execution_ids.push(execution_id.clone());
 
-            // Create execution record with batch_id as parent for hierarchical tracing (OPT-SA-11)
+            // Create execution record with batch_id as parent for hierarchical tracing
             let mut execution_create = SubAgentExecutionCreate::with_parent(
                 self.workflow_id.clone(),
                 self.current_agent_id.clone(),
                 task_spec.agent_id.clone(),
                 task_spec.agent_name.clone(),
                 task_spec.prompt.clone(),
-                Some(batch_id.clone()), // OPT-SA-11: Link parallel tasks to batch
+                Some(batch_id.clone()), // Link parallel tasks to batch
             );
             execution_create.status = "running".to_string();
 
@@ -395,7 +395,7 @@ impl ParallelTasksTool {
             {
                 warn!(
                     execution_id = %execution_id,
-                    batch_id = %batch_id, // OPT-SA-11: Include batch correlation in logs
+                    batch_id = %batch_id, // Include batch correlation in logs
                     error = %e,
                     "Failed to create execution record"
                 );
@@ -415,7 +415,7 @@ impl ParallelTasksTool {
 
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
 
-            // Emit sub_agent_start event via unified executor (OPT-SA-4)
+            // Emit sub_agent_start event via unified executor
             executor.emit_start_event(
                 &task_spec.agent_id,
                 &task_spec.agent_name,
@@ -431,9 +431,9 @@ impl ParallelTasksTool {
         })
     }
 
-    /// Executes all tasks in parallel using JoinSet (OPT-SA-6).
+    /// Executes all tasks in parallel using JoinSet.
     ///
-    /// Each task is executed with retry and heartbeat monitoring (OPT-SA-1, OPT-SA-10).
+    /// Each task is executed with retry and heartbeat monitoring.
     /// Returns results in original task order along with total duration.
     async fn run_parallel_tasks(
         &self,
@@ -455,7 +455,7 @@ impl ParallelTasksTool {
             let cancellation_token = self.cancellation_token.clone();
 
             join_set.spawn(async move {
-                // Create executor for this task with retry support (OPT-SA-10)
+                // Create executor for this task with retry support
                 let executor = SubAgentExecutor::with_cancellation(
                     db,
                     orchestrator,
@@ -513,7 +513,6 @@ impl ParallelTasksTool {
     /// - Emits completion event
     /// - Builds individual and aggregated reports
     ///
-    /// # OPT-SA-10 Update
     /// Now accepts `Vec<ExecutionResult>` directly from `run_parallel_tasks` which uses
     /// `execute_with_retry` for each task with exponential backoff on transient errors.
     async fn process_results(
@@ -566,7 +565,7 @@ impl ParallelTasksTool {
                 failed_count += 1;
                 let error_msg = exec_result.error_message.clone().unwrap_or_default();
 
-                // OPT-SA-11: Include batch_id (parent_execution_id) for hierarchical tracing
+                // Include batch_id (parent_execution_id) for hierarchical tracing
                 error!(
                     agent_id = %task_spec.agent_id,
                     batch_id = %batch_id,
@@ -625,7 +624,7 @@ impl ParallelTasksTool {
     }
 
     // =========================================================================
-    // Main execute_batch() - Refactored for CC~6 (OPT-SA-9)
+    // Main execute_batch() - Refactored for CC~6
     // =========================================================================
 
     /// Executes multiple tasks in parallel.
@@ -634,7 +633,7 @@ impl ParallelTasksTool {
     /// * `tasks` - Vector of (agent_id, prompt) pairs
     /// * `wait_all` - Whether to wait for all tasks (currently always true)
     ///
-    /// # Refactoring (OPT-SA-9)
+    /// # Refactoring
     ///
     /// This function has been refactored to reduce cyclomatic complexity from ~20 to ~6.
     /// Logic has been extracted into helper functions:
@@ -696,7 +695,7 @@ impl ParallelTasksTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
 
-    // NOTE: update_execution_record() removed as part of OPT-SA-5
+    // NOTE: update_execution_record() removed during refactoring
     // Now using SubAgentExecutor::update_execution_record() for unified DB updates
 }
 

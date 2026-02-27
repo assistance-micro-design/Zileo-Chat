@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Circuit Breaker for Sub-Agent Execution Resilience (OPT-SA-8)
+//! Circuit Breaker for Sub-Agent Execution Resilience
 //!
 //! Implements the circuit breaker pattern to prevent cascade failures when
 //! sub-agent executions repeatedly fail. This protects against scenarios where
