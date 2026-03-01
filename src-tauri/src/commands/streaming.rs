@@ -23,9 +23,8 @@ use crate::{
     db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
-        llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk,
-        ThinkingStepCreate, Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult,
-        WorkflowToolExecution,
+        llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk, ThinkingStepCreate,
+        Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
     AppState,

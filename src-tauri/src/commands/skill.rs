@@ -199,11 +199,7 @@ pub async fn update_skill(
 
     set_clauses.push("updated_at = time::now()".to_string());
 
-    let query = format!(
-        "UPDATE skill:`{}` SET {}",
-        skill_id,
-        set_clauses.join(", ")
-    );
+    let query = format!("UPDATE skill:`{}` SET {}", skill_id, set_clauses.join(", "));
 
     state.db.execute(&query).await.map_err(|e| {
         error!(error = %e, "Failed to update skill in database");
@@ -308,7 +304,10 @@ mod tests {
                 &query,
                 vec![
                     ("name".to_string(), serde_json::json!("len-skill")),
-                    ("description".to_string(), serde_json::json!("Testing length")),
+                    (
+                        "description".to_string(),
+                        serde_json::json!("Testing length"),
+                    ),
                     ("category".to_string(), serde_json::json!("custom")),
                     ("content".to_string(), serde_json::json!(content)),
                 ],
@@ -359,10 +358,7 @@ mod tests {
 
         let results: Vec<serde_json::Value> = state
             .db
-            .query_json(&format!(
-                "SELECT enabled FROM skill:`{}`",
-                id
-            ))
+            .query_json(&format!("SELECT enabled FROM skill:`{}`", id))
             .await
             .unwrap();
         assert_eq!(results.len(), 1);

@@ -386,9 +386,7 @@ impl LLMAgent {
 
         // Auto-inject ReadSkillTool when agent has skills assigned
         let mut tool_names: Vec<String> = self.config.tools.clone();
-        if !self.config.skills.is_empty()
-            && !tool_names.iter().any(|t| t == "ReadSkillTool")
-        {
+        if !self.config.skills.is_empty() && !tool_names.iter().any(|t| t == "ReadSkillTool") {
             debug!(
                 agent_id = %self.config.id,
                 skills_count = self.config.skills.len(),
@@ -425,12 +423,7 @@ impl LLMAgent {
             "Creating basic tools (sub-agent tools NOT available)"
         );
         factory
-            .create_tools(
-                &tool_names,
-                workflow_id,
-                self.config.id.clone(),
-                app_handle,
-            )
+            .create_tools(&tool_names, workflow_id, self.config.id.clone(), app_handle)
             .await
     }
 

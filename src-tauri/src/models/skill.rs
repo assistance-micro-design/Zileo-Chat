@@ -24,9 +24,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
 /// Regex pattern for validating skill names: only alphanumeric, underscore, and hyphen.
-static SKILL_NAME_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[a-zA-Z0-9_-]+$").expect("Invalid skill name regex pattern")
-});
+static SKILL_NAME_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$").expect("Invalid skill name regex pattern"));
 
 // ===== Enums =====
 
@@ -177,19 +176,13 @@ mod tests {
             validate_skill_name("coding-standards").unwrap(),
             "coding-standards"
         );
-        assert_eq!(
-            validate_skill_name("git_workflow").unwrap(),
-            "git_workflow"
-        );
+        assert_eq!(validate_skill_name("git_workflow").unwrap(), "git_workflow");
         assert_eq!(validate_skill_name("MySkill123").unwrap(), "MySkill123");
     }
 
     #[test]
     fn test_validate_skill_name_trims() {
-        assert_eq!(
-            validate_skill_name("  my-skill  ").unwrap(),
-            "my-skill"
-        );
+        assert_eq!(validate_skill_name("  my-skill  ").unwrap(), "my-skill");
     }
 
     #[test]

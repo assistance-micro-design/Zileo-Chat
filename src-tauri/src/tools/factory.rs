@@ -128,7 +128,10 @@ impl ToolFactory {
         let query = "SELECT skills FROM agent WHERE meta::id(id) = $agent_id";
         let results: Result<Vec<serde_json::Value>, _> = self
             .db
-            .query_json_with_params(query, vec![("agent_id".to_string(), serde_json::json!(agent_id))])
+            .query_json_with_params(
+                query,
+                vec![("agent_id".to_string(), serde_json::json!(agent_id))],
+            )
             .await;
 
         match results {
@@ -398,8 +401,7 @@ impl ToolFactory {
 
         match tool_name {
             // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool"
-            | "ReadSkillTool" => {
+            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool" => {
                 // Extract app_handle from context for basic tools
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
@@ -720,12 +722,7 @@ mod tests {
         let factory = create_test_factory().await;
 
         let result = factory
-            .create_tool(
-                "ReadSkillTool",
-                None,
-                "test_agent".to_string(),
-                None,
-            )
+            .create_tool("ReadSkillTool", None, "test_agent".to_string(), None)
             .await;
 
         assert!(result.is_ok());

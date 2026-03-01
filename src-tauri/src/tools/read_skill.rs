@@ -117,18 +117,12 @@ impl ReadSkillTool {
 
         let results: Vec<serde_json::Value> = self
             .db
-            .query_json_with_params(
-                query,
-                vec![("name".to_string(), json!(name))],
-            )
+            .query_json_with_params(query, vec![("name".to_string(), json!(name))])
             .await
             .map_err(|e| ToolError::DatabaseError(format!("Failed to read skill: {}", e)))?;
 
         let skill = results.into_iter().next().ok_or_else(|| {
-            ToolError::NotFound(format!(
-                "Skill '{}' not found or is disabled.",
-                name
-            ))
+            ToolError::NotFound(format!("Skill '{}' not found or is disabled.", name))
         })?;
 
         info!(skill_name = %name, "Skill read successfully");
@@ -214,13 +208,11 @@ EXAMPLES:
         match operation {
             "list" => self.list_skills().await,
             "read" => {
-                let name = input["name"]
-                    .as_str()
-                    .ok_or_else(|| {
-                        ToolError::InvalidInput(
-                            "Read operation requires 'name' field (skill name)".to_string(),
-                        )
-                    })?;
+                let name = input["name"].as_str().ok_or_else(|| {
+                    ToolError::InvalidInput(
+                        "Read operation requires 'name' field (skill name)".to_string(),
+                    )
+                })?;
                 self.read_skill(name).await
             }
             _ => Err(ToolError::InvalidInput(format!(
@@ -297,9 +289,7 @@ mod tests {
     async fn test_validate_read_with_name() {
         let db = create_test_db().await;
         let tool = ReadSkillTool::new(db, vec![]);
-        assert!(tool
-            .validate_input(&json!({"name": "my-skill"}))
-            .is_ok());
+        assert!(tool.validate_input(&json!({"name": "my-skill"})).is_ok());
     }
 
     #[tokio::test]
@@ -338,9 +328,7 @@ mod tests {
         db.initialize_schema().await.unwrap();
 
         let tool = ReadSkillTool::new(db, vec!["allowed-skill".to_string()]);
-        let result = tool
-            .execute(json!({"name": "forbidden-skill"}))
-            .await;
+        let result = tool.execute(json!({"name": "forbidden-skill"})).await;
         assert!(result.is_err());
         match result {
             Err(ToolError::PermissionDenied(_)) => {}
@@ -359,9 +347,7 @@ mod tests {
         db.initialize_schema().await.unwrap();
 
         let tool = ReadSkillTool::new(db, vec!["nonexistent-skill".to_string()]);
-        let result = tool
-            .execute(json!({"name": "nonexistent-skill"}))
-            .await;
+        let result = tool.execute(json!({"name": "nonexistent-skill"})).await;
         assert!(result.is_err());
         match result {
             Err(ToolError::NotFound(_)) => {}
@@ -398,17 +384,17 @@ mod tests {
                 ("name".to_string(), json!("test-skill")),
                 ("description".to_string(), json!("A test skill")),
                 ("category".to_string(), json!("coding")),
-                ("content".to_string(), json!("# Test Skill\n\nFollow these rules.")),
+                (
+                    "content".to_string(),
+                    json!("# Test Skill\n\nFollow these rules."),
+                ),
             ],
         )
         .await
         .unwrap();
 
         let tool = ReadSkillTool::new(db, vec!["test-skill".to_string()]);
-        let result = tool
-            .execute(json!({"name": "test-skill"}))
-            .await
-            .unwrap();
+        let result = tool.execute(json!({"name": "test-skill"})).await.unwrap();
 
         assert!(result["success"].as_bool().unwrap());
         assert_eq!(result["name"], "test-skill");
@@ -451,9 +437,7 @@ mod tests {
         .unwrap();
 
         let tool = ReadSkillTool::new(db, vec!["disabled-skill".to_string()]);
-        let result = tool
-            .execute(json!({"name": "disabled-skill"}))
-            .await;
+        let result = tool.execute(json!({"name": "disabled-skill"})).await;
         assert!(result.is_err());
         match result {
             Err(ToolError::NotFound(_)) => {}
