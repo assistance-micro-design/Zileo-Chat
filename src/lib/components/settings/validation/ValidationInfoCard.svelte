@@ -17,7 +17,7 @@
 <!--
   ValidationInfoCard - Reusable info-card for validation mode displays.
   Used in Auto/Manual modes to show entity validation status.
-  Extracted from ValidationSettings to deduplicate 6 identical info-card blocks (SA-010 DUP-1).
+  Extracted from ValidationSettings to deduplicate info-card blocks.
 -->
 
 <script lang="ts">

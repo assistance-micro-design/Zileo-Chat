@@ -20,7 +20,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ExportPreview - Preview what will be exported.
 Shows summaries for each entity type and MCP sanitization options.
-Refactored for SA-010 DUP-3: ExportEntitySection replaces 4 identical collapsible sections.
+Uses ExportEntitySection for collapsible entity sections.
 -->
 
 <script lang="ts">

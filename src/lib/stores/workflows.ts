@@ -27,6 +27,7 @@ import type { Workflow } from '$types/workflow';
 
 import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * State interface for the reactive workflow store
@@ -79,7 +80,7 @@ export const workflowStore = {
 			const workflows = await invoke<Workflow[]>('load_workflows');
 			workflowWritable.update((s) => ({ ...s, workflows, loading: false }));
 		} catch (e) {
-			const error = e instanceof Error ? e.message : String(e);
+			const error = getErrorMessage(e);
 			workflowWritable.update((s) => ({ ...s, error, loading: false }));
 		}
 	},

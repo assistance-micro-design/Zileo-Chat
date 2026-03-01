@@ -2,7 +2,7 @@
   Copyright 2025 Assistance Micro Design
   SPDX-License-Identifier: Apache-2.0
 
-  SubAgentBlock Component - SA-019 P3
+  SubAgentBlock Component
   Collapsible block showing sub-agent execution results.
 -->
 

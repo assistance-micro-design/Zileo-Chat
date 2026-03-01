@@ -45,9 +45,6 @@
  * ```
  */
 
-// Note: Error handling utilities are available from './error' if needed:
-// import { getErrorMessage } from './error';
-
 /**
  * Options for async handler behavior
  */

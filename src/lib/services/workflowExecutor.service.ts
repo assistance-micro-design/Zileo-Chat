@@ -232,12 +232,12 @@ export const WorkflowExecutorService = {
 		executingWorkflows.add(workflowId);
 
 		try {
-			// Step 1: Save user message
+			// Persist user message to DB and notify UI
 			const userMessageId = await MessageService.saveUser(workflowId, message);
 			const userMessage = createUserMessage(workflowId, message);
 			callbacks?.onUserMessage?.(userMessage);
 
-			// Step 1.5: Register in background workflows store
+			// Track execution in background store so it persists across workflow switches
 			const selectedWorkflow = workflowStore.getSelected();
 			backgroundWorkflowsStore.register(
 				workflowId,
@@ -245,12 +245,12 @@ export const WorkflowExecutorService = {
 				selectedWorkflow?.name ?? 'Workflow'
 			);
 
-			// Step 2: Start streaming and execution blocks (for the viewed workflow)
+			// Initialize streaming and execution block UI for the viewed workflow
 			tokenStore.startStreaming();
 			executionBlocksStore.start(workflowId);
 			await streamingStore.start(workflowId);
 
-			// Step 3: Execute workflow (long-running IPC - user may switch workflows)
+			// Long-running IPC call - user may switch workflows during execution
 			const workflowResult = await WorkflowService.executeStreaming(
 				workflowId,
 				message,
@@ -261,7 +261,7 @@ export const WorkflowExecutorService = {
 			// Post-execution: user may have switched to a different workflow.
 			// DB saves always run; UI updates only if still viewing this workflow.
 
-			// Step 4: Update tokens and cost (UI-only, guard)
+			// Update token counters and cost display (only if still viewing this workflow)
 			if (isStillViewed()) {
 				tokenStore.setInputTokens(workflowResult.metrics.tokens_input);
 				tokenStore.updateStreamingTokens(workflowResult.metrics.tokens_output);
@@ -269,8 +269,8 @@ export const WorkflowExecutorService = {
 			}
 			callbacks?.onTokenUpdate?.(workflowResult.metrics);
 
-			// Step 5: Save assistant response (always persist to DB)
-			// Use backend-generated message_id to match persisted blocks (SA-019 P5)
+			// Persist assistant response to DB regardless of current view
+			// Use backend-generated message_id to match persisted blocks
 			const assistantMessageId = await MessageService.saveAssistant(
 				workflowId,
 				workflowResult.response,
@@ -298,7 +298,7 @@ export const WorkflowExecutorService = {
 				callbacks?.onAssistantMessage?.(assistantMessage);
 			}
 
-			// Step 6: Refresh workflows (always reload list)
+			// Refresh workflow list to reflect updated state
 			await workflowStore.loadWorkflows();
 			if (isStillViewed()) {
 				const workflow = workflowStore.getSelected();
@@ -308,8 +308,7 @@ export const WorkflowExecutorService = {
 				callbacks?.onWorkflowRefresh?.(workflow);
 			}
 
-			// Step 7: Return success result
-			// Capture blocks snapshot BEFORE finally{} resets the store (SA-019 P5)
+			// Capture blocks snapshot BEFORE finally{} resets the store
 			return {
 				success: true,
 				userMessageId,

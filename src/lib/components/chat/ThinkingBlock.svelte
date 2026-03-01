@@ -2,7 +2,7 @@
   Copyright 2025 Assistance Micro Design
   SPDX-License-Identifier: Apache-2.0
 
-  ThinkingBlock Component - SA-019 P3
+  ThinkingBlock Component
   Collapsible block showing model thinking or agent flow reasoning.
 -->
 

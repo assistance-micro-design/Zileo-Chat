@@ -17,7 +17,7 @@
 <!--
   ExportEntitySection - Collapsible entity section for ExportPreview.
   Extracts the common pattern of expandable Card with header button + item list.
-  Extracted from ExportPreview to deduplicate 4 identical collapsible sections (SA-010 DUP-3).
+  Extracted from ExportPreview to deduplicate collapsible sections.
 -->
 
 <script lang="ts">

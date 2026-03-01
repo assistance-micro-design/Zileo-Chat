@@ -26,6 +26,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
 import type { RestorationResult } from '$types/services';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * Service for workflow operations.
@@ -139,7 +140,7 @@ export const WorkflowService = {
 				workflowId,
 				messagesCount: 0,
 				activitiesCount: 0,
-				error: String(e)
+				error: getErrorMessage(e)
 			};
 		}
 	}

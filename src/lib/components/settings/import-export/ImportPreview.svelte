@@ -21,7 +21,7 @@ SPDX-License-Identifier: Apache-2.0
 ImportPreview - Preview what will be imported with selection controls.
 Displays entity summaries with checkboxes for selection/deselection.
 Shows warnings for conflicts and missing MCP env vars.
-Refactored for SA-010 DUP-2: data-driven loops replace 4 identical summary cards + 4 entity lists.
+Uses data-driven loops for summary cards and entity lists.
 -->
 
 <script lang="ts">

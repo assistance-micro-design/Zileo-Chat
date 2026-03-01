@@ -275,7 +275,7 @@ Shows prompt summary with actions for edit and delete.
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 		gap: var(--spacing-lg);
-		contain: layout style; /* SA-017/PERF-2: Isolate layout recalculations */
+		contain: layout style; /* Isolate layout recalculations */
 	}
 
 	.prompt-card {

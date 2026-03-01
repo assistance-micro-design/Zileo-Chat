@@ -2,7 +2,7 @@
   Copyright 2025 Assistance Micro Design
   SPDX-License-Identifier: Apache-2.0
 
-  ToolCallBlock Component - SA-019 P3
+  ToolCallBlock Component
   Collapsible block showing a tool call with input/output details.
 -->
 

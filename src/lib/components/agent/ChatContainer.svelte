@@ -18,7 +18,7 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-ChatContainer Component - SA-019 P3 Block-by-Block Refactoring
+ChatContainer Component
 Main chat area with message display, execution blocks inline, and input controls.
 -->
 

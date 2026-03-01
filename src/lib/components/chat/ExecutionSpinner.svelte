@@ -2,7 +2,7 @@
   Copyright 2025 Assistance Micro Design
   SPDX-License-Identifier: Apache-2.0
 
-  ExecutionSpinner Component - SA-019 P3
+  ExecutionSpinner Component
   Animated spinner with contextual text shown between execution blocks.
 -->
 
