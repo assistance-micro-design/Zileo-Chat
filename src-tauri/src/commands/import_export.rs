@@ -689,7 +689,7 @@ async fn export_agents(
 ) -> Result<Vec<AgentExportData>, String> {
     let mut agents = Vec::new();
     for agent_id in agent_ids {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
             agents.push(AgentExportData {
@@ -710,6 +710,14 @@ async fn export_agents(
                     })
                     .unwrap_or_default(),
                 mcp_servers: row["mcp_servers"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                skills: row["skills"]
                     .as_array()
                     .map(|a| {
                         a.iter()
@@ -962,6 +970,7 @@ async fn import_agents(
                     },
                     "tools": agent.tools,
                     "mcp_servers": agent.mcp_servers,
+                    "skills": agent.skills,
                     "system_prompt": agent.system_prompt,
                     "max_tool_iterations": agent.max_tool_iterations,
                     "enable_thinking": agent.enable_thinking,

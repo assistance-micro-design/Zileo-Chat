@@ -130,6 +130,7 @@ export interface AgentExportData {
 	llm: LLMConfig;
 	tools: string[];
 	mcpServers: string[];
+	skills: string[];
 	systemPrompt: string;
 	maxToolIterations: number;
 	/** Enable thinking mode for supported models (default: true for thinking models) */

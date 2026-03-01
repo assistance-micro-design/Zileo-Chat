@@ -63,6 +63,7 @@ export const AgentConfigSchema = z.object({
 	llm: LLMConfigSchema,
 	tools: z.array(z.string()),
 	mcp_servers: z.array(z.string()),
+	skills: z.array(z.string()),
 	system_prompt: z.string(),
 	max_tool_iterations: z.number().min(1).max(200),
 	enable_thinking: z.boolean()
@@ -75,7 +76,8 @@ export const AgentSummarySchema = z.object({
 	provider: z.string(),
 	model: z.string(),
 	tools_count: z.number().nonnegative(),
-	mcp_servers_count: z.number().nonnegative()
+	mcp_servers_count: z.number().nonnegative(),
+	skills_count: z.number().nonnegative()
 });
 
 // ============================================================================

@@ -52,7 +52,8 @@ describe('Agent Store', () => {
 		provider: 'Mistral',
 		model: 'mistral-large-latest',
 		tools_count: 2,
-		mcp_servers_count: 1
+		mcp_servers_count: 1,
+		skills_count: 0
 	});
 
 	// Helper to create mock agent config
@@ -72,6 +73,7 @@ describe('Agent Store', () => {
 		},
 		tools: ['MemoryTool', 'TodoTool'],
 		mcp_servers: ['serena'],
+		skills: [],
 		system_prompt: 'You are a helpful assistant.',
 		max_tool_iterations: 50,
 		enable_thinking: true
@@ -152,6 +154,7 @@ describe('Agent Store', () => {
 				},
 				tools: ['MemoryTool'],
 				mcp_servers: [],
+				skills: [],
 				system_prompt: 'Test prompt',
 				max_tool_iterations: 50,
 				enable_thinking: true
@@ -180,6 +183,7 @@ describe('Agent Store', () => {
 				},
 				tools: [],
 				mcp_servers: [],
+				skills: [],
 				system_prompt: '',
 				max_tool_iterations: 50,
 				enable_thinking: true

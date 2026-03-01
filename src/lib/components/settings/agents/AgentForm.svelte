@@ -247,6 +247,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			},
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
+			skills: [],
 			system_prompt: systemPrompt.trim(),
 			max_tool_iterations: maxToolIterations,
 			enable_thinking: enableThinking

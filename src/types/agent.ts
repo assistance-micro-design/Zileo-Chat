@@ -63,6 +63,8 @@ export interface AgentConfig {
   tools: string[];
   /** MCP server NAMES (not IDs) that the agent can use */
   mcp_servers: string[];
+  /** Skill names assigned to this agent */
+  skills: string[];
   /** System prompt */
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
@@ -101,6 +103,8 @@ export interface AgentConfigCreate {
   tools: string[];
   /** List of MCP servers */
   mcp_servers: string[];
+  /** Skill names assigned to this agent */
+  skills: string[];
   /** System prompt (1-10000 chars) */
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
@@ -121,6 +125,8 @@ export interface AgentConfigUpdate {
   tools?: string[];
   /** List of MCP servers */
   mcp_servers?: string[];
+  /** Skill names assigned to this agent */
+  skills?: string[];
   /** System prompt (1-10000 chars) */
   system_prompt?: string;
   /** Maximum number of tool execution iterations (1-200) */
@@ -147,6 +153,8 @@ export interface AgentSummary {
   tools_count: number;
   /** Number of configured MCP servers */
   mcp_servers_count: number;
+  /** Number of assigned skills */
+  skills_count: number;
 }
 
 // Re-export tool constants from centralized location

@@ -163,6 +163,8 @@ pub struct AgentExportData {
     pub llm: LLMConfigExport,
     pub tools: Vec<String>,
     pub mcp_servers: Vec<String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
     pub system_prompt: String,
     pub max_tool_iterations: usize,
     /// Enable thinking mode for supported models (default: true for thinking models)
