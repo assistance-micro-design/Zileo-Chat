@@ -140,7 +140,7 @@ pub async fn seed_test_memory(db: &DBClient) -> String {
     });
     let response = db
         .db
-        .query(&format!("CREATE memory:`{}` CONTENT $data", id))
+        .query(format!("CREATE memory:`{}` CONTENT $data", id))
         .bind(("data", data))
         .await
         .expect("Query execution failed");
@@ -170,7 +170,7 @@ pub async fn seed_test_memory_with_embedding(db: &DBClient) -> String {
     });
     let response = db
         .db
-        .query(&format!("CREATE memory:`{}` CONTENT $data", id))
+        .query(format!("CREATE memory:`{}` CONTENT $data", id))
         .bind(("data", data))
         .await
         .expect("Query execution failed");
