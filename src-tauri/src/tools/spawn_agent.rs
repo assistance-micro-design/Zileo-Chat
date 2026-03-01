@@ -406,7 +406,7 @@ impl SpawnAgentTool {
             .update_execution_record(&execution_id, &exec_result)
             .await;
 
-        // 17b. Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+        // 17b. Persist sub-agent internal tool executions and reasoning steps
         executor
             .persist_sub_agent_internals(&execution_id, &sub_agent_id, &exec_result)
             .await;

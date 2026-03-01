@@ -21,6 +21,12 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
+
+/// Regex pattern for detecting `{{variable_name}}` placeholders in prompt templates.
+static VARIABLE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern")
+});
 
 // ===== Enums =====
 
@@ -126,13 +132,10 @@ impl Prompt {
     /// assert_eq!(vars.len(), 2);
     /// ```
     pub fn detect_variables(content: &str) -> Vec<PromptVariable> {
-        let pattern =
-            Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern");
-
         let mut seen = HashSet::new();
         let mut variables = Vec::new();
 
-        for cap in pattern.captures_iter(content) {
+        for cap in VARIABLE_PATTERN.captures_iter(content) {
             let name = cap[1].to_string();
             if seen.insert(name.clone()) {
                 variables.push(PromptVariable {
@@ -162,10 +165,7 @@ impl Prompt {
     /// ```
     #[allow(dead_code)]
     pub fn interpolate(content: &str, values: &HashMap<String, String>) -> String {
-        let pattern =
-            Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern");
-
-        pattern
+        VARIABLE_PATTERN
             .replace_all(content, |caps: &regex::Captures| {
                 let key = &caps[1];
                 values

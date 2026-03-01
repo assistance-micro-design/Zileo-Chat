@@ -114,7 +114,7 @@ pub use llm_models::get_all_builtin_models;
 pub use llm_models::{
     ConnectionTestResult, CreateModelRequest, LLMModel, ProviderSettings, UpdateModelRequest,
 };
-// ProviderType canonical location: llm/provider.rs (SA-023/P1)
+// ProviderType canonical location: llm/provider.rs
 #[allow(unused_imports)]
 pub use crate::llm::ProviderType;
 

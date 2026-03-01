@@ -69,7 +69,7 @@ impl AppState {
         let mcp_manager = Arc::new(
             MCPManager::new(db.clone())
                 .await
-                .expect("Failed to initialize MCP manager"),
+                .map_err(|e| anyhow::anyhow!("Failed to initialize MCP manager: {}", e))?,
         );
 
         // Initialize embedding service as None (configured via Settings UI)

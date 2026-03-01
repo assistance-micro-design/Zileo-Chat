@@ -375,7 +375,7 @@ pub async fn execute_workflow_streaming(
         .collect();
     // Note: Clones here are necessary as WorkflowToolExecution needs owned data for Tauri IPC
 
-    // Persist tool executions in parallel (SA-014: use shared persistence module)
+    // Persist tool executions via shared persistence module
     crate::db::persist_tool_executions(
         &state.db,
         &report.metrics.tool_executions,
@@ -385,7 +385,7 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    // Persist intermediate reasoning steps in parallel (SA-014: use shared persistence module)
+    // Persist intermediate reasoning steps via shared persistence module
     thinking_step_number = crate::db::persist_reasoning_steps(
         &state.db,
         &report.metrics.reasoning_steps,

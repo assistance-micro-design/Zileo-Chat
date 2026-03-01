@@ -412,12 +412,12 @@ impl DelegateTaskTool {
         let metrics = exec_result.metrics.clone();
         let success = exec_result.success;
 
-        // 13. Update execution record (SA-014: use unified parameterized method)
+        // 13. Update execution record
         executor
             .update_execution_record(&execution_id, &exec_result)
             .await;
 
-        // 13b. Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+        // 13b. Persist sub-agent internal tool executions and reasoning steps
         executor
             .persist_sub_agent_internals(&execution_id, agent_id, &exec_result)
             .await;

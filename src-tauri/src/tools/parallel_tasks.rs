@@ -537,12 +537,12 @@ impl ParallelTasksTool {
                 .update_execution_record(&execution_id, &exec_result)
                 .await;
 
-            // Persist sub-agent internal tool executions and reasoning steps (SA-014 P1/P2)
+            // Persist sub-agent internal tool executions and reasoning steps
             executor
                 .persist_sub_agent_internals(&execution_id, &task_spec.agent_id, &exec_result)
                 .await;
 
-            // Emit completion event (SA-020/P5: use real agent name)
+            // Emit completion event with resolved agent name
             executor.emit_complete_event(&task_spec.agent_id, &task_spec.agent_name, &exec_result);
 
             // Build task result
