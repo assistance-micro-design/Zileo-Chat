@@ -252,9 +252,10 @@ DEFINE FIELD OVERWRITE llm.temperature ON agent TYPE float
 DEFINE FIELD OVERWRITE llm.max_tokens ON agent TYPE int
     ASSERT $value >= 256 AND $value <= 128000;
 
--- Tools and MCP servers
+-- Tools, MCP servers, and Skills
 DEFINE FIELD OVERWRITE tools ON agent TYPE array<string>;
 DEFINE FIELD OVERWRITE mcp_servers ON agent TYPE array<string>;
+DEFINE FIELD OVERWRITE skills ON agent TYPE array<string> DEFAULT [];
 
 -- System prompt
 DEFINE FIELD OVERWRITE system_prompt ON agent TYPE string
@@ -388,6 +389,30 @@ DEFINE FIELD OVERWRITE answered_at ON user_question TYPE option<datetime>;
 DEFINE INDEX OVERWRITE user_question_workflow_idx ON user_question FIELDS workflow_id;
 DEFINE INDEX OVERWRITE user_question_status_idx ON user_question FIELDS status;
 DEFINE INDEX OVERWRITE user_question_workflow_status_idx ON user_question FIELDS workflow_id, status;
+
+-- =============================================
+-- Table: skill
+-- Stores reusable skill definitions (markdown instructions for agents)
+-- =============================================
+DEFINE TABLE OVERWRITE skill SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON skill TYPE string;
+DEFINE FIELD OVERWRITE name ON skill TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128
+    AND $value = /^[a-zA-Z0-9_-]+$/;
+DEFINE FIELD OVERWRITE description ON skill TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 500;
+DEFINE FIELD OVERWRITE category ON skill TYPE string
+    ASSERT $value IN ['system', 'coding', 'workflow', 'analysis', 'custom'];
+DEFINE FIELD OVERWRITE content ON skill TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 50000;
+DEFINE FIELD OVERWRITE enabled ON skill TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE created_at ON skill TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON skill TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE unique_skill_id ON skill FIELDS id UNIQUE;
+DEFINE INDEX OVERWRITE unique_skill_name ON skill FIELDS name UNIQUE;
+DEFINE INDEX OVERWRITE skill_category_idx ON skill FIELDS category;
+DEFINE INDEX OVERWRITE skill_enabled_idx ON skill FIELDS enabled;
 
 -- =============================================
 -- Table: migration_log

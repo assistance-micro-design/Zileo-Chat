@@ -30,6 +30,9 @@ pub struct ToolMetadata {
     pub name: &'static str,
     pub category: ToolCategory,
     pub requires_context: bool,
+    /// Hidden tools are registered (valid for validation) but not shown in frontend UI.
+    /// Example: ReadSkillTool is auto-injected, not user-selectable.
+    pub hidden: bool,
 }
 
 /// Centralized registry for all available tools.
@@ -49,6 +52,7 @@ impl ToolRegistry {
                 name: "MemoryTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
+                hidden: false,
             },
         );
         tools.insert(
@@ -57,6 +61,7 @@ impl ToolRegistry {
                 name: "TodoTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
+                hidden: false,
             },
         );
         tools.insert(
@@ -65,6 +70,7 @@ impl ToolRegistry {
                 name: "CalculatorTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
+                hidden: false,
             },
         );
         tools.insert(
@@ -73,6 +79,18 @@ impl ToolRegistry {
                 name: "UserQuestionTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
+                hidden: false,
+            },
+        );
+
+        // Auto-injected tools (hidden from frontend UI)
+        tools.insert(
+            "ReadSkillTool",
+            ToolMetadata {
+                name: "ReadSkillTool",
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: true,
             },
         );
 
@@ -83,6 +101,7 @@ impl ToolRegistry {
                 name: "SpawnAgentTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
+                hidden: false,
             },
         );
         tools.insert(
@@ -91,6 +110,7 @@ impl ToolRegistry {
                 name: "DelegateTaskTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
+                hidden: false,
             },
         );
         tools.insert(
@@ -99,6 +119,7 @@ impl ToolRegistry {
                 name: "ParallelTasksTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
+                hidden: false,
             },
         );
 
@@ -124,16 +145,29 @@ impl ToolRegistry {
             .unwrap_or(false)
     }
 
-    /// Returns all tool names.
+    /// Returns all tool names (including hidden tools).
     pub fn available_tools(&self) -> Vec<&'static str> {
         self.tools.keys().copied().collect()
     }
 
-    /// Returns basic tools (no context needed).
+    /// Returns visible tool names (excludes hidden tools like ReadSkillTool).
+    ///
+    /// Use this for frontend-facing tool lists where auto-injected tools
+    /// should not appear as user-selectable options.
+    #[allow(dead_code)]
+    pub fn visible_tools(&self) -> Vec<&'static str> {
+        self.tools
+            .iter()
+            .filter(|(_, m)| !m.hidden)
+            .map(|(name, _)| *name)
+            .collect()
+    }
+
+    /// Returns basic tools (no context needed, excludes hidden).
     pub fn basic_tools(&self) -> Vec<&'static str> {
         self.tools
             .iter()
-            .filter(|(_, m)| m.category == ToolCategory::Basic)
+            .filter(|(_, m)| m.category == ToolCategory::Basic && !m.hidden)
             .map(|(name, _)| *name)
             .collect()
     }
@@ -237,7 +271,30 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 7); // 4 basic + 3 sub-agent
+        assert_eq!(all.len(), 8); // 4 basic + 1 hidden + 3 sub-agent
+    }
+
+    #[test]
+    fn test_registry_visible_tools_excludes_hidden() {
+        let visible = TOOL_REGISTRY.visible_tools();
+        assert_eq!(visible.len(), 7); // 4 basic + 3 sub-agent (hidden excluded)
+        assert!(!visible.contains(&"ReadSkillTool"));
+        assert!(visible.contains(&"MemoryTool"));
+        assert!(visible.contains(&"SpawnAgentTool"));
+    }
+
+    #[test]
+    fn test_registry_hidden_tool_still_valid() {
+        // Hidden tools are registered and valid for validation
+        assert!(TOOL_REGISTRY.has_tool("ReadSkillTool"));
+        let metadata = TOOL_REGISTRY.get("ReadSkillTool").unwrap();
+        assert_eq!(metadata.name, "ReadSkillTool");
+        assert_eq!(metadata.category, ToolCategory::Basic);
+        assert!(!metadata.requires_context);
+        assert!(metadata.hidden);
+
+        // Validation accepts hidden tools
+        assert!(TOOL_REGISTRY.validate("ReadSkillTool").is_ok());
     }
 
     #[test]
@@ -247,5 +304,6 @@ mod tests {
         assert_eq!(metadata.name, "CalculatorTool");
         assert_eq!(metadata.category, ToolCategory::Basic);
         assert!(!metadata.requires_context);
+        assert!(!metadata.hidden);
     }
 }

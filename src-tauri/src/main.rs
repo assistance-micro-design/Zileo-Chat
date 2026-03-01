@@ -320,6 +320,12 @@ async fn main() -> anyhow::Result<()> {
             commands::prompt::update_prompt,
             commands::prompt::delete_prompt,
             commands::prompt::search_prompts,
+            // Skill commands (Tool Skills)
+            commands::skill::list_skills,
+            commands::skill::get_skill,
+            commands::skill::create_skill,
+            commands::skill::update_skill,
+            commands::skill::delete_skill,
             // Import/Export commands
             commands::import_export::prepare_export_preview,
             commands::import_export::generate_export_file,
@@ -419,7 +425,7 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // Load agents from database
-                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, enable_thinking FROM agent";
+                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, enable_thinking FROM agent";
                 let results: Vec<serde_json::Value> = match db.db.query(query).await {
                     Ok(mut r) => r.take(0).unwrap_or_default(),
                     Err(e) => {
@@ -462,6 +468,11 @@ async fn main() -> anyhow::Result<()> {
                         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                         .unwrap_or_default();
 
+                    let skills_list: Vec<String> = row["skills"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+
                     let system_prompt = row["system_prompt"].as_str().unwrap_or("You are a helpful assistant.").to_string();
 
                     let max_tool_iterations = row["max_tool_iterations"]
@@ -479,6 +490,7 @@ async fn main() -> anyhow::Result<()> {
                         llm,
                         tools,
                         mcp_servers: mcp_servers_list,
+                        skills: skills_list,
                         system_prompt,
                         max_tool_iterations,
                         enable_thinking,

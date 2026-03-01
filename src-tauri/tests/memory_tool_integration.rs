@@ -310,6 +310,7 @@ mod agent_config_tests {
             },
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "You are an agent with memory capabilities.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

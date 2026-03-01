@@ -24,6 +24,7 @@ pub mod memory;
 pub mod message;
 pub mod prompt;
 pub mod serde_utils;
+pub mod skill;
 pub mod streaming;
 pub mod sub_agent;
 pub mod task;
@@ -129,6 +130,13 @@ pub use embedding::{
 pub use prompt::{
     Prompt, PromptCategory, PromptCreate, PromptSummary, PromptUpdate, PromptVariable,
     MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
+};
+
+// Re-export skill types for Skill feature
+#[allow(unused_imports)]
+pub use skill::{
+    Skill, SkillCategory, SkillCreate, SkillSummary, SkillUpdate, MAX_SKILL_CONTENT_LEN,
+    MAX_SKILL_DESCRIPTION_LEN, MAX_SKILL_NAME_LEN,
 };
 
 // Re-export function calling types for JSON-based tool calling (replacing XML)

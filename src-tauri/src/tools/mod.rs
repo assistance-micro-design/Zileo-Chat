@@ -59,6 +59,7 @@ pub mod delegate_task;
 pub mod factory;
 pub mod memory;
 pub mod parallel_tasks;
+pub mod read_skill;
 pub mod registry;
 pub mod response;
 pub mod spawn_agent;
@@ -87,6 +88,8 @@ pub use factory::ToolFactory;
 pub use memory::MemoryTool;
 #[allow(unused_imports)]
 pub use parallel_tasks::ParallelTasksTool;
+#[allow(unused_imports)]
+pub use read_skill::ReadSkillTool;
 #[allow(unused_imports)]
 pub use registry::TOOL_REGISTRY;
 #[allow(unused_imports)]

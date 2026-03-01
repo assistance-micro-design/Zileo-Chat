@@ -130,6 +130,41 @@ fn validate_tools(tools: &[String]) -> Result<Vec<String>, String> {
     Ok(validated)
 }
 
+/// Validates skill names list
+///
+/// Skill names must match `[a-zA-Z0-9_-]+` (same as skill model validation).
+fn validate_skills(skills: &[String]) -> Result<Vec<String>, String> {
+    let mut validated = Vec::new();
+
+    for skill in skills {
+        let trimmed = skill.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !trimmed
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(format!(
+                "Invalid skill name '{}'. Only alphanumeric, underscore, and hyphen allowed",
+                trimmed
+            ));
+        }
+
+        if trimmed.len() > 128 {
+            return Err(format!(
+                "Skill name '{}' exceeds maximum length of 128 characters",
+                trimmed
+            ));
+        }
+
+        validated.push(trimmed.to_string());
+    }
+
+    Ok(validated)
+}
+
 /// Validates MCP servers list
 fn validate_mcp_servers(servers: &[String]) -> Result<Vec<String>, String> {
     let mut validated = Vec::new();
@@ -165,6 +200,7 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
         llm: validate_llm_config(&config.llm)?,
         tools: validate_tools(&config.tools)?,
         mcp_servers: validate_mcp_servers(&config.mcp_servers)?,
+        skills: validate_skills(&config.skills)?,
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
         enable_thinking: config.enable_thinking,
@@ -181,6 +217,7 @@ struct SerializedAgentFields {
     llm_json: String,
     tools_json: String,
     mcp_json: String,
+    skills_json: String,
     prompt_json: String,
 }
 
@@ -190,6 +227,7 @@ fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields,
     let llm_json = serialize_for_query(&config.llm, "LLM config")?;
     let tools_json = serialize_for_query(&config.tools, "tools")?;
     let mcp_json = serialize_for_query(&config.mcp_servers, "MCP servers")?;
+    let skills_json = serialize_for_query(&config.skills, "skills")?;
     let prompt_json = serialize_for_query(&config.system_prompt, "system prompt")?;
 
     Ok(SerializedAgentFields {
@@ -197,6 +235,7 @@ fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields,
         llm_json,
         tools_json,
         mcp_json,
+        skills_json,
         prompt_json,
     })
 }
@@ -340,6 +379,7 @@ pub async fn create_agent(
         llm,
         tools,
         mcp_servers,
+        skills,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -358,6 +398,7 @@ pub async fn create_agent(
         llm,
         tools,
         mcp_servers,
+        skills,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -374,6 +415,7 @@ pub async fn create_agent(
             llm: {},
             tools: {},
             mcp_servers: {},
+            skills: {},
             system_prompt: {},
             max_tool_iterations: {},
             enable_thinking: {},
@@ -387,6 +429,7 @@ pub async fn create_agent(
         fields.llm_json,
         fields.tools_json,
         fields.mcp_json,
+        fields.skills_json,
         fields.prompt_json,
         validated.max_tool_iterations,
         validated.enable_thinking
@@ -425,6 +468,10 @@ fn merge_agent_config(
         Some(m) => validate_mcp_servers(m)?,
         None => existing.mcp_servers.clone(),
     };
+    let skills = match &update.skills {
+        Some(s) => validate_skills(s)?,
+        None => existing.skills.clone(),
+    };
     let system_prompt = match &update.system_prompt {
         Some(p) => validate_system_prompt(p)?,
         None => existing.system_prompt.clone(),
@@ -441,6 +488,7 @@ fn merge_agent_config(
         llm,
         tools,
         mcp_servers,
+        skills,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -487,6 +535,7 @@ pub async fn update_agent(
             llm = {},
             tools = {},
             mcp_servers = {},
+            skills = {},
             system_prompt = {},
             max_tool_iterations = {},
             enable_thinking = {},
@@ -496,6 +545,7 @@ pub async fn update_agent(
         fields.llm_json,
         fields.tools_json,
         fields.mcp_json,
+        fields.skills_json,
         fields.prompt_json,
         updated_config.max_tool_iterations,
         updated_config.enable_thinking
@@ -632,6 +682,7 @@ mod tests {
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -665,6 +716,7 @@ mod tests {
             },
             tools: vec!["tool_a".to_string(), "tool_b".to_string()],
             mcp_servers: vec!["serena".to_string()],
+            skills: vec![],
             system_prompt: "You are a test agent".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -710,6 +762,7 @@ mod tests {
             },
             tools: vec![],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "Test prompt".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -757,6 +810,7 @@ mod tests {
                 },
                 tools: vec![],
                 mcp_servers: vec![],
+                skills: vec![],
                 system_prompt: format!("Agent {} prompt", i),
                 max_tool_iterations: 50,
                 enable_thinking: true,

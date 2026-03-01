@@ -384,6 +384,19 @@ impl LLMAgent {
         // Extract app_handle from context if available
         let app_handle = effective_context.and_then(|ctx| ctx.app_handle.clone());
 
+        // Auto-inject ReadSkillTool when agent has skills assigned
+        let mut tool_names: Vec<String> = self.config.tools.clone();
+        if !self.config.skills.is_empty()
+            && !tool_names.iter().any(|t| t == "ReadSkillTool")
+        {
+            debug!(
+                agent_id = %self.config.id,
+                skills_count = self.config.skills.len(),
+                "Auto-injecting ReadSkillTool for agent with skills"
+            );
+            tool_names.push("ReadSkillTool".to_string());
+        }
+
         // If this is the primary agent and we have context, use create_tools_with_context
         // to include sub-agent tools
         if is_primary_agent {
@@ -394,7 +407,7 @@ impl LLMAgent {
                 );
                 return factory
                     .create_tools_with_context(
-                        &self.config.tools,
+                        &tool_names,
                         workflow_id,
                         self.config.id.clone(),
                         Some(context.clone()),
@@ -413,7 +426,7 @@ impl LLMAgent {
         );
         factory
             .create_tools(
-                &self.config.tools,
+                &tool_names,
                 workflow_id,
                 self.config.id.clone(),
                 app_handle,
@@ -477,6 +490,21 @@ impl LLMAgent {
         }
 
         sections.push(tools_context);
+
+        // Add skills context if agent has skills assigned
+        if !self.config.skills.is_empty() {
+            let mut skills_section = String::from("## Available Skills\n\n");
+            skills_section.push_str(
+                "You have the following skills assigned. Use the ReadSkill tool to read their content before performing related tasks.\n\n",
+            );
+            for skill_name in &self.config.skills {
+                skills_section.push_str(&format!("- `{}`\n", skill_name));
+            }
+            skills_section.push_str(
+                "\nUse `ReadSkill` with `{\"operation\": \"list\"}` for descriptions, or `{\"name\": \"skill-name\"}` to read content.",
+            );
+            sections.push(skills_section);
+        }
 
         // Add agent configuration context (provider, model, available resources)
         // This helps the LLM make informed decisions when spawning sub-agents
@@ -1651,6 +1679,7 @@ mod tests {
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

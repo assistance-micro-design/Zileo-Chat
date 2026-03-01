@@ -167,6 +167,7 @@ pub mod message;
 pub mod migration;
 pub mod prompt;
 pub mod security;
+pub mod skill;
 pub mod streaming;
 pub mod sub_agent_execution;
 pub mod task;

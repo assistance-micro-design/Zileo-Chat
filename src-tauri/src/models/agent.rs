@@ -72,6 +72,10 @@ pub struct AgentConfig {
     /// MCP server NAMES (not IDs) that the agent can use
     /// Example: ["Serena", "Context7"]
     pub mcp_servers: Vec<String>,
+    /// Skill names assigned to this agent (read via ReadSkillTool)
+    /// Example: ["coding-standards", "git-workflow"]
+    #[serde(default)]
+    pub skills: Vec<String>,
     /// System prompt
     pub system_prompt: String,
     /// Maximum number of tool execution iterations (1-200, default: 50)
@@ -140,6 +144,9 @@ pub struct AgentConfigCreate {
     pub tools: Vec<String>,
     /// MCP server NAMES (not IDs) that the agent can use
     pub mcp_servers: Vec<String>,
+    /// Skill names assigned to this agent
+    #[serde(default)]
+    pub skills: Vec<String>,
     /// System prompt (1-10000 chars)
     pub system_prompt: String,
     /// Maximum number of tool execution iterations (1-200, default: 50)
@@ -165,6 +172,9 @@ pub struct AgentConfigUpdate {
     /// MCP server NAMES (not IDs) that the agent can use
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mcp_servers: Option<Vec<String>>,
+    /// Skill names assigned to this agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skills: Option<Vec<String>>,
     /// System prompt (1-10000 chars)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
@@ -193,6 +203,9 @@ pub struct AgentSummary {
     pub tools_count: usize,
     /// Number of configured MCP servers
     pub mcp_servers_count: usize,
+    /// Number of assigned skills
+    #[serde(default)]
+    pub skills_count: usize,
 }
 
 impl From<&AgentConfig> for AgentSummary {
@@ -205,6 +218,7 @@ impl From<&AgentConfig> for AgentSummary {
             model: config.llm.model.clone(),
             tools_count: config.tools.len(),
             mcp_servers_count: config.mcp_servers.len(),
+            skills_count: config.skills.len(),
         }
     }
 }
@@ -281,6 +295,7 @@ mod tests {
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -330,6 +345,7 @@ mod tests {
             },
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -358,6 +374,7 @@ mod tests {
                 "AnotherBadTool".to_string(),
             ],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -393,6 +410,7 @@ mod tests {
                 "ParallelTasksTool".to_string(),
             ],
             mcp_servers: vec![],
+            skills: vec![],
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

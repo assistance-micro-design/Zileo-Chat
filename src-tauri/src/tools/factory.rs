@@ -49,7 +49,7 @@ use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::registry::TOOL_REGISTRY;
 use crate::tools::spawn_agent::SpawnAgentTool;
-use crate::tools::{CalculatorTool, MemoryTool, TodoTool, Tool, UserQuestionTool};
+use crate::tools::{CalculatorTool, MemoryTool, ReadSkillTool, TodoTool, Tool, UserQuestionTool};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -119,6 +119,35 @@ impl ToolFactory {
     /// like validation that are not tied to a specific tool.
     pub fn get_db(&self) -> Arc<DBClient> {
         self.db.clone()
+    }
+
+    /// Resolves the skill names assigned to an agent from the database.
+    ///
+    /// Returns an empty Vec if the agent is not found or has no skills.
+    async fn resolve_agent_skills(&self, agent_id: &str) -> Vec<String> {
+        let query = "SELECT skills FROM agent WHERE meta::id(id) = $agent_id";
+        let results: Result<Vec<serde_json::Value>, _> = self
+            .db
+            .query_json_with_params(query, vec![("agent_id".to_string(), serde_json::json!(agent_id))])
+            .await;
+
+        match results {
+            Ok(rows) => {
+                if let Some(row) = rows.into_iter().next() {
+                    if let Some(skills) = row["skills"].as_array() {
+                        return skills
+                            .iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect();
+                    }
+                }
+                Vec::new()
+            }
+            Err(e) => {
+                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent skills, defaulting to empty");
+                Vec::new()
+            }
+        }
     }
 
     /// Creates a tool instance by name.
@@ -197,10 +226,23 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
+            "ReadSkillTool" => {
+                // Query the agent's assigned skills from DB
+                let agent_skills = self.resolve_agent_skills(&agent_id).await;
+                debug!(
+                    agent_id = %agent_id,
+                    skills_count = agent_skills.len(),
+                    "Creating ReadSkillTool with resolved agent skills"
+                );
+                let tool = ReadSkillTool::new(self.db.clone(), agent_skills);
+                info!("ReadSkillTool instance created");
+                Ok(Arc::new(tool))
+            }
+
             _ => {
                 warn!(tool_name = %tool_name, "Unknown tool requested");
                 Err(format!(
-                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool",
+                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, ReadSkillTool",
                     tool_name
                 ))
             }
@@ -356,7 +398,8 @@ impl ToolFactory {
 
         match tool_name {
             // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" => {
+            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool"
+            | "ReadSkillTool" => {
                 // Extract app_handle from context for basic tools
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
@@ -565,10 +608,11 @@ mod tests {
         assert!(tools.contains(&"TodoTool"));
         assert!(tools.contains(&"CalculatorTool"));
         assert!(tools.contains(&"UserQuestionTool"));
+        assert!(tools.contains(&"ReadSkillTool"));
         assert!(tools.contains(&"SpawnAgentTool"));
         assert!(tools.contains(&"DelegateTaskTool"));
         assert!(tools.contains(&"ParallelTasksTool"));
-        assert_eq!(tools.len(), 7); // 4 basic + 3 sub-agent
+        assert_eq!(tools.len(), 8); // 4 basic + 1 hidden + 3 sub-agent
     }
 
     #[test]
@@ -598,6 +642,7 @@ mod tests {
         assert!(ToolFactory::is_valid_tool("TodoTool"));
         assert!(ToolFactory::is_valid_tool("CalculatorTool"));
         assert!(ToolFactory::is_valid_tool("UserQuestionTool"));
+        assert!(ToolFactory::is_valid_tool("ReadSkillTool"));
         assert!(ToolFactory::is_valid_tool("SpawnAgentTool"));
         assert!(!ToolFactory::is_valid_tool("InvalidTool"));
         assert!(!ToolFactory::is_valid_tool("memory_tool"));
@@ -667,6 +712,25 @@ mod tests {
         assert!(result.is_ok());
         let tool = result.unwrap();
         assert_eq!(tool.definition().id, "CalculatorTool");
+        assert!(!tool.requires_confirmation());
+    }
+
+    #[tokio::test]
+    async fn test_create_read_skill_tool() {
+        let factory = create_test_factory().await;
+
+        let result = factory
+            .create_tool(
+                "ReadSkillTool",
+                None,
+                "test_agent".to_string(),
+                None,
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let tool = result.unwrap();
+        assert_eq!(tool.definition().id, "ReadSkillTool");
         assert!(!tool.requires_confirmation());
     }
 
