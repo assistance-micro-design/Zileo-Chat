@@ -23,8 +23,9 @@ use crate::{
     db::queries::workflow as wf_queries,
     llm::pricing::calculate_cost,
     models::{
-        llm_models::LLMModel, streaming::events, Message, StreamChunk, ThinkingStepCreate,
-        Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
+        llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk,
+        ThinkingStepCreate, Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult,
+        WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
     AppState,
@@ -185,9 +186,12 @@ pub async fn execute_workflow_streaming(
     let task_id = Uuid::new_v4().to_string();
     info!(task_id = %task_id, "Creating task for streaming workflow");
 
+    // Resolve skill references: {{skill:name}} -> LLM instruction to read via ReadSkillTool
+    let resolved_message = Prompt::interpolate_skills(&validated_message);
+
     let task = Task {
         id: task_id.clone(),
-        description: validated_message,
+        description: resolved_message,
         context: history_context,
     };
 
@@ -264,30 +268,36 @@ pub async fn execute_workflow_streaming(
         let system_message_id = Uuid::new_v4().to_string();
         let system_content = system_prompt.clone();
 
-        // Save system prompt as a system message (will be loaded in future conversations)
-        let insert_query = format!(
-            "CREATE message:`{}` CONTENT {{ \
-                workflow_id: '{}', \
-                role: 'system', \
-                content: {}, \
-                tokens: 0, \
-                tokens_input: 0, \
-                tokens_output: 0, \
-                timestamp: time::now() \
-            }}",
-            system_message_id,
-            validated_workflow_id,
-            serde_json::to_string(&system_content).unwrap_or_else(|_| "\"\"".to_string())
-        );
+        // Save system prompt as a system message (uses db.create with bind params
+        // instead of format!() to prevent SurrealQL injection - ERR_SEC_001)
+        let system_msg = crate::models::MessageCreate {
+            workflow_id: validated_workflow_id.clone(),
+            role: "system".to_string(),
+            content: system_content.clone(),
+            tokens: 0,
+            tokens_input: Some(0),
+            tokens_output: Some(0),
+            model: None,
+            provider: None,
+            cost_usd: None,
+            duration_ms: None,
+        };
 
-        if let Err(e) = state.db.execute(&insert_query).await {
-            warn!(error = %e, "Failed to persist system prompt as message");
-        } else {
-            info!(
-                system_message_id = %system_message_id,
-                system_prompt_len = system_content.len(),
-                "Saved system prompt for workflow context reuse"
-            );
+        match state
+            .db
+            .create("message", &system_message_id, system_msg)
+            .await
+        {
+            Err(e) => {
+                warn!(error = %e, "Failed to persist system prompt as message");
+            }
+            Ok(_) => {
+                info!(
+                    system_message_id = %system_message_id,
+                    system_prompt_len = system_content.len(),
+                    "Saved system prompt for workflow context reuse"
+                );
+            }
         }
     }
 

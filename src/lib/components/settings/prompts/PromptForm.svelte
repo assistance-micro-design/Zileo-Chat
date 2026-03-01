@@ -29,7 +29,6 @@ Displays in a modal with variable detection and preview.
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
 	import type { SkillSummary } from '$types/skill';
 	import { extractVariables, extractSkillReferences } from '$lib/stores/prompts';
-	import { getErrorMessage } from '$lib/utils/error';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -64,9 +63,9 @@ Displays in a modal with variable detection and preview.
 		try {
 			const skills = await invoke<SkillSummary[]>('list_skills');
 			availableSkills = skills.filter((s) => s.enabled);
-		} catch (e) {
-			// Non-blocking: skills insertion is optional
-			console.warn('Failed to load skills for prompt form:', getErrorMessage(e));
+		} catch {
+			// Non-blocking: skill insertion is an optional feature.
+			// If loading fails, the insertion dropdown simply won't appear.
 		}
 	});
 

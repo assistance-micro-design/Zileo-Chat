@@ -20,7 +20,7 @@
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::LazyLock;
 
 /// Regex pattern for detecting `{{variable_name}}` placeholders in prompt templates.
@@ -155,58 +155,10 @@ impl Prompt {
         variables
     }
 
-    /// Interpolate variables into content
-    ///
-    /// Variables not found in the values map are left unchanged.
-    ///
-    /// # Example
-    /// ```
-    /// use zileo_chat::models::Prompt;
-    /// use std::collections::HashMap;
-    /// let content = "Hello {{name}}!";
-    /// let mut values = HashMap::new();
-    /// values.insert("name".to_string(), "Alice".to_string());
-    /// let result = Prompt::interpolate(content, &values);
-    /// assert_eq!(result, "Hello Alice!");
-    /// ```
-    #[allow(dead_code)]
-    pub fn interpolate(content: &str, values: &HashMap<String, String>) -> String {
-        VARIABLE_PATTERN
-            .replace_all(content, |caps: &regex::Captures| {
-                let key = &caps[1];
-                values
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_else(|| format!("{{{{{}}}}}", key))
-            })
-            .into_owned()
-    }
-
-    /// Detect skill references in content using {{skill:skill_name}} pattern.
-    ///
-    /// Returns unique skill names in order of first appearance.
-    /// This is separate from detect_variables() because the `:` syntax
-    /// is not matched by VARIABLE_PATTERN.
-    #[allow(dead_code)]
-    pub fn detect_skill_references(content: &str) -> Vec<String> {
-        let mut seen = HashSet::new();
-        let mut skills = Vec::new();
-
-        for cap in SKILL_PATTERN.captures_iter(content) {
-            let name = cap[1].to_string();
-            if seen.insert(name.clone()) {
-                skills.push(name);
-            }
-        }
-
-        skills
-    }
-
     /// Interpolate skill references in content.
     ///
     /// Replaces `{{skill:name}}` with an instruction for the LLM to read the skill.
-    /// Should be called after variable interpolation.
-    #[allow(dead_code)]
+    /// Called in the streaming pipeline after variable interpolation.
     pub fn interpolate_skills(content: &str) -> String {
         SKILL_PATTERN
             .replace_all(content, |caps: &regex::Captures| {
@@ -293,43 +245,6 @@ mod tests {
     }
 
     #[test]
-    fn test_interpolate_basic() {
-        let content = "Hello {{name}}!";
-        let mut values = HashMap::new();
-        values.insert("name".to_string(), "Alice".to_string());
-        let result = Prompt::interpolate(content, &values);
-        assert_eq!(result, "Hello Alice!");
-    }
-
-    #[test]
-    fn test_interpolate_multiple() {
-        let content = "{{greeting}} {{name}}, welcome to {{place}}!";
-        let mut values = HashMap::new();
-        values.insert("greeting".to_string(), "Hello".to_string());
-        values.insert("name".to_string(), "Bob".to_string());
-        values.insert("place".to_string(), "Paris".to_string());
-        let result = Prompt::interpolate(content, &values);
-        assert_eq!(result, "Hello Bob, welcome to Paris!");
-    }
-
-    #[test]
-    fn test_interpolate_missing_var() {
-        let content = "Hello {{name}}!";
-        let values = HashMap::new();
-        let result = Prompt::interpolate(content, &values);
-        assert_eq!(result, "Hello {{name}}!");
-    }
-
-    #[test]
-    fn test_interpolate_partial() {
-        let content = "Hello {{name}}, task: {{task}}";
-        let mut values = HashMap::new();
-        values.insert("name".to_string(), "Charlie".to_string());
-        let result = Prompt::interpolate(content, &values);
-        assert_eq!(result, "Hello Charlie, task: {{task}}");
-    }
-
-    #[test]
     fn test_category_display() {
         assert_eq!(PromptCategory::System.to_string(), "system");
         assert_eq!(PromptCategory::User.to_string(), "user");
@@ -361,47 +276,7 @@ mod tests {
         assert_eq!(summary.variables_count, 1);
     }
 
-    // ===== Skill Reference Tests =====
-
-    #[test]
-    fn test_detect_skill_references_single() {
-        let content = "Use {{skill:code-review}} for this task";
-        let skills = Prompt::detect_skill_references(content);
-        assert_eq!(skills, vec!["code-review"]);
-    }
-
-    #[test]
-    fn test_detect_skill_references_multiple() {
-        let content = "{{skill:planning}} then {{skill:code-review}}";
-        let skills = Prompt::detect_skill_references(content);
-        assert_eq!(skills, vec!["planning", "code-review"]);
-    }
-
-    #[test]
-    fn test_detect_skill_references_dedup() {
-        let content = "{{skill:review}} and {{skill:review}} again";
-        let skills = Prompt::detect_skill_references(content);
-        assert_eq!(skills, vec!["review"]);
-    }
-
-    #[test]
-    fn test_detect_skill_references_none() {
-        let content = "Hello {{user_name}}, no skills here";
-        let skills = Prompt::detect_skill_references(content);
-        assert!(skills.is_empty());
-    }
-
-    #[test]
-    fn test_detect_skill_references_mixed_with_variables() {
-        let content = "{{greeting}} {{skill:helper}} {{name}}";
-        let skills = Prompt::detect_skill_references(content);
-        assert_eq!(skills, vec!["helper"]);
-        // Variables should not be detected as skills
-        let vars = Prompt::detect_variables(content);
-        assert_eq!(vars.len(), 2);
-        assert_eq!(vars[0].name, "greeting");
-        assert_eq!(vars[1].name, "name");
-    }
+    // ===== Skill Interpolation Tests =====
 
     #[test]
     fn test_interpolate_skills_basic() {
