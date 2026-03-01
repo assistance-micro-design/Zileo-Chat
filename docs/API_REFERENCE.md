@@ -178,6 +178,7 @@ interface AgentSummary {
   model: string;                 // Model name
   tools_count: number;           // Number of enabled tools
   mcp_servers_count: number;     // Number of MCP servers
+  skills_count: number;          // Number of assigned skills
 }
 ```
 
@@ -217,6 +218,7 @@ interface AgentConfig {
     max_tokens: number;       // 256-128000
   };
   tools: string[];            // ["MemoryTool", "TodoTool"]
+  skills: string[];           // Skill names assigned to agent
   mcp_servers: string[];      // MCP server names
   system_prompt: string;
   created_at?: string;        // ISO 8601
@@ -245,6 +247,7 @@ const agentId = await invoke<string>('create_agent', {
       max_tokens: number             // 256-128000
     },
     tools: string[],                 // ["MemoryTool", "TodoTool"]
+    skills: string[],                // Skill names to assign
     mcp_servers: string[],           // MCP server names
     system_prompt: string            // 1-10000 chars
   }
@@ -284,6 +287,7 @@ const updated = await invoke<AgentConfig>('update_agent', {
     name?: string,
     llm?: LLMConfig,
     tools?: string[],
+    skills?: string[],
     mcp_servers?: string[],
     system_prompt?: string
     // Note: lifecycle cannot be changed after creation
@@ -328,6 +332,169 @@ async fn delete_agent(
 **Effect** : Supprime de SurrealDB et désenregistre du AgentRegistry
 
 **Errors** : Agent not found, database error
+
+---
+
+## Skills
+
+### list_skills
+
+Liste tous les skills disponibles (resume).
+
+**Frontend**
+```typescript
+const skills = await invoke<SkillSummary[]>('list_skills');
+```
+
+**Backend Signature**
+```rust
+async fn list_skills(
+    state: State<'_, AppState>
+) -> Result<Vec<SkillSummary>, String>
+```
+
+**SkillSummary Type**
+```typescript
+interface SkillSummary {
+  id: string;
+  name: string;
+  description: string;
+  category: 'system' | 'coding' | 'workflow' | 'analysis' | 'custom';
+  enabled: boolean;
+  content_length: number;
+  updated_at: string;
+}
+```
+
+**Returns** : Array de resumes skills (sans content complet)
+
+---
+
+### get_skill
+
+Recupere un skill complet par ID.
+
+**Frontend**
+```typescript
+const skill = await invoke<Skill>('get_skill', {
+  skillId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn get_skill(
+    skill_id: String,
+    state: State<'_, AppState>
+) -> Result<Skill, String>
+```
+
+**Skill Type**
+```typescript
+interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  category: 'system' | 'coding' | 'workflow' | 'analysis' | 'custom';
+  content: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+**Errors** : Skill not found, invalid ID
+
+---
+
+### create_skill
+
+Cree un nouveau skill.
+
+**Frontend**
+```typescript
+const skillId = await invoke<string>('create_skill', {
+  config: {
+    name: string,             // 1-128 chars, regex [a-zA-Z0-9_-]+
+    description: string,      // 1-500 chars
+    category: SkillCategory,
+    content: string           // 1-50000 chars (markdown)
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn create_skill(
+    config: SkillCreate,
+    state: State<'_, AppState>
+) -> Result<String, String>
+```
+
+**Validation**
+- `name`: 1-128 chars, regex `^[a-zA-Z0-9_-]+$`, UNIQUE
+- `description`: 1-500 chars, non vide
+- `content`: 1-50000 chars, non vide
+
+**Returns** : UUID du skill cree
+
+**Errors** : Validation failed, duplicate name, database error
+
+---
+
+### update_skill
+
+Met a jour un skill existant (mise a jour partielle).
+
+**Frontend**
+```typescript
+const updated = await invoke<Skill>('update_skill', {
+  skillId: string,
+  config: {
+    name?: string,
+    description?: string,
+    category?: SkillCategory,
+    content?: string,
+    enabled?: boolean
+  }
+});
+```
+
+**Backend Signature**
+```rust
+async fn update_skill(
+    skill_id: String,
+    config: SkillUpdate,
+    state: State<'_, AppState>
+) -> Result<Skill, String>
+```
+
+**Returns** : Skill mis a jour
+
+**Errors** : Skill not found, validation failed
+
+---
+
+### delete_skill
+
+Supprime un skill.
+
+**Frontend**
+```typescript
+await invoke('delete_skill', {
+  skillId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn delete_skill(
+    skill_id: String,
+    state: State<'_, AppState>
+) -> Result<(), String>
+```
+
+**Errors** : Skill not found, database error
 
 ---
 

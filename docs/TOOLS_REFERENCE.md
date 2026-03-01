@@ -13,6 +13,7 @@ Documentation complete des tools disponibles pour les agents dans Zileo-Chat-3.
 - [SpawnAgentTool](#5-spawnagentool)
 - [DelegateTaskTool](#6-delegatetasktool)
 - [ParallelTasksTool](#7-paralleltaskstool)
+- [ReadSkillTool](#8-readskilltool)
 - [Utility Modules](#utility-modules)
 - [ToolError Types](#toolerror-types)
 - [Fichiers source](#fichiers-source)
@@ -33,13 +34,16 @@ ToolFactory
 ├── Interaction Tools (human-in-the-loop)
 │   └── UserQuestionTool - Questions interactives avec timeout et circuit breaker
 │
-└── Sub-Agent Tools (Primary Agent uniquement)
-    ├── SpawnAgentTool      - Creation de sous-agents temporaires
-    ├── DelegateTaskTool    - Delegation a agents permanents
-    └── ParallelTasksTool   - Execution parallele multi-agents
+├── Sub-Agent Tools (Primary Agent uniquement)
+│   ├── SpawnAgentTool      - Creation de sous-agents temporaires
+│   ├── DelegateTaskTool    - Delegation a agents permanents
+│   └── ParallelTasksTool   - Execution parallele multi-agents
+│
+└── Hidden Tools (auto-injectes)
+    └── ReadSkillTool       - Lecture de documents de competences (skills)
 ```
 
-**Total**: 7 tools (3 basic + 1 interaction + 3 sub-agent)
+**Total**: 8 tools (3 basic + 1 interaction + 3 sub-agent + 1 hidden)
 
 ### Trait Tool
 
@@ -90,6 +94,7 @@ Le `TOOL_REGISTRY` est un singleton global (`std::sync::LazyLock`) pour la decou
 | SpawnAgentTool | SubAgent | true |
 | DelegateTaskTool | SubAgent | true |
 | ParallelTasksTool | SubAgent | true |
+| ReadSkillTool | Hidden | false |
 
 ### API du Registry
 
@@ -1458,6 +1463,84 @@ Execute plusieurs taches simultanement.
 
 ---
 
+## 8. ReadSkillTool
+
+**Fichier**: `src-tauri/src/tools/read_skill.rs`
+
+Lecture de documents de competences (skills) contenant des instructions et du contexte pour les agents.
+
+**Hidden**: `true` - Auto-injecte quand l'agent a des skills assignes, pas visible dans l'UI frontend.
+
+### ToolDefinition
+
+| Champ | Valeur |
+|-------|--------|
+| **id** | `ReadSkillTool` |
+| **name** | `ReadSkill` |
+| **category** | Basic |
+| **requires_confirmation** | false |
+| **hidden** | true |
+
+### Operations
+
+| Operation | Description | Parametres |
+|-----------|-------------|------------|
+| `read` (default) | Lire le contenu complet d'un skill | `name` (requis) |
+| `list` | Lister les skills disponibles pour l'agent | (aucun) |
+
+### Input Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": ["read", "list"],
+      "default": "read",
+      "description": "Operation: 'read' to get skill content, 'list' to see available skills"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of the skill to read (required for 'read' operation)"
+    }
+  }
+}
+```
+
+### Controle d'Acces
+
+| Operation | Acces | Erreur si non autorise |
+|-----------|-------|------------------------|
+| `list` | Uniquement les skills dans `agent_skills` ET `enabled = true` en DB | - |
+| `read` | `name` doit etre dans `agent_skills` ET `enabled = true` en DB | `PermissionDenied` ou `NotFound` |
+
+### Auto-Injection (llm_agent.rs)
+
+```rust
+// Auto-inject ReadSkillTool when agent has skills assigned
+if !self.config.skills.is_empty()
+    && !tool_names.iter().any(|t| t == "ReadSkillTool")
+{
+    tool_names.push("ReadSkillTool".to_string());
+}
+```
+
+Quand injecte, le factory appelle `resolve_agent_skills(agent_id)` pour recuperer la liste des noms de skills depuis la table `agent` en DB.
+
+Les sous-agents heritent des skills du parent (`spawn_agent.rs`: `skills: parent_config.skills.clone()`).
+
+### Prompt Template Integration
+
+La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans `streaming.rs` :
+```
+{{skill:coding-standards}}
+→ [Skill: coding-standards]
+  Before proceeding, read the skill "coding-standards" using the ReadSkill tool and follow its instructions.
+```
+
+---
+
 ## Utility Modules
 
 Modules utilitaires partages entre les tools.
@@ -1594,6 +1677,7 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 | `src-tauri/src/tools/spawn_agent.rs` | Implementation SpawnAgentTool |
 | `src-tauri/src/tools/delegate_task.rs` | Implementation DelegateTaskTool |
 | `src-tauri/src/tools/parallel_tasks.rs` | Implementation ParallelTasksTool |
+| `src-tauri/src/tools/read_skill.rs` | Implementation ReadSkillTool |
 
 ---
 
@@ -1653,6 +1737,7 @@ Voir `CLAUDE.md` section "Tool Description Guidelines" pour details complets.
 4. **SpawnAgentTool**: Utiliser pour taches ad-hoc necessitant config specifique
 5. **DelegateTaskTool**: Utiliser pour leverager l'expertise d'agents specialises
 6. **ParallelTasksTool**: Utiliser quand les taches sont independantes
+7. **ReadSkillTool**: Auto-injecte - lire les skills AVANT d'effectuer les taches associees
 
 ### Gestion des erreurs
 

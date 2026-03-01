@@ -104,6 +104,7 @@ User Input
   /memory/+page.svelte       → MemorySettings + MemoryList (lazy)
   /validation/+page.svelte   → ValidationSettings
   /prompts/+page.svelte      → PromptSettings
+  /skills/+page.svelte       → SkillSettings
   /import-export/+page.svelte → ImportExportSettings
   /theme/+page.svelte        → Theme selection + Security info
 ```
@@ -125,6 +126,7 @@ User Input
 │  Memory        │                             │
 │  Validation    │                             │
 │  Prompts       │                             │
+│  Skills        │                             │
 │  Import/Export │                             │
 │  Theme         │                             │
 │                │                             │
@@ -150,6 +152,7 @@ User Input
     { id: 'memory', route: '/settings/memory', labelKey: 'settings_memory', icon: Brain },
     { id: 'validation', route: '/settings/validation', labelKey: 'settings_validation', icon: ShieldCheck },
     { id: 'prompts', route: '/settings/prompts', labelKey: 'settings_prompts', icon: BookOpen },
+    { id: 'skills', route: '/settings/skills', labelKey: 'settings_skills', icon: GraduationCap },
     { id: 'import-export', route: '/settings/import-export', labelKey: 'settings_import_export', icon: FolderSync },
     { id: 'theme', route: '/settings/theme', labelKey: 'settings_theme', icon: Palette }
   ];
@@ -1287,7 +1290,7 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (93 Total Components)
+### Component Library (96 Total Components)
 
 ```
 src/lib/components/
@@ -1367,6 +1370,10 @@ src/lib/components/
 │  │  ├─ PromptSettings.svelte
 │  │  ├─ PromptList.svelte
 │  │  └─ PromptForm.svelte
+│  ├─ skills/           # Skill CRUD (3)
+│  │  ├─ SkillSettings.svelte
+│  │  ├─ SkillList.svelte
+│  │  └─ SkillForm.svelte
 │  ├─ validation/       # Validation config (1)
 │  │  └─ ValidationSettings.svelte
 │  └─ import-export/    # Data portability (9)
@@ -1392,7 +1399,7 @@ src/lib/components/
       └─ StepComplete.svelte
 ```
 
-### Stores (17 Total)
+### Stores (18 Total)
 
 | Store | Type | Key Exports | Description |
 |-------|------|-------------|-------------|
@@ -1405,6 +1412,7 @@ src/lib/components/
 | `streaming` | custom | `streamingStore`, `isStreaming`, `streamContent`, `activeTools`, `reasoningSteps` | Real-time workflow execution |
 | `activity` | custom | `activityStore`, `historicalActivities`, `allActivities`, `filteredActivities` | Workflow activity tracking |
 | `prompts` | custom | `promptStore`, `prompts`, `selectedPrompt`, `hasPrompts` | Prompt library management |
+| `skills` | custom | `skillStore`, `skills`, `selectedSkill`, `hasSkills`, `enabledSkills` | Skill CRUD (createCRUDStore factory) |
 | `validation` | custom | `validationStore`, `hasPendingValidation`, `pendingValidation` | Human-in-the-loop requests |
 | `tokens` | custom | `tokenStore`, `tokenDisplayData`, `streamingTokens`, `cumulativeTokens` | Token usage/cost tracking |
 | `validation-settings` | custom | N/A | Validation configuration |
@@ -1413,7 +1421,7 @@ src/lib/components/
 | `toast` | custom | `toastStore`, `toasts`, `visibleToasts`, `hasToasts`, `navigationTarget` | Toast notifications for background workflow events |
 | `index` | barrel | All stores | Re-exports all stores |
 
-### Types (25 Modules in src/types/)
+### Types (26 Modules in src/types/)
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|
@@ -1430,6 +1438,7 @@ src/lib/components/
 | `sub-agent.ts` | `SubAgentExecution`, `ValidationRequiredEvent` | Sub-agent execution |
 | `validation.ts` | `ValidationRequest`, `ValidationType`, `RiskLevel` | Validation requests |
 | `prompt.ts` | `Prompt`, `PromptCreate`, `PromptSummary`, `PromptCategory` | Prompt library |
+| `skill.ts` | `Skill`, `SkillCreate`, `SkillUpdate`, `SkillSummary`, `SkillCategory`, `SKILL_CATEGORY_LABELS` | Skill documents |
 | `activity.ts` | `WorkflowActivityEvent`, `ActivityFilter` | Activity events |
 | `background-workflow.ts` | `BackgroundWorkflowStatus`, `WorkflowStreamState`, `Toast`, `ToastType` | Background workflow execution and toast notifications |
 | `memory.ts` | `Memory`, `MemoryType` | Memory/RAG |

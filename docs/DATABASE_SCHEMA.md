@@ -1,12 +1,12 @@
 # Schéma Database SurrealDB
 
-> **Version** : 1.0
+> **Version** : 1.1
 > **SurrealDB** : 2.5.0
 > **Type** : Graph relationnel avec support vectoriel
 
 ## Vue d'Ensemble
 
-**Total : 20 tables**
+**Total : 21 tables**
 
 ```
 workflow ─────────────┐
@@ -27,6 +27,7 @@ llm_model ────────────→ provider_settings
 custom_provider ──────→ (linked via provider name)
 
 prompt (standalone)
+skill (standalone)
 settings (key-value config)
 ```
 
@@ -438,6 +439,7 @@ Configuration des agents crees par l'utilisateur.
   - `temperature` : float (0.0-2.0)
   - `max_tokens` : int (256-128000)
 - `tools` : array<string>
+- `skills` : array<string> (skill names assigned to agent)
 - `mcp_servers` : array<string>
 - `system_prompt` : string (1-10000 chars)
 - `max_tool_iterations` : int?
@@ -449,6 +451,30 @@ Configuration des agents crees par l'utilisateur.
 - `id` (UNIQUE)
 - `name` (UNIQUE - case-insensitive uniqueness enforced at backend level)
 - `llm.provider`
+
+---
+
+### skill
+
+Documents de compétences (instructions markdown) assignables aux agents.
+
+**Champs**
+- `id` : UUID
+- `name` : string (1-128 chars, regex `^[a-zA-Z0-9_-]+$`, UNIQUE)
+- `description` : string (1-500 chars)
+- `category` : enum (system, coding, workflow, analysis, custom)
+- `content` : string (1-50000 chars, markdown instructions)
+- `enabled` : boolean (DEFAULT true)
+- `created_at` : datetime (DEFAULT time::now())
+- `updated_at` : datetime (DEFAULT time::now())
+
+**Indexes**
+- `unique_skill_id` ON id (UNIQUE)
+- `unique_skill_name` ON name (UNIQUE)
+- `skill_category_idx` ON category
+- `skill_enabled_idx` ON enabled
+
+**Usage** : Les skills sont assignes aux agents via le champ `agent.skills` (array de noms). Le ReadSkillTool permet aux agents de lire les instructions a l'execution.
 
 ---
 

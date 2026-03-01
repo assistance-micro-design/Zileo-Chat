@@ -15,6 +15,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 | **SpawnAgentTool** | Implemented | `src-tauri/src/tools/spawn_agent.rs` |
 | **DelegateTaskTool** | Implemented | `src-tauri/src/tools/delegate_task.rs` |
 | **ParallelTasksTool** | Implemented | `src-tauri/src/tools/parallel_tasks.rs` |
+| **ReadSkillTool** | Implemented | `src-tauri/src/tools/read_skill.rs` |
 | **Tool Execution** | Implemented | `src-tauri/src/agents/llm_agent.rs` |
 
 **Note**: Les DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) ont été retirés - l'accès DB se fait via les commands Tauri IPC.
@@ -23,6 +24,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 - **Basic Tools**: MemoryTool, TodoTool, CalculatorTool (no special context required)
 - **Interaction Tools**: UserQuestionTool (human-in-the-loop interactions)
 - **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
+- **Hidden Tools**: ReadSkillTool (auto-injected when agent has skills assigned, not shown in UI)
 
 **Sub-Agent Resilience Features (v1.0)**:
 - Inactivity Timeout with Heartbeat: 300s timeout, 30s check interval
@@ -553,7 +555,107 @@ Closed → [3 timeouts] → Open → [60s cooldown] → HalfOpen
 
 ---
 
-## 5. Tool Execution Integration (LLMAgent)
+## 5. ReadSkill Tool
+
+**Objectif** : Permettre aux agents de lire des documents de competences (skills) contenant des instructions et du contexte
+
+**Implementation** : `src-tauri/src/tools/read_skill.rs` (ReadSkillTool)
+
+**Statut** : Implemented
+
+**Hidden** : `true` - Auto-injecte quand l'agent a des skills assignes, pas visible dans l'UI frontend
+
+### Operations Disponibles (via JSON)
+
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `read` (default) | Lire le contenu complet d'un skill | `name` |
+| `list` | Lister les skills disponibles pour l'agent | (aucun) |
+
+### Parametres
+
+| Parametre | Type | Requis | Description |
+|-----------|------|--------|-------------|
+| `operation` | string | Non | "read" (default) ou "list" |
+| `name` | string | Conditionnel | Nom du skill (requis pour "read") |
+
+### Exemples d'Utilisation
+
+**Lister les skills disponibles**:
+```json
+{
+  "operation": "list"
+}
+```
+
+**Lire un skill**:
+```json
+{
+  "name": "coding-standards"
+}
+```
+
+**Lire avec operation explicite**:
+```json
+{
+  "operation": "read",
+  "name": "git-workflow"
+}
+```
+
+### Structure de Reponse
+
+**List**:
+```json
+{
+  "success": true,
+  "skills": [
+    {"name": "coding-standards", "description": "...", "category": "coding"}
+  ],
+  "message": "Found 1 available skill(s)"
+}
+```
+
+**Read**:
+```json
+{
+  "success": true,
+  "name": "coding-standards",
+  "description": "Standards de code",
+  "category": "coding",
+  "content": "# Coding Standards\n..."
+}
+```
+
+### Controle d'Acces
+
+- **list** : Retourne uniquement les skills dans `agent_skills` ET `enabled = true` en DB
+- **read** : Le `name` doit etre dans la liste des skills assignes a l'agent ET `enabled = true` en DB
+- `ToolError::PermissionDenied` si le skill n'est pas assigne a l'agent
+- `ToolError::NotFound` si le skill est assigne mais absent ou desactive en DB
+- `ToolError::InvalidInput` si `name` manquant pour "read" ou operation inconnue
+
+### Auto-Injection
+
+Le ReadSkillTool est injecte automatiquement dans `llm_agent.rs` quand :
+1. L'agent a `skills.len() > 0`
+2. `"ReadSkillTool"` n'est pas deja dans sa liste de tools
+
+De plus, quand un agent a des skills, une section "Available Skills" est ajoutee a son system prompt, listant chaque skill et instruisant le LLM d'utiliser ReadSkill avant d'effectuer les taches associees.
+
+Les sous-agents heritent des skills de leur agent parent (`spawn_agent.rs`).
+
+### Prompt Template Integration
+
+La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans le pipeline de streaming (`streaming.rs`) :
+```
+{{skill:coding-standards}} → [Skill: coding-standards]
+Before proceeding, read the skill "coding-standards" using the ReadSkill tool and follow its instructions.
+```
+
+---
+
+## 6. Tool Execution Integration (LLMAgent)
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
@@ -713,12 +815,12 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.3
+**Version** : 2.4
 **Derniere mise a jour** : 2026-03-01
-**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation
+**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation + Tool Skills
 
 **Features (v2.1)**:
-- 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+- 8 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool, ReadSkillTool
 - Sub-Agent Resilience: Inactivity Timeout, CancellationToken, Circuit Breaker, Retry, Correlation ID
 - MemoryTool Optimizations: Parameterized queries, MemoryInput struct, helpers.rs consolidation, composite indexes
 - TodoTool Optimizations: Parameterized queries, N+1 reduction, db_error uniformization, TASK_SELECT_FIELDS, query limits
@@ -737,6 +839,7 @@ activate_workflow("code_review")
 | **UserQuestionTool Unit** | 25 tests | validate_input, definition, constants |
 | **UserQuestionTool Integration** | 21 tests | commands, SQL injection, validation |
 | **UserQuestionTool Circuit Breaker** | 12 tests | state transitions, recovery |
+| **ReadSkillTool Unit** | 15+ tests | validate_input, access control, operations |
 | **LLMAgent Tool Execution** | 10+ tests | parse_tool_calls, execute, format_results |
 | **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
 | **Memory Types (TS)** | 15+ tests | Type structure, compatibility |

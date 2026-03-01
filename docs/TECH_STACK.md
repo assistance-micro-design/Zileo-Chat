@@ -284,7 +284,7 @@ cargo --version   # >= 1.93.0
 - Report enforcement mechanism for agents
 - Code organization: barrel exports, kebab-case filenames, dead code removal
 - 24 security audits completed
-- Test count: 1025 backend + 260 frontend = 1285 total
+- Test count: 2061 backend + 260 frontend = 2321 total
 
 **6 Feb 2026 - Background Workflow Execution**:
 - New stores: `backgroundWorkflowsStore`, `toastStore`
