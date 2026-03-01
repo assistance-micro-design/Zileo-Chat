@@ -5,6 +5,65 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-03-01
+
+### Added
+
+- **Block-by-block Agent Chat (SA-019)**: Complete rewrite of agent message display
+  - Real-time token streaming with thinking extraction and new ChunkTypes
+  - `ChatBlock` model with `load_message_blocks` command for structured display
+  - Frontend execution blocks store with inline block-by-block rendering
+  - Removed ActivitySidebar (22 files deleted, -5585 lines), replaced with 2-column layout
+  - TodoTool tasks display with persistence and agent name resolution
+  - Auto-scroll with smart detection (short-circuit, timing)
+- **Hybrid Agent ID/Name Resolution (SA-020)**: Agents addressable by name or UUID
+  - UNIQUE index on agent name with backend uniqueness validation
+  - `AgentRegistry.get_by_name()` with case-insensitive + trim lookup
+  - `resolve_agent_ref()` shared function (ID fast path, name slow path)
+  - `DelegateTaskTool` and `ParallelTasksTool` accept `agent_name` as alternative to `agent_id`
+  - Real agent names in events and reports
+  - Frontend duplicate name validation with i18n
+- **Report Enforcement (SA-021)**: Detects generic completion messages and triggers follow-up LLM call for proper markdown report
+- **Workflow UX Improvements (SA-016)**: Temporal grouping, round separators, markdown streaming, workflow rename (F2), filter labels
+- **Settings Decomposition (SA-017)**: Shared UI components, centralized name validation with TDD, error handling with ErrorBanner
+- **Internationalization (SA-018)**: Removed hardcoded model IDs, centralized `DEFAULT_OLLAMA_URL`, internationalized settings messages
+
+### Changed
+
+- **Code Organization (SA-022)**: Barrel exports, provider components moved to `settings/providers/`, filenames normalized to kebab-case, dead code removal, JSDoc import paths fixed
+- **Consolidation (SA-023)**: `ProviderType` in single canonical location, app-wide constants in `constants.rs`, `safe_truncate()` in `utils.rs`, `commands/models.rs` renamed to `commands/llm_models.rs`
+- **Dependency Cleanup (SA-024)**: Replaced `once_cell` and `futures` with std alternatives, pinned `surrealdb`, moved `svelte-virtual-list` to deps, converted `.expect()` to `Result` in LLM providers
+
+### Fixed
+
+- **Scroll Performance (SA-017)**: WebKit2GTK scroll fixes for settings pages
+- **each_key_duplicate**: Composite keys `${type}-${i}` in ChatContainer blocks and MessageMetrics sub-agents
+- **`{@const}` non-reactive**: Inline function calls instead of `{@const}` with SvelteMap
+- **serde_json::Value in json!()**: Serialize to string first
+- **message_id chain**: Correct propagation through block-by-block display
+
+### Security
+
+- **SurrealQL Injection Prevention (SA-001)**: Parameterized queries with `.bind()` / `execute_with_params()`
+- **Type Safety (SA-013)**: Aligned enums and types between Rust and TypeScript (ChunkType, AgentConfigCreate, ProviderSettings, MessageCreate)
+- **Defense-in-depth**: `validate_uuid_field()` (47 sites), `serialize_for_query()` (25 sites), `sanitize_for_surrealdb()` on external data
+- **Dead Code Removal (SA-015)**: 5-phase cleanup of annotations, superseded code, dead getters, speculative methods
+- **MCP HTTP Validation (SA-002)**: `base_url` validation warning for MCP servers
+- **Console Violations (SA-013)**: Removed all `console.*` from frontend
+- **Cancellation Token Propagation**: Through agent chain with UTF-8 safe truncation
+- **Migration Guard (SA-005)**: Prevents embedding destruction during migrations
+- **Function Decomposition (SA-007)**: Long functions decomposed (workflow executor, import/export)
+- **Sub-agent Token Tracking (SA-014)**: Separate tracking and data persistence
+
+### Removed
+
+- ActivitySidebar component and related 22 files (-5585 lines)
+- 171 OPT-* traceability markers from codebase
+- `once_cell` and `futures` crate dependencies (replaced by std)
+- Unused `Default` impls in LLM providers
+
+---
+
 ## [0.12.0] - 2026-02-12
 
 ### Added
@@ -290,7 +349,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned for 1.0.0
 
-- Replace 69 `unwrap()`/`expect()` calls with proper error handling
 - Integration tests with ephemeral SurrealDB
 - E2E tests with Playwright
 - macOS and Windows distribution packages
@@ -331,6 +389,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.13.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.13.0
 [0.12.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.12.0
 [0.11.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.11.0
 [0.10.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.10.0
@@ -339,4 +398,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.13.0...HEAD
