@@ -333,10 +333,10 @@ impl DelegateTaskTool {
             "Delegating task to agent"
         );
 
-        // 7. Create execution record ID
+        // 8. Create execution record ID
         let execution_id = Uuid::new_v4().to_string();
 
-        // 8. Create execution record in database (status: running)
+        // 9. Create execution record in database (status: running)
         // Note: DelegateTaskTool is a top-level execution, so parent_execution_id = None
         let mut execution_create = SubAgentExecutionCreate::with_parent(
             self.workflow_id.clone(),
@@ -365,7 +365,7 @@ impl DelegateTaskTool {
             "Created delegation execution record"
         );
 
-        // 9. Track active delegation
+        // 10. Track active delegation
         let delegation = ActiveDelegation {
             agent_id: agent_id.to_string(),
             agent_name: agent_name.clone(),
@@ -375,7 +375,7 @@ impl DelegateTaskTool {
         };
         self.active_delegations.write().await.push(delegation);
 
-        // 9b. Create executor for unified event emission
+        // 10b. Create executor for unified event emission
         // Use with_cancellation for graceful shutdown support
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
@@ -387,10 +387,10 @@ impl DelegateTaskTool {
             self.cancellation_token.clone(),
         );
 
-        // 9c. Emit sub_agent_start event via unified executor
+        // 10c. Emit sub_agent_start event via unified executor
         executor.emit_start_event(agent_id, &agent_name, prompt);
 
-        // 10. Create task for agent
+        // 11. Create task for agent
         let task = Task {
             id: format!("delegate_{}", Uuid::new_v4()),
             description: prompt.to_string(),
@@ -401,10 +401,10 @@ impl DelegateTaskTool {
             }),
         };
 
-        // 11. Execute via unified executor with retry and heartbeat monitoring
+        // 12. Execute via unified executor with retry and heartbeat monitoring
         let exec_result = executor.execute_with_retry(agent_id, task, None).await;
 
-        // 12. Emit sub_agent_complete or sub_agent_error event via unified executor
+        // 13. Emit sub_agent_complete or sub_agent_error event via unified executor
         executor.emit_complete_event(agent_id, &agent_name, &exec_result);
 
         // Extract values for subsequent processing
@@ -412,17 +412,17 @@ impl DelegateTaskTool {
         let metrics = exec_result.metrics.clone();
         let success = exec_result.success;
 
-        // 13. Update execution record
+        // 14. Update execution record
         executor
             .update_execution_record(&execution_id, &exec_result)
             .await;
 
-        // 13b. Persist sub-agent internal tool executions and reasoning steps
+        // 14b. Persist sub-agent internal tool executions and reasoning steps
         executor
             .persist_sub_agent_internals(&execution_id, agent_id, &exec_result)
             .await;
 
-        // 14. Update active delegations status
+        // 15. Update active delegations status
         {
             let mut delegations = self.active_delegations.write().await;
             if let Some(d) = delegations.iter_mut().find(|d| d.agent_id == agent_id) {
@@ -444,7 +444,7 @@ impl DelegateTaskTool {
             "Delegation completed"
         );
 
-        // 15. Return result
+        // 16. Return result
         let result = DelegateResult {
             success,
             agent_id: agent_id.to_string(),
