@@ -28,6 +28,12 @@ static VARIABLE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}").expect("Invalid regex pattern")
 });
 
+/// Regex pattern for detecting `{{skill:skill_name}}` references in prompt templates.
+/// Separate from VARIABLE_PATTERN because `:` is not matched by the variable regex.
+static SKILL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\{\{skill:([a-zA-Z0-9_-]+)\}\}").expect("Invalid skill regex pattern")
+});
+
 // ===== Enums =====
 
 /// Category for organizing prompts
@@ -175,6 +181,43 @@ impl Prompt {
             })
             .into_owned()
     }
+
+    /// Detect skill references in content using {{skill:skill_name}} pattern.
+    ///
+    /// Returns unique skill names in order of first appearance.
+    /// This is separate from detect_variables() because the `:` syntax
+    /// is not matched by VARIABLE_PATTERN.
+    #[allow(dead_code)]
+    pub fn detect_skill_references(content: &str) -> Vec<String> {
+        let mut seen = HashSet::new();
+        let mut skills = Vec::new();
+
+        for cap in SKILL_PATTERN.captures_iter(content) {
+            let name = cap[1].to_string();
+            if seen.insert(name.clone()) {
+                skills.push(name);
+            }
+        }
+
+        skills
+    }
+
+    /// Interpolate skill references in content.
+    ///
+    /// Replaces `{{skill:name}}` with an instruction for the LLM to read the skill.
+    /// Should be called after variable interpolation.
+    #[allow(dead_code)]
+    pub fn interpolate_skills(content: &str) -> String {
+        SKILL_PATTERN
+            .replace_all(content, |caps: &regex::Captures| {
+                let name = &caps[1];
+                format!(
+                    "[Skill: {}]\nBefore proceeding, read the skill \"{}\" using the ReadSkill tool and follow its instructions.",
+                    name, name
+                )
+            })
+            .into_owned()
+    }
 }
 
 impl From<&Prompt> for PromptSummary {
@@ -316,5 +359,71 @@ mod tests {
         assert_eq!(summary.id, "test-id");
         assert_eq!(summary.name, "Test Prompt");
         assert_eq!(summary.variables_count, 1);
+    }
+
+    // ===== Skill Reference Tests =====
+
+    #[test]
+    fn test_detect_skill_references_single() {
+        let content = "Use {{skill:code-review}} for this task";
+        let skills = Prompt::detect_skill_references(content);
+        assert_eq!(skills, vec!["code-review"]);
+    }
+
+    #[test]
+    fn test_detect_skill_references_multiple() {
+        let content = "{{skill:planning}} then {{skill:code-review}}";
+        let skills = Prompt::detect_skill_references(content);
+        assert_eq!(skills, vec!["planning", "code-review"]);
+    }
+
+    #[test]
+    fn test_detect_skill_references_dedup() {
+        let content = "{{skill:review}} and {{skill:review}} again";
+        let skills = Prompt::detect_skill_references(content);
+        assert_eq!(skills, vec!["review"]);
+    }
+
+    #[test]
+    fn test_detect_skill_references_none() {
+        let content = "Hello {{user_name}}, no skills here";
+        let skills = Prompt::detect_skill_references(content);
+        assert!(skills.is_empty());
+    }
+
+    #[test]
+    fn test_detect_skill_references_mixed_with_variables() {
+        let content = "{{greeting}} {{skill:helper}} {{name}}";
+        let skills = Prompt::detect_skill_references(content);
+        assert_eq!(skills, vec!["helper"]);
+        // Variables should not be detected as skills
+        let vars = Prompt::detect_variables(content);
+        assert_eq!(vars.len(), 2);
+        assert_eq!(vars[0].name, "greeting");
+        assert_eq!(vars[1].name, "name");
+    }
+
+    #[test]
+    fn test_interpolate_skills_basic() {
+        let content = "Start: {{skill:my_skill}}";
+        let result = Prompt::interpolate_skills(content);
+        assert!(result.contains("[Skill: my_skill]"));
+        assert!(result.contains("read the skill \"my_skill\""));
+        assert!(!result.contains("{{skill:my_skill}}"));
+    }
+
+    #[test]
+    fn test_interpolate_skills_preserves_variables() {
+        let content = "{{name}} with {{skill:helper}}";
+        let result = Prompt::interpolate_skills(content);
+        assert!(result.contains("{{name}}"));
+        assert!(result.contains("[Skill: helper]"));
+    }
+
+    #[test]
+    fn test_interpolate_skills_no_skills() {
+        let content = "Hello {{name}}, plain text";
+        let result = Prompt::interpolate_skills(content);
+        assert_eq!(result, content);
     }
 }

@@ -41,7 +41,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import type { ProviderType, LLMState } from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
+	import type { SkillSummary } from '$types/skill';
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
+	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
 	/**
@@ -67,6 +69,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let enableThinking = $state(true);
 	let selectedTools = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
+	let selectedSkills = $state<string[]>([]);
 	let systemPrompt = $state('');
 
 	// Sync form state when agent prop changes (e.g., switching between edit targets)
@@ -79,6 +82,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		enableThinking = agent?.enable_thinking ?? true;
 		selectedTools = agent?.tools ?? [];
 		selectedMcpServers = agent?.mcp_servers ?? [];
+		selectedSkills = agent?.skills ?? [];
 		systemPrompt = agent?.system_prompt ?? '';
 		// Reset validation state when agent changes
 		errors = {};
@@ -91,6 +95,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let mcpState = $state<MCPState>(createInitialMCPState());
 	let llmState = $state<LLMState>(createInitialLLMState());
 	let providerList = $state<ProviderInfo[]>([]);
+	let availableSkillSummaries = $state<SkillSummary[]>([]);
 
 	/** Available tools (from backend) - reactive to locale */
 	const availableTools = $derived([
@@ -141,6 +146,17 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		return getModelByApiName(llmState, model, providerType);
 	});
 
+	/** Available skills (enabled only) */
+	const availableSkills = $derived(
+		availableSkillSummaries
+			.filter((s) => s.enabled)
+			.map((s) => ({
+				value: s.name,
+				label: s.name,
+				description: s.description
+			}))
+	);
+
 	/** Available MCP servers from store */
 	const availableMcpServers = $derived(
 		mcpState.servers.map((s) => ({
@@ -160,6 +176,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			mcpState = setServers(mcpState, servers);
 		} catch {
 			loadWarnings = [...loadWarnings, t('agents_mcp_load_failed')];
+		}
+
+		// Load available skills
+		try {
+			availableSkillSummaries = await invoke<SkillSummary[]>('list_skills');
+		} catch {
+			loadWarnings = [...loadWarnings, t('agents_skills_load_failed')];
 		}
 
 		// Load LLM models and provider list
@@ -247,7 +270,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			},
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
-			skills: [],
+			skills: selectedSkills,
 			system_prompt: systemPrompt.trim(),
 			max_tool_iterations: maxToolIterations,
 			enable_thinking: enableThinking
@@ -274,6 +297,17 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			selectedTools = selectedTools.filter((t) => t !== toolValue);
 		} else {
 			selectedTools = [...selectedTools, toolValue];
+		}
+	}
+
+	/**
+	 * Toggles skill selection
+	 */
+	function toggleSkill(skillName: string): void {
+		if (selectedSkills.includes(skillName)) {
+			selectedSkills = selectedSkills.filter((s) => s !== skillName);
+		} else {
+			selectedSkills = [...selectedSkills, skillName];
 		}
 	}
 
@@ -483,6 +517,34 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 									<div class="checkbox-content">
 										<span class="checkbox-label">{server.label}</span>
 										<span class="checkbox-description">{server.description}</span>
+									</div>
+								</label>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Skills -->
+				<div class="form-section">
+					<h4 class="section-title">{$i18n('agents_skills_section')}</h4>
+					<p class="section-help">{$i18n('agents_skills_help')}</p>
+
+					{#if availableSkills.length === 0}
+						<p class="no-servers">
+							{$i18n('agents_skills_none')}
+						</p>
+					{:else}
+						<div class="checkbox-group">
+							{#each availableSkills as skill (skill.value)}
+								<label class="checkbox-item">
+									<input
+										type="checkbox"
+										checked={selectedSkills.includes(skill.value)}
+										onchange={() => toggleSkill(skill.value)}
+									/>
+									<div class="checkbox-content">
+										<span class="checkbox-label">{skill.label}</span>
+										<span class="checkbox-description">{skill.description}</span>
 									</div>
 								</label>
 							{/each}

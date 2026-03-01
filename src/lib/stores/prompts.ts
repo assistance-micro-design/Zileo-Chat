@@ -251,3 +251,30 @@ export function getMissingVariables(content: string, values: Record<string, stri
 	const required = extractVariables(content);
 	return required.filter((name) => !values[name] || values[name].trim() === '');
 }
+
+/**
+ * Extract skill references from content (frontend version)
+ * Mirrors backend Prompt::detect_skill_references
+ *
+ * Detects `{{skill:skill_name}}` patterns. Separate from extractVariables()
+ * because the `:` syntax is not matched by the variable regex.
+ *
+ * @param content - The prompt content to scan
+ * @returns Unique skill names in order of first appearance
+ */
+export function extractSkillReferences(content: string): string[] {
+	const pattern = /\{\{skill:([a-zA-Z0-9_-]+)\}\}/g;
+	const seen = new Set<string>();
+	const skills: string[] = [];
+
+	let match;
+	while ((match = pattern.exec(content)) !== null) {
+		const name = match[1];
+		if (!seen.has(name)) {
+			seen.add(name);
+			skills.push(name);
+		}
+	}
+
+	return skills;
+}
