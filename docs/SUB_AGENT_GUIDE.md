@@ -130,6 +130,8 @@ Routes tasks to existing permanent agents already configured in the system.
 - Don't need custom configuration
 - Want to leverage pre-configured agent capabilities
 
+**Hybrid Resolution**: Accepts either `agent_id` (UUID) or `agent_name` (case-insensitive). UUID is resolved first (fast path), name uses `AgentRegistry.get_by_name()`.
+
 **Example Prompt for Primary Agent**:
 ```
 Delegate the database optimization task to the db_agent:
@@ -138,12 +140,21 @@ Delegate the database optimization task to the db_agent:
 - Suggest index improvements
 ```
 
-**Tool Input**:
+**Tool Input** (by ID or by name):
 ```json
 {
   "operation": "delegate",
   "agent_id": "db_agent",
   "prompt": "Analyze the database query performance. Identify the top 5 slowest queries and suggest optimization strategies including potential index additions."
+}
+```
+
+**Or by name**:
+```json
+{
+  "operation": "delegate",
+  "agent_name": "Database Agent",
+  "prompt": "..."
 }
 ```
 
@@ -171,6 +182,8 @@ Executes multiple independent tasks simultaneously across different agents.
 - Multiple independent analyses needed
 - Time-sensitive operations
 - Tasks don't depend on each other's results
+
+**Hybrid Resolution**: Each task accepts `agent_id` or `agent_name`. Real agent names are used in streaming events and reports.
 
 **Example Prompt for Primary Agent**:
 ```
@@ -482,7 +495,7 @@ console.log(`Deleted ${deletedCount} executions`);
 
 The sub-agent system includes several resilience mechanisms to handle failures gracefully.
 
-### Inactivity Timeout with Heartbeat (OPT-SA-1)
+### Inactivity Timeout with Heartbeat
 
 Sub-agents are monitored for activity to detect true hangs without cutting legitimate long-running operations:
 
@@ -506,7 +519,7 @@ Execution starts
 Continue monitoring...
 ```
 
-### Retry with Exponential Backoff (OPT-SA-10)
+### Retry with Exponential Backoff
 
 Transient failures are automatically retried with exponential backoff:
 
@@ -524,7 +537,7 @@ Transient failures are automatically retried with exponential backoff:
 - Invalid input, authentication errors
 - Circuit breaker open
 
-### Circuit Breaker (OPT-SA-8)
+### Circuit Breaker
 
 The circuit breaker pattern prevents cascade failures:
 
@@ -543,7 +556,7 @@ The circuit breaker pattern prevents cascade failures:
     +------------ [Open] <--- test fails ---------------+
 ```
 
-### Graceful Cancellation (OPT-SA-7)
+### Graceful Cancellation
 
 Sub-agent executions can be cancelled gracefully via CancellationToken:
 
@@ -552,7 +565,7 @@ Sub-agent executions can be cancelled gracefully via CancellationToken:
 - Sub-agents respond immediately instead of waiting for timeout
 - Clean shutdown with proper resource cleanup
 
-### Hierarchical Tracing (OPT-SA-11)
+### Hierarchical Tracing
 
 Parallel batch executions use correlation IDs for tracing:
 

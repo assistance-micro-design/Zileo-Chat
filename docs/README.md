@@ -81,14 +81,6 @@ Build et packaging : Linux (AppImage, .deb), macOS (.dmg), Windows (.msi)
 **[TESTING_STRATEGY.md](TESTING_STRATEGY.md)**
 Stratégie tests : unitaires, intégration, E2E, CI/CD
 
-### 📋 Tâches Restantes & Roadmap
-
-**[REMAINING_TASKS.md](REMAINING_TASKS.md)**
-Tâches post-v1 différées : TYPE-OPT-5 (specta), SEC-OPT-7/8, DB-OPT-12/14, FE-OPT-12/13, OPT-FA-10/14/15
-
-**[SPECS_REMAINING.md](SPECS_REMAINING.md)**
-Spécifications OPT-FA restantes : migration streaming class runes, $inspect helpers, retry logic
-
 ## Workflows Documentation
 
 ### Nouveau Contributeur
@@ -148,6 +140,7 @@ Spécifications OPT-FA restantes : migration streaming class runes, $inspect hel
 
 - **Cohérente** : Interdépendances vérifiées
 - **Complète** : Toutes sections couvertes
-- **Tests** : ~627 backend unit tests, ~179 frontend tests (~806 total)
+- **Tests** : ~1025 backend tests (975 unit + 46 integration + 4 doc), ~260 frontend tests (~1285 total)
+- **Sécurité** : 24 audits de sécurité complétés
 
-Dernière validation : 2026-01-25
+Dernière validation : 2026-03-01

@@ -256,9 +256,9 @@ enabled = ["TodoTool", "SurrealDBTool"]
 - **Base de connaissances** : Accumulation expertise projet-specific
 - **Décisions architecturales** : Historique choix techniques et justifications
 
-### Securite et Performance (OPT-MEM)
+### Securite et Performance
 
-**Requetes Parametrees** (OPT-MEM-5):
+**Requetes Parametrees**:
 Toutes les requetes DB utilisent des bind parameters pour prevenir l'injection SQL:
 ```rust
 let params = vec![
@@ -268,7 +268,7 @@ let params = vec![
 let results: Vec<Memory> = db.query_with_params(&query, params).await?;
 ```
 
-**Validation Typee** (OPT-MEM-7):
+**Validation Typee**:
 L'outil utilise `MemoryInput` struct pour parsing et validation typee:
 ```rust
 struct MemoryInput {
@@ -279,10 +279,10 @@ struct MemoryInput {
 }
 ```
 
-**Logique Partagee** (OPT-MEM-6):
+**Logique Partagee**:
 La logique add_memory est consolidee dans `tools/memory/helpers.rs` pour eliminer la duplication entre tool et commands.
 
-**Index Composites** (OPT-MEM-4):
+**Index Composites**:
 - `memory_type_workflow_idx` - Optimise les recherches avec type + workflow_id
 - `memory_type_created_idx` - Optimise les requetes de nettoyage par type + created_at
 
@@ -463,7 +463,7 @@ Le tool utilise un pattern de polling progressif pour attendre la reponse utilis
 | 5-6 | 2000ms |
 | 7+ | 5000ms (jusqu'au timeout) |
 
-**Timeout (OPT-UQ-7)** : Apres 5 minutes (300 secondes) sans reponse, le statut devient "timeout" et une erreur est retournee. Le circuit breaker enregistre ce timeout (voir section Circuit Breaker ci-dessous).
+**Timeout** : Apres 5 minutes (300 secondes) sans reponse, le statut devient "timeout" et une erreur est retournee. Le circuit breaker enregistre ce timeout (voir section Circuit Breaker ci-dessous).
 
 ### Events Emis
 
@@ -500,23 +500,23 @@ Pour activer le UserQuestionTool sur un agent:
 
 ```rust
 pub const MAX_QUESTION_LENGTH: usize = 2000;
-pub const MAX_OPTION_ID_LENGTH: usize = 64;        // OPT-UQ-2
+pub const MAX_OPTION_ID_LENGTH: usize = 64;
 pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
 pub const MAX_OPTIONS: usize = 20;
 pub const MAX_CONTEXT_LENGTH: usize = 5000;
-pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000; // OPT-UQ-1
+pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
 pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
 pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
 
-// Timeout (OPT-UQ-7)
+// Timeout
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
 
-// Circuit Breaker (OPT-UQ-12)
+// Circuit Breaker
 pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;  // Opens after 3 consecutive timeouts
 pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;     // 60s cooldown before recovery attempt
 ```
 
-### Circuit Breaker (OPT-UQ-12)
+### Circuit Breaker
 
 Le UserQuestionTool implemente un circuit breaker pour prevenir le spam de questions quand l'utilisateur ne repond pas.
 
@@ -713,17 +713,17 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.2
-**Derniere mise a jour** : 2026-01-25
-**Phase** : Functional Agent System v1.0 Complete + OPT-MEM + OPT-TODO + OPT-UQ + OPT-TD Optimizations
+**Version** : 2.3
+**Derniere mise a jour** : 2026-03-01
+**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation
 
 **Features (v2.1)**:
 - 7 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
-- Sub-Agent Resilience: Inactivity Timeout (OPT-SA-1), CancellationToken (OPT-SA-7), Circuit Breaker (OPT-SA-8), Retry (OPT-SA-10), Correlation ID (OPT-SA-11)
-- MemoryTool Optimizations: Parameterized queries (OPT-MEM-5), MemoryInput struct (OPT-MEM-7), helpers.rs consolidation (OPT-MEM-6), composite indexes (OPT-MEM-4)
-- TodoTool Optimizations: Parameterized queries (OPT-TODO-1 to 4), N+1 reduction (OPT-TODO-5,6), db_error uniformization (OPT-TODO-7), TASK_SELECT_FIELDS (OPT-TODO-9), query limits (OPT-TODO-10)
-- UserQuestionTool Optimizations (OPT-UQ-1 to 12): Text response validation (OPT-UQ-1), Option ID length (OPT-UQ-2), Strict error handling (OPT-UQ-3), Queue limit 50 (OPT-UQ-4), Logger unified (OPT-UQ-5), SQL injection tests (OPT-UQ-6), Configurable timeout 5min (OPT-UQ-7), Unit tests (OPT-UQ-8), Integration tests (OPT-UQ-9), Refactor ask_question (OPT-UQ-10), Refactor submit_response (OPT-UQ-11), Circuit breaker (OPT-UQ-12)
-- Tool Description Optimizations (OPT-TD-1 to 8): Enriched descriptions with structured sections, dynamic constant injection, sub-agent template helper, CLAUDE.md guidelines
+- Sub-Agent Resilience: Inactivity Timeout, CancellationToken, Circuit Breaker, Retry, Correlation ID
+- MemoryTool Optimizations: Parameterized queries, MemoryInput struct, helpers.rs consolidation, composite indexes
+- TodoTool Optimizations: Parameterized queries, N+1 reduction, db_error uniformization, TASK_SELECT_FIELDS, query limits
+- UserQuestionTool Optimizations: Text response validation, Option ID length, Strict error handling, Queue limit 50, Logger unified, SQL injection tests, Configurable timeout 5min, Unit tests, Integration tests, Refactor ask_question, Refactor submit_response, Circuit breaker
+- Tool Description Optimizations: Enriched descriptions with structured sections, dynamic constant injection, sub-agent template helper, CLAUDE.md guidelines
 
 ### Test Coverage
 

@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.1 | Svelte 5.49.1 | Vite 7.2.6 | Tauri 2.9.4
+> **Stack**: SvelteKit 2.49.1 | Svelte 5.49.1 | Vite 7.2.6 | Tauri 2.10.2
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 
@@ -89,7 +89,7 @@ User Input
 
 ## 2. Page Settings
 
-### Architecture Route-Based (OPT-SCROLL-ROUTES)
+### Architecture Route-Based
 
 > **Refactoring Dec 2025**: Migration d'une architecture scroll-based vers route-based pour améliorer les performances et l'expérience utilisateur.
 
@@ -1313,9 +1313,8 @@ src/lib/components/
 │  └─ FloatingMenu.svelte
 ├─ navigation/          # 1 navigation element
 │  └─ NavItem.svelte
-├─ agent/               # 4 agent page sections
+├─ agent/               # 3 agent page sections (2-column layout)
 │  ├─ AgentHeader.svelte
-│  ├─ ActivitySidebar.svelte
 │  ├─ ChatContainer.svelte
 │  └─ WorkflowSidebar.svelte
 ├─ chat/                # 8 chat components
@@ -1451,22 +1450,22 @@ src/lib/components/
 | `async.ts` | `createAsyncHandler()`, `createAsyncHandlerWithEvent()`, `withLoadingState()` | Async operation wrappers with loading/error handling |
 | `error.ts` | `getErrorMessage()`, `formatErrorForDisplay()` | Error extraction and formatting utilities |
 | `activity.ts` | `combineActivities()`, `filterActivities()`, `countActivitiesByType()` | Activity feed helpers |
-| `activity-icons.ts` | `ACTIVITY_TYPE_ICONS`, `getActivityIcon()` | Consolidated activity type icon mapping (OPT-MSG-4) |
-| `duration.ts` | `formatDuration()` | Duration formatting utility (OPT-MSG-2) |
-| `debounce.ts` | `debounce()` | Debounce function wrapper (OPT-FA-4) |
+| `activity-icons.ts` | `ACTIVITY_TYPE_ICONS`, `getActivityIcon()` | Consolidated activity type icon mapping |
+| `duration.ts` | `formatDuration()` | Duration formatting utility |
+| `debounce.ts` | `debounce()` | Debounce function wrapper |
 | `index.ts` | All utilities | Barrel export |
 
 ### Services (src/lib/services/)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
-| `message.service.ts` | `MessageService.load()`, `MessageService.save()` | Message CRUD with error handling (returns `{ messages, error? }` - OPT-FA-3) |
+| `message.service.ts` | `MessageService.load()`, `MessageService.save()` | Message CRUD with error handling (returns `{ messages, error? }`) |
 | `workflow.service.ts` | `WorkflowService.execute()`, `WorkflowService.cancel()` | Workflow execution management |
-| `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration with concurrency check and view-aware guards (OPT-FA-8) |
-| `localStorage.service.ts` | `LocalStorage.get()`, `LocalStorage.set()`, `STORAGE_KEYS` | Typed localStorage access (OPT-FA-5) |
+| `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration with concurrency check and view-aware guards |
+| `localStorage.service.ts` | `LocalStorage.get()`, `LocalStorage.set()`, `STORAGE_KEYS` | Typed localStorage access |
 | `index.ts` | All services | Barrel export |
 
-**WorkflowExecutorService Pattern** (OPT-FA-8):
+**WorkflowExecutorService Pattern**:
 ```typescript
 // Extracted 8-step orchestration from handleSend
 await WorkflowExecutorService.execute(
@@ -1484,7 +1483,7 @@ await WorkflowExecutorService.execute(
 );
 ```
 
-**localStorage Service Pattern** (OPT-FA-5):
+**localStorage Service Pattern**:
 ```typescript
 import { LocalStorage, STORAGE_KEYS } from '$lib/services';
 
@@ -1493,7 +1492,7 @@ const collapsed = LocalStorage.get(STORAGE_KEYS.RIGHT_SIDEBAR_COLLAPSED, false);
 LocalStorage.set(STORAGE_KEYS.SELECTED_AGENT_ID, agentId);
 ```
 
-### PageState Pattern (OPT-FA-9)
+### PageState Pattern
 
 Aggregate page state into a single reactive object instead of multiple `$state()` variables:
 
@@ -1517,7 +1516,7 @@ pageState.messages = [...pageState.messages, newMessage];
 pageState.selectedWorkflowId = workflow.id;
 ```
 
-### Streaming Store Consolidation (OPT-FA-7)
+### Streaming Store Consolidation
 
 Derived stores reduced from 28 to 14. Use direct filtering instead of deprecated helpers:
 
@@ -1716,51 +1715,51 @@ async fn stream_workflow(app_handle: &AppHandle, workflow_id: String) {
 
 ## 8. Performance
 
-### Settings Page Optimizations (OPT-SCROLL - Dec 2025)
+### Settings Page Optimizations (Dec 2025)
 
 > Migration from scroll-based to route-based navigation with comprehensive performance optimizations.
 
 | Optimization | Status | Impact | Location |
 |-------------|--------|--------|----------|
-| OPT-SCROLL-ROUTES | Active | Code splitting, lazy loading | `src/routes/settings/*` |
-| OPT-SCROLL-2 | Active | 15-30% GPU improvement | `global.css:694` |
-| OPT-SCROLL-3 | Active | GPU acceleration | `+layout.svelte:254` |
-| OPT-SCROLL-5 | Active | ~10% layout time reduction | Grid sections CSS |
-| OPT-SCROLL-6 | Active | ~5-10% JS execution reduction | `llm.ts` memoization |
-| OPT-SCROLL-7 | Active | ~20 DOM nodes vs 20000 | `MemoryList.svelte` |
-| OPT-SCROLL-8 | Active | ~5% GPU during scroll | `global.css:889` |
+| Route-based navigation | Active | Code splitting, lazy loading | `src/routes/settings/*` |
+| Modal backdrop fix | Active | 15-30% GPU improvement | `global.css:694` |
+| GPU scroll acceleration | Active | GPU acceleration | `+layout.svelte:254` |
+| CSS containment on grids | Active | ~10% layout time reduction | Grid sections CSS |
+| Memoized selectors | Active | ~5-10% JS execution reduction | `llm.ts` memoization |
+| Virtual scrolling | Active | ~20 DOM nodes vs 20000 | `MemoryList.svelte` |
+| Animation pause on scroll | Active | ~5% GPU during scroll | `global.css:889` |
 
-**OPT-SCROLL-2: Modal Backdrop** - Removed expensive `backdrop-filter: blur(4px)`, replaced with `rgba(0,0,0,0.6)`.
+**Modal Backdrop** - Removed expensive `backdrop-filter: blur(4px)`, replaced with `rgba(0,0,0,0.6)`.
 
-**OPT-SCROLL-3: GPU Scroll Acceleration** - Added `will-change: scroll-position` to content area.
+**GPU Scroll Acceleration** - Added `will-change: scroll-position` to content area.
 
-**OPT-SCROLL-5: CSS Containment on Grids** - Applied `contain: layout style` to:
+**CSS Containment on Grids** - Applied `contain: layout style` to:
 - `.mcp-server-grid` (MCPSection)
 - `.provider-grid`, `.models-grid` (LLMSection)
 - `.agent-grid` (AgentList)
 
-**OPT-SCROLL-6: Memoized Selectors** - `getFilteredModelsMemoized()` with cache key strategy.
+**Memoized Selectors** - `getFilteredModelsMemoized()` with cache key strategy.
 
-**OPT-SCROLL-7: Virtual Scrolling** - MemoryList uses `@humanspeak/svelte-virtual-list` for 1000+ items.
+**Virtual Scrolling** - MemoryList uses `@humanspeak/svelte-virtual-list` for 1000+ items.
 
-**OPT-SCROLL-8: Animation Pause** - `.is-scrolling` class pauses animations during scroll.
+**Animation Pause** - `.is-scrolling` class pauses animations during scroll.
 
-### OPT-MSG Optimizations (Dec 2025)
+### Messages Area Optimizations (Dec 2025)
 
 Messages Area optimizations for Agent page.
 
 | Optimization | Status | Impact | Location |
 |-------------|--------|--------|----------|
-| OPT-MSG-1 | Active | 60% GPU reduction (green/warning states) | `TokenDisplay.svelte` |
-| OPT-MSG-2 | Active | DRY utility | `src/lib/utils/duration.ts` |
-| OPT-MSG-3 | Active | 1 less object allocation per render | `ActivityFeed.svelte:52-58` |
-| OPT-MSG-4 | Active | Single source of truth | `src/lib/utils/activity-icons.ts` |
-| OPT-MSG-5 | Active | 90% DOM reduction for 100+ activities | `ActivityFeed.svelte` |
-| OPT-MSG-6 | Active | Overflow fixes, component extraction | `ActivityItemDetails.svelte` |
+| Conditional animations | Active | 60% GPU reduction (green/warning states) | `TokenDisplay.svelte` |
+| Duration utility | Active | DRY utility | `src/lib/utils/duration.ts` |
+| Const icon map | Active | 1 less object allocation per render | `ActivityFeed.svelte:52-58` |
+| Activity icons module | Active | Single source of truth | `src/lib/utils/activity-icons.ts` |
+| Virtual scroll ActivityFeed | Active | 90% DOM reduction for 100+ activities | `ActivityFeed.svelte` |
+| ActivityItemDetails extraction | Active | Overflow fixes, component extraction | `ActivityItemDetails.svelte` |
 
-**OPT-MSG-1: Conditional Animations** - TokenDisplay pulse animations activate only when `warningLevel === 'critical'`.
+**Conditional Animations** - TokenDisplay pulse animations activate only when `warningLevel === 'critical'`.
 
-**OPT-MSG-5: ActivityFeed Virtual Scroll** - Uses `@humanspeak/svelte-virtual-list` with 20-item threshold:
+**ActivityFeed Virtual Scroll** - Uses `@humanspeak/svelte-virtual-list` with 20-item threshold:
 ```svelte
 const VIRTUAL_SCROLL_THRESHOLD = 20;
 const useVirtualScroll = $derived(activities.length >= VIRTUAL_SCROLL_THRESHOLD);
@@ -1772,7 +1771,7 @@ const useVirtualScroll = $derived(activities.length >= VIRTUAL_SCROLL_THRESHOLD)
 >
 ```
 
-**OPT-MSG-6: ActivityItemDetails Extraction** - Task details extracted to dedicated component for reduced complexity.
+**ActivityItemDetails Extraction** - Task details extracted to dedicated component for reduced complexity.
 
 ### General Optimization Strategies
 

@@ -111,7 +111,7 @@ Stockage vectoriel pour RAG et contexte agent. Supporte l'auto-scoping, l'import
 - `memory_vec_idx` : embedding (HNSW vectoriel, KNN search)
 - `memory_workflow_idx` : workflow_id (scope workflow)
 
-**Index Composites (OPT-MEM-4)**:
+**Index Composites**:
 - `memory_type_workflow_idx` ON (type, workflow_id) - Optimise search_memories() avec type + workflow
 - `memory_type_created_idx` ON (type, created_at) - Optimise requetes TTL/cleanup
 
@@ -447,8 +447,24 @@ Configuration des agents crees par l'utilisateur.
 
 **Indexes**
 - `id` (UNIQUE)
-- `name`
+- `name` (UNIQUE - case-insensitive uniqueness enforced at backend level)
 - `llm.provider`
+
+---
+
+### migration_log
+
+Journal des migrations de schema executees (guard pattern).
+
+**Champs**
+- `id` : string (migration identifier, e.g. "001_embedding_migration")
+- `executed_at` : datetime
+- `description` : string?
+
+**Indexes**
+- `id` (UNIQUE)
+
+**Usage** : Empeche les migrations destructrices d'etre executees plusieurs fois.
 
 ---
 
@@ -532,7 +548,7 @@ db.transaction_with_params(vec![
 ]).await?;  // Rolls back on any failure
 ```
 
-### Query Limits (OPT-DB-8)
+### Query Limits
 
 All list operations enforce LIMIT to prevent memory explosion:
 ```rust

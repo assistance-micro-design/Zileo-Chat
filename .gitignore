@@ -110,6 +110,8 @@ CLAUDE.md
 # ─────────────────────────────────────────────────────
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+docs/specs/
+docs/security-audits/
 
 # ─────────────────────────────────────────────────────
 # External / Generated Site

@@ -1,6 +1,6 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 6 Fevrier 2026**
+> **Versions actuelles du projet : 1 Mars 2026**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
@@ -28,15 +28,15 @@ Desktop   : Tauri (cross-platform)
 - **svelte-check**: ^4.3.5
 
 **Tauri Integration**:
-- **@tauri-apps/api**: ^2.9.0
-- **@tauri-apps/cli**: ^2.9.6
+- **@tauri-apps/api**: ^2.10.1
+- **@tauri-apps/cli**: ^2.10.0
 - **@tauri-apps/plugin-dialog**: ^2.6.0
 
 **UI Components**:
-- **@lucide/svelte**: ^0.563.1 (official Lucide icon library - migrated OPT-FA-12)
+- **@lucide/svelte**: ^0.563.1 (official Lucide icon library)
 
 **Testing**:
-- **vitest**: ^4.0.15 (unit tests - updated OPT-FA-6)
+- **vitest**: ^4.0.15 (unit tests)
 - **@playwright/test**: ^1.58.0 (E2E tests)
 - **jsdom**: ^27.4.0 (DOM testing)
 
@@ -52,7 +52,7 @@ Desktop   : Tauri (cross-platform)
 ### Backend (Cargo.toml)
 
 **Core Framework**:
-- **Rust**: 1.91.1 (stable, edition 2021)
+- **Rust**: 1.93.0 (stable, edition 2021)
 - **tauri**: 2 (framework)
 - **tauri-build**: 2.5.3 (build dependencies)
 - **tauri-plugin-opener**: 2.5.3
@@ -61,8 +61,7 @@ Desktop   : Tauri (cross-platform)
 **LLM & Multi-Agent**:
 - **rig-core**: 0.30.0 (features: all) - LLM abstraction framework
 - **async-trait**: 0.1 (agent trait definitions)
-- **futures**: 0.3.31 (parallel execution)
-- **futures-util**: 0.3.31
+- **futures-util**: 0.3.31 (stream utilities)
 
 **Database**:
 - **surrealdb**: 2.5.0 (features: kv-rocksdb, protocol-http)
@@ -85,9 +84,8 @@ Desktop   : Tauri (cross-platform)
 
 **Utilities**:
 - **uuid**: 1.20.0 (features: v4, serde)
-- **chrono**: 0.4.43 (features: serde) - Updated OPT-MEM-3
+- **chrono**: 0.4.43 (features: serde)
 - **regex**: 1.10
-- **once_cell**: 1.20
 
 **HTTP & Network**:
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
@@ -248,15 +246,15 @@ src-tauri/target/release/
 
 ### Minimum Requirements
 - **Node.js**: 20.19+ ou 22.12+ (Node.js 18 n'est plus supporté par Vite 7)
-- **Rust**: 1.80.1+ (requis par SurrealDB SDK)
+- **Rust**: 1.93.0+ (requis par SurrealDB SDK)
 - **npm/pnpm/yarn**: Latest stable
 
 ### Recommended Setup
 ```bash
 # Vérifier les versions installées
 node --version    # >= 20.19
-rustc --version   # >= 1.91.1
-cargo --version   # >= 1.91.1
+rustc --version   # >= 1.93.0
+cargo --version   # >= 1.93.0
 ```
 
 ## Resources
@@ -270,6 +268,23 @@ cargo --version   # >= 1.91.1
 - **TypeScript**: https://www.typescriptlang.org
 
 ## Version Update Notes
+
+**1 Mar 2026 - Security Audit Remediation**:
+- **once_cell** removed: replaced by `std::sync::LazyLock`
+- **futures** removed: replaced by `std::future` alternatives
+- **surrealdb** pinned to =2.5.0
+- **Rust** updated to 1.93.0 (required for `LazyLock` stabilization)
+- `.expect()` converted to `Result` in LLM providers
+- `ProviderType` consolidated into single canonical location
+- `commands/models.rs` renamed to `commands/llm_models.rs`
+- `safe_truncate()` moved to `utils.rs`
+- App-wide constants moved to top-level `constants.rs`
+- Block-by-block agent chat with real token streaming
+- Hybrid agent ID/name resolution with UNIQUE index
+- Report enforcement mechanism for agents
+- Code organization: barrel exports, kebab-case filenames, dead code removal
+- 24 security audits completed
+- Test count: 1025 backend + 260 frontend = 1285 total
 
 **6 Feb 2026 - Background Workflow Execution**:
 - New stores: `backgroundWorkflowsStore`, `toastStore`
@@ -288,19 +303,19 @@ cargo --version   # >= 1.91.1
 - **@tauri-apps/plugin-dialog**: 2.6.0 + **tauri-plugin-dialog**: 2.6.0
 - **uuid**: 1.20.0, **thiserror**: 2.0.18, **tauri-build**: 2.5.3, **tokio-util**: 0.7.18
 
-**11 Dec 2025 - OPT-FA Frontend/Agent Optimizations**:
-- **@lucide/svelte 0.560.0** (migrated from lucide-svelte - OPT-FA-12)
-- **vitest 4.0.15** (upgraded from 2.1.9 - OPT-FA-6)
-- **@tauri-apps/plugin-dialog 2.4.2** (upgraded from 2.2.0 - OPT-FA-2)
-- OPT-FA-1: Modal duplication fix (single ValidationModal)
-- OPT-FA-3: Error handling with `{ messages, error? }` return type
-- OPT-FA-4: Debounced search input (300ms)
-- OPT-FA-5: Typed localStorage service with STORAGE_KEYS
-- OPT-FA-7: Consolidated derived stores (28→14)
-- OPT-FA-8: WorkflowExecutorService extracted (8-step orchestration)
-- OPT-FA-9: PageState interface aggregation
-- OPT-FA-11: Lazy-loaded modals via dynamic imports
-- OPT-FA-13: Memoized activity filtering at store level
+**11 Dec 2025 - Frontend/Agent Optimizations**:
+- **@lucide/svelte 0.560.0** (migrated from lucide-svelte)
+- **vitest 4.0.15** (upgraded from 2.1.9)
+- **@tauri-apps/plugin-dialog 2.4.2** (upgraded from 2.2.0)
+- Modal duplication fix (single ValidationModal)
+- Error handling with `{ messages, error? }` return type
+- Debounced search input (300ms)
+- Typed localStorage service with STORAGE_KEYS
+- Consolidated derived stores (28→14)
+- WorkflowExecutorService extracted (8-step orchestration)
+- PageState interface aggregation
+- Lazy-loaded modals via dynamic imports
+- Memoized activity filtering at store level
 
 **7 Dec 2025 - Phase 7 Quick Wins (Frontend Optimization)**:
 - **Vite 7.2.6** (upgraded from 5.4.21 - performance improvement)

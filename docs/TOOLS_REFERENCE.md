@@ -77,7 +77,7 @@ let tool = factory.create_tool_with_context(
 
 **Fichier**: `src-tauri/src/tools/registry.rs`
 
-Le `TOOL_REGISTRY` est un singleton global (once_cell::sync::Lazy) pour la decouverte et validation des tools.
+Le `TOOL_REGISTRY` est un singleton global (`std::sync::LazyLock`) pour la decouverte et validation des tools.
 
 ### Tools enregistres
 
@@ -713,9 +713,9 @@ Supprime une tache du workflow.
 
 ---
 
-### Securite et Performance (OPT-TODO)
+### Securite et Performance
 
-**Requetes Parametrees** (OPT-TODO-1 a OPT-TODO-4):
+**Requetes Parametrees**:
 Toutes les requetes DB utilisent des bind parameters pour prevenir l'injection SQL:
 ```rust
 // ParamQueryBuilder pour queries SELECT
@@ -730,19 +730,19 @@ let params = vec![("status".to_string(), json!(status))];
 db.execute_with_params(&format!("UPDATE task:`{}` SET status = $status", task_id), params).await?;
 ```
 
-**Reduction N+1** (OPT-TODO-5, OPT-TODO-6):
+**Reduction N+1**:
 Les operations `update_status()` et `complete_task()` utilisent `UPDATE ... RETURN` pour combiner existence check + update en une seule requete:
 ```rust
 let query = "UPDATE task SET status = $status WHERE meta::id(id) = $task_id RETURN name";
 ```
 
-**Query Limits** (OPT-TODO-10):
+**Query Limits**:
 `list_tasks()` inclut une limite pour prevenir l'explosion memoire:
 ```rust
 builder = builder.limit(query_limits::DEFAULT_LIST_LIMIT); // 1000
 ```
 
-**Test Coverage** (OPT-TODO-11, OPT-TODO-12):
+**Test Coverage**:
 - 26 tests au total (6 unit + 11 integration + 8 SQL injection prevention)
 - Tests d'injection SQL verifient que les payloads malicieux sont rejetes
 
@@ -985,13 +985,13 @@ Questions interactives human-in-the-loop avec timeout configurable et circuit br
 }
 ```
 
-### Timeout (OPT-UQ-7)
+### Timeout
 
 - **Duree**: 5 minutes (300 secondes, configurable)
 - **Comportement**: Status DB devient "timeout", erreur retournee
 - **Circuit breaker**: Timeout incremente le compteur
 
-### Circuit Breaker (OPT-UQ-12)
+### Circuit Breaker
 
 Previent le spam de questions quand utilisateur non-responsif.
 
@@ -1032,14 +1032,14 @@ pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;           // 60s recovery
 pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
 ```
 
-### Securite et Performance (OPT-UQ)
+### Securite et Performance
 
-- **OPT-UQ-1**: Validation `MAX_TEXT_RESPONSE_LENGTH` (10000 chars)
-- **OPT-UQ-2**: Validation `MAX_OPTION_ID_LENGTH` (64 chars)
-- **OPT-UQ-3**: Error handling strict (no `unwrap_or_default`)
-- **OPT-UQ-4**: Queue limit frontend (50 questions max)
-- **OPT-UQ-5**: Logger unifie (no console.log en prod)
-- **OPT-UQ-6**: Tests SQL injection (queries parametrees)
+- Validation `MAX_TEXT_RESPONSE_LENGTH` (10000 chars)
+- Validation `MAX_OPTION_ID_LENGTH` (64 chars)
+- Error handling strict (no `unwrap_or_default`)
+- Queue limit frontend (50 questions max)
+- Logger unifie (no console.log en prod)
+- Tests SQL injection (queries parametrees)
 - **Tests**: 58 tests (25 unit + 21 integration + 12 circuit breaker)
 
 ---
@@ -1227,10 +1227,13 @@ Execute une tache via un agent permanent existant.
 
 | Parametre | Type | Requis | Description |
 |-----------|------|--------|-------------|
-| `agent_id` | string | Oui | ID de l'agent cible (utiliser `list_agents` pour voir les disponibles) |
+| `agent_id` | string | Oui* | ID de l'agent cible (utiliser `list_agents` pour voir les disponibles) |
+| `agent_name` | string | Oui* | Nom de l'agent cible (alternative a `agent_id`) |
 | `prompt` | string | Oui | Prompt COMPLET pour l'agent |
 
-**Exemple:**
+> **Resolution hybride** : Fournir `agent_id` (UUID) OU `agent_name` (nom). La resolution par nom est case-insensitive avec trim. `agent_id` est prioritaire si les deux sont fournis.
+
+**Exemple par ID:**
 ```json
 {
   "operation": "delegate",
@@ -1250,6 +1253,15 @@ Execute une tache via un agent permanent existant.
     "tokens_input": 850,
     "tokens_output": 2100
   }
+}
+```
+
+**Exemple par nom:**
+```json
+{
+  "operation": "delegate",
+  "agent_name": "Database Agent",
+  "prompt": "List all tables with row counts and index usage statistics."
 }
 ```
 
@@ -1331,20 +1343,23 @@ Execute plusieurs taches simultanement.
 
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
-| `agent_id` | string | Oui | ID de l'agent cible |
+| `agent_id` | string | Oui* | ID de l'agent cible |
+| `agent_name` | string | Oui* | Nom de l'agent cible (alternative a `agent_id`) |
 | `prompt` | string | Oui | Prompt COMPLET pour cet agent |
 
-**Exemple minimal:**
+> **Resolution hybride** : Chaque tache peut utiliser `agent_id` OU `agent_name`. Les deux modes peuvent etre melanges dans un meme batch.
+
+**Exemple minimal (par nom):**
 ```json
 {
   "operation": "execute_batch",
   "tasks": [
     {
-      "agent_id": "db_agent",
+      "agent_name": "Database Agent",
       "prompt": "List all tables with row counts."
     },
     {
-      "agent_id": "api_agent",
+      "agent_name": "API Agent",
       "prompt": "List all API endpoints."
     }
   ]
@@ -1584,7 +1599,7 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 
 ## Bonnes pratiques
 
-### Pour les descriptions de tools (OPT-TD)
+### Pour les descriptions de tools
 
 Les descriptions de tools suivent un pattern standardise pour optimiser la comprehension LLM:
 

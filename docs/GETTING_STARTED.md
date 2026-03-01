@@ -6,7 +6,7 @@
 
 ### Versions Minimales
 - **Node.js** : 20.19+ ou 22.12+ (Vite 7 requis)
-- **Rust** : 1.80.1+ (SurrealDB SDK requis)
+- **Rust** : 1.93.0+ (SurrealDB SDK requis)
 - **npm/pnpm/yarn** : Latest stable
 
 ### Outils Optionnels
@@ -16,8 +16,8 @@
 ### Vérification
 ```bash
 node --version   # >= 20.19
-rustc --version  # >= 1.91.1
-cargo --version  # >= 1.91.1
+rustc --version  # >= 1.93.0
+cargo --version  # >= 1.93.0
 ```
 
 ---
@@ -39,7 +39,7 @@ pnpm install
 
 ### 3. Installer Tauri CLI
 ```bash
-cargo install tauri-cli --version ^2.9
+cargo install tauri-cli --version ^2.10
 ```
 
 ### 4. Configurer SurrealDB
@@ -103,14 +103,14 @@ zileo-chat-3/
 │  │  ├─ settings/          # Page Settings (8 sections)
 │  │  └─ agent/             # Page Agent (chat principal)
 │  ├─ lib/
-│  │  ├─ components/        # 85 composants Svelte
+│  │  ├─ components/        # 91 composants Svelte
 │  │  │  ├─ ui/             # Composants atomiques (13)
 │  │  │  ├─ layout/         # Layout (4)
 │  │  │  ├─ chat/           # Chat UI (8)
 │  │  │  ├─ workflow/       # Gestion workflows (16)
 │  │  │  ├─ settings/       # Sections settings (22)
 │  │  │  └─ onboarding/     # Assistant premier lancement (9)
-│  │  ├─ stores/            # 15 stores Svelte
+│  │  ├─ stores/            # 18 stores Svelte
 │  │  ├─ services/          # Couche business logic
 │  │  └─ i18n/              # Internationalisation
 │  ├─ types/                # Définitions TypeScript (23 fichiers)
@@ -120,7 +120,7 @@ zileo-chat-3/
 ├─ src-tauri/               # Backend Rust
 │  ├─ src/
 │  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # 20 modules (116 commandes Tauri)
+│  │  ├─ commands/          # 20 modules (123 commandes Tauri)
 │  │  ├─ agents/            # Système multi-agents
 │  │  ├─ llm/               # Rig.rs integration (Mistral, Ollama)
 │  │  ├─ mcp/               # MCP client/server
@@ -283,7 +283,7 @@ Error: Vite requires Node.js 20.19+ or 22.12+
 
 ### Rust Compilation Error
 ```
-error: package requires Rust 1.80.1+
+error: package requires Rust 1.80.1+ (or higher)
 ```
 **Solution** : `rustup update stable`
 

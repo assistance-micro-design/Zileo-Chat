@@ -2,8 +2,8 @@
 
 > **Objectif** : Definir comment l'agent principal determine l'execution parallele ou sequentielle des operations au sein d'un workflow
 
-**Status** : Implementation Complete (Phase 5 + OPT-WF + Background Execution)
-**Version** : 2.2 | **Derniere mise a jour** : 2026-02-06
+**Status** : Implementation Complete (Phase 5 + Background Execution + Security Audit)
+**Version** : 2.3 | **Derniere mise a jour** : 2026-03-01
 
 ---
 
@@ -388,9 +388,10 @@ activityStore.reset(): void
 | Component | Props | File |
 |-----------|-------|------|
 | `WorkflowSidebar` | collapsed, workflows, selectedWorkflowId, searchFilter, onsearchchange, onselect, oncreate, ondelete, onrename, runningWorkflowIds, recentlyCompletedIds, questionPendingIds | WorkflowSidebar.svelte |
-| `ActivitySidebar` | collapsed, activities, isStreaming, filter, onfilterchange | ActivitySidebar.svelte |
 | `ChatContainer` | messages, messagesLoading, streamContent, isStreaming, disabled, onsend, oncancel | ChatContainer.svelte |
 | `AgentHeader` | workflow, agents, selectedAgentId, maxIterations, agentsLoading, messagesLoading, onagentchange, oniterationschange | AgentHeader.svelte |
+
+> **Note** : `ActivitySidebar` a ete supprime. Le layout Agent page est desormais en 2 colonnes (WorkflowSidebar + Chat/Agent Interface). Les informations d'activite (tool executions, thinking steps, sub-agent executions, todo tasks) sont affichees inline dans les blocs de chat via le systeme block-by-block.
 
 #### UI Components (src/lib/components/ui/)
 
@@ -764,7 +765,7 @@ async fn retry_operation<T>(
 
 ## Optimisations Performance
 
-### Timeouts (OPT-WF-9)
+### Timeouts
 
 **Timeouts configures** via constantes dans `tools/constants.rs`:
 
@@ -913,8 +914,8 @@ Completed workflow executions are automatically removed from the background stor
 **File Locations**:
 - Backend Commands: `src-tauri/src/commands/workflow.rs`, `src-tauri/src/commands/streaming.rs`
 - Orchestrator: `src-tauri/src/agents/core/orchestrator.rs`
-- Query Constants: `src-tauri/src/db/queries.rs` (OPT-WF-1: centralized queries + cascade module)
-- Timeout Constants: `src-tauri/src/tools/constants.rs` (workflow module, OPT-WF-3/9)
+- Query Constants: `src-tauri/src/db/queries.rs` (centralized queries + cascade module)
+- Timeout Constants: `src-tauri/src/tools/constants.rs` (workflow module)
 - Models: `src-tauri/src/models/workflow.rs`, `src-tauri/src/models/streaming.rs`
 - Frontend Stores: `src/lib/stores/workflows.ts`, `src/lib/stores/streaming.ts`, `src/lib/stores/activity.ts`, `src/lib/stores/backgroundWorkflows.ts`, `src/lib/stores/toast.ts`
 - Frontend Types: `src/types/workflow.ts`, `src/types/streaming.ts`, `src/types/activity.ts`, `src/types/background-workflow.ts`

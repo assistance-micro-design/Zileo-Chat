@@ -14,13 +14,14 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| **Backend Unit** | 75 | 786 |
+| **Backend Unit** | 80+ | 975 |
 | **Backend Integration** | 2 | 46 |
-| **Frontend Unit** | 7 | 165 |
+| **Backend Doc** | - | 4 |
+| **Frontend Unit** | 12 | 260 |
 | **Frontend E2E** | 10 | 112 |
-| **Total** | **94** | **1109** |
+| **Total** | **104+** | **~1397** |
 
-> **Last Updated**: 2025-12-10 (post OPT-TODO optimizations)
+> **Last Updated**: 2026-03-01
 
 ---
 
@@ -30,15 +31,15 @@
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| vitest | 2.0.0 | Unit testing framework |
-| @playwright/test | 1.47.0 | E2E testing framework |
-| jsdom | 27.2.0 | DOM environment for testing |
+| vitest | ^4.0.15 | Unit testing framework |
+| @playwright/test | ^1.58.0 | E2E testing framework |
+| jsdom | ^27.4.0 | DOM environment for testing |
 
 ### Backend (Cargo.toml dev-dependencies)
 
 | Crate | Version | Purpose |
 |-------|---------|---------|
-| tempfile | 3.14 | Temporary file/directory for test DBs |
+| tempfile | 3.24 | Temporary file/directory for test DBs |
 
 ---
 
@@ -63,7 +64,23 @@
 
 ## Tests Backend (Rust)
 
-### Unit Tests (635 tests, 73 files)
+### Approche TDD (Red-Green-Refactor)
+
+Pour toute logique testable (Rust pure functions, TS utils/stores), l'approche TDD est obligatoire :
+1. **RED** : Ecrire un test qui echoue definissant le comportement attendu
+2. **GREEN** : Ecrire le minimum de code pour faire passer le test
+3. **REFACTOR** : Nettoyer en gardant les tests verts
+
+Pour les bugs, un test de reproduction est ecrit AVANT la correction.
+
+### Shared Test Harness (test_utils.rs)
+
+Un module partage `src-tauri/src/test_utils.rs` fournit :
+- `setup_test_state()` : Cree un AppState complet avec DB en memoire
+- 10+ seed helpers : `seed_agent()`, `seed_workflow()`, `seed_message()`, etc.
+- Utilise par les tests unitaires et d'integration
+
+### Unit Tests (975 tests, 80+ files)
 
 **Localisation** : `src-tauri/src/**/*.rs`
 
@@ -187,7 +204,7 @@ let input = json!({
 
 ## Tests Frontend (SvelteKit)
 
-### Unit Tests (165 tests, 7 files)
+### Unit Tests (260 tests, 12 files)
 
 **Localisation** : `src/lib/**/__tests__/*.test.ts`, `src/types/__tests__/*.test.ts`
 
@@ -196,10 +213,15 @@ let input = json!({
 | File | Tests | Target |
 |------|-------|--------|
 | `lib/utils/__tests__/debounce.test.ts` | 10 | Debounce/throttle utilities |
-| `lib/stores/__tests__/agents.test.ts` | 26 | Agent CRUD operations |
-| `lib/stores/__tests__/streaming.test.ts` | 17 | Real-time workflow execution |
+| `lib/utils/__tests__/dateGrouping.test.ts` | - | Temporal grouping |
+| `lib/utils/__tests__/error.test.ts` | - | Error handling utilities |
+| `lib/utils/__tests__/url.test.ts` | - | URL validation utilities |
+| `lib/stores/__tests__/agents.test.ts` | 22 | Agent CRUD operations |
+| `lib/stores/__tests__/streaming.test.ts` | 18 | Real-time workflow execution |
 | `lib/stores/__tests__/llm.test.ts` | 57 | LLM models and providers |
-| `lib/stores/__tests__/workflows.test.ts` | 24 | Workflow state management |
+| `lib/stores/__tests__/workflows.test.ts` | 36 | Workflow state management |
+| `lib/stores/__tests__/chunkProcessor.test.ts` | - | Chunk processing |
+| `lib/stores/__tests__/execution-blocks.test.ts` | 25 | Block-by-block display |
 | `types/__tests__/embedding.test.ts` | 15 | Embedding config validation |
 | `types/__tests__/memory.test.ts` | 16 | Memory structure validation |
 

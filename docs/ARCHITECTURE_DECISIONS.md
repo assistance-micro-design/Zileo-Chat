@@ -1,8 +1,8 @@
 # Décisions Architecture Projet
 
-> **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation)
-> **Phase** : Phase 8 complète, optimisations LLM/MCP/DB terminées
-> **Statut** : Décisions validées et implémentées (111 commandes Tauri, 87 fichiers Rust, 77 composants Svelte, 667+ tests)
+> **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation) | 2026-03-01 (post-audit sécurité)
+> **Phase** : Phase 8 complète + Security Audit Remediation
+> **Statut** : Décisions validées et implémentées (123 commandes Tauri, 91 composants Svelte, ~1285 tests)
 
 ---
 
@@ -703,14 +703,15 @@ zileo-chat-3/
 8. ✅ Phase 7 : Strategic Frontend (settings decomposition, lazy loading, cache TTL)
 9. ✅ Phase 8 : LLM Optimizations (rate limiter, retry, circuit breaker, HTTP pooling, utils)
 
-**Total Tests** : 667+ passing
+**Total Tests** : ~1285 passing (975 backend unit + 46 integration + 4 doc + 260 frontend)
 **Code Quality** : 0 errors across all validations (clippy, eslint, svelte-check)
+**Security Audit** : 24 audits remédiés, incluant SurrealQL injection, input validation, dependency cleanup
 
 **Différé Post-v1** :
-- TYPE-OPT-5 : specta + tauri-specta (BLOCKED: incompatible with Tauri 2.9.x)
-- SEC-OPT-7/8 : Rate limiting sensitive ops, prompt injection guard
-- DB-OPT-12/14 : thiserror migration, live query API
-- FE-OPT-12/13 : Superforms integration
+- specta + tauri-specta (BLOCKED: incompatible with Tauri 2.10.x)
+- Rate limiting sensitive ops, prompt injection guard
+- thiserror migration, live query API
+- Superforms integration
 
 **Documentation Technique** :
 - Schéma DB : `docs/DATABASE_SCHEMA.md`
@@ -855,7 +856,7 @@ async cleanup() {
 
 ---
 
-### Question 20bis : Patterns State Management (OPT-7)
+### Question 20bis : Patterns State Management
 
 **Décision** : **Documentation explicite des 3 patterns acceptés**
 
@@ -1040,7 +1041,7 @@ db.query_with_params(
 let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 ```
 
-**Query Limits** (OPT-DB-8):
+**Query Limits**:
 - Default 1000 for list operations (agents, memories, tasks)
 - Default 100 for models
 - Default 500 for MCP logs, messages
@@ -1104,7 +1105,7 @@ let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 - backdrop-filter blur causing 15-30% GPU degradation
 - No code splitting possible with scroll-based approach
 
-**Solution (OPT-SCROLL-ROUTES)** :
+**Solution** :
 
 **Route Structure**:
 ```
@@ -1133,16 +1134,16 @@ let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 
 | ID | Item | Impact | Status |
 |---|---|---|---|
-| OPT-SCROLL-2 | Remove backdrop-filter blur | 15-30% GPU | Active |
-| OPT-SCROLL-6 | getFilteredModelsMemoized() | ~5-10% JS | Active |
-| OPT-SCROLL-7 | Virtual scrolling MemoryList | 20 vs 20000 DOM nodes | Active |
+| Remove backdrop-filter blur | 15-30% GPU | Active |
+| getFilteredModelsMemoized() | ~5-10% JS | Active |
+| Virtual scrolling MemoryList | 20 vs 20000 DOM nodes | Active |
 
 **Obsoleted Optimizations** (superseded by route-based):
-- OPT-SCROLL-1: Single threshold IntersectionObserver
-- OPT-SCROLL-3: will-change scroll (not needed with routes)
-- OPT-SCROLL-4: RAF debounce IntersectionObserver
-- OPT-SCROLL-5: CSS contain on grids (not implemented)
-- OPT-SCROLL-8: .is-scrolling animation pause (not implemented)
+- Single threshold IntersectionObserver
+- will-change scroll (not needed with routes)
+- RAF debounce IntersectionObserver
+- CSS contain on grids (not implemented)
+- .is-scrolling animation pause (not implemented)
 
 **Implementation Files**:
 - Layout: `src/routes/settings/+layout.svelte`

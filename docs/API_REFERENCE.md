@@ -98,6 +98,33 @@ async fn load_workflows(
 
 ---
 
+### rename_workflow
+
+Renomme un workflow existant.
+
+**Frontend**
+```typescript
+const workflow = await invoke<Workflow>('rename_workflow', {
+  workflowId: string,
+  name: string      // 1-128 chars, validated
+});
+```
+
+**Backend Signature**
+```rust
+async fn rename_workflow(
+    workflow_id: String,
+    name: String,
+    state: State<'_, AppState>
+) -> Result<Workflow, String>
+```
+
+**Returns** : Workflow mis a jour
+
+**Errors** : Workflow not found, invalid name
+
+---
+
 ### delete_workflow
 
 Supprime workflow + données associées.
@@ -233,7 +260,7 @@ async fn create_agent(
 ```
 
 **Validation**
-- `name`: 1-64 caractères, non vide
+- `name`: 1-64 caractères, non vide, **UNIQUE** (case-insensitive)
 - `temperature`: 0.0-2.0
 - `max_tokens`: 256-128000
 - `tools`: Doit être dans KNOWN_TOOLS ("MemoryTool", "TodoTool")
@@ -582,7 +609,7 @@ interface UserQuestion {
   text_placeholder?: string;
   text_required: boolean;
   context?: string;
-  status: 'pending' | 'answered' | 'skipped' | 'timeout';  // OPT-UQ-7: timeout after 5 min
+  status: 'pending' | 'answered' | 'skipped' | 'timeout';  // timeout after 5 min
   selected_options?: string[];
   text_response?: string;
   created_at: string;
@@ -595,10 +622,10 @@ interface QuestionOption {
 }
 ```
 
-**Timeout Behavior (OPT-UQ-7)**:
+**Timeout Behavior**:
 - Questions timeout after 5 minutes (300 seconds) without response
 - Status automatically updated to "timeout" in database
-- Circuit breaker (OPT-UQ-12) tracks consecutive timeouts
+- Circuit breaker tracks consecutive timeouts
 - After 3 consecutive timeouts, new questions are rejected for 60 seconds
 
 **Returns**: Array of pending questions sorted by created_at ASC
@@ -631,6 +658,37 @@ async fn skip_question(
 - Emits `workflow_stream` event with `user_question_complete`
 
 **Errors**: Question not found, question not pending
+
+---
+
+## Message Blocks (Block-by-Block Display)
+
+### load_message_blocks
+
+Charge les blocs d'affichage structures pour un message (tool executions, thinking steps, sub-agent executions).
+
+**Frontend**
+```typescript
+import type { ChatBlock } from '$types/chat-block';
+
+const blocks = await invoke<ChatBlock[]>('load_message_blocks', {
+  messageId: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn load_message_blocks(
+    message_id: String,
+    state: State<'_, AppState>
+) -> Result<Vec<ChatBlock>, String>
+```
+
+**ChatBlock Types** : `tool_execution`, `thinking_step`, `sub_agent_execution`, `todo_task`
+
+**Returns** : Array de blocs ordonnés chronologiquement
+
+**Errors** : Invalid message_id
 
 ---
 
@@ -1458,15 +1516,31 @@ const unlisten = await listen<StreamChunk>('workflow_stream', (event) => {
 ```typescript
 type StreamChunk = {
   workflow_id: string;
-  type: 'token' | 'tool_start' | 'tool_end' | 'reasoning' | 'error'
-      | 'user_question_start' | 'user_question_complete';
+  chunk_type: 'token' | 'real_token' | 'tool_start' | 'tool_end' | 'reasoning'
+      | 'thinking_start' | 'thinking_content' | 'thinking_end'
+      | 'error' | 'user_question_start' | 'user_question_complete'
+      | 'sub_agent_start' | 'sub_agent_progress' | 'sub_agent_complete' | 'sub_agent_error'
+      | 'task_create' | 'task_update' | 'task_complete';
   content?: string;
   tool?: string;
   duration?: number;
+  // Sub-agent fields
+  sub_agent_id?: string;
+  sub_agent_name?: string;
+  parent_agent_id?: string;
+  metrics?: SubAgentStreamMetrics;
+  // Task fields
+  task_id?: string;
+  task_name?: string;
+  task_status?: string;
+  task_priority?: number;
+  // Token tracking
+  tokens_delta?: number;
+  tokens_total?: number;
   // User question specific fields
-  user_question?: UserQuestionStreamPayload;  // For user_question_start
-  question_id?: string;                        // For user_question_complete
-  status?: 'answered' | 'skipped';             // For user_question_complete
+  user_question?: UserQuestionStreamPayload;
+  question_id?: string;
+  status?: 'answered' | 'skipped';
 };
 ```
 

@@ -17,6 +17,10 @@
 
 **Persistence**: Agents stockés dans SurrealDB (table `agent`)
 
+**Contrainte UNIQUE** : Les noms d'agents sont uniques (case-insensitive). Le backend et le frontend valident les doublons.
+
+**Resolution Hybride** : Les agents peuvent être référencés par UUID ou par nom via `resolve_agent_ref()`. Le UUID est prioritaire (fast path), le nom est résolu via `AgentRegistry.get_by_name()` (case-insensitive, trim).
+
 **Chargement**: Agents chargés automatiquement au démarrage via `load_agents_from_db()`
 
 ### Hiérarchie d'Agents
@@ -760,6 +764,16 @@ Agent → Event → Event Bus → Subscribers
 Agent → Stream<Chunk> → Principal (SSE)
 ```
 
+### Report Enforcement
+
+Le système détecte les agents qui retournent des rapports génériques ("Task completed after N iteration(s)") et force un appel LLM supplémentaire avec un tableau d'outils vide pour générer un rapport markdown structuré.
+
+**Mécanisme** :
+1. Détection du pattern générique dans le rapport retourné
+2. Appel LLM follow-up avec `tools: []` (compatible Ollama)
+3. Le LLM génère un rapport markdown détaillé sans pouvoir appeler d'outils
+4. 6 tests TDD couvrent ce mécanisme
+
 ### Reprise sur Erreur et Idempotence
 
 Pour garantir la robustesse des workflows, notamment lors d'erreurs passagères (ex: réseau), le système intègre des stratégies de reprise.
@@ -774,12 +788,12 @@ Pour garantir la robustesse des workflows, notamment lors d'erreurs passagères 
 
 Le système sub-agent implémente plusieurs patterns de résilience:
 
-**Inactivity Timeout with Heartbeat (OPT-SA-1)**
+**Inactivity Timeout with Heartbeat**
 - Monitoring toutes les 30 secondes
 - Timeout après 300s d'inactivité (pas de tokens, tool calls, ou réponses MCP)
 - Évite de couper les exécutions longues légitimes
 
-**Retry with Exponential Backoff (OPT-SA-10)**
+**Retry with Exponential Backoff**
 ```rust
 // Stratégie de retry
 MAX_RETRY_ATTEMPTS = 2;        // 3 tentatives totales
@@ -788,7 +802,7 @@ INITIAL_RETRY_DELAY_MS = 500;  // 500ms, 1000ms, 2000ms
 - Erreurs retryables: timeout, network, rate limit, 502/503/429
 - Erreurs non-retryables: cancelled, permission denied, invalid
 
-**Circuit Breaker (OPT-SA-8)**
+**Circuit Breaker**
 ```rust
 CIRCUIT_FAILURE_THRESHOLD = 3;  // Ouvre après 3 échecs
 CIRCUIT_COOLDOWN_SECS = 60;     // 60s avant recovery
@@ -796,12 +810,12 @@ CIRCUIT_COOLDOWN_SECS = 60;     // 60s avant recovery
 - États: Closed → Open → HalfOpen → Closed
 - Empêche les cascade failures
 
-**Graceful Cancellation (OPT-SA-7)**
+**Graceful Cancellation**
 - CancellationToken propagé aux sub-agents
 - Réponse immédiate à la demande d'annulation
 - Cleanup des ressources
 
-**Hierarchical Tracing (OPT-SA-11)**
+**Hierarchical Tracing**
 - `parent_execution_id` pour corrélation batch → tasks
 - Logs structurés avec correlation IDs
 
@@ -989,8 +1003,8 @@ L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
 | Tool | Description | Operations |
 |------|-------------|------------|
 | **SpawnAgentTool** | Cree et execute sous-agent temporaire | spawn, list_children, terminate |
-| **DelegateTaskTool** | Delegation sequentielle a agent existant | delegate |
-| **ParallelTasksTool** | Execution parallele multiple taches | parallel_execute |
+| **DelegateTaskTool** | Delegation sequentielle a agent existant (par ID ou nom) | delegate |
+| **ParallelTasksTool** | Execution parallele multiple taches (par ID ou nom) | parallel_execute |
 
 **Contraintes Sub-Agent Tools**:
 - Maximum 15 sous-agents par workflow (`MAX_SUB_AGENTS`)
@@ -1120,7 +1134,7 @@ zileo-chat-3/
 │  │  ├─ delegate_task.rs     # DelegateTaskTool
 │  │  ├─ parallel_tasks.rs    # ParallelTasksTool
 │  │  ├─ sub_agent_executor.rs # Shared utilities (retry, heartbeat, metrics)
-│  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker (OPT-SA-8)
+│  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker
 │  │  └─ validation_helper.rs # Human-in-the-loop validation
 │  │
 │  ├─ commands/               # Tauri IPC commands
@@ -1155,9 +1169,8 @@ sont des patterns de reference pour la conception.
 Le systeme utilise un registre global (`tools/registry.rs`) pour la decouverte des tools:
 
 ```rust
-lazy_static::lazy_static! {
-    pub static ref TOOL_REGISTRY: ToolRegistry = ToolRegistry::new();
-}
+use std::sync::LazyLock;
+pub static TOOL_REGISTRY: LazyLock<ToolRegistry> = LazyLock::new(ToolRegistry::new);
 
 pub enum ToolCategory {
     Basic,      // MemoryTool, TodoTool, CalculatorTool
