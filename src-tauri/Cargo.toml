@@ -34,7 +34,7 @@ tokio = { version = "1.49.0", features = [
 ] }
 # SA-006 DEP-2: Pruned unused features (protocol-http, protocol-ws, rustls)
 # Only kv-rocksdb is needed for embedded storage (Surreal::new::<RocksDb>)
-surrealdb = { version = "~2.6", default-features = false, features = ["kv-rocksdb"] }
+surrealdb = { version = "~3.0", default-features = false, features = ["kv-rocksdb"] }
 anyhow = "1.0"
 thiserror = "2.0"
 tracing = "0.1"
