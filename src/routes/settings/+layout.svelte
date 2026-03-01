@@ -31,6 +31,7 @@ Each section is now a separate route for better performance and UX.
 		Bot,
 		Settings,
 		BookOpen,
+		BookMarked,
 		FolderSync
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -83,6 +84,7 @@ Each section is now a separate route for better performance and UX.
 		{ id: 'memory', route: '/settings/memory', labelKey: 'settings_memory', icon: Brain },
 		{ id: 'validation', route: '/settings/validation', labelKey: 'settings_validation', icon: ShieldCheck },
 		{ id: 'prompts', route: '/settings/prompts', labelKey: 'settings_prompts', icon: BookOpen },
+		{ id: 'skills', route: '/settings/skills', labelKey: 'settings_skills', icon: BookMarked },
 		{ id: 'import-export', route: '/settings/import-export', labelKey: 'settings_import_export', icon: FolderSync },
 		{ id: 'theme', route: '/settings/theme', labelKey: 'settings_theme', icon: Palette }
 	] as const;
