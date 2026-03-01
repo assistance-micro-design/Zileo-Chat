@@ -25,7 +25,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
-	import { Button, Select, Card, StatusIndicator, Modal, ErrorBanner } from '$lib/components/ui';
+	import { Button, Select, Card, StatusIndicator, Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
@@ -75,6 +75,10 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 
 	/** Modal state */
 	let showConfigModal = $state(false);
+
+	/** Delete confirmation state */
+	let showDeleteConfirm = $state(false);
+	let deleteDeleting = $state(false);
 
 	/** Provider options (reactive to locale) */
 	const providerOptions = $derived<SelectOption[]>([
@@ -180,25 +184,36 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	}
 
 	/**
-	 * Deletes the embedding configuration (resets to defaults)
+	 * Requests delete confirmation for embedding configuration
 	 */
-	async function handleDelete(): Promise<void> {
-		if (!confirm(t('memory_confirm_delete_config'))) {
-			return;
-		}
+	function handleDeleteRequest(): void {
+		showDeleteConfirm = true;
+	}
 
-		saving = true;
+	/**
+	 * Confirms and executes configuration deletion (resets to defaults)
+	 */
+	async function confirmDelete(): Promise<void> {
+		deleteDeleting = true;
 		try {
 			await invoke('save_embedding_config', { config: defaultConfig });
 			config = { ...defaultConfig };
 			editConfig = { ...defaultConfig };
 			configExists = false;
 			errorMessage = null;
+			showDeleteConfirm = false;
 		} catch (err) {
 			errorMessage = t('memory_failed_delete').replace('{error}', getErrorMessage(err));
 		} finally {
-			saving = false;
+			deleteDeleting = false;
 		}
+	}
+
+	/**
+	 * Cancels delete confirmation
+	 */
+	function cancelDelete(): void {
+		showDeleteConfirm = false;
 	}
 
 	/**
@@ -270,7 +285,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 			{providerOptions}
 			{strategyOptions}
 			onOpenConfigModal={openConfigModal}
-			onDelete={handleDelete}
+			onDelete={handleDeleteRequest}
 		/>
 
 		<!-- Embedding Test Card -->
@@ -381,6 +396,16 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		</div>
 	{/snippet}
 </Modal>
+
+<!-- Delete Configuration Confirmation Modal -->
+<DeleteConfirmModal
+	open={showDeleteConfirm}
+	titleKey="memory_config_delete_title"
+	confirmMessageKey="memory_confirm_delete_config"
+	deleting={deleteDeleting}
+	onConfirm={confirmDelete}
+	onCancel={cancelDelete}
+/>
 
 <style>
 	.memory-settings {

@@ -22,7 +22,7 @@ Manages API key configuration modal for LLM providers.
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import type { ProviderType, ProviderSettings } from '$types/llm';
-	import { Button, Input, Modal, StatusIndicator } from '$lib/components/ui';
+	import { Button, Input, Modal, StatusIndicator, DeleteConfirmModal } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 
@@ -56,6 +56,14 @@ Manages API key configuration modal for LLM providers.
 	let saving = $state(false);
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
+	/** Save confirmation state */
+	let showSaveConfirm = $state(false);
+	let saveConfirming = $state(false);
+
+	/** Delete confirmation state */
+	let showDeleteConfirm = $state(false);
+	let deleteConfirming = $state(false);
+
 	/**
 	 * Resets form state when modal opens/closes
 	 */
@@ -67,24 +75,24 @@ Manages API key configuration modal for LLM providers.
 	});
 
 	/**
-	 * Saves API key for the selected provider
+	 * Requests save confirmation for API key
 	 */
-	async function handleSaveApiKey(): Promise<void> {
+	function handleSaveApiKeyRequest(): void {
 		if (!apiKey.trim()) {
 			message = { type: 'error', text: $i18n('settings_api_key_empty') };
 			return;
 		}
+		showSaveConfirm = true;
+	}
 
-		// Confirmation before saving API key
-		if (!confirm($i18n('api_key_confirm_save'))) {
-			return;
-		}
-
-		saving = true;
+	/**
+	 * Confirms and executes API key save
+	 */
+	async function confirmSaveApiKey(): Promise<void> {
+		saveConfirming = true;
 		message = null;
 
 		try {
-			// Map ProviderType to LLMProvider format (capitalize first letter)
 			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 			await invoke('save_api_key', {
 				provider: providerName,
@@ -93,23 +101,34 @@ Manages API key configuration modal for LLM providers.
 			apiKey = '';
 			onReload();
 			message = { type: 'success', text: $i18n('settings_api_key_saved') };
+			showSaveConfirm = false;
 			onclose();
 		} catch (err) {
 			message = { type: 'error', text: $i18n('settings_api_key_save_failed', { error: getErrorMessage(err) }) };
 		} finally {
-			saving = false;
+			saveConfirming = false;
 		}
 	}
 
 	/**
-	 * Deletes API key for the provider
+	 * Cancels save confirmation
 	 */
-	async function handleDeleteApiKey(): Promise<void> {
-		if (!confirm($i18n('settings_api_key_delete_confirm', { provider }))) {
-			return;
-		}
+	function cancelSaveApiKey(): void {
+		showSaveConfirm = false;
+	}
 
-		saving = true;
+	/**
+	 * Requests delete confirmation for API key
+	 */
+	function handleDeleteApiKeyRequest(): void {
+		showDeleteConfirm = true;
+	}
+
+	/**
+	 * Confirms and executes API key deletion
+	 */
+	async function confirmDeleteApiKey(): Promise<void> {
+		deleteConfirming = true;
 		message = null;
 
 		try {
@@ -117,11 +136,19 @@ Manages API key configuration modal for LLM providers.
 			await invoke('delete_api_key', { provider: providerName });
 			onReload();
 			message = { type: 'success', text: $i18n('settings_api_key_deleted') };
+			showDeleteConfirm = false;
 		} catch (err) {
 			message = { type: 'error', text: $i18n('settings_api_key_delete_failed', { error: getErrorMessage(err) }) };
 		} finally {
-			saving = false;
+			deleteConfirming = false;
 		}
+	}
+
+	/**
+	 * Cancels delete confirmation
+	 */
+	function cancelDeleteApiKey(): void {
+		showDeleteConfirm = false;
 	}
 </script>
 
@@ -187,7 +214,7 @@ Manages API key configuration modal for LLM providers.
 				{#if hasApiKey}
 					<Button
 						variant="danger"
-						onclick={handleDeleteApiKey}
+						onclick={handleDeleteApiKeyRequest}
 						disabled={saving}
 					>
 						{$i18n('api_key_delete')}
@@ -195,7 +222,7 @@ Manages API key configuration modal for LLM providers.
 				{/if}
 				<Button
 					variant="primary"
-					onclick={handleSaveApiKey}
+					onclick={handleSaveApiKeyRequest}
 					disabled={saving || !apiKey.trim()}
 				>
 					{saving ? $i18n('common_saving') : $i18n('api_key_save')}
@@ -208,6 +235,30 @@ Manages API key configuration modal for LLM providers.
 		</div>
 	{/snippet}
 </Modal>
+
+<!-- Save API Key Confirmation Modal -->
+<DeleteConfirmModal
+	open={showSaveConfirm}
+	titleKey="api_key_save_title"
+	confirmMessageKey="api_key_confirm_save"
+	deleting={saveConfirming}
+	deletingLabelKey="api_key_saving"
+	variant="primary"
+	confirmLabelKey="api_key_save_confirm_label"
+	onConfirm={confirmSaveApiKey}
+	onCancel={cancelSaveApiKey}
+/>
+
+<!-- Delete API Key Confirmation Modal -->
+<DeleteConfirmModal
+	open={showDeleteConfirm}
+	titleKey="api_key_delete_title"
+	confirmMessageKey="api_key_delete_confirm_msg"
+	deleting={deleteConfirming}
+	itemName={provider.charAt(0).toUpperCase() + provider.slice(1)}
+	onConfirm={confirmDeleteApiKey}
+	onCancel={cancelDeleteApiKey}
+/>
 
 <style>
 	.api-key-modal-content {

@@ -30,7 +30,7 @@ Combines Providers and Models sections.
 		LLMState
 	} from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import { Card, Button, StatusIndicator, Modal, HelpButton, Select } from '$lib/components/ui';
+	import { Card, Button, StatusIndicator, Modal, HelpButton, Select, DeleteConfirmModal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import CustomProviderForm from './CustomProviderForm.svelte';
@@ -76,6 +76,16 @@ Combines Providers and Models sections.
 	let message = $state<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 	let showCustomProviderForm = $state(false);
 
+	/** Provider delete confirmation state */
+	let showProviderDeleteConfirm = $state(false);
+	let providerToDelete = $state<ProviderInfo | null>(null);
+	let providerDeleting = $state(false);
+
+	/** Model delete confirmation state */
+	let showModelDeleteConfirm = $state(false);
+	let modelToDelete = $state<LLMModel | null>(null);
+	let modelDeleting = $state(false);
+
 	/** Provider filter options for models section (dynamic from providerList) */
 	const modelsProviderOptions: SelectOption[] = $derived([
 		{ value: 'all', label: $i18n('providers_all') },
@@ -100,19 +110,38 @@ Combines Providers and Models sections.
 	}
 
 	/**
-	 * Handles custom provider deletion
+	 * Requests provider delete confirmation
 	 */
-	async function handleDeleteCustomProvider(providerInfo: ProviderInfo): Promise<void> {
-		if (!confirm($i18n('llm_custom_provider_delete_confirm'))) {
-			return;
-		}
+	function handleDeleteProviderRequest(providerInfo: ProviderInfo): void {
+		providerToDelete = providerInfo;
+		showProviderDeleteConfirm = true;
+	}
+
+	/**
+	 * Confirms and executes provider deletion
+	 */
+	async function confirmDeleteProvider(): Promise<void> {
+		if (!providerToDelete) return;
+		providerDeleting = true;
 		try {
-			await deleteCustomProvider(providerInfo.id);
-			message = { type: 'success', text: $i18n('settings_provider_deleted', { name: providerInfo.displayName }) };
+			await deleteCustomProvider(providerToDelete.id);
+			message = { type: 'success', text: $i18n('settings_provider_deleted', { name: providerToDelete.displayName }) };
+			showProviderDeleteConfirm = false;
+			providerToDelete = null;
 			await loadLLMData();
 		} catch (err) {
 			message = { type: 'error', text: $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }) };
+		} finally {
+			providerDeleting = false;
 		}
+	}
+
+	/**
+	 * Cancels provider delete confirmation
+	 */
+	function cancelDeleteProvider(): void {
+		showProviderDeleteConfirm = false;
+		providerToDelete = null;
 	}
 
 	/**
@@ -153,20 +182,38 @@ Combines Providers and Models sections.
 	}
 
 	/**
-	 * Handles model deletion
+	 * Requests model delete confirmation
 	 */
-	async function handleDeleteModel(model: LLMModel): Promise<void> {
-		if (!confirm($i18n('settings_model_delete_confirm', { name: model.name }))) {
-			return;
-		}
+	function handleDeleteModelRequest(model: LLMModel): void {
+		modelToDelete = model;
+		showModelDeleteConfirm = true;
+	}
 
+	/**
+	 * Confirms and executes model deletion
+	 */
+	async function confirmDeleteModel(): Promise<void> {
+		if (!modelToDelete) return;
+		modelDeleting = true;
 		try {
-			await deleteModel(model.id);
-			llmState = removeModel(llmState, model.id);
-			message = { type: 'success', text: $i18n('settings_model_deleted', { name: model.name }) };
+			await deleteModel(modelToDelete.id);
+			llmState = removeModel(llmState, modelToDelete.id);
+			message = { type: 'success', text: $i18n('settings_model_deleted', { name: modelToDelete.name }) };
+			showModelDeleteConfirm = false;
+			modelToDelete = null;
 		} catch (err) {
 			message = { type: 'error', text: $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }) };
+		} finally {
+			modelDeleting = false;
 		}
+	}
+
+	/**
+	 * Cancels model delete confirmation
+	 */
+	function cancelDeleteModel(): void {
+		showModelDeleteConfirm = false;
+		modelToDelete = null;
 	}
 
 	/**
@@ -292,7 +339,7 @@ Combines Providers and Models sections.
 					defaultModel={getProviderDefaultModel(provInfo.id)}
 					isCustom={true}
 					onConfigure={() => onConfigureApiKey(provInfo.id, provInfo.displayName, true)}
-					onDelete={() => handleDeleteCustomProvider(provInfo)}
+					onDelete={() => handleDeleteProviderRequest(provInfo)}
 				>
 					{#snippet icon()}
 						<Globe size={24} class="icon-info" />
@@ -378,7 +425,7 @@ Combines Providers and Models sections.
 					{model}
 					isDefault={llmState.providers[model.provider]?.default_model_id === model.id}
 					onEdit={() => modelModal.openEdit(model)}
-					onDelete={() => handleDeleteModel(model)}
+					onDelete={() => handleDeleteModelRequest(model)}
 					onSetDefault={() => handleSetDefaultModel(model)}
 				/>
 			{/each}
@@ -418,6 +465,29 @@ Combines Providers and Models sections.
 		/>
 	{/snippet}
 </Modal>
+
+<!-- Provider Delete Confirmation Modal -->
+<DeleteConfirmModal
+	open={showProviderDeleteConfirm}
+	titleKey="llm_provider_delete_title"
+	confirmMessageKey="llm_provider_delete_confirm_msg"
+	deleting={providerDeleting}
+	itemName={providerToDelete?.displayName}
+	warningMessageKey="llm_provider_delete_warning"
+	onConfirm={confirmDeleteProvider}
+	onCancel={cancelDeleteProvider}
+/>
+
+<!-- Model Delete Confirmation Modal -->
+<DeleteConfirmModal
+	open={showModelDeleteConfirm}
+	titleKey="llm_model_delete_title"
+	confirmMessageKey="llm_model_delete_confirm_msg"
+	deleting={modelDeleting}
+	itemName={modelToDelete?.name}
+	onConfirm={confirmDeleteModel}
+	onCancel={cancelDeleteModel}
+/>
 
 <style>
 	.settings-section {

@@ -288,9 +288,6 @@ Each section is now a separate route for better performance and UX.
 		overflow-y: auto;
 		padding: var(--spacing-xl);
 		-webkit-overflow-scrolling: touch;
-		/* contain: content instead of will-change */
-		/* will-change: scroll-position causes GPU overhead in WebKit2GTK */
-		contain: content;
 	}
 
 	/**

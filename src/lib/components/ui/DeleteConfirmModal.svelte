@@ -33,17 +33,21 @@ Extracted from AgentSettings and PromptSettings.
 		titleKey: string;
 		/** i18n key for the confirmation message */
 		confirmMessageKey: string;
-		/** Whether a delete operation is in progress */
+		/** Whether an operation is in progress */
 		deleting: boolean;
-		/** i18n key for the deleting state label (defaults to common_delete) */
+		/** i18n key for the in-progress state label (defaults to common_delete for danger, common_confirm for primary) */
 		deletingLabelKey?: string;
-		/** Name of the item being deleted (displayed in bold after confirm message) */
+		/** Name of the item being acted upon (displayed in bold after confirm message) */
 		itemName?: string;
 		/** i18n key for a warning message displayed below the confirm text */
 		warningMessageKey?: string;
-		/** Callback when delete is confirmed */
+		/** Visual variant for the confirm button */
+		variant?: 'danger' | 'primary';
+		/** i18n key for the confirm button label (overrides default based on variant) */
+		confirmLabelKey?: string;
+		/** Callback when action is confirmed */
 		onConfirm: () => void;
-		/** Callback when delete is cancelled */
+		/** Callback when action is cancelled */
 		onCancel: () => void;
 	}
 
@@ -55,9 +59,14 @@ Extracted from AgentSettings and PromptSettings.
 		deletingLabelKey,
 		itemName,
 		warningMessageKey,
+		variant = 'danger',
+		confirmLabelKey,
 		onConfirm,
 		onCancel
 	}: Props = $props();
+
+	const defaultConfirmKey = $derived(confirmLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm'));
+	const defaultDeletingKey = $derived(deletingLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm'));
 </script>
 
 <Modal
@@ -67,10 +76,10 @@ Extracted from AgentSettings and PromptSettings.
 >
 	{#snippet body()}
 		<p class="confirm-text">
-			{$i18n(confirmMessageKey)}{#if itemName} <strong class="item-name">"{itemName}"</strong>?{/if}
+			{$i18n(confirmMessageKey)}{#if itemName} <strong class="item-name" class:item-name-primary={variant === 'primary'}>"{itemName}"</strong>?{/if}
 		</p>
 		{#if warningMessageKey}
-			<p class="delete-warning">
+			<p class="delete-warning" class:warning-primary={variant === 'primary'}>
 				{$i18n(warningMessageKey)}
 			</p>
 		{/if}
@@ -80,8 +89,8 @@ Extracted from AgentSettings and PromptSettings.
 			<Button variant="ghost" onclick={onCancel} disabled={deleting}>
 				{$i18n('common_cancel')}
 			</Button>
-			<Button variant="danger" onclick={onConfirm} disabled={deleting}>
-				{deleting ? $i18n(deletingLabelKey ?? 'common_delete') : $i18n('common_delete')}
+			<Button {variant} onclick={onConfirm} disabled={deleting}>
+				{deleting ? $i18n(defaultDeletingKey) : $i18n(defaultConfirmKey)}
 			</Button>
 		</div>
 	{/snippet}
@@ -100,6 +109,10 @@ Extracted from AgentSettings and PromptSettings.
 		font-weight: var(--font-weight-semibold);
 	}
 
+	.item-name-primary {
+		color: var(--color-accent);
+	}
+
 	.delete-warning {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
@@ -109,6 +122,10 @@ Extracted from AgentSettings and PromptSettings.
 		background: var(--color-bg-secondary);
 		border-radius: var(--border-radius-md);
 		border-left: 3px solid var(--color-error);
+	}
+
+	.warning-primary {
+		border-left-color: var(--color-accent);
 	}
 
 	.modal-actions {

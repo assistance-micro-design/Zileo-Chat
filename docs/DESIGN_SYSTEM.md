@@ -728,6 +728,53 @@ box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 ```
 
+### DeleteConfirmModal
+
+Reusable confirmation dialog for destructive or significant actions. Supports two visual variants.
+
+```svelte
+<!-- Danger variant (default) - for delete operations -->
+<DeleteConfirmModal
+  open={showConfirm}
+  titleKey="memory_delete_title"
+  confirmMessageKey="memory_confirm_delete"
+  deleting={isDeleting}
+  itemName="My Item"
+  warningMessageKey="optional_warning_key"
+  onConfirm={handleConfirm}
+  onCancel={handleCancel}
+/>
+
+<!-- Primary variant - for non-destructive confirmations (save, regenerate) -->
+<DeleteConfirmModal
+  open={showConfirm}
+  titleKey="api_key_save_title"
+  confirmMessageKey="api_key_confirm_save"
+  deleting={isSaving}
+  variant="primary"
+  confirmLabelKey="api_key_save_confirm_label"
+  deletingLabelKey="api_key_saving"
+  onConfirm={handleConfirm}
+  onCancel={handleCancel}
+/>
+```
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `open` | `boolean` | required | Whether the modal is visible |
+| `titleKey` | `string` | required | i18n key for modal title |
+| `confirmMessageKey` | `string` | required | i18n key for confirmation message |
+| `deleting` | `boolean` | required | Whether action is in progress |
+| `variant` | `'danger' \| 'primary'` | `'danger'` | Visual variant for confirm button |
+| `confirmLabelKey` | `string` | auto | i18n key for confirm button label |
+| `deletingLabelKey` | `string` | auto | i18n key for in-progress label |
+| `itemName` | `string` | - | Item name displayed in bold |
+| `warningMessageKey` | `string` | - | i18n key for warning message |
+| `onConfirm` | `() => void` | required | Callback on confirm |
+| `onCancel` | `() => void` | required | Callback on cancel |
+
 ### Table
 
 ```html

@@ -25,7 +25,7 @@ Displays memories with filtering, search, and action buttons.
 <script lang="ts">
 	import { invoke } from '@tauri-apps/api/core';
 	import { save } from '@tauri-apps/plugin-dialog';
-	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal } from '$lib/components/ui';
+	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal, DeleteConfirmModal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { Memory, MemoryType, MemorySearchResult } from '$types/memory';
 	import type { ExportFormat, ImportResult, RegenerateResult } from '$types/embedding';
@@ -33,8 +33,6 @@ Displays memories with filtering, search, and action buttons.
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
-	// Virtual scrolling for large memory lists
-	import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
 	/** Props */
 	interface Props {
@@ -63,6 +61,15 @@ Displays memories with filtering, search, and action buttons.
 	/** Action state */
 	let actionLoading = $state(false);
 	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+
+	/** Delete confirmation state */
+	let showDeleteConfirm = $state(false);
+	let memoryToDelete = $state<Memory | null>(null);
+	let deleting = $state(false);
+
+	/** Regenerate confirmation state */
+	let showRegenerateConfirm = $state(false);
+	let regenerating = $state(false);
 
 	/** Memory type options (reactive to locale) */
 	const typeOptions = $derived<SelectOption[]>([
@@ -213,24 +220,39 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Deletes a memory
+	 * Requests delete confirmation for a memory
 	 */
-	async function handleDelete(memory: Memory): Promise<void> {
-		if (!confirm(t('memory_confirm_delete'))) {
-			return;
-		}
+	function handleDeleteRequest(memory: Memory): void {
+		memoryToDelete = memory;
+		showDeleteConfirm = true;
+	}
 
-		actionLoading = true;
+	/**
+	 * Confirms and executes memory deletion
+	 */
+	async function confirmDelete(): Promise<void> {
+		if (!memoryToDelete) return;
+		deleting = true;
 		try {
-			await invoke('delete_memory', { memoryId: memory.id });
-			memories = memories.filter((m) => m.id !== memory.id);
+			await invoke('delete_memory', { memoryId: memoryToDelete.id });
+			memories = memories.filter((m) => m.id !== memoryToDelete!.id);
 			message = { type: 'success', text: t('memory_deleted') };
+			showDeleteConfirm = false;
+			memoryToDelete = null;
 			onchange?.();
 		} catch (err) {
 			message = { type: 'error', text: t('memory_failed_delete_memory').replace('{error}', getErrorMessage(err)) };
 		} finally {
-			actionLoading = false;
+			deleting = false;
 		}
+	}
+
+	/**
+	 * Cancels delete confirmation
+	 */
+	function cancelDelete(): void {
+		showDeleteConfirm = false;
+		memoryToDelete = null;
 	}
 
 	/**
@@ -309,14 +331,17 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Regenerates embeddings for all memories
+	 * Requests regeneration confirmation
 	 */
-	async function handleRegenerateEmbeddings(): Promise<void> {
-		if (!confirm(t('memory_confirm_regenerate'))) {
-			return;
-		}
+	function handleRegenerateRequest(): void {
+		showRegenerateConfirm = true;
+	}
 
-		actionLoading = true;
+	/**
+	 * Confirms and executes embedding regeneration
+	 */
+	async function confirmRegenerate(): Promise<void> {
+		regenerating = true;
 		try {
 			const result = await invoke<RegenerateResult>('regenerate_embeddings', {
 				typeFilter: typeFilter || undefined
@@ -328,12 +353,20 @@ Displays memories with filtering, search, and action buttons.
 					.replace('{success}', String(result.success))
 					.replace('{failed}', String(result.failed))
 			};
+			showRegenerateConfirm = false;
 			onchange?.();
 		} catch (err) {
 			message = { type: 'error', text: t('memory_regenerate_failed').replace('{error}', getErrorMessage(err)) };
 		} finally {
-			actionLoading = false;
+			regenerating = false;
 		}
+	}
+
+	/**
+	 * Cancels regeneration confirmation
+	 */
+	function cancelRegenerate(): void {
+		showRegenerateConfirm = false;
 	}
 
 	/**
@@ -393,7 +426,7 @@ Displays memories with filtering, search, and action buttons.
 				<Upload size={16} />
 				<span>{$i18n('memory_import')}</span>
 			</Button>
-			<Button variant="secondary" size="sm" onclick={handleRegenerateEmbeddings} disabled={actionLoading}>
+			<Button variant="secondary" size="sm" onclick={handleRegenerateRequest} disabled={actionLoading}>
 				<RefreshCw size={16} />
 				<span>{$i18n('memory_regenerate')}</span>
 			</Button>
@@ -438,75 +471,62 @@ Displays memories with filtering, search, and action buttons.
 			{/snippet}
 		</Card>
 	{:else}
-		<!-- Virtual scrolling for large memory lists -->
-		<div class="virtual-table-container">
-			<!-- Sticky header row (outside virtual list) -->
-			<div class="virtual-table-header">
-				<div class="virtual-cell header-type">{$i18n('memory_table_type')}</div>
-				<div class="virtual-cell header-scope">{$i18n('memory_table_scope')}</div>
-				<div class="virtual-cell header-content">{$i18n('memory_table_content')}</div>
-				<div class="virtual-cell header-date">{$i18n('memory_table_date')}</div>
-				<div class="virtual-cell header-actions">{$i18n('memory_table_actions')}</div>
+		<div class="table-container">
+			<div class="table-header">
+				<div class="table-cell header-type">{$i18n('memory_table_type')}</div>
+				<div class="table-cell header-scope">{$i18n('memory_table_scope')}</div>
+				<div class="table-cell header-content">{$i18n('memory_table_content')}</div>
+				<div class="table-cell header-date">{$i18n('memory_table_date')}</div>
+				<div class="table-cell header-actions">{$i18n('memory_table_actions')}</div>
 			</div>
 
-			<!-- Virtualized rows -->
-			<div class="virtual-table-body">
-				<SvelteVirtualList
-					items={memories}
-					containerClass="virtual-list-wrapper"
-					viewportClass="virtual-list-viewport"
-					contentClass="virtual-list-content"
-					itemsClass="virtual-list-items"
-					defaultEstimatedItemHeight={48}
-					bufferSize={10}
-				>
-					{#snippet renderItem(memory: Memory)}
-						<div class="virtual-row" role="row">
-							<div class="virtual-cell cell-type">
-								<Badge variant={getTypeVariant(memory.type as MemoryType)}>
-									{memory.type}
-								</Badge>
-							</div>
-							<div class="virtual-cell cell-scope" title={memory.workflow_id || $i18n('memory_scope_general')}>
-								<span class="scope-badge" class:workflow={memory.workflow_id}>
-									{formatScope(memory.workflow_id)}
-								</span>
-							</div>
-							<div class="virtual-cell cell-content">
-								{truncate(memory.content, 100)}
-							</div>
-							<div class="virtual-cell cell-date">
-								{formatDate(memory.created_at)}
-							</div>
-							<div class="virtual-cell cell-actions">
-								<button
-									type="button"
-									class="action-btn"
-									onclick={() => openViewModal(memory)}
-									title={$i18n('memory_modal_view')}
-								>
-									<Eye size={16} />
-								</button>
-								<button
-									type="button"
-									class="action-btn"
-									onclick={() => openEditModal(memory)}
-									title={$i18n('common_edit')}
-								>
-									<Edit size={16} />
-								</button>
-								<button
-									type="button"
-									class="action-btn"
-									onclick={() => handleDelete(memory)}
-									title={$i18n('common_delete')}
-								>
-									<Trash2 size={16} />
-								</button>
-							</div>
+			<div class="table-body">
+				{#each memories as memory (memory.id)}
+					<div class="table-row" role="row">
+						<div class="table-cell cell-type">
+							<Badge variant={getTypeVariant(memory.type as MemoryType)}>
+								{memory.type}
+							</Badge>
 						</div>
-					{/snippet}
-				</SvelteVirtualList>
+						<div class="table-cell cell-scope" title={memory.workflow_id || $i18n('memory_scope_general')}>
+							<span class="scope-badge" class:workflow={memory.workflow_id}>
+								{formatScope(memory.workflow_id)}
+							</span>
+						</div>
+						<div class="table-cell cell-content">
+							{truncate(memory.content, 100)}
+						</div>
+						<div class="table-cell cell-date">
+							{formatDate(memory.created_at)}
+						</div>
+						<div class="table-cell cell-actions">
+							<button
+								type="button"
+								class="action-btn"
+								onclick={() => openViewModal(memory)}
+								title={$i18n('memory_modal_view')}
+							>
+								<Eye size={16} />
+							</button>
+							<button
+								type="button"
+								class="action-btn"
+								onclick={() => openEditModal(memory)}
+								title={$i18n('common_edit')}
+							>
+								<Edit size={16} />
+							</button>
+							<button
+								type="button"
+								class="action-btn"
+								onclick={() => handleDeleteRequest(memory)}
+								title={$i18n('common_delete')}
+							>
+								<Trash2 size={16} />
+							</button>
+						</div>
+					</div>
+				{/each}
 			</div>
 		</div>
 	{/if}
@@ -566,6 +586,30 @@ Displays memories with filtering, search, and action buttons.
 		</Button>
 	{/snippet}
 </Modal>
+
+<!-- Delete Confirmation Modal -->
+<DeleteConfirmModal
+	open={showDeleteConfirm}
+	titleKey="memory_delete_title"
+	confirmMessageKey="memory_confirm_delete"
+	deleting={deleting}
+	deletingLabelKey="memory_deleting"
+	onConfirm={confirmDelete}
+	onCancel={cancelDelete}
+/>
+
+<!-- Regenerate Confirmation Modal -->
+<DeleteConfirmModal
+	open={showRegenerateConfirm}
+	titleKey="memory_regenerate_title"
+	confirmMessageKey="memory_confirm_regenerate"
+	deleting={regenerating}
+	deletingLabelKey="memory_regenerating"
+	variant="primary"
+	confirmLabelKey="memory_regenerate_confirm_label"
+	onConfirm={confirmRegenerate}
+	onCancel={cancelRegenerate}
+/>
 
 <style>
 	.memory-list {
@@ -640,7 +684,7 @@ Displays memories with filtering, search, and action buttons.
 		margin: 0;
 	}
 
-	/* Note: Old table styles removed - replaced by virtual table */
+	/* Table Styles */
 
 	.scope-badge {
 		display: inline-block;
@@ -657,7 +701,7 @@ Displays memories with filtering, search, and action buttons.
 		color: var(--color-accent);
 	}
 
-	/* Note: .actions-cell removed - replaced by .cell-actions */
+	/* Action buttons */
 
 	.action-btn {
 		display: flex;
@@ -710,11 +754,11 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/* ============================================
-	   Virtual Table Styles
-	   Uses CSS Grid to simulate table layout with virtual scrolling
+	   Table Styles
+	   Uses CSS Grid to simulate table layout
 	   ============================================ */
 
-	.virtual-table-container {
+	.table-container {
 		display: flex;
 		flex-direction: column;
 		border: 1px solid var(--color-border);
@@ -723,7 +767,7 @@ Displays memories with filtering, search, and action buttons.
 		background: var(--color-bg-primary);
 	}
 
-	.virtual-table-header {
+	.table-header {
 		display: grid;
 		grid-template-columns: 100px 100px 1fr 140px 100px;
 		gap: 0;
@@ -737,85 +781,50 @@ Displays memories with filtering, search, and action buttons.
 		z-index: 1;
 	}
 
-	.virtual-table-header .virtual-cell {
+	.table-header .table-cell {
 		padding: var(--spacing-md);
 		border-right: 1px solid var(--color-border-light);
 	}
 
-	.virtual-table-header .virtual-cell:last-child {
+	.table-header .table-cell:last-child {
 		border-right: none;
 	}
 
-	.virtual-table-body {
-		height: 400px;
-		overflow: hidden;
-		contain: layout style; /* SA-017/PERF-4: Isolate virtual list layout */
+	.table-body {
+		max-height: 400px;
+		overflow-y: auto;
 	}
 
-	/* Virtual list wrapper styles - replicate library's positioning logic */
-	.virtual-table-body :global(.virtual-list-wrapper) {
-		position: relative;
-		width: 100%;
-		height: 100%;
-		overflow: hidden;
-	}
-
-	.virtual-table-body :global(.virtual-list-viewport) {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		overflow-y: scroll;
-		overflow-x: hidden;
-		-webkit-overflow-scrolling: touch;
-	}
-
-	.virtual-table-body :global(.virtual-list-content) {
-		position: relative;
-		width: 100%;
-		min-height: 100%;
-	}
-
-	.virtual-table-body :global(.virtual-list-items) {
-		position: absolute;
-		width: 100%;
-		left: 0;
-		top: 0;
-	}
-
-	/* Custom scrollbar for virtual list viewport */
-	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar {
+	.table-body::-webkit-scrollbar {
 		width: 6px;
 	}
 
-	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-track {
+	.table-body::-webkit-scrollbar-track {
 		background: transparent;
 	}
 
-	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-thumb {
+	.table-body::-webkit-scrollbar-thumb {
 		background: var(--color-border);
 		border-radius: var(--border-radius-full);
 	}
 
-	.virtual-table-body :global(.virtual-list-viewport)::-webkit-scrollbar-thumb:hover {
+	.table-body::-webkit-scrollbar-thumb:hover {
 		background: var(--color-text-tertiary);
 	}
 
-	.virtual-row {
+	.table-row {
 		display: grid;
 		grid-template-columns: 100px 100px 1fr 140px 100px;
 		gap: 0;
 		border-bottom: 1px solid var(--color-border-light);
 		font-size: var(--font-size-sm);
-		/* SA-017/PERF-4: Removed transition - instant hover is more responsive during scroll */
 	}
 
-	.virtual-row:hover {
+	.table-row:hover {
 		background: var(--color-bg-hover);
 	}
 
-	.virtual-cell {
+	.table-cell {
 		padding: var(--spacing-md);
 		display: flex;
 		align-items: center;
@@ -823,7 +832,7 @@ Displays memories with filtering, search, and action buttons.
 		border-right: 1px solid var(--color-border-light);
 	}
 
-	.virtual-cell:last-child {
+	.table-cell:last-child {
 		border-right: none;
 	}
 
@@ -868,14 +877,14 @@ Displays memories with filtering, search, and action buttons.
 			justify-content: center;
 		}
 
-		/* Responsive virtual table */
-		.virtual-table-header,
-		.virtual-row {
+		/* Responsive table */
+		.table-header,
+		.table-row {
 			grid-template-columns: 80px 80px 1fr 100px 80px;
 		}
 
-		.virtual-table-body {
-			height: 300px;
+		.table-body {
+			max-height: 300px;
 		}
 	}
 </style>

@@ -22,7 +22,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
-	import { Card, Button, StatusIndicator, Modal, HelpButton } from '$lib/components/ui';
+	import { Card, Button, StatusIndicator, Modal, HelpButton, DeleteConfirmModal } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import {
 		createInitialMCPState,
@@ -57,6 +57,11 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	let testError = $state<string | null>(null);
 	let showTestModal = $state(false);
 	let testingServerConfig = $state<MCPServerConfig | null>(null);
+
+	/** Delete confirmation state */
+	let showDeleteConfirm = $state(false);
+	let serverToDelete = $state<MCPServer | null>(null);
+	let serverDeleting = $state(false);
 
 	/**
 	 * Loads MCP servers from backend
@@ -111,19 +116,37 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	}
 
 	/**
-	 * Deletes an MCP server
+	 * Requests delete confirmation for an MCP server
 	 */
-	async function handleDeleteServer(server: MCPServer): Promise<void> {
-		if (!confirm($i18n('settings_mcp_delete_confirm', { name: server.name }))) {
-			return;
-		}
+	function handleDeleteServerRequest(server: MCPServer): void {
+		serverToDelete = server;
+		showDeleteConfirm = true;
+	}
 
+	/**
+	 * Confirms and executes server deletion
+	 */
+	async function confirmDeleteServer(): Promise<void> {
+		if (!serverToDelete) return;
+		serverDeleting = true;
 		try {
-			await deleteServer(server.id);
-			mcpState = removeServer(mcpState, server.id);
+			await deleteServer(serverToDelete.id);
+			mcpState = removeServer(mcpState, serverToDelete.id);
+			showDeleteConfirm = false;
+			serverToDelete = null;
 		} catch (err) {
 			mcpState = setMCPError(mcpState, $i18n('settings_mcp_delete_failed', { error: getErrorMessage(err) }));
+		} finally {
+			serverDeleting = false;
 		}
+	}
+
+	/**
+	 * Cancels delete confirmation
+	 */
+	function cancelDeleteServer(): void {
+		showDeleteConfirm = false;
+		serverToDelete = null;
 	}
 
 	/**
@@ -276,7 +299,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 					onEdit={() => openEditModal(server)}
 					onTest={() => handleTestServer(server)}
 					onToggle={() => handleToggleServer(server)}
-					onDelete={() => handleDeleteServer(server)}
+					onDelete={() => handleDeleteServerRequest(server)}
 				/>
 			{/each}
 		</div>
@@ -320,6 +343,17 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		</Button>
 	{/snippet}
 </Modal>
+
+<!-- Server Delete Confirmation Modal -->
+<DeleteConfirmModal
+	open={showDeleteConfirm}
+	titleKey="settings_mcp_delete_title"
+	confirmMessageKey="settings_mcp_delete_confirm_msg"
+	deleting={serverDeleting}
+	itemName={serverToDelete?.name}
+	onConfirm={confirmDeleteServer}
+	onCancel={cancelDeleteServer}
+/>
 
 <style>
 	.settings-section {
