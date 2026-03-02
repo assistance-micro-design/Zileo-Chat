@@ -312,6 +312,8 @@ mod agent_config_tests {
             mcp_servers: vec![],
             skills: vec![],
             system_prompt: "You are an agent with memory capabilities.".to_string(),
+            folders: vec![],
+            require_file_confirmation: true,
             max_tool_iterations: 50,
             enable_thinking: true,
         };

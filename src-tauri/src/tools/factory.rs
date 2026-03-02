@@ -49,7 +49,10 @@ use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::registry::TOOL_REGISTRY;
 use crate::tools::spawn_agent::SpawnAgentTool;
-use crate::tools::{CalculatorTool, MemoryTool, ReadSkillTool, TodoTool, Tool, UserQuestionTool};
+use crate::tools::{
+    CalculatorTool, FileManagerTool, MemoryTool, ReadSkillTool, TodoTool, Tool, UserQuestionTool,
+};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -153,6 +156,53 @@ impl ToolFactory {
         }
     }
 
+    /// Resolves the folder paths assigned to an agent from the database.
+    ///
+    /// Returns canonicalized PathBuf for each valid, existing folder.
+    /// Invalid or missing folders are logged as warnings and skipped.
+    async fn resolve_agent_folders(&self, agent_id: &str) -> Vec<PathBuf> {
+        let query = "SELECT folders FROM agent WHERE meta::id(id) = $agent_id";
+        let results: Result<Vec<serde_json::Value>, _> = self
+            .db
+            .query_json_with_params(
+                query,
+                vec![("agent_id".to_string(), serde_json::json!(agent_id))],
+            )
+            .await;
+
+        match results {
+            Ok(rows) => {
+                if let Some(row) = rows.into_iter().next() {
+                    if let Some(folders) = row["folders"].as_array() {
+                        return folders
+                            .iter()
+                            .filter_map(|v| {
+                                let path_str = v.as_str()?;
+                                let path = PathBuf::from(path_str);
+                                match path.canonicalize() {
+                                    Ok(canonical) if canonical.is_dir() => Some(canonical),
+                                    Ok(_) => {
+                                        warn!(path = %path_str, agent_id = %agent_id, "Folder path is not a directory, skipping");
+                                        None
+                                    }
+                                    Err(e) => {
+                                        warn!(path = %path_str, agent_id = %agent_id, error = %e, "Cannot resolve folder path, skipping");
+                                        None
+                                    }
+                                }
+                            })
+                            .collect();
+                    }
+                }
+                Vec::new()
+            }
+            Err(e) => {
+                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent folders, defaulting to empty");
+                Vec::new()
+            }
+        }
+    }
+
     /// Creates a tool instance by name.
     ///
     /// # Arguments
@@ -242,10 +292,22 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
+            "FileManagerTool" => {
+                let folders = self.resolve_agent_folders(&agent_id).await;
+                debug!(
+                    agent_id = %agent_id,
+                    folders_count = folders.len(),
+                    "Creating FileManagerTool with resolved agent folders"
+                );
+                let tool = FileManagerTool::new(folders);
+                info!("FileManagerTool instance created");
+                Ok(Arc::new(tool))
+            }
+
             _ => {
                 warn!(tool_name = %tool_name, "Unknown tool requested");
                 Err(format!(
-                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, ReadSkillTool",
+                    "Unknown tool: '{}'. Available tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, ReadSkillTool, FileManagerTool",
                     tool_name
                 ))
             }
@@ -401,7 +463,8 @@ impl ToolFactory {
 
         match tool_name {
             // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool" => {
+            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool"
+            | "FileManagerTool" => {
                 // Extract app_handle from context for basic tools
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
@@ -611,10 +674,11 @@ mod tests {
         assert!(tools.contains(&"CalculatorTool"));
         assert!(tools.contains(&"UserQuestionTool"));
         assert!(tools.contains(&"ReadSkillTool"));
+        assert!(tools.contains(&"FileManagerTool"));
         assert!(tools.contains(&"SpawnAgentTool"));
         assert!(tools.contains(&"DelegateTaskTool"));
         assert!(tools.contains(&"ParallelTasksTool"));
-        assert_eq!(tools.len(), 8); // 4 basic + 1 hidden + 3 sub-agent
+        assert_eq!(tools.len(), 9); // 5 basic + 1 hidden + 3 sub-agent
     }
 
     #[test]
@@ -625,7 +689,7 @@ mod tests {
         assert!(tools.contains(&"CalculatorTool"));
         assert!(tools.contains(&"UserQuestionTool"));
         assert!(!tools.contains(&"SpawnAgentTool"));
-        assert_eq!(tools.len(), 4);
+        assert_eq!(tools.len(), 5);
     }
 
     #[test]
@@ -645,6 +709,7 @@ mod tests {
         assert!(ToolFactory::is_valid_tool("CalculatorTool"));
         assert!(ToolFactory::is_valid_tool("UserQuestionTool"));
         assert!(ToolFactory::is_valid_tool("ReadSkillTool"));
+        assert!(ToolFactory::is_valid_tool("FileManagerTool"));
         assert!(ToolFactory::is_valid_tool("SpawnAgentTool"));
         assert!(!ToolFactory::is_valid_tool("InvalidTool"));
         assert!(!ToolFactory::is_valid_tool("memory_tool"));
@@ -656,6 +721,7 @@ mod tests {
         assert!(!ToolFactory::requires_context("TodoTool"));
         assert!(!ToolFactory::requires_context("CalculatorTool"));
         assert!(!ToolFactory::requires_context("UserQuestionTool"));
+        assert!(!ToolFactory::requires_context("FileManagerTool"));
         assert!(ToolFactory::requires_context("SpawnAgentTool"));
         assert!(ToolFactory::requires_context("DelegateTaskTool"));
         assert!(ToolFactory::requires_context("ParallelTasksTool"));

@@ -153,6 +153,17 @@ fn should_require_validation(
     true
 }
 
+/// Checks if a FileManagerTool operation is destructive and requires confirmation.
+///
+/// Destructive operations: write, replace, delete, move, rename
+/// Non-destructive: list, read, create, search_glob, search_content
+pub fn is_destructive_file_op(operation: &str) -> bool {
+    matches!(
+        operation,
+        "write" | "replace" | "delete" | "move" | "rename"
+    )
+}
+
 /// Validation helper for human-in-the-loop approval.
 ///
 /// Handles the full validation flow for sub-agent, tool, and MCP operations.
@@ -519,6 +530,73 @@ impl ValidationHelper {
             "server_name": server_name,
             "tool_name": tool_name,
             "arguments_preview": safe_truncate(&arguments.to_string(), 200, true)
+        })
+    }
+
+    // =========================================================================
+    // File Operation Validation
+    // =========================================================================
+
+    /// Requests validation for a destructive file operation.
+    ///
+    /// # Arguments
+    /// * `workflow_id` - Associated workflow ID
+    /// * `operation` - File operation name (e.g., "delete", "write", "move")
+    /// * `path` - File/directory path being operated on
+    /// * `details` - Additional details (destination, pattern, etc.)
+    ///
+    /// # Returns
+    /// * `Ok(())` - If approved or validation skipped
+    /// * `Err(ToolError)` - If rejected or error
+    pub async fn request_file_validation(
+        &self,
+        workflow_id: &str,
+        operation: &str,
+        path: &str,
+        details: Value,
+    ) -> Result<(), ToolError> {
+        let settings = self.load_validation_settings().await;
+        let risk_level = RiskLevel::Medium; // Destructive file ops are medium risk
+
+        if !should_require_validation(&settings, &ValidationType::FileOp, &risk_level) {
+            info!(
+                workflow_id = %workflow_id,
+                operation = %operation,
+                path = %path,
+                "Skipping validation for file operation (mode: {:?})",
+                settings.mode
+            );
+            return Ok(());
+        }
+
+        let validation_id = Uuid::new_v4().to_string();
+        let full_details = Self::file_op_details(operation, path, &details);
+        let description = format!("File operation '{}' on: {}", operation, path);
+
+        info!(
+            validation_id = %validation_id,
+            workflow_id = %workflow_id,
+            operation = %operation,
+            "Creating validation request for file operation"
+        );
+
+        self.create_and_wait_validation(
+            &validation_id,
+            workflow_id,
+            ValidationType::FileOp,
+            &description,
+            full_details,
+            risk_level,
+        )
+        .await
+    }
+
+    /// Creates operation details JSON for file operations.
+    pub fn file_op_details(operation: &str, path: &str, extra: &Value) -> Value {
+        serde_json::json!({
+            "operation": operation,
+            "path": path,
+            "details": extra
         })
     }
 
@@ -945,5 +1023,61 @@ mod tests {
         );
         let preview = details["prompt_preview"].as_str().unwrap();
         assert!(preview.ends_with("..."), "Preview should end with ellipsis");
+    }
+
+    // =========================================================================
+    // File operation validation tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_destructive_file_op() {
+        assert!(is_destructive_file_op("write"));
+        assert!(is_destructive_file_op("replace"));
+        assert!(is_destructive_file_op("delete"));
+        assert!(is_destructive_file_op("move"));
+        assert!(is_destructive_file_op("rename"));
+        assert!(!is_destructive_file_op("list"));
+        assert!(!is_destructive_file_op("read"));
+        assert!(!is_destructive_file_op("create"));
+        assert!(!is_destructive_file_op("search_glob"));
+        assert!(!is_destructive_file_op("search_content"));
+        assert!(!is_destructive_file_op("unknown"));
+    }
+
+    #[test]
+    fn test_should_require_validation_selective_file_ops() {
+        let selective_with_file_ops = SelectiveValidationConfig {
+            sub_agents: false,
+            tools: false,
+            mcp: false,
+            file_ops: true,
+            db_ops: false,
+        };
+        let settings = make_settings(
+            ValidationMode::Selective,
+            false,
+            false,
+            selective_with_file_ops,
+        );
+        assert!(should_require_validation(
+            &settings,
+            &ValidationType::FileOp,
+            &RiskLevel::Medium
+        ));
+        assert!(!should_require_validation(
+            &settings,
+            &ValidationType::Tool,
+            &RiskLevel::Medium
+        ));
+    }
+
+    #[test]
+    fn test_file_op_details() {
+        let extra = serde_json::json!({"destination": "/tmp/backup"});
+        let details = ValidationHelper::file_op_details("move", "/home/user/file.txt", &extra);
+
+        assert_eq!(details["operation"], "move");
+        assert_eq!(details["path"], "/home/user/file.txt");
+        assert_eq!(details["details"]["destination"], "/tmp/backup");
     }
 }

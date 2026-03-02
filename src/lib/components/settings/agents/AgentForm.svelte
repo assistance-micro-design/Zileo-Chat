@@ -46,6 +46,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
+	import AgentFolders from './AgentFolders.svelte';
 	/**
 	 * Component props
 	 */
@@ -70,6 +71,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let selectedTools = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
 	let selectedSkills = $state<string[]>([]);
+	let selectedFolders = $state<string[]>([]);
+	let requireFileConfirmation = $state(true);
 	let systemPrompt = $state('');
 
 	// Sync form state when agent prop changes (e.g., switching between edit targets)
@@ -83,6 +86,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		selectedTools = agent?.tools ?? [];
 		selectedMcpServers = agent?.mcp_servers ?? [];
 		selectedSkills = agent?.skills ?? [];
+		selectedFolders = agent?.folders ?? [];
+		requireFileConfirmation = agent?.require_file_confirmation ?? true;
 		systemPrompt = agent?.system_prompt ?? '';
 		// Reset validation state when agent changes
 		errors = {};
@@ -102,7 +107,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		{ value: 'MemoryTool', label: $i18n('agents_tool_memory'), description: $i18n('agents_tool_memory_desc') },
 		{ value: 'TodoTool', label: $i18n('agents_tool_todo'), description: $i18n('agents_tool_todo_desc') },
 		{ value: 'UserQuestionTool', label: $i18n('agents_tool_user_question'), description: $i18n('agents_tool_user_question_desc') },
-		{ value: 'CalculatorTool', label: $i18n('agents_tool_calculator'), description: $i18n('agents_tool_calculator_desc') }
+		{ value: 'CalculatorTool', label: $i18n('agents_tool_calculator'), description: $i18n('agents_tool_calculator_desc') },
+		{ value: 'FileManagerTool', label: $i18n('agents_tool_file_manager'), description: $i18n('agents_tool_file_manager_desc') }
 	]);
 
 	/** Lifecycle options with descriptions - reactive to locale */
@@ -271,6 +277,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,
 			skills: selectedSkills,
+			folders: selectedFolders,
+			require_file_confirmation: requireFileConfirmation,
 			system_prompt: systemPrompt.trim(),
 			max_tool_iterations: maxToolIterations,
 			enable_thinking: enableThinking
@@ -550,6 +558,28 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							{/each}
 						</div>
 					{/if}
+				</div>
+
+				<!-- Folders -->
+				<div class="form-section">
+					<h4 class="section-title">{$i18n('agents_section_folders')}</h4>
+
+					<AgentFolders
+						folders={selectedFolders}
+						onchange={(f) => { selectedFolders = f; }}
+					/>
+
+					<label class="checkbox-item">
+						<input
+							type="checkbox"
+							checked={requireFileConfirmation}
+							onchange={() => { requireFileConfirmation = !requireFileConfirmation; }}
+						/>
+						<div class="checkbox-content">
+							<span class="checkbox-label">{$i18n('agents_require_file_confirmation')}</span>
+							<span class="checkbox-description">{$i18n('agents_require_file_confirmation_desc')}</span>
+						</div>
+					</label>
 				</div>
 
 				<!-- System Prompt -->

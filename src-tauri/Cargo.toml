@@ -43,6 +43,7 @@ uuid = { version = "1.20", features = ["v4", "serde"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 async-trait = "0.1"
 regex = "1.10"
+globset = "0.4"
 
 # Async utilities for cancellation tokens
 tokio-util = { version = "0.7", features = ["rt"] }

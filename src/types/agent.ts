@@ -65,6 +65,10 @@ export interface AgentConfig {
   mcp_servers: string[];
   /** Skill names assigned to this agent */
   skills: string[];
+  /** Authorized directory paths for FileManagerTool */
+  folders: string[];
+  /** Require user confirmation for destructive file operations (default: true) */
+  require_file_confirmation: boolean;
   /** System prompt */
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
@@ -105,6 +109,10 @@ export interface AgentConfigCreate {
   mcp_servers: string[];
   /** Skill names assigned to this agent */
   skills: string[];
+  /** Authorized directory paths for FileManagerTool */
+  folders: string[];
+  /** Require user confirmation for destructive file operations (default: true) */
+  require_file_confirmation: boolean;
   /** System prompt (1-10000 chars) */
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
@@ -127,6 +135,10 @@ export interface AgentConfigUpdate {
   mcp_servers?: string[];
   /** Skill names assigned to this agent */
   skills?: string[];
+  /** Authorized directory paths for FileManagerTool */
+  folders?: string[];
+  /** Require user confirmation for destructive file operations */
+  require_file_confirmation?: boolean;
   /** System prompt (1-10000 chars) */
   system_prompt?: string;
   /** Maximum number of tool execution iterations (1-200) */
@@ -155,6 +167,8 @@ export interface AgentSummary {
   mcp_servers_count: number;
   /** Number of assigned skills */
   skills_count: number;
+  /** Number of authorized folders */
+  folders_count: number;
 }
 
 // Re-export tool constants from centralized location

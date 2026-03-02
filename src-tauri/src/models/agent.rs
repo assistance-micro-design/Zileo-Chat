@@ -76,6 +76,12 @@ pub struct AgentConfig {
     /// Example: ["coding-standards", "git-workflow"]
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Authorized directory paths for FileManagerTool
+    #[serde(default)]
+    pub folders: Vec<String>,
+    /// Require user confirmation for destructive file operations (default: true)
+    #[serde(default = "default_require_file_confirmation")]
+    pub require_file_confirmation: bool,
     /// System prompt
     pub system_prompt: String,
     /// Maximum number of tool execution iterations (1-200, default: 50)
@@ -93,6 +99,11 @@ fn default_max_tool_iterations() -> usize {
 
 /// Default value for enable_thinking
 fn default_enable_thinking() -> bool {
+    true
+}
+
+/// Default value for require_file_confirmation
+fn default_require_file_confirmation() -> bool {
     true
 }
 
@@ -147,6 +158,12 @@ pub struct AgentConfigCreate {
     /// Skill names assigned to this agent
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Authorized directory paths for FileManagerTool
+    #[serde(default)]
+    pub folders: Vec<String>,
+    /// Require user confirmation for destructive file operations (default: true)
+    #[serde(default = "default_require_file_confirmation")]
+    pub require_file_confirmation: bool,
     /// System prompt (1-10000 chars)
     pub system_prompt: String,
     /// Maximum number of tool execution iterations (1-200, default: 50)
@@ -175,6 +192,12 @@ pub struct AgentConfigUpdate {
     /// Skill names assigned to this agent
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skills: Option<Vec<String>>,
+    /// Authorized directory paths for FileManagerTool
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folders: Option<Vec<String>>,
+    /// Require user confirmation for destructive file operations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_file_confirmation: Option<bool>,
     /// System prompt (1-10000 chars)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
@@ -206,6 +229,9 @@ pub struct AgentSummary {
     /// Number of assigned skills
     #[serde(default)]
     pub skills_count: usize,
+    /// Number of authorized folders
+    #[serde(default)]
+    pub folders_count: usize,
 }
 
 impl From<&AgentConfig> for AgentSummary {
@@ -219,6 +245,7 @@ impl From<&AgentConfig> for AgentSummary {
             tools_count: config.tools.len(),
             mcp_servers_count: config.mcp_servers.len(),
             skills_count: config.skills.len(),
+            folders_count: config.folders.len(),
         }
     }
 }
@@ -296,6 +323,8 @@ mod tests {
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -346,6 +375,8 @@ mod tests {
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -375,6 +406,8 @@ mod tests {
             ],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -411,6 +444,8 @@ mod tests {
             ],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

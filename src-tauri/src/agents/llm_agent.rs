@@ -41,8 +41,9 @@ use crate::models::mcp::MCPTool;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::{AgentConfig, Lifecycle};
 use crate::tools::{
-    context::AgentToolContext, validation_helper::ValidationHelper, Tool, ToolDefinition,
-    ToolFactory,
+    context::AgentToolContext,
+    validation_helper::{is_destructive_file_op, ValidationHelper},
+    Tool, ToolDefinition, ToolFactory,
 };
 use async_trait::async_trait;
 use chrono::Local;
@@ -677,8 +678,42 @@ You are currently running with the following configuration:
                     || call.name == "ParallelTasksTool";
 
                 if !is_sub_agent_tool {
-                    if let Some(helper) = validation_helper {
-                        // Extract operation from arguments if available
+                    // FileManagerTool: use file-specific validation if destructive + confirmation enabled
+                    if call.name == "FileManagerTool" && self.config.require_file_confirmation {
+                        let operation = call
+                            .arguments
+                            .get("operation")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+
+                        if is_destructive_file_op(operation) {
+                            if let Some(helper) = validation_helper {
+                                let path = call
+                                    .arguments
+                                    .get("path")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
+
+                                if let Err(e) = helper
+                                    .request_file_validation(
+                                        workflow_id,
+                                        operation,
+                                        path,
+                                        call.arguments.clone(),
+                                    )
+                                    .await
+                                {
+                                    warn!(tool = %call.name, operation = %operation, error = %e, "File operation validation rejected");
+                                    return FunctionCallResult::failure(
+                                        &call.id,
+                                        &call.name,
+                                        e.to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    } else if let Some(helper) = validation_helper {
+                        // Standard tool validation for non-FileManagerTool
                         let operation = call
                             .arguments
                             .get("operation")
@@ -1673,6 +1708,8 @@ mod tests {
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

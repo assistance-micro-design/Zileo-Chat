@@ -83,6 +83,16 @@ impl ToolRegistry {
             },
         );
 
+        tools.insert(
+            "FileManagerTool",
+            ToolMetadata {
+                name: "FileManagerTool",
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: false,
+            },
+        );
+
         // Auto-injected tools (hidden from frontend UI)
         tools.insert(
             "ReadSkillTool",
@@ -248,7 +258,7 @@ mod tests {
         assert!(basic.contains(&"CalculatorTool"));
         assert!(basic.contains(&"UserQuestionTool"));
         assert!(!basic.contains(&"SpawnAgentTool"));
-        assert_eq!(basic.len(), 4);
+        assert_eq!(basic.len(), 5);
 
         let sub_agent = TOOL_REGISTRY.sub_agent_tools();
         assert!(sub_agent.contains(&"SpawnAgentTool"));
@@ -271,13 +281,13 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 8); // 4 basic + 1 hidden + 3 sub-agent
+        assert_eq!(all.len(), 9); // 5 basic + 1 hidden + 3 sub-agent
     }
 
     #[test]
     fn test_registry_visible_tools_excludes_hidden() {
         let visible = TOOL_REGISTRY.visible_tools();
-        assert_eq!(visible.len(), 7); // 4 basic + 3 sub-agent (hidden excluded)
+        assert_eq!(visible.len(), 8); // 5 basic + 3 sub-agent (hidden excluded)
         assert!(!visible.contains(&"ReadSkillTool"));
         assert!(visible.contains(&"MemoryTool"));
         assert!(visible.contains(&"SpawnAgentTool"));

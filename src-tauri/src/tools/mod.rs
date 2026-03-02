@@ -57,6 +57,7 @@ pub mod constants;
 pub mod context;
 pub mod delegate_task;
 pub mod factory;
+pub mod file_manager;
 pub mod memory;
 pub mod parallel_tasks;
 pub mod read_skill;
@@ -84,6 +85,8 @@ pub use context::AgentToolContext;
 pub use delegate_task::DelegateTaskTool;
 #[allow(unused_imports)]
 pub use factory::ToolFactory;
+#[allow(unused_imports)]
+pub use file_manager::FileManagerTool;
 #[allow(unused_imports)]
 pub use memory::MemoryTool;
 #[allow(unused_imports)]

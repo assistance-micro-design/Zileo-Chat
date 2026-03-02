@@ -201,6 +201,8 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
         tools: validate_tools(&config.tools)?,
         mcp_servers: validate_mcp_servers(&config.mcp_servers)?,
         skills: validate_skills(&config.skills)?,
+        folders: config.folders.clone(),
+        require_file_confirmation: config.require_file_confirmation,
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
         enable_thinking: config.enable_thinking,
@@ -218,6 +220,8 @@ struct SerializedAgentFields {
     tools_json: String,
     mcp_json: String,
     skills_json: String,
+    folders_json: String,
+    require_file_confirmation: bool,
     prompt_json: String,
 }
 
@@ -228,6 +232,7 @@ fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields,
     let tools_json = serialize_for_query(&config.tools, "tools")?;
     let mcp_json = serialize_for_query(&config.mcp_servers, "MCP servers")?;
     let skills_json = serialize_for_query(&config.skills, "skills")?;
+    let folders_json = serialize_for_query(&config.folders, "folders")?;
     let prompt_json = serialize_for_query(&config.system_prompt, "system prompt")?;
 
     Ok(SerializedAgentFields {
@@ -236,6 +241,8 @@ fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields,
         tools_json,
         mcp_json,
         skills_json,
+        folders_json,
+        require_file_confirmation: config.require_file_confirmation,
         prompt_json,
     })
 }
@@ -380,6 +387,8 @@ pub async fn create_agent(
         tools,
         mcp_servers,
         skills,
+        folders,
+        require_file_confirmation,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -399,6 +408,8 @@ pub async fn create_agent(
         tools,
         mcp_servers,
         skills,
+        folders,
+        require_file_confirmation,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -416,6 +427,8 @@ pub async fn create_agent(
             tools: {},
             mcp_servers: {},
             skills: {},
+            folders: {},
+            require_file_confirmation: {},
             system_prompt: {},
             max_tool_iterations: {},
             enable_thinking: {},
@@ -430,9 +443,11 @@ pub async fn create_agent(
         fields.tools_json,
         fields.mcp_json,
         fields.skills_json,
+        fields.folders_json,
+        fields.require_file_confirmation,
         fields.prompt_json,
-        validated.max_tool_iterations,
-        validated.enable_thinking
+        agent_config.max_tool_iterations,
+        agent_config.enable_thinking
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -472,6 +487,13 @@ fn merge_agent_config(
         Some(s) => validate_skills(s)?,
         None => existing.skills.clone(),
     };
+    let folders = match &update.folders {
+        Some(f) => f.clone(),
+        None => existing.folders.clone(),
+    };
+    let require_file_confirmation = update
+        .require_file_confirmation
+        .unwrap_or(existing.require_file_confirmation);
     let system_prompt = match &update.system_prompt {
         Some(p) => validate_system_prompt(p)?,
         None => existing.system_prompt.clone(),
@@ -489,6 +511,8 @@ fn merge_agent_config(
         tools,
         mcp_servers,
         skills,
+        folders,
+        require_file_confirmation,
         system_prompt,
         max_tool_iterations,
         enable_thinking,
@@ -536,6 +560,8 @@ pub async fn update_agent(
             tools = {},
             mcp_servers = {},
             skills = {},
+            folders = {},
+            require_file_confirmation = {},
             system_prompt = {},
             max_tool_iterations = {},
             enable_thinking = {},
@@ -546,6 +572,8 @@ pub async fn update_agent(
         fields.tools_json,
         fields.mcp_json,
         fields.skills_json,
+        fields.folders_json,
+        fields.require_file_confirmation,
         fields.prompt_json,
         updated_config.max_tool_iterations,
         updated_config.enable_thinking
@@ -683,6 +711,8 @@ mod tests {
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -717,6 +747,8 @@ mod tests {
             tools: vec!["tool_a".to_string(), "tool_b".to_string()],
             mcp_servers: vec!["serena".to_string()],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "You are a test agent".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -763,6 +795,8 @@ mod tests {
             tools: vec![],
             mcp_servers: vec![],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "Test prompt".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,
@@ -811,6 +845,8 @@ mod tests {
                 tools: vec![],
                 mcp_servers: vec![],
                 skills: vec![],
+                folders: vec![],
+                require_file_confirmation: true,
                 system_prompt: format!("Agent {} prompt", i),
                 max_tool_iterations: 50,
                 enable_thinking: true,

@@ -252,10 +252,12 @@ DEFINE FIELD OVERWRITE llm.temperature ON agent TYPE float
 DEFINE FIELD OVERWRITE llm.max_tokens ON agent TYPE int
     ASSERT $value >= 256 AND $value <= 128000;
 
--- Tools, MCP servers, and Skills
+-- Tools, MCP servers, Skills, and Folders
 DEFINE FIELD OVERWRITE tools ON agent TYPE array<string>;
 DEFINE FIELD OVERWRITE mcp_servers ON agent TYPE array<string>;
 DEFINE FIELD OVERWRITE skills ON agent TYPE array<string> DEFAULT [];
+DEFINE FIELD OVERWRITE folders ON agent TYPE array<string> DEFAULT [];
+DEFINE FIELD OVERWRITE require_file_confirmation ON agent TYPE bool DEFAULT true;
 
 -- System prompt
 DEFINE FIELD OVERWRITE system_prompt ON agent TYPE string

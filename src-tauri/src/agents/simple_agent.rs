@@ -141,6 +141,8 @@ mod tests {
             tools: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_servers: vec!["mcp_server1".to_string()],
             skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
             system_prompt: "You are a test agent.".to_string(),
             max_tool_iterations: 50,
             enable_thinking: true,

@@ -15,6 +15,7 @@ export const AVAILABLE_TOOLS = [
   'TodoTool',
   'CalculatorTool',
   'UserQuestionTool',
+  'FileManagerTool',
   'SpawnAgentTool',
   'DelegateTaskTool',
   'ParallelTasksTool'
@@ -24,7 +25,7 @@ export const AVAILABLE_TOOLS = [
  * Basic tools for memory and task management.
  * These tools do not require AgentToolContext.
  */
-export const BASIC_TOOLS = ['MemoryTool', 'TodoTool', 'CalculatorTool', 'UserQuestionTool'] as const;
+export const BASIC_TOOLS = ['MemoryTool', 'TodoTool', 'CalculatorTool', 'UserQuestionTool', 'FileManagerTool'] as const;
 
 /**
  * Sub-agent orchestration tools.

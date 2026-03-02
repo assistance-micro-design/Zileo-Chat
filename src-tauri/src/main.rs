@@ -326,6 +326,10 @@ async fn main() -> anyhow::Result<()> {
             commands::skill::create_skill,
             commands::skill::update_skill,
             commands::skill::delete_skill,
+            // FileManager commands
+            commands::file_manager::validate_agent_folder,
+            commands::file_manager::list_trash,
+            commands::file_manager::restore_from_trash_cmd,
             // Import/Export commands
             commands::import_export::prepare_export_preview,
             commands::import_export::generate_export_file,
@@ -425,7 +429,7 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // Load agents from database
-                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, enable_thinking FROM agent";
+                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders, require_file_confirmation, system_prompt, max_tool_iterations, enable_thinking FROM agent";
                 let results: Vec<serde_json::Value> = match db.db.query(query).await {
                     Ok(mut r) => r.take(0).unwrap_or_default(),
                     Err(e) => {
@@ -473,6 +477,13 @@ async fn main() -> anyhow::Result<()> {
                         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                         .unwrap_or_default();
 
+                    let folders_list: Vec<String> = row["folders"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+
+                    let require_file_confirmation = row["require_file_confirmation"].as_bool().unwrap_or(true);
+
                     let system_prompt = row["system_prompt"].as_str().unwrap_or("You are a helpful assistant.").to_string();
 
                     let max_tool_iterations = row["max_tool_iterations"]
@@ -491,6 +502,8 @@ async fn main() -> anyhow::Result<()> {
                         tools,
                         mcp_servers: mcp_servers_list,
                         skills: skills_list,
+                        folders: folders_list,
+                        require_file_confirmation,
                         system_prompt,
                         max_tool_iterations,
                         enable_thinking,

@@ -456,6 +456,8 @@ mod tests {
                     tools: vec![],
                     mcp_servers: vec![],
                     skills: vec![],
+                    folders: vec![],
+                    require_file_confirmation: true,
                     system_prompt: "Test prompt".to_string(),
                     max_tool_iterations: 50,
                     enable_thinking: true,

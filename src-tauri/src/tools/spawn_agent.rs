@@ -336,6 +336,9 @@ impl SpawnAgentTool {
             mcp_servers: mcp_servers.unwrap_or_else(|| parent_config.mcp_servers.clone()),
             // Sub-agents inherit parent's skills
             skills: parent_config.skills.clone(),
+            // Sub-agents inherit parent's folders and file confirmation setting
+            folders: parent_config.folders.clone(),
+            require_file_confirmation: parent_config.require_file_confirmation,
             system_prompt: system_prompt
                 .unwrap_or(DEFAULT_SUB_AGENT_SYSTEM_PROMPT)
                 .to_string(),

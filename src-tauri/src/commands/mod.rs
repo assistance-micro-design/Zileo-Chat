@@ -158,6 +158,7 @@
 pub mod agent;
 pub mod custom_provider;
 pub mod embedding;
+pub mod file_manager;
 pub mod import_export;
 pub mod llm;
 pub mod llm_models;
