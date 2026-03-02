@@ -556,13 +556,19 @@ impl ValidationHelper {
         details: Value,
     ) -> Result<(), ToolError> {
         let settings = self.load_validation_settings().await;
-        let risk_level = RiskLevel::Medium; // Destructive file ops are medium risk
+        // Delete is high risk (permanent data loss), other destructive ops are medium
+        let risk_level = if operation == "delete" {
+            RiskLevel::High
+        } else {
+            RiskLevel::Medium
+        };
 
         if !should_require_validation(&settings, &ValidationType::FileOp, &risk_level) {
             info!(
                 workflow_id = %workflow_id,
                 operation = %operation,
                 path = %path,
+                risk_level = %risk_level,
                 "Skipping validation for file operation (mode: {:?})",
                 settings.mode
             );
