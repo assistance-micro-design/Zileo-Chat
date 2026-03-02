@@ -179,6 +179,7 @@ interface AgentSummary {
   tools_count: number;           // Number of enabled tools
   mcp_servers_count: number;     // Number of MCP servers
   skills_count: number;          // Number of assigned skills
+  folders_count: number;         // Number of authorized folders
 }
 ```
 
@@ -216,13 +217,16 @@ interface AgentConfig {
     model: string;
     temperature: number;      // 0.0-2.0
     max_tokens: number;       // 256-128000
+    is_reasoning: boolean;    // Whether model supports thinking mode
   };
-  tools: string[];            // ["MemoryTool", "TodoTool"]
+  tools: string[];            // ["MemoryTool", "TodoTool", "FileManagerTool"]
   skills: string[];           // Skill names assigned to agent
   mcp_servers: string[];      // MCP server names
+  folders: string[];          // Authorized directory paths for FileManagerTool
+  require_file_confirmation: boolean; // Require user validation for destructive file ops (default: true)
   system_prompt: string;
-  created_at?: string;        // ISO 8601
-  updated_at?: string;        // ISO 8601
+  max_tool_iterations: number; // 1-200, default: 50
+  enable_thinking: boolean;   // Enable thinking mode for supported models
 }
 ```
 
@@ -246,10 +250,14 @@ const agentId = await invoke<string>('create_agent', {
       temperature: number,           // 0.0-2.0
       max_tokens: number             // 256-128000
     },
-    tools: string[],                 // ["MemoryTool", "TodoTool"]
+    tools: string[],                 // ["MemoryTool", "TodoTool", "FileManagerTool"]
     skills: string[],                // Skill names to assign
     mcp_servers: string[],           // MCP server names
-    system_prompt: string            // 1-10000 chars
+    folders: string[],               // Authorized directory paths for FileManagerTool
+    require_file_confirmation: boolean, // Require validation for destructive file ops (default: true)
+    system_prompt: string,           // 1-10000 chars
+    max_tool_iterations: number,     // 1-200, default: 50
+    enable_thinking: boolean         // Enable thinking mode (default: true)
   }
 });
 ```
@@ -266,7 +274,7 @@ async fn create_agent(
 - `name`: 1-64 caractères, non vide, **UNIQUE** (case-insensitive)
 - `temperature`: 0.0-2.0
 - `max_tokens`: 256-128000
-- `tools`: Doit être dans KNOWN_TOOLS ("MemoryTool", "TodoTool")
+- `tools`: Doit être dans KNOWN_TOOLS ("MemoryTool", "TodoTool", "CalculatorTool", "UserQuestionTool", "FileManagerTool", "SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool")
 - `system_prompt`: Non vide
 
 **Returns** : UUID de l'agent créé
@@ -289,7 +297,11 @@ const updated = await invoke<AgentConfig>('update_agent', {
     tools?: string[],
     skills?: string[],
     mcp_servers?: string[],
-    system_prompt?: string
+    folders?: string[],
+    require_file_confirmation?: boolean,
+    system_prompt?: string,
+    max_tool_iterations?: number,
+    enable_thinking?: boolean
     // Note: lifecycle cannot be changed after creation
   }
 });
@@ -1606,6 +1618,92 @@ interface MCPLatencyMetrics {
 
 ---
 
+## FileManager
+
+### validate_agent_folder
+
+Valide un chemin de dossier et retourne sa forme canonique.
+
+**Frontend**
+```typescript
+const canonicalPath = await invoke<string>('validate_agent_folder', {
+  path: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn validate_agent_folder(
+    path: String
+) -> Result<String, String>
+```
+
+**Returns** : Chemin canonique valide
+
+**Errors** : Path does not exist, not a directory, not UTF-8
+
+---
+
+### list_trash
+
+Liste les entrees trash d'un dossier autorise.
+
+**Frontend**
+```typescript
+import type { TrashEntry } from '$types/fileManager';
+
+const entries = await invoke<TrashEntry[]>('list_trash', {
+  folderPath: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn list_trash(
+    folder_path: String
+) -> Result<Vec<TrashEntry>, String>
+```
+
+**TrashEntry Type**
+```typescript
+interface TrashEntry {
+  trash_path: string;
+  original_relative_path: string;
+  deleted_at: string;
+  size_bytes: number;
+}
+```
+
+**Returns** : Array des fichiers dans la trash du dossier
+
+---
+
+### restore_from_trash_cmd
+
+Restaure un fichier depuis la trash vers son emplacement original.
+
+**Frontend**
+```typescript
+const restoredPath = await invoke<string>('restore_from_trash_cmd', {
+  trashPath: string,
+  folderPath: string
+});
+```
+
+**Backend Signature**
+```rust
+async fn restore_from_trash_cmd(
+    trash_path: String,
+    folder_path: String
+) -> Result<String, String>
+```
+
+**Returns** : Chemin du fichier restaure
+
+**Errors** : Folder does not exist, trash file not found, restore failed
+
+---
+
 ## Sub-Agent Events
 
 ### Validation Events
@@ -1785,7 +1883,7 @@ try {
 
 Types générés depuis Rust avec `ts-rs` ou manuellement synchronisés.
 
-**Localisation** : `src/lib/types/api.ts`
+**Localisation** : `src/types/` (alias `$types`)
 
 **Synchronisation** : Valider types après changements backend
 

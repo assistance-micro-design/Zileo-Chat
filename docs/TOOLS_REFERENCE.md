@@ -14,6 +14,7 @@ Documentation complete des tools disponibles pour les agents dans Zileo-Chat-3.
 - [DelegateTaskTool](#6-delegatetasktool)
 - [ParallelTasksTool](#7-paralleltaskstool)
 - [ReadSkillTool](#8-readskilltool)
+- [FileManagerTool](#9-filemanagertool)
 - [Utility Modules](#utility-modules)
 - [ToolError Types](#toolerror-types)
 - [Fichiers source](#fichiers-source)
@@ -34,6 +35,9 @@ ToolFactory
 ├── Interaction Tools (human-in-the-loop)
 │   └── UserQuestionTool - Questions interactives avec timeout et circuit breaker
 │
+├── File Tools (sandboxed filesystem)
+│   └── FileManagerTool  - Operations fichiers dans dossiers autorises
+│
 ├── Sub-Agent Tools (Primary Agent uniquement)
 │   ├── SpawnAgentTool      - Creation de sous-agents temporaires
 │   ├── DelegateTaskTool    - Delegation a agents permanents
@@ -43,7 +47,7 @@ ToolFactory
     └── ReadSkillTool       - Lecture de documents de competences (skills)
 ```
 
-**Total**: 8 tools (3 basic + 1 interaction + 3 sub-agent + 1 hidden)
+**Total**: 9 tools (3 basic + 1 interaction + 1 file + 3 sub-agent + 1 hidden)
 
 ### Trait Tool
 
@@ -1541,6 +1545,90 @@ La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans `streamin
 
 ---
 
+## 9. FileManagerTool
+
+**Fichier** : `src-tauri/src/tools/file_manager/tool.rs`
+
+**Tool Name** : `FileManagerTool`
+
+**Description** : Operations filesystem sandboxees dans les dossiers autorises de l'agent
+
+**Categorie** : File Tool (require authorized folders configuration)
+
+### Architecture Fichiers
+
+```
+src-tauri/src/tools/file_manager/
+├── mod.rs           - Module exports
+├── tool.rs          - FileManagerTool struct + Tool trait (10 operations)
+├── security.rs      - Path validation, sandbox enforcement, folder authorization
+├── helpers.rs       - File info formatting, text detection, constants
+└── trash.rs         - Trash-based safety (backup, restore, cleanup, size eviction)
+```
+
+### Operations
+
+| Operation | Description | Params requis | Risk Level |
+|-----------|-------------|---------------|------------|
+| `list` | Lister le contenu d'un repertoire | `path` | - |
+| `read` | Lire le contenu d'un fichier texte | `path` | - |
+| `write` | Ecrire/creer un fichier (backup si existant) | `path`, `content` | Medium |
+| `replace` | Remplacement par regex dans un fichier | `path`, `pattern`, `replacement` | Medium |
+| `create` | Creer un repertoire | `path` | - |
+| `delete` | Supprimer fichier/dossier (vers trash) | `path` | **High** |
+| `move` | Deplacer fichier/dossier | `source`, `destination` | Medium |
+| `rename` | Renommer fichier/dossier | `path`, `new_name` | Medium |
+| `search_glob` | Recherche par pattern glob | `path`, `pattern` | - |
+| `search_content` | Recherche dans le contenu des fichiers | `path`, `pattern` | - |
+
+### Securite
+
+- **Sandbox** : Tous les chemins sont valides et canonicalises contre les dossiers autorises de l'agent
+- **Trash Safety** : Les operations destructives creent des backups dans `.zileo-trash/` avant modification
+- **Lazy Cleanup** : Le cleanup de la trash est effectue uniquement a la premiere operation destructive (AtomicBool)
+- **Size Eviction** : Phase 1 = retention temporelle (7j), Phase 2 = eviction par taille (>500MB)
+- **Dynamic Description** : La definition du tool inclut les chemins des dossiers autorises pour que le LLM sache quels chemins utiliser
+
+### Validation et Confirmation
+
+Quand `require_file_confirmation = true` sur l'agent :
+- **Mode Auto + always_confirm_high** : Seul `delete` (RiskLevel::High) declenche le modal
+- **Mode Manual/Selective** : Toutes les operations destructives declenchent le modal
+- Les operations non-destructives (list, read, create, search_*) ne declenchent jamais le modal
+
+### Constantes
+
+| Constante | Valeur | Usage |
+|-----------|--------|-------|
+| `MAX_FILE_SIZE` | 10 MB | Taille max fichier lisible |
+| `DEFAULT_LIST_MAX` | 200 | Max entrees par list |
+| `DEFAULT_SEARCH_MAX` | 100 | Max resultats recherche |
+| `DEFAULT_CONTEXT_LINES` | 2 | Lignes de contexte search_content |
+| `MAX_CONTEXT_LINES` | 10 | Max lignes de contexte |
+| `DEFAULT_RETENTION_DAYS` | 7 | Retention trash (jours) |
+| `MAX_TRASH_SIZE` | 500 MB | Taille max trash avant eviction |
+| `TRASH_DIR_NAME` | `.zileo-trash` | Nom du repertoire trash |
+
+### Configuration Agent
+
+```json
+{
+  "tools": ["FileManagerTool"],
+  "folders": ["/home/user/project"],
+  "require_file_confirmation": true
+}
+```
+
+### Commandes Tauri IPC
+
+| Commande | Fichier | Description |
+|----------|---------|-------------|
+| `validate_agent_folder` | commands/file_manager.rs | Valider un chemin de dossier |
+| `list_trash` | commands/file_manager.rs | Lister les entrees trash |
+| `restore_from_trash_cmd` | commands/file_manager.rs | Restaurer depuis la trash |
+
+---
+
 ## Utility Modules
 
 Modules utilitaires partages entre les tools.
@@ -1665,7 +1753,7 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 | `src-tauri/src/tools/utils.rs` | Validation + QueryBuilder |
 | `src-tauri/src/tools/context.rs` | AgentToolContext pour sub-agent tools |
 | `src-tauri/src/tools/sub_agent_executor.rs` | Logique commune sub-agents |
-| `src-tauri/src/tools/validation_helper.rs` | Helpers de validation legacy |
+| `src-tauri/src/tools/validation_helper.rs` | ValidationHelper pour file ops + sub-agent ops |
 | `src-tauri/src/tools/memory/tool.rs` | Implementation MemoryTool |
 | `src-tauri/src/tools/memory/mod.rs` | Module memory exports |
 | `src-tauri/src/tools/todo/tool.rs` | Implementation TodoTool |
@@ -1678,6 +1766,11 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 | `src-tauri/src/tools/delegate_task.rs` | Implementation DelegateTaskTool |
 | `src-tauri/src/tools/parallel_tasks.rs` | Implementation ParallelTasksTool |
 | `src-tauri/src/tools/read_skill.rs` | Implementation ReadSkillTool |
+| `src-tauri/src/tools/file_manager/tool.rs` | Implementation FileManagerTool |
+| `src-tauri/src/tools/file_manager/security.rs` | Path validation et sandbox enforcement |
+| `src-tauri/src/tools/file_manager/helpers.rs` | File info formatting, constantes |
+| `src-tauri/src/tools/file_manager/trash.rs` | Trash safety (backup, restore, cleanup) |
+| `src-tauri/src/tools/file_manager/mod.rs` | Module file_manager exports |
 
 ---
 

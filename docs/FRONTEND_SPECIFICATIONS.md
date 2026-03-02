@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.1 | Svelte 5.49.1 | Vite 7.2.6 | Tauri 2.10.2
+> **Stack**: SvelteKit 2.49.1 | Svelte 5.53.6 | Vite 7.2.6 | Tauri 2
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 

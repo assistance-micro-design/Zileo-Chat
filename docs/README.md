@@ -4,10 +4,10 @@ Application desktop multi-agents avec interface conversationnelle.
 
 ## Stack Technique
 
-**Frontend** : SvelteKit 2.49.1 + Svelte 5.49.1 + Vite 7.2.6
-**Backend** : Rust 1.93.0 + Tauri 2.10.2
-**Database** : SurrealDB 2.5.0
-**LLM Framework** : Rig.rs 0.30.0 (multi-provider)
+**Frontend** : SvelteKit 2.49.1 + Svelte 5.53.6 + Vite 7.2.6
+**Backend** : Rust 1.93.0 + Tauri 2
+**Database** : SurrealDB ~2.6
+**LLM Framework** : Rig.rs 0.31.0 (multi-provider)
 **LLM Providers Phase 1** : Mistral + Ollama
 **Protocol** : MCP 2025-06-18 (SDK officiel Anthropic)
 

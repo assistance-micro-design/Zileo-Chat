@@ -16,6 +16,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 | **DelegateTaskTool** | Implemented | `src-tauri/src/tools/delegate_task.rs` |
 | **ParallelTasksTool** | Implemented | `src-tauri/src/tools/parallel_tasks.rs` |
 | **ReadSkillTool** | Implemented | `src-tauri/src/tools/read_skill.rs` |
+| **FileManagerTool** | Implemented | `src-tauri/src/tools/file_manager/tool.rs` |
 | **Tool Execution** | Implemented | `src-tauri/src/agents/llm_agent.rs` |
 
 **Note**: Les DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) ont été retirés - l'accès DB se fait via les commands Tauri IPC.
@@ -23,6 +24,7 @@ Documentation technique des outils natifs disponibles pour les agents du systèm
 **Categories**:
 - **Basic Tools**: MemoryTool, TodoTool, CalculatorTool (no special context required)
 - **Interaction Tools**: UserQuestionTool (human-in-the-loop interactions)
+- **File Tools**: FileManagerTool (sandboxed filesystem operations within authorized folders)
 - **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
 - **Hidden Tools**: ReadSkillTool (auto-injected when agent has skills assigned, not shown in UI)
 
@@ -655,7 +657,129 @@ Before proceeding, read the skill "coding-standards" using the ReadSkill tool an
 
 ---
 
-## 6. Tool Execution Integration (LLMAgent)
+## 6. FileManager Tool
+
+**Objectif** : Operations filesystem sandboxees dans les dossiers autorises de l'agent
+
+**Implementation** : `src-tauri/src/tools/file_manager/tool.rs` (FileManagerTool)
+
+**Statut** : Implemented
+
+### Architecture
+
+```
+FileManagerTool
+├── tool.rs          - Struct + Tool trait implementation (10 operations)
+├── security.rs      - Path validation, sandbox enforcement
+├── helpers.rs       - File info formatting, text detection, constants
+└── trash.rs         - Trash-based safety (backup, restore, cleanup)
+```
+
+**Securite** : Toutes les operations sont sandboxees dans les dossiers autorises configures par agent. Les chemins sont valides et canonicalises avant chaque operation.
+
+**Trash Safety** : Les operations destructives (write overwrite, delete, move, rename) creent des backups dans `.zileo-trash/` avant modification. Le cleanup est lazy (premiere operation destructive).
+
+### Operations Disponibles (via JSON)
+
+| Operation | Description | Parametres requis |
+|-----------|-------------|-------------------|
+| `list` | Lister le contenu d'un repertoire | `path` |
+| `read` | Lire le contenu d'un fichier texte | `path` |
+| `write` | Ecrire/creer un fichier (backup si existant) | `path`, `content` |
+| `replace` | Remplacement par regex dans un fichier | `path`, `pattern`, `replacement` |
+| `create` | Creer un repertoire | `path` |
+| `delete` | Supprimer fichier/dossier (vers trash) | `path` |
+| `move` | Deplacer fichier/dossier (backup si destination existe) | `source`, `destination` |
+| `rename` | Renommer fichier/dossier (backup si destination existe) | `path`, `new_name` |
+| `search_glob` | Recherche par pattern glob | `path`, `pattern` |
+| `search_content` | Recherche dans le contenu des fichiers | `path`, `pattern` |
+
+### Exemples d'Utilisation
+
+**Lister un repertoire**:
+```json
+{
+  "operation": "list",
+  "path": "/home/user/project/src",
+  "recursive": false,
+  "max_results": 100
+}
+```
+
+**Lire un fichier**:
+```json
+{
+  "operation": "read",
+  "path": "/home/user/project/src/main.rs"
+}
+```
+
+**Ecrire un fichier (avec backup automatique)**:
+```json
+{
+  "operation": "write",
+  "path": "/home/user/project/config.json",
+  "content": "{\"key\": \"value\"}"
+}
+```
+
+**Recherche par contenu**:
+```json
+{
+  "operation": "search_content",
+  "path": "/home/user/project/src",
+  "pattern": "TODO|FIXME",
+  "max_results": 50,
+  "context_lines": 2
+}
+```
+
+### Validation et Confirmation
+
+- **Toutes les operations** : Le chemin doit etre dans un dossier autorise de l'agent
+- **Operations destructives** (write overwrite, delete, move, rename) : Backup trash automatique
+- **Confirmation utilisateur** : Si `require_file_confirmation` est active sur l'agent, les operations destructives passent par le systeme de validation (ValidationHelper)
+  - En mode Auto + "always confirm high risk" : seul `delete` (RiskLevel::High) declenche le modal
+  - Autres operations destructives : RiskLevel::Medium (pas de modal en Auto)
+  - En mode Manual/Selective : toutes les operations destructives declenchent le modal
+
+### Constantes
+
+```rust
+pub const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;     // 10 MB max file read
+pub const DEFAULT_LIST_MAX: usize = 200;               // Max entries per list
+pub const DEFAULT_SEARCH_MAX: usize = 100;             // Max search results
+pub const DEFAULT_CONTEXT_LINES: usize = 2;            // Context lines for search
+pub const MAX_CONTEXT_LINES: usize = 10;               // Max context lines
+pub const DEFAULT_RETENTION_DAYS: u32 = 7;             // Trash retention
+pub const MAX_TRASH_SIZE: u64 = 500 * 1024 * 1024;    // 500 MB max trash size
+pub const TRASH_DIR_NAME: &str = ".zileo-trash";       // Trash directory name
+```
+
+### Commandes Tauri IPC (Frontend)
+
+| Commande | Description | Parametres |
+|----------|-------------|------------|
+| `validate_agent_folder` | Valider un chemin de dossier pour autorisation | `path` |
+| `list_trash` | Lister les entrees trash d'un dossier | `folderPath` |
+| `restore_from_trash_cmd` | Restaurer un fichier depuis la trash | `trashPath`, `folderPath` |
+
+### Configuration Agent
+
+Pour activer le FileManagerTool sur un agent:
+1. Ajouter `"FileManagerTool"` dans la liste des tools
+2. Configurer au moins un dossier autorise dans `folders`
+3. Optionnel: activer `require_file_confirmation` pour les operations destructives
+
+### Cas d'Usage
+- **Edition de code** : Lecture, modification, creation de fichiers source
+- **Gestion de projet** : Organisation de fichiers, renommage, deplacement
+- **Recherche** : Trouver des fichiers par pattern glob ou contenu
+- **Analyse** : Lister et lire des fichiers de configuration
+
+---
+
+## 7. Tool Execution Integration (LLMAgent)
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
@@ -815,12 +939,12 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.4
+**Version** : 2.5
 **Derniere mise a jour** : 2026-03-01
-**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation + Tool Skills
+**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation + Tool Skills + FileManager
 
-**Features (v2.1)**:
-- 8 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool, ReadSkillTool
+**Features (v2.2)**:
+- 9 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool, ReadSkillTool
 - Sub-Agent Resilience: Inactivity Timeout, CancellationToken, Circuit Breaker, Retry, Correlation ID
 - MemoryTool Optimizations: Parameterized queries, MemoryInput struct, helpers.rs consolidation, composite indexes
 - TodoTool Optimizations: Parameterized queries, N+1 reduction, db_error uniformization, TASK_SELECT_FIELDS, query limits

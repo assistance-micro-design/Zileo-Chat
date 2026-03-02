@@ -6,9 +6,9 @@
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.49.1 | Svelte 5.49.1
+Frontend  : SvelteKit 2.49.1 | Svelte 5.53.6
 Backend   : Rust 1.93.0 + Tauri 2
-Database  : SurrealDB 2.5.0 (protocol-http enabled)
+Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
 ```
 
@@ -17,8 +17,8 @@ Desktop   : Tauri (cross-platform)
 ### Frontend (package.json)
 
 **Core Framework**:
-- **svelte**: 5.49.1
-- **@sveltejs/kit**: 2.49.1
+- **svelte**: 5.53.6
+- **@sveltejs/kit**: ^2.49.1
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
 - **vite**: ^7.2.6
@@ -28,12 +28,18 @@ Desktop   : Tauri (cross-platform)
 - **svelte-check**: ^4.3.5
 
 **Tauri Integration**:
-- **@tauri-apps/api**: ^2.10.1
-- **@tauri-apps/cli**: ^2.10.0
+- **@tauri-apps/api**: ^2.9.0
+- **@tauri-apps/cli**: ^2.9.6
 - **@tauri-apps/plugin-dialog**: ^2.6.0
+- **@tauri-apps/plugin-opener**: ^2.5.3
 
 **UI Components**:
 - **@lucide/svelte**: ^0.563.1 (official Lucide icon library)
+
+**Content Processing**:
+- **dompurify**: ^3.3.1 (HTML sanitization)
+- **marked**: ^17.0.1 (Markdown rendering)
+- **zod**: ^4.3.6 (Schema validation)
 
 **Testing**:
 - **vitest**: ^4.0.15 (unit tests)
@@ -59,12 +65,12 @@ Desktop   : Tauri (cross-platform)
 - **tauri-plugin-dialog**: 2.6.0
 
 **LLM & Multi-Agent**:
-- **rig-core**: 0.30.0 (features: all) - LLM abstraction framework
+- **rig-core**: 0.31.0 - LLM abstraction framework
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures-util**: 0.3.31 (stream utilities)
 
 **Database**:
-- **surrealdb**: 2.5.0 (features: kv-rocksdb, protocol-http)
+- **surrealdb**: ~2.6 (features: kv-rocksdb, default-features: false)
 
 **Serialization**:
 - **serde**: 1.0.228 (features: derive)
@@ -76,7 +82,7 @@ Desktop   : Tauri (cross-platform)
 
 **Error Handling**:
 - **anyhow**: 1.0
-- **thiserror**: 2.0.18
+- **thiserror**: 2.0
 
 **Logging**:
 - **tracing**: 0.1
@@ -86,20 +92,21 @@ Desktop   : Tauri (cross-platform)
 - **uuid**: 1.20.0 (features: v4, serde)
 - **chrono**: 0.4.43 (features: serde)
 - **regex**: 1.10
+- **globset**: 0.4 (glob pattern matching for FileManagerTool)
 
 **HTTP & Network**:
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
 
 **Security**:
-- **keyring**: 3.6 (OS keychain integration)
+- **keyring**: 3.6 (OS keychain integration: apple-native, windows-native, sync-secret-service)
 - **aes-gcm**: 0.10 (AES-256 encryption)
 
 **Dev Dependencies**:
 - **tempfile**: 3.24
 
 ### Database
-- **SurrealDB**: 2.5.0 (embedded with kv-rocksdb feature)
-- **surrealdb.rs**: 2.5.0 (Rust client via Cargo)
+- **SurrealDB**: ~2.6 (embedded with kv-rocksdb feature, default-features disabled)
+- **surrealdb.rs**: ~2.6 (Rust client via Cargo)
 
 ## Architecture
 

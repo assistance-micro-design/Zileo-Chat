@@ -1,17 +1,16 @@
 # Schéma Database SurrealDB
 
 > **Version** : 1.1
-> **SurrealDB** : 2.5.0
+> **SurrealDB** : ~2.6
 > **Type** : Graph relationnel avec support vectoriel
 
 ## Vue d'Ensemble
 
-**Total : 21 tables**
+**Total : 17 tables**
 
 ```
 workflow ─────────────┐
                       ├─→ agent (user-created configs)
-                      ├─→ agent_state (runtime state)
                       ├─→ message
                       ├─→ task
                       ├─→ validation_request
@@ -26,9 +25,8 @@ mcp_server ───────────→ mcp_call_log
 llm_model ────────────→ provider_settings
 custom_provider ──────→ (linked via provider name)
 
-prompt (standalone)
 skill (standalone)
-settings (key-value config)
+migration_log (schema versioning)
 ```
 
 ## Tables Principales
@@ -58,32 +56,6 @@ Représente un workflow multi-agents avec son cycle de vie complet.
 - `agent_id` (workflows par agent)
 
 **Requête type** : Récupérer workflows actifs agent spécifique
-
----
-
-### agent_state
-
-État persistant agents permanents (DB agent, API agent, etc.).
-
-**Champs**
-- `id` : UUID
-- `agent_id` : string (identifiant unique agent)
-- `lifecycle` : enum (permanent, temporary)
-- `config` : object (configuration TOML)
-- `metrics` : object (tasks_executed, success_rate, avg_duration, token_usage, cost)
-- `last_active` : datetime
-- `created_at` : datetime
-
-**Relations**
-- → `workflow[]` (workflows créés)
-- → `memory[]` (mémoires agent-specific)
-
-**Indexes**
-- `agent_id` (unique)
-- `lifecycle` (filter permanents/temporaires)
-- `last_active` (cleanup temporaires inactifs)
-
-**Requête type** : État agent + métriques performance
 
 ---
 
@@ -441,9 +413,11 @@ Configuration des agents crees par l'utilisateur.
 - `tools` : array<string>
 - `skills` : array<string> (skill names assigned to agent)
 - `mcp_servers` : array<string>
+- `folders` : array<string> DEFAULT [] (authorized directory paths for FileManagerTool)
+- `require_file_confirmation` : boolean DEFAULT true (require user validation for destructive file ops)
 - `system_prompt` : string (1-10000 chars)
-- `max_tool_iterations` : int?
-- `enable_thinking` : boolean?
+- `max_tool_iterations` : int (1-200, default 50)
+- `enable_thinking` : boolean (default true)
 - `created_at` : datetime
 - `updated_at` : datetime
 
