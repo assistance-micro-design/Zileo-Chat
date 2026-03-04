@@ -70,6 +70,12 @@ pub struct Workflow {
     /// Cumulative output tokens from sub-agents only
     #[serde(default)]
     pub sub_agent_tokens_output: u64,
+    /// Cumulative cached input tokens for this workflow (cache reads)
+    #[serde(default)]
+    pub total_cached_tokens: Option<u64>,
+    /// Cumulative cache-write tokens for this workflow
+    #[serde(default)]
+    pub total_cache_write_tokens: Option<u64>,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -152,6 +158,32 @@ pub struct WorkflowResult {
     pub message_id: String,
 }
 
+/// Metrics for a single LLM API call within the tool execution loop.
+///
+/// Each iteration represents one round-trip to the LLM API, capturing
+/// token usage, timing, and context size at that point in the conversation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IterationMetrics {
+    /// 1-based iteration number
+    pub iteration: u32,
+    /// Input/prompt tokens for this call
+    pub tokens_input: usize,
+    /// Output/completion tokens for this call
+    pub tokens_output: usize,
+    /// Cached input tokens - cache reads (if reported by provider)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<usize>,
+    /// Cache-write tokens (if reported by provider)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<usize>,
+    /// Number of messages in the context at this iteration
+    pub messages_count: usize,
+    /// Number of tool calls made by LLM at this iteration
+    pub tool_calls_count: usize,
+    /// Duration of this API call in milliseconds
+    pub duration_ms: u64,
+}
+
 /// Metrics collected during workflow execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowMetrics {
@@ -167,6 +199,15 @@ pub struct WorkflowMetrics {
     pub provider: String,
     /// Model used
     pub model: String,
+    /// Cached input tokens for this execution - cache reads (if provider supports caching)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<usize>,
+    /// Cache-write tokens for this execution (if provider supports caching)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<usize>,
+    /// Per-iteration token breakdown (one entry per LLM API call)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iteration_metrics: Vec<IterationMetrics>,
 }
 
 /// Complete workflow state for recovery after restart.
@@ -236,6 +277,8 @@ mod tests {
             current_context_tokens: 0,
             sub_agent_tokens_input: 0,
             sub_agent_tokens_output: 0,
+            total_cached_tokens: None,
+            total_cache_write_tokens: None,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
@@ -262,6 +305,9 @@ mod tests {
                 cost_usd: 0.005,
                 provider: "Mistral".to_string(),
                 model: "mistral-large".to_string(),
+                cached_tokens: None,
+                cache_write_tokens: None,
+                iteration_metrics: vec![],
             },
             tools_used: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_calls: vec!["mcp_call1".to_string()],
@@ -287,6 +333,9 @@ mod tests {
             cost_usd: 0.01,
             provider: "Ollama".to_string(),
             model: "llama3".to_string(),
+            cached_tokens: None,
+            cache_write_tokens: None,
+            iteration_metrics: vec![],
         };
 
         let json = serde_json::to_string(&metrics).unwrap();

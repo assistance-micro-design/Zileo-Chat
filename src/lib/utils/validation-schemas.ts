@@ -37,6 +37,8 @@ export const LLMModelSchema = z.object({
 	is_reasoning: z.boolean(),
 	input_price_per_mtok: z.number().nonnegative(),
 	output_price_per_mtok: z.number().nonnegative(),
+	cache_read_price_per_mtok: z.number().nonnegative(),
+	cache_write_price_per_mtok: z.number().nonnegative(),
 	created_at: z.string(),
 	updated_at: z.string()
 });

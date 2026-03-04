@@ -39,6 +39,7 @@ use crate::mcp::MCPManager;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::models::mcp::MCPTool;
 use crate::models::streaming::{events, StreamChunk};
+use crate::models::workflow::IterationMetrics;
 use crate::models::{AgentConfig, Lifecycle};
 use crate::tools::{
     context::AgentToolContext,
@@ -836,10 +837,14 @@ impl Agent for LLMAgent {
                         duration_ms: start.elapsed().as_millis() as u64,
                         tokens_input: 0,
                         tokens_output: 0,
+                        context_tokens: 0,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
                         reasoning_steps: vec![],
+                        iteration_metrics: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -872,10 +877,14 @@ impl Agent for LLMAgent {
                     duration_ms: start.elapsed().as_millis() as u64,
                     tokens_input: 0,
                     tokens_output: 0,
+                    context_tokens: 0,
+                    cached_tokens: None,
+                    cache_write_tokens: None,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
                     reasoning_steps: vec![],
+                    iteration_metrics: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -930,10 +939,14 @@ impl Agent for LLMAgent {
                         duration_ms,
                         tokens_input: response.tokens_input,
                         tokens_output: response.tokens_output,
+                        context_tokens: response.tokens_input,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
                         reasoning_steps: vec![],
+                        iteration_metrics: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -975,10 +988,14 @@ impl Agent for LLMAgent {
                         duration_ms,
                         tokens_input: 0,
                         tokens_output: 0,
+                        context_tokens: 0,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
                         reasoning_steps: vec![],
+                        iteration_metrics: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -1020,8 +1037,17 @@ impl Agent for LLMAgent {
         let start = std::time::Instant::now();
         let mut tools_used: Vec<String> = Vec::new();
         let mut mcp_calls_made: Vec<String> = Vec::new();
-        let mut total_tokens_input: usize = 0;
+        let mut total_tokens_input: usize = 0; // Cumulative input tokens (total billed)
         let mut total_tokens_output: usize = 0;
+        let mut context_tokens: usize = 0; // Last call's input tokens (context window size)
+        let mut total_cached_tokens: Option<usize> = None;
+        let mut total_cache_write_tokens: Option<usize> = None;
+        // Per-iteration values (saved from match arm for IterationMetrics)
+        let mut iter_input_tokens: usize = 0;
+        let mut iter_output_tokens: usize = 0;
+        let mut iter_cached_tokens: Option<usize> = None;
+        let mut iter_cache_write_tokens: Option<usize> = None;
+        let mut iteration_metrics_data: Vec<IterationMetrics> = Vec::new();
         let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
         let mut reasoning_steps_data: Vec<ReasoningStepData> = Vec::new();
 
@@ -1043,10 +1069,14 @@ impl Agent for LLMAgent {
                         duration_ms: start.elapsed().as_millis() as u64,
                         tokens_input: 0,
                         tokens_output: 0,
+                        context_tokens: 0,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
                         reasoning_steps: vec![],
+                        iteration_metrics: vec![],
                     },
                     system_prompt: None,
                     tools_json: None,
@@ -1079,10 +1109,14 @@ impl Agent for LLMAgent {
                     duration_ms: start.elapsed().as_millis() as u64,
                     tokens_input: 0,
                     tokens_output: 0,
+                    context_tokens: 0,
+                    cached_tokens: None,
+                    cache_write_tokens: None,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
                     reasoning_steps: vec![],
+                    iteration_metrics: vec![],
                 },
                 system_prompt: None,
                 tools_json: None,
@@ -1171,6 +1205,7 @@ impl Agent for LLMAgent {
 
         debug!(
             agent_name = %self.config.name,
+            provider = adapter.provider_name(),
             local_tools_count = local_tools.len(),
             mcp_tools_count = mcp_tools.len(),
             mcp_servers_count = mcp_server_summaries.len(),
@@ -1233,6 +1268,7 @@ impl Agent for LLMAgent {
 
         loop {
             iteration += 1;
+            let iter_start = std::time::Instant::now();
             if iteration > max_iterations {
                 warn!(
                     iterations = max_iterations,
@@ -1296,16 +1332,37 @@ impl Agent for LLMAgent {
                 Ok(r) => {
                     // Track token usage from response using provider-specific adapter
                     // We track both cumulative (for billing) and last-call (for context size)
-                    let (input_tokens, output_tokens) = adapter.extract_usage(&r);
-                    total_tokens_input = input_tokens; // Last call only (context size)
+                    let usage = adapter.extract_usage(&r);
+                    let input_tokens = usage.input_tokens;
+                    let output_tokens = usage.output_tokens;
+                    // Save per-iteration values before accumulation
+                    iter_input_tokens = input_tokens;
+                    iter_output_tokens = output_tokens;
+                    iter_cached_tokens = usage.cached_tokens;
+                    iter_cache_write_tokens = usage.cache_write_tokens;
+
+                    total_tokens_input += input_tokens; // Cumulative (total billed across all API calls)
+                    context_tokens = input_tokens; // Last call only (context window size)
                     total_tokens_output += output_tokens; // Cumulative (total generated)
+
+                    // Accumulate cached tokens across iterations
+                    if let Some(cached) = usage.cached_tokens {
+                        total_cached_tokens = Some(total_cached_tokens.unwrap_or(0) + cached);
+                    }
+                    if let Some(cache_write) = usage.cache_write_tokens {
+                        total_cache_write_tokens =
+                            Some(total_cache_write_tokens.unwrap_or(0) + cache_write);
+                    }
 
                     debug!(
                         iteration = iteration,
                         input_tokens = input_tokens,
                         output_tokens = output_tokens,
+                        cached_tokens = ?usage.cached_tokens,
+                        cache_write_tokens = ?usage.cache_write_tokens,
+                        total_input = total_tokens_input,
                         total_output = total_tokens_output,
-                        "Token usage - input shows last call context size"
+                        "Token usage - input_tokens is this call, total_input is cumulative"
                     );
 
                     r
@@ -1343,10 +1400,14 @@ impl Agent for LLMAgent {
                             duration_ms: start.elapsed().as_millis() as u64,
                             tokens_input: total_tokens_input,
                             tokens_output: total_tokens_output,
+                            context_tokens,
+                            cached_tokens: total_cached_tokens,
+                            cache_write_tokens: total_cache_write_tokens,
                             tools_used,
                             mcp_calls: mcp_calls_made,
                             tool_executions: tool_executions_data,
                             reasoning_steps: reasoning_steps_data,
+                            iteration_metrics: iteration_metrics_data,
                         },
                         system_prompt: None,
                         tools_json: None,
@@ -1371,7 +1432,24 @@ impl Agent for LLMAgent {
             }
 
             // Parse tool calls from response using the adapter (JSON function calling)
-            let function_calls = adapter.parse_tool_calls(&response);
+            // Use has_tool_calls() as a quick structural check before full parsing
+            let function_calls = if adapter.has_tool_calls(&response) {
+                adapter.parse_tool_calls(&response)
+            } else {
+                Vec::new()
+            };
+
+            // Record per-iteration metrics (per-call values, not cumulative)
+            iteration_metrics_data.push(IterationMetrics {
+                iteration: iteration as u32,
+                tokens_input: iter_input_tokens,
+                tokens_output: iter_output_tokens,
+                cached_tokens: iter_cached_tokens,
+                cache_write_tokens: iter_cache_write_tokens,
+                messages_count: messages.len(),
+                tool_calls_count: function_calls.len(),
+                duration_ms: iter_start.elapsed().as_millis() as u64,
+            });
 
             // Check if we're finished (no tool calls)
             if function_calls.is_empty() {
@@ -1396,7 +1474,12 @@ impl Agent for LLMAgent {
                         iteration
                     );
                 }
-                debug!(iteration = iteration, "No tool calls found, finishing");
+                debug!(
+                    iteration = iteration,
+                    provider = adapter.provider_name(),
+                    finished = adapter.is_finished(&response),
+                    "No tool calls found, finishing"
+                );
                 break;
             }
 
@@ -1537,6 +1620,7 @@ impl Agent for LLMAgent {
                 // ToolChoiceMode::None is ignored by some providers (e.g. Ollama),
                 // so sending no tools is the most reliable way to force a text response.
                 let empty_tools: Vec<serde_json::Value> = vec![];
+                let report_iter_start = std::time::Instant::now();
 
                 match self
                     .provider_manager
@@ -1552,9 +1636,24 @@ impl Agent for LLMAgent {
                     .await
                 {
                     Ok(response) => {
-                        let (input_tokens, output_tokens) = adapter.extract_usage(&response);
-                        total_tokens_input = input_tokens;
-                        total_tokens_output += output_tokens;
+                        let usage = adapter.extract_usage(&response);
+                        iter_input_tokens = usage.input_tokens;
+                        iter_output_tokens = usage.output_tokens;
+                        iter_cached_tokens = usage.cached_tokens;
+                        iter_cache_write_tokens = usage.cache_write_tokens;
+
+                        total_tokens_input += iter_input_tokens; // Accumulate
+                        context_tokens = iter_input_tokens; // Update context size
+                        total_tokens_output += iter_output_tokens;
+
+                        // Accumulate cached tokens from report enforcement call
+                        if let Some(cached) = iter_cached_tokens {
+                            total_cached_tokens = Some(total_cached_tokens.unwrap_or(0) + cached);
+                        }
+                        if let Some(cache_write) = iter_cache_write_tokens {
+                            total_cache_write_tokens =
+                                Some(total_cache_write_tokens.unwrap_or(0) + cache_write);
+                        }
 
                         if let Some(content) = adapter.extract_content(&response) {
                             if !content.trim().is_empty() {
@@ -1571,6 +1670,18 @@ impl Agent for LLMAgent {
                         warn!(error = %e, "Report enforcement LLM call failed, keeping generic message");
                     }
                 }
+
+                // Record report enforcement as an iteration (per-call values)
+                iteration_metrics_data.push(IterationMetrics {
+                    iteration: (iteration + 1) as u32,
+                    tokens_input: iter_input_tokens,
+                    tokens_output: iter_output_tokens,
+                    cached_tokens: iter_cached_tokens,
+                    cache_write_tokens: iter_cache_write_tokens,
+                    messages_count: messages.len(),
+                    tool_calls_count: 0,
+                    duration_ms: report_iter_start.elapsed().as_millis() as u64,
+                });
             } else {
                 debug!("Skipping report enforcement: workflow cancelled");
             }
@@ -1580,10 +1691,12 @@ impl Agent for LLMAgent {
 
         info!(
             iterations = iteration,
+            provider = adapter.provider_name(),
             tools_used_count = tools_used.len(),
             mcp_calls_count = mcp_calls_made.len(),
             total_tokens_input = total_tokens_input,
             total_tokens_output = total_tokens_output,
+            total_cached_tokens = ?total_cached_tokens,
             duration_ms = duration_ms,
             "LLM Agent task execution with tools completed"
         );
@@ -1644,10 +1757,14 @@ impl Agent for LLMAgent {
                 duration_ms,
                 tokens_input: total_tokens_input,
                 tokens_output: total_tokens_output,
+                context_tokens,
+                cached_tokens: total_cached_tokens,
+                cache_write_tokens: total_cache_write_tokens,
                 tools_used,
                 mcp_calls: mcp_calls_made,
                 tool_executions: tool_executions_data,
                 reasoning_steps: reasoning_steps_data,
+                iteration_metrics: iteration_metrics_data,
             },
             // Return system_prompt and tools_json only on first message for persistence
             system_prompt: system_prompt_for_report,

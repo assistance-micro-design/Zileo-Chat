@@ -58,6 +58,10 @@ export interface Workflow {
   sub_agent_tokens_input: number;
   /** Cumulative output tokens from sub-agents only */
   sub_agent_tokens_output: number;
+  /** Cumulative cached input tokens for this workflow */
+  total_cached_tokens?: number;
+  /** Cumulative cache-write tokens for this workflow */
+  total_cache_write_tokens?: number;
 }
 
 /**
@@ -81,6 +85,31 @@ export interface WorkflowResult {
 }
 
 /**
+ * Metrics for a single LLM API call within the tool execution loop.
+ *
+ * Each iteration represents one round-trip to the LLM API, capturing
+ * token usage, timing, and context size at that point in the conversation.
+ */
+export interface IterationMetrics {
+  /** 1-based iteration number */
+  iteration: number;
+  /** Input/prompt tokens for this call */
+  tokens_input: number;
+  /** Output/completion tokens for this call */
+  tokens_output: number;
+  /** Cached input tokens (if reported by provider) */
+  cached_tokens?: number;
+  /** Cache-write tokens (if reported by provider) */
+  cache_write_tokens?: number;
+  /** Number of messages in the context at this iteration */
+  messages_count: number;
+  /** Number of tool calls made by LLM at this iteration */
+  tool_calls_count: number;
+  /** Duration of this API call in milliseconds */
+  duration_ms: number;
+}
+
+/**
  * Metrics collected during workflow execution
  */
 export interface WorkflowMetrics {
@@ -96,6 +125,12 @@ export interface WorkflowMetrics {
   provider: string;
   /** Model used */
   model: string;
+  /** Cached input tokens for this execution (if provider supports caching) */
+  cached_tokens?: number;
+  /** Cache-write tokens for this execution (if provider supports caching) */
+  cache_write_tokens?: number;
+  /** Per-iteration token breakdown (one entry per LLM API call) */
+  iteration_metrics?: IterationMetrics[];
 }
 
 /**
@@ -147,6 +182,14 @@ export interface TokenDisplayData {
   sub_agent_output: number;
   /** Total workflow cost (main agent + sub-agent estimate) */
   workflow_total_cost: number;
+  /** Cached input tokens for current message */
+  cached_tokens?: number;
+  /** Cumulative cached input tokens for workflow */
+  cumulative_cached?: number;
+  /** Cache-write tokens for current message */
+  cache_write_tokens?: number;
+  /** Cumulative cache-write tokens for workflow */
+  cumulative_cache_write?: number;
   /** Token generation speed (tokens/second) - only during streaming */
   speed_tks?: number;
   /** Whether currently streaming */

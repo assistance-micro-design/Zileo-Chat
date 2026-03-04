@@ -67,6 +67,16 @@ pub struct LLMModel {
     /// Price per million output tokens (USD) - user configurable
     #[serde(default)]
     pub output_price_per_mtok: f64,
+    /// Price per million cache-read input tokens (USD).
+    /// Applied to `cached_tokens` from API response (cache hits).
+    /// OpenRouter typical: 0.25x to 0.50x of input_price_per_mtok. 0.0 = free.
+    #[serde(default)]
+    pub cache_read_price_per_mtok: f64,
+    /// Price per million cache-write input tokens (USD).
+    /// Applied to `cache_write_tokens` from API response (cache misses written).
+    /// OpenRouter typical: 1.0x to 1.25x of input_price_per_mtok. 0.0 = same as input.
+    #[serde(default)]
+    pub cache_write_price_per_mtok: f64,
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
     /// Last update timestamp
@@ -93,6 +103,8 @@ impl LLMModel {
             is_reasoning: request.is_reasoning,
             input_price_per_mtok: request.input_price_per_mtok,
             output_price_per_mtok: request.output_price_per_mtok,
+            cache_read_price_per_mtok: request.cache_read_price_per_mtok,
+            cache_write_price_per_mtok: request.cache_write_price_per_mtok,
             created_at: now,
             updated_at: now,
         }
@@ -132,6 +144,12 @@ pub struct CreateModelRequest {
     /// Price per million output tokens (USD, defaults to 0.0)
     #[serde(default)]
     pub output_price_per_mtok: f64,
+    /// Price per million cache-read input tokens (USD, defaults to 0.0 = free)
+    #[serde(default)]
+    pub cache_read_price_per_mtok: f64,
+    /// Price per million cache-write input tokens (USD, defaults to 0.0 = same as input)
+    #[serde(default)]
+    pub cache_write_price_per_mtok: f64,
 }
 
 /// Default temperature value for new models.
@@ -190,6 +208,16 @@ impl CreateModelRequest {
         if self.output_price_per_mtok < 0.0 || self.output_price_per_mtok > 1000.0 {
             return Err("Output price must be between 0 and 1000 USD per million tokens".into());
         }
+        if self.cache_read_price_per_mtok < 0.0 || self.cache_read_price_per_mtok > 1000.0 {
+            return Err(
+                "Cache read price must be between 0 and 1000 USD per million tokens".into(),
+            );
+        }
+        if self.cache_write_price_per_mtok < 0.0 || self.cache_write_price_per_mtok > 1000.0 {
+            return Err(
+                "Cache write price must be between 0 and 1000 USD per million tokens".into(),
+            );
+        }
 
         Ok(())
     }
@@ -221,6 +249,10 @@ pub struct UpdateModelRequest {
     pub input_price_per_mtok: Option<f64>,
     /// New price per million output tokens (USD)
     pub output_price_per_mtok: Option<f64>,
+    /// New price per million cache-read input tokens (USD)
+    pub cache_read_price_per_mtok: Option<f64>,
+    /// New price per million cache-write input tokens (USD)
+    pub cache_write_price_per_mtok: Option<f64>,
 }
 
 impl UpdateModelRequest {
@@ -309,6 +341,20 @@ impl UpdateModelRequest {
                 );
             }
         }
+        if let Some(price_cached) = self.cache_read_price_per_mtok {
+            if !(0.0..=1000.0).contains(&price_cached) {
+                return Err(
+                    "Cache read price must be between 0 and 1000 USD per million tokens".into(),
+                );
+            }
+        }
+        if let Some(price_write) = self.cache_write_price_per_mtok {
+            if !(0.0..=1000.0).contains(&price_write) {
+                return Err(
+                    "Cache write price must be between 0 and 1000 USD per million tokens".into(),
+                );
+            }
+        }
 
         Ok(())
     }
@@ -323,6 +369,8 @@ impl UpdateModelRequest {
             && self.is_reasoning.is_none()
             && self.input_price_per_mtok.is_none()
             && self.output_price_per_mtok.is_none()
+            && self.cache_read_price_per_mtok.is_none()
+            && self.cache_write_price_per_mtok.is_none()
     }
 }
 
@@ -452,6 +500,8 @@ mod tests {
             is_reasoning: false,
             input_price_per_mtok: 2.0,
             output_price_per_mtok: 6.0,
+            cache_read_price_per_mtok: 1.0,
+            cache_write_price_per_mtok: 2.0,
         };
         assert!(valid.validate().is_ok());
 
@@ -495,6 +545,8 @@ mod tests {
             is_reasoning: None,
             input_price_per_mtok: None,
             output_price_per_mtok: None,
+            cache_read_price_per_mtok: None,
+            cache_write_price_per_mtok: None,
         };
 
         // Should fail for builtin models
@@ -513,6 +565,8 @@ mod tests {
             is_reasoning: None,
             input_price_per_mtok: Some(2.0),
             output_price_per_mtok: Some(6.0),
+            cache_read_price_per_mtok: None,
+            cache_write_price_per_mtok: None,
         };
         assert!(temp_update.validate(true).is_ok());
     }
@@ -529,6 +583,8 @@ mod tests {
             is_reasoning: false,
             input_price_per_mtok: 0.0,
             output_price_per_mtok: 0.0,
+            cache_read_price_per_mtok: 0.0,
+            cache_write_price_per_mtok: 0.0,
         };
         let model = LLMModel::from_create_request("test-id".into(), &request);
 

@@ -24,7 +24,7 @@
 //! - `tool_choice` supports: "auto", "any" (required), "none"
 //! - Response path: `choices[0].message.tool_calls`
 
-use crate::llm::tool_adapter::{helpers, ProviderToolAdapter};
+use crate::llm::tool_adapter::{helpers, ProviderToolAdapter, TokenUsage};
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::tools::ToolDefinition;
 use serde_json::{json, Value};
@@ -193,7 +193,8 @@ impl ProviderToolAdapter for MistralToolAdapter {
     /// Mistral uses OpenAI-compatible format:
     /// - `usage.prompt_tokens` = input tokens
     /// - `usage.completion_tokens` = output tokens
-    fn extract_usage(&self, response: &Value) -> (usize, usize) {
+    /// - `usage.prompt_tokens_details.cached_tokens` = cached input tokens (best-effort)
+    fn extract_usage(&self, response: &Value) -> TokenUsage {
         let input = response
             .pointer("/usage/prompt_tokens")
             .and_then(|v| v.as_u64())
@@ -202,14 +203,24 @@ impl ProviderToolAdapter for MistralToolAdapter {
             .pointer("/usage/completion_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
+        let cached = response
+            .pointer("/usage/prompt_tokens_details/cached_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         debug!(
             prompt_tokens = input,
             completion_tokens = output,
+            cached_tokens = ?cached,
             "Extracted token usage from Mistral response"
         );
 
-        (input, output)
+        TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cached_tokens: cached,
+            cache_write_tokens: None,
+        }
     }
 }
 
@@ -366,9 +377,10 @@ mod tests {
             }
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 24);
-        assert_eq!(output, 27);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 24);
+        assert_eq!(usage.output_tokens, 27);
+        assert_eq!(usage.cached_tokens, None);
     }
 
     #[test]
@@ -387,9 +399,10 @@ mod tests {
             }]
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 0);
-        assert_eq!(output, 0);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 0);
+        assert_eq!(usage.output_tokens, 0);
+        assert_eq!(usage.cached_tokens, None);
     }
 
     #[test]
@@ -420,8 +433,29 @@ mod tests {
             }
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 150);
-        assert_eq!(output, 45);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 150);
+        assert_eq!(usage.output_tokens, 45);
+        assert_eq!(usage.cached_tokens, None);
+    }
+
+    #[test]
+    fn test_extract_usage_with_cached_tokens() {
+        let adapter = MistralToolAdapter::new();
+
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 1000);
+        assert_eq!(usage.output_tokens, 200);
+        assert_eq!(usage.cached_tokens, Some(800));
     }
 }

@@ -110,6 +110,11 @@
 	}
 
 	/**
+	 * Whether cached tokens are reported
+	 */
+	const hasCachedTokens = $derived((data.cached_tokens ?? 0) > 0 || (data.cumulative_cached ?? 0) > 0);
+
+	/**
 	 * Whether sub-agents contributed tokens to this workflow
 	 */
 	const hasSubAgents = $derived(data.sub_agent_input > 0 || data.sub_agent_output > 0);
@@ -198,6 +203,14 @@
 			<span class="metric-label">{$i18n('workflow_token_in_out')}</span>
 		{/if}
 	</div>
+
+	<!-- Cached Tokens (only shown when provider reports caching) -->
+	{#if !compact && hasCachedTokens}
+		<div class="metric tokens-metric cached" title={$i18n('workflow_metrics_cached_tokens')}>
+			<span class="token-value cached-value">{formatTokens(data.cached_tokens ?? 0)}</span>
+			<span class="metric-label">{$i18n('workflow_token_cached')}</span>
+		</div>
+	{/if}
 
 	<!-- Agent Cumulative Tokens (main agent only) -->
 	{#if !compact}
@@ -471,6 +484,14 @@
 	/* Token Values */
 	.tokens-metric {
 		gap: var(--spacing-xs);
+	}
+
+	.tokens-metric.cached {
+		opacity: 0.8;
+	}
+
+	.cached-value {
+		color: var(--color-success);
 	}
 
 	.tokens-metric.cumulative {

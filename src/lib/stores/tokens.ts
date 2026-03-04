@@ -35,6 +35,8 @@ interface TokenState {
 	streaming: {
 		input: number;
 		output: number;
+		cached: number | null;
+		cacheWrite: number | null;
 		speed: number | null;
 	};
 	/** Cumulative token metrics (entire workflow - main agent only) */
@@ -42,6 +44,8 @@ interface TokenState {
 		input: number;
 		output: number;
 		cost: number;
+		cached: number | null;
+		cacheWrite: number | null;
 	};
 	/** Sub-agent cumulative token metrics */
 	subAgent: {
@@ -54,6 +58,10 @@ interface TokenState {
 	inputPrice: number;
 	/** Output token price (per million tokens) */
 	outputPrice: number;
+	/** Cache-read token price (per million tokens) */
+	cacheReadPrice: number;
+	/** Cache-write token price (per million tokens) */
+	cacheWritePrice: number;
 	/** Whether streaming is currently active */
 	isStreaming: boolean;
 	/** Timestamp when streaming started */
@@ -66,12 +74,14 @@ interface TokenState {
  * Initial state for the token store
  */
 const initialState: TokenState = {
-	streaming: { input: 0, output: 0, speed: null },
-	cumulative: { input: 0, output: 0, cost: 0 },
+	streaming: { input: 0, output: 0, cached: null, cacheWrite: null, speed: null },
+	cumulative: { input: 0, output: 0, cost: 0, cached: null, cacheWrite: null },
 	subAgent: { input: 0, output: 0 },
 	contextMax: 128000,
 	inputPrice: 0,
 	outputPrice: 0,
+	cacheReadPrice: 0,
+	cacheWritePrice: 0,
 	isStreaming: false,
 	streamStartTime: null,
 	sessionCost: null
@@ -104,7 +114,9 @@ export const tokenStore = {
 			cumulative: {
 				input: workflow.total_tokens_input ?? 0,
 				output: workflow.total_tokens_output ?? 0,
-				cost: workflow.total_cost_usd ?? 0
+				cost: workflow.total_cost_usd ?? 0,
+				cached: workflow.total_cached_tokens ?? null,
+				cacheWrite: workflow.total_cache_write_tokens ?? null
 			},
 			subAgent: {
 				input: workflow.sub_agent_tokens_input ?? 0,
@@ -124,7 +136,9 @@ export const tokenStore = {
 			...s,
 			contextMax: model.context_window ?? 128000,
 			inputPrice: model.input_price_per_mtok ?? 0,
-			outputPrice: model.output_price_per_mtok ?? 0
+			outputPrice: model.output_price_per_mtok ?? 0,
+			cacheReadPrice: model.cache_read_price_per_mtok ?? 0,
+			cacheWritePrice: model.cache_write_price_per_mtok ?? 0
 		}));
 	},
 
@@ -135,45 +149,10 @@ export const tokenStore = {
 	startStreaming(): void {
 		store.update((s) => ({
 			...s,
-			streaming: { input: 0, output: 0, speed: null },
+			streaming: { input: 0, output: 0, cached: null, cacheWrite: null, speed: null },
 			isStreaming: true,
 			streamStartTime: Date.now(),
 			sessionCost: null
-		}));
-	},
-
-	/**
-	 * Update streaming output tokens and calculate speed.
-	 * Should be called each time new tokens are received during streaming.
-	 *
-	 * @param tokensOut - Total output tokens received so far
-	 */
-	updateStreamingTokens(tokensOut: number): void {
-		store.update((s) => {
-			const elapsed = s.streamStartTime ? (Date.now() - s.streamStartTime) / 1000 : 1;
-			const speed = elapsed > 0 ? tokensOut / elapsed : null;
-
-			return {
-				...s,
-				streaming: {
-					...s.streaming,
-					output: tokensOut,
-					speed
-				}
-			};
-		});
-	},
-
-	/**
-	 * Set input tokens (from prompt).
-	 * Should be called when the prompt is sent.
-	 *
-	 * @param tokensIn - Number of input tokens in the prompt
-	 */
-	setInputTokens(tokensIn: number): void {
-		store.update((s) => ({
-			...s,
-			streaming: { ...s.streaming, input: tokensIn }
 		}));
 	},
 
@@ -184,13 +163,17 @@ export const tokenStore = {
 	 *
 	 * @param tokensIn - Input tokens consumed
 	 * @param tokensOut - Output tokens generated
+	 * @param cachedTokens - Cached input tokens (if reported by provider)
+	 * @param cacheWriteTokens - Cache-write tokens (if reported by provider)
 	 */
-	setSessionTokens(tokensIn: number, tokensOut: number): void {
+	setSessionTokens(tokensIn: number, tokensOut: number, cachedTokens?: number, cacheWriteTokens?: number): void {
 		store.update((s) => ({
 			...s,
 			streaming: {
 				input: tokensIn,
 				output: tokensOut,
+				cached: cachedTokens ?? null,
+				cacheWrite: cacheWriteTokens ?? null,
 				speed: null
 			}
 		}));
@@ -269,6 +252,10 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cumulative_cost_usd: $s.cumulative.cost,
 		sub_agent_input: $s.subAgent.input,
 		sub_agent_output: $s.subAgent.output,
+		cached_tokens: $s.streaming.cached ?? undefined,
+		cumulative_cached: $s.cumulative.cached ?? undefined,
+		cache_write_tokens: $s.streaming.cacheWrite ?? undefined,
+		cumulative_cache_write: $s.cumulative.cacheWrite ?? undefined,
 		workflow_total_cost: $s.cumulative.cost + subAgentCost,
 		speed_tks: $s.streaming.speed ?? undefined,
 		is_streaming: $s.isStreaming

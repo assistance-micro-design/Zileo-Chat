@@ -133,6 +133,8 @@ pub async fn list_models(
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
              created_at, updated_at \
              FROM llm_model WHERE provider = $provider LIMIT {}",
             query_limits::DEFAULT_MODELS_LIMIT
@@ -154,6 +156,8 @@ pub async fn list_models(
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
              created_at, updated_at \
              FROM llm_model LIMIT {}",
             query_limits::DEFAULT_MODELS_LIMIT
@@ -398,6 +402,8 @@ async fn insert_model_record(
         "is_reasoning": model.is_reasoning,
         "input_price_per_mtok": model.input_price_per_mtok,
         "output_price_per_mtok": model.output_price_per_mtok,
+        "cache_read_price_per_mtok": model.cache_read_price_per_mtok,
+        "cache_write_price_per_mtok": model.cache_write_price_per_mtok,
     });
 
     // time::now() must be set separately as a SurrealQL function (not a param)
@@ -512,6 +518,15 @@ pub async fn update_model(
     }
     if let Some(output_price) = data.output_price_per_mtok {
         set_parts.push(format!("output_price_per_mtok = {}", output_price));
+    }
+    if let Some(cached_price) = data.cache_read_price_per_mtok {
+        set_parts.push(format!("cache_read_price_per_mtok = {}", cached_price));
+    }
+    if let Some(cache_write_price) = data.cache_write_price_per_mtok {
+        set_parts.push(format!(
+            "cache_write_price_per_mtok = {}",
+            cache_write_price
+        ));
     }
 
     // id is validated by validate_model_id (strict char check) so safe for record ID
@@ -955,6 +970,8 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
                 "is_reasoning": model.is_reasoning,
                 "input_price_per_mtok": model.input_price_per_mtok,
                 "output_price_per_mtok": model.output_price_per_mtok,
+                "cache_read_price_per_mtok": model.cache_read_price_per_mtok,
+                "cache_write_price_per_mtok": model.cache_write_price_per_mtok,
             });
 
             state
@@ -1112,6 +1129,8 @@ mod injection_tests {
             "is_reasoning": false,
             "input_price_per_mtok": 0.0,
             "output_price_per_mtok": 0.0,
+            "cache_read_price_per_mtok": 0.0,
+            "cache_write_price_per_mtok": 0.0,
         });
 
         state
@@ -1164,6 +1183,8 @@ mod injection_tests {
             "is_reasoning": false,
             "input_price_per_mtok": 0.0,
             "output_price_per_mtok": 0.0,
+            "cache_read_price_per_mtok": 0.0,
+            "cache_write_price_per_mtok": 0.0,
         });
         state
             .db

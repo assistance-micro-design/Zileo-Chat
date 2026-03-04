@@ -39,6 +39,8 @@ DEFINE FIELD OVERWRITE current_context_tokens ON workflow TYPE int DEFAULT 0;
 -- Sub-agent token tracking (separate from main agent totals)
 DEFINE FIELD OVERWRITE sub_agent_tokens_input ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE sub_agent_tokens_output ON workflow TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE total_cached_tokens ON workflow TYPE option<int> DEFAULT 0;
+DEFINE FIELD OVERWRITE total_cache_write_tokens ON workflow TYPE option<int> DEFAULT 0;
 
 -- Table: message
 -- Extended with metrics fields for persistence
@@ -190,6 +192,12 @@ DEFINE FIELD OVERWRITE input_price_per_mtok ON llm_model TYPE float
     ASSERT $value >= 0.0 AND $value <= 1000.0
     DEFAULT 0.0;
 DEFINE FIELD OVERWRITE output_price_per_mtok ON llm_model TYPE float
+    ASSERT $value >= 0.0 AND $value <= 1000.0
+    DEFAULT 0.0;
+DEFINE FIELD OVERWRITE cache_read_price_per_mtok ON llm_model TYPE float
+    ASSERT $value >= 0.0 AND $value <= 1000.0
+    DEFAULT 0.0;
+DEFINE FIELD OVERWRITE cache_write_price_per_mtok ON llm_model TYPE float
     ASSERT $value >= 0.0 AND $value <= 1000.0
     DEFAULT 0.0;
 DEFINE FIELD OVERWRITE created_at ON llm_model TYPE datetime DEFAULT time::now();

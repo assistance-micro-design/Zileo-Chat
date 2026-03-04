@@ -21,7 +21,7 @@ use crate::{
     agents::core::agent::Task,
     constants::workflow as wf_const,
     db::queries::workflow as wf_queries,
-    llm::pricing::calculate_cost,
+    llm::pricing::calculate_cost_with_cache,
     models::{
         llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk, ThinkingStepCreate,
         Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
@@ -340,6 +340,8 @@ pub async fn execute_workflow_streaming(
             report.response.clone(),
             report.metrics.tokens_input,
             report.metrics.tokens_output,
+            report.metrics.cached_tokens,
+            report.metrics.cache_write_tokens,
         ),
     );
 
@@ -349,6 +351,8 @@ pub async fn execute_workflow_streaming(
         &validated_agent_id,
         report.metrics.tokens_input,
         report.metrics.tokens_output,
+        report.metrics.cached_tokens,
+        report.metrics.cache_write_tokens,
     )
     .await;
 
@@ -358,8 +362,11 @@ pub async fn execute_workflow_streaming(
         &validated_workflow_id,
         report.metrics.tokens_input,
         report.metrics.tokens_output,
+        report.metrics.cached_tokens,
+        report.metrics.cache_write_tokens,
         pricing.cost_usd,
         &pricing.model_id,
+        report.metrics.context_tokens,
     )
     .await;
 
@@ -422,6 +429,9 @@ pub async fn execute_workflow_streaming(
             cost_usd: pricing.cost_usd,
             provider: pricing.provider,
             model: pricing.model,
+            cached_tokens: report.metrics.cached_tokens,
+            cache_write_tokens: report.metrics.cache_write_tokens,
+            iteration_metrics: report.metrics.iteration_metrics.clone(),
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
@@ -566,11 +576,16 @@ struct ModelPricingInfo {
 }
 
 /// Loads agent configuration and model pricing info, then calculates cost.
+///
+/// Supports cached token pricing: when `cached_tokens` or `cache_write_tokens`
+/// is provided, the cost splits input tokens between regular, cache-read, and cache-write rates.
 async fn load_model_pricing_info(
     state: &AppState,
     agent_id: &str,
     tokens_input: usize,
     tokens_output: usize,
+    cached_tokens: Option<usize>,
+    cache_write_tokens: Option<usize>,
 ) -> ModelPricingInfo {
     let (provider, model) = match state.registry.get(agent_id).await {
         Some(agent) => {
@@ -580,12 +595,14 @@ async fn load_model_pricing_info(
         None => ("Unknown".to_string(), agent_id.to_string()),
     };
 
-    let (input_price, output_price, model_id) = {
+    let (input_price, output_price, cache_read_price, cache_write_price, model_id) = {
         let provider_lower = provider.to_lowercase();
         let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
              (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
              (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
              created_at, updated_at \
              FROM llm_model WHERE api_name = $model_name AND provider = $provider_name";
 
@@ -607,34 +624,51 @@ async fn load_model_pricing_info(
                             model_id = %loaded_model.id,
                             input_price = loaded_model.input_price_per_mtok,
                             output_price = loaded_model.output_price_per_mtok,
+                            cache_read_price = loaded_model.cache_read_price_per_mtok,
+                            cache_write_price = loaded_model.cache_write_price_per_mtok,
                             "Loaded model for pricing"
                         );
                         (
                             loaded_model.input_price_per_mtok,
                             loaded_model.output_price_per_mtok,
+                            loaded_model.cache_read_price_per_mtok,
+                            loaded_model.cache_write_price_per_mtok,
                             loaded_model.id,
                         )
                     }
                     _ => {
                         warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
-                        (0.0, 0.0, model.clone())
+                        (0.0, 0.0, 0.0, 0.0, model.clone())
                     }
                 }
             }
             Err(e) => {
                 warn!(error = %e, "Failed to load model for pricing, using defaults");
-                (0.0, 0.0, model.clone())
+                (0.0, 0.0, 0.0, 0.0, model.clone())
             }
         }
     };
 
-    let cost_usd = calculate_cost(tokens_input, tokens_output, input_price, output_price);
+    let cost_usd = calculate_cost_with_cache(
+        tokens_input,
+        tokens_output,
+        cached_tokens,
+        cache_write_tokens,
+        input_price,
+        output_price,
+        cache_read_price,
+        cache_write_price,
+    );
 
     info!(
         tokens_input = tokens_input,
         tokens_output = tokens_output,
+        cached_tokens = ?cached_tokens,
+        cache_write_tokens = ?cache_write_tokens,
         input_price = input_price,
         output_price = output_price,
+        cache_read_price = cache_read_price,
+        cache_write_price = cache_write_price,
         cost_usd = cost_usd,
         "Calculated token cost"
     );
@@ -648,18 +682,26 @@ async fn load_model_pricing_info(
 }
 
 /// Updates workflow cumulative token counts, cost, model, and context size.
+#[allow(clippy::too_many_arguments)]
 async fn update_workflow_cumulative_metrics(
     state: &AppState,
     workflow_id: &str,
     tokens_input: usize,
     tokens_output: usize,
+    cached_tokens: Option<usize>,
+    cache_write_tokens: Option<usize>,
     cost_usd: f64,
     model_id: &str,
+    context_tokens: usize,
 ) {
+    let cached = cached_tokens.unwrap_or(0);
+    let cache_write = cache_write_tokens.unwrap_or(0);
     let update_query = format!(
         "UPDATE workflow:`{}` SET \
             total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
             total_tokens_output = (total_tokens_output ?? 0) + $tokens_out, \
+            total_cached_tokens = (total_cached_tokens ?? 0) + $cached, \
+            total_cache_write_tokens = (total_cache_write_tokens ?? 0) + $cache_write, \
             total_cost_usd = (total_cost_usd ?? 0.0) + $cost, \
             model_id = $model_id, \
             current_context_tokens = $context_tokens, \
@@ -670,6 +712,8 @@ async fn update_workflow_cumulative_metrics(
     info!(
         tokens_in = tokens_input,
         tokens_out = tokens_output,
+        cached = cached,
+        cache_write = cache_write,
         cost = cost_usd,
         model_id = %model_id,
         "Executing workflow token update"
@@ -681,9 +725,11 @@ async fn update_workflow_cumulative_metrics(
         .query(&update_query)
         .bind(("tokens_in", tokens_input))
         .bind(("tokens_out", tokens_output))
+        .bind(("cached", cached))
+        .bind(("cache_write", cache_write))
         .bind(("cost", cost_usd))
         .bind(("model_id", model_id.to_string()))
-        .bind(("context_tokens", tokens_input))
+        .bind(("context_tokens", context_tokens))
         .await
     {
         error!(error = %e, "Failed to update workflow cumulative tokens");
@@ -692,7 +738,9 @@ async fn update_workflow_cumulative_metrics(
             workflow_id = %workflow_id,
             tokens_input = tokens_input,
             tokens_output = tokens_output,
-            current_context = tokens_input,
+            cached_tokens = cached,
+            cache_write_tokens = cache_write,
+            current_context = context_tokens,
             cost_usd = cost_usd,
             model_id = %model_id,
             "Updated workflow cumulative tokens and context"

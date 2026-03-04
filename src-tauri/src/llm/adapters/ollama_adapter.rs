@@ -25,7 +25,7 @@
 //! - Response path: `message.tool_calls` (not choices[0].message)
 //! - Tool support varies by model (qwen2.5, llama3.1+, mistral work best)
 
-use crate::llm::tool_adapter::{helpers, ProviderToolAdapter};
+use crate::llm::tool_adapter::{helpers, ProviderToolAdapter, TokenUsage};
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::tools::ToolDefinition;
 use serde_json::{json, Value};
@@ -193,7 +193,9 @@ impl ProviderToolAdapter for OllamaToolAdapter {
     /// Ollama uses different field names than OpenAI:
     /// - `prompt_eval_count` = input tokens
     /// - `eval_count` = output tokens
-    fn extract_usage(&self, response: &Value) -> (usize, usize) {
+    ///
+    /// Ollama does not support prompt caching, so `cached_tokens` is always `None`.
+    fn extract_usage(&self, response: &Value) -> TokenUsage {
         let input = response
             .get("prompt_eval_count")
             .and_then(|v| v.as_u64())
@@ -209,7 +211,12 @@ impl ProviderToolAdapter for OllamaToolAdapter {
             "Extracted token usage from Ollama response"
         );
 
-        (input, output)
+        TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cached_tokens: None,
+            cache_write_tokens: None,
+        }
     }
 }
 
@@ -381,9 +388,10 @@ mod tests {
             "eval_count": 15
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 42);
-        assert_eq!(output, 15);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 42);
+        assert_eq!(usage.output_tokens, 15);
+        assert_eq!(usage.cached_tokens, None);
     }
 
     #[test]
@@ -397,9 +405,10 @@ mod tests {
             "done": true
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 0);
-        assert_eq!(output, 0);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 0);
+        assert_eq!(usage.output_tokens, 0);
+        assert_eq!(usage.cached_tokens, None);
     }
 
     #[test]
@@ -413,8 +422,9 @@ mod tests {
             "eval_count": 25
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 0);
-        assert_eq!(output, 25);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 0);
+        assert_eq!(usage.output_tokens, 25);
+        assert_eq!(usage.cached_tokens, None);
     }
 }

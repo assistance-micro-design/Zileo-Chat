@@ -84,7 +84,9 @@
 		temperature_default: 0.7,
 		is_reasoning: false,
 		input_price_per_mtok: 0,
-		output_price_per_mtok: 0
+		output_price_per_mtok: 0,
+		cache_read_price_per_mtok: 0,
+		cache_write_price_per_mtok: 0
 	});
 
 	// Sync form data when model or provider props change (e.g., switching between edit targets)
@@ -98,7 +100,9 @@
 			temperature_default: model?.temperature_default ?? 0.7,
 			is_reasoning: model?.is_reasoning ?? false,
 			input_price_per_mtok: model?.input_price_per_mtok ?? 0,
-			output_price_per_mtok: model?.output_price_per_mtok ?? 0
+			output_price_per_mtok: model?.output_price_per_mtok ?? 0,
+			cache_read_price_per_mtok: model?.cache_read_price_per_mtok ?? 0,
+			cache_write_price_per_mtok: model?.cache_write_price_per_mtok ?? 0
 		};
 		// Reset validation state when model changes
 		errors = {};
@@ -170,6 +174,18 @@
 			newErrors.output_price_per_mtok = t('llm_form_price_max');
 		}
 
+		if (formData.cache_read_price_per_mtok < 0) {
+			newErrors.cache_read_price_per_mtok = t('llm_form_price_negative');
+		} else if (formData.cache_read_price_per_mtok > 1000) {
+			newErrors.cache_read_price_per_mtok = t('llm_form_price_max');
+		}
+
+		if (formData.cache_write_price_per_mtok < 0) {
+			newErrors.cache_write_price_per_mtok = t('llm_form_price_negative');
+		} else if (formData.cache_write_price_per_mtok > 1000) {
+			newErrors.cache_write_price_per_mtok = t('llm_form_price_max');
+		}
+
 		errors = newErrors;
 		return Object.keys(newErrors).length === 0;
 	}
@@ -195,7 +211,9 @@
 				temperature_default: formData.temperature_default,
 				is_reasoning: formData.is_reasoning,
 				input_price_per_mtok: formData.input_price_per_mtok,
-				output_price_per_mtok: formData.output_price_per_mtok
+				output_price_per_mtok: formData.output_price_per_mtok,
+				cache_read_price_per_mtok: formData.cache_read_price_per_mtok,
+				cache_write_price_per_mtok: formData.cache_write_price_per_mtok
 			};
 			onsubmit(createData);
 		} else {
@@ -226,6 +244,12 @@
 			if (model && formData.output_price_per_mtok !== model.output_price_per_mtok) {
 				updateData.output_price_per_mtok = formData.output_price_per_mtok;
 			}
+			if (model && formData.cache_read_price_per_mtok !== model.cache_read_price_per_mtok) {
+				updateData.cache_read_price_per_mtok = formData.cache_read_price_per_mtok;
+			}
+			if (model && formData.cache_write_price_per_mtok !== model.cache_write_price_per_mtok) {
+				updateData.cache_write_price_per_mtok = formData.cache_write_price_per_mtok;
+			}
 
 			onsubmit(updateData);
 		}
@@ -242,12 +266,12 @@
 	 * Handles number input change with proper conversion
 	 */
 	function handleNumberInput(
-		field: 'context_window' | 'max_output_tokens' | 'temperature_default' | 'input_price_per_mtok' | 'output_price_per_mtok',
+		field: 'context_window' | 'max_output_tokens' | 'temperature_default' | 'input_price_per_mtok' | 'output_price_per_mtok' | 'cache_read_price_per_mtok' | 'cache_write_price_per_mtok',
 		event: Event & { currentTarget: HTMLInputElement }
 	): void {
 		const value = parseFloat(event.currentTarget.value);
 		if (!isNaN(value)) {
-			if (field === 'temperature_default' || field === 'input_price_per_mtok' || field === 'output_price_per_mtok') {
+			if (field === 'temperature_default' || field === 'input_price_per_mtok' || field === 'output_price_per_mtok' || field === 'cache_read_price_per_mtok' || field === 'cache_write_price_per_mtok') {
 				formData[field] = value;
 			} else {
 				formData[field] = Math.floor(value);
@@ -397,6 +421,42 @@
 				/>
 				{#if touched && errors.output_price_per_mtok}
 					<span class="error-text">{errors.output_price_per_mtok}</span>
+				{/if}
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="form-field">
+				<Input
+					label={$i18n('llm_form_cache_read_price_label')}
+					type="number"
+					value={formData.cache_read_price_per_mtok.toString()}
+					oninput={(e) => handleNumberInput('cache_read_price_per_mtok', e)}
+					step="0.01"
+					min="0"
+					max="1000"
+					help={$i18n('llm_form_cache_read_price_help')}
+					disabled={saving}
+				/>
+				{#if touched && errors.cache_read_price_per_mtok}
+					<span class="error-text">{errors.cache_read_price_per_mtok}</span>
+				{/if}
+			</div>
+
+			<div class="form-field">
+				<Input
+					label={$i18n('llm_form_cache_write_price_label')}
+					type="number"
+					value={formData.cache_write_price_per_mtok.toString()}
+					oninput={(e) => handleNumberInput('cache_write_price_per_mtok', e)}
+					step="0.01"
+					min="0"
+					max="1000"
+					help={$i18n('llm_form_cache_write_price_help')}
+					disabled={saving}
+				/>
+				{#if touched && errors.cache_write_price_per_mtok}
+					<span class="error-text">{errors.cache_write_price_per_mtok}</span>
 				{/if}
 			</div>
 		</div>

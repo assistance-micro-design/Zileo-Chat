@@ -74,6 +74,15 @@
 		{/if}
 	</div>
 
+	{#if metrics.cached_tokens && metrics.cached_tokens > 0}
+		<div class="metric" title={$i18n('workflow_metrics_cached_tokens')}>
+			<span class="metric-value cached">{metrics.cached_tokens.toLocaleString()}</span>
+			{#if !compact}
+				<span class="metric-label">{$i18n('workflow_token_cached')}</span>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="metric" title={$i18n('workflow_metrics_provider_title')}>
 		<Server size={14} />
 		<span class="metric-value">{metrics.provider}</span>
@@ -121,6 +130,10 @@
 		font-weight: var(--font-weight-medium);
 		color: var(--color-text-primary);
 		font-family: var(--font-mono);
+	}
+
+	.metric-value.cached {
+		color: var(--color-success);
 	}
 
 	.metric-label {

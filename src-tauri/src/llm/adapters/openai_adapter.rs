@@ -30,7 +30,7 @@
 //! - Mistral uses `"any"` for required mode
 //! - OpenAI standard uses `"required"` for required mode
 
-use crate::llm::tool_adapter::{helpers, ProviderToolAdapter};
+use crate::llm::tool_adapter::{helpers, ProviderToolAdapter, TokenUsage};
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::tools::ToolDefinition;
 use serde_json::{json, Value};
@@ -182,7 +182,7 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             })
     }
 
-    fn extract_usage(&self, response: &Value) -> (usize, usize) {
+    fn extract_usage(&self, response: &Value) -> TokenUsage {
         let input = response
             .pointer("/usage/prompt_tokens")
             .and_then(|v| v.as_u64())
@@ -191,14 +191,24 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             .pointer("/usage/completion_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
+        let cached = response
+            .pointer("/usage/prompt_tokens_details/cached_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         debug!(
             prompt_tokens = input,
             completion_tokens = output,
+            cached_tokens = ?cached,
             "Extracted token usage from OpenAI-compatible response"
         );
 
-        (input, output)
+        TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cached_tokens: cached,
+            cache_write_tokens: None,
+        }
     }
 }
 
@@ -282,8 +292,45 @@ mod tests {
             }
         });
 
-        let (input, output) = adapter.extract_usage(&response);
-        assert_eq!(input, 100);
-        assert_eq!(output, 50);
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.cached_tokens, None);
+    }
+
+    #[test]
+    fn test_extract_usage_with_cached_tokens() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 1000);
+        assert_eq!(usage.output_tokens, 200);
+        assert_eq!(usage.cached_tokens, Some(800));
+    }
+
+    #[test]
+    fn test_extract_usage_cached_zero() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 500,
+                "completion_tokens": 100,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.cached_tokens, Some(0));
     }
 }

@@ -115,6 +115,10 @@ export interface LLMModel {
   input_price_per_mtok: number;
   /** Price per million output tokens (USD) - user configurable */
   output_price_per_mtok: number;
+  /** Price per million cache-read tokens (USD) - typically 0.25x-0.50x of input price */
+  cache_read_price_per_mtok: number;
+  /** Price per million cache-write tokens (USD) - typically 1.0x-1.25x of input price */
+  cache_write_price_per_mtok: number;
   /** ISO 8601 creation timestamp */
   created_at: string;
   /** ISO 8601 last update timestamp */
@@ -145,6 +149,10 @@ export interface CreateModelRequest {
   input_price_per_mtok?: number;
   /** Price per million output tokens (USD, default 0.0) */
   output_price_per_mtok?: number;
+  /** Price per million cache-read tokens (USD, default 0.0) */
+  cache_read_price_per_mtok?: number;
+  /** Price per million cache-write tokens (USD, default 0.0) */
+  cache_write_price_per_mtok?: number;
 }
 
 /**
@@ -170,6 +178,10 @@ export interface UpdateModelRequest {
   input_price_per_mtok?: number;
   /** New price per million output tokens (USD) */
   output_price_per_mtok?: number;
+  /** New price per million cache-read tokens (USD) */
+  cache_read_price_per_mtok?: number;
+  /** New price per million cache-write tokens (USD) */
+  cache_write_price_per_mtok?: number;
 }
 
 /**

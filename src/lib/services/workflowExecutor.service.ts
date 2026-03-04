@@ -263,8 +263,12 @@ export const WorkflowExecutorService = {
 
 			// Update token counters and cost display (only if still viewing this workflow)
 			if (isStillViewed()) {
-				tokenStore.setInputTokens(workflowResult.metrics.tokens_input);
-				tokenStore.updateStreamingTokens(workflowResult.metrics.tokens_output);
+				tokenStore.setSessionTokens(
+					workflowResult.metrics.tokens_input,
+					workflowResult.metrics.tokens_output,
+					workflowResult.metrics.cached_tokens,
+					workflowResult.metrics.cache_write_tokens
+				);
 				tokenStore.setSessionCost(workflowResult.metrics.cost_usd);
 			}
 			callbacks?.onTokenUpdate?.(workflowResult.metrics);

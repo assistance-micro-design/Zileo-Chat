@@ -28,6 +28,23 @@ use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoi
 use crate::tools::ToolDefinition;
 use serde_json::Value;
 
+/// Token usage extracted from a provider's API response.
+///
+/// Different providers report varying levels of detail.
+/// `cached_tokens` is only available from providers that support prompt caching
+/// (e.g., OpenAI-compatible APIs with prefixes >= 1024 tokens).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    /// Number of input/prompt tokens consumed
+    pub input_tokens: usize,
+    /// Number of output/completion tokens generated
+    pub output_tokens: usize,
+    /// Number of input tokens served from cache (cache reads)
+    pub cached_tokens: Option<usize>,
+    /// Number of input tokens written to cache (cache writes, first request)
+    pub cache_write_tokens: Option<usize>,
+}
+
 /// Trait for adapting between internal tool system and provider-specific JSON formats.
 ///
 /// Implementors handle the format differences between providers like Mistral and Ollama.
@@ -44,7 +61,6 @@ use serde_json::Value;
 /// let tools_json = adapter.format_tools(&tool_definitions);
 /// let calls = adapter.parse_tool_calls(&response);
 /// ```
-#[allow(dead_code)] // Some trait methods are for API completeness and future use
 pub trait ProviderToolAdapter: Send + Sync {
     /// Converts internal `ToolDefinition` structs to provider-specific JSON format.
     ///
@@ -173,16 +189,20 @@ pub trait ProviderToolAdapter: Send + Sync {
     /// Extracts token usage from the provider's response.
     ///
     /// Different providers return token counts in different formats:
-    /// - **Mistral**: `usage.prompt_tokens`, `usage.completion_tokens`
+    /// - **OpenAI/Mistral**: `usage.prompt_tokens`, `usage.completion_tokens`
     /// - **Ollama**: `prompt_eval_count`, `eval_count` (at root level)
+    ///
+    /// Providers supporting prompt caching (OpenAI-compatible, OpenRouter) also return
+    /// `usage.prompt_tokens_details.cached_tokens`.
     ///
     /// # Arguments
     /// * `response` - The raw JSON response from the provider
     ///
     /// # Returns
-    /// Tuple of (input_tokens, output_tokens). Returns (0, 0) if not available.
-    fn extract_usage(&self, response: &Value) -> (usize, usize) {
+    /// A `TokenUsage` struct with input, output, and optional cached token counts.
+    fn extract_usage(&self, response: &Value) -> TokenUsage {
         // Default implementation: try OpenAI/Mistral format
+        // Note: .unwrap_or(0) is Option::unwrap_or (not Result::unwrap), safe
         let input = response
             .pointer("/usage/prompt_tokens")
             .and_then(|v| v.as_u64())
@@ -191,7 +211,21 @@ pub trait ProviderToolAdapter: Send + Sync {
             .pointer("/usage/completion_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
-        (input, output)
+        let cached = response
+            .pointer("/usage/prompt_tokens_details/cached_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+        let cache_write = response
+            .pointer("/usage/prompt_tokens_details/cache_write_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            cached_tokens: cached,
+            cache_write_tokens: cache_write,
+        }
     }
 }
 
@@ -309,5 +343,39 @@ mod tests {
         let invalid = parse_arguments_string("not json");
         assert!(invalid.is_object());
         assert!(invalid.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_token_usage_default() {
+        let usage = TokenUsage::default();
+        assert_eq!(usage.input_tokens, 0);
+        assert_eq!(usage.output_tokens, 0);
+        assert_eq!(usage.cached_tokens, None);
+        assert_eq!(usage.cache_write_tokens, None);
+    }
+
+    #[test]
+    fn test_token_usage_equality() {
+        let a = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cached_tokens: Some(80),
+            cache_write_tokens: None,
+        };
+        let b = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cached_tokens: Some(80),
+            cache_write_tokens: None,
+        };
+        assert_eq!(a, b);
+
+        let c = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+            cached_tokens: None,
+            cache_write_tokens: None,
+        };
+        assert_ne!(a, c);
     }
 }

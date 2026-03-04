@@ -469,6 +469,9 @@ fn build_workflow_result(
             cost_usd: 0.0,
             provider,
             model,
+            cached_tokens: report.metrics.cached_tokens,
+            cache_write_tokens: report.metrics.cache_write_tokens,
+            iteration_metrics: report.metrics.iteration_metrics.clone(),
         },
         tools_used: report.metrics.tools_used.clone(),
         mcp_calls: report.metrics.mcp_calls.clone(),
@@ -594,6 +597,9 @@ mod tests {
                 cost_usd: 0.001,
                 provider: "Test".to_string(),
                 model: "test-model".to_string(),
+                cached_tokens: None,
+                cache_write_tokens: None,
+                iteration_metrics: vec![],
             },
             tools_used: vec!["tool1".to_string()],
             mcp_calls: vec![],
@@ -662,6 +668,9 @@ mod tests {
             cost_usd: 0.0,
             provider: String::new(),
             model: String::new(),
+            cached_tokens: None,
+            cache_write_tokens: None,
+            iteration_metrics: vec![],
         };
 
         assert_eq!(metrics.duration_ms, 0);

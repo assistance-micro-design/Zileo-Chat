@@ -295,7 +295,7 @@ Uses extracted components, services, and stores for clean architecture.
 			streamingStore.restoreFrom(bgExecution);
 			executionBlocksStore.start(workflowId);
 			tokenStore.startStreaming();
-			tokenStore.updateStreamingTokens(bgExecution.tokensReceived);
+			tokenStore.setSessionTokens(0, bgExecution.tokensReceived);
 
 			// Open user question modal if there are pending questions for this workflow
 			userQuestionStore.openForWorkflow(workflowId);

@@ -193,6 +193,41 @@ where
 }
 
 // ============================================================================
+// Prompt Cache Control
+// ============================================================================
+
+/// Applies prompt cache control markers to the system message.
+///
+/// Converts the system message content to multipart format with
+/// `cache_control: { "type": "ephemeral" }` to enable prompt caching.
+/// Required for Anthropic Claude models, harmlessly ignored by providers
+/// that handle caching automatically (OpenAI, DeepSeek, Gemini, etc.).
+fn apply_prompt_cache_control(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    messages
+        .iter()
+        .map(|msg| {
+            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if role == "system" {
+                if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
+                    serde_json::json!({
+                        "role": "system",
+                        "content": [{
+                            "type": "text",
+                            "text": content,
+                            "cache_control": { "type": "ephemeral" }
+                        }]
+                    })
+                } else {
+                    msg.clone()
+                }
+            } else {
+                msg.clone()
+            }
+        })
+        .collect()
+}
+
+// ============================================================================
 // OpenAI-Compatible Provider
 // ============================================================================
 
@@ -446,9 +481,13 @@ impl OpenAiCompatibleProvider {
             LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
         })?;
 
+        // Apply prompt cache control to system message for providers that support it
+        // (required for Anthropic Claude, harmlessly ignored by others)
+        let cached_messages = apply_prompt_cache_control(messages);
+
         let request_body = ToolChatRequest {
             model: model.to_string(),
-            messages: messages.to_vec(),
+            messages: cached_messages,
             temperature: Some(temperature),
             max_tokens: Some(max_tokens),
             tools: if tools.is_empty() {
@@ -670,5 +709,58 @@ mod tests {
         }"#;
         let msg: ChatResponseMessage = serde_json::from_str(json).expect("parse should succeed");
         assert_eq!(msg.content, "The answer is 42");
+    }
+
+    #[test]
+    fn test_apply_prompt_cache_control_system_message() {
+        let messages = vec![
+            serde_json::json!({"role": "system", "content": "You are a helpful assistant."}),
+            serde_json::json!({"role": "user", "content": "Hello"}),
+        ];
+
+        let result = apply_prompt_cache_control(&messages);
+
+        // System message should be converted to multipart with cache_control
+        let system = &result[0];
+        assert_eq!(system["role"], "system");
+        let content = system["content"].as_array().expect("content should be array");
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "You are a helpful assistant.");
+        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
+
+        // User message should remain unchanged
+        let user = &result[1];
+        assert_eq!(user["role"], "user");
+        assert_eq!(user["content"], "Hello");
+    }
+
+    #[test]
+    fn test_apply_prompt_cache_control_no_system() {
+        let messages = vec![
+            serde_json::json!({"role": "user", "content": "Hello"}),
+            serde_json::json!({"role": "assistant", "content": "Hi there"}),
+        ];
+
+        let result = apply_prompt_cache_control(&messages);
+
+        // Messages without system role should be unchanged
+        assert_eq!(result[0]["content"], "Hello");
+        assert_eq!(result[1]["content"], "Hi there");
+    }
+
+    #[test]
+    fn test_apply_prompt_cache_control_already_multipart() {
+        let messages = vec![serde_json::json!({
+            "role": "system",
+            "content": [{"type": "text", "text": "Already multipart"}]
+        })];
+
+        let result = apply_prompt_cache_control(&messages);
+
+        // Non-string content should pass through unchanged
+        let content = result[0]["content"].as_array().expect("should remain array");
+        assert_eq!(content[0]["text"], "Already multipart");
+        assert!(content[0].get("cache_control").is_none());
     }
 }

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::mcp::MCPManager;
+use crate::models::workflow::IterationMetrics;
 use crate::models::{AgentConfig, Lifecycle};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -125,10 +126,16 @@ pub struct ToolExecutionData {
 pub struct ReportMetrics {
     /// Duration in milliseconds
     pub duration_ms: u64,
-    /// Input tokens consumed
+    /// Cumulative input tokens billed across all LLM API calls (for cost calculation)
     pub tokens_input: usize,
-    /// Output tokens generated
+    /// Output tokens generated (cumulative across all iterations)
     pub tokens_output: usize,
+    /// Last API call's input tokens (context window size for display)
+    pub context_tokens: usize,
+    /// Cached input tokens - cache reads (if provider supports prompt caching)
+    pub cached_tokens: Option<usize>,
+    /// Cache-write tokens (if provider supports prompt caching)
+    pub cache_write_tokens: Option<usize>,
     /// Tools used (names only, for backward compatibility)
     pub tools_used: Vec<String>,
     /// MCP calls made (names only, for backward compatibility)
@@ -137,6 +144,8 @@ pub struct ReportMetrics {
     pub tool_executions: Vec<ToolExecutionData>,
     /// Intermediate reasoning steps collected during execution
     pub reasoning_steps: Vec<ReasoningStepData>,
+    /// Per-iteration token breakdown (one entry per LLM API call in tool loop)
+    pub iteration_metrics: Vec<IterationMetrics>,
 }
 
 /// Agent trait - unified interface for all agents

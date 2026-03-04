@@ -776,7 +776,7 @@ async fn export_models(
 ) -> Result<Vec<LLMModelExportData>, String> {
     let mut models = Vec::new();
     for model_id in model_ids {
-        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, input_price_per_mtok, output_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, max_output_tokens, temperature_default, is_builtin, is_reasoning, input_price_per_mtok, output_price_per_mtok, (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, created_at, updated_at FROM llm_model WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, model_id, "model").await? {
             models.push(LLMModelExportData {
                 provider: row["provider"].as_str().unwrap_or("").to_string(),
@@ -789,6 +789,10 @@ async fn export_models(
                 is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
                 input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),
                 output_price_per_mtok: row["output_price_per_mtok"].as_f64().unwrap_or(0.0),
+                cache_read_price_per_mtok: row["cache_read_price_per_mtok"].as_f64().unwrap_or(0.0),
+                cache_write_price_per_mtok: row["cache_write_price_per_mtok"]
+                    .as_f64()
+                    .unwrap_or(0.0),
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });
@@ -1072,6 +1076,8 @@ async fn import_models(
                     "is_reasoning": model.is_reasoning,
                     "input_price_per_mtok": model.input_price_per_mtok,
                     "output_price_per_mtok": model.output_price_per_mtok,
+                    "cache_read_price_per_mtok": model.cache_read_price_per_mtok,
+                    "cache_write_price_per_mtok": model.cache_write_price_per_mtok,
                 }));
                 match persist_imported_entity(db, "llm_model", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.models += 1,

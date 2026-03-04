@@ -119,6 +119,10 @@ export interface StreamChunk {
   tokens_input?: number;
   /** Output tokens count (for response_block) */
   tokens_output?: number;
+  /** Cached input tokens count (for response_block) */
+  cached_tokens?: number;
+  /** Cache-write tokens count (for response_block) */
+  cache_write_tokens?: number;
 }
 
 /**

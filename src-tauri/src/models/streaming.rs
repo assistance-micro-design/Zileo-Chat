@@ -132,6 +132,12 @@ pub struct StreamChunk {
     /// Output tokens count (for response_block)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_output: Option<usize>,
+    /// Cached input tokens - cache reads (for response_block, prompt caching)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<usize>,
+    /// Cache-write tokens (for response_block, prompt caching)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<usize>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -173,6 +179,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -203,6 +211,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -233,6 +243,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -263,6 +275,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -301,6 +315,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -340,6 +356,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -379,6 +397,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -417,6 +437,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -454,6 +476,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -491,6 +515,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -523,6 +549,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -555,6 +583,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -587,6 +617,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -626,6 +658,8 @@ impl StreamChunk {
             tool_success: Some(success),
             tokens_input: None,
             tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
         }
     }
 
@@ -637,6 +671,8 @@ impl StreamChunk {
         content: impl Into<String>,
         tokens_input: usize,
         tokens_output: usize,
+        cached_tokens: Option<usize>,
+        cache_write_tokens: Option<usize>,
     ) -> Self {
         Self {
             workflow_id: workflow_id.into(),
@@ -663,6 +699,8 @@ impl StreamChunk {
             tool_success: None,
             tokens_input: Some(tokens_input),
             tokens_output: Some(tokens_output),
+            cached_tokens,
+            cache_write_tokens,
         }
     }
 }
@@ -1130,7 +1168,7 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_response_block() {
-        let chunk = StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25);
+        let chunk = StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25, None, None);
         assert_eq!(chunk.chunk_type, ChunkType::ResponseBlock);
         assert_eq!(chunk.content, Some("The answer is 42.".to_string()));
         assert_eq!(chunk.tokens_input, Some(100));

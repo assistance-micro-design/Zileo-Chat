@@ -79,7 +79,7 @@ pub use embedding::{
 #[allow(unused_imports)]
 pub use adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
 #[allow(unused_imports)]
-pub use tool_adapter::ProviderToolAdapter;
+pub use tool_adapter::{ProviderToolAdapter, TokenUsage};
 
 // Re-export OpenAI-compatible provider for custom provider commands
 #[allow(unused_imports)]

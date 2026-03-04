@@ -231,6 +231,10 @@ pub struct LLMModelExportData {
     pub input_price_per_mtok: f64,
     #[serde(default)]
     pub output_price_per_mtok: f64,
+    #[serde(default)]
+    pub cache_read_price_per_mtok: f64,
+    #[serde(default)]
+    pub cache_write_price_per_mtok: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -72,6 +72,8 @@ describe('LLM Store', () => {
 		is_reasoning: false,
 		input_price_per_mtok: 0,
 		output_price_per_mtok: 0,
+		cache_read_price_per_mtok: 0,
+		cache_write_price_per_mtok: 0,
 		created_at: new Date().toISOString(),
 		updated_at: new Date().toISOString()
 	});
