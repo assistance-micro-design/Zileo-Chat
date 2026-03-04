@@ -5,6 +5,35 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-03-04
+
+### Added
+
+- **Reasoning Effort** (#65): Granular thinking control for LLM agents
+  - New `ReasoningEffort` enum (low/medium/high) replacing boolean `enable_thinking`
+  - DB migration: `enable_thinking` -> `reasoning_effort` with ASSERT validation
+  - `LLMProvider` trait updated with `reasoning_effort: Option<ReasoningEffort>` on all 3 providers
+  - `thinking_tokens` field added to Message, StreamChunk, and metrics
+  - `extract_thinking_from_message()` utility for response parsing
+  - Agent form: reasoning effort dropdown (conditional on `is_reasoning` model flag)
+  - MessageMetrics: BrainCircuit icon with thinking token count
+  - Design decision: reasoning_effort intentionally not passed during tool-loop iterations
+
+### Changed
+
+- **Dead Code Cleanup**: Removed `#[allow(dead_code)]` annotations from production code
+  - Removed 2 unused methods (`with_retry_config`, `has_custom_provider`) from `ProviderManager`
+  - Moved 5 test-only methods to `#[cfg(test)]` impl block
+  - Removed incorrect `#[allow(dead_code)]` on `http_client` field/accessor (actually used)
+- **Agent Deserialization**: Replaced ~70 lines of manual `unwrap_or` deserialization with `serde_json::from_value()` leveraging serde defaults on `AgentConfig`, `LLMConfig`, and `Lifecycle`
+- **Dead Code Removal**: Removed unused command module (`llm.rs`), unused TS type files (`fileManager.ts`, `function-calling.ts`, `security.ts`, `task.ts`), and dead `execute_workflow`/`test_llm_completion`/`ProviderManager::complete()` methods
+
+### Fixed
+
+- **Pipeline Cleanup**: Net reduction of ~860 lines of dead/redundant code
+
+---
+
 ## [0.14.0] - 2026-03-03
 
 ### Added
@@ -435,6 +464,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.15.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.0
 [0.14.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.14.0
 [0.13.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.13.0
 [0.12.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.12.0
@@ -445,4 +475,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.15.0...HEAD
