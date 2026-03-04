@@ -213,15 +213,6 @@ async fn main() -> anyhow::Result<()> {
             commands::security::delete_api_key,
             commands::security::has_api_key,
             commands::security::list_api_key_providers,
-            // LLM commands
-            commands::llm::get_llm_config,
-            commands::llm::configure_mistral,
-            commands::llm::configure_ollama,
-            commands::llm::set_active_provider,
-            commands::llm::set_default_model,
-            commands::llm::get_available_models,
-            commands::llm::test_ollama_connection,
-            commands::llm::test_mistral_connection,
             // Custom provider commands
             commands::custom_provider::list_providers,
             commands::custom_provider::create_custom_provider,
@@ -439,76 +430,22 @@ async fn main() -> anyhow::Result<()> {
 
                 let mut loaded = 0;
                 for row in results {
-                    let id = row["id"].as_str().unwrap_or("").to_string();
-                    if id.is_empty() {
+                    let config: crate::models::AgentConfig = match serde_json::from_value(row) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Failed to deserialize agent, skipping");
+                            continue;
+                        }
+                    };
+                    if config.id.is_empty() {
                         continue;
                     }
-
-                    let name = row["name"].as_str().unwrap_or("Unknown").to_string();
-                    let lifecycle_str = row["lifecycle"].as_str().unwrap_or("permanent");
-                    let lifecycle = if lifecycle_str == "temporary" {
-                        crate::models::Lifecycle::Temporary
-                    } else {
-                        crate::models::Lifecycle::Permanent
-                    };
-
-                    let llm_value = &row["llm"];
-                    let llm = crate::models::LLMConfig {
-                        provider: llm_value["provider"].as_str().unwrap_or("Mistral").to_string(),
-                        model: llm_value["model"].as_str().unwrap_or("mistral-large-latest").to_string(),
-                        temperature: llm_value["temperature"].as_f64().unwrap_or(0.7) as f32,
-                        max_tokens: llm_value["max_tokens"].as_u64().unwrap_or(4096) as usize,
-                        is_reasoning: llm_value["is_reasoning"].as_bool().unwrap_or(false),
-                    };
-
-                    let tools: Vec<String> = row["tools"]
-                        .as_array()
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default();
-
-                    let mcp_servers_list: Vec<String> = row["mcp_servers"]
-                        .as_array()
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default();
-
-                    let skills_list: Vec<String> = row["skills"]
-                        .as_array()
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default();
-
-                    let folders_list: Vec<String> = row["folders"]
-                        .as_array()
-                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_default();
-
-                    let require_file_confirmation = row["require_file_confirmation"].as_bool().unwrap_or(true);
-
-                    let system_prompt = row["system_prompt"].as_str().unwrap_or("You are a helpful assistant.").to_string();
-
-                    let max_tool_iterations = row["max_tool_iterations"]
-                        .as_u64()
-                        .map(|v| v as usize)
-                        .unwrap_or(50)
-                        .clamp(1, 200);
-
-                    let reasoning_effort = row["reasoning_effort"]
-                        .as_str()
-                        .and_then(|s| serde_json::from_value(serde_json::json!(s)).ok());
-
+                    // Clamp max_tool_iterations to safe range
                     let config = crate::models::AgentConfig {
-                        id: id.clone(),
-                        name,
-                        lifecycle,
-                        llm,
-                        tools,
-                        mcp_servers: mcp_servers_list,
-                        skills: skills_list,
-                        folders: folders_list,
-                        require_file_confirmation,
-                        system_prompt,
-                        max_tool_iterations,
-                        reasoning_effort,
+                        max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
+                        ..config
                     };
+                    let id = config.id.clone();
 
                     // Create agent context with app_handle
                     // Note: No cancellation token during startup agent loading

@@ -29,6 +29,7 @@ use tracing::{debug, info, instrument, warn};
 
 /// Provider configuration state
 #[derive(Debug, Clone)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub struct ProviderConfig {
     /// Currently active provider
     pub active_provider: ProviderType,
@@ -80,7 +81,6 @@ pub struct ProviderManager {
     /// Configuration state
     config: Arc<RwLock<ProviderConfig>>,
     /// Shared HTTP client for all providers (connection pooling)
-    #[allow(dead_code)] // Stored for http_client() accessor
     http_client: Arc<reqwest::Client>,
     /// Retry configuration for API calls
     retry_config: RetryConfig,
@@ -138,53 +138,10 @@ impl ProviderManager {
         })
     }
 
-    /// Creates a new provider manager with custom retry configuration.
-    ///
-    /// # Errors
-    /// Returns an error if the HTTP client fails to initialize.
-    #[allow(dead_code)] // API completeness - custom configuration builder
-    pub fn with_retry_config(retry_config: RetryConfig) -> Result<Self, String> {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-                .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
-                .build()
-                .map_err(|e| format!("Failed to create HTTP client: {}", e))?,
-        );
-
-        // Initialize circuit breakers for each provider
-        let mut circuit_breakers = HashMap::new();
-        circuit_breakers.insert(
-            ProviderType::Mistral,
-            CircuitBreaker::new(
-                CircuitBreakerConfig::for_llm_provider(),
-                "Mistral".to_string(),
-            ),
-        );
-        circuit_breakers.insert(
-            ProviderType::Ollama,
-            CircuitBreaker::new(
-                CircuitBreakerConfig::for_llm_provider(),
-                "Ollama".to_string(),
-            ),
-        );
-
-        Ok(Self {
-            mistral: Arc::new(MistralProvider::new(http_client.clone())),
-            ollama: Arc::new(OllamaProvider::new(http_client.clone())),
-            custom_providers: Arc::new(RwLock::new(HashMap::new())),
-            config: Arc::new(RwLock::new(ProviderConfig::default())),
-            http_client,
-            retry_config,
-            circuit_breakers: Arc::new(RwLock::new(circuit_breakers)),
-        })
-    }
-
     /// Returns a reference to the shared HTTP client.
     ///
     /// This can be used by external code that needs to make HTTP requests
     /// while benefiting from the manager's connection pool.
-    #[allow(dead_code)] // API for external HTTP client sharing
     pub fn http_client(&self) -> &Arc<reqwest::Client> {
         &self.http_client
     }
@@ -226,32 +183,6 @@ impl ProviderManager {
         }
     }
 
-    /// Gets the circuit breaker status for a provider.
-    ///
-    /// Returns the current state (Closed, Open, HalfOpen) and statistics.
-    #[allow(dead_code)] // API completeness - status monitoring
-    pub async fn get_circuit_breaker_status(
-        &self,
-        provider: ProviderType,
-    ) -> Option<super::circuit_breaker::CircuitBreakerStats> {
-        let breakers = self.circuit_breakers.read().await;
-        if let Some(breaker) = breakers.get(&provider) {
-            Some(breaker.stats().await)
-        } else {
-            None
-        }
-    }
-
-    /// Resets the circuit breaker for a provider (for manual intervention).
-    #[allow(dead_code)] // Manual intervention API
-    pub async fn reset_circuit_breaker(&self, provider: ProviderType) {
-        let breakers = self.circuit_breakers.read().await;
-        if let Some(breaker) = breakers.get(&provider) {
-            breaker.reset().await;
-            info!(provider = %provider, "Circuit breaker manually reset");
-        }
-    }
-
     /// Registers a custom OpenAI-compatible provider.
     pub async fn register_custom_provider(
         &self,
@@ -276,18 +207,14 @@ impl ProviderManager {
         self.custom_providers.read().await.get(name).cloned()
     }
 
-    /// Checks if a custom provider exists.
-    #[allow(dead_code)]
-    pub async fn has_custom_provider(&self, name: &str) -> bool {
-        self.custom_providers.read().await.contains_key(name)
-    }
-
     /// Gets the current configuration
+    #[cfg(test)]
     pub async fn get_config(&self) -> ProviderConfig {
         self.config.read().await.clone()
     }
 
     /// Sets the active provider
+    #[cfg(test)]
     pub async fn set_active_provider(&self, provider: ProviderType) -> Result<(), LLMError> {
         // Verify the provider is configured
         let is_configured = match &provider {
@@ -309,12 +236,6 @@ impl ProviderManager {
         self.config.write().await.active_provider = provider.clone();
         info!(?provider, "Active provider changed");
         Ok(())
-    }
-
-    /// Gets the active provider type
-    #[allow(dead_code)] // API completeness - provider inspection
-    pub async fn get_active_provider(&self) -> ProviderType {
-        self.config.read().await.active_provider.clone()
     }
 
     /// Configures the Mistral provider with an API key
@@ -342,6 +263,7 @@ impl ProviderManager {
     }
 
     /// Sets the default model for a provider
+    #[cfg(test)]
     pub async fn set_default_model(&self, provider: ProviderType, model: &str) {
         let mut config = self.config.write().await;
         match provider {
@@ -355,18 +277,8 @@ impl ProviderManager {
         debug!(?provider, model, "Default model updated");
     }
 
-    /// Gets the default model for a provider
-    #[allow(dead_code)] // API completeness - configuration access
-    pub async fn get_default_model(&self, provider: ProviderType) -> String {
-        let config = self.config.read().await;
-        match provider {
-            ProviderType::Mistral => config.mistral_model.clone(),
-            ProviderType::Ollama => config.ollama_model.clone(),
-            ProviderType::Custom(_) => String::new(),
-        }
-    }
-
     /// Gets available models for a provider
+    #[cfg(test)]
     pub fn get_available_models(&self, provider: ProviderType) -> Vec<String> {
         match provider {
             ProviderType::Mistral => self.mistral.available_models(),
@@ -386,27 +298,6 @@ impl ProviderManager {
                 .map(|guard| guard.get(name).map(|p| p.is_configured()).unwrap_or(false))
                 .unwrap_or(false),
         }
-    }
-
-    /// Gets all configured providers
-    #[allow(dead_code)] // API completeness - provider inspection
-    pub fn get_configured_providers(&self) -> Vec<ProviderType> {
-        let mut providers = Vec::new();
-        if self.mistral.is_configured() {
-            providers.push(ProviderType::Mistral);
-        }
-        if self.ollama.is_configured() {
-            providers.push(ProviderType::Ollama);
-        }
-        // Custom providers added at runtime
-        if let Ok(guard) = self.custom_providers.try_read() {
-            for (name, p) in guard.iter() {
-                if p.is_configured() {
-                    providers.push(ProviderType::Custom(name.clone()));
-                }
-            }
-        }
-        providers
     }
 
     /// Completes a prompt using a specific provider with automatic retry.
@@ -653,14 +544,68 @@ impl ProviderManager {
         result
     }
 
-    /// Gets reference to Mistral provider
-    pub fn mistral(&self) -> &Arc<MistralProvider> {
-        &self.mistral
-    }
-
     /// Gets reference to Ollama provider
     pub fn ollama(&self) -> &Arc<OllamaProvider> {
         &self.ollama
+    }
+}
+
+#[cfg(test)]
+impl ProviderManager {
+    /// Gets the circuit breaker status for a provider (test-only).
+    pub async fn get_circuit_breaker_status(
+        &self,
+        provider: ProviderType,
+    ) -> Option<super::circuit_breaker::CircuitBreakerStats> {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            Some(breaker.stats().await)
+        } else {
+            None
+        }
+    }
+
+    /// Resets the circuit breaker for a provider (test-only).
+    pub async fn reset_circuit_breaker(&self, provider: ProviderType) {
+        let breakers = self.circuit_breakers.read().await;
+        if let Some(breaker) = breakers.get(&provider) {
+            breaker.reset().await;
+            info!(provider = %provider, "Circuit breaker manually reset");
+        }
+    }
+
+    /// Gets the active provider type (test-only).
+    pub async fn get_active_provider(&self) -> ProviderType {
+        self.config.read().await.active_provider.clone()
+    }
+
+    /// Gets the default model for a provider (test-only).
+    pub async fn get_default_model(&self, provider: ProviderType) -> String {
+        let config = self.config.read().await;
+        match provider {
+            ProviderType::Mistral => config.mistral_model.clone(),
+            ProviderType::Ollama => config.ollama_model.clone(),
+            ProviderType::Custom(_) => String::new(),
+        }
+    }
+
+    /// Gets all configured providers (test-only).
+    pub fn get_configured_providers(&self) -> Vec<ProviderType> {
+        let mut providers = Vec::new();
+        if self.mistral.is_configured() {
+            providers.push(ProviderType::Mistral);
+        }
+        if self.ollama.is_configured() {
+            providers.push(ProviderType::Ollama);
+        }
+        if let Ok(guard) = self.custom_providers.try_read() {
+            for (name, p) in guard.iter() {
+                if p.is_configured() {
+                    providers.push(ProviderType::Custom(name.clone()));
+                }
+            }
+        }
+        providers
     }
 }
 

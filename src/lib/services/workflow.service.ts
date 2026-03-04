@@ -113,7 +113,7 @@ export const WorkflowService = {
 	 * @returns Complete workflow state
 	 */
 	async getFullState(workflowId: string): Promise<WorkflowFullState> {
-		return invoke<WorkflowFullState>('get_workflow_full_state', { workflowId });
+		return invoke<WorkflowFullState>('load_workflow_full_state', { workflowId });
 	},
 
 	/**

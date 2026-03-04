@@ -39,9 +39,10 @@ impl ReasoningEffort {
 }
 
 /// Agent lifecycle type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
+    #[default]
     Permanent,
     Temporary,
 }
@@ -79,21 +80,27 @@ pub struct Agent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Unique identifier
+    #[serde(default)]
     pub id: String,
     /// Agent name
+    #[serde(default = "default_agent_name")]
     pub name: String,
     /// Lifecycle type
+    #[serde(default)]
     pub lifecycle: Lifecycle,
     /// LLM configuration
+    #[serde(default = "default_llm_config")]
     pub llm: LLMConfig,
     /// List of available tools
     ///
     /// Valid tool names include:
     /// - `MemoryTool` - Contextual memory with semantic search
     /// - `TodoTool` - Task management for workflow decomposition
+    #[serde(default)]
     pub tools: Vec<String>,
     /// MCP server NAMES (not IDs) that the agent can use
     /// Example: ["Serena", "Context7"]
+    #[serde(default)]
     pub mcp_servers: Vec<String>,
     /// Skill names assigned to this agent (read via ReadSkillTool)
     /// Example: ["coding-standards", "git-workflow"]
@@ -106,6 +113,7 @@ pub struct AgentConfig {
     #[serde(default = "default_require_file_confirmation")]
     pub require_file_confirmation: bool,
     /// System prompt
+    #[serde(default = "default_system_prompt")]
     pub system_prompt: String,
     /// Maximum number of tool execution iterations (1-200, default: 50)
     #[serde(default = "default_max_tool_iterations")]
@@ -124,6 +132,24 @@ fn default_max_tool_iterations() -> usize {
 /// Default value for require_file_confirmation
 fn default_require_file_confirmation() -> bool {
     true
+}
+
+fn default_agent_name() -> String {
+    "Unknown".to_string()
+}
+
+fn default_system_prompt() -> String {
+    "You are a helpful assistant.".to_string()
+}
+
+fn default_llm_config() -> LLMConfig {
+    LLMConfig {
+        provider: default_llm_provider(),
+        model: default_llm_model(),
+        temperature: default_temperature(),
+        max_tokens: default_max_tokens(),
+        is_reasoning: false,
+    }
 }
 
 #[allow(dead_code)]
@@ -149,16 +175,36 @@ impl AgentConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMConfig {
     /// Provider name (e.g., "Mistral", "Ollama")
+    #[serde(default = "default_llm_provider")]
     pub provider: String,
     /// Model name
+    #[serde(default = "default_llm_model")]
     pub model: String,
     /// Sampling temperature
+    #[serde(default = "default_temperature")]
     pub temperature: f32,
     /// Maximum tokens to generate
+    #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
     /// Whether the model is a reasoning/thinking model (from DB)
     #[serde(default)]
     pub is_reasoning: bool,
+}
+
+fn default_llm_provider() -> String {
+    "Mistral".to_string()
+}
+
+fn default_llm_model() -> String {
+    "mistral-large-latest".to_string()
+}
+
+fn default_temperature() -> f32 {
+    0.7
+}
+
+fn default_max_tokens() -> usize {
+    4096
 }
 
 /// Agent configuration for creation (without ID, timestamps)

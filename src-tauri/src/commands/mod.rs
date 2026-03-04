@@ -22,9 +22,10 @@
 //!
 //! ### Workflow Commands ([`workflow`])
 //! - `create_workflow` - Create new workflow
-//! - `execute_workflow` - Execute workflow with message
 //! - `load_workflows` - List all workflows
+//! - `rename_workflow` - Rename an existing workflow
 //! - `delete_workflow` - Delete workflow by ID
+//! - `load_workflow_full_state` - Load complete workflow state for recovery
 //!
 //! ### Agent Commands ([`agent`])
 //! - `list_agents` - List registered agent IDs
@@ -34,17 +35,6 @@
 //! - `save_api_key` - Securely store API key
 //! - `get_api_key` - Retrieve stored API key
 //! - `delete_api_key` - Remove stored API key
-//!
-//! ### LLM Commands ([`llm`])
-//! - `get_llm_config` - Get current LLM configuration
-//! - `configure_mistral` - Configure Mistral provider
-//! - `configure_ollama` - Configure Ollama provider
-//! - `set_active_provider` - Set active LLM provider
-//! - `set_default_model` - Set default model for provider
-//! - `get_available_models` - Get available models
-//! - `test_ollama_connection` - Test Ollama connectivity
-//! - `test_mistral_connection` - Test Mistral connectivity
-//! - `test_llm_completion` - Test LLM completion
 //!
 //! ### Model Commands ([`llm_models`])
 //! - `list_models` - List all LLM models (builtin + custom)
@@ -127,6 +117,9 @@
 //! ### Migration Commands ([`migration`])
 //! - `migrate_memory_schema` - Migrate memory table for vector search
 //! - `get_memory_schema_status` - Get memory schema status
+//! - `migrate_mcp_http_schema` - Migrate MCP schema for HTTP support
+//! - `migrate_memory_v2_schema` - Migrate memory table for v2 (importance + TTL)
+//! - `migrate_reasoning_effort` - Migrate agent enable_thinking to reasoning_effort
 //!
 //! ### Embedding Commands ([`embedding`])
 //! - `get_embedding_config` - Get current embedding configuration
@@ -160,7 +153,6 @@ pub mod custom_provider;
 pub mod embedding;
 pub mod file_manager;
 pub mod import_export;
-pub mod llm;
 pub mod llm_models;
 pub mod mcp;
 pub mod memory;
