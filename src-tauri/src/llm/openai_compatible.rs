@@ -723,7 +723,9 @@ mod tests {
         // System message should be converted to multipart with cache_control
         let system = &result[0];
         assert_eq!(system["role"], "system");
-        let content = system["content"].as_array().expect("content should be array");
+        let content = system["content"]
+            .as_array()
+            .expect("content should be array");
         assert_eq!(content.len(), 1);
         assert_eq!(content[0]["type"], "text");
         assert_eq!(content[0]["text"], "You are a helpful assistant.");
@@ -759,7 +761,9 @@ mod tests {
         let result = apply_prompt_cache_control(&messages);
 
         // Non-string content should pass through unchanged
-        let content = result[0]["content"].as_array().expect("should remain array");
+        let content = result[0]["content"]
+            .as_array()
+            .expect("should remain array");
         assert_eq!(content[0]["text"], "Already multipart");
         assert!(content[0].get("cache_control").is_none());
     }

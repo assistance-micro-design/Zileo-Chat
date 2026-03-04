@@ -5,6 +5,52 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-03-03
+
+### Added
+
+- **Prompt Caching Metrics**: Full prompt caching support with cost tracking
+  - `cache_control` injection on system messages for Anthropic-compatible providers (`apply_prompt_cache_control`)
+  - `TokenUsage` struct replacing tuple returns from `extract_usage()` across all LLM adapters (OpenAI, Mistral, Ollama)
+  - `IterationMetrics` struct for per-API-call metrics (tokens, cost, duration, cache hits)
+  - 3-tier input pricing: regular, cache-read, cache-write with `calculate_cost_with_cache()` in `pricing.rs`
+  - Cache pricing fields on model schema (`cache_read_price_per_mtok`, `cache_write_price_per_mtok`)
+  - Cache token display in `TokenDisplay` and `MetricsBar` components
+  - Model form fields for cache pricing configuration
+  - 13 pricing tests covering all cache scenarios (free reads, 50% reads, 1.25x writes, overflow clamping)
+- **FileManagerTool** (#63): Sandboxed filesystem operations for LLM agents
+  - 10 operations: list, read, write, replace, create, delete, move, rename, search_glob, search_content
+  - Per-agent folder sandboxing with 6-layer path validation
+  - Trash-based safe deletion with timestamped backups (30-day retention, 100MB cap)
+  - Integration with ValidationHelper for destructive ops (High risk for delete, Medium for write/replace)
+- **Tool Skills System** (#62): Full-stack skill document system
+  - CRUD backend (5 commands), ReadSkillTool (hidden, auto-injected)
+  - Frontend Settings > Skills UI with category filters, enable/disable toggle
+  - Agent form skills selection, prompt `{{skill:name}}` syntax
+  - i18n translations (FR/EN)
+
+### Changed
+
+- **Cumulative Token Tracking**: Fixed token accumulation from last-call-only to proper cumulative addition (`+=`)
+- **Token Store**: Replaced `updateStreamingTokens()` and `setInputTokens()` with unified `setSessionTokens()` API
+- **Import/Export**: Added cache pricing fields to model export/import
+- **Validation Schema**: Added cache pricing fields to model validation
+
+### Fixed
+
+- **seed_builtin_models**: Added missing `cache_write_price_per_mtok` field that was silently defaulting to 0
+- **Modal Positioning** (#59): Removed CSS `contain: content` that broke `position: fixed` modals in settings
+- **confirm() Migration** (#59): Replaced 8 `window.confirm()` calls with `DeleteConfirmModal` across 5 settings files
+- **Backend Code Quality** (#61): Extracted duplicate `Regex::new()` to `static LazyLock`, replaced `expect()` with `?` in `AppState::new()`
+- **Frontend Cleanup** (#60): Standardized error handling, removed SA-xxx references from component headers, untracked internal docs
+
+### Maintenance
+
+- **CI** (#57): Removed redundant Validate run on push to main (was duplicating ~23min CI run after every merge)
+- **Dependencies** (#58): Batch dependency updates March 2026 (6 Dependabot PRs)
+
+---
+
 ## [0.13.0] - 2026-03-01
 
 ### Added
@@ -389,6 +435,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.14.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.14.0
 [0.13.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.13.0
 [0.12.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.12.0
 [0.11.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.11.0
@@ -398,4 +445,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.14.0...HEAD
