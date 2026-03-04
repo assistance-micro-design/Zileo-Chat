@@ -20,6 +20,7 @@ use super::ollama::OllamaProvider;
 use super::openai_compatible::OpenAiCompatibleProvider;
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use super::retry::{with_retry, RetryConfig};
+use crate::models::agent::ReasoningEffort;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -408,143 +409,6 @@ impl ProviderManager {
         providers
     }
 
-    /// Completes a prompt using the active provider with automatic retry.
-    ///
-    /// This method wraps the provider completion with retry logic
-    /// and circuit breaker protection.
-    ///
-    /// Transient errors (network issues, rate limits) are retried with exponential
-    /// backoff, while non-recoverable errors (auth failures, bad requests) fail immediately.
-    /// If the provider's circuit breaker is open, the request fails immediately with
-    /// CircuitOpen error.
-    #[instrument(
-        name = "manager_complete",
-        skip(self, prompt, system_prompt),
-        fields(prompt_len = prompt.len())
-    )]
-    pub async fn complete(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        is_reasoning: bool,
-    ) -> Result<LLMResponse, LLMError> {
-        let (provider_type, model_to_use) = {
-            let config = self.config.read().await;
-            let provider = config.active_provider.clone();
-            let model_str = model
-                .map(|m| m.to_string())
-                .unwrap_or_else(|| match &provider {
-                    ProviderType::Mistral => config.mistral_model.clone(),
-                    ProviderType::Ollama => config.ollama_model.clone(),
-                    ProviderType::Custom(_) => String::new(),
-                });
-            (provider, model_str)
-        };
-
-        // Check circuit breaker before making request
-        self.check_circuit_breaker(provider_type.clone()).await?;
-
-        debug!(
-            ?provider_type,
-            model = %model_to_use,
-            "Executing completion via manager"
-        );
-
-        // Clone values for the retry closure
-        let prompt_owned = prompt.to_string();
-        let system_prompt_owned = system_prompt.map(|s| s.to_string());
-        let model_owned = model_to_use.clone();
-
-        // Execute with retry
-        let result = match &provider_type {
-            ProviderType::Mistral => {
-                let mistral = self.mistral.clone();
-                with_retry(
-                    || {
-                        let p = prompt_owned.clone();
-                        let sp = system_prompt_owned.clone();
-                        let m = model_owned.clone();
-                        let provider = mistral.clone();
-                        async move {
-                            provider
-                                .complete(
-                                    &p,
-                                    sp.as_deref(),
-                                    Some(&m),
-                                    temperature,
-                                    max_tokens,
-                                    is_reasoning,
-                                )
-                                .await
-                        }
-                    },
-                    &self.retry_config,
-                )
-                .await
-            }
-            ProviderType::Ollama => {
-                let ollama = self.ollama.clone();
-                with_retry(
-                    || {
-                        let p = prompt_owned.clone();
-                        let sp = system_prompt_owned.clone();
-                        let m = model_owned.clone();
-                        let provider = ollama.clone();
-                        async move {
-                            provider
-                                .complete(
-                                    &p,
-                                    sp.as_deref(),
-                                    Some(&m),
-                                    temperature,
-                                    max_tokens,
-                                    is_reasoning,
-                                )
-                                .await
-                        }
-                    },
-                    &self.retry_config,
-                )
-                .await
-            }
-            ProviderType::Custom(ref name) => {
-                let custom = self
-                    .custom_providers
-                    .read()
-                    .await
-                    .get(name)
-                    .cloned()
-                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
-                with_retry(
-                    || {
-                        let p = prompt_owned.clone();
-                        let sp = system_prompt_owned.clone();
-                        let m = model_owned.clone();
-                        let provider = custom.clone();
-                        async move {
-                            provider
-                                .complete(&p, sp.as_deref(), &m, temperature, max_tokens)
-                                .await
-                        }
-                    },
-                    &self.retry_config,
-                )
-                .await
-            }
-        };
-
-        // Record result for circuit breaker
-        match &result {
-            Ok(_) => self.record_circuit_success(provider_type).await,
-            Err(_) => self.record_circuit_failure(provider_type).await,
-        }
-
-        result
-    }
-
     /// Completes a prompt using a specific provider with automatic retry.
     ///
     /// This method wraps the provider completion with retry logic
@@ -558,7 +422,7 @@ impl ProviderManager {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
-        is_reasoning: bool,
+        reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<LLMResponse, LLMError> {
         // Check circuit breaker before making request
         self.check_circuit_breaker(provider.clone()).await?;
@@ -577,6 +441,7 @@ impl ProviderManager {
                         let sp = system_prompt_owned.clone();
                         let m = model_owned.clone();
                         let prov = mistral.clone();
+                        let effort = reasoning_effort.clone();
                         async move {
                             prov.complete(
                                 &p,
@@ -584,7 +449,7 @@ impl ProviderManager {
                                 m.as_deref(),
                                 temperature,
                                 max_tokens,
-                                is_reasoning,
+                                effort,
                             )
                             .await
                         }
@@ -601,6 +466,7 @@ impl ProviderManager {
                         let sp = system_prompt_owned.clone();
                         let m = model_owned.clone();
                         let prov = ollama.clone();
+                        let effort = reasoning_effort.clone();
                         async move {
                             prov.complete(
                                 &p,
@@ -608,7 +474,7 @@ impl ProviderManager {
                                 m.as_deref(),
                                 temperature,
                                 max_tokens,
-                                is_reasoning,
+                                effort,
                             )
                             .await
                         }
@@ -631,10 +497,18 @@ impl ProviderManager {
                         let sp = system_prompt_owned.clone();
                         let m = model_owned.clone();
                         let prov = custom.clone();
+                        let effort = reasoning_effort.clone();
                         async move {
                             let model_str = m.unwrap_or_default();
-                            prov.complete(&p, sp.as_deref(), &model_str, temperature, max_tokens)
-                                .await
+                            prov.complete(
+                                &p,
+                                sp.as_deref(),
+                                &model_str,
+                                temperature,
+                                max_tokens,
+                                effort,
+                            )
+                            .await
                         }
                     },
                     &self.retry_config,
@@ -657,6 +531,11 @@ impl ProviderManager {
     /// This method is used for JSON function calling with tool definitions.
     /// Includes retry logic with exponential backoff and circuit
     /// breaker protection.
+    ///
+    /// Note: This method intentionally does not accept `reasoning_effort`.
+    /// Most LLM providers do not support simultaneous tool calling and
+    /// extended thinking. The initial completion (before the tool loop)
+    /// uses `reasoning_effort` via `complete_with_provider()`.
     ///
     /// # Arguments
     /// * `provider` - Which provider to use
@@ -918,7 +797,7 @@ mod tests {
         let manager = ProviderManager::new().expect("test provider manager");
 
         let result = manager
-            .complete("Hello", None, None, 0.7, 1000, false)
+            .complete_with_provider(ProviderType::Mistral, "Hello", None, None, 0.7, 1000, None)
             .await;
 
         assert!(result.is_err());

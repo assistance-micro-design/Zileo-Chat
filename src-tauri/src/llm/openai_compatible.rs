@@ -22,6 +22,7 @@
 //! a polymorphic content deserializer (string or array of content blocks).
 
 use super::provider::{LLMError, LLMResponse, ProviderType};
+use crate::models::agent::ReasoningEffort;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -40,6 +41,10 @@ struct ChatRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
+    /// OpenAI-compatible reasoning effort parameter.
+    /// Sent as `"reasoning_effort": "low"/"medium"/"high"` for providers that support it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 /// Message in OpenAI API format
@@ -65,13 +70,22 @@ struct ChatChoice {
     finish_reason: Option<String>,
 }
 
+/// Parsed content separating text from thinking blocks
+#[derive(Debug, Clone)]
+struct ParsedContent {
+    /// The text content (final answer)
+    text: String,
+    /// Thinking content from reasoning models (if present)
+    thinking: Option<String>,
+}
+
 /// Response message - content can be string or array of content blocks
 #[derive(Debug, Deserialize)]
 struct ChatResponseMessage {
     #[allow(dead_code)]
     role: String,
     #[serde(deserialize_with = "deserialize_content")]
-    content: String,
+    content: ParsedContent,
 }
 
 /// Content block for reasoning models (thinking or text)
@@ -135,8 +149,8 @@ struct ToolChatRequest {
 // ============================================================================
 
 /// Custom deserializer for content field that handles both string and array formats.
-/// Copied from mistral.rs to avoid modifying that file.
-fn deserialize_content<'de, D>(deserializer: D) -> Result<String, D::Error>
+/// Extracts thinking content from reasoning models into ParsedContent.
+fn deserialize_content<'de, D>(deserializer: D) -> Result<ParsedContent, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -145,7 +159,7 @@ where
     struct ContentVisitor;
 
     impl<'de> Visitor<'de> for ContentVisitor {
-        type Value = String;
+        type Value = ParsedContent;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a string or an array of content blocks")
@@ -155,37 +169,57 @@ where
         where
             E: de::Error,
         {
-            Ok(value.to_string())
+            Ok(ParsedContent {
+                text: value.to_string(),
+                thinking: None,
+            })
         }
 
         fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
         where
             E: de::Error,
         {
-            Ok(value)
+            Ok(ParsedContent {
+                text: value,
+                thinking: None,
+            })
         }
 
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
         where
             A: de::SeqAccess<'de>,
         {
-            let mut result = String::new();
+            let mut text_parts = String::new();
+            let mut thinking_parts = String::new();
 
             while let Some(block) = seq.next_element::<ContentBlock>()? {
                 match block {
                     ContentBlock::Thinking { thinking } => {
+                        for tb in &thinking {
+                            if !thinking_parts.is_empty() {
+                                thinking_parts.push('\n');
+                            }
+                            thinking_parts.push_str(&tb.text);
+                        }
                         debug!("Reasoning model thinking blocks: {} items", thinking.len());
                     }
                     ContentBlock::Text { text } => {
-                        if !result.is_empty() {
-                            result.push('\n');
+                        if !text_parts.is_empty() {
+                            text_parts.push('\n');
                         }
-                        result.push_str(&text);
+                        text_parts.push_str(&text);
                     }
                 }
             }
 
-            Ok(result)
+            Ok(ParsedContent {
+                text: text_parts,
+                thinking: if thinking_parts.is_empty() {
+                    None
+                } else {
+                    Some(thinking_parts)
+                },
+            })
         }
     }
 
@@ -334,6 +368,7 @@ impl OpenAiCompatibleProvider {
         model: &str,
         temperature: f32,
         max_tokens: usize,
+        reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<LLMResponse, LLMError> {
         let api_key = self
             .api_key
@@ -364,6 +399,7 @@ impl OpenAiCompatibleProvider {
             messages,
             temperature: Some(temperature),
             max_tokens: Some(max_tokens),
+            reasoning_effort: reasoning_effort.map(|e| e.as_str().to_string()),
         };
 
         let url = format!("{}/chat/completions", base_url);
@@ -423,8 +459,16 @@ impl OpenAiCompatibleProvider {
             .next()
             .ok_or_else(|| LLMError::RequestFailed("No choices in response".to_string()))?;
 
-        let content = choice.message.content;
+        let parsed = choice.message.content;
+        let content = parsed.text;
+        let mut thinking_content = parsed.thinking;
         let finish_reason = choice.finish_reason;
+
+        // Best-effort: extract thinking from alternative response formats
+        // if not already found via content blocks
+        if thinking_content.is_none() {
+            thinking_content = Self::extract_thinking_from_raw(&body);
+        }
 
         let (tokens_input, tokens_output) = if let Some(usage) = chat_response.usage {
             (usage.prompt_tokens, usage.completion_tokens)
@@ -441,6 +485,7 @@ impl OpenAiCompatibleProvider {
             tokens_input = tokens_input,
             tokens_output = tokens_output,
             response_len = content.len(),
+            has_thinking = thinking_content.is_some(),
             "Custom provider completion successful"
         );
 
@@ -451,7 +496,10 @@ impl OpenAiCompatibleProvider {
             model: model.to_string(),
             provider: ProviderType::Custom(self.provider_name.clone()),
             finish_reason,
-            thinking_content: None,
+            thinking_tokens: thinking_content
+                .as_ref()
+                .map(|t| crate::llm::utils::estimate_tokens(t)),
+            thinking_content,
         })
     }
 
@@ -567,6 +615,16 @@ impl OpenAiCompatibleProvider {
         }
 
         Ok(json_response)
+    }
+
+    /// Best-effort extraction of thinking content from raw JSON response body.
+    ///
+    /// Delegates to [`crate::llm::utils::extract_thinking_from_message`] after
+    /// parsing the JSON and navigating to `choices[0].message`.
+    fn extract_thinking_from_raw(body: &str) -> Option<String> {
+        let json: serde_json::Value = serde_json::from_str(body).ok()?;
+        let message = json.pointer("/choices/0/message")?;
+        crate::llm::utils::extract_thinking_from_message(message)
     }
 
     /// Tests connection by making a GET request to `{base_url}/models`.
@@ -695,7 +753,8 @@ mod tests {
     fn test_deserialize_standard_content() {
         let json = r#"{"role": "assistant", "content": "Hello world"}"#;
         let msg: ChatResponseMessage = serde_json::from_str(json).expect("parse should succeed");
-        assert_eq!(msg.content, "Hello world");
+        assert_eq!(msg.content.text, "Hello world");
+        assert!(msg.content.thinking.is_none());
     }
 
     #[test]
@@ -708,7 +767,29 @@ mod tests {
             ]
         }"#;
         let msg: ChatResponseMessage = serde_json::from_str(json).expect("parse should succeed");
-        assert_eq!(msg.content, "The answer is 42");
+        assert_eq!(msg.content.text, "The answer is 42");
+        assert_eq!(msg.content.thinking, Some("Let me think...".to_string()));
+    }
+
+    #[test]
+    fn test_extract_thinking_from_raw_reasoning_field() {
+        let body = r#"{"choices": [{"message": {"role": "assistant", "content": "Answer", "reasoning": "Step 1..."}}]}"#;
+        let result = OpenAiCompatibleProvider::extract_thinking_from_raw(body);
+        assert_eq!(result, Some("Step 1...".to_string()));
+    }
+
+    #[test]
+    fn test_extract_thinking_from_raw_reasoning_details() {
+        let body = r#"{"choices": [{"message": {"role": "assistant", "content": "Answer", "reasoning_details": [{"text": "Step 1"}, {"text": "Step 2"}]}}]}"#;
+        let result = OpenAiCompatibleProvider::extract_thinking_from_raw(body);
+        assert_eq!(result, Some("Step 1\nStep 2".to_string()));
+    }
+
+    #[test]
+    fn test_extract_thinking_from_raw_none() {
+        let body = r#"{"choices": [{"message": {"role": "assistant", "content": "Answer"}}]}"#;
+        let result = OpenAiCompatibleProvider::extract_thinking_from_raw(body);
+        assert!(result.is_none());
     }
 
     #[test]

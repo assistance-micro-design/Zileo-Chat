@@ -15,6 +15,29 @@
 use crate::tools::registry::TOOL_REGISTRY;
 use serde::{Deserialize, Serialize};
 
+/// Reasoning effort level for thinking models.
+///
+/// Controls how much reasoning/thinking the model performs.
+/// Only effective when the model supports reasoning (is_reasoning = true).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    Low,
+    Medium,
+    High,
+}
+
+impl ReasoningEffort {
+    /// Returns the string representation matching serde serialization.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReasoningEffort::Low => "low",
+            ReasoningEffort::Medium => "medium",
+            ReasoningEffort::High => "high",
+        }
+    }
+}
+
 /// Agent lifecycle type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,19 +110,15 @@ pub struct AgentConfig {
     /// Maximum number of tool execution iterations (1-200, default: 50)
     #[serde(default = "default_max_tool_iterations")]
     pub max_tool_iterations: usize,
-    /// Enable thinking mode for supported models (default: true for thinking models)
-    #[serde(default = "default_enable_thinking")]
-    pub enable_thinking: bool,
+    /// Reasoning effort for thinking models (None = disabled)
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 /// Default value for max_tool_iterations
 fn default_max_tool_iterations() -> usize {
     50
-}
-
-/// Default value for enable_thinking
-fn default_enable_thinking() -> bool {
-    true
 }
 
 /// Default value for require_file_confirmation
@@ -169,9 +188,10 @@ pub struct AgentConfigCreate {
     /// Maximum number of tool execution iterations (1-200, default: 50)
     #[serde(default = "default_max_tool_iterations")]
     pub max_tool_iterations: usize,
-    /// Enable thinking mode for supported models (default: true for thinking models)
-    #[serde(default = "default_enable_thinking")]
-    pub enable_thinking: bool,
+    /// Reasoning effort for thinking models (None = disabled)
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 /// Agent configuration for updates (all fields optional except lifecycle which cannot change)
@@ -204,9 +224,9 @@ pub struct AgentConfigUpdate {
     /// Maximum number of tool execution iterations (1-200)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tool_iterations: Option<usize>,
-    /// Enable thinking mode for supported models
+    /// Reasoning effort for thinking models
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_thinking: Option<bool>,
+    pub reasoning_effort: Option<Option<ReasoningEffort>>,
 }
 
 /// Agent summary for listing (lightweight representation)
@@ -253,6 +273,79 @@ impl From<&AgentConfig> for AgentSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_reasoning_effort_serialization() {
+        let low = ReasoningEffort::Low;
+        let json = serde_json::to_string(&low).unwrap();
+        assert_eq!(json, "\"low\"");
+
+        let medium: ReasoningEffort = serde_json::from_str("\"medium\"").unwrap();
+        assert_eq!(medium, ReasoningEffort::Medium);
+
+        let high: ReasoningEffort = serde_json::from_str("\"high\"").unwrap();
+        assert_eq!(high, ReasoningEffort::High);
+    }
+
+    #[test]
+    fn test_agent_config_with_reasoning_effort() {
+        let config = AgentConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: true,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: Some(ReasoningEffort::Medium),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"reasoning_effort\":\"medium\""));
+
+        let deserialized: AgentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.reasoning_effort, Some(ReasoningEffort::Medium));
+    }
+
+    #[test]
+    fn test_agent_config_without_reasoning_effort() {
+        let config = AgentConfig {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: false,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "Test".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("reasoning_effort"));
+
+        let deserialized: AgentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.reasoning_effort, None);
+    }
 
     #[test]
     fn test_lifecycle_serialization() {
@@ -327,7 +420,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -379,7 +472,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         assert!(config.has_valid_tools());
@@ -410,7 +503,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         assert!(!config.has_valid_tools());
@@ -448,7 +541,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         assert!(config.has_valid_tools());

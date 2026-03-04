@@ -26,7 +26,7 @@
  * @module types/import-export
  */
 
-import type { AgentSummary, LLMConfig } from './agent';
+import type { AgentSummary, LLMConfig, ReasoningEffort } from './agent';
 import type { PromptSummary } from './prompt';
 
 // ============ EXPORT TYPES ============
@@ -133,8 +133,8 @@ export interface AgentExportData {
 	skills: string[];
 	systemPrompt: string;
 	maxToolIterations: number;
-	/** Enable thinking mode for supported models (default: true for thinking models) */
-	enableThinking: boolean;
+	/** Reasoning effort for thinking models (null = disabled) */
+	reasoningEffort: ReasoningEffort | null;
 	createdAt?: string;
 	updatedAt?: string;
 }

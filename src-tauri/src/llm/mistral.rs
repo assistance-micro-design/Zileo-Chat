@@ -19,6 +19,7 @@
 //! that requires custom HTTP handling.
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use crate::models::agent::ReasoningEffort;
 use async_trait::async_trait;
 use rig::completion::Prompt;
 use rig::providers::mistral;
@@ -458,6 +459,9 @@ impl MistralProvider {
             model: model.to_string(),
             provider: ProviderType::Mistral,
             finish_reason,
+            thinking_tokens: thinking_content
+                .as_ref()
+                .map(|t| crate::llm::utils::estimate_tokens(t)),
             thinking_content,
         })
     }
@@ -618,16 +622,17 @@ impl LLMProvider for MistralProvider {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
-        is_reasoning: bool,
+        reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<LLMResponse, LLMError> {
         let model_name = model.unwrap_or("mistral-large-latest");
 
         // Use custom HTTP client for reasoning models (e.g. Magistral)
         // because rig-core doesn't support their response format.
-        // is_reasoning comes from the DB (set by user when creating the model).
-        if is_reasoning {
+        // Mistral auto-thinks based on model type; no effort param sent.
+        if reasoning_effort.is_some() {
             debug!(
                 model = model_name,
+                effort = ?reasoning_effort,
                 "Using custom HTTP client for reasoning model"
             );
             return self
@@ -685,6 +690,7 @@ impl LLMProvider for MistralProvider {
             provider: ProviderType::Mistral,
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
+            thinking_tokens: None,
         })
     }
 }
@@ -764,7 +770,7 @@ mod tests {
         let provider = test_mistral_provider();
 
         let result = provider
-            .complete("Hello", None, None, 0.7, 1000, false)
+            .complete("Hello", None, None, 0.7, 1000, None)
             .await;
 
         assert!(result.is_err());

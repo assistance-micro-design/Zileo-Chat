@@ -79,7 +79,7 @@ describe('Agent Store', () => {
 		require_file_confirmation: true,
 		system_prompt: 'You are a helpful assistant.',
 		max_tool_iterations: 50,
-		enable_thinking: true
+		reasoning_effort: null
 	});
 
 	beforeEach(() => {
@@ -162,7 +162,7 @@ describe('Agent Store', () => {
 				require_file_confirmation: true,
 				system_prompt: 'Test prompt',
 				max_tool_iterations: 50,
-				enable_thinking: true
+				reasoning_effort: null
 			};
 
 			mockInvoke.mockResolvedValueOnce(newAgentId); // create_agent
@@ -193,7 +193,7 @@ describe('Agent Store', () => {
 				require_file_confirmation: true,
 				system_prompt: '',
 				max_tool_iterations: 50,
-				enable_thinking: true
+				reasoning_effort: null
 			};
 
 			mockInvoke.mockRejectedValueOnce(new Error('Validation failed'));

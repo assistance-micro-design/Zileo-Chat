@@ -128,7 +128,7 @@ const agentId = await agentStore.createAgent({
   mcp_servers: ['serena'],
   system_prompt: 'You are a helpful assistant...',
   max_tool_iterations: 50,  // 1-200
-  enable_thinking: true     // For thinking models
+  reasoning_effort: 'medium' // For thinking models: 'low', 'medium', 'high', or null
 });
 
 // Lister les agents

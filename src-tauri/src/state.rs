@@ -380,7 +380,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         let agent = SimpleAgent::new(config);

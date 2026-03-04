@@ -34,6 +34,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::models::agent::ReasoningEffort;
+
 // ============================================================================
 // Export Types
 // ============================================================================
@@ -167,18 +169,13 @@ pub struct AgentExportData {
     pub skills: Vec<String>,
     pub system_prompt: String,
     pub max_tool_iterations: usize,
-    /// Enable thinking mode for supported models (default: true for thinking models)
-    #[serde(default = "default_enable_thinking")]
-    pub enable_thinking: bool,
+    /// Reasoning effort for thinking models (None = disabled)
+    #[serde(default)]
+    pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
-}
-
-/// Default value for enable_thinking
-fn default_enable_thinking() -> bool {
-    true
 }
 
 /// LLM config for export (simplified).

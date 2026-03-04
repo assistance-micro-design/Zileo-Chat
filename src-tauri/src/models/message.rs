@@ -76,6 +76,9 @@ pub struct Message {
     /// Generation duration in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// Thinking/reasoning tokens (for reasoning models)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u64>,
     /// Message timestamp
     pub timestamp: DateTime<Utc>,
 }
@@ -112,6 +115,9 @@ pub struct MessageCreate {
     /// Duration in milliseconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// Thinking/reasoning tokens (for reasoning models)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u64>,
 }
 
 /// Response for paginated message loading.
@@ -146,6 +152,7 @@ impl MessageCreate {
             provider: None,
             cost_usd: None,
             duration_ms: None,
+            thinking_tokens: None,
         }
     }
 
@@ -171,6 +178,7 @@ impl MessageCreate {
             provider,
             cost_usd: None, // Cost calculation is provider-specific
             duration_ms,
+            thinking_tokens: None,
         }
     }
 
@@ -188,6 +196,7 @@ impl MessageCreate {
             provider: None,
             cost_usd: None,
             duration_ms: None,
+            thinking_tokens: None,
         }
     }
 }
@@ -234,6 +243,7 @@ mod tests {
             provider: None,
             cost_usd: None,
             duration_ms: None,
+            thinking_tokens: None,
             timestamp: Utc::now(),
         };
 
@@ -261,6 +271,7 @@ mod tests {
             provider: Some("Mistral".to_string()),
             cost_usd: Some(0.001),
             duration_ms: Some(1500),
+            thinking_tokens: Some(25),
             timestamp: Utc::now(),
         };
 

@@ -216,55 +216,6 @@ pub async fn test_mistral_connection(state: State<'_, AppState>) -> Result<bool,
     }
 }
 
-/// Executes a simple LLM completion (for testing)
-#[tauri::command]
-#[instrument(name = "test_llm_completion", skip(state, prompt))]
-pub async fn test_llm_completion(
-    prompt: String,
-    provider: Option<String>,
-    model: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    // Validate prompt
-    if prompt.is_empty() {
-        return Err("Prompt cannot be empty".to_string());
-    }
-
-    // If provider specified, use it; otherwise use active
-    let response = if let Some(p) = provider {
-        let provider_type: ProviderType =
-            p.parse().map_err(|_| format!("Invalid provider: {}", p))?;
-        state
-            .llm_manager
-            .complete_with_provider(
-                provider_type,
-                &prompt,
-                Some("You are a helpful assistant."),
-                model.as_deref(),
-                0.7,
-                1000,
-                false,
-            )
-            .await
-    } else {
-        state
-            .llm_manager
-            .complete(
-                &prompt,
-                Some("You are a helpful assistant."),
-                model.as_deref(),
-                0.7,
-                1000,
-                false,
-            )
-            .await
-    };
-
-    response
-        .map(|r| r.content)
-        .map_err(|e| format!("LLM completion failed: {}", e))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

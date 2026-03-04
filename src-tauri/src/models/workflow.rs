@@ -176,6 +176,9 @@ pub struct IterationMetrics {
     /// Cache-write tokens (if reported by provider)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<usize>,
+    /// Thinking/reasoning tokens for this call (if reasoning model)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<usize>,
     /// Number of messages in the context at this iteration
     pub messages_count: usize,
     /// Number of tool calls made by LLM at this iteration

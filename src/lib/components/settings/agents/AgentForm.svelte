@@ -40,7 +40,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	} from '$lib/stores/llm';
 	import type { ProviderType, LLMState } from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import type { AgentConfig, AgentConfigCreate, Lifecycle } from '$types/agent';
+	import type { AgentConfig, AgentConfigCreate, Lifecycle, ReasoningEffort } from '$types/agent';
 	import type { SkillSummary } from '$types/skill';
 	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
 	import { invoke } from '@tauri-apps/api/core';
@@ -67,7 +67,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let provider = $state('mistral');
 	let model = $state('mistral-large-latest');
 	let maxToolIterations = $state(50);
-	let enableThinking = $state(true);
+	let reasoningEffort = $state<ReasoningEffort | null>(null);
 	let selectedTools = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
 	let selectedSkills = $state<string[]>([]);
@@ -82,7 +82,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		provider = (agent?.llm.provider ?? 'mistral').toLowerCase();
 		model = agent?.llm.model ?? 'mistral-large-latest';
 		maxToolIterations = agent?.max_tool_iterations ?? 50;
-		enableThinking = agent?.enable_thinking ?? true;
+		reasoningEffort = agent?.reasoning_effort ?? null;
 		selectedTools = agent?.tools ?? [];
 		selectedMcpServers = agent?.mcp_servers ?? [];
 		selectedSkills = agent?.skills ?? [];
@@ -281,7 +281,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			require_file_confirmation: requireFileConfirmation,
 			system_prompt: systemPrompt.trim(),
 			max_tool_iterations: maxToolIterations,
-			enable_thinking: enableThinking
+			reasoning_effort: reasoningEffort
 		};
 
 		try {
@@ -472,6 +472,24 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							{/if}
 						{/if}
 					</div>
+
+					{#if selectedModel?.is_reasoning}
+						<div class="form-field">
+							<label class="field-label" for="reasoning-effort">{$i18n('agents_reasoning_effort')}</label>
+							<select
+								id="reasoning-effort"
+								bind:value={reasoningEffort}
+								class="form-select"
+								aria-describedby="reasoning-effort-help"
+							>
+								<option value={null}>{$i18n('agents_reasoning_off')}</option>
+								<option value="low">{$i18n('agents_reasoning_low')}</option>
+								<option value="medium">{$i18n('agents_reasoning_medium')}</option>
+								<option value="high">{$i18n('agents_reasoning_high')}</option>
+							</select>
+							<span id="reasoning-effort-help" class="field-help">{$i18n('agents_reasoning_tooltip')}</span>
+						</div>
+					{/if}
 
 					<Input
 						type="number"

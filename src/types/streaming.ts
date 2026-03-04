@@ -123,6 +123,8 @@ export interface StreamChunk {
   cached_tokens?: number;
   /** Cache-write tokens count (for response_block) */
   cache_write_tokens?: number;
+  /** Thinking/reasoning tokens count (for response_block) */
+  thinking_tokens?: number;
 }
 
 /**

@@ -80,6 +80,7 @@ impl Agent for SimpleAgent {
                 context_tokens: 0,
                 cached_tokens: None,
                 cache_write_tokens: None,
+                thinking_tokens: None,
                 tools_used: vec![],
                 mcp_calls: vec![],
                 tool_executions: vec![],
@@ -149,7 +150,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "You are a test agent.".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         }
     }
 

@@ -315,7 +315,7 @@ mod agent_config_tests {
             folders: vec![],
             require_file_confirmation: true,
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         assert!(config.has_valid_tools());

@@ -136,6 +136,8 @@ pub struct ReportMetrics {
     pub cached_tokens: Option<usize>,
     /// Cache-write tokens (if provider supports prompt caching)
     pub cache_write_tokens: Option<usize>,
+    /// Thinking/reasoning tokens (if reasoning model used)
+    pub thinking_tokens: Option<usize>,
     /// Tools used (names only, for backward compatibility)
     pub tools_used: Vec<String>,
     /// MCP calls made (names only, for backward compatibility)

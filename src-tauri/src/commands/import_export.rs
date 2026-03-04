@@ -689,7 +689,7 @@ async fn export_agents(
 ) -> Result<Vec<AgentExportData>, String> {
     let mut agents = Vec::new();
     for agent_id in agent_ids {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, enable_thinking, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, reasoning_effort, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
             agents.push(AgentExportData {
@@ -727,7 +727,9 @@ async fn export_agents(
                     .unwrap_or_default(),
                 system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
                 max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
-                enable_thinking: row["enable_thinking"].as_bool().unwrap_or(true),
+                reasoning_effort: row["reasoning_effort"].as_str().and_then(|s| {
+                    serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+                }),
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });
@@ -977,7 +979,7 @@ async fn import_agents(
                     "skills": agent.skills,
                     "system_prompt": agent.system_prompt,
                     "max_tool_iterations": agent.max_tool_iterations,
-                    "enable_thinking": agent.enable_thinking,
+                    "reasoning_effort": agent.reasoning_effort,
                 }));
                 match persist_imported_entity(db, "agent", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.agents += 1,

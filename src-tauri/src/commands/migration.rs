@@ -38,6 +38,7 @@ pub struct MigrationResult {
 const MIGRATION_MEMORY_SCHEMA_V1: &str = "memory_schema_v1";
 const MIGRATION_MEMORY_V2_SCHEMA: &str = "memory_v2_schema";
 const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
+const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -372,6 +373,99 @@ pub async fn migrate_mcp_http_schema(
         success: true,
         message: "MCP schema updated to support HTTP deployment method".to_string(),
         records_affected: 0,
+    })
+}
+
+/// SQL for migrating agent table from enable_thinking (bool) to reasoning_effort (enum string).
+///
+/// Changes:
+/// - Converts enable_thinking=true to reasoning_effort='medium'
+/// - Converts enable_thinking=false/NONE to reasoning_effort=NONE
+/// - Removes the old enable_thinking field
+/// - Defines new reasoning_effort field with ASSERT constraint
+const REASONING_EFFORT_MIGRATION: &str = r#"
+-- Step 1: Define reasoning_effort field
+DEFINE FIELD OVERWRITE reasoning_effort ON agent TYPE option<string>
+    ASSERT $value IS NONE OR $value IN ['low', 'medium', 'high']
+    DEFAULT NONE;
+
+-- Step 2: Convert enable_thinking=true to reasoning_effort='medium'
+UPDATE agent SET reasoning_effort = 'medium' WHERE enable_thinking = true;
+
+-- Step 3: Ensure false/NONE -> NONE
+UPDATE agent SET reasoning_effort = NONE WHERE enable_thinking = false OR enable_thinking IS NONE;
+
+-- Step 4: Remove old field
+REMOVE FIELD IF EXISTS enable_thinking ON agent;
+"#;
+
+/// Migrates agent table from enable_thinking (bool) to reasoning_effort (enum).
+///
+/// Converts:
+/// - `enable_thinking: true` -> `reasoning_effort: 'medium'`
+/// - `enable_thinking: false/NONE` -> `reasoning_effort: NONE`
+///
+/// # Safety
+/// Guarded by migration_log to prevent re-execution.
+#[tauri::command]
+#[instrument(name = "migrate_reasoning_effort", skip(state))]
+pub async fn migrate_reasoning_effort(
+    state: State<'_, AppState>,
+) -> Result<MigrationResult, String> {
+    info!("Starting reasoning effort migration (enable_thinking -> reasoning_effort)");
+
+    if check_migration_applied(&state.db, MIGRATION_REASONING_EFFORT).await? {
+        info!("Reasoning effort migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: reasoning_effort_v1".to_string(),
+            records_affected: 0,
+        });
+    }
+
+    // Count agents before migration
+    let count_query = "SELECT count() FROM agent GROUP ALL";
+    let count_result: Vec<serde_json::Value> = state.db.query(count_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count agents");
+        format!("Failed to count agents: {}", e)
+    })?;
+
+    let total_agents = extract_count(&count_result) as usize;
+
+    info!(total_agents = total_agents, "Agents found before migration");
+
+    // Run migration
+    let _: Vec<serde_json::Value> =
+        state
+            .db
+            .query(REASONING_EFFORT_MIGRATION)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Reasoning effort migration failed");
+                format!("Reasoning effort migration failed: {}", e)
+            })?;
+
+    // Record migration
+    record_migration_applied(&state.db, MIGRATION_REASONING_EFFORT).await?;
+
+    let message = if total_agents > 0 {
+        format!(
+            "Reasoning effort migration complete. {} agents converted.",
+            total_agents
+        )
+    } else {
+        "Reasoning effort migration complete. No agents to convert.".to_string()
+    };
+
+    info!(
+        records_affected = total_agents,
+        "Reasoning effort migration completed successfully"
+    );
+
+    Ok(MigrationResult {
+        success: true,
+        message,
+        records_affected: total_agents,
     })
 }
 

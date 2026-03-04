@@ -24,9 +24,10 @@
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Cpu, ArrowDownToLine, CircleDollarSign, Users } from '@lucide/svelte';
+	import { Clock, Cpu, ArrowDownToLine, CircleDollarSign, Users, BrainCircuit } from '@lucide/svelte';
 	import { formatTokenCount } from '$lib/utils/activity';
 	import { formatDuration } from '$lib/utils/duration';
+	import { i18n } from '$lib/i18n';
 
 	/**
 	 * MessageMetrics props
@@ -60,6 +61,12 @@
 				<ArrowDownToLine size={12} />
 				{formatTokenCount(message.tokens_input ?? 0)} / {formatTokenCount(message.tokens_output ?? 0)}
 			</span>
+			{#if message.thinking_tokens && message.thinking_tokens > 0}
+				<span class="metric thinking" title={$i18n('metrics_thinking_tokens')}>
+					<BrainCircuit size={12} />
+					{formatTokenCount(message.thinking_tokens)}
+				</span>
+			{/if}
 		{/if}
 
 		{#if message.duration_ms}
@@ -113,6 +120,10 @@
 		gap: var(--spacing-xs);
 		color: var(--color-text-tertiary);
 		font-family: var(--font-mono);
+	}
+
+	.metric.thinking {
+		color: var(--color-warning, #f59e0b);
 	}
 
 	.sub-agents-bar {

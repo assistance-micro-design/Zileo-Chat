@@ -68,6 +68,7 @@ pub async fn save_message(
     model: Option<String>,
     provider: Option<String>,
     duration_ms: Option<u64>,
+    thinking_tokens: Option<u64>,
     message_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -116,6 +117,7 @@ pub async fn save_message(
         provider,
         cost_usd: None, // Cost calculation is provider-specific (future enhancement)
         duration_ms,
+        thinking_tokens,
     };
 
     // Insert into database
@@ -165,6 +167,7 @@ pub async fn load_workflow_messages(
             provider,
             cost_usd,
             duration_ms,
+            thinking_tokens,
             timestamp
         FROM message
         WHERE workflow_id = '{}'
@@ -244,6 +247,7 @@ pub async fn load_workflow_messages_paginated(
             provider,
             cost_usd,
             duration_ms,
+            thinking_tokens,
             timestamp
         FROM message
         WHERE workflow_id = '{}'

@@ -56,6 +56,7 @@ DEFINE FIELD OVERWRITE model ON message TYPE option<string>;
 DEFINE FIELD OVERWRITE provider ON message TYPE option<string>;
 DEFINE FIELD OVERWRITE cost_usd ON message TYPE option<float>;
 DEFINE FIELD OVERWRITE duration_ms ON message TYPE option<int>;
+DEFINE FIELD OVERWRITE thinking_tokens ON message TYPE option<int> DEFAULT NONE;
 DEFINE FIELD OVERWRITE timestamp ON message TYPE datetime DEFAULT time::now();
 
 -- =============================================
@@ -276,9 +277,10 @@ DEFINE FIELD OVERWRITE max_tool_iterations ON agent TYPE int
     ASSERT $value >= 1 AND $value <= 200
     DEFAULT 50;
 
--- Enable thinking mode for supported models (default: true)
-DEFINE FIELD OVERWRITE enable_thinking ON agent TYPE bool
-    DEFAULT true;
+-- Reasoning effort for thinking models (null = disabled)
+DEFINE FIELD OVERWRITE reasoning_effort ON agent TYPE option<string>
+    ASSERT $value IS NONE OR $value IN ['low', 'medium', 'high']
+    DEFAULT NONE;
 
 -- Timestamps
 DEFINE FIELD OVERWRITE created_at ON agent TYPE datetime DEFAULT time::now();

@@ -342,9 +342,9 @@ impl SpawnAgentTool {
             system_prompt: system_prompt
                 .unwrap_or(DEFAULT_SUB_AGENT_SYSTEM_PROMPT)
                 .to_string(),
-            // Sub-agents inherit parent's max_tool_iterations and enable_thinking
+            // Sub-agents inherit parent's max_tool_iterations and reasoning_effort
             max_tool_iterations: parent_config.max_tool_iterations,
-            enable_thinking: parent_config.enable_thinking,
+            reasoning_effort: parent_config.reasoning_effort.clone(),
         };
 
         // 10. Create execution record in database (status: running)

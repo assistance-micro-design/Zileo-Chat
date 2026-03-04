@@ -840,6 +840,7 @@ impl Agent for LLMAgent {
                         context_tokens: 0,
                         cached_tokens: None,
                         cache_write_tokens: None,
+                        thinking_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
@@ -880,6 +881,7 @@ impl Agent for LLMAgent {
                     context_tokens: 0,
                     cached_tokens: None,
                     cache_write_tokens: None,
+                    thinking_tokens: None,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
@@ -891,6 +893,13 @@ impl Agent for LLMAgent {
             });
         }
 
+        // Compute effective reasoning effort: only if model supports reasoning
+        let reasoning_effort = if self.config.llm.is_reasoning {
+            self.config.reasoning_effort.clone()
+        } else {
+            None
+        };
+
         // Execute LLM call
         let llm_result = self
             .provider_manager
@@ -901,7 +910,7 @@ impl Agent for LLMAgent {
                 Some(&self.config.llm.model),
                 self.config.llm.temperature,
                 self.config.llm.max_tokens,
-                self.config.llm.is_reasoning,
+                reasoning_effort,
             )
             .await;
 
@@ -942,6 +951,7 @@ impl Agent for LLMAgent {
                         context_tokens: response.tokens_input,
                         cached_tokens: None,
                         cache_write_tokens: None,
+                        thinking_tokens: response.thinking_tokens,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
@@ -991,6 +1001,7 @@ impl Agent for LLMAgent {
                         context_tokens: 0,
                         cached_tokens: None,
                         cache_write_tokens: None,
+                        thinking_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
@@ -1042,11 +1053,13 @@ impl Agent for LLMAgent {
         let mut context_tokens: usize = 0; // Last call's input tokens (context window size)
         let mut total_cached_tokens: Option<usize> = None;
         let mut total_cache_write_tokens: Option<usize> = None;
+        let mut total_thinking_tokens: Option<usize> = None;
         // Per-iteration values (saved from match arm for IterationMetrics)
         let mut iter_input_tokens: usize = 0;
         let mut iter_output_tokens: usize = 0;
         let mut iter_cached_tokens: Option<usize> = None;
         let mut iter_cache_write_tokens: Option<usize> = None;
+        let mut iter_thinking_tokens: Option<usize> = None;
         let mut iteration_metrics_data: Vec<IterationMetrics> = Vec::new();
         let mut tool_executions_data: Vec<ToolExecutionData> = Vec::new();
         let mut reasoning_steps_data: Vec<ReasoningStepData> = Vec::new();
@@ -1072,6 +1085,7 @@ impl Agent for LLMAgent {
                         context_tokens: 0,
                         cached_tokens: None,
                         cache_write_tokens: None,
+                        thinking_tokens: None,
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
@@ -1112,6 +1126,7 @@ impl Agent for LLMAgent {
                     context_tokens: 0,
                     cached_tokens: None,
                     cache_write_tokens: None,
+                    thinking_tokens: None,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],
@@ -1340,6 +1355,7 @@ impl Agent for LLMAgent {
                     iter_output_tokens = output_tokens;
                     iter_cached_tokens = usage.cached_tokens;
                     iter_cache_write_tokens = usage.cache_write_tokens;
+                    iter_thinking_tokens = usage.thinking_tokens;
 
                     total_tokens_input += input_tokens; // Cumulative (total billed across all API calls)
                     context_tokens = input_tokens; // Last call only (context window size)
@@ -1352,6 +1368,9 @@ impl Agent for LLMAgent {
                     if let Some(cache_write) = usage.cache_write_tokens {
                         total_cache_write_tokens =
                             Some(total_cache_write_tokens.unwrap_or(0) + cache_write);
+                    }
+                    if let Some(thinking) = usage.thinking_tokens {
+                        total_thinking_tokens = Some(total_thinking_tokens.unwrap_or(0) + thinking);
                     }
 
                     debug!(
@@ -1403,6 +1422,7 @@ impl Agent for LLMAgent {
                             context_tokens,
                             cached_tokens: total_cached_tokens,
                             cache_write_tokens: total_cache_write_tokens,
+                            thinking_tokens: total_thinking_tokens,
                             tools_used,
                             mcp_calls: mcp_calls_made,
                             tool_executions: tool_executions_data,
@@ -1417,6 +1437,13 @@ impl Agent for LLMAgent {
 
             if let Some(thinking) = adapter.extract_thinking(&response) {
                 if !thinking.trim().is_empty() {
+                    // Fallback: estimate thinking tokens if not reported by provider
+                    if iter_thinking_tokens.is_none() {
+                        let estimated = crate::llm::utils::estimate_tokens(&thinking);
+                        iter_thinking_tokens = Some(estimated);
+                        total_thinking_tokens =
+                            Some(total_thinking_tokens.unwrap_or(0) + estimated);
+                    }
                     global_sequence += 1;
                     self.emit_progress(StreamChunk::thinking_block(
                         event_workflow_id.clone(),
@@ -1446,6 +1473,7 @@ impl Agent for LLMAgent {
                 tokens_output: iter_output_tokens,
                 cached_tokens: iter_cached_tokens,
                 cache_write_tokens: iter_cache_write_tokens,
+                thinking_tokens: iter_thinking_tokens,
                 messages_count: messages.len(),
                 tool_calls_count: function_calls.len(),
                 duration_ms: iter_start.elapsed().as_millis() as u64,
@@ -1641,6 +1669,7 @@ impl Agent for LLMAgent {
                         iter_output_tokens = usage.output_tokens;
                         iter_cached_tokens = usage.cached_tokens;
                         iter_cache_write_tokens = usage.cache_write_tokens;
+                        iter_thinking_tokens = usage.thinking_tokens;
 
                         total_tokens_input += iter_input_tokens; // Accumulate
                         context_tokens = iter_input_tokens; // Update context size
@@ -1653,6 +1682,10 @@ impl Agent for LLMAgent {
                         if let Some(cache_write) = iter_cache_write_tokens {
                             total_cache_write_tokens =
                                 Some(total_cache_write_tokens.unwrap_or(0) + cache_write);
+                        }
+                        if let Some(thinking) = iter_thinking_tokens {
+                            total_thinking_tokens =
+                                Some(total_thinking_tokens.unwrap_or(0) + thinking);
                         }
 
                         if let Some(content) = adapter.extract_content(&response) {
@@ -1678,6 +1711,7 @@ impl Agent for LLMAgent {
                     tokens_output: iter_output_tokens,
                     cached_tokens: iter_cached_tokens,
                     cache_write_tokens: iter_cache_write_tokens,
+                    thinking_tokens: iter_thinking_tokens,
                     messages_count: messages.len(),
                     tool_calls_count: 0,
                     duration_ms: report_iter_start.elapsed().as_millis() as u64,
@@ -1760,6 +1794,7 @@ impl Agent for LLMAgent {
                 context_tokens,
                 cached_tokens: total_cached_tokens,
                 cache_write_tokens: total_cache_write_tokens,
+                thinking_tokens: total_thinking_tokens,
                 tools_used,
                 mcp_calls: mcp_calls_made,
                 tool_executions: tool_executions_data,
@@ -1829,7 +1864,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         }
     }
 

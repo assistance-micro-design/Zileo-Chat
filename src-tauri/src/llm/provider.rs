@@ -14,6 +14,7 @@
 
 //! LLM Provider trait and common types
 
+use crate::models::agent::ReasoningEffort;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -101,6 +102,10 @@ pub struct LLMResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub thinking_content: Option<String>,
+    /// Number of tokens used for reasoning/thinking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub thinking_tokens: Option<usize>,
 }
 
 /// LLM error types
@@ -174,7 +179,7 @@ pub trait LLMProvider: Send + Sync {
     /// * `model` - Model to use (None for default)
     /// * `temperature` - Sampling temperature (0.0-1.0)
     /// * `max_tokens` - Maximum tokens to generate
-    /// * `is_reasoning` - Whether the model is a reasoning/thinking model (from DB)
+    /// * `reasoning_effort` - Reasoning effort level (None = no thinking)
     ///
     /// # Returns
     /// LLMResponse with the generated content and metrics
@@ -185,7 +190,7 @@ pub trait LLMProvider: Send + Sync {
         model: Option<&str>,
         temperature: f32,
         max_tokens: usize,
-        is_reasoning: bool,
+        reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<LLMResponse, LLMError>;
 }
 
@@ -258,6 +263,7 @@ mod tests {
             provider: ProviderType::Mistral,
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
+            thinking_tokens: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -281,6 +287,7 @@ mod tests {
             provider: ProviderType::Mistral,
             finish_reason: Some("stop".to_string()),
             thinking_content: Some("Let me reason about this...".to_string()),
+            thinking_tokens: Some(6),
         };
 
         // When Some, thinking_content IS serialized
@@ -305,10 +312,12 @@ mod tests {
             provider: ProviderType::Ollama,
             finish_reason: None,
             thinking_content: None,
+            thinking_tokens: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(!json.contains("thinking_content"));
+        assert!(!json.contains("thinking_tokens"));
     }
 
     #[test]

@@ -43,6 +43,8 @@ pub struct TokenUsage {
     pub cached_tokens: Option<usize>,
     /// Number of input tokens written to cache (cache writes, first request)
     pub cache_write_tokens: Option<usize>,
+    /// Number of tokens used for reasoning/thinking (e.g. OpenAI reasoning_tokens)
+    pub thinking_tokens: Option<usize>,
 }
 
 /// Trait for adapting between internal tool system and provider-specific JSON formats.
@@ -219,12 +221,17 @@ pub trait ProviderToolAdapter: Send + Sync {
             .pointer("/usage/prompt_tokens_details/cache_write_tokens")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
+        let thinking = response
+            .pointer("/usage/completion_tokens_details/reasoning_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         TokenUsage {
             input_tokens: input,
             output_tokens: output,
             cached_tokens: cached,
             cache_write_tokens: cache_write,
+            thinking_tokens: thinking,
         }
     }
 }
@@ -361,12 +368,14 @@ mod tests {
             output_tokens: 50,
             cached_tokens: Some(80),
             cache_write_tokens: None,
+            thinking_tokens: None,
         };
         let b = TokenUsage {
             input_tokens: 100,
             output_tokens: 50,
             cached_tokens: Some(80),
             cache_write_tokens: None,
+            thinking_tokens: None,
         };
         assert_eq!(a, b);
 
@@ -375,6 +384,7 @@ mod tests {
             output_tokens: 50,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         };
         assert_ne!(a, c);
     }

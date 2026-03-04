@@ -280,6 +280,7 @@ pub async fn execute_workflow_streaming(
             provider: None,
             cost_usd: None,
             duration_ms: None,
+            thinking_tokens: None,
         };
 
         match state
@@ -342,6 +343,7 @@ pub async fn execute_workflow_streaming(
             report.metrics.tokens_output,
             report.metrics.cached_tokens,
             report.metrics.cache_write_tokens,
+            report.metrics.thinking_tokens,
         ),
     );
 

@@ -145,6 +145,15 @@ impl ProviderToolAdapter for OllamaToolAdapter {
         "ollama"
     }
 
+    fn extract_thinking(&self, response: &Value) -> Option<String> {
+        // Ollama response: { "message": { "thinking": "..." } }
+        response
+            .pointer("/message/thinking")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+    }
+
     fn extract_content(&self, response: &Value) -> Option<String> {
         // Ollama response: { "message": { "content": "..." } }
         response
@@ -216,6 +225,7 @@ impl ProviderToolAdapter for OllamaToolAdapter {
             output_tokens: output,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 }

@@ -417,7 +417,7 @@ Configuration des agents crees par l'utilisateur.
 - `require_file_confirmation` : boolean DEFAULT true (require user validation for destructive file ops)
 - `system_prompt` : string (1-10000 chars)
 - `max_tool_iterations` : int (1-200, default 50)
-- `enable_thinking` : boolean (default true)
+- `reasoning_effort` : option<string> DEFAULT NONE (reasoning effort level: 'low', 'medium', 'high', or null)
 - `created_at` : datetime
 - `updated_at` : datetime
 

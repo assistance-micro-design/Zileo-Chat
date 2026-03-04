@@ -18,38 +18,6 @@ Backend Services
 
 ## Workflows
 
-### execute_workflow
-
-Execute workflow avec agent spécifique.
-
-**Frontend**
-```typescript
-const result = await invoke<WorkflowResult>('execute_workflow', {
-  workflowId: string,
-  message: string,
-  agentId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn execute_workflow(
-    workflow_id: String,
-    message: String,
-    agent_id: String
-) -> Result<WorkflowResult, String>
-```
-
-**Returns** : `WorkflowResult`
-- `report` : Markdown report agent
-- `metrics` : Tokens, duration, cost
-- `tools_used` : Liste tools exécutés
-- `mcp_calls` : Liste MCP servers appelés
-
-**Errors** : Agent not found, workflow not found, execution failed
-
----
-
 ### create_workflow
 
 Créer nouveau workflow.
@@ -226,7 +194,7 @@ interface AgentConfig {
   require_file_confirmation: boolean; // Require user validation for destructive file ops (default: true)
   system_prompt: string;
   max_tool_iterations: number; // 1-200, default: 50
-  enable_thinking: boolean;   // Enable thinking mode for supported models
+  reasoning_effort: string | null; // Reasoning effort level: 'low', 'medium', 'high', or null
 }
 ```
 
@@ -257,7 +225,7 @@ const agentId = await invoke<string>('create_agent', {
     require_file_confirmation: boolean, // Require validation for destructive file ops (default: true)
     system_prompt: string,           // 1-10000 chars
     max_tool_iterations: number,     // 1-200, default: 50
-    enable_thinking: boolean         // Enable thinking mode (default: true)
+    reasoning_effort: string | null  // Reasoning effort: 'low', 'medium', 'high', or null
   }
 });
 ```
@@ -301,7 +269,7 @@ const updated = await invoke<AgentConfig>('update_agent', {
     require_file_confirmation?: boolean,
     system_prompt?: string,
     max_tool_iterations?: number,
-    enable_thinking?: boolean
+    reasoning_effort?: string | null
     // Note: lifecycle cannot be changed after creation
   }
 });

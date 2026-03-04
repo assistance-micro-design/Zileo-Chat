@@ -138,6 +138,9 @@ pub struct StreamChunk {
     /// Cache-write tokens (for response_block, prompt caching)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<usize>,
+    /// Thinking/reasoning tokens (for response_block, reasoning models)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<usize>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -181,6 +184,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -213,6 +217,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -245,6 +250,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -277,6 +283,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -317,6 +324,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -358,6 +366,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -399,6 +408,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -439,6 +449,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -478,6 +489,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -517,6 +529,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -551,6 +564,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -585,6 +599,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -619,6 +634,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -660,6 +676,7 @@ impl StreamChunk {
             tokens_output: None,
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 
@@ -673,6 +690,7 @@ impl StreamChunk {
         tokens_output: usize,
         cached_tokens: Option<usize>,
         cache_write_tokens: Option<usize>,
+        thinking_tokens: Option<usize>,
     ) -> Self {
         Self {
             workflow_id: workflow_id.into(),
@@ -701,6 +719,7 @@ impl StreamChunk {
             tokens_output: Some(tokens_output),
             cached_tokens,
             cache_write_tokens,
+            thinking_tokens,
         }
     }
 }
@@ -1168,7 +1187,8 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_response_block() {
-        let chunk = StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25, None, None);
+        let chunk =
+            StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25, None, None, None);
         assert_eq!(chunk.chunk_type, ChunkType::ResponseBlock);
         assert_eq!(chunk.content, Some("The answer is 42.".to_string()));
         assert_eq!(chunk.tokens_input, Some(100));

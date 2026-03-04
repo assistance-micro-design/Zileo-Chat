@@ -69,6 +69,8 @@ export interface Message {
   cost_usd?: number;
   /** Generation duration in milliseconds */
   duration_ms?: number;
+  /** Thinking/reasoning tokens (for reasoning models) */
+  thinking_tokens?: number;
   /** Message timestamp */
   timestamp: Date;
   /** Sub-agent summaries (transient, captured from StreamingState) */
@@ -100,6 +102,8 @@ export interface MessageCreate {
   cost_usd?: number;
   /** Duration in milliseconds */
   duration_ms?: number;
+  /** Thinking/reasoning tokens (for reasoning models) */
+  thinking_tokens?: number;
 }
 
 /**

@@ -205,7 +205,7 @@ fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate
         require_file_confirmation: config.require_file_confirmation,
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
-        enable_thinking: config.enable_thinking,
+        reasoning_effort: config.reasoning_effort.clone(),
     })
 }
 
@@ -391,7 +391,7 @@ pub async fn create_agent(
         require_file_confirmation,
         system_prompt,
         max_tool_iterations,
-        enable_thinking,
+        reasoning_effort,
     } = validated;
 
     // Persist to database - get lifecycle string before moving into AgentConfig
@@ -412,7 +412,7 @@ pub async fn create_agent(
         require_file_confirmation,
         system_prompt,
         max_tool_iterations,
-        enable_thinking,
+        reasoning_effort,
     };
 
     // Serialize fields for database
@@ -431,7 +431,7 @@ pub async fn create_agent(
             require_file_confirmation: {},
             system_prompt: {},
             max_tool_iterations: {},
-            enable_thinking: {},
+            reasoning_effort: {},
             created_at: time::now(),
             updated_at: time::now()
         }}",
@@ -447,7 +447,10 @@ pub async fn create_agent(
         fields.require_file_confirmation,
         fields.prompt_json,
         agent_config.max_tool_iterations,
-        agent_config.enable_thinking
+        agent_config
+            .reasoning_effort
+            .as_ref()
+            .map_or("NONE".to_string(), |e| format!("'{}'", e.as_str()))
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -501,7 +504,10 @@ fn merge_agent_config(
     let max_tool_iterations = update
         .max_tool_iterations
         .map_or(existing.max_tool_iterations, |m| m.clamp(1, 200));
-    let enable_thinking = update.enable_thinking.unwrap_or(existing.enable_thinking);
+    let reasoning_effort = match &update.reasoning_effort {
+        Some(effort) => effort.clone(),
+        None => existing.reasoning_effort.clone(),
+    };
 
     Ok(AgentConfig {
         id: existing.id.clone(),
@@ -515,7 +521,7 @@ fn merge_agent_config(
         require_file_confirmation,
         system_prompt,
         max_tool_iterations,
-        enable_thinking,
+        reasoning_effort,
     })
 }
 
@@ -564,7 +570,7 @@ pub async fn update_agent(
             require_file_confirmation = {},
             system_prompt = {},
             max_tool_iterations = {},
-            enable_thinking = {},
+            reasoning_effort = {},
             updated_at = time::now()",
         validated_id,
         fields.name_json,
@@ -576,7 +582,10 @@ pub async fn update_agent(
         fields.require_file_confirmation,
         fields.prompt_json,
         updated_config.max_tool_iterations,
-        updated_config.enable_thinking
+        updated_config
+            .reasoning_effort
+            .as_ref()
+            .map_or("NONE".to_string(), |e| format!("'{}'", e.as_str()))
     );
 
     state.db.execute(&query).await.map_err(|e| {
@@ -715,7 +724,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         let agent = SimpleAgent::new(config);
@@ -751,7 +760,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "You are a test agent".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         let agent = SimpleAgent::new(config.clone());
@@ -799,7 +808,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test prompt".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
 
         // Verify JSON serialization
@@ -849,7 +858,7 @@ mod tests {
                 require_file_confirmation: true,
                 system_prompt: format!("Agent {} prompt", i),
                 max_tool_iterations: 50,
-                enable_thinking: true,
+                reasoning_effort: None,
             };
 
             let agent = SimpleAgent::new(config);
@@ -881,7 +890,7 @@ mod tests {
                 mcp_servers = [], \
                 system_prompt = 'Test agent.', \
                 max_tool_iterations = 50, \
-                enable_thinking = false, \
+                reasoning_effort = NONE, \
                 created_at = time::now(), \
                 updated_at = time::now()",
             id, id

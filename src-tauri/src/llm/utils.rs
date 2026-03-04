@@ -49,6 +49,47 @@ pub fn estimate_tokens(text: &str) -> usize {
 }
 
 // ============================================================================
+// Thinking Extraction (OpenAI/OpenRouter format)
+// ============================================================================
+
+/// Extracts thinking/reasoning content from an OpenAI-format message object.
+///
+/// Checks two alternative formats used by various providers:
+/// - `message.reasoning` (OpenRouter format, string)
+/// - `message.reasoning_details[]` (array of objects with `text` field)
+///
+/// # Arguments
+/// * `message` - A JSON value representing the `choices[0].message` object
+///
+/// # Returns
+/// The extracted thinking text, or `None` if no reasoning content is found.
+pub fn extract_thinking_from_message(message: &serde_json::Value) -> Option<String> {
+    // OpenRouter format: message.reasoning (string)
+    if let Some(reasoning) = message.get("reasoning").and_then(|v| v.as_str()) {
+        if !reasoning.trim().is_empty() {
+            return Some(reasoning.to_string());
+        }
+    }
+
+    // Alternative format: message.reasoning_details (array of objects with text)
+    if let Some(details) = message.get("reasoning_details").and_then(|v| v.as_array()) {
+        let texts: Vec<&str> = details
+            .iter()
+            .filter_map(|item| {
+                item.get("text")
+                    .and_then(|t| t.as_str())
+                    .filter(|s| !s.trim().is_empty())
+            })
+            .collect();
+        if !texts.is_empty() {
+            return Some(texts.join("\n"));
+        }
+    }
+
+    None
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -89,5 +130,61 @@ mod tests {
         let text = "The quick brown fox jumps over the lazy dog";
         // 9 words * 1.5 = 13.5 -> 14
         assert_eq!(estimate_tokens(text), 14);
+    }
+
+    // Thinking extraction tests
+    #[test]
+    fn test_extract_thinking_from_message_reasoning_field() {
+        let message = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer",
+            "reasoning": "Step 1..."
+        });
+        assert_eq!(
+            extract_thinking_from_message(&message),
+            Some("Step 1...".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_thinking_from_message_reasoning_details() {
+        let message = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer",
+            "reasoning_details": [{"text": "Step 1"}, {"text": "Step 2"}]
+        });
+        assert_eq!(
+            extract_thinking_from_message(&message),
+            Some("Step 1\nStep 2".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_thinking_from_message_none() {
+        let message = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer"
+        });
+        assert!(extract_thinking_from_message(&message).is_none());
+    }
+
+    #[test]
+    fn test_extract_thinking_from_message_empty_reasoning() {
+        let message = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer",
+            "reasoning": "   "
+        });
+        assert!(extract_thinking_from_message(&message).is_none());
+    }
+
+    #[test]
+    fn test_extract_thinking_from_message_empty_details() {
+        let message = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer",
+            "reasoning_details": [{"text": "  "}]
+        });
+        assert!(extract_thinking_from_message(&message).is_none());
     }
 }

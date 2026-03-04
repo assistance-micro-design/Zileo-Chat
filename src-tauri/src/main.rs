@@ -197,7 +197,6 @@ async fn main() -> anyhow::Result<()> {
         .invoke_handler(tauri::generate_handler![
             // Workflow commands
             commands::workflow::create_workflow,
-            commands::workflow::execute_workflow,
             commands::workflow::load_workflows,
             commands::workflow::rename_workflow,
             commands::workflow::delete_workflow,
@@ -223,7 +222,6 @@ async fn main() -> anyhow::Result<()> {
             commands::llm::get_available_models,
             commands::llm::test_ollama_connection,
             commands::llm::test_mistral_connection,
-            commands::llm::test_llm_completion,
             // Custom provider commands
             commands::custom_provider::list_providers,
             commands::custom_provider::create_custom_provider,
@@ -303,6 +301,7 @@ async fn main() -> anyhow::Result<()> {
             commands::migration::get_memory_schema_status,
             commands::migration::migrate_mcp_http_schema,
             commands::migration::migrate_memory_v2_schema,
+            commands::migration::migrate_reasoning_effort,
             commands::embedding::get_embedding_config,
             commands::embedding::save_embedding_config,
             commands::embedding::get_memory_stats,
@@ -429,7 +428,7 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 // Load agents from database
-                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders, require_file_confirmation, system_prompt, max_tool_iterations, enable_thinking FROM agent";
+                let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders, require_file_confirmation, system_prompt, max_tool_iterations, reasoning_effort FROM agent";
                 let results: Vec<serde_json::Value> = match db.db.query(query).await {
                     Ok(mut r) => r.take(0).unwrap_or_default(),
                     Err(e) => {
@@ -492,7 +491,9 @@ async fn main() -> anyhow::Result<()> {
                         .unwrap_or(50)
                         .clamp(1, 200);
 
-                    let enable_thinking = row["enable_thinking"].as_bool().unwrap_or(true);
+                    let reasoning_effort = row["reasoning_effort"]
+                        .as_str()
+                        .and_then(|s| serde_json::from_value(serde_json::json!(s)).ok());
 
                     let config = crate::models::AgentConfig {
                         id: id.clone(),
@@ -506,7 +507,7 @@ async fn main() -> anyhow::Result<()> {
                         require_file_confirmation,
                         system_prompt,
                         max_tool_iterations,
-                        enable_thinking,
+                        reasoning_effort,
                     };
 
                     // Create agent context with app_handle

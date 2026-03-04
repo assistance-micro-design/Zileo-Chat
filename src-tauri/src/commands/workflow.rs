@@ -16,7 +16,7 @@ use crate::{
     db::queries::{cascade, workflow as wf_queries},
     models::{
         Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
-        WorkflowMetrics, WorkflowResult, WorkflowStatus, WorkflowToolExecution,
+        WorkflowStatus,
     },
     security::{validate_uuid_field, Validator},
     AppState,
@@ -71,116 +71,6 @@ pub async fn create_workflow(
 
     info!(workflow_id = %id, "Workflow created successfully");
     Ok(id)
-}
-
-/// Executes a workflow with a message
-#[tauri::command]
-#[instrument(
-    name = "execute_workflow",
-    skip(state, message),
-    fields(
-        workflow_id = %workflow_id,
-        agent_id = %agent_id,
-        message_len = message.len()
-    )
-)]
-pub async fn execute_workflow(
-    workflow_id: String,
-    message: String,
-    agent_id: String,
-    state: State<'_, AppState>,
-) -> Result<WorkflowResult, String> {
-    use crate::agents::core::agent::Task;
-    use crate::constants::workflow as wf_const;
-    use tokio::time::{timeout, Duration};
-    use uuid::Uuid;
-
-    info!("Starting workflow execution");
-
-    // Validate inputs
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
-
-    let validated_message = Validator::validate_message(&message).map_err(|e| {
-        warn!(error = %e, "Invalid message");
-        format!("Invalid message: {}", e)
-    })?;
-
-    let validated_agent_id = Validator::validate_agent_id(&agent_id).map_err(|e| {
-        warn!(error = %e, "Invalid agent_id");
-        format!("Invalid agent_id: {}", e)
-    })?;
-
-    // 1. Load workflow (Use centralized query constant)
-    let query = format!(
-        "{} WHERE meta::id(id) = '{}'",
-        wf_queries::SELECT_BASIC,
-        validated_workflow_id
-    );
-    let workflows: Vec<Workflow> = query_and_deserialize(&state.db, &query, "workflow").await?;
-    let _workflow = workflows.first().ok_or_else(|| {
-        warn!(workflow_id = %validated_workflow_id, "Workflow not found");
-        "Workflow not found".to_string()
-    })?;
-
-    // 2. Create task
-    let task_id = Uuid::new_v4().to_string();
-    info!(task_id = %task_id, "Creating task for workflow");
-
-    let task = Task {
-        id: task_id.clone(),
-        description: validated_message,
-        context: serde_json::json!({}),
-    };
-
-    // 3. Execute via orchestrator with MCP support (with timeout)
-    let execution_future = state.orchestrator.execute_with_mcp(
-        &validated_agent_id,
-        task,
-        Some(state.mcp_manager.clone()),
-        None, // No cancellation token for non-streaming execution
-    );
-
-    let report = timeout(
-        Duration::from_secs(wf_const::LLM_EXECUTION_TIMEOUT_SECS),
-        execution_future,
-    )
-    .await
-    .map_err(|_| {
-        error!(task_id = %task_id, timeout_secs = wf_const::LLM_EXECUTION_TIMEOUT_SECS, "Workflow execution timed out");
-        format!(
-            "Workflow execution timed out after {} seconds",
-            wf_const::LLM_EXECUTION_TIMEOUT_SECS
-        )
-    })?
-    .map_err(|e| {
-        error!(error = %e, task_id = %task_id, "Workflow execution failed");
-        format!("Execution failed: {}", e)
-    })?;
-
-    // 4. Get agent config for accurate provider/model info
-    let (provider, model) = match state.registry.get(&validated_agent_id).await {
-        Some(agent) => {
-            let config = agent.config();
-            (config.llm.provider.clone(), config.llm.model.clone())
-        }
-        None => {
-            // Fallback if agent not found (shouldn't happen after successful execution)
-            ("Unknown".to_string(), validated_agent_id.clone())
-        }
-    };
-
-    // 5. Build result
-    let result = build_workflow_result(report, provider, model);
-
-    info!(
-        duration_ms = result.metrics.duration_ms,
-        tokens_input = result.metrics.tokens_input,
-        tokens_output = result.metrics.tokens_output,
-        tools_count = result.tools_used.len(),
-        "Workflow execution completed"
-    );
-
-    Ok(result)
 }
 
 /// Loads all workflows
@@ -435,58 +325,13 @@ async fn query_and_deserialize<T: serde::de::DeserializeOwned>(
         })
 }
 
-/// Builds a WorkflowResult from an agent execution report.
-fn build_workflow_result(
-    report: crate::agents::core::agent::Report,
-    provider: String,
-    model: String,
-) -> WorkflowResult {
-    use uuid::Uuid;
-    let tool_executions: Vec<WorkflowToolExecution> = report
-        .metrics
-        .tool_executions
-        .iter()
-        .map(|te| WorkflowToolExecution {
-            tool_type: te.tool_type.clone(),
-            tool_name: te.tool_name.clone(),
-            server_name: te.server_name.clone(),
-            input_params: te.input_params.clone(),
-            output_result: te.output_result.clone(),
-            success: te.success,
-            error_message: te.error_message.clone(),
-            duration_ms: te.duration_ms,
-            iteration: te.iteration,
-        })
-        .collect();
-
-    WorkflowResult {
-        report: report.content,
-        response: report.response,
-        metrics: WorkflowMetrics {
-            duration_ms: report.metrics.duration_ms,
-            tokens_input: report.metrics.tokens_input,
-            tokens_output: report.metrics.tokens_output,
-            cost_usd: 0.0,
-            provider,
-            model,
-            cached_tokens: report.metrics.cached_tokens,
-            cache_write_tokens: report.metrics.cache_write_tokens,
-            iteration_metrics: report.metrics.iteration_metrics.clone(),
-        },
-        tools_used: report.metrics.tools_used.clone(),
-        mcp_calls: report.metrics.mcp_calls.clone(),
-        tool_executions,
-        message_id: Uuid::new_v4().to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::agents::core::{AgentOrchestrator, AgentRegistry};
     use crate::agents::SimpleAgent;
     use crate::db::DBClient;
-    use crate::models::{AgentConfig, LLMConfig, Lifecycle};
+    use crate::models::{AgentConfig, LLMConfig, Lifecycle, WorkflowMetrics, WorkflowResult};
     use std::sync::Arc;
     use tempfile::tempdir;
 
@@ -525,7 +370,7 @@ mod tests {
             require_file_confirmation: true,
             system_prompt: "Test agent".to_string(),
             max_tool_iterations: 50,
-            enable_thinking: true,
+            reasoning_effort: None,
         };
         let agent = SimpleAgent::new(config);
         registry

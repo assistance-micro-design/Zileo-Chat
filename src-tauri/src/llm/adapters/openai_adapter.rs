@@ -142,6 +142,11 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
         "openai_compatible"
     }
 
+    fn extract_thinking(&self, response: &Value) -> Option<String> {
+        let message = response.pointer("/choices/0/message")?;
+        crate::llm::utils::extract_thinking_from_message(message)
+    }
+
     fn extract_content(&self, response: &Value) -> Option<String> {
         response
             .pointer("/choices/0/message/content")
@@ -195,11 +200,16 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             .pointer("/usage/prompt_tokens_details/cached_tokens")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
+        let thinking = response
+            .pointer("/usage/completion_tokens_details/reasoning_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         debug!(
             prompt_tokens = input,
             completion_tokens = output,
             cached_tokens = ?cached,
+            thinking_tokens = ?thinking,
             "Extracted token usage from OpenAI-compatible response"
         );
 
@@ -208,6 +218,7 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             output_tokens: output,
             cached_tokens: cached,
             cache_write_tokens: None,
+            thinking_tokens: thinking,
         }
     }
 }
@@ -332,5 +343,55 @@ mod tests {
 
         let usage = adapter.extract_usage(&response);
         assert_eq!(usage.cached_tokens, Some(0));
+    }
+
+    #[test]
+    fn test_extract_usage_with_reasoning_tokens() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 500,
+                "completion_tokens": 300,
+                "completion_tokens_details": {
+                    "reasoning_tokens": 200
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 500);
+        assert_eq!(usage.output_tokens, 300);
+        assert_eq!(usage.thinking_tokens, Some(200));
+    }
+
+    #[test]
+    fn test_extract_usage_no_reasoning_tokens() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.thinking_tokens, None);
+    }
+
+    #[test]
+    fn test_extract_usage_reasoning_tokens_zero() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "completion_tokens_details": {
+                    "reasoning_tokens": 0
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.thinking_tokens, Some(0));
     }
 }

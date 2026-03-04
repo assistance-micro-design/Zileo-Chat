@@ -101,6 +101,8 @@ export interface IterationMetrics {
   cached_tokens?: number;
   /** Cache-write tokens (if reported by provider) */
   cache_write_tokens?: number;
+  /** Thinking/reasoning tokens for this call (if reasoning model) */
+  thinking_tokens?: number;
   /** Number of messages in the context at this iteration */
   messages_count: number;
   /** Number of tool calls made by LLM at this iteration */
@@ -129,6 +131,8 @@ export interface WorkflowMetrics {
   cached_tokens?: number;
   /** Cache-write tokens for this execution (if provider supports caching) */
   cache_write_tokens?: number;
+  /** Thinking/reasoning tokens (for reasoning models) */
+  thinking_tokens?: number;
   /** Per-iteration token breakdown (one entry per LLM API call) */
   iteration_metrics?: IterationMetrics[];
 }

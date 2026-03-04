@@ -17,6 +17,9 @@
 // Copyright 2025 Zileo-Chat-3 Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+/** Reasoning effort level for thinking models */
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 /**
  * Agent lifecycle type
  */
@@ -73,8 +76,8 @@ export interface AgentConfig {
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
   max_tool_iterations: number;
-  /** Enable thinking mode for supported models (default: true) */
-  enable_thinking: boolean;
+  /** Reasoning effort for thinking models (null = disabled) */
+  reasoning_effort: ReasoningEffort | null;
 }
 
 /**
@@ -117,8 +120,8 @@ export interface AgentConfigCreate {
   system_prompt: string;
   /** Maximum number of tool execution iterations (1-200, default: 50) */
   max_tool_iterations: number;
-  /** Enable thinking mode for supported models (default: true) */
-  enable_thinking: boolean;
+  /** Reasoning effort for thinking models (null = disabled) */
+  reasoning_effort: ReasoningEffort | null;
 }
 
 /**
@@ -143,8 +146,8 @@ export interface AgentConfigUpdate {
   system_prompt?: string;
   /** Maximum number of tool execution iterations (1-200) */
   max_tool_iterations?: number;
-  /** Enable thinking mode for supported models */
-  enable_thinking?: boolean;
+  /** Reasoning effort for thinking models */
+  reasoning_effort?: ReasoningEffort | null;
 }
 
 /**

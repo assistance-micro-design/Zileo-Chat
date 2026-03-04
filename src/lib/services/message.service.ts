@@ -153,6 +153,7 @@ export const MessageService = {
 			model: params.metrics?.model ?? null,
 			provider: params.metrics?.provider ?? null,
 			durationMs: params.metrics?.duration_ms ?? null,
+			thinkingTokens: params.metrics?.thinking_tokens ?? null,
 			messageId: params.messageId ?? null
 		});
 	},

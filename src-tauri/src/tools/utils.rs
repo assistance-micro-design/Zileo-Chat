@@ -460,7 +460,7 @@ mod tests {
                     require_file_confirmation: true,
                     system_prompt: "Test prompt".to_string(),
                     max_tool_iterations: 50,
-                    enable_thinking: true,
+                    reasoning_effort: None,
                 },
             }
         }
@@ -486,6 +486,7 @@ mod tests {
                     tool_executions: vec![],
                     reasoning_steps: vec![],
                     iteration_metrics: vec![],
+                    thinking_tokens: None,
                 },
                 system_prompt: None,
                 tools_json: None,

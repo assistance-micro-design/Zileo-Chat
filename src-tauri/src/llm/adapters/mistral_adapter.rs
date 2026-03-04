@@ -146,6 +146,35 @@ impl ProviderToolAdapter for MistralToolAdapter {
         "mistral"
     }
 
+    fn extract_thinking(&self, response: &Value) -> Option<String> {
+        // Mistral reasoning models: content is an array with thinking blocks
+        // Try to extract from content array format
+        let content = response.pointer("/choices/0/message/content")?;
+        let blocks = content.as_array()?;
+
+        let mut thinking_parts = String::new();
+        for block in blocks {
+            if block.get("type").and_then(|t| t.as_str()) == Some("thinking") {
+                if let Some(items) = block.get("thinking").and_then(|t| t.as_array()) {
+                    for item in items {
+                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                            if !thinking_parts.is_empty() {
+                                thinking_parts.push('\n');
+                            }
+                            thinking_parts.push_str(text);
+                        }
+                    }
+                }
+            }
+        }
+
+        if thinking_parts.is_empty() {
+            None
+        } else {
+            Some(thinking_parts)
+        }
+    }
+
     fn extract_content(&self, response: &Value) -> Option<String> {
         response
             .pointer("/choices/0/message/content")
@@ -220,6 +249,7 @@ impl ProviderToolAdapter for MistralToolAdapter {
             output_tokens: output,
             cached_tokens: cached,
             cache_write_tokens: None,
+            thinking_tokens: None,
         }
     }
 }

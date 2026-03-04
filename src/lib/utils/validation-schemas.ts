@@ -68,7 +68,7 @@ export const AgentConfigSchema = z.object({
 	skills: z.array(z.string()),
 	system_prompt: z.string(),
 	max_tool_iterations: z.number().min(1).max(200),
-	enable_thinking: z.boolean()
+	reasoning_effort: z.enum(['low', 'medium', 'high']).nullable()
 });
 
 export const AgentSummarySchema = z.object({
