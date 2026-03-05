@@ -34,6 +34,18 @@ pub enum ProviderType {
     Custom(String),
 }
 
+impl ProviderType {
+    /// Returns the lowercase provider identifier matching serde serialization.
+    /// Use this instead of `.to_string()` (Display) for DB storage and queries.
+    pub fn as_id(&self) -> &str {
+        match self {
+            ProviderType::Mistral => "mistral",
+            ProviderType::Ollama => "ollama",
+            ProviderType::Custom(name) => name,
+        }
+    }
+}
+
 impl Serialize for ProviderType {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
@@ -47,10 +59,10 @@ impl Serialize for ProviderType {
 impl<'de> Deserialize<'de> for ProviderType {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        Ok(match s.as_str() {
+        Ok(match s.to_lowercase().as_str() {
             "mistral" => ProviderType::Mistral,
             "ollama" => ProviderType::Ollama,
-            other => ProviderType::Custom(other.to_string()),
+            _ => ProviderType::Custom(s),
         })
     }
 }
@@ -251,6 +263,32 @@ mod tests {
 
         let deserialized: ProviderType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, ProviderType::Mistral);
+    }
+
+    #[test]
+    fn test_provider_type_as_id() {
+        assert_eq!(ProviderType::Mistral.as_id(), "mistral");
+        assert_eq!(ProviderType::Ollama.as_id(), "ollama");
+        assert_eq!(
+            ProviderType::Custom("routerlab".to_string()).as_id(),
+            "routerlab"
+        );
+    }
+
+    #[test]
+    fn test_provider_type_deserialize_case_insensitive() {
+        let mistral: ProviderType = serde_json::from_str("\"Mistral\"").unwrap();
+        assert_eq!(mistral, ProviderType::Mistral);
+
+        let ollama: ProviderType = serde_json::from_str("\"Ollama\"").unwrap();
+        assert_eq!(ollama, ProviderType::Ollama);
+
+        let upper: ProviderType = serde_json::from_str("\"MISTRAL\"").unwrap();
+        assert_eq!(upper, ProviderType::Mistral);
+
+        // Custom providers preserve original casing
+        let custom: ProviderType = serde_json::from_str("\"RouterLab\"").unwrap();
+        assert_eq!(custom, ProviderType::Custom("RouterLab".to_string()));
     }
 
     #[test]

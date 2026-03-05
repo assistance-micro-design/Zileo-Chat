@@ -143,7 +143,7 @@ pub async fn list_models(
             .db
             .query_with_params(
                 &query,
-                vec![("provider".to_string(), serde_json::json!(pt.to_string()))],
+                vec![("provider".to_string(), serde_json::json!(pt.as_id()))],
             )
             .await
             .map_err(|e| {
@@ -212,6 +212,8 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
          max_output_tokens, temperature_default, is_builtin, is_reasoning, \
          (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
          (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+         (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+         (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
          created_at, updated_at \
          FROM llm_model:`{}`",
         id
@@ -274,6 +276,8 @@ pub async fn get_model_by_api_name(
          max_output_tokens, temperature_default, is_builtin, is_reasoning, \
          (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
          (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+         (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+         (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
          created_at, updated_at \
          FROM llm_model WHERE api_name = $api_name AND provider = $provider";
 
@@ -365,7 +369,7 @@ async fn check_model_uniqueness(
             vec![
                 (
                     "provider".to_string(),
-                    serde_json::json!(data.provider.to_string()),
+                    serde_json::json!(data.provider.as_id()),
                 ),
                 ("api_name".to_string(), serde_json::json!(&data.api_name)),
             ],
@@ -392,7 +396,7 @@ async fn insert_model_record(
     let insert_query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
     let insert_data = serde_json::json!({
         "id": model_id,
-        "provider": model.provider.to_string(),
+        "provider": model.provider.as_id(),
         "name": model.name,
         "api_name": model.api_name,
         "context_window": model.context_window,
@@ -483,7 +487,7 @@ pub async fn update_model(
                 vec![
                     (
                         "provider".to_string(),
-                        serde_json::json!(existing.provider.to_string()),
+                        serde_json::json!(existing.provider.as_id()),
                     ),
                     ("api_name".to_string(), serde_json::json!(api_name)),
                     ("exclude_id".to_string(), serde_json::json!(&id)),
@@ -729,7 +733,7 @@ pub async fn update_provider_settings(
     ];
     let mut params: Vec<(String, serde_json::Value)> = vec![(
         "p_provider".to_string(),
-        serde_json::json!(provider_type.to_string()),
+        serde_json::json!(provider_type.as_id()),
     )];
 
     // For enabled: use provided value, keep existing, or default to true
@@ -960,7 +964,7 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
             );
             let insert_data = serde_json::json!({
                 "id": model.id,
-                "provider": model.provider.to_string(),
+                "provider": model.provider.as_id(),
                 "name": model.name,
                 "api_name": model.api_name,
                 "context_window": model.context_window,
@@ -987,10 +991,22 @@ pub async fn seed_builtin_models(state: State<'_, AppState>) -> Result<usize, St
         }
     }
 
+    // Normalize existing provider values to lowercase (fixes case mismatch from Display trait)
+    // This is idempotent: already-lowercase values are unchanged.
+    state
+        .db
+        .db
+        .query("UPDATE llm_model SET provider = string::lowercase(provider)")
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to normalize provider values");
+            format!("Failed to normalize provider values: {}", e)
+        })?;
+
     info!(
         total = models.len(),
         inserted = inserted,
-        "Builtin models seeded"
+        "Builtin models seeded (provider values normalized)"
     );
     Ok(inserted)
 }
