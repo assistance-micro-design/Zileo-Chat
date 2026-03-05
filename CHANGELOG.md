@@ -5,6 +5,17 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-03-05
+
+### Fixed
+
+- **ProviderType case mismatch**: Models created for Ollama/Mistral were stored with capitalized provider name ("Mistral"/"Ollama") due to using `Display` trait instead of `Serialize` for DB storage. This caused:
+  - Provider filter in Settings→Models not showing user-created models
+  - Agent form (Settings→Agents) not listing models when selecting Mistral/Ollama
+  - TokenDisplay showing `0/128000` instead of actual model context window and pricing
+  - `fetchModelByApiName` silent failures affecting temperature, reasoning, and token data
+- **Cache pricing fields missing**: `get_model` and `get_model_by_api_name` queries were missing `cache_read_price_per_mtok` and `cache_write_price_per_mtok` fields, causing cache cost calculations to always return 0
+
 ## [0.15.0] - 2026-03-04
 
 ### Added
@@ -475,4 +486,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.15.0...HEAD
+[0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.15.1...HEAD
