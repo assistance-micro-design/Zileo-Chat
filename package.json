@@ -49,7 +49,7 @@
     "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.0.0",
     "eslint-plugin-svelte": "^3.14.0",
-    "globals": "^17.2.0",
+    "globals": "^17.4.0",
     "jsdom": "^27.4.0",
     "svelte": "5.53.6",
     "svelte-check": "^4.3.5",
