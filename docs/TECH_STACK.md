@@ -169,7 +169,7 @@ Production-ready resilience patterns for LLM provider calls:
 **Rate Limiting**:
 - 1 request per second minimum delay between API calls
 - Compatible with Mistral Free Tier (1 req/s) and Ollama
-- Implementation: `src-tauri/src/llm/rate_limiter.rs`
+- Implementation: integrated into `src-tauri/src/llm/manager.rs`
 
 **Retry Strategy**:
 - Exponential backoff with 3 max retries
@@ -205,7 +205,7 @@ Production-ready resilience patterns for LLM provider calls:
 
 **Query Limits**:
 - All list queries enforce LIMIT (memory explosion prevention)
-- Constants in `src-tauri/src/tools/constants.rs`:
+- Constants in `src-tauri/src/constants.rs`:
   - `DEFAULT_LIST_LIMIT`: 1000 (agents, memories, tasks)
   - `DEFAULT_MODELS_LIMIT`: 100 (LLM models)
   - `DEFAULT_MCP_LOGS_LIMIT`: 500 (MCP call logs)
@@ -221,7 +221,7 @@ Production-ready resilience patterns for LLM provider calls:
 {
   "app": {
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      "csp": "default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     }
   }
 }
@@ -279,7 +279,7 @@ cargo --version   # >= 1.93.0
 **1 Mar 2026 - Security Audit Remediation**:
 - **once_cell** removed: replaced by `std::sync::LazyLock`
 - **futures** removed: replaced by `std::future` alternatives
-- **surrealdb** pinned to =2.5.0
+- **surrealdb** updated to ~2.6
 - **Rust** updated to 1.93.0 (required for `LazyLock` stabilization)
 - `.expect()` converted to `Result` in LLM providers
 - `ProviderType` consolidated into single canonical location
@@ -291,7 +291,7 @@ cargo --version   # >= 1.93.0
 - Report enforcement mechanism for agents
 - Code organization: barrel exports, kebab-case filenames, dead code removal
 - 24 security audits completed
-- Test count: 2061 backend + 260 frontend = 2321 total
+- Test count: 2286 backend + 260 frontend = 2546 total
 
 **6 Feb 2026 - Background Workflow Execution**:
 - New stores: `backgroundWorkflowsStore`, `toastStore`
@@ -343,7 +343,7 @@ cargo --version   # >= 1.93.0
 **5 Dec 2025 - Initial Production Versions**:
 - Tauri 2.x with plugin-dialog and plugin-opener
 - SurrealDB 2.4.0 with kv-rocksdb for embedded desktop use
-- **rig-core 0.24.0** for multi-provider LLM abstraction (Mistral, Ollama)
+- **rig-core 0.31.0** for multi-provider LLM abstraction (current version)
 - async-trait 0.1 and futures 0.3 for multi-agent async patterns
-- keyring 2.0 + aes-gcm 0.10 for secure API key storage
-- lucide-svelte 0.554.0 for UI icons
+- keyring 3.6 + aes-gcm 0.10 for secure API key storage
+- @lucide/svelte 0.563.1 for UI icons

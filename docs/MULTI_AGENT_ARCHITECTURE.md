@@ -110,7 +110,7 @@ Les agents sont créés par l'utilisateur via l'interface Settings:
    - Temperature (0.0-2.0)
    - Max tokens (256-128000)
    - Max tool iterations (1-200, default: 50)
-   - Enable thinking (true/false, default: true)
+   - Reasoning effort (low/medium/high, or null for no thinking)
    - Tools actives (MemoryTool, TodoTool, CalculatorTool)
    - MCP Servers (depuis ceux configures)
    - System Prompt (1-10000 caracteres)
@@ -994,7 +994,7 @@ L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
 
 | Tool | Description | Operations |
 |------|-------------|------------|
-| **MemoryTool** | Persistence vectorielle | add, get, list, search, delete, clear_by_type, activate_workflow |
+| **MemoryTool** | Persistence vectorielle | describe, add, get, list, search, delete, clear_by_type |
 | **TodoTool** | Gestion taches workflow | create, get, update, list, complete, delete |
 | **CalculatorTool** | Calculs mathematiques | evaluate (expressions: +, -, *, /, ^, sqrt, sin, cos, tan, log, ln) |
 
@@ -1137,12 +1137,15 @@ zileo-chat-3/
 │  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker
 │  │  └─ validation_helper.rs # Human-in-the-loop validation
 │  │
-│  ├─ commands/               # Tauri IPC commands
+│  ├─ commands/               # Tauri IPC commands (22 modules, 137 commands)
 │  │  ├─ agent.rs             # Agent CRUD
 │  │  ├─ workflow.rs          # Workflow management
+│  │  ├─ streaming.rs         # SSE streaming
 │  │  ├─ validation.rs        # Human-in-the-loop
 │  │  ├─ memory.rs            # Memory commands
-│  │  └─ streaming.rs         # SSE streaming
+│  │  ├─ skill.rs             # Skill CRUD
+│  │  ├─ llm_models.rs        # LLM model management
+│  │  └─ ...                  # 14 more modules
 │  │
 │  ├─ models/                 # Rust structs
 │  │  ├─ agent.rs             # AgentConfig, Lifecycle, etc.

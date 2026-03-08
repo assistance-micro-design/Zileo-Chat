@@ -1749,15 +1749,15 @@ import { localeStore, locale, localeInfo } from '$lib/stores/locale';
 
 ### Lucide Icons in Svelte
 
-Option 1: Use `lucide-svelte` package:
+Option 1: Use `@lucide/svelte` package:
 
 ```bash
-npm install lucide-svelte
+npm install @lucide/svelte
 ```
 
 ```svelte
 <script>
-  import { Settings, Bot, Search } from 'lucide-svelte';
+  import { Settings, Bot, Search } from '@lucide/svelte';
 </script>
 
 <Settings size={16} />

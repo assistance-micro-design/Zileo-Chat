@@ -381,7 +381,7 @@ onMount(() => {
 
 #### Validation (Global Settings)
 
-**Implementation Status**: Complete (v0.9.1)
+**Implementation Status**: Complete (v0.15.1)
 
 **Mode de validation** (radio buttons) :
 - **Auto** : Execute sans confirmation (affiche liste des outils/MCP avec badge "Auto-approved")
@@ -1290,11 +1290,11 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (96 Total Components)
+### Component Library (95 Total Components)
 
 ```
 src/lib/components/
-├─ ui/                  # 15 atomic UI components
+├─ ui/                  # 18 atomic UI components
 │  ├─ Button.svelte
 │  ├─ Badge.svelte
 │  ├─ Card.svelte
@@ -1309,18 +1309,17 @@ src/lib/components/
 │  ├─ LanguageSelector.svelte
 │  ├─ ToastContainer.svelte
 │  └─ ToastItem.svelte
-├─ layout/              # 4 layout containers
+├─ layout/              # 3 layout containers
 │  ├─ AppContainer.svelte
 │  ├─ Sidebar.svelte
-│  ├─ RightSidebar.svelte
-│  └─ FloatingMenu.svelte
+│  └─ RightSidebar.svelte
 ├─ navigation/          # 1 navigation element
 │  └─ NavItem.svelte
 ├─ agent/               # 3 agent page sections (2-column layout)
 │  ├─ AgentHeader.svelte
 │  ├─ ChatContainer.svelte
 │  └─ WorkflowSidebar.svelte
-├─ chat/                # 8 chat components
+├─ chat/                # 11 chat components
 │  ├─ ChatInput.svelte
 │  ├─ MessageBubble.svelte
 │  ├─ MessageList.svelte
@@ -1329,25 +1328,18 @@ src/lib/components/
 │  ├─ ReasoningStep.svelte
 │  ├─ StreamingMessage.svelte
 │  └─ ToolExecution.svelte
-├─ workflow/            # 16 workflow components
-│  ├─ ActivityFeed.svelte
-│  ├─ ActivityItem.svelte
-│  ├─ ActivityItemDetails.svelte
+├─ workflow/            # 9 workflow components
 │  ├─ AgentSelector.svelte
-│  ├─ ConfirmDeleteModal.svelte
 │  ├─ MetricsBar.svelte
 │  ├─ NewWorkflowModal.svelte
-│  ├─ ReasoningPanel.svelte
-│  ├─ SubAgentActivity.svelte
 │  ├─ TokenDisplay.svelte
-│  ├─ ToolExecutionPanel.svelte
 │  ├─ UserQuestionModal.svelte
 │  ├─ ValidationModal.svelte
 │  ├─ WorkflowItem.svelte
 │  ├─ WorkflowItemCompact.svelte
 │  └─ WorkflowList.svelte
-├─ settings/            # Includes CustomProviderForm.svelte
-│  └─ CustomProviderForm.svelte  # Modal form for adding OpenAI-compatible providers
+├─ legal/               # 1 legal component
+│  └─ LicensesModal.svelte
 ├─ mcp/                 # 3 MCP management components
 │  ├─ MCPServerCard.svelte
 │  ├─ MCPServerForm.svelte
@@ -1357,7 +1349,7 @@ src/lib/components/
 │  ├─ ModelCard.svelte
 │  ├─ ModelForm.svelte
 │  └─ ProviderCard.svelte
-├─ settings/            # 24 settings components
+├─ settings/            # 33 settings components
 │  ├─ agents/           # Agent CRUD (3)
 │  │  ├─ AgentSettings.svelte
 │  │  ├─ AgentList.svelte
@@ -1421,7 +1413,7 @@ src/lib/components/
 | `toast` | custom | `toastStore`, `toasts`, `visibleToasts`, `hasToasts`, `navigationTarget` | Toast notifications for background workflow events |
 | `index` | barrel | All stores | Re-exports all stores |
 
-### Types (26 Modules in src/types/)
+### Types (23 Modules in src/types/)
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|

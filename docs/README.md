@@ -49,7 +49,7 @@ Orchestration intra-workflow : exécution parallèle vs séquentielle des sous-a
 Outils natifs agents : Todo, Memory (vectorielle), UserQuestion, Sub-Agent tools
 
 **[TOOLS_REFERENCE.md](TOOLS_REFERENCE.md)**
-Reference complete des 7 tools avec exemples JSON et patterns de securite
+Reference complete des 9 tools avec exemples JSON et patterns de securite
 
 **[SUB_AGENT_GUIDE.md](SUB_AGENT_GUIDE.md)**
 Guide sous-agents : SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
@@ -140,7 +140,7 @@ Stratégie tests : unitaires, intégration, E2E, CI/CD
 
 - **Cohérente** : Interdépendances vérifiées
 - **Complète** : Toutes sections couvertes
-- **Tests** : ~1025 backend tests (975 unit + 46 integration + 4 doc), ~260 frontend tests (~1285 total)
+- **Tests** : ~2286 backend tests, ~260 frontend tests (~2546 total)
 - **Sécurité** : 24 audits de sécurité complétés
 
-Dernière validation : 2026-03-01
+Dernière validation : 2026-03-08

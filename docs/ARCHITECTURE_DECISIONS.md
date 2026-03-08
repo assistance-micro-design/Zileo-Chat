@@ -2,7 +2,7 @@
 
 > **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation) | 2026-03-01 (post-audit sécurité)
 > **Phase** : Phase 8 complète + Security Audit Remediation
-> **Statut** : Décisions validées et implémentées (123 commandes Tauri, 91 composants Svelte, ~1285 tests)
+> **Statut** : Décisions validées et implémentées (137 commandes Tauri, 95 composants Svelte, ~2546 tests)
 
 ---
 
@@ -686,7 +686,7 @@ zileo-chat-3/
 ### ✅ Frontend State
 - Store pattern : CRUD factory canonique, pure functions acceptable
 - Event-driven : Cleanup lifecycle obligatoire
-- Runes migration : Différée post-v1
+- Runes migration : Completee (Svelte 5 runes utilisees partout)
 
 ---
 
@@ -703,7 +703,7 @@ zileo-chat-3/
 8. ✅ Phase 7 : Strategic Frontend (settings decomposition, lazy loading, cache TTL)
 9. ✅ Phase 8 : LLM Optimizations (rate limiter, retry, circuit breaker, HTTP pooling, utils)
 
-**Total Tests** : ~1285 passing (975 backend unit + 46 integration + 4 doc + 260 frontend)
+**Total Tests** : ~2546 passing (2286 backend + 260 frontend)
 **Code Quality** : 0 errors across all validations (clippy, eslint, svelte-check)
 **Security Audit** : 24 audits remédiés, incluant SurrealQL injection, input validation, dependency cleanup
 
@@ -1045,7 +1045,7 @@ let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
 - Default 1000 for list operations (agents, memories, tasks)
 - Default 100 for models
 - Default 500 for MCP logs, messages
-- Constants: `src-tauri/src/tools/constants::query_limits`
+- Constants: `src-tauri/src/constants::query_limits`
 
 **Transaction Support** :
 - `transaction_with_params()` for atomic multi-query operations

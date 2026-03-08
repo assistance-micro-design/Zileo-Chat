@@ -767,10 +767,10 @@ async fn retry_operation<T>(
 
 ### Timeouts
 
-**Timeouts configures** via constantes dans `tools/constants.rs`:
+**Timeouts configures** via constantes dans `constants.rs`:
 
 ```rust
-// src-tauri/src/tools/constants.rs
+// src-tauri/src/constants.rs
 pub mod workflow {
     pub const LLM_EXECUTION_TIMEOUT_SECS: u64 = 300;       // 5 minutes pour execution LLM
     pub const DB_OPERATION_TIMEOUT_SECS: u64 = 30;         // 30 secondes pour DB ops
@@ -782,7 +782,7 @@ pub mod workflow {
 **Utilisation**:
 ```rust
 use tokio::time::timeout;
-use crate::tools::constants::workflow as wf_const;
+use crate::constants::workflow as wf_const;
 
 // execute_workflow() - timeout sur execution LLM
 let report = timeout(
@@ -905,7 +905,7 @@ Completed workflow executions are automatically removed from the background stor
 
 **Architecture** : [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md)
 **Tools Agents** : [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md)
-**MCP Integration** : [MCP_ARCHITECTURE_DECISION.md](MCP_ARCHITECTURE_DECISION.md)
+**MCP Integration** : [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md)
 **API Reference** : [API_REFERENCE.md](API_REFERENCE.md)
 **Database Schema** : [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)
 
@@ -915,7 +915,7 @@ Completed workflow executions are automatically removed from the background stor
 - Backend Commands: `src-tauri/src/commands/workflow.rs`, `src-tauri/src/commands/streaming.rs`
 - Orchestrator: `src-tauri/src/agents/core/orchestrator.rs`
 - Query Constants: `src-tauri/src/db/queries.rs` (centralized queries + cascade module)
-- Timeout Constants: `src-tauri/src/tools/constants.rs` (workflow module)
+- Timeout Constants: `src-tauri/src/constants.rs` (workflow module)
 - Models: `src-tauri/src/models/workflow.rs`, `src-tauri/src/models/streaming.rs`
 - Frontend Stores: `src/lib/stores/workflows.ts`, `src/lib/stores/streaming.ts`, `src/lib/stores/activity.ts`, `src/lib/stores/backgroundWorkflows.ts`, `src/lib/stores/toast.ts`
 - Frontend Types: `src/types/workflow.ts`, `src/types/streaming.ts`, `src/types/activity.ts`, `src/types/background-workflow.ts`

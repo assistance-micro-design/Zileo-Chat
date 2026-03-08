@@ -100,16 +100,21 @@ zileo-chat-3/
 │  ├─ routes/               # Pages (file-based routing)
 │  │  ├─ +layout.svelte     # Layout global (theme, locale, onboarding)
 │  │  ├─ +page.svelte       # Accueil (redirect vers /agent)
-│  │  ├─ settings/          # Page Settings (8 sections)
+│  │  ├─ settings/          # Page Settings (10 sections)
 │  │  └─ agent/             # Page Agent (chat principal)
 │  ├─ lib/
-│  │  ├─ components/        # 91 composants Svelte
-│  │  │  ├─ ui/             # Composants atomiques (13)
+│  │  ├─ components/        # 95 composants Svelte
+│  │  │  ├─ ui/             # Composants atomiques (18)
 │  │  │  ├─ layout/         # Layout (4)
-│  │  │  ├─ chat/           # Chat UI (8)
-│  │  │  ├─ workflow/       # Gestion workflows (16)
-│  │  │  ├─ settings/       # Sections settings (22)
-│  │  │  └─ onboarding/     # Assistant premier lancement (9)
+│  │  │  ├─ chat/           # Chat UI (11)
+│  │  │  ├─ workflow/       # Gestion workflows (9)
+│  │  │  ├─ settings/       # Sections settings (33)
+│  │  │  ├─ onboarding/     # Assistant premier lancement (9)
+│  │  │  ├─ agent/          # Agent UI (3)
+│  │  │  ├─ llm/            # LLM components (4)
+│  │  │  ├─ mcp/            # MCP components (3)
+│  │  │  ├─ navigation/     # Navigation (1)
+│  │  │  └─ legal/          # Legal (1)
 │  │  ├─ stores/            # 18 stores Svelte
 │  │  ├─ services/          # Couche business logic
 │  │  └─ i18n/              # Internationalisation
@@ -120,18 +125,18 @@ zileo-chat-3/
 ├─ src-tauri/               # Backend Rust
 │  ├─ src/
 │  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # 20 modules (123 commandes Tauri)
+│  │  ├─ commands/          # 22 modules (137 commandes Tauri)
 │  │  ├─ agents/            # Système multi-agents
 │  │  ├─ llm/               # Rig.rs integration (Mistral, Ollama)
 │  │  ├─ mcp/               # MCP client/server
-│  │  ├─ tools/             # 7 outils (Memory, Todo, Calculator, UserQuestion, SpawnAgent, DelegateTask, ParallelTasks)
+│  │  ├─ tools/             # 9 outils (Memory, Todo, Calculator, UserQuestion, FileManager, ReadSkill, SpawnAgent, DelegateTask, ParallelTasks)
 │  │  ├─ models/            # Structs Rust (sync avec TS)
 │  │  ├─ security/          # Keystore + validation
-│  │  └─ db/                # SurrealDB client (16 tables)
+│  │  └─ db/                # SurrealDB client (17 tables)
 │  ├─ Cargo.toml            # Dépendances Rust
 │  └─ tauri.conf.json       # Config Tauri
 │
-└─ docs/                    # Documentation (18 fichiers)
+└─ docs/                    # Documentation (17 fichiers)
 ```
 
 ---
@@ -153,16 +158,17 @@ Au premier lancement, un assistant guide la configuration :
 
 ### 3. Configuration Avancée
 
-**Page Settings** (9 sections) :
+**Page Settings** (10 sections) :
 1. **Providers** : Configurer Mistral (API key) et/ou Ollama (local)
 2. **Models** : Gérer modèles LLM (builtin + custom)
 3. **Agents** : Créer votre premier agent (aucun agent par défaut)
 4. **MCP Servers** : Configurer serveurs MCP (Docker/NPX/UVX)
-5. **Memory** : Configuration embeddings + gestion mémoires
-6. **Validation** : Paramètres human-in-the-loop
-7. **Prompts** : Bibliothèque de prompts
-8. **Import/Export** : Sauvegarde/restauration configuration
-9. **Theme** : Choisir Light/Dark
+5. **Skills** : Gestion des documents de competences assignables aux agents
+6. **Memory** : Configuration embeddings + gestion mémoires
+7. **Validation** : Paramètres human-in-the-loop
+8. **Prompts** : Bibliothèque de prompts
+9. **Import/Export** : Sauvegarde/restauration configuration
+10. **Theme** : Choisir Light/Dark
 
 **Note** : Toutes les API keys sont configurées via UI et stockées de manière sécurisée (Tauri secure storage + encryption)
 

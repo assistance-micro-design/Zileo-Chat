@@ -147,7 +147,7 @@ let tool = factory.create_tool("MemoryTool", Some("wf_001".into()), "agent_id".i
 Pour activer le TodoTool sur un agent:
 ```toml
 [tools]
-enabled = ["TodoTool", "SurrealDBTool"]
+enabled = ["TodoTool", "MemoryTool"]
 ```
 
 ---
@@ -856,7 +856,7 @@ loop {
 
     iteration += 1;
     if iteration >= MAX_ITERATIONS {
-        break; // Safety limit (10 iterations)
+        break; // Safety limit (configurable via max_tool_iterations, default: 50)
     }
 }
 ```
@@ -939,11 +939,11 @@ activate_workflow("code_review")
 
 ---
 
-**Version** : 2.5
-**Derniere mise a jour** : 2026-03-01
+**Version** : 2.6
+**Derniere mise a jour** : 2026-03-08
 **Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation + Tool Skills + FileManager
 
-**Features (v2.2)**:
+**Features (v2.6)**:
 - 9 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool, ReadSkillTool
 - Sub-Agent Resilience: Inactivity Timeout, CancellationToken, Circuit Breaker, Retry, Correlation ID
 - MemoryTool Optimizations: Parameterized queries, MemoryInput struct, helpers.rs consolidation, composite indexes

@@ -4,7 +4,7 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.9.3
+**Version actuelle** : 0.15.1
 **Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
 **Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
 **CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
@@ -48,7 +48,7 @@ xcode-select --install
 ```json
 {
   "productName": "Zileo Chat",
-  "version": "0.9.0-beta",
+  "version": "0.15.1",
   "identifier": "com.zileo.chat",
   "build": {
     "frontendDist": "../build",
@@ -59,12 +59,12 @@ xcode-select --install
   "app": {
     "windows": [{ "title": "Zileo Chat", "width": 1200, "height": 800 }],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -109,7 +109,7 @@ npm run tauri:build
 
 ### Linux (Configure)
 
-Les targets Linux sont configures dans tauri.conf.json : `["appimage", "deb"]`
+Les targets sont configures dans tauri.conf.json : `"all"` (tous les formats disponibles par OS)
 
 #### AppImage (Universal)
 ```bash
@@ -117,27 +117,26 @@ npm run tauri:build
 ```
 
 **Avantages** : Pas installation, portable, compatible toutes distros
-**Output** : `zileo-chat_0.9.0-beta_amd64.AppImage`
+**Output** : `zileo-chat_0.15.1_amd64.AppImage`
 
 #### .deb (Debian/Ubuntu)
 Build produit automatiquement les deux formats.
 
 **Installation** :
 ```bash
-sudo dpkg -i zileo-chat_0.9.0-beta_amd64.deb
+sudo dpkg -i zileo-chat_0.15.1_amd64.deb
 ```
 
-**Output** : `zileo-chat_0.9.0-beta_amd64.deb`
+**Output** : `zileo-chat_0.15.1_amd64.deb`
 
 ---
 
 ### macOS (Prevu)
 
-> **Statut** : Non configure. Necessite ajout de "dmg" dans bundle.targets.
+> **Statut** : Configure via `bundle.targets: "all"` dans tauri.conf.json.
 
 #### .dmg (Image Disque)
 ```bash
-# Ajouter "dmg" dans tauri.conf.json bundle.targets
 npm run tauri:build
 ```
 
@@ -147,7 +146,7 @@ codesign --sign "Developer ID Application: Your Name" \
   src-tauri/target/release/bundle/macos/Zileo\ Chat.app
 ```
 
-**Output prevu** : `zileo-chat_0.9.0-beta_x64.dmg`
+**Output prevu** : `zileo-chat_0.15.1_x64.dmg`
 
 ---
 
@@ -225,9 +224,9 @@ explorer "src-tauri\target\release\bundle\msi"
 ```
 src-tauri/target/release/bundle/
 ├── msi/
-│   └── zileo-chat_0.9.0-beta_x64-setup.msi    # Installer MSI
+│   └── zileo-chat_0.15.1_x64-setup.msi    # Installer MSI
 └── nsis/
-    └── zileo-chat_0.9.0-beta_x64-setup.exe    # Installer NSIS (alternative)
+    └── zileo-chat_0.15.1_x64-setup.exe    # Installer NSIS (alternative)
 ```
 
 #### Script Automatise Windows
@@ -331,14 +330,14 @@ npm run tauri dev
 npm run tauri build
 
 # Installer pour tester
-Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.9.0-beta_x64-setup.msi"
+Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.15.1_x64-setup.msi"
 ```
 
 #### Checklist Pre-Build Windows
 
 ```powershell
 # Verifier tous les prerequisites
-rustc --version          # >= 1.80
+rustc --version          # >= 1.93.0
 rustup show              # stable-x86_64-pc-windows-msvc
 node --version           # >= 20.x
 npm --version            # >= 10.x
@@ -391,7 +390,7 @@ Chaque OS est builde sur son propre runner en parallele.
 
 #### Workflow Validate (`.github/workflows/validate.yml`)
 
-**Declencheur** : Push sur `main`/`develop`, PR vers `main`
+**Declencheur** : PR vers `main` uniquement
 
 **Jobs paralleles** :
 1. **Frontend** : `npm run lint` + `npm run check` + `npm run test`
@@ -401,7 +400,7 @@ Chaque OS est builde sur son propre runner en parallele.
 
 | Workflow | Declencheur | Action |
 |----------|-------------|--------|
-| `validate.yml` | Push/PR sur main/develop | Lint + Type check + Tests (frontend + backend) |
+| `validate.yml` | PR vers main | Lint + Type check + Tests (frontend + backend) |
 | `release.yml` | Tag `v*` ou manuel | Build 3 OS + Release draft |
 
 ### Creer une Release
@@ -412,7 +411,7 @@ Chaque OS est builde sur son propre runner en parallele.
 2. Commit final des changements
 3. Aller dans **History**
 4. Clic droit sur le commit → **Create Tag**
-5. Nom : `v0.9.3-beta` (ou version suivante)
+5. Nom : `v0.15.1-beta` (ou version suivante)
 6. **Push origin** (inclut automatiquement le tag)
 
 #### Via CLI
@@ -424,8 +423,8 @@ npm run lint && npm run check
 cd src-tauri && cargo clippy && cargo test
 
 # Creer et pousser le tag
-git tag v0.9.3-beta
-git push origin v0.9.3-beta
+git tag v0.15.1-beta
+git push origin v0.15.1-beta
 ```
 
 #### Finalisation sur GitHub
@@ -526,7 +525,7 @@ Ajouter dans `tauri.conf.json` :
 npx tauri signer generate
 
 # Signer release
-npx tauri signer sign zileo-chat_0.9.0-beta_amd64.AppImage
+npx tauri signer sign zileo-chat_0.15.1_amd64.AppImage
 ```
 
 Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
@@ -627,8 +626,8 @@ git push origin :refs/tags/v0.1.1
 
 **3. Republier version stable** (exemple)
 ```bash
-git tag v0.9.0-beta-hotfix
-git push origin v0.9.0-beta-hotfix
+git tag v0.15.1-hotfix
+git push origin v0.15.1-hotfix
 ```
 
 **4. Communiquer** : Release notes + notification utilisateurs
@@ -648,7 +647,7 @@ git push origin v0.9.0-beta-hotfix
 ### Release (Automatise via GitHub Actions)
 - [ ] Tag cree et pushe : `git tag vX.Y.Z && git push origin vX.Y.Z`
 - [ ] Workflow release termine sans erreur
-- [ ] 6 artifacts presents dans la draft release
+- [ ] artifacts presents dans la draft release
 - [ ] Release notes verifiees et editees si besoin
 - [ ] Release publiee
 
@@ -680,9 +679,8 @@ git push origin v0.9.0-beta-hotfix
 ### Large Binary Size
 
 **Solutions** :
-1. Strip symbols : `strip target/release/zileo-chat`
-2. Enable LTO : Ajouter `[profile.release] lto = "thin"` dans Cargo.toml (non configure)
-3. Optimize dependencies : Exclude unused features dans Cargo.toml
+1. **Enable LTO** : Deja configure dans Cargo.toml (`lto = true`, `strip = true`, `codegen-units = 1`)
+2. Optimize dependencies : Exclude unused features dans Cargo.toml
 
 ---
 

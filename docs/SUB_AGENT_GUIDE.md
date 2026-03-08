@@ -591,9 +591,9 @@ Parallel batch executions use correlation IDs for tracing:
 
 **Solution**: Ensure only the primary agent uses SpawnAgentTool/DelegateTaskTool/ParallelTasksTool.
 
-### "Maximum 3 sub-agents exceeded"
+### "Maximum 15 sub-agents exceeded"
 
-**Cause**: Workflow already has 3 active sub-agents.
+**Cause**: Workflow already has 15 active sub-agents.
 
 **Solution**: Wait for current sub-agents to complete or terminate one before spawning more.
 

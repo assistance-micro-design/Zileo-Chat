@@ -552,7 +552,7 @@ db.transaction_with_params(vec![
 
 All list operations enforce LIMIT to prevent memory explosion:
 ```rust
-use crate::tools::constants::query_limits;
+use crate::constants::query_limits;
 
 let query = format!(
     "SELECT * FROM memory ORDER BY created_at DESC LIMIT {}",
@@ -560,7 +560,7 @@ let query = format!(
 );
 ```
 
-**Constants** (`src-tauri/src/tools/constants.rs`):
+**Constants** (`src-tauri/src/constants.rs`):
 | Constant | Value | Usage |
 |----------|-------|-------|
 | `DEFAULT_LIST_LIMIT` | 1000 | agents, memories, tasks |

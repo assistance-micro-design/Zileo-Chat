@@ -14,14 +14,12 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| **Backend Unit** | 80+ | 975 |
-| **Backend Integration** | 2 | 46 |
-| **Backend Doc** | - | 4 |
+| **Backend (all)** | 80+ | 2286 |
 | **Frontend Unit** | 12 | 260 |
 | **Frontend E2E** | 10 | 112 |
-| **Total** | **104+** | **~1397** |
+| **Total** | **102+** | **~2658** |
 
-> **Last Updated**: 2026-03-01
+> **Last Updated**: 2026-03-08
 
 ---
 
@@ -80,7 +78,7 @@ Un module partage `src-tauri/src/test_utils.rs` fournit :
 - 10+ seed helpers : `seed_agent()`, `seed_workflow()`, `seed_message()`, etc.
 - Utilise par les tests unitaires et d'integration
 
-### Unit Tests (975 tests, 80+ files)
+### Unit Tests (80+ files)
 
 **Localisation** : `src-tauri/src/**/*.rs`
 
@@ -122,7 +120,7 @@ cargo test -- --nocapture # With logs
 
 ---
 
-### Integration Tests (46 tests, 2 files)
+### Integration Tests (2 files)
 
 **Localisation** : `src-tauri/tests/`
 
@@ -439,34 +437,32 @@ mod tests {
 
 **Workflow** : `.github/workflows/test.yml`
 
-#### On Push (branches feature)
+#### On PR (validate.yml)
 ```yaml
-name: Tests
-on: [push]
+name: Validate
+on:
+  pull_request:
+    branches: [main]
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm run lint
-      - run: cargo clippy
-
-  test-backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo test
-
-  test-frontend:
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: npm install
+      - run: npm run lint
+      - run: npm run check
       - run: npm run test
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
 ```
 
-#### On PR (vers main)
+#### Additional PR Checks
 ```yaml
   test-integration:
     runs-on: ubuntu-latest
