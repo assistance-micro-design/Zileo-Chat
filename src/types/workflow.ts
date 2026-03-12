@@ -198,6 +198,8 @@ export interface TokenDisplayData {
   speed_tks?: number;
   /** Whether currently streaming */
   is_streaming: boolean;
+  /** Current context window usage (last API call input tokens) */
+  context_used: number;
   /** Cache hit rate percentage (cached_tokens / tokens_input * 100), null if no caching */
   cache_hit_rate: number | null;
 }

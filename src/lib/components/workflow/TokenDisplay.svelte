@@ -59,10 +59,9 @@
 
 	/**
 	 * Calculate context usage percentage.
-	 * Always uses cumulative main agent tokens to show how much context
-	 * the main agent has consumed relative to its context window max.
+	 * Uses current context size (last API call input tokens) from backend.
 	 */
-	const contextUsed = $derived(data.cumulative_input);
+	const contextUsed = $derived(data.context_used);
 	const contextPercentage = $derived(
 		data.context_max > 0 ? Math.min((contextUsed / data.context_max) * 100, 100) : 0
 	);
