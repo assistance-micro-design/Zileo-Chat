@@ -42,11 +42,16 @@ use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool}
 use reqwest::Client;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::LazyLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 /// Default timeout for HTTP operations (30 seconds)
 const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
+
+/// Minimum delay between consecutive HTTP requests to the same server (ms).
+/// Prevents rate-limiting on shared hosting (e.g. o2switch Tiger Protect).
+const HTTP_THROTTLE_DELAY_MS: u64 = 500;
 
 /// Shared HTTP client for connection pooling
 ///
@@ -114,6 +119,8 @@ pub struct MCPHttpHandle {
     connected: bool,
     /// Custom headers for this connection (API key, etc.)
     headers: reqwest::header::HeaderMap,
+    /// Timestamp of last HTTP request (for throttling)
+    last_request_time: Mutex<Instant>,
 }
 
 impl MCPHttpHandle {
@@ -211,6 +218,9 @@ impl MCPHttpHandle {
             server_info: None,
             connected: false,
             headers,
+            last_request_time: Mutex::new(
+                Instant::now() - Duration::from_millis(HTTP_THROTTLE_DELAY_MS),
+            ),
         };
 
         // Test connection with a simple request
@@ -229,6 +239,8 @@ impl MCPHttpHandle {
 
     /// Tests connectivity to the HTTP endpoint
     async fn test_connectivity(&self) -> MCPResult<()> {
+        self.throttle().await;
+
         debug!(
             server_id = %self.config.id,
             base_url = %self.base_url,
@@ -482,7 +494,26 @@ impl MCPHttpHandle {
     }
 
     /// Sends a JSON-RPC request to the server
+    /// Enforces minimum delay between consecutive HTTP requests to avoid rate-limiting.
+    async fn throttle(&self) {
+        let mut last_time = self.last_request_time.lock().await;
+        let elapsed = last_time.elapsed();
+        let min_delay = Duration::from_millis(HTTP_THROTTLE_DELAY_MS);
+        if elapsed < min_delay {
+            let wait = min_delay - elapsed;
+            debug!(
+                server_id = %self.config.id,
+                wait_ms = wait.as_millis(),
+                "Throttling HTTP request"
+            );
+            tokio::time::sleep(wait).await;
+        }
+        *last_time = Instant::now();
+    }
+
     async fn send_request(&self, request: JsonRpcRequest) -> MCPResult<JsonRpcResponse> {
+        self.throttle().await;
+
         debug!(
             server_id = %self.config.id,
             method = %request.method,
@@ -549,6 +580,8 @@ impl MCPHttpHandle {
         method: &str,
         params: Option<serde_json::Value>,
     ) -> MCPResult<()> {
+        self.throttle().await;
+
         debug!(
             server_id = %self.config.id,
             method = %method,
