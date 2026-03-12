@@ -163,7 +163,7 @@ export const tokenStore = {
 	/**
 	 * Set session tokens from a response_block event.
 	 * Sets both input and output tokens at once without speed calculation.
-	 * Used with the new block-by-block execution model (SA-019).
+	 * Used with the block-by-block execution model.
 	 *
 	 * @param tokensIn - Input tokens consumed
 	 * @param tokensOut - Output tokens generated

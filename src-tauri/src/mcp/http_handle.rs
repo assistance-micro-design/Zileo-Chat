@@ -769,7 +769,7 @@ mod tests {
         assert!(config.args.is_empty());
     }
 
-    // SA-002 S2-H3: HTTP warning integration tests
+    // HTTP warning integration tests
     #[test]
     fn test_http_warning_for_remote_http_url() {
         let result = check_http_warning("http://remote-api.com/mcp");
