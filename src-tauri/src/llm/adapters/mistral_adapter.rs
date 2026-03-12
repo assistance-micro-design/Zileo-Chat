@@ -24,7 +24,7 @@
 //! - `tool_choice` supports: "auto", "any" (required), "none"
 //! - Response path: `choices[0].message.tool_calls`
 
-use crate::llm::tool_adapter::{helpers, ProviderToolAdapter, TokenUsage};
+use crate::llm::tool_adapter::{helpers, ProviderToolAdapter};
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::tools::ToolDefinition;
 use serde_json::{json, Value};
@@ -217,41 +217,8 @@ impl ProviderToolAdapter for MistralToolAdapter {
             })
     }
 
-    /// Extracts token usage from Mistral's response format.
-    ///
-    /// Mistral uses OpenAI-compatible format:
-    /// - `usage.prompt_tokens` = input tokens
-    /// - `usage.completion_tokens` = output tokens
-    /// - `usage.prompt_tokens_details.cached_tokens` = cached input tokens (best-effort)
-    fn extract_usage(&self, response: &Value) -> TokenUsage {
-        let input = response
-            .pointer("/usage/prompt_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let output = response
-            .pointer("/usage/completion_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let cached = response
-            .pointer("/usage/prompt_tokens_details/cached_tokens")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-
-        debug!(
-            prompt_tokens = input,
-            completion_tokens = output,
-            cached_tokens = ?cached,
-            "Extracted token usage from Mistral response"
-        );
-
-        TokenUsage {
-            input_tokens: input,
-            output_tokens: output,
-            cached_tokens: cached,
-            cache_write_tokens: None,
-            thinking_tokens: None,
-        }
-    }
+    // extract_usage: uses trait default from ProviderToolAdapter
+    // which extracts all fields including cache_write_tokens
 }
 
 #[cfg(test)]
@@ -487,5 +454,28 @@ mod tests {
         assert_eq!(usage.input_tokens, 1000);
         assert_eq!(usage.output_tokens, 200);
         assert_eq!(usage.cached_tokens, Some(800));
+        assert_eq!(usage.cache_write_tokens, None);
+    }
+
+    #[test]
+    fn test_extract_usage_with_cache_write_tokens() {
+        let adapter = MistralToolAdapter::new();
+
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 3000,
+                "completion_tokens": 400,
+                "prompt_tokens_details": {
+                    "cached_tokens": 1500,
+                    "cache_write_tokens": 1500
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 3000);
+        assert_eq!(usage.output_tokens, 400);
+        assert_eq!(usage.cached_tokens, Some(1500));
+        assert_eq!(usage.cache_write_tokens, Some(1500));
     }
 }

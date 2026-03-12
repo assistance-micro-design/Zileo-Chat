@@ -831,6 +831,7 @@
   "workflow_token_speed": "j/s",
   "workflow_token_cached": "cache",
   "workflow_metrics_cached_tokens": "Jetons en cache",
+  "workflow_cache_hit_rate": "taux cache",
   "workflow_cost_estimate": "(estimatif)",
 
   "workflow_agent_select": "Selectionnez un agent...",

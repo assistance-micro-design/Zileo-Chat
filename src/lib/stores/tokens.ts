@@ -258,7 +258,11 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cumulative_cache_write: $s.cumulative.cacheWrite ?? undefined,
 		workflow_total_cost: $s.cumulative.cost + subAgentCost,
 		speed_tks: $s.streaming.speed ?? undefined,
-		is_streaming: $s.isStreaming
+		is_streaming: $s.isStreaming,
+		cache_hit_rate:
+			$s.streaming.cached && $s.streaming.input > 0
+				? Math.round(($s.streaming.cached / $s.streaming.input) * 100)
+				: null
 	};
 });
 

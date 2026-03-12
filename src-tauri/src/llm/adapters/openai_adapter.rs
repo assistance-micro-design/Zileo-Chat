@@ -30,7 +30,7 @@
 //! - Mistral uses `"any"` for required mode
 //! - OpenAI standard uses `"required"` for required mode
 
-use crate::llm::tool_adapter::{helpers, ProviderToolAdapter, TokenUsage};
+use crate::llm::tool_adapter::{helpers, ProviderToolAdapter};
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::tools::ToolDefinition;
 use serde_json::{json, Value};
@@ -187,40 +187,8 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             })
     }
 
-    fn extract_usage(&self, response: &Value) -> TokenUsage {
-        let input = response
-            .pointer("/usage/prompt_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let output = response
-            .pointer("/usage/completion_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
-        let cached = response
-            .pointer("/usage/prompt_tokens_details/cached_tokens")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-        let thinking = response
-            .pointer("/usage/completion_tokens_details/reasoning_tokens")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-
-        debug!(
-            prompt_tokens = input,
-            completion_tokens = output,
-            cached_tokens = ?cached,
-            thinking_tokens = ?thinking,
-            "Extracted token usage from OpenAI-compatible response"
-        );
-
-        TokenUsage {
-            input_tokens: input,
-            output_tokens: output,
-            cached_tokens: cached,
-            cache_write_tokens: None,
-            thinking_tokens: thinking,
-        }
-    }
+    // extract_usage: uses trait default from ProviderToolAdapter
+    // which extracts all fields including cache_write_tokens and thinking_tokens
 }
 
 #[cfg(test)]
@@ -307,6 +275,7 @@ mod tests {
         assert_eq!(usage.input_tokens, 100);
         assert_eq!(usage.output_tokens, 50);
         assert_eq!(usage.cached_tokens, None);
+        assert_eq!(usage.cache_write_tokens, None);
     }
 
     #[test]
@@ -326,6 +295,7 @@ mod tests {
         assert_eq!(usage.input_tokens, 1000);
         assert_eq!(usage.output_tokens, 200);
         assert_eq!(usage.cached_tokens, Some(800));
+        assert_eq!(usage.cache_write_tokens, None);
     }
 
     #[test]
@@ -343,6 +313,27 @@ mod tests {
 
         let usage = adapter.extract_usage(&response);
         assert_eq!(usage.cached_tokens, Some(0));
+    }
+
+    #[test]
+    fn test_extract_usage_with_cache_write_tokens() {
+        let adapter = OpenAiToolAdapter::new();
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 2000,
+                "completion_tokens": 500,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800,
+                    "cache_write_tokens": 1200
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 2000);
+        assert_eq!(usage.output_tokens, 500);
+        assert_eq!(usage.cached_tokens, Some(800));
+        assert_eq!(usage.cache_write_tokens, Some(1200));
     }
 
     #[test]
@@ -393,5 +384,31 @@ mod tests {
 
         let usage = adapter.extract_usage(&response);
         assert_eq!(usage.thinking_tokens, Some(0));
+    }
+
+    #[test]
+    fn test_extract_usage_all_cache_fields() {
+        let adapter = OpenAiToolAdapter::new();
+        // Simulates OpenRouter response for Anthropic model with full cache info
+        let response = json!({
+            "usage": {
+                "prompt_tokens": 5000,
+                "completion_tokens": 1000,
+                "prompt_tokens_details": {
+                    "cached_tokens": 3000,
+                    "cache_write_tokens": 2000
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 500
+                }
+            }
+        });
+
+        let usage = adapter.extract_usage(&response);
+        assert_eq!(usage.input_tokens, 5000);
+        assert_eq!(usage.output_tokens, 1000);
+        assert_eq!(usage.cached_tokens, Some(3000));
+        assert_eq!(usage.cache_write_tokens, Some(2000));
+        assert_eq!(usage.thinking_tokens, Some(500));
     }
 }

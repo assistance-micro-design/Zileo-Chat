@@ -831,6 +831,7 @@
   "workflow_token_speed": "tk/s",
   "workflow_token_cached": "cached",
   "workflow_metrics_cached_tokens": "Cached tokens",
+  "workflow_cache_hit_rate": "cache hit",
   "workflow_cost_estimate": "(estimate)",
 
   "workflow_agent_select": "Select an agent...",

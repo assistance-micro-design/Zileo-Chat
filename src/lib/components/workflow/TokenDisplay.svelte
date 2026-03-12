@@ -115,6 +115,19 @@
 	const hasCachedTokens = $derived((data.cached_tokens ?? 0) > 0 || (data.cumulative_cached ?? 0) > 0);
 
 	/**
+	 * Cache hit rate color based on percentage thresholds.
+	 * Green (>50%): excellent, Yellow (10-50%): moderate, Gray (<10%): low.
+	 */
+	type CacheRateColor = 'high' | 'medium' | 'low';
+	const cacheRateColor = $derived<CacheRateColor | null>(
+		data.cache_hit_rate !== null
+			? data.cache_hit_rate > 50 ? 'high'
+				: data.cache_hit_rate >= 10 ? 'medium'
+				: 'low'
+			: null
+	);
+
+	/**
 	 * Whether sub-agents contributed tokens to this workflow
 	 */
 	const hasSubAgents = $derived(data.sub_agent_input > 0 || data.sub_agent_output > 0);
@@ -204,11 +217,14 @@
 		{/if}
 	</div>
 
-	<!-- Cached Tokens (only shown when provider reports caching) -->
+	<!-- Cached Tokens + Cache Hit Rate (only shown when provider reports caching) -->
 	{#if !compact && hasCachedTokens}
 		<div class="metric tokens-metric cached" title={$i18n('workflow_metrics_cached_tokens')}>
 			<span class="token-value cached-value">{formatTokens(data.cached_tokens ?? 0)}</span>
 			<span class="metric-label">{$i18n('workflow_token_cached')}</span>
+			{#if data.cache_hit_rate !== null && cacheRateColor}
+				<span class="cache-rate cache-rate-{cacheRateColor}">{data.cache_hit_rate}%</span>
+			{/if}
 		</div>
 	{/if}
 
@@ -492,6 +508,29 @@
 
 	.cached-value {
 		color: var(--color-success);
+	}
+
+	.cache-rate {
+		font-family: var(--font-mono);
+		font-size: 10px;
+		font-weight: var(--font-weight-semibold);
+		padding: 1px 4px;
+		border-radius: var(--border-radius-sm);
+	}
+
+	.cache-rate-high {
+		color: var(--color-success);
+		background: color-mix(in srgb, var(--color-success) 15%, transparent);
+	}
+
+	.cache-rate-medium {
+		color: var(--color-warning);
+		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+	}
+
+	.cache-rate-low {
+		color: var(--color-text-tertiary);
+		background: color-mix(in srgb, var(--color-text-tertiary) 10%, transparent);
 	}
 
 	.tokens-metric.cumulative {
