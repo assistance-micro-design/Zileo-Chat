@@ -5,6 +5,23 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-03-21
+
+### Added
+
+- **Multi-breakpoint Prompt Cache Optimization**: Intelligent cache breakpoint placement for LLM requests
+  - Multi-breakpoint strategy with system prompt, conversation history, and tool results
+  - Cache hit rate display in TokenDisplay UI component
+  - Per-iteration cost tracking with cache read/write pricing
+- **MCP HTTP Request Throttling**: 500ms minimum delay between HTTP requests to MCP servers to prevent rate limiting
+
+### Fixed
+
+- **Context Bar**: Shows actual context window size instead of cumulative sum across iterations
+- **Code Cleanup**: Removed parasitic SA-xxx audit reference comments from codebase
+
+---
+
 ## [0.15.1] - 2026-03-05
 
 ### Fixed
@@ -486,5 +503,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
+[0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
 [0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.16.0...HEAD
