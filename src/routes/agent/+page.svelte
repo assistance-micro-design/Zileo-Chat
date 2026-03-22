@@ -227,7 +227,8 @@ Uses extracted components, services, and stores for clean architecture.
 				});
 			}
 
-			// Load persisted execution blocks for all messages			messageBlocks.clear();
+			// Load persisted execution blocks for all messages
+			messageBlocks.clear();
 			try {
 				const blocks = await BlockService.loadForMessages(result.messages);
 				for (const [id, b] of blocks) {
@@ -240,7 +241,8 @@ Uses extracted components, services, and stores for clean architecture.
 			// Rebuild sub-agent blocks from executions (not in tool_execution/thinking_step tables)
 			appendSubAgentBlocks(result.messages, result.executions);
 
-			// Load persisted tasks for this workflow			persistedTasks = [];
+			// Load persisted tasks for this workflow
+			persistedTasks = [];
 			try {
 				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
 				persistedTasks = tasks.map((t) => ({
@@ -543,13 +545,15 @@ Uses extracted components, services, and stores for clean architecture.
 			}
 		);
 
-		// Transfer execution blocks to persisted messageBlocks		// Blocks snapshot is captured in execute() before the store reset.
+		// Transfer execution blocks to persisted messageBlocks
+		// Blocks snapshot is captured in execute() before the store reset.
 		// No ID patching needed: createAssistantMessage uses result.message_id directly.
 		if (result.success && result.assistantMessageId && result.blocks && result.blocks.length > 0) {
 			messageBlocks.set(result.assistantMessageId, result.blocks);
 		}
 
-		// Reload persisted tasks from DB after execution completes		// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
+		// Reload persisted tasks from DB after execution completes
+		// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
 		// switches to persistedTasks which must be fresh from DB.
 		if (pageState.selectedWorkflowId) {
 			try {
