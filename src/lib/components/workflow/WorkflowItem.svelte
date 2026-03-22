@@ -294,8 +294,8 @@
 			type="button"
 			class="action-btn more-btn"
 			onclick={handleMoreClick}
-			title={$i18n('workflow_rename')}
-			aria-label="Actions"
+			title={$i18n('sidebar_context_actions')}
+			aria-label={$i18n('sidebar_context_actions')}
 			aria-haspopup="menu"
 			aria-expanded={contextMenuOpen}
 		>

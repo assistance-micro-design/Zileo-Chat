@@ -24,6 +24,7 @@
 	import { ChevronDown, ChevronRight, EllipsisVertical, Pencil, Trash2 } from '@lucide/svelte';
 	import type { ContextMenuItem } from '$types/sidebar';
 	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+	import { i18n } from '$lib/i18n';
 	import { tick } from 'svelte';
 
 	interface Props {
@@ -163,7 +164,7 @@
 				type="button"
 				class="action-btn"
 				onclick={handleMoreClick}
-				aria-label="Actions"
+				aria-label={$i18n('sidebar_context_actions')}
 				aria-haspopup="menu"
 				aria-expanded={contextMenuOpen}
 			>

@@ -1154,6 +1154,7 @@
   "sidebar_filter_error": "Erreur",
   "sidebar_filter_idle": "Inactifs",
 
+  "sidebar_context_actions": "Actions",
   "sidebar_context_rename": "Renommer",
   "sidebar_context_pin": "Epingler en haut",
   "sidebar_context_unpin": "Desepingler",

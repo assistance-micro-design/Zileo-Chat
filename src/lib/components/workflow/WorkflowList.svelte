@@ -116,16 +116,19 @@
 		workflows.filter((w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id) && !w.pinned)
 	);
 
-	/** Workflows in folders (not pinned, not running, not recently completed) */
-	function workflowsInFolder(folderId: string): Workflow[] {
-		return workflows.filter(
-			(w) =>
-				w.folder_id === folderId &&
-				!w.pinned &&
-				!runningWorkflowIds.has(w.id) &&
-				!recentlyCompletedIds.has(w.id)
-		);
-	}
+	/** Precomputed map of folder ID -> workflows in that folder (not pinned, not running, not recently completed) */
+	const folderWorkflowsMap = $derived(
+		folders.reduce<Record<string, Workflow[]>>((acc, folder) => {
+			acc[folder.id] = workflows.filter(
+				(w) =>
+					w.folder_id === folder.id &&
+					!w.pinned &&
+					!runningWorkflowIds.has(w.id) &&
+					!recentlyCompletedIds.has(w.id)
+			);
+			return acc;
+		}, {})
+	);
 
 	/** Uncategorized workflows (no folder, not pinned, not running, not recently completed) */
 	const uncategorizedWorkflows = $derived(
@@ -265,22 +268,22 @@
 		{/if}
 
 		<!-- Folder sections -->
-		{#each folders as folder (folder.id)}
-			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0 || completedWorkflows.length > 0 || folders.indexOf(folder) > 0}
+		{#each folders as folder, folderIdx (folder.id)}
+			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0 || completedWorkflows.length > 0 || folderIdx > 0}
 				<div class="section-divider"></div>
 			{/if}
 			<FolderItem
 				{folder}
 				expanded={expandedFolderIds.has(folder.id)}
-				workflowCount={workflowsInFolder(folder.id).length}
+				workflowCount={(folderWorkflowsMap[folder.id] ?? []).length}
 				ontoggle={() => onfoldertoggle?.(folder.id)}
 				onrename={onfolderrename}
 				ondelete={onfolderdelete}
 			>
-				{#if workflowsInFolder(folder.id).length === 0}
+				{#if (folderWorkflowsMap[folder.id] ?? []).length === 0}
 					<p class="folder-empty-hint">{$i18n('sidebar_folder_empty')}</p>
 				{:else}
-					{#each workflowsInFolder(folder.id) as workflow (workflow.id)}
+					{#each folderWorkflowsMap[folder.id] ?? [] as workflow (workflow.id)}
 						{@render workflowItemSnippet(workflow)}
 					{/each}
 				{/if}
@@ -288,8 +291,8 @@
 		{/each}
 
 		<!-- Uncategorized (by date) -->
-		{#each dateGroups as group (group.label)}
-			{#if hasSectionsAbove || dateGroups.indexOf(group) > 0}
+		{#each dateGroups as group, groupIdx (group.label)}
+			{#if hasSectionsAbove || groupIdx > 0}
 				<div class="section-divider"></div>
 			{/if}
 			<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>

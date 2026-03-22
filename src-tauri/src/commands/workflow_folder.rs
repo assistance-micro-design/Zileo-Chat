@@ -19,20 +19,20 @@ use crate::{
     security::{serialize_for_query, validate_uuid_field, Validator},
     AppState,
 };
+use std::sync::LazyLock;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
 /// Maximum number of folders allowed
 const MAX_FOLDERS: usize = 50;
 
-/// Regex pattern for valid hex color
-const HEX_COLOR_PATTERN: &str = r"^#[0-9a-fA-F]{6}$";
+/// Compiled regex for valid hex color (#RRGGBB)
+static HEX_COLOR_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^#[0-9a-fA-F]{6}$").expect("valid hex color regex"));
 
 /// Validates a hex color string.
 fn validate_hex_color(color: &str) -> Result<String, String> {
-    let re =
-        regex::Regex::new(HEX_COLOR_PATTERN).map_err(|e| format!("Internal regex error: {}", e))?;
-    if re.is_match(color) {
+    if HEX_COLOR_REGEX.is_match(color) {
         Ok(color.to_string())
     } else {
         Err(format!(
@@ -79,7 +79,10 @@ pub async fn create_workflow_folder(
 
     // Get next sort_order
     let sort_query = "SELECT math::max(sort_order) AS max_order FROM workflow_folder GROUP ALL";
-    let sort_result: Vec<serde_json::Value> = state.db.query(sort_query).await.unwrap_or_default();
+    let sort_result: Vec<serde_json::Value> = state.db.query(sort_query).await.map_err(|e| {
+        error!(error = %e, "Failed to query max sort_order");
+        format!("Failed to query max sort_order: {}", e)
+    })?;
     let next_order = sort_result
         .first()
         .and_then(|v| v.get("max_order").and_then(|o| o.as_i64()))

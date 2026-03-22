@@ -1154,6 +1154,7 @@
   "sidebar_filter_error": "Error",
   "sidebar_filter_idle": "Idle",
 
+  "sidebar_context_actions": "Actions",
   "sidebar_context_rename": "Rename",
   "sidebar_context_pin": "Pin to top",
   "sidebar_context_unpin": "Unpin",

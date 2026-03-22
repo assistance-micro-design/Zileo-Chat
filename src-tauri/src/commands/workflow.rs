@@ -139,7 +139,14 @@ pub async fn rename_workflow(
     let name_json = crate::security::serialize_for_query(&validated_name, "name")?;
 
     let query = format!(
-        "UPDATE workflow:`{}` SET name = {} RETURN meta::id(id) AS id, name, agent_id, status, created_at, updated_at, total_tokens_input, total_tokens_output, total_cost_usd",
+        "UPDATE workflow:`{}` SET name = {}, updated_at = time::now() RETURN \
+         meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
+         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
+         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
+         (current_context_tokens ?? 0) AS current_context_tokens, \
+         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+         folder_id, (pinned ?? false) AS pinned",
         validated_id, name_json
     );
 
