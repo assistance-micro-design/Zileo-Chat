@@ -144,11 +144,13 @@
 	}
 
 	/**
-	 * Handle checkbox toggle in selection mode
+	 * Handle checkbox click in selection mode.
+	 * Uses onclick (not onchange) to preserve MouseEvent with modifier keys
+	 * for Shift+Click range selection support.
 	 */
-	function handleCheckboxChange(event: Event): void {
+	function handleCheckboxClick(event: MouseEvent): void {
 		event.stopPropagation();
-		onselectiontoggle?.(workflow.id, event as unknown as MouseEvent);
+		onselectiontoggle?.(workflow.id, event);
 	}
 
 	/**
@@ -231,8 +233,7 @@
 			type="checkbox"
 			class="selection-checkbox"
 			checked={selected}
-			onchange={handleCheckboxChange}
-			onclick={(e) => e.stopPropagation()}
+			onclick={handleCheckboxClick}
 			aria-label={$i18n('sidebar_selection_toggle')}
 		/>
 	{/if}

@@ -141,10 +141,10 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Aggregated page state */
 	let pageState = $state<PageState>(initialPageState);
 
-	/** Persisted blocks per message (SA-019 P3) */
+	/** Persisted blocks per message */
 	let messageBlocks = new SvelteMap<string, ChatBlock[]>();
 
-	/** Persisted tasks for the current workflow (SA-019 P6) */
+	/** Persisted tasks for the current workflow */
 	let persistedTasks = $state<TodoTaskDisplay[]>([]);
 
 	/** Resolved tasks: real-time store during execution of THIS workflow, persisted otherwise.
@@ -345,6 +345,35 @@ Uses extracted components, services, and stores for clean architecture.
 		} finally {
 			deletingWorkflow = false;
 		}
+	}
+
+	/**
+	 * Batch delete workflows.
+	 * Shows a toast if some workflows were skipped due to running status.
+	 *
+	 * @param ids - Array of workflow IDs to delete
+	 * @returns Result with deleted count and skipped running IDs
+	 */
+	async function handleBatchDelete(ids: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
+		const result = await workflowStore.deleteBatch(ids);
+
+		if (result.skipped_running.length > 0) {
+			toastStore.add({
+				type: 'warning',
+				title: $i18n('sidebar_selection_running_skipped', { count: result.skipped_running.length }),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
+		}
+
+		// Clear selection if current workflow was deleted
+		if (pageState.selectedWorkflowId && ids.includes(pageState.selectedWorkflowId) && !result.skipped_running.includes(pageState.selectedWorkflowId)) {
+			pageState.selectedWorkflowId = null;
+			pageState.messages = [];
+		}
+
+		return result;
 	}
 
 	/**
@@ -621,7 +650,7 @@ Uses extracted components, services, and stores for clean architecture.
 		ondelete={(w) => modalState = { type: 'delete-workflow', workflowId: w.id }}
 		onrename={(w, name) => handleRename(w.id, name)}
 		onretry={() => workflowStore.loadWorkflows()}
-		onbatchdelete={(ids) => workflowStore.deleteBatch(ids)}
+		onbatchdelete={handleBatchDelete}
 	/>
 
 	<!-- Main Content -->

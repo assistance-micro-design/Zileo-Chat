@@ -144,16 +144,20 @@ Left sidebar for workflow management with search and CRUD operations.
 	/**
 	 * Confirm and execute batch delete
 	 */
+	/** Error message from last failed batch delete */
+	let batchDeleteError = $state<string | null>(null);
+
 	async function handleBatchDelete(): Promise<void> {
 		if (!onbatchdelete || selectedIds.size === 0) return;
 		batchDeleting = true;
+		batchDeleteError = null;
 		try {
 			await onbatchdelete([...selectedIds]);
 			selectedIds.clear();
 			selectionMode = false;
 			lastClickedId = null;
 		} catch (e) {
-			const _msg = getErrorMessage(e);
+			batchDeleteError = getErrorMessage(e);
 		} finally {
 			batchDeleting = false;
 			showBatchDeleteConfirm = false;
@@ -257,6 +261,9 @@ Left sidebar for workflow management with search and CRUD operations.
 		/>
 		{#if selectionMode && selectedIds.size > 0 && !isCollapsed}
 			<div class="batch-action-bar">
+				{#if batchDeleteError}
+					<p class="batch-error" role="alert">{batchDeleteError}</p>
+				{/if}
 				<Button
 					variant="danger"
 					size="sm"
@@ -405,12 +412,21 @@ Left sidebar for workflow management with search and CRUD operations.
 
 	.batch-action-bar {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-sm) var(--spacing-md);
 		border-top: 1px solid var(--color-border);
 		background: var(--color-bg-secondary);
+	}
+
+	.batch-error {
+		width: 100%;
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-error);
+		text-align: center;
 	}
 
 	/* Utility Classes */

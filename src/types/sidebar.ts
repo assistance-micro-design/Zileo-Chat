@@ -24,14 +24,6 @@ import type { WorkflowStatus } from './workflow';
 /** Active status filter in the sidebar */
 export type StatusFilter = 'all' | WorkflowStatus;
 
-/** State for multi-selection mode in the sidebar */
-export interface SidebarSelectionState {
-	/** Whether selection mode is active */
-	active: boolean;
-	/** Set of currently selected workflow IDs */
-	selectedIds: Set<string>;
-}
-
 /** Context menu item for workflow actions */
 export interface ContextMenuItem {
 	/** Unique identifier for the action */
