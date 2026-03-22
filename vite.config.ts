@@ -8,7 +8,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    host: 'localhost'
+    host: 'localhost',
+    watch: {
+      ignored: ['**/src-tauri/target/**']
+    }
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
