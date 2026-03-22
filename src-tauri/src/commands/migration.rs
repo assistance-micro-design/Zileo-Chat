@@ -494,6 +494,9 @@ DEFINE FIELD OVERWRITE folder_id ON workflow TYPE option<string>;
 
 -- Step 3: Add pinned field on workflow
 DEFINE FIELD OVERWRITE pinned ON workflow TYPE bool DEFAULT false;
+
+-- Step 4: Backfill pinned on existing workflows (DEFAULT only applies to new records)
+UPDATE workflow SET pinned = false WHERE pinned IS NONE;
 "#;
 
 /// Migrates database schema to support sidebar folder and pinning features.

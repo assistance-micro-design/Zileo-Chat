@@ -455,4 +455,7 @@ DEFINE INDEX OVERWRITE unique_folder_id ON workflow_folder FIELDS id UNIQUE;
 -- Workflow extensions for folders and pinning
 DEFINE FIELD OVERWRITE folder_id ON workflow TYPE option<string>;
 DEFINE FIELD OVERWRITE pinned ON workflow TYPE bool DEFAULT false;
+
+-- Backfill pinned field on existing workflows (DEFAULT only applies to new records)
+UPDATE workflow SET pinned = false WHERE pinned IS NONE;
 "#;
