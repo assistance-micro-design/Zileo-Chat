@@ -54,7 +54,9 @@ Uses extracted components, services, and stores for clean architecture.
 		filteredWorkflows,
 		workflowSearchFilter,
 		workflowsError,
-		workflowsLoading
+		workflowsLoading,
+		statusFilter as statusFilter$,
+		statusCounts as statusCounts$
 	} from '$lib/stores/workflows';
 	import {
 		tokenStore,
@@ -117,7 +119,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/** Initial page state with localStorage restoration */
 	const initialPageState: PageState = {
-		leftSidebarCollapsed: false,
+		leftSidebarCollapsed: LocalStorage.get(STORAGE_KEYS.LEFT_SIDEBAR_COLLAPSED, false),
 		selectedWorkflowId: null,
 		selectedAgentId: null,
 		currentMaxIterations: 50,
@@ -536,6 +538,12 @@ Uses extracted components, services, and stores for clean architecture.
 			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
 		);
 
+		// Restore status filter from localStorage
+		const savedFilter = LocalStorage.get(STORAGE_KEYS.STATUS_FILTER, 'all');
+		if (savedFilter !== 'all') {
+			workflowStore.setStatusFilter(savedFilter);
+		}
+
 		// Restore last selected workflow from localStorage
 		const lastWorkflowId = LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
 		if (lastWorkflowId && $workflows.find(w => w.id === lastWorkflowId)) {
@@ -555,6 +563,21 @@ Uses extracted components, services, and stores for clean architecture.
 		streamingStore.cleanup();
 		validationStore.cleanup();
 		userQuestionStore.cleanup();
+	});
+
+	/**
+	 * Persist sidebar collapsed state to localStorage.
+	 */
+	$effect(() => {
+		LocalStorage.set(STORAGE_KEYS.LEFT_SIDEBAR_COLLAPSED, pageState.leftSidebarCollapsed);
+	});
+
+	/**
+	 * Persist status filter to localStorage and sync to store.
+	 */
+	$effect(() => {
+		const filter = $statusFilter$;
+		LocalStorage.set(STORAGE_KEYS.STATUS_FILTER, filter);
 	});
 
 	/**
@@ -590,10 +613,13 @@ Uses extracted components, services, and stores for clean architecture.
 		searchFilter={$workflowSearchFilter}
 		error={$workflowsError}
 		loading={$workflowsLoading}
+		activeStatusFilter={$statusFilter$}
+		statusCounts={$statusCounts$}
 		runningWorkflowIds={$runningWorkflowIds$}
 		recentlyCompletedIds={$recentlyCompletedIds$}
 		questionPendingIds={$questionPendingIds$}
 		onsearchchange={(v) => workflowStore.setSearchFilter(v)}
+		onstatusfilterchange={(f) => workflowStore.setStatusFilter(f)}
 		onselect={(w) => selectWorkflow(w.id)}
 		oncreate={() => modalState = { type: 'new-workflow' }}
 		ondelete={(w) => modalState = { type: 'delete-workflow', workflowId: w.id }}

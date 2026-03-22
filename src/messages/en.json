@@ -1146,5 +1146,11 @@
 
   "privacy_update_title": "Updates",
   "privacy_update_content": "This privacy policy may be updated. The last modification date is indicated below.",
-  "privacy_last_updated": "Last updated: January 2026"
+  "privacy_last_updated": "Last updated: January 2026",
+
+  "sidebar_filter_all": "All",
+  "sidebar_filter_running": "Running",
+  "sidebar_filter_completed": "Completed",
+  "sidebar_filter_error": "Error",
+  "sidebar_filter_idle": "Idle"
 }

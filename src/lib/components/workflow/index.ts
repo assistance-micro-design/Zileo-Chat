@@ -31,3 +31,4 @@ export { default as ValidationModal } from './ValidationModal.svelte';
 export { default as UserQuestionModal } from './UserQuestionModal.svelte';
 export { default as AgentSelector } from './AgentSelector.svelte';
 export { default as TokenDisplay } from './TokenDisplay.svelte';
+export { default as StatusFilters } from './StatusFilters.svelte';

@@ -1146,5 +1146,11 @@
 
   "privacy_update_title": "Mise a jour",
   "privacy_update_content": "Cette politique de confidentialite peut etre mise a jour. La date de derniere modification est indiquee ci-dessous.",
-  "privacy_last_updated": "Derniere mise a jour : janvier 2026"
+  "privacy_last_updated": "Derniere mise a jour : janvier 2026",
+
+  "sidebar_filter_all": "Tous",
+  "sidebar_filter_running": "En cours",
+  "sidebar_filter_completed": "Termines",
+  "sidebar_filter_error": "Erreur",
+  "sidebar_filter_idle": "Inactifs"
 }

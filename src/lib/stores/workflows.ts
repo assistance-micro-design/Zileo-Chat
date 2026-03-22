@@ -24,6 +24,7 @@
  */
 
 import type { Workflow } from '$types/workflow';
+import type { StatusFilter } from '$types/sidebar';
 
 import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
@@ -43,6 +44,8 @@ export interface WorkflowState {
 	error: string | null;
 	/** Search filter text */
 	searchFilter: string;
+	/** Active status filter */
+	statusFilter: StatusFilter;
 }
 
 /**
@@ -53,7 +56,8 @@ const initialStoreState: WorkflowState = {
 	selectedId: null,
 	loading: false,
 	error: null,
-	searchFilter: ''
+	searchFilter: '',
+	statusFilter: 'all'
 };
 
 /**
@@ -114,6 +118,15 @@ export const workflowStore = {
 	},
 
 	/**
+	 * Set the active status filter.
+	 *
+	 * @param filter - Status filter value
+	 */
+	setStatusFilter(filter: StatusFilter): void {
+		workflowWritable.update((s) => ({ ...s, statusFilter: filter }));
+	},
+
+	/**
 	 * Reset store to initial state.
 	 */
 	reset(): void {
@@ -155,10 +168,41 @@ export const selectedWorkflow = derived(
 );
 
 /**
- * Derived store: workflows filtered by search text
+ * Derived store: active status filter
+ */
+export const statusFilter = derived(workflowWritable, ($s) => $s.statusFilter);
+
+/**
+ * Derived store: workflow count per status (includes 'all')
+ */
+export const statusCounts = derived(workflowWritable, ($s) => {
+	const counts: Record<StatusFilter, number> = {
+		all: $s.workflows.length,
+		idle: 0,
+		running: 0,
+		completed: 0,
+		error: 0
+	};
+	for (const w of $s.workflows) {
+		counts[w.status]++;
+	}
+	return counts;
+});
+
+/**
+ * Derived store: workflows filtered by search text and status filter
  */
 export const filteredWorkflows = derived(workflowWritable, ($s) => {
-	if (!$s.searchFilter) return $s.workflows;
-	const filter = $s.searchFilter.toLowerCase();
-	return $s.workflows.filter((w) => w.name.toLowerCase().includes(filter));
+	let result = $s.workflows;
+
+	if ($s.statusFilter !== 'all') {
+		result = result.filter((w) => w.status === $s.statusFilter);
+	}
+
+	if ($s.searchFilter) {
+		const filter = $s.searchFilter.toLowerCase();
+		result = result.filter((w) => w.name.toLowerCase().includes(filter));
+	}
+
+	return result;
 });

@@ -27,9 +27,11 @@ Left sidebar for workflow management with search and CRUD operations.
 	import { Button, HelpButton } from '$lib/components/ui';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';
+	import StatusFilters from '$lib/components/workflow/StatusFilters.svelte';
 	import { i18n } from '$lib/i18n';
 	import { debounce } from '$lib/utils/debounce';
 	import type { Workflow } from '$types/workflow';
+	import type { StatusFilter } from '$types/sidebar';
 
 	interface Props {
 		collapsed?: boolean;
@@ -40,6 +42,10 @@ Left sidebar for workflow management with search and CRUD operations.
 		error?: string | null;
 		/** Whether workflows are currently loading */
 		loading?: boolean;
+		/** Active status filter */
+		activeStatusFilter?: StatusFilter;
+		/** Workflow count per status */
+		statusCounts?: Record<StatusFilter, number>;
 		onsearchchange?: (value: string) => void;
 		onselect: (workflow: Workflow) => void;
 		oncreate: () => void;
@@ -47,6 +53,8 @@ Left sidebar for workflow management with search and CRUD operations.
 		onrename?: (workflow: Workflow, newName: string) => void;
 		/** Retry handler for failed loads */
 		onretry?: () => void;
+		/** Handler for status filter changes */
+		onstatusfilterchange?: (filter: StatusFilter) => void;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -55,6 +63,8 @@ Left sidebar for workflow management with search and CRUD operations.
 		questionPendingIds?: Set<string>;
 	}
 
+	const defaultCounts: Record<StatusFilter, number> = { all: 0, idle: 0, running: 0, completed: 0, error: 0 };
+
 	let {
 		collapsed = $bindable(false),
 		workflows,
@@ -62,12 +72,15 @@ Left sidebar for workflow management with search and CRUD operations.
 		searchFilter = $bindable(''),
 		error = null,
 		loading = false,
+		activeStatusFilter = 'all',
+		statusCounts = defaultCounts,
 		onsearchchange,
 		onselect,
 		oncreate,
 		ondelete,
 		onrename,
 		onretry,
+		onstatusfilterchange,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
@@ -124,6 +137,13 @@ Left sidebar for workflow management with search and CRUD operations.
 						oninput={handleSearchInput}
 					/>
 				</div>
+				{#if onstatusfilterchange}
+					<StatusFilters
+						activeFilter={activeStatusFilter}
+						counts={statusCounts}
+						onfilterchange={onstatusfilterchange}
+					/>
+				{/if}
 			{/if}
 		</div>
 	{/snippet}
