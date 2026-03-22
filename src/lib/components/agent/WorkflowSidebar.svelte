@@ -217,44 +217,41 @@ Left sidebar for workflow management with search and CRUD operations.
 					<Plus size={16} />
 				</Button>
 			{:else}
-				<div class="flex justify-between items-center">
-					<div class="title-row">
-						<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
-						<HelpButton
-							titleKey="help_workflow_sidebar_title"
-							descriptionKey="help_workflow_sidebar_description"
-							tutorialKey="help_workflow_sidebar_tutorial"
-						/>
-					</div>
-					<div class="header-actions">
-						{#if onfoldercreate}
-							<button
-								type="button"
-								class="selection-toggle-btn"
-								onclick={onfoldercreate}
-								title={$i18n('sidebar_folder_create')}
-								aria-label={$i18n('sidebar_folder_create')}
-							>
-								<FolderPlus size={14} />
-							</button>
-						{/if}
-						{#if onbatchdelete}
-							<button
-								type="button"
-								class="selection-toggle-btn"
-								class:active={selectionMode}
-								onclick={toggleSelectionMode}
-								title={$i18n('sidebar_selection_toggle')}
-								aria-label={$i18n('sidebar_selection_toggle')}
-								aria-pressed={selectionMode}
-							>
-								<CheckSquare size={14} />
-							</button>
-						{/if}
-						<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
-							<Plus size={14} />
-						</Button>
-					</div>
+				<div class="title-row">
+					<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
+					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
+						<Plus size={14} />
+					</Button>
+				</div>
+				<div class="secondary-actions">
+					<HelpButton
+						titleKey="help_workflow_sidebar_title"
+						descriptionKey="help_workflow_sidebar_description"
+						tutorialKey="help_workflow_sidebar_tutorial"
+					/>
+					{#if onfoldercreate}
+						<button
+							type="button"
+							class="action-btn"
+							onclick={onfoldercreate}
+							title={$i18n('sidebar_folder_create')}
+							aria-label={$i18n('sidebar_folder_create')}
+						>
+							<FolderPlus size={14} />
+						</button>
+					{/if}
+					{#if onbatchdelete}
+						<button
+							type="button"
+							class={['action-btn', selectionMode && 'active']}
+							onclick={toggleSelectionMode}
+							title={$i18n('sidebar_selection_toggle')}
+							aria-label={$i18n('sidebar_selection_toggle')}
+							aria-pressed={selectionMode}
+						>
+							<CheckSquare size={14} />
+						</button>
+					{/if}
 				</div>
 				<div class="search-input-wrapper">
 					<span class="search-icon-container">
@@ -359,6 +356,7 @@ Left sidebar for workflow management with search and CRUD operations.
 	.title-row {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: var(--spacing-sm);
 	}
 
@@ -367,6 +365,12 @@ Left sidebar for workflow management with search and CRUD operations.
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
 		margin: 0;
+	}
+
+	.secondary-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
 	}
 
 	.search-input-wrapper {
@@ -424,13 +428,7 @@ Left sidebar for workflow management with search and CRUD operations.
 		cursor: pointer;
 	}
 
-	.header-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
-	.selection-toggle-btn {
+	.action-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -445,12 +443,12 @@ Left sidebar for workflow management with search and CRUD operations.
 		transition: all var(--transition-fast);
 	}
 
-	.selection-toggle-btn:hover {
+	.action-btn:hover {
 		background: var(--color-bg-hover);
 		color: var(--color-text-primary);
 	}
 
-	.selection-toggle-btn.active {
+	.action-btn.active {
 		background: var(--color-accent-light);
 		border-color: var(--color-accent);
 		color: var(--color-accent);
@@ -475,16 +473,4 @@ Left sidebar for workflow management with search and CRUD operations.
 		text-align: center;
 	}
 
-	/* Utility Classes */
-	.flex {
-		display: flex;
-	}
-
-	.justify-between {
-		justify-content: space-between;
-	}
-
-	.items-center {
-		align-items: center;
-	}
 </style>

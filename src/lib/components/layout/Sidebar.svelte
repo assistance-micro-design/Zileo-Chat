@@ -85,55 +85,70 @@
 		</div>
 	{/if}
 
-	<button
-		type="button"
-		class="sidebar-toggle"
-		onclick={toggleCollapsed}
-		aria-label={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
-		aria-expanded={!collapsed}
-		title={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
-	>
-		{#if collapsed}
-			<PanelLeftOpen size={18} />
-		{:else}
-			<PanelLeftClose size={18} />
-		{/if}
-	</button>
+	<div class="sidebar-footer sidebar-toggle-footer">
+		<button
+			type="button"
+			class="sidebar-toggle"
+			onclick={toggleCollapsed}
+			aria-label={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
+			aria-expanded={!collapsed}
+			title={collapsed ? $i18n('layout_expand_sidebar') : $i18n('layout_collapse_sidebar')}
+		>
+			{#if collapsed}
+				<PanelLeftOpen size={20} />
+			{:else}
+				<PanelLeftClose size={20} />
+				<span class="toggle-label">{$i18n('layout_collapse_sidebar')}</span>
+			{/if}
+		</button>
+	</div>
 </aside>
 
 <style>
+	.sidebar {
+		position: relative;
+	}
+
+	.sidebar-toggle-footer {
+		margin-top: auto;
+		padding: 0;
+		border-top: none;
+		background: none;
+	}
+
 	.sidebar-toggle {
-		position: absolute;
-		bottom: var(--spacing-lg);
-		right: calc(-1 * var(--spacing-md) - 2px);
-		width: 28px;
-		height: 28px;
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
+		width: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md) var(--spacing-lg);
+		background: var(--color-bg-tertiary);
+		border: none;
+		border-top: 1px solid var(--color-border);
 		cursor: pointer;
-		transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-		color: var(--color-text-tertiary);
-		z-index: 10;
-		box-shadow: var(--shadow-sm);
+		transition: background-color var(--transition-fast), color var(--transition-fast);
+		color: var(--color-accent);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+	}
+
+	:global(.sidebar.collapsed) .sidebar-toggle {
+		padding: var(--spacing-md) var(--spacing-sm);
 	}
 
 	.sidebar-toggle:hover {
 		background: var(--color-accent);
-		border-color: var(--color-accent);
 		color: var(--color-accent-text);
-		transform: scale(1.05);
-		box-shadow: var(--shadow-md);
 	}
 
 	.sidebar-toggle:active {
-		transform: scale(0.95);
+		background: var(--color-accent-dark, var(--color-accent));
+		color: var(--color-accent-text);
 	}
 
-	.sidebar {
-		position: relative;
+	.toggle-label {
+		white-space: nowrap;
+		overflow: hidden;
 	}
 </style>

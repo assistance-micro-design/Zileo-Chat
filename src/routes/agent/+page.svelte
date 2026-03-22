@@ -91,6 +91,7 @@ Uses extracted components, services, and stores for clean architecture.
 		expandedFolderIds as expandedFolderIds$
 	} from '$lib/stores/folders';
 	import { withToastError } from '$lib/utils/async';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
@@ -332,17 +333,23 @@ Uses extracted components, services, and stores for clean architecture.
 	async function handleDeleteWorkflow(workflowId: string): Promise<void> {
 		deletingWorkflow = true;
 		try {
-			await withToastError(async () => {
-				await WorkflowService.delete(workflowId);
-				await workflowStore.loadWorkflows();
+			await WorkflowService.delete(workflowId);
+			await workflowStore.loadWorkflows();
 
-				if (pageState.selectedWorkflowId === workflowId) {
-					pageState.selectedWorkflowId = null;
-					pageState.messages = [];
-				}
+			if (pageState.selectedWorkflowId === workflowId) {
+				pageState.selectedWorkflowId = null;
+				pageState.messages = [];
+			}
 
-				modalState = { type: 'none' };
-			})();
+			modalState = { type: 'none' };
+		} catch (err: unknown) {
+			toastStore.add({
+				type: 'error',
+				title: getErrorMessage(err),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
 		} finally {
 			deletingWorkflow = false;
 		}
