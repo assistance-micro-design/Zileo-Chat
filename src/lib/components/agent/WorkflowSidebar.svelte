@@ -72,6 +72,10 @@ Left sidebar for workflow management with search and CRUD operations.
 		onfolderrename?: (folder: WorkflowFolder, name: string) => void;
 		/** Folder delete handler */
 		onfolderdelete?: (folder: WorkflowFolder) => void;
+		/** Pin toggle handler */
+		ontogglepin?: (workflow: Workflow) => void;
+		/** Move to folder handler */
+		onmoveto?: (workflow: Workflow, folderId: string | null) => void;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -105,6 +109,8 @@ Left sidebar for workflow management with search and CRUD operations.
 		onfoldercreate,
 		onfolderrename,
 		onfolderdelete,
+		ontogglepin,
+		onmoveto,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
@@ -289,6 +295,8 @@ Left sidebar for workflow management with search and CRUD operations.
 			{onfoldertoggle}
 			{onfolderrename}
 			{onfolderdelete}
+			{ontogglepin}
+			{onmoveto}
 			{runningWorkflowIds}
 			{recentlyCompletedIds}
 			{questionPendingIds}

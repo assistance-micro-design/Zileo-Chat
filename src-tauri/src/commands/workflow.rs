@@ -814,6 +814,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_toggle_workflow_pinned() {
+        let state = crate::test_utils::setup_test_state().await;
+
+        // Seed a workflow
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+        let wf_json = serde_json::json!({
+            "name": "Pin Test Workflow",
+            "status": "idle",
+            "agent_id": "test-agent",
+            "pinned": false,
+        });
+        state
+            .db
+            .execute_with_params(
+                &format!("CREATE workflow:`{}` CONTENT $data", workflow_id),
+                vec![("data".to_string(), wf_json)],
+            )
+            .await
+            .expect("Failed to create test workflow");
+
+        // Toggle pin ON
+        let query_on = format!(
+            "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN \
+             meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
+             (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
+             (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
+             (current_context_tokens ?? 0) AS current_context_tokens, \
+             (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+             (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+             folder_id, (pinned ?? false) AS pinned",
+            workflow_id
+        );
+        let results_on = state
+            .db
+            .query_json(&query_on)
+            .await
+            .expect("Toggle ON failed");
+        let wf_on: Workflow =
+            serde_json::from_value(results_on.into_iter().next().unwrap()).unwrap();
+        assert!(wf_on.pinned, "Workflow should be pinned after first toggle");
+
+        // Toggle pin OFF
+        let query_off = query_on.clone();
+        let results_off = state
+            .db
+            .query_json(&query_off)
+            .await
+            .expect("Toggle OFF failed");
+        let wf_off: Workflow =
+            serde_json::from_value(results_off.into_iter().next().unwrap()).unwrap();
+        assert!(
+            !wf_off.pinned,
+            "Workflow should be unpinned after second toggle"
+        );
+    }
+
+    #[tokio::test]
     async fn test_workflow_metrics_defaults() {
         let metrics = WorkflowMetrics {
             duration_ms: 0,

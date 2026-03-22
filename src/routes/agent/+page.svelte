@@ -91,7 +91,7 @@ Uses extracted components, services, and stores for clean architecture.
 		expandedFolderIds as expandedFolderIds$
 	} from '$lib/stores/folders';
 	import { getErrorMessage } from '$lib/utils/error';
-	import type { WorkflowFolder } from '$types/workflow';
+	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
@@ -441,6 +441,28 @@ Uses extracted components, services, and stores for clean architecture.
 		}
 	}
 
+	/**
+	 * Toggle pinned state for a workflow.
+	 */
+	async function handleTogglePin(workflow: Workflow): Promise<void> {
+		try {
+			await workflowStore.togglePinned(workflow.id);
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
+	/**
+	 * Move a workflow to a folder (or remove from folder).
+	 */
+	async function handleMoveToFolder(workflow: Workflow, folderId: string | null): Promise<void> {
+		try {
+			await workflowStore.moveToFolder(workflow.id, folderId);
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
 	// ============================================================================
 	// Agent Management Functions
 	// ============================================================================
@@ -705,6 +727,8 @@ Uses extracted components, services, and stores for clean architecture.
 		onfoldercreate={handleCreateFolder}
 		onfolderrename={handleRenameFolder}
 		onfolderdelete={handleDeleteFolder}
+		ontogglepin={handleTogglePin}
+		onmoveto={handleMoveToFolder}
 	/>
 
 	<!-- Main Content -->
