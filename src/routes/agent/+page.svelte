@@ -85,7 +85,13 @@ Uses extracted components, services, and stores for clean architecture.
 	import { toastStore, navigationTarget } from '$lib/stores/toast';
 	import { fetchModelByApiName } from '$lib/stores/llm';
 	import { locale } from '$lib/stores/locale';
+	import {
+		folderStore,
+		folders as folders$,
+		expandedFolderIds as expandedFolderIds$
+	} from '$lib/stores/folders';
 	import { getErrorMessage } from '$lib/utils/error';
+	import type { WorkflowFolder } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
@@ -395,6 +401,47 @@ Uses extracted components, services, and stores for clean architecture.
 	}
 
 	// ============================================================================
+	// Folder Management Functions
+	// ============================================================================
+
+	/**
+	 * Create a new folder with a default name and color.
+	 */
+	async function handleCreateFolder(): Promise<void> {
+		const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+		const color = colors[($folders$).length % colors.length];
+		try {
+			await folderStore.createFolder('New folder', color);
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
+	/**
+	 * Rename a folder.
+	 */
+	async function handleRenameFolder(folder: WorkflowFolder, name: string): Promise<void> {
+		try {
+			await folderStore.renameFolder(folder.id, name);
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
+	/**
+	 * Delete a folder (workflows become uncategorized).
+	 */
+	async function handleDeleteFolder(folder: WorkflowFolder): Promise<void> {
+		try {
+			await folderStore.deleteFolder(folder.id);
+			// Reload workflows to reflect folder_id changes
+			await workflowStore.loadWorkflows();
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
+	// ============================================================================
 	// Agent Management Functions
 	// ============================================================================
 
@@ -542,8 +589,9 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Initialize component on mount.
 	 */
 	onMount(async () => {
-		// Load workflows and agents
+		// Load workflows, folders, and agents
 		await workflowStore.loadWorkflows();
+		await folderStore.loadFolders();
 		await agentStore.loadAgents();
 
 		// Load validation settings (needed for concurrent workflow limits)
@@ -640,6 +688,8 @@ Uses extracted components, services, and stores for clean architecture.
 		loading={$workflowsLoading}
 		activeStatusFilter={$statusFilter$}
 		statusCounts={$statusCounts$}
+		folders={$folders$}
+		expandedFolderIds={$expandedFolderIds$}
 		runningWorkflowIds={$runningWorkflowIds$}
 		recentlyCompletedIds={$recentlyCompletedIds$}
 		questionPendingIds={$questionPendingIds$}
@@ -651,6 +701,10 @@ Uses extracted components, services, and stores for clean architecture.
 		onrename={(w, name) => handleRename(w.id, name)}
 		onretry={() => workflowStore.loadWorkflows()}
 		onbatchdelete={handleBatchDelete}
+		onfoldertoggle={(id) => folderStore.toggleExpanded(id)}
+		onfoldercreate={handleCreateFolder}
+		onfolderrename={handleRenameFolder}
+		onfolderdelete={handleDeleteFolder}
 	/>
 
 	<!-- Main Content -->

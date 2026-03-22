@@ -23,7 +23,7 @@ Left sidebar for workflow management with search and CRUD operations.
 -->
 
 <script lang="ts">
-	import { Plus, Search, CheckSquare } from '@lucide/svelte';
+	import { Plus, Search, CheckSquare, FolderPlus } from '@lucide/svelte';
 	import { Button, HelpButton } from '$lib/components/ui';
 	import DeleteConfirmModal from '$lib/components/ui/DeleteConfirmModal.svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
@@ -33,7 +33,7 @@ Left sidebar for workflow management with search and CRUD operations.
 	import { i18n } from '$lib/i18n';
 	import { debounce } from '$lib/utils/debounce';
 	import { getErrorMessage } from '$lib/utils/error';
-	import type { Workflow } from '$types/workflow';
+	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { StatusFilter } from '$types/sidebar';
 
 	interface Props {
@@ -49,6 +49,10 @@ Left sidebar for workflow management with search and CRUD operations.
 		activeStatusFilter?: StatusFilter;
 		/** Workflow count per status */
 		statusCounts?: Record<StatusFilter, number>;
+		/** Available folders */
+		folders?: WorkflowFolder[];
+		/** Set of expanded folder IDs */
+		expandedFolderIds?: Set<string>;
 		onsearchchange?: (value: string) => void;
 		onselect: (workflow: Workflow) => void;
 		oncreate: () => void;
@@ -60,6 +64,14 @@ Left sidebar for workflow management with search and CRUD operations.
 		onstatusfilterchange?: (filter: StatusFilter) => void;
 		/** Batch delete handler */
 		onbatchdelete?: (ids: string[]) => Promise<{ deleted: number; skipped_running: string[] }>;
+		/** Folder toggle handler */
+		onfoldertoggle?: (folderId: string) => void;
+		/** Folder create handler */
+		onfoldercreate?: () => void;
+		/** Folder rename handler */
+		onfolderrename?: (folder: WorkflowFolder, name: string) => void;
+		/** Folder delete handler */
+		onfolderdelete?: (folder: WorkflowFolder) => void;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -79,6 +91,8 @@ Left sidebar for workflow management with search and CRUD operations.
 		loading = false,
 		activeStatusFilter = 'all',
 		statusCounts = defaultCounts,
+		folders = [],
+		expandedFolderIds = new Set<string>(),
 		onsearchchange,
 		onselect,
 		oncreate,
@@ -87,6 +101,10 @@ Left sidebar for workflow management with search and CRUD operations.
 		onretry,
 		onstatusfilterchange,
 		onbatchdelete,
+		onfoldertoggle,
+		onfoldercreate,
+		onfolderrename,
+		onfolderdelete,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
@@ -200,6 +218,17 @@ Left sidebar for workflow management with search and CRUD operations.
 						/>
 					</div>
 					<div class="header-actions">
+						{#if onfoldercreate}
+							<button
+								type="button"
+								class="selection-toggle-btn"
+								onclick={onfoldercreate}
+								title={$i18n('sidebar_folder_create')}
+								aria-label={$i18n('sidebar_folder_create')}
+							>
+								<FolderPlus size={14} />
+							</button>
+						{/if}
 						{#if onbatchdelete}
 							<button
 								type="button"
@@ -250,11 +279,16 @@ Left sidebar for workflow management with search and CRUD operations.
 			{loading}
 			selectionMode={!isCollapsed && selectionMode}
 			{selectedIds}
+			{folders}
+			{expandedFolderIds}
 			{onselect}
 			{ondelete}
 			{onrename}
 			{onretry}
 			onselectiontoggle={handleSelectionToggle}
+			{onfoldertoggle}
+			{onfolderrename}
+			{onfolderdelete}
 			{runningWorkflowIds}
 			{recentlyCompletedIds}
 			{questionPendingIds}

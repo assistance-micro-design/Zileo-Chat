@@ -39,6 +39,7 @@ const MIGRATION_MEMORY_SCHEMA_V1: &str = "memory_schema_v1";
 const MIGRATION_MEMORY_V2_SCHEMA: &str = "memory_v2_schema";
 const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
 const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
+const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -466,6 +467,81 @@ pub async fn migrate_reasoning_effort(
         success: true,
         message,
         records_affected: total_agents,
+    })
+}
+
+/// SQL for migrating workflow table to support folders and pinning.
+///
+/// Changes:
+/// - Creates workflow_folder table
+/// - Adds folder_id field on workflow (optional)
+/// - Adds pinned field on workflow (default false)
+const SIDEBAR_FEATURES_MIGRATION: &str = r#"
+-- Step 1: Create workflow_folder table
+DEFINE TABLE OVERWRITE workflow_folder SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON workflow_folder TYPE string;
+DEFINE FIELD OVERWRITE name ON workflow_folder TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
+DEFINE FIELD OVERWRITE color ON workflow_folder TYPE string
+    ASSERT $value = /^#[0-9a-fA-F]{6}$/;
+DEFINE FIELD OVERWRITE sort_order ON workflow_folder TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE created_at ON workflow_folder TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON workflow_folder TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE unique_folder_id ON workflow_folder FIELDS id UNIQUE;
+
+-- Step 2: Add folder_id field on workflow
+DEFINE FIELD OVERWRITE folder_id ON workflow TYPE option<string>;
+
+-- Step 3: Add pinned field on workflow
+DEFINE FIELD OVERWRITE pinned ON workflow TYPE bool DEFAULT false;
+"#;
+
+/// Migrates database schema to support sidebar folder and pinning features.
+///
+/// This migration:
+/// - Creates workflow_folder table for organizing workflows
+/// - Adds folder_id field on workflow (optional, links to folder)
+/// - Adds pinned field on workflow (boolean, default false)
+///
+/// # Safety
+/// Guarded by migration_log to prevent re-execution.
+/// All fields use OVERWRITE for idempotency.
+#[tauri::command]
+#[instrument(name = "migrate_sidebar_features", skip(state))]
+pub async fn migrate_sidebar_features(
+    state: State<'_, AppState>,
+) -> Result<MigrationResult, String> {
+    info!("Starting sidebar features migration (folders + pinning)");
+
+    if check_migration_applied(&state.db, MIGRATION_SIDEBAR_FEATURES).await? {
+        info!("Sidebar features migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: sidebar_features_v1".to_string(),
+            records_affected: 0,
+        });
+    }
+
+    // Run migration queries
+    let _: Vec<serde_json::Value> =
+        state
+            .db
+            .query(SIDEBAR_FEATURES_MIGRATION)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Sidebar features migration failed");
+                format!("Sidebar features migration failed: {}", e)
+            })?;
+
+    // Record migration as applied
+    record_migration_applied(&state.db, MIGRATION_SIDEBAR_FEATURES).await?;
+
+    info!("Sidebar features migration completed successfully");
+
+    Ok(MigrationResult {
+        success: true,
+        message: "Sidebar features migration complete. workflow_folder table created, folder_id and pinned fields added to workflow.".to_string(),
+        records_affected: 0,
     })
 }
 

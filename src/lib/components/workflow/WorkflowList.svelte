@@ -16,17 +16,14 @@
 
 <!--
   WorkflowList Component
-  A list of workflow items with selection support.
+  A list of workflow items with selection, folder grouping, and pinned support.
   Supports collapsed mode for compact sidebar display.
-
-  @example
-  <WorkflowList workflows={workflows} selectedId={currentWorkflowId} onselect={handleSelect} ondelete={handleDelete} />
-  <WorkflowList workflows={workflows} collapsed={true} />
 -->
 <script lang="ts">
-	import type { Workflow } from '$types/workflow';
+	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import WorkflowItem from './WorkflowItem.svelte';
 	import WorkflowItemCompact from './WorkflowItemCompact.svelte';
+	import FolderItem from './FolderItem.svelte';
 	import { AlertTriangle, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { groupByDate } from '$lib/utils/dateGrouping';
@@ -38,9 +35,6 @@
 		older: 'workflow_group_older'
 	};
 
-	/**
-	 * WorkflowList props
-	 */
 	interface Props {
 		/** Array of workflows to display */
 		workflows: Workflow[];
@@ -56,6 +50,10 @@
 		selectionMode?: boolean;
 		/** Set of selected workflow IDs (multi-select) */
 		selectedIds?: Set<string>;
+		/** Available folders */
+		folders?: WorkflowFolder[];
+		/** Set of expanded folder IDs */
+		expandedFolderIds?: Set<string>;
 		/** Selection handler */
 		onselect?: (workflow: Workflow) => void;
 		/** Delete handler */
@@ -66,6 +64,12 @@
 		onretry?: () => void;
 		/** Multi-selection toggle handler */
 		onselectiontoggle?: (workflowId: string, event: MouseEvent | KeyboardEvent) => void;
+		/** Folder toggle handler */
+		onfoldertoggle?: (folderId: string) => void;
+		/** Folder rename handler */
+		onfolderrename?: (folder: WorkflowFolder, name: string) => void;
+		/** Folder delete handler */
+		onfolderdelete?: (folder: WorkflowFolder) => void;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -82,34 +86,84 @@
 		loading = false,
 		selectionMode = false,
 		selectedIds = new Set<string>(),
+		folders = [],
+		expandedFolderIds = new Set<string>(),
 		onselect,
 		ondelete,
 		onrename,
 		onretry,
 		onselectiontoggle,
+		onfoldertoggle,
+		onfolderrename,
+		onfolderdelete,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
 	}: Props = $props();
 
-	/** Workflows that are currently running in the background */
+	/** Pinned workflows (shown at top) */
+	const pinnedWorkflows = $derived(
+		workflows.filter((w) => w.pinned)
+	);
+
+	/** Running workflows (not pinned, shown after pinned) */
 	const runningWorkflows = $derived(
-		workflows.filter((w) => runningWorkflowIds.has(w.id))
+		workflows.filter((w) => runningWorkflowIds.has(w.id) && !w.pinned)
 	);
 
-	/** Workflows that recently completed in the background */
+	/** Recently completed workflows (not pinned) */
 	const completedWorkflows = $derived(
-		workflows.filter((w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id))
+		workflows.filter((w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id) && !w.pinned)
 	);
 
-	/** Remaining workflows (not running, not recently completed) */
-	const remainingWorkflows = $derived(
-		workflows.filter((w) => !runningWorkflowIds.has(w.id) && !recentlyCompletedIds.has(w.id))
+	/** Workflows in folders (not pinned, not running, not recently completed) */
+	function workflowsInFolder(folderId: string): Workflow[] {
+		return workflows.filter(
+			(w) =>
+				w.folder_id === folderId &&
+				!w.pinned &&
+				!runningWorkflowIds.has(w.id) &&
+				!recentlyCompletedIds.has(w.id)
+		);
+	}
+
+	/** Uncategorized workflows (no folder, not pinned, not running, not recently completed) */
+	const uncategorizedWorkflows = $derived(
+		workflows.filter(
+			(w) =>
+				!w.folder_id &&
+				!w.pinned &&
+				!runningWorkflowIds.has(w.id) &&
+				!recentlyCompletedIds.has(w.id)
+		)
 	);
 
-	/** Remaining workflows grouped by date (for expanded mode) */
-	const dateGroups = $derived(groupByDate(remainingWorkflows, 'updated_at'));
+	/** Uncategorized workflows grouped by date */
+	const dateGroups = $derived(groupByDate(uncategorizedWorkflows, 'updated_at'));
+
+	/** Whether there are any sections above the date groups */
+	const hasSectionsAbove = $derived(
+		pinnedWorkflows.length > 0 ||
+		runningWorkflows.length > 0 ||
+		completedWorkflows.length > 0 ||
+		folders.length > 0
+	);
 </script>
+
+{#snippet workflowItemSnippet(workflow: Workflow, isRunning?: boolean)}
+	<WorkflowItem
+		{workflow}
+		active={workflow.id === selectedId}
+		running={isRunning ?? false}
+		hasQuestion={questionPendingIds.has(workflow.id)}
+		{onselect}
+		{ondelete}
+		{onrename}
+		{selectionMode}
+		selected={selectedIds.has(workflow.id)}
+		{onselectiontoggle}
+	/>
+{/snippet}
 
 <div class="workflow-list" class:collapsed role="listbox" aria-label={$i18n('workflow_list_arialabel')}>
 	{#if error && workflows.length === 0}
@@ -148,6 +202,13 @@
 			{/if}
 		</div>
 	{:else if collapsed}
+		{#each pinnedWorkflows as workflow (workflow.id)}
+			<WorkflowItemCompact
+				{workflow}
+				active={workflow.id === selectedId}
+				{onselect}
+			/>
+		{/each}
 		{#each runningWorkflows as workflow (workflow.id)}
 			<WorkflowItemCompact
 				{workflow}
@@ -165,7 +226,7 @@
 				{onselect}
 			/>
 		{/each}
-		{#each remainingWorkflows as workflow (workflow.id)}
+		{#each uncategorizedWorkflows as workflow (workflow.id)}
 			<WorkflowItemCompact
 				{workflow}
 				active={workflow.id === selectedId}
@@ -173,58 +234,67 @@
 			/>
 		{/each}
 	{:else}
-		{#if runningWorkflows.length > 0}
-			<h3 class="section-header running">{$i18n('workflow_section_running')}</h3>
-			{#each runningWorkflows as workflow (workflow.id)}
-				<WorkflowItem
-					{workflow}
-					active={workflow.id === selectedId}
-					running={true}
-					hasQuestion={questionPendingIds.has(workflow.id)}
-					{onselect}
-					{ondelete}
-					{onrename}
-					{selectionMode}
-					selected={selectedIds.has(workflow.id)}
-					{onselectiontoggle}
-				/>
+		<!-- Pinned section -->
+		{#if pinnedWorkflows.length > 0}
+			<h3 class="section-header pinned">{$i18n('sidebar_pin_section_title')}</h3>
+			{#each pinnedWorkflows as workflow (workflow.id)}
+				{@render workflowItemSnippet(workflow)}
 			{/each}
 		{/if}
+
+		<!-- Running section -->
+		{#if runningWorkflows.length > 0}
+			{#if pinnedWorkflows.length > 0}
+				<div class="section-divider"></div>
+			{/if}
+			<h3 class="section-header running">{$i18n('workflow_section_running')}</h3>
+			{#each runningWorkflows as workflow (workflow.id)}
+				{@render workflowItemSnippet(workflow, true)}
+			{/each}
+		{/if}
+
+		<!-- Recently completed section -->
 		{#if completedWorkflows.length > 0}
-			{#if runningWorkflows.length > 0}
+			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0}
 				<div class="section-divider"></div>
 			{/if}
 			<h3 class="section-header completed">{$i18n('workflow_section_recently_completed')}</h3>
 			{#each completedWorkflows as workflow (workflow.id)}
-				<WorkflowItem
-					{workflow}
-					active={workflow.id === selectedId}
-					hasQuestion={questionPendingIds.has(workflow.id)}
-					{onselect}
-					{ondelete}
-					{onrename}
-					{selectionMode}
-					selected={selectedIds.has(workflow.id)}
-					{onselectiontoggle}
-				/>
+				{@render workflowItemSnippet(workflow)}
 			{/each}
 		{/if}
+
+		<!-- Folder sections -->
+		{#each folders as folder (folder.id)}
+			{#if pinnedWorkflows.length > 0 || runningWorkflows.length > 0 || completedWorkflows.length > 0 || folders.indexOf(folder) > 0}
+				<div class="section-divider"></div>
+			{/if}
+			<FolderItem
+				{folder}
+				expanded={expandedFolderIds.has(folder.id)}
+				workflowCount={workflowsInFolder(folder.id).length}
+				ontoggle={() => onfoldertoggle?.(folder.id)}
+				onrename={onfolderrename}
+				ondelete={onfolderdelete}
+			>
+				{#if workflowsInFolder(folder.id).length === 0}
+					<p class="folder-empty-hint">{$i18n('sidebar_folder_empty')}</p>
+				{:else}
+					{#each workflowsInFolder(folder.id) as workflow (workflow.id)}
+						{@render workflowItemSnippet(workflow)}
+					{/each}
+				{/if}
+			</FolderItem>
+		{/each}
+
+		<!-- Uncategorized (by date) -->
 		{#each dateGroups as group (group.label)}
-			{#if runningWorkflows.length > 0 || completedWorkflows.length > 0 || dateGroups.indexOf(group) > 0}
+			{#if hasSectionsAbove || dateGroups.indexOf(group) > 0}
 				<div class="section-divider"></div>
 			{/if}
 			<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>
 			{#each group.items as workflow (workflow.id)}
-				<WorkflowItem
-					{workflow}
-					active={workflow.id === selectedId}
-					{onselect}
-					{ondelete}
-					{onrename}
-					{selectionMode}
-					selected={selectedIds.has(workflow.id)}
-					{onselectiontoggle}
-				/>
+				{@render workflowItemSnippet(workflow)}
 			{/each}
 		{/each}
 	{/if}
@@ -361,6 +431,10 @@
 		font-weight: var(--font-weight-medium);
 	}
 
+	.section-header.pinned {
+		color: var(--color-accent);
+	}
+
 	.section-header.running {
 		color: var(--color-success);
 	}
@@ -373,5 +447,13 @@
 		height: 1px;
 		background: var(--color-border);
 		margin: var(--spacing-sm) var(--spacing-md);
+	}
+
+	.folder-empty-hint {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		padding: var(--spacing-sm) var(--spacing-md);
+		margin: 0;
+		font-style: italic;
 	}
 </style>

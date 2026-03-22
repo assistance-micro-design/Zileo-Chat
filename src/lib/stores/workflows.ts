@@ -147,6 +147,57 @@ export const workflowStore = {
 	},
 
 	/**
+	 * Move a single workflow to a folder (or remove from folder).
+	 *
+	 * @param workflowId - The workflow ID to move
+	 * @param folderId - Target folder ID, or null to remove from folder
+	 */
+	async moveToFolder(workflowId: string, folderId: string | null): Promise<void> {
+		const updated = await invoke<Workflow>('move_workflow_to_folder', {
+			workflowId,
+			folderId
+		});
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+		}));
+	},
+
+	/**
+	 * Move multiple workflows to a folder (or remove from folder).
+	 *
+	 * @param workflowIds - Array of workflow IDs to move
+	 * @param folderId - Target folder ID, or null to remove from folder
+	 * @returns Number of workflows moved
+	 */
+	async moveBatchToFolder(workflowIds: string[], folderId: string | null): Promise<number> {
+		const moved = await invoke<number>('move_workflows_to_folder', {
+			workflowIds,
+			folderId
+		});
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.map((w) =>
+				workflowIds.includes(w.id) ? { ...w, folder_id: folderId ?? undefined } : w
+			)
+		}));
+		return moved;
+	},
+
+	/**
+	 * Toggle the pinned state of a workflow.
+	 *
+	 * @param workflowId - The workflow ID to toggle
+	 */
+	async togglePinned(workflowId: string): Promise<void> {
+		const updated = await invoke<Workflow>('toggle_workflow_pinned', { workflowId });
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+		}));
+	},
+
+	/**
 	 * Reset store to initial state.
 	 */
 	reset(): void {
@@ -208,6 +259,13 @@ export const statusCounts = derived(workflowWritable, ($s) => {
 	}
 	return counts;
 });
+
+/**
+ * Derived store: pinned workflows
+ */
+export const pinnedWorkflows = derived(workflowWritable, ($s) =>
+	$s.workflows.filter((w) => w.pinned)
+);
 
 /**
  * Derived store: workflows filtered by search text and status filter

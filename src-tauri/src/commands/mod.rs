@@ -169,5 +169,6 @@ pub mod tool_execution;
 pub mod user_question;
 pub mod validation;
 pub mod workflow;
+pub mod workflow_folder;
 
 pub use security::SecureKeyStore;

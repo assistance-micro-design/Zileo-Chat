@@ -1166,5 +1166,17 @@
   "sidebar_selection_delete_title": "Delete workflows",
   "sidebar_selection_delete_confirm": "Are you sure you want to delete {count} workflow(s)?",
   "sidebar_selection_delete_warning": "This action is irreversible. All associated messages and data will be deleted.",
-  "sidebar_selection_running_skipped": "{count} running workflow(s) were skipped"
+  "sidebar_selection_running_skipped": "{count} running workflow(s) were skipped",
+
+  "sidebar_folder_create": "New folder",
+  "sidebar_folder_create_title": "Create folder",
+  "sidebar_folder_name_placeholder": "Folder name",
+  "sidebar_folder_rename": "Rename folder",
+  "sidebar_folder_delete": "Delete folder",
+  "sidebar_folder_delete_confirm": "Delete this folder? Workflows inside will become uncategorized.",
+  "sidebar_folder_uncategorized": "Uncategorized",
+  "sidebar_folder_empty": "No workflows in this folder",
+  "sidebar_folder_move_to": "Move to",
+  "sidebar_folder_remove_from": "Remove from folder",
+  "sidebar_pin_section_title": "Pinned"
 }

@@ -53,7 +53,9 @@ pub mod workflow {
         model_id,
         (current_context_tokens ?? 0) AS current_context_tokens,
         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
-        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output
+        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output,
+        folder_id,
+        (pinned ?? false) AS pinned
     FROM workflow"#;
 
     /// SELECT query for listing all workflows ordered by update time.
@@ -72,7 +74,9 @@ pub mod workflow {
         model_id,
         (current_context_tokens ?? 0) AS current_context_tokens,
         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
-        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output
+        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output,
+        folder_id,
+        (pinned ?? false) AS pinned
     FROM workflow
     ORDER BY updated_at DESC"#;
 

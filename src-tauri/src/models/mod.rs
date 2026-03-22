@@ -33,6 +33,7 @@ pub mod tool_execution;
 pub mod user_question;
 pub mod validation;
 pub mod workflow;
+pub mod workflow_folder;
 
 pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
@@ -41,6 +42,7 @@ pub use workflow::{
     Workflow, WorkflowCreate, WorkflowFullState, WorkflowMetrics, WorkflowResult, WorkflowStatus,
     WorkflowToolExecution,
 };
+pub use workflow_folder::{WorkflowFolder, WorkflowFolderCreate};
 
 #[allow(unused_imports)]
 pub use memory::{Memory, MemoryCreate, MemoryDescribeResult, MemorySearchResult, MemoryType};

@@ -23,11 +23,11 @@
   <WorkflowItem workflow={wf} active={selectedId === wf.id} onselect={handleSelect} ondelete={handleDelete} />
 -->
 <script lang="ts">
-	import type { Workflow } from '$types/workflow';
+	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { ContextMenuItem } from '$types/sidebar';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
 	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
-	import { EllipsisVertical, Pencil, Pin, FolderInput, Trash2 } from '@lucide/svelte';
+	import { EllipsisVertical, Pencil, Pin, PinOff, FolderInput, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { tick } from 'svelte';
 
@@ -55,6 +55,12 @@
 		onrename?: (workflow: Workflow, newName: string) => void;
 		/** Multi-selection toggle handler (Ctrl+Click or checkbox) */
 		onselectiontoggle?: (workflowId: string, event: MouseEvent | KeyboardEvent) => void;
+		/** Pin toggle handler */
+		ontogglepin?: (workflow: Workflow) => void;
+		/** Move to folder handler */
+		onmoveto?: (workflow: Workflow, folderId: string | null) => void;
+		/** Available folders for move-to menu */
+		folders?: WorkflowFolder[];
 	}
 
 	let {
@@ -67,7 +73,10 @@
 		onselect,
 		ondelete,
 		onrename,
-		onselectiontoggle
+		onselectiontoggle,
+		ontogglepin,
+		onmoveto,
+		folders = []
 	}: Props = $props();
 
 	let editing = $state(false);
@@ -77,13 +86,19 @@
 	let contextMenuX = $state(0);
 	let contextMenuY = $state(0);
 
-	/** Context menu items for this workflow */
-	const contextMenuItems: ContextMenuItem[] = [
+	/** Context menu items for this workflow (dynamic based on state) */
+	const contextMenuItems = $derived<ContextMenuItem[]>([
 		{ id: 'rename', labelKey: 'sidebar_context_rename', icon: Pencil },
-		{ id: 'pin', labelKey: 'sidebar_context_pin', icon: Pin, disabled: true },
-		{ id: 'move', labelKey: 'sidebar_context_move_to', icon: FolderInput, disabled: true },
-		{ id: 'delete', labelKey: 'sidebar_context_delete', icon: Trash2, variant: 'danger', separator: true },
-	];
+		{
+			id: 'pin',
+			labelKey: workflow.pinned ? 'sidebar_context_unpin' : 'sidebar_context_pin',
+			icon: workflow.pinned ? PinOff : Pin,
+			disabled: !ontogglepin,
+		},
+		{ id: 'move', labelKey: 'sidebar_context_move_to', icon: FolderInput, disabled: !onmoveto || folders.length === 0 },
+		...(workflow.folder_id && onmoveto ? [{ id: 'remove_from_folder', labelKey: 'sidebar_folder_remove_from', icon: FolderInput }] : []),
+		{ id: 'delete', labelKey: 'sidebar_context_delete', icon: Trash2, variant: 'danger' as const, separator: true },
+	]);
 
 	// Sync editName with workflow.name when workflow changes (e.g., external rename).
 	// Note (M-011): While editing, external renames are intentionally ignored to
@@ -207,8 +222,21 @@
 			case 'rename':
 				startEdit();
 				break;
+			case 'pin':
+				ontogglepin?.(workflow);
+				break;
+			case 'remove_from_folder':
+				onmoveto?.(workflow, null);
+				break;
 			case 'delete':
 				ondelete?.(workflow);
+				break;
+			default:
+				// Handle folder move actions (prefixed with 'move_to_')
+				if (actionId.startsWith('move_to_')) {
+					const folderId = actionId.replace('move_to_', '');
+					onmoveto?.(workflow, folderId);
+				}
 				break;
 		}
 	}
@@ -241,6 +269,9 @@
 		<span class="running-indicator"></span>
 	{/if}
 	<StatusIndicator status={workflow.status} size="sm" />
+	{#if workflow.pinned}
+		<Pin size={12} class="pin-icon" />
+	{/if}
 	{#if hasQuestion}
 		<span class="question-badge"></span>
 	{/if}
@@ -396,6 +427,11 @@
 		50% {
 			opacity: 0.4;
 		}
+	}
+
+	:global(.pin-icon) {
+		color: var(--color-accent);
+		min-width: 12px;
 	}
 
 	.question-badge {

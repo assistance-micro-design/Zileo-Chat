@@ -54,7 +54,8 @@ describe('Workflow Store', () => {
 		model_id: null,
 		current_context_tokens: 0,
 		sub_agent_tokens_input: 0,
-		sub_agent_tokens_output: 0
+		sub_agent_tokens_output: 0,
+		pinned: false
 	});
 
 	beforeEach(() => {

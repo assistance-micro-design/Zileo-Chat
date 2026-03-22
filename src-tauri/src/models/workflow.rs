@@ -76,6 +76,12 @@ pub struct Workflow {
     /// Cumulative cache-write tokens for this workflow
     #[serde(default)]
     pub total_cache_write_tokens: Option<u64>,
+    /// Folder ID for organization (None = uncategorized)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<String>,
+    /// Whether this workflow is pinned to the top of the sidebar
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -282,6 +288,8 @@ mod tests {
             sub_agent_tokens_output: 0,
             total_cached_tokens: None,
             total_cache_write_tokens: None,
+            folder_id: Some("folder-123".to_string()),
+            pinned: true,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
@@ -294,6 +302,45 @@ mod tests {
         assert_eq!(deserialized.total_tokens_output, 0);
         assert_eq!(deserialized.sub_agent_tokens_input, 0);
         assert_eq!(deserialized.sub_agent_tokens_output, 0);
+        assert_eq!(deserialized.folder_id, Some("folder-123".to_string()));
+        assert!(deserialized.pinned);
+    }
+
+    #[test]
+    fn test_workflow_folder_id_skip_serializing_if_none() {
+        let workflow = Workflow {
+            id: "wf_002".to_string(),
+            name: "No Folder".to_string(),
+            agent_id: "agent_001".to_string(),
+            status: WorkflowStatus::Idle,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            completed_at: None,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_cost_usd: 0.0,
+            model_id: None,
+            current_context_tokens: 0,
+            sub_agent_tokens_input: 0,
+            sub_agent_tokens_output: 0,
+            total_cached_tokens: None,
+            total_cache_write_tokens: None,
+            folder_id: None,
+            pinned: false,
+        };
+
+        let json = serde_json::to_string(&workflow).unwrap();
+        assert!(
+            !json.contains("folder_id"),
+            "folder_id should be omitted when None"
+        );
+        assert!(json.contains("\"pinned\":false"));
+
+        // Verify deserialization without folder_id field works (backwards compat)
+        let minimal_json = r#"{"id":"wf_003","name":"Old","agent_id":"a1","status":"idle","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}"#;
+        let wf: Workflow = serde_json::from_str(minimal_json).unwrap();
+        assert_eq!(wf.folder_id, None);
+        assert!(!wf.pinned);
     }
 
     #[test]

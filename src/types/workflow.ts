@@ -62,6 +62,28 @@ export interface Workflow {
   total_cached_tokens?: number;
   /** Cumulative cache-write tokens for this workflow */
   total_cache_write_tokens?: number;
+  /** Folder ID for organization (absent = uncategorized) */
+  folder_id?: string;
+  /** Whether this workflow is pinned to the top of the sidebar */
+  pinned: boolean;
+}
+
+/**
+ * Workflow folder for organizing workflows into named groups.
+ */
+export interface WorkflowFolder {
+  /** Unique identifier */
+  id: string;
+  /** Folder display name */
+  name: string;
+  /** Hex color for the folder indicator (e.g. "#3b82f6") */
+  color: string;
+  /** Position in the folder list (lower = higher) */
+  sort_order: number;
+  /** Creation timestamp */
+  created_at: Date;
+  /** Last update timestamp */
+  updated_at: Date;
 }
 
 /**

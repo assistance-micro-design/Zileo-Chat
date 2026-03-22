@@ -410,6 +410,169 @@ pub async fn delete_workflows_batch(
     })
 }
 
+/// Moves a single workflow to a folder (or removes from folder).
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to move
+/// * `folder_id` - Target folder ID, or None to remove from folder
+///
+/// # Returns
+/// The updated Workflow entity
+#[tauri::command]
+#[instrument(name = "move_workflow_to_folder", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn move_workflow_to_folder(
+    workflow_id: String,
+    folder_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Workflow, String> {
+    info!("Moving workflow to folder");
+
+    let validated_wf_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+
+    let folder_clause = match &folder_id {
+        Some(fid) => {
+            let validated_fid = validate_uuid_field(fid, "folder_id")?;
+            let fid_json = crate::security::serialize_for_query(&validated_fid, "folder_id")?;
+            format!("folder_id = {}", fid_json)
+        }
+        None => "folder_id = NONE".to_string(),
+    };
+
+    let query = format!(
+        "UPDATE workflow:`{}` SET {}, updated_at = time::now() RETURN {}",
+        validated_wf_id,
+        folder_clause,
+        "meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
+         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
+         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
+         (current_context_tokens ?? 0) AS current_context_tokens, \
+         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+         folder_id, (pinned ?? false) AS pinned"
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to move workflow to folder");
+        format!("Failed to move workflow to folder: {}", e)
+    })?;
+
+    let workflow: Workflow = json_results
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Workflow not found".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v).map_err(|e| format!("Failed to deserialize workflow: {}", e))
+        })?;
+
+    info!(folder_id = ?folder_id, "Workflow moved to folder");
+    Ok(workflow)
+}
+
+/// Moves multiple workflows to a folder (or removes from folder).
+///
+/// # Arguments
+/// * `workflow_ids` - List of workflow IDs to move
+/// * `folder_id` - Target folder ID, or None to remove from folder
+///
+/// # Returns
+/// Number of workflows moved
+#[tauri::command]
+#[instrument(name = "move_workflows_to_folder", skip(state), fields(count = workflow_ids.len()))]
+pub async fn move_workflows_to_folder(
+    workflow_ids: Vec<String>,
+    folder_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<u64, String> {
+    info!(
+        count = workflow_ids.len(),
+        "Batch moving workflows to folder"
+    );
+
+    if workflow_ids.is_empty() {
+        return Ok(0);
+    }
+
+    // Validate all IDs
+    let mut validated_ids = Vec::with_capacity(workflow_ids.len());
+    for id in &workflow_ids {
+        validated_ids.push(validate_uuid_field(id, "workflow_id")?);
+    }
+
+    let folder_clause = match &folder_id {
+        Some(fid) => {
+            let validated_fid = validate_uuid_field(fid, "folder_id")?;
+            let fid_json = crate::security::serialize_for_query(&validated_fid, "folder_id")?;
+            format!("folder_id = {}", fid_json)
+        }
+        None => "folder_id = NONE".to_string(),
+    };
+
+    let record_ids: Vec<String> = validated_ids
+        .iter()
+        .map(|id| format!("workflow:`{}`", id))
+        .collect();
+    let in_clause = record_ids.join(", ");
+    let query = format!(
+        "UPDATE workflow SET {}, updated_at = time::now() WHERE id IN [{}]",
+        folder_clause, in_clause
+    );
+
+    state.db.execute(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to batch move workflows to folder");
+        format!("Failed to batch move workflows: {}", e)
+    })?;
+
+    let moved = validated_ids.len() as u64;
+    info!(moved = moved, "Workflows moved to folder");
+    Ok(moved)
+}
+
+/// Toggles the pinned state of a workflow.
+///
+/// # Arguments
+/// * `workflow_id` - The workflow ID to toggle
+///
+/// # Returns
+/// The updated Workflow entity
+#[tauri::command]
+#[instrument(name = "toggle_workflow_pinned", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn toggle_workflow_pinned(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<Workflow, String> {
+    info!("Toggling workflow pinned state");
+
+    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+
+    let query = format!(
+        "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN \
+         meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
+         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
+         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
+         (current_context_tokens ?? 0) AS current_context_tokens, \
+         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+         folder_id, (pinned ?? false) AS pinned",
+        validated_id
+    );
+
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to toggle workflow pinned");
+        format!("Failed to toggle workflow pinned: {}", e)
+    })?;
+
+    let workflow: Workflow = json_results
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Workflow not found".to_string())
+        .and_then(|v| {
+            serde_json::from_value(v).map_err(|e| format!("Failed to deserialize workflow: {}", e))
+        })?;
+
+    info!(pinned = workflow.pinned, "Workflow pinned state toggled");
+    Ok(workflow)
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

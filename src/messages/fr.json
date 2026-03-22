@@ -1166,5 +1166,17 @@
   "sidebar_selection_delete_title": "Supprimer les workflows",
   "sidebar_selection_delete_confirm": "Voulez-vous vraiment supprimer {count} workflow(s) ?",
   "sidebar_selection_delete_warning": "Cette action est irreversible. Tous les messages et donnees associes seront supprimes.",
-  "sidebar_selection_running_skipped": "{count} workflow(s) en cours ont ete ignores"
+  "sidebar_selection_running_skipped": "{count} workflow(s) en cours ont ete ignores",
+
+  "sidebar_folder_create": "Nouveau dossier",
+  "sidebar_folder_create_title": "Creer un dossier",
+  "sidebar_folder_name_placeholder": "Nom du dossier",
+  "sidebar_folder_rename": "Renommer le dossier",
+  "sidebar_folder_delete": "Supprimer le dossier",
+  "sidebar_folder_delete_confirm": "Supprimer ce dossier ? Les workflows a l'interieur deviendront non classes.",
+  "sidebar_folder_uncategorized": "Non classes",
+  "sidebar_folder_empty": "Aucun workflow dans ce dossier",
+  "sidebar_folder_move_to": "Deplacer vers",
+  "sidebar_folder_remove_from": "Retirer du dossier",
+  "sidebar_pin_section_title": "Epingles"
 }

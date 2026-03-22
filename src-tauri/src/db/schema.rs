@@ -435,4 +435,24 @@ DEFINE TABLE OVERWRITE migration_log SCHEMAFULL;
 DEFINE FIELD OVERWRITE name ON migration_log TYPE string;
 DEFINE FIELD OVERWRITE applied_at ON migration_log TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE unique_migration_name ON migration_log FIELDS name UNIQUE;
+
+-- =============================================
+-- Table: workflow_folder
+-- Organizes workflows into named folders
+-- =============================================
+DEFINE TABLE OVERWRITE workflow_folder SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON workflow_folder TYPE string;
+DEFINE FIELD OVERWRITE name ON workflow_folder TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 128;
+DEFINE FIELD OVERWRITE color ON workflow_folder TYPE string
+    ASSERT $value = /^#[0-9a-fA-F]{6}$/;
+DEFINE FIELD OVERWRITE sort_order ON workflow_folder TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE created_at ON workflow_folder TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON workflow_folder TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE unique_folder_id ON workflow_folder FIELDS id UNIQUE;
+
+-- Workflow extensions for folders and pinning
+DEFINE FIELD OVERWRITE folder_id ON workflow TYPE option<string>;
+DEFINE FIELD OVERWRITE pinned ON workflow TYPE bool DEFAULT false;
 "#;
