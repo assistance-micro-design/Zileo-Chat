@@ -140,7 +140,9 @@ pub async fn rename_workflow(
 
     let query = format!(
         "UPDATE workflow:`{}` SET name = {}, updated_at = time::now() RETURN {}",
-        validated_id, name_json, wf_queries::RETURN_FIELDS
+        validated_id,
+        name_json,
+        wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
@@ -440,7 +442,9 @@ pub async fn move_workflow_to_folder(
 
     let query = format!(
         "UPDATE workflow:`{}` SET {}, updated_at = time::now() RETURN {}",
-        validated_wf_id, folder_clause, wf_queries::RETURN_FIELDS
+        validated_wf_id,
+        folder_clause,
+        wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
@@ -538,7 +542,8 @@ pub async fn toggle_workflow_pinned(
 
     let query = format!(
         "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN {}",
-        validated_id, wf_queries::RETURN_FIELDS
+        validated_id,
+        wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
