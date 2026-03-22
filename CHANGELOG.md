@@ -5,6 +5,35 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-03-22
+
+### Added
+
+- **Sidebar Improvements**: Complete overhaul of the workflow sidebar (6 phases)
+  - Phase 1: Sidebar collapsed state persistence to localStorage, status filters (All/Idle/Running/Completed/Error)
+  - Phase 2: Right-click context menu on workflow items (rename, delete, pin, move to folder)
+  - Phase 3: Multi-selection mode with Shift+Click range selection and batch delete (skips running workflows)
+  - Phase 4: Workflow folders with color-coded labels, move-to-folder support, pin/unpin workflows
+  - Phase 5: Pinned workflows section, wired folder/pin handlers to backend, query deduplication
+  - Phase 6: Drag & drop workflows into folders with multi-select drag support and drop zones
+- **`withToastError` utility**: Higher-order function to wrap async handlers with toast error notifications, replacing 7 repetitive try/catch blocks
+- **`async.test.ts`**: 5 unit tests for the new `withToastError` utility
+
+### Changed
+
+- **Sidebar header layout**: Title + create button on first line, secondary actions (help, folder, selection) on second line
+- **Sidebar collapse toggle**: Moved from invisible edge-positioned button to visible footer button with accent color
+- **Batch delete optimization**: Replaced N+1 status queries with single `IN` query
+- **Workflow query fields**: Deduplicated with shared `FIELDS` constant in `queries.rs`
+
+### Fixed
+
+- **Context menu move-to-folder**: Now lists folders individually instead of as a group
+- **Pinned field backfill**: Existing workflows with `NONE` pinned value are backfilled to `false` at startup
+- **Vite ENOSPC**: Excluded `src-tauri/target` from file watcher to prevent ENOSPC errors on Linux
+
+---
+
 ## [0.16.0] - 2026-03-21
 
 ### Added
@@ -503,6 +532,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
+[0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
 [0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
 [0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.17.0...HEAD
