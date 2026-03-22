@@ -1152,5 +1152,11 @@
   "sidebar_filter_running": "En cours",
   "sidebar_filter_completed": "Termines",
   "sidebar_filter_error": "Erreur",
-  "sidebar_filter_idle": "Inactifs"
+  "sidebar_filter_idle": "Inactifs",
+
+  "sidebar_context_rename": "Renommer",
+  "sidebar_context_pin": "Epingler en haut",
+  "sidebar_context_unpin": "Desepingler",
+  "sidebar_context_move_to": "Deplacer dans un dossier...",
+  "sidebar_context_delete": "Supprimer"
 }

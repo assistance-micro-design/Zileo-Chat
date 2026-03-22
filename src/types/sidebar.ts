@@ -23,3 +23,19 @@ import type { WorkflowStatus } from './workflow';
 
 /** Active status filter in the sidebar */
 export type StatusFilter = 'all' | WorkflowStatus;
+
+/** Context menu item for workflow actions */
+export interface ContextMenuItem {
+	/** Unique identifier for the action */
+	id: string;
+	/** i18n translation key for the label */
+	labelKey: string;
+	/** Lucide icon component */
+	icon?: import('svelte').Component;
+	/** Visual variant */
+	variant?: 'default' | 'danger';
+	/** Whether the item is disabled */
+	disabled?: boolean;
+	/** Show a visual separator before this item */
+	separator?: boolean;
+}

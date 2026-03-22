@@ -41,5 +41,6 @@ export { default as HelpButton } from './HelpButton.svelte';
 export { default as ErrorBanner } from './ErrorBanner.svelte';
 export { default as DeleteConfirmModal } from './DeleteConfirmModal.svelte';
 export { default as MarkdownRenderer } from './MarkdownRenderer.svelte';
+export { default as ContextMenu } from './ContextMenu.svelte';
 export { default as ToastContainer } from './ToastContainer.svelte';
 export { default as ToastItem } from './ToastItem.svelte';

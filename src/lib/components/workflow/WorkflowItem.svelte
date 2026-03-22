@@ -24,8 +24,10 @@
 -->
 <script lang="ts">
 	import type { Workflow } from '$types/workflow';
+	import type { ContextMenuItem } from '$types/sidebar';
 	import StatusIndicator from '$lib/components/ui/StatusIndicator.svelte';
-	import { X, Pencil } from '@lucide/svelte';
+	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
+	import { EllipsisVertical, Pencil, Pin, FolderInput, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { tick } from 'svelte';
 
@@ -54,6 +56,17 @@
 	let editing = $state(false);
 	let editName = $state('');
 	let nameInputRef = $state<HTMLInputElement | null>(null);
+	let contextMenuOpen = $state(false);
+	let contextMenuX = $state(0);
+	let contextMenuY = $state(0);
+
+	/** Context menu items for this workflow */
+	const contextMenuItems: ContextMenuItem[] = [
+		{ id: 'rename', labelKey: 'sidebar_context_rename', icon: Pencil },
+		{ id: 'pin', labelKey: 'sidebar_context_pin', icon: Pin, disabled: true },
+		{ id: 'move', labelKey: 'sidebar_context_move_to', icon: FolderInput, disabled: true },
+		{ id: 'delete', labelKey: 'sidebar_context_delete', icon: Trash2, variant: 'danger', separator: true },
+	];
 
 	// Sync editName with workflow.name when workflow changes (e.g., external rename).
 	// Note (M-011): While editing, external renames are intentionally ignored to
@@ -109,14 +122,6 @@
 	}
 
 	/**
-	 * Handle delete button click
-	 */
-	function handleDelete(event: MouseEvent): void {
-		event.stopPropagation();
-		ondelete?.(workflow);
-	}
-
-	/**
 	 * Handle keyboard activation
 	 */
 	function handleKeydown(event: KeyboardEvent): void {
@@ -126,6 +131,49 @@
 		} else if (event.key === 'F2') {
 			event.preventDefault();
 			startEdit();
+		}
+	}
+
+	/**
+	 * Open context menu at position
+	 */
+	function openContextMenu(x: number, y: number): void {
+		contextMenuX = x;
+		contextMenuY = y;
+		contextMenuOpen = true;
+	}
+
+	/**
+	 * Handle right-click context menu
+	 */
+	function handleContextMenu(event: MouseEvent): void {
+		event.preventDefault();
+		event.stopPropagation();
+		openContextMenu(event.clientX, event.clientY);
+	}
+
+	/**
+	 * Handle ... button click
+	 */
+	function handleMoreClick(event: MouseEvent): void {
+		event.stopPropagation();
+		const button = event.currentTarget as HTMLElement;
+		const rect = button.getBoundingClientRect();
+		openContextMenu(rect.right, rect.bottom);
+	}
+
+	/**
+	 * Handle context menu action selection
+	 */
+	function handleContextAction(actionId: string): void {
+		contextMenuOpen = false;
+		switch (actionId) {
+			case 'rename':
+				startEdit();
+				break;
+			case 'delete':
+				ondelete?.(workflow);
+				break;
 		}
 	}
 </script>
@@ -138,7 +186,9 @@
 	onclick={handleSelect}
 	onkeydown={handleKeydown}
 	ondblclick={startEdit}
+	oncontextmenu={handleContextMenu}
 	aria-pressed={active}
+	aria-haspopup="menu"
 	aria-label={`Workflow: ${workflow.name}`}
 >
 	{#if running}
@@ -165,23 +215,27 @@
 	<div class="item-actions">
 		<button
 			type="button"
-			class="action-btn edit-btn"
-			onclick={startEdit}
+			class="action-btn more-btn"
+			onclick={handleMoreClick}
 			title={$i18n('workflow_rename')}
-			aria-label={$i18n('workflow_rename')}
+			aria-label="Actions"
+			aria-haspopup="menu"
+			aria-expanded={contextMenuOpen}
 		>
-			<Pencil size={14} />
-		</button>
-		<button
-			type="button"
-			class="action-btn delete-btn"
-			onclick={handleDelete}
-			aria-label={$i18n('workflow_delete_arialabel').replace('{name}', workflow.name)}
-		>
-			<X size={14} />
+			<EllipsisVertical size={14} />
 		</button>
 	</div>
 </div>
+
+{#if contextMenuOpen}
+	<ContextMenu
+		items={contextMenuItems}
+		x={contextMenuX}
+		y={contextMenuY}
+		onselect={handleContextAction}
+		onclose={() => (contextMenuOpen = false)}
+	/>
+{/if}
 
 <style>
 	.workflow-item {
@@ -261,14 +315,9 @@
 		transition: all var(--transition-fast);
 	}
 
-	.edit-btn:hover {
-		background: var(--color-accent-light);
-		color: var(--color-accent);
-	}
-
-	.delete-btn:hover {
-		background: var(--color-error-light);
-		color: var(--color-error);
+	.more-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-primary);
 	}
 
 	.running-indicator {

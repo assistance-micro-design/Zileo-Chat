@@ -1152,5 +1152,11 @@
   "sidebar_filter_running": "Running",
   "sidebar_filter_completed": "Completed",
   "sidebar_filter_error": "Error",
-  "sidebar_filter_idle": "Idle"
+  "sidebar_filter_idle": "Idle",
+
+  "sidebar_context_rename": "Rename",
+  "sidebar_context_pin": "Pin to top",
+  "sidebar_context_unpin": "Unpin",
+  "sidebar_context_move_to": "Move to folder...",
+  "sidebar_context_delete": "Delete"
 }
