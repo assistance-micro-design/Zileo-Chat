@@ -49,7 +49,7 @@ globset = "0.4"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # LLM Integration (Rig.rs)
-rig-core = "0.31.0"
+rig-core = "0.32.0"
 
 # HTTP client for provider connectivity tests and MCP HTTP transport
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
