@@ -52,6 +52,10 @@
 		error?: string | null;
 		/** Whether workflows are currently loading */
 		loading?: boolean;
+		/** Whether multi-selection mode is active */
+		selectionMode?: boolean;
+		/** Set of selected workflow IDs (multi-select) */
+		selectedIds?: Set<string>;
 		/** Selection handler */
 		onselect?: (workflow: Workflow) => void;
 		/** Delete handler */
@@ -60,6 +64,8 @@
 		onrename?: (workflow: Workflow, newName: string) => void;
 		/** Retry handler for failed loads */
 		onretry?: () => void;
+		/** Multi-selection toggle handler */
+		onselectiontoggle?: (workflowId: string, event: MouseEvent | KeyboardEvent) => void;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -74,10 +80,13 @@
 		collapsed = false,
 		error = null,
 		loading = false,
+		selectionMode = false,
+		selectedIds = new Set<string>(),
 		onselect,
 		ondelete,
 		onrename,
 		onretry,
+		onselectiontoggle,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
@@ -175,6 +184,9 @@
 					{onselect}
 					{ondelete}
 					{onrename}
+					{selectionMode}
+					selected={selectedIds.has(workflow.id)}
+					{onselectiontoggle}
 				/>
 			{/each}
 		{/if}
@@ -191,6 +203,9 @@
 					{onselect}
 					{ondelete}
 					{onrename}
+					{selectionMode}
+					selected={selectedIds.has(workflow.id)}
+					{onselectiontoggle}
 				/>
 			{/each}
 		{/if}
@@ -206,6 +221,9 @@
 					{onselect}
 					{ondelete}
 					{onrename}
+					{selectionMode}
+					selected={selectedIds.has(workflow.id)}
+					{onselectiontoggle}
 				/>
 			{/each}
 		{/each}

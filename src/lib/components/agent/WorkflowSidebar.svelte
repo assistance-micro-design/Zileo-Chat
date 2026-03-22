@@ -23,13 +23,16 @@ Left sidebar for workflow management with search and CRUD operations.
 -->
 
 <script lang="ts">
-	import { Plus, Search } from '@lucide/svelte';
+	import { Plus, Search, CheckSquare } from '@lucide/svelte';
 	import { Button, HelpButton } from '$lib/components/ui';
+	import DeleteConfirmModal from '$lib/components/ui/DeleteConfirmModal.svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import WorkflowList from '$lib/components/workflow/WorkflowList.svelte';
 	import StatusFilters from '$lib/components/workflow/StatusFilters.svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { i18n } from '$lib/i18n';
 	import { debounce } from '$lib/utils/debounce';
+	import { getErrorMessage } from '$lib/utils/error';
 	import type { Workflow } from '$types/workflow';
 	import type { StatusFilter } from '$types/sidebar';
 
@@ -55,6 +58,8 @@ Left sidebar for workflow management with search and CRUD operations.
 		onretry?: () => void;
 		/** Handler for status filter changes */
 		onstatusfilterchange?: (filter: StatusFilter) => void;
+		/** Batch delete handler */
+		onbatchdelete?: (ids: string[]) => Promise<{ deleted: number; skipped_running: string[] }>;
 		/** Set of workflow IDs currently running in the background */
 		runningWorkflowIds?: Set<string>;
 		/** Set of workflow IDs that recently completed */
@@ -81,10 +86,79 @@ Left sidebar for workflow management with search and CRUD operations.
 		onrename,
 		onretry,
 		onstatusfilterchange,
+		onbatchdelete,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
 		questionPendingIds = new Set<string>()
 	}: Props = $props();
+
+	/** Multi-selection state */
+	let selectionMode = $state(false);
+	let selectedIds = new SvelteSet<string>();
+	let showBatchDeleteConfirm = $state(false);
+	let batchDeleting = $state(false);
+
+	/** Last clicked index for Shift+Click range selection */
+	let lastClickedId = $state<string | null>(null);
+
+	/**
+	 * Toggle selection mode on/off
+	 */
+	function toggleSelectionMode(): void {
+		selectionMode = !selectionMode;
+		if (!selectionMode) {
+			selectedIds.clear();
+			lastClickedId = null;
+		}
+	}
+
+	/**
+	 * Handle selection toggle for a workflow (Ctrl+Click, Shift+Click, checkbox)
+	 */
+	function handleSelectionToggle(workflowId: string, event: MouseEvent | KeyboardEvent): void {
+		if (!selectionMode) {
+			selectionMode = true;
+		}
+
+		if ('shiftKey' in event && event.shiftKey && lastClickedId) {
+			const ids = workflows.map((w) => w.id);
+			const startIdx = ids.indexOf(lastClickedId);
+			const endIdx = ids.indexOf(workflowId);
+			if (startIdx !== -1 && endIdx !== -1) {
+				const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+				for (let i = from; i <= to; i++) {
+					selectedIds.add(ids[i]);
+				}
+			}
+		} else {
+			if (selectedIds.has(workflowId)) {
+				selectedIds.delete(workflowId);
+			} else {
+				selectedIds.add(workflowId);
+			}
+		}
+
+		lastClickedId = workflowId;
+	}
+
+	/**
+	 * Confirm and execute batch delete
+	 */
+	async function handleBatchDelete(): Promise<void> {
+		if (!onbatchdelete || selectedIds.size === 0) return;
+		batchDeleting = true;
+		try {
+			await onbatchdelete([...selectedIds]);
+			selectedIds.clear();
+			selectionMode = false;
+			lastClickedId = null;
+		} catch (e) {
+			const _msg = getErrorMessage(e);
+		} finally {
+			batchDeleting = false;
+			showBatchDeleteConfirm = false;
+		}
+	}
 
 	function handleSearchInput(e: Event) {
 		const target = e.target as HTMLInputElement;
@@ -121,9 +195,24 @@ Left sidebar for workflow management with search and CRUD operations.
 							tutorialKey="help_workflow_sidebar_tutorial"
 						/>
 					</div>
-					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
-						<Plus size={14} />
-					</Button>
+					<div class="header-actions">
+						{#if onbatchdelete}
+							<button
+								type="button"
+								class="selection-toggle-btn"
+								class:active={selectionMode}
+								onclick={toggleSelectionMode}
+								title={$i18n('sidebar_selection_toggle')}
+								aria-label={$i18n('sidebar_selection_toggle')}
+								aria-pressed={selectionMode}
+							>
+								<CheckSquare size={14} />
+							</button>
+						{/if}
+						<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
+							<Plus size={14} />
+						</Button>
+					</div>
 				</div>
 				<div class="search-input-wrapper">
 					<span class="search-icon-container">
@@ -155,16 +244,50 @@ Left sidebar for workflow management with search and CRUD operations.
 			collapsed={isCollapsed}
 			{error}
 			{loading}
+			selectionMode={!isCollapsed && selectionMode}
+			{selectedIds}
 			{onselect}
 			{ondelete}
 			{onrename}
 			{onretry}
+			onselectiontoggle={handleSelectionToggle}
 			{runningWorkflowIds}
 			{recentlyCompletedIds}
 			{questionPendingIds}
 		/>
+		{#if selectionMode && selectedIds.size > 0 && !isCollapsed}
+			<div class="batch-action-bar">
+				<Button
+					variant="danger"
+					size="sm"
+					onclick={() => (showBatchDeleteConfirm = true)}
+					disabled={batchDeleting}
+				>
+					{$i18n('sidebar_selection_delete', { count: selectedIds.size })}
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={toggleSelectionMode}
+				>
+					{$i18n('sidebar_selection_cancel')}
+				</Button>
+			</div>
+		{/if}
 	{/snippet}
 </Sidebar>
+
+{#if showBatchDeleteConfirm}
+	<DeleteConfirmModal
+		open={showBatchDeleteConfirm}
+		titleKey="sidebar_selection_delete_title"
+		confirmMessageKey="sidebar_selection_delete_confirm"
+		warningMessageKey="sidebar_selection_delete_warning"
+		deleting={batchDeleting}
+		onConfirm={handleBatchDelete}
+		onCancel={() => (showBatchDeleteConfirm = false)}
+	/>
+{/if}
 
 <style>
 	.sidebar-header-content {
@@ -246,6 +369,48 @@ Left sidebar for workflow management with search and CRUD operations.
 		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='6' x2='6' y2='18'%3E%3C/line%3E%3Cline x1='6' y1='6' x2='18' y2='18'%3E%3C/line%3E%3C/svg%3E")
 			center/contain no-repeat;
 		cursor: pointer;
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.selection-toggle-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--border-radius-md);
+		color: var(--color-text-tertiary);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.selection-toggle-btn:hover {
+		background: var(--color-bg-hover);
+		color: var(--color-text-primary);
+	}
+
+	.selection-toggle-btn.active {
+		background: var(--color-accent-light);
+		border-color: var(--color-accent);
+		color: var(--color-accent);
+	}
+
+	.batch-action-bar {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-sm) var(--spacing-md);
+		border-top: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
 	}
 
 	/* Utility Classes */

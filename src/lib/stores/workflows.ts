@@ -127,6 +127,26 @@ export const workflowStore = {
 	},
 
 	/**
+	 * Batch delete multiple workflows.
+	 * Calls the backend command and removes deleted workflows from state.
+	 *
+	 * @param ids - Array of workflow IDs to delete
+	 * @returns Result with deleted count and skipped running IDs
+	 */
+	async deleteBatch(ids: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
+		const result = await invoke<{ deleted: number; skipped_running: string[] }>(
+			'delete_workflows_batch',
+			{ workflowIds: ids }
+		);
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.filter((w) => !ids.includes(w.id) || result.skipped_running.includes(w.id)),
+			selectedId: ids.includes(s.selectedId ?? '') ? null : s.selectedId
+		}));
+		return result;
+	},
+
+	/**
 	 * Reset store to initial state.
 	 */
 	reset(): void {

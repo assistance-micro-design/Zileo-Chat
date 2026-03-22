@@ -1158,5 +1158,13 @@
   "sidebar_context_pin": "Epingler en haut",
   "sidebar_context_unpin": "Desepingler",
   "sidebar_context_move_to": "Deplacer dans un dossier...",
-  "sidebar_context_delete": "Supprimer"
+  "sidebar_context_delete": "Supprimer",
+
+  "sidebar_selection_toggle": "Mode selection",
+  "sidebar_selection_cancel": "Annuler",
+  "sidebar_selection_delete": "Supprimer ({count})",
+  "sidebar_selection_delete_title": "Supprimer les workflows",
+  "sidebar_selection_delete_confirm": "Voulez-vous vraiment supprimer {count} workflow(s) ?",
+  "sidebar_selection_delete_warning": "Cette action est irreversible. Tous les messages et donnees associes seront supprimes.",
+  "sidebar_selection_running_skipped": "{count} workflow(s) en cours ont ete ignores"
 }

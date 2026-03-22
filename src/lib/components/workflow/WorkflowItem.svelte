@@ -43,15 +43,32 @@
 		running?: boolean;
 		/** Whether this workflow has a pending user question */
 		hasQuestion?: boolean;
+		/** Whether multi-selection mode is active */
+		selectionMode?: boolean;
+		/** Whether this item is currently selected (multi-select) */
+		selected?: boolean;
 		/** Selection handler */
 		onselect?: (workflow: Workflow) => void;
 		/** Delete handler */
 		ondelete?: (workflow: Workflow) => void;
 		/** Rename handler */
 		onrename?: (workflow: Workflow, newName: string) => void;
+		/** Multi-selection toggle handler (Ctrl+Click or checkbox) */
+		onselectiontoggle?: (workflowId: string, event: MouseEvent | KeyboardEvent) => void;
 	}
 
-	let { workflow, active = false, running = false, hasQuestion = false, onselect, ondelete, onrename }: Props = $props();
+	let {
+		workflow,
+		active = false,
+		running = false,
+		hasQuestion = false,
+		selectionMode = false,
+		selected = false,
+		onselect,
+		ondelete,
+		onrename,
+		onselectiontoggle
+	}: Props = $props();
 
 	let editing = $state(false);
 	let editName = $state('');
@@ -78,12 +95,17 @@
 	});
 
 	/**
-	 * Handle workflow selection
+	 * Handle workflow selection or multi-select toggle
 	 */
-	function handleSelect(): void {
-		if (!editing) {
-			onselect?.(workflow);
+	function handleClick(event: MouseEvent): void {
+		if (editing) return;
+
+		if (selectionMode || event.ctrlKey || event.metaKey || event.shiftKey) {
+			onselectiontoggle?.(workflow.id, event);
+			return;
 		}
+
+		onselect?.(workflow);
 	}
 
 	/**
@@ -122,12 +144,24 @@
 	}
 
 	/**
+	 * Handle checkbox toggle in selection mode
+	 */
+	function handleCheckboxChange(event: Event): void {
+		event.stopPropagation();
+		onselectiontoggle?.(workflow.id, event as unknown as MouseEvent);
+	}
+
+	/**
 	 * Handle keyboard activation
 	 */
 	function handleKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
-			handleSelect();
+			if (selectionMode) {
+				onselectiontoggle?.(workflow.id, event);
+			} else {
+				onselect?.(workflow);
+			}
 		} else if (event.key === 'F2') {
 			event.preventDefault();
 			startEdit();
@@ -181,16 +215,27 @@
 <div
 	class="workflow-item"
 	class:active
+	class:selected
 	role="button"
 	tabindex="0"
-	onclick={handleSelect}
+	onclick={handleClick}
 	onkeydown={handleKeydown}
-	ondblclick={startEdit}
+	ondblclick={selectionMode ? undefined : startEdit}
 	oncontextmenu={handleContextMenu}
 	aria-pressed={active}
 	aria-haspopup="menu"
 	aria-label={`Workflow: ${workflow.name}`}
 >
+	{#if selectionMode}
+		<input
+			type="checkbox"
+			class="selection-checkbox"
+			checked={selected}
+			onchange={handleCheckboxChange}
+			onclick={(e) => e.stopPropagation()}
+			aria-label={$i18n('sidebar_selection_toggle')}
+		/>
+	{/if}
 	{#if running}
 		<span class="running-indicator"></span>
 	{/if}
@@ -262,6 +307,20 @@
 	.workflow-item.active {
 		background: var(--color-accent-light);
 		border-color: var(--color-accent);
+	}
+
+	.workflow-item.selected {
+		background: var(--color-accent-light);
+		border-color: var(--color-accent);
+		opacity: 0.9;
+	}
+
+	.selection-checkbox {
+		width: 16px;
+		height: 16px;
+		min-width: 16px;
+		accent-color: var(--color-accent);
+		cursor: pointer;
 	}
 
 	.workflow-name {

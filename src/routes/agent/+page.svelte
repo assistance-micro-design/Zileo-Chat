@@ -621,6 +621,7 @@ Uses extracted components, services, and stores for clean architecture.
 		ondelete={(w) => modalState = { type: 'delete-workflow', workflowId: w.id }}
 		onrename={(w, name) => handleRename(w.id, name)}
 		onretry={() => workflowStore.loadWorkflows()}
+		onbatchdelete={(ids) => workflowStore.deleteBatch(ids)}
 	/>
 
 	<!-- Main Content -->

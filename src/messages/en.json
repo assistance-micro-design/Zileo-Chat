@@ -1158,5 +1158,13 @@
   "sidebar_context_pin": "Pin to top",
   "sidebar_context_unpin": "Unpin",
   "sidebar_context_move_to": "Move to folder...",
-  "sidebar_context_delete": "Delete"
+  "sidebar_context_delete": "Delete",
+
+  "sidebar_selection_toggle": "Selection mode",
+  "sidebar_selection_cancel": "Cancel",
+  "sidebar_selection_delete": "Delete ({count})",
+  "sidebar_selection_delete_title": "Delete workflows",
+  "sidebar_selection_delete_confirm": "Are you sure you want to delete {count} workflow(s)?",
+  "sidebar_selection_delete_warning": "This action is irreversible. All associated messages and data will be deleted.",
+  "sidebar_selection_running_skipped": "{count} running workflow(s) were skipped"
 }

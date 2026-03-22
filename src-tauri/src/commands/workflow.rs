@@ -25,6 +25,15 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
+/// Batch delete result containing the count of deleted workflows
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BatchDeleteResult {
+    /// Number of workflows successfully deleted
+    pub deleted: u64,
+    /// IDs of workflows that were skipped (running status)
+    pub skipped_running: Vec<String>,
+}
+
 /// Creates a new workflow
 #[tauri::command]
 #[instrument(
@@ -297,6 +306,97 @@ pub async fn load_workflow_full_state(
     Ok(full_state)
 }
 
+/// Deletes multiple workflows in a single batch operation.
+///
+/// Validates all IDs, rejects workflows with 'running' status,
+/// and performs cascade delete for each valid workflow in sequence.
+///
+/// # Arguments
+/// * `workflow_ids` - List of workflow IDs to delete
+///
+/// # Returns
+/// BatchDeleteResult with count of deleted and list of skipped running IDs
+///
+/// # Errors
+/// Returns error if all IDs are invalid or if a database error occurs
+#[tauri::command]
+#[instrument(name = "delete_workflows_batch", skip(state), fields(count = workflow_ids.len()))]
+pub async fn delete_workflows_batch(
+    workflow_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<BatchDeleteResult, String> {
+    info!(count = workflow_ids.len(), "Batch deleting workflows");
+
+    if workflow_ids.is_empty() {
+        return Ok(BatchDeleteResult {
+            deleted: 0,
+            skipped_running: vec![],
+        });
+    }
+
+    // Validate all UUIDs
+    let mut validated_ids = Vec::with_capacity(workflow_ids.len());
+    for id in &workflow_ids {
+        let validated = validate_uuid_field(id, "workflow_id")?;
+        validated_ids.push(validated);
+    }
+
+    // Check status for each workflow - reject running ones
+    let mut to_delete = Vec::new();
+    let mut skipped_running = Vec::new();
+
+    for id in &validated_ids {
+        let query = format!("SELECT status FROM workflow:`{}` LIMIT 1", id);
+        let json_results = state.db.query_json(&query).await.map_err(|e| {
+            error!(error = %e, workflow_id = %id, "Failed to check workflow status");
+            format!("Failed to check workflow status: {}", e)
+        })?;
+
+        if let Some(row) = json_results.into_iter().next() {
+            let status_str = row
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+
+            if status_str == "running" {
+                warn!(workflow_id = %id, "Skipping running workflow in batch delete");
+                skipped_running.push(id.clone());
+            } else {
+                to_delete.push(id.clone());
+            }
+        }
+        // If workflow not found, silently skip (already deleted)
+    }
+
+    // Cascade delete each valid workflow
+    let mut deleted: u64 = 0;
+    for id in &to_delete {
+        cascade::delete_workflow_related(&state.db, id).await;
+
+        state
+            .db
+            .delete(&format!("workflow:{}", id))
+            .await
+            .map_err(|e| {
+                error!(error = %e, workflow_id = %id, "Failed to delete workflow in batch");
+                format!("Failed to delete workflow {}: {}", id, e)
+            })?;
+
+        deleted += 1;
+    }
+
+    info!(
+        deleted = deleted,
+        skipped_running = skipped_running.len(),
+        "Batch delete completed"
+    );
+
+    Ok(BatchDeleteResult {
+        deleted,
+        skipped_running,
+    })
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -502,6 +602,32 @@ mod tests {
             .execute_with_mcp("nonexistent_agent", task, None, None)
             .await;
         assert!(result.is_err(), "Should fail for nonexistent agent");
+    }
+
+    #[tokio::test]
+    async fn test_batch_delete_result_serialization() {
+        let result = super::BatchDeleteResult {
+            deleted: 3,
+            skipped_running: vec!["id-1".to_string(), "id-2".to_string()],
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"deleted\":3"));
+        assert!(json.contains("\"skipped_running\""));
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["deleted"], 3);
+        assert_eq!(parsed["skipped_running"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_batch_delete_empty_ids() {
+        // BatchDeleteResult with 0 deleted for empty input
+        let result = super::BatchDeleteResult {
+            deleted: 0,
+            skipped_running: vec![],
+        };
+        assert_eq!(result.deleted, 0);
+        assert!(result.skipped_running.is_empty());
     }
 
     #[tokio::test]
