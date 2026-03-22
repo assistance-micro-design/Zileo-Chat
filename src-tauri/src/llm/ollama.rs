@@ -16,6 +16,7 @@
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use crate::models::agent::ReasoningEffort;
+use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
 use rig::client::Nothing;
 use rig::completion::Prompt;
@@ -224,7 +225,7 @@ impl OllamaProvider {
                 LLMError::RequestFailed(format!(
                     "Failed to parse Ollama response: {}. Body: {}",
                     e,
-                    &response_text[..response_text.len().min(500)]
+                    safe_truncate(&response_text, 500, true)
                 ))
             })?;
 

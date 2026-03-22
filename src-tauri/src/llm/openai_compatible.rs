@@ -23,6 +23,7 @@
 
 use super::provider::{LLMError, LLMResponse, ProviderType};
 use crate::models::agent::ReasoningEffort;
+use crate::tools::utils::safe_truncate;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -495,7 +496,7 @@ impl OpenAiCompatibleProvider {
                 "Failed to parse {} response: {}. Body: {}",
                 self.provider_name,
                 e,
-                &body[..body.len().min(500)]
+                safe_truncate(&body, 500, true)
             ))
         })?;
 
@@ -639,7 +640,7 @@ impl OpenAiCompatibleProvider {
                 "Failed to parse {} response: {}. Body: {}",
                 self.provider_name,
                 e,
-                &body[..body.len().min(500)]
+                safe_truncate(&body, 500, true)
             ))
         })?;
 

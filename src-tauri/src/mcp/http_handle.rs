@@ -66,7 +66,10 @@ static SHARED_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .pool_idle_timeout(Duration::from_secs(90))
         .timeout(Duration::from_millis(DEFAULT_HTTP_TIMEOUT_MS))
         .build()
-        .expect("Failed to create shared HTTP client")
+        .unwrap_or_else(|e| {
+            warn!("Failed to create optimized HTTP client: {e}, falling back to default");
+            Client::new()
+        })
 });
 
 /// MCP HTTP Transport Handle

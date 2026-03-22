@@ -20,6 +20,7 @@
 
 use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
 use crate::models::agent::ReasoningEffort;
+use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
 use rig::completion::Prompt;
 use rig::providers::mistral;
@@ -408,7 +409,7 @@ impl MistralProvider {
             LLMError::RequestFailed(format!(
                 "Failed to parse Mistral response: {}. Body: {}",
                 e,
-                &body[..body.len().min(500)]
+                safe_truncate(&body, 500, true)
             ))
         })?;
 
@@ -559,7 +560,7 @@ impl MistralProvider {
             LLMError::RequestFailed(format!(
                 "Failed to parse Mistral response: {}. Body: {}",
                 e,
-                &body[..body.len().min(500)]
+                safe_truncate(&body, 500, true)
             ))
         })?;
 
