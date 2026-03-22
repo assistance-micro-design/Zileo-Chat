@@ -22,6 +22,17 @@
  *
  * @module utils/async
  *
+ * @see {@link withToastError} for a lightweight wrapper that catches errors and shows a toast.
+ *
+ * @example
+ * ```typescript
+ * // Wrap any async handler to catch errors as toasts
+ * const handleRename = withToastError(async (id: string, name: string) => {
+ *   await WorkflowService.rename(id, name);
+ *   await workflowStore.loadWorkflows();
+ * });
+ * ```
+ *
  * @example
  * ```typescript
  * // Create a handler for saving data
@@ -44,6 +55,9 @@
  * <button onclick={handleSave}>Save</button>
  * ```
  */
+
+import { toastStore } from '$lib/stores/toast';
+import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * Options for async handler behavior
@@ -212,6 +226,50 @@ export function withLoadingState<T, Args extends unknown[]>(
 			return await fn(...args);
 		} finally {
 			setLoading(false);
+		}
+	};
+}
+
+/**
+ * Wraps an async function to catch errors and display them as toast notifications.
+ *
+ * Eliminates the repetitive try/catch + toastStore.add pattern. The wrapped function
+ * swallows errors (they are shown to the user via toast instead of propagating).
+ *
+ * @param fn - The async function to wrap
+ * @returns A function with the same parameters that catches errors and shows a toast
+ *
+ * @example
+ * ```typescript
+ * // Before: repeated in 7+ handlers
+ * async function handleRename(id: string, name: string) {
+ *   try {
+ *     await WorkflowService.rename(id, name);
+ *   } catch (err) {
+ *     toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+ *   }
+ * }
+ *
+ * // After: clean one-liner wrap
+ * const handleRename = withToastError(async (id: string, name: string) => {
+ *   await WorkflowService.rename(id, name);
+ * });
+ * ```
+ */
+export function withToastError<Args extends unknown[]>(
+	fn: (...args: Args) => Promise<void>
+): (...args: Args) => Promise<void> {
+	return async (...args: Args): Promise<void> => {
+		try {
+			await fn(...args);
+		} catch (err: unknown) {
+			toastStore.add({
+				type: 'error',
+				title: getErrorMessage(err),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
 		}
 	};
 }

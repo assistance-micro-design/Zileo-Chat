@@ -27,6 +27,7 @@ export {
 	createAsyncHandler,
 	createAsyncHandlerWithEvent,
 	withLoadingState,
+	withToastError,
 	type AsyncHandlerOptions
 } from './async';
 export { createModalController, type ModalController, type ModalMode } from './modal.svelte';

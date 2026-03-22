@@ -90,7 +90,7 @@ Uses extracted components, services, and stores for clean architecture.
 		folders as folders$,
 		expandedFolderIds as expandedFolderIds$
 	} from '$lib/stores/folders';
-	import { getErrorMessage } from '$lib/utils/error';
+	import { withToastError } from '$lib/utils/async';
 	import type { Workflow, WorkflowFolder } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
@@ -332,24 +332,17 @@ Uses extracted components, services, and stores for clean architecture.
 	async function handleDeleteWorkflow(workflowId: string): Promise<void> {
 		deletingWorkflow = true;
 		try {
-			await WorkflowService.delete(workflowId);
-			await workflowStore.loadWorkflows();
+			await withToastError(async () => {
+				await WorkflowService.delete(workflowId);
+				await workflowStore.loadWorkflows();
 
-			// Clear selection if deleted workflow was selected
-			if (pageState.selectedWorkflowId === workflowId) {
-				pageState.selectedWorkflowId = null;
-				pageState.messages = [];
-			}
+				if (pageState.selectedWorkflowId === workflowId) {
+					pageState.selectedWorkflowId = null;
+					pageState.messages = [];
+				}
 
-			modalState = { type: 'none' };
-		} catch (err) {
-			toastStore.add({
-				type: 'error',
-				title: getErrorMessage(err),
-				message: '',
-				persistent: false,
-				duration: 5000
-			});
+				modalState = { type: 'none' };
+			})();
 		} finally {
 			deletingWorkflow = false;
 		}
@@ -387,20 +380,10 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Rename a workflow.
 	 */
-	async function handleRename(workflowId: string, newName: string): Promise<void> {
-		try {
-			await WorkflowService.rename(workflowId, newName);
-			await workflowStore.loadWorkflows();
-		} catch (err) {
-			toastStore.add({
-				type: 'error',
-				title: getErrorMessage(err),
-				message: '',
-				persistent: false,
-				duration: 5000
-			});
-		}
-	}
+	const handleRename = withToastError(async (workflowId: string, newName: string) => {
+		await WorkflowService.rename(workflowId, newName);
+		await workflowStore.loadWorkflows();
+	});
 
 	// ============================================================================
 	// Folder Management Functions
@@ -409,76 +392,51 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Create a new folder with a default name and color.
 	 */
-	async function handleCreateFolder(): Promise<void> {
+	const handleCreateFolder = withToastError(async () => {
 		const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
 		const color = colors[($folders$).length % colors.length];
-		try {
-			await folderStore.createFolder('New folder', color);
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
-		}
-	}
+		await folderStore.createFolder($i18n('sidebar_folder_create'), color);
+	});
 
 	/**
 	 * Rename a folder.
 	 */
-	async function handleRenameFolder(folder: WorkflowFolder, name: string): Promise<void> {
-		try {
-			await folderStore.renameFolder(folder.id, name);
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
-		}
-	}
+	const handleRenameFolder = withToastError(async (folder: WorkflowFolder, name: string) => {
+		await folderStore.renameFolder(folder.id, name);
+	});
 
 	/**
 	 * Delete a folder (workflows become uncategorized).
 	 */
-	async function handleDeleteFolder(folder: WorkflowFolder): Promise<void> {
-		try {
-			await folderStore.deleteFolder(folder.id);
-			// Reload workflows to reflect folder_id changes
-			await workflowStore.loadWorkflows();
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
-		}
-	}
+	const handleDeleteFolder = withToastError(async (folder: WorkflowFolder) => {
+		await folderStore.deleteFolder(folder.id);
+		await workflowStore.loadWorkflows();
+	});
 
 	/**
 	 * Toggle pinned state for a workflow.
 	 */
-	async function handleTogglePin(workflow: Workflow): Promise<void> {
-		try {
-			await workflowStore.togglePinned(workflow.id);
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
-		}
-	}
+	const handleTogglePin = withToastError(async (workflow: Workflow) => {
+		await workflowStore.togglePinned(workflow.id);
+	});
 
 	/**
 	 * Move a workflow to a folder (or remove from folder).
 	 */
-	async function handleMoveToFolder(workflow: Workflow, folderId: string | null): Promise<void> {
-		try {
-			await workflowStore.moveToFolder(workflow.id, folderId);
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
-		}
-	}
+	const handleMoveToFolder = withToastError(async (workflow: Workflow, folderId: string | null) => {
+		await workflowStore.moveToFolder(workflow.id, folderId);
+	});
 
 	/**
 	 * Move multiple workflows to a folder via drag & drop.
 	 */
-	async function handleWorkflowMove(workflowIds: string[], folderId: string | null): Promise<void> {
-		try {
-			if (workflowIds.length === 1) {
-				await workflowStore.moveToFolder(workflowIds[0], folderId);
-			} else {
-				await workflowStore.moveBatchToFolder(workflowIds, folderId);
-			}
-		} catch (err) {
-			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+	const handleWorkflowMove = withToastError(async (workflowIds: string[], folderId: string | null) => {
+		if (workflowIds.length === 1) {
+			await workflowStore.moveToFolder(workflowIds[0], folderId);
+		} else {
+			await workflowStore.moveBatchToFolder(workflowIds, folderId);
 		}
-	}
+	});
 
 	// ============================================================================
 	// Agent Management Functions
