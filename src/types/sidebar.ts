@@ -28,8 +28,10 @@ export type StatusFilter = 'all' | WorkflowStatus;
 export interface ContextMenuItem {
 	/** Unique identifier for the action */
 	id: string;
-	/** i18n translation key for the label */
-	labelKey: string;
+	/** i18n translation key for the label (used if label is not set) */
+	labelKey?: string;
+	/** Direct label text (takes precedence over labelKey) */
+	label?: string;
 	/** Lucide icon component */
 	icon?: import('svelte').Component;
 	/** Visual variant */

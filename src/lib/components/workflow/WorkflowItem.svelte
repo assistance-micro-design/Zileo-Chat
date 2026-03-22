@@ -98,7 +98,16 @@
 			icon: workflow.pinned ? PinOff : Pin,
 			disabled: !ontogglepin,
 		},
-		{ id: 'move', labelKey: 'sidebar_context_move_to', icon: FolderInput, disabled: !onmoveto || folders.length === 0 },
+		...(onmoveto && folders.length > 0
+			? folders
+				.filter((f) => f.id !== workflow.folder_id)
+				.map((f, idx) => ({
+					id: `move_to_${f.id}`,
+					label: f.name,
+					icon: FolderInput,
+					separator: idx === 0,
+				}))
+			: []),
 		...(workflow.folder_id && onmoveto ? [{ id: 'remove_from_folder', labelKey: 'sidebar_folder_remove_from', icon: FolderInput }] : []),
 		{ id: 'delete', labelKey: 'sidebar_context_delete', icon: Trash2, variant: 'danger' as const, separator: true },
 	]);

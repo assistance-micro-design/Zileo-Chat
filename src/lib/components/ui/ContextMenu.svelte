@@ -160,7 +160,7 @@
 					<item.icon size={14} />
 				</span>
 			{/if}
-			<span class="menu-item-label">{$i18n(item.labelKey)}</span>
+			<span class="menu-item-label">{item.label ?? $i18n(item.labelKey ?? '')}</span>
 		</button>
 	{/each}
 </div>
