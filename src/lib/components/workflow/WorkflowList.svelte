@@ -26,6 +26,7 @@
 	import FolderItem from './FolderItem.svelte';
 	import { AlertTriangle, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { getWorkflowIdsFromDrag, hasWorkflowDragData } from '$lib/utils/dragDrop';
 	import { groupByDate } from '$lib/utils/dateGrouping';
 
 	const DATE_GROUP_I18N: Record<string, string> = {
@@ -156,32 +157,15 @@
 	/** Whether a drag is hovering the uncategorized drop zone */
 	let uncategorizedDragOver = $state(false);
 
-	/**
-	 * Extract workflow IDs from drag event data
-	 */
-	function getWorkflowIds(event: DragEvent): string[] | null {
-		const data = event.dataTransfer?.getData('application/x-workflow-ids');
-		if (!data) return null;
-		try {
-			const ids: unknown = JSON.parse(data);
-			if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) {
-				return ids as string[];
-			}
-		} catch {
-			// Invalid JSON
-		}
-		return null;
-	}
-
 	function handleUncategorizedDragOver(event: DragEvent): void {
-		if (!onworkflowmove || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		if (!onworkflowmove || !event.dataTransfer || !hasWorkflowDragData(event)) return;
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
 		uncategorizedDragOver = true;
 	}
 
 	function handleUncategorizedDragEnter(event: DragEvent): void {
-		if (!onworkflowmove || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		if (!onworkflowmove || !hasWorkflowDragData(event)) return;
 		event.preventDefault();
 		uncategorizedDragOver = true;
 	}
@@ -196,7 +180,7 @@
 	function handleUncategorizedDrop(event: DragEvent): void {
 		event.preventDefault();
 		uncategorizedDragOver = false;
-		const ids = getWorkflowIds(event);
+		const ids = getWorkflowIdsFromDrag(event);
 		if (ids && ids.length > 0) {
 			onworkflowmove?.(ids, null);
 		}
@@ -371,7 +355,6 @@
 				ondragenter={handleUncategorizedDragEnter}
 				ondragleave={handleUncategorizedDragLeave}
 				ondrop={handleUncategorizedDrop}
-				aria-dropeffect={onworkflowmove ? 'move' : 'none'}
 			>
 				{#each dateGroups as group, groupIdx (group.label)}
 					{#if hasSectionsAbove || groupIdx > 0}

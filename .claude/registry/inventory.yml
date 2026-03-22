@@ -1,0 +1,931 @@
+# Zileo-Chat-3 Code Inventory
+# Generated: 2025-01-03
+# Purpose: Quick lookup of existing elements before creating new ones
+# Usage: ALWAYS consult before /Plan_Zileo or /Build_Zileo
+
+meta:
+  last_updated: "2026-03-22"
+  total_components: 98
+  total_stores: 20
+  total_services: 7
+  total_commands: 132
+  total_types_ts: 195
+  total_types_rust: 136
+  total_events: 4
+  total_menus: 1
+
+# =============================================================================
+# FRONTEND COMPONENTS
+# =============================================================================
+components:
+  ui:
+    # Atomic reusable components
+    - { name: Badge, path: src/lib/components/ui/Badge.svelte, props: [variant] }
+    - { name: Button, path: src/lib/components/ui/Button.svelte, props: [variant, size, disabled, loading, onclick] }
+    - { name: Card, path: src/lib/components/ui/Card.svelte, props: [title], slots: [header, body, footer] }
+    - { name: HelpButton, path: src/lib/components/ui/HelpButton.svelte, props: [titleKey, descriptionKey] }
+    - { name: Input, path: src/lib/components/ui/Input.svelte, props: [label, value, type, placeholder, help, disabled] }
+    - { name: LanguageSelector, path: src/lib/components/ui/LanguageSelector.svelte, props: [] }
+    - { name: MarkdownRenderer, path: src/lib/components/ui/MarkdownRenderer.svelte, props: [content, compact], description: "Markdown to sanitized HTML renderer using marked + DOMPurify" }
+    - { name: Modal, path: src/lib/components/ui/Modal.svelte, props: [open, title, onclose, size] }
+    - { name: ProgressBar, path: src/lib/components/ui/ProgressBar.svelte, props: [value, showLabel] }
+    - { name: Select, path: src/lib/components/ui/Select.svelte, props: [label, options, value, onchange] }
+    - { name: Skeleton, path: src/lib/components/ui/Skeleton.svelte, props: [width, height, variant] }
+    - { name: Spinner, path: src/lib/components/ui/Spinner.svelte, props: [size] }
+    - { name: StatusIndicator, path: src/lib/components/ui/StatusIndicator.svelte, props: [status, size] }
+    - { name: Textarea, path: src/lib/components/ui/Textarea.svelte, props: [label, value, placeholder, rows] }
+    - { name: ToastContainer, path: src/lib/components/ui/ToastContainer.svelte, props: [], description: "Fixed overlay rendering toast notifications" }
+    - { name: ToastItem, path: src/lib/components/ui/ToastItem.svelte, props: [toast, onnavigate], description: "Single toast notification with icon, action, dismiss" }
+    # SA-022/P2: JsonViewer removed (dead code, 0 importers)
+    - { name: ErrorBanner, path: src/lib/components/ui/ErrorBanner.svelte, props: [message, onDismiss, dismissLabel], description: "SA-017/OPT-1: Reusable error banner with dismiss" }
+    - { name: ContextMenu, path: src/lib/components/ui/ContextMenu.svelte, props: [items, x, y, onselect, onclose], description: "Reusable context menu with keyboard nav, viewport-aware positioning, ARIA roles" }
+    - { name: DeleteConfirmModal, path: src/lib/components/ui/DeleteConfirmModal.svelte, props: [open, titleKey, confirmMessageKey, deleting, "itemName?", "warningMessageKey?", "deletingLabelKey?", onConfirm, onCancel], description: "SA-022/P4: Consolidated delete modal (replaces workflow/ConfirmDeleteModal)" }
+
+  agent:  # SA-019/P4: ActivitySidebar removed
+    - { name: AgentHeader, path: src/lib/components/agent/AgentHeader.svelte, description: "Header bar for agent page" }
+    - { name: ChatContainer, path: src/lib/components/agent/ChatContainer.svelte, description: "Main chat area container with smart auto-scroll and scroll-to-bottom button" }
+    - { name: WorkflowSidebar, path: src/lib/components/agent/WorkflowSidebar.svelte, props: [runningWorkflowIds, recentlyCompletedIds, questionPendingIds, error, loading, onretry, onbatchdelete, activeStatusFilter, statusCounts], description: "Workflow sidebar with visual indicators, error recovery, multi-selection batch delete" }
+
+  navigation:
+    - { name: NavItem, path: src/lib/components/navigation/NavItem.svelte, description: "Sidebar navigation item" }
+
+  layout:  # SA-019/P4: RightSidebar removed
+    - { name: AppContainer, path: src/lib/components/layout/AppContainer.svelte }
+    - { name: FloatingMenu, path: src/lib/components/layout/FloatingMenu.svelte }
+    - { name: Sidebar, path: src/lib/components/layout/Sidebar.svelte }
+
+  chat:
+    - { name: ChatInput, path: src/lib/components/chat/ChatInput.svelte, props: [disabled, placeholder, onsubmit, agentId, workflowId] }
+    - { name: MessageBubble, path: src/lib/components/chat/MessageBubble.svelte, props: [message, isUser] }
+    - { name: MessageList, path: src/lib/components/chat/MessageList.svelte, props: [messages, autoScroll, performanceThreshold] }
+    - { name: MessageMetrics, path: src/lib/components/chat/MessageMetrics.svelte, props: [message] }
+    - { name: MessageListSkeleton, path: src/lib/components/chat/MessageListSkeleton.svelte }
+    - { name: PromptSelectorModal, path: src/lib/components/chat/PromptSelectorModal.svelte, props: [open, onclose, onselect] }
+    # SA-019/P4: ReasoningStep + StreamingMessage removed (dead code)
+    # SA-022/P2: ToolExecution removed (dead code, replaced by ToolCallBlock in SA-019/P3)
+    - { name: ThinkingBlock, path: src/lib/components/chat/ThinkingBlock.svelte, props: [content, source, collapsed], description: "SA-019/P3: Collapsible thinking block (model/agent)" }
+    - { name: ToolCallBlock, path: src/lib/components/chat/ToolCallBlock.svelte, props: [toolName, toolType, serverName, inputParams, outputResult, success, errorMessage, durationMs, collapsed], description: "SA-019/P3: Collapsible tool call block with JSON I/O" }
+    - { name: SubAgentBlock, path: src/lib/components/chat/SubAgentBlock.svelte, props: [agentName, status, durationMs, tokensInput, tokensOutput, reportSummary, collapsed], description: "SA-019/P3: Collapsible sub-agent execution block" }
+    - { name: ExecutionSpinner, path: src/lib/components/chat/ExecutionSpinner.svelte, props: [context, active], description: "SA-019/P3: Contextual spinner during execution" }
+    - { name: TodoTasksBlock, path: src/lib/components/chat/TodoTasksBlock.svelte, props: [tasks], description: "SA-019/P6: Task list grouped by agent, status icons, priority badges" }
+
+  workflow:
+    - { name: AgentSelector, path: src/lib/components/workflow/AgentSelector.svelte, props: [agents, selectedAgentId, onselect] }
+    - { name: MetricsBar, path: src/lib/components/workflow/MetricsBar.svelte, props: [metrics, compact] }
+    - { name: NewWorkflowModal, path: src/lib/components/workflow/NewWorkflowModal.svelte, props: [open, agents, oncreate] }
+    - { name: TokenDisplay, path: src/lib/components/workflow/TokenDisplay.svelte, props: [data, compact] }
+    - { name: UserQuestionModal, path: src/lib/components/workflow/UserQuestionModal.svelte, props: [open, question, workflowId] }
+    - { name: ValidationModal, path: src/lib/components/workflow/ValidationModal.svelte, props: [open, request] }
+    - { name: WorkflowItem, path: src/lib/components/workflow/WorkflowItem.svelte, props: [workflow, active, onselect, ondelete, onrename, running, hasQuestion, selectionMode, selected, selectedIds, onselectiontoggle, ontogglepin, onmoveto, folders] }
+    - { name: WorkflowItemCompact, path: src/lib/components/workflow/WorkflowItemCompact.svelte, props: [workflow, running, hasQuestion, onclick] }
+    - { name: WorkflowList, path: src/lib/components/workflow/WorkflowList.svelte, props: [workflows, selectedId, collapsed, error, loading, onselect, ondelete, onrename, onretry, runningWorkflowIds, recentlyCompletedIds, questionPendingIds, selectionMode, selectedIds, onselectiontoggle, folders, expandedFolderIds, onfoldertoggle, onfolderrename, onfolderdelete, ontogglepin, onmoveto, onworkflowmove], description: "Workflow list with folders, pinning, drag-drop, error state, retry, multi-selection support" }
+    - { name: StatusFilters, path: src/lib/components/workflow/StatusFilters.svelte, props: [activeFilter, counts, onfilterchange], description: "Horizontal chip buttons to filter workflows by status" }
+    - { name: FolderItem, path: src/lib/components/workflow/FolderItem.svelte, props: [folder, expanded, workflowCount, ontoggle, onrename, ondelete, onworkflowdrop, children], description: "Collapsible folder accordion with context menu and drag-drop target" }
+
+  settings:
+    top_level:
+      - { name: MCPSection, path: src/lib/components/settings/MCPSection.svelte, description: "MCP server configuration section" }
+      - { name: SettingsSectionHeader, path: src/lib/components/settings/SettingsSectionHeader.svelte, props: [titleKey, descriptionKey, helpTitleKey, helpDescriptionKey, helpTutorialKey, createLabelKey, onCreate], description: "SA-017/OPT-2: Shared header with title, help, description, create button" }
+    agents:
+      - { name: AgentForm, path: src/lib/components/settings/agents/AgentForm.svelte, props: [mode, agent, providers, models] }
+      - { name: AgentList, path: src/lib/components/settings/agents/AgentList.svelte, props: [agents, onEdit, onDelete] }
+      - { name: AgentSettings, path: src/lib/components/settings/agents/AgentSettings.svelte }
+    prompts:
+      - { name: PromptForm, path: src/lib/components/settings/prompts/PromptForm.svelte, props: [mode, prompt] }
+      - { name: PromptList, path: src/lib/components/settings/prompts/PromptList.svelte, props: [prompts, onEdit, onDelete] }
+      - { name: PromptSettings, path: src/lib/components/settings/prompts/PromptSettings.svelte }
+    memory:
+      - { name: MemoryForm, path: src/lib/components/settings/memory/MemoryForm.svelte, props: [mode, memory] }
+      - { name: MemoryList, path: src/lib/components/settings/memory/MemoryList.svelte, props: [onchange] }
+      - { name: MemorySettings, path: src/lib/components/settings/memory/MemorySettings.svelte }
+      - { name: EmbeddingConfigCard, path: src/lib/components/settings/memory/EmbeddingConfigCard.svelte, props: [config, configExists, providerOptions, strategyOptions, onOpenConfigModal, onDelete], description: "SA-017/OPT-4: Embedding config display card" }
+      - { name: EmbeddingTestCard, path: src/lib/components/settings/memory/EmbeddingTestCard.svelte, props: [configExists], description: "SA-017/OPT-5: Self-contained embedding test card" }
+      - { name: MemoryStatsCard, path: src/lib/components/settings/memory/MemoryStatsCard.svelte, props: [stats, tokenStats], description: "SA-017/OPT-6: Memory stats with category breakdown" }
+    providers:
+      - { name: APIKeysSection, path: src/lib/components/settings/providers/APIKeysSection.svelte, description: "API key management modal (SA-022/P7)" }
+      - { name: CustomProviderForm, path: src/lib/components/settings/providers/CustomProviderForm.svelte, props: [oncreated, oncancel], description: "Form for adding OpenAI-compatible custom providers" }
+      - { name: LLMSection, path: src/lib/components/settings/providers/LLMSection.svelte, description: "LLM provider configuration section (SA-022/P7)" }
+    skills:
+      - { name: SkillForm, path: src/lib/components/settings/skills/SkillForm.svelte, props: [mode, skill] }
+      - { name: SkillList, path: src/lib/components/settings/skills/SkillList.svelte, props: [skills, onEdit, onDelete, onToggleEnabled] }
+      - { name: SkillSettings, path: src/lib/components/settings/skills/SkillSettings.svelte }
+    agents_sub:
+      - { name: AgentFolders, path: src/lib/components/settings/agents/AgentFolders.svelte, props: [folders, onchange], description: "Folder picker + validator for FileManagerTool authorized directories" }
+    import_export:
+      - { name: ImportExportSettings, path: src/lib/components/settings/import-export/ImportExportSettings.svelte }
+      - { name: ImportPanel, path: src/lib/components/settings/import-export/ImportPanel.svelte }
+      - { name: ImportPreview, path: src/lib/components/settings/import-export/ImportPreview.svelte }
+      - { name: ExportPanel, path: src/lib/components/settings/import-export/ExportPanel.svelte }
+      - { name: ExportPreview, path: src/lib/components/settings/import-export/ExportPreview.svelte }
+      - { name: EntitySelector, path: src/lib/components/settings/import-export/EntitySelector.svelte }
+      - { name: MCPEnvEditor, path: src/lib/components/settings/import-export/MCPEnvEditor.svelte }
+      - { name: MCPFieldEditor, path: src/lib/components/settings/import-export/MCPFieldEditor.svelte }
+      - { name: ConflictResolver, path: src/lib/components/settings/import-export/ConflictResolver.svelte }
+      - { name: ExportEntitySection, path: src/lib/components/settings/import-export/ExportEntitySection.svelte, props: [title, count, expanded, onToggle, children], description: "Collapsible entity section for export preview (SA-010 DUP-3)" }
+
+  mcp:
+    - { name: MCPServerCard, path: src/lib/components/mcp/MCPServerCard.svelte, props: [server, testing] }
+    - { name: MCPServerForm, path: src/lib/components/mcp/MCPServerForm.svelte, props: [mode, server] }
+    - { name: MCPServerTester, path: src/lib/components/mcp/MCPServerTester.svelte, props: [result, loading] }
+
+  llm:
+    - { name: ConnectionTester, path: src/lib/components/llm/ConnectionTester.svelte, props: [provider, disabled] }
+    - { name: ModelCard, path: src/lib/components/llm/ModelCard.svelte, props: [model, isDefault] }
+    - { name: ModelForm, path: src/lib/components/llm/ModelForm.svelte, props: [mode, model, provider] }
+    - { name: ProviderCard, path: src/lib/components/llm/ProviderCard.svelte, props: [provider, settings, hasApiKey] }
+
+  legal:
+    - { name: LegalModal, path: src/lib/components/legal/LegalModal.svelte, props: [type, open, onclose], description: "Legal notices and GDPR privacy policy modal" }
+
+  onboarding:
+    main:
+      - { name: OnboardingModal, path: src/lib/components/onboarding/OnboardingModal.svelte }
+      - { name: OnboardingProgress, path: src/lib/components/onboarding/OnboardingProgress.svelte }
+    steps:
+      - { name: StepLanguage, path: src/lib/components/onboarding/steps/StepLanguage.svelte }
+      - { name: StepTheme, path: src/lib/components/onboarding/steps/StepTheme.svelte }
+      - { name: StepWelcome, path: src/lib/components/onboarding/steps/StepWelcome.svelte }
+      - { name: StepApiKey, path: src/lib/components/onboarding/steps/StepApiKey.svelte }
+      - { name: StepComplete, path: src/lib/components/onboarding/steps/StepComplete.svelte }
+      - { name: StepImport, path: src/lib/components/onboarding/steps/StepImport.svelte }
+      - { name: StepValues, path: src/lib/components/onboarding/steps/StepValues.svelte }
+
+  validation:
+    - { name: ValidationSettings, path: src/lib/components/settings/validation/ValidationSettings.svelte, description: "Validation mode settings with auto/manual/selective modes" }
+    - { name: ValidationInfoCard, path: src/lib/components/settings/validation/ValidationInfoCard.svelte, props: [variant, icon, titleKey, statusKey, children], description: "Reusable info-card for validation mode displays (SA-010 DUP-1)" }
+
+# =============================================================================
+# SVELTE STORES
+# =============================================================================
+stores:
+  crud_stores:
+    - name: agentStore
+      path: src/lib/stores/agents.ts
+      exports: [agentStore, agents, selectedAgent, isLoading, error, formMode, editingAgent]
+      invokes: [list_agents, get_agent_config, create_agent, update_agent, delete_agent]
+      removed_exports: [agentCount, AgentState, createInitialAgentState]
+
+    - name: promptStore
+      path: src/lib/stores/prompts.ts
+      exports: [promptStore, prompts, selectedPromptId, promptLoading, promptFormMode, extractVariables, extractSkillReferences, interpolateVariables, getMissingVariables]
+      invokes: [list_prompts, get_prompt, create_prompt, update_prompt, delete_prompt]
+      removed_exports: [promptCount]
+
+    - name: skillStore
+      path: src/lib/stores/skills.ts
+      exports: [skillStore, skills, selectedSkillId, skillLoading, skillError, skillFormMode, editingSkill, hasSkills, skillCount, enabledSkills]
+      invokes: [list_skills, get_skill, create_skill, update_skill, delete_skill]
+
+  workflow_stores:
+    - name: workflowStore
+      path: src/lib/stores/workflows.ts
+      exports: [workflowStore, workflows, selectedWorkflowId, workflowsLoading, workflowsError, workflowSearchFilter, selectedWorkflow, filteredWorkflows, statusFilter, statusCounts, pinnedWorkflows]
+      invokes: [load_workflows, delete_workflows_batch, move_workflow_to_folder, move_workflows_to_folder, toggle_workflow_pinned]
+
+    - name: folderStore
+      path: src/lib/stores/folders.ts
+      exports: [folderStore, folders, foldersLoading, expandedFolderIds]
+      invokes: [list_workflow_folders, create_workflow_folder, rename_workflow_folder, update_folder_color, delete_workflow_folder, reorder_workflow_folders]
+
+    # activityStore removed (activity sidebar deleted)
+
+    - name: streamingStore
+      path: src/lib/stores/streaming.ts
+      exports: [streamingStore, isStreaming, streamContent, activeTools, reasoningSteps]
+      events: [workflow_stream, workflow_complete]
+
+    - name: tokenStore
+      path: src/lib/stores/tokens.ts
+      exports: [tokenStore, tokenDisplayData, streamingTokens, cumulativeTokens]
+      removed_exports: [isTokenStreaming]
+
+  store_utils:
+    - name: chunkProcessor
+      path: src/lib/stores/utils/chunkProcessor.ts
+      exports: [applyChunkToState, ChunkableState]
+      description: "Shared chunk-to-state-delta processor used by streamingStore and backgroundWorkflowsStore"
+
+  execution_stores:
+    - name: executionBlocksStore
+      path: src/lib/stores/execution-blocks.ts
+      exports: [executionBlocksStore, executionBlocks, isExecuting, spinnerContext, executionResponse, executionError, executionCancelled, executionWorkflowId]
+      description: "SA-019/P3: Block-by-block execution display state (thinking, tool_call, sub_agent blocks)"
+
+  background_stores:
+    - name: backgroundWorkflowsStore
+      path: src/lib/stores/background-workflows.ts
+      exports: [backgroundWorkflowsStore, runningWorkflows, recentlyCompletedWorkflows, runningCount, canStartNew, viewedExecution, runningWorkflowIds, recentlyCompletedIds, questionPendingIds]
+      events: [workflow_stream, workflow_complete]
+      description: "Central event dispatch for concurrent background workflow executions"
+
+    - name: toastStore
+      path: src/lib/stores/toast.ts
+      exports: [toastStore, toasts, visibleToasts, hasToasts, navigationTarget]
+      description: "Toast notification store for background workflow events"
+
+  interaction_stores:
+    - name: userQuestionStore
+      path: src/lib/stores/user-question.ts
+      exports: [userQuestionStore, pendingQuestions, currentQuestion, isModalOpen]
+      invokes: [submit_user_response, skip_question]
+
+    - name: validationStore
+      path: src/lib/stores/validation.ts
+      exports: [validationStore, hasPendingValidation, pendingValidation, isValidating]
+      invokes: [approve_validation, reject_validation]
+      events: [validation_required]
+
+    - name: validationSettingsStore
+      path: src/lib/stores/validation-settings.ts
+      exports: [validationSettingsStore, settings, isLoading, isSaving]
+      invokes: [get_validation_settings, update_validation_settings]
+
+  config_stores:
+    - name: llmStore
+      path: src/lib/stores/llm.ts
+      type: pure_functions
+      exports: [loadModels, createModel, updateModel, deleteModel, loadProviderSettings, testConnection, listProviders, createCustomProvider, updateCustomProvider, deleteCustomProvider, loadAllLLMData]
+      invokes: [list_models, get_model, create_model, update_model, delete_model, get_provider_settings, update_provider_settings, test_provider_connection, list_providers, create_custom_provider, update_custom_provider, delete_custom_provider]
+
+    - name: mcpStore
+      path: src/lib/stores/mcp.ts
+      type: pure_functions
+      exports: [loadServers, createServer, updateServerConfig, deleteServer, testServer, startServer, stopServer]
+      invokes: [list_mcp_servers, create_mcp_server, update_mcp_server, delete_mcp_server, test_mcp_server, start_mcp_server, stop_mcp_server]
+
+  ui_stores:
+    - name: theme
+      path: src/lib/stores/theme.ts
+      exports: [theme]
+      persistence: localStorage
+
+    - name: localeStore
+      path: src/lib/stores/locale.ts
+      exports: [localeStore, locale, localeInfo]
+      persistence: localStorage
+
+    - name: onboardingStore
+      path: src/lib/stores/onboarding.ts
+      exports: [onboardingStore, currentStep, onboardingCompleted]
+      persistence: localStorage
+
+  factory:
+    - name: createCRUDStore
+      path: src/lib/stores/factory/createCRUDStore.ts
+      exports: [createCRUDStore, createDerivedStores]
+      description: Generic factory for CRUD stores with Tauri IPC
+
+# =============================================================================
+# SERVICES (frontend service layer)
+# =============================================================================
+services:
+  barrel:
+    - name: index
+      path: src/lib/services/index.ts
+      description: Service layer barrel re-exports for agent page
+
+  ipc_services:
+    - name: blockService
+      path: src/lib/services/block.service.ts
+      description: Load persisted execution blocks from the backend
+
+    - name: messageService
+      path: src/lib/services/message.service.ts
+      description: Message-related Tauri IPC calls (save user/assistant messages)
+
+    - name: subAgentExecutionService
+      path: src/lib/services/sub-agent-execution.service.ts
+      description: Sub-agent execution data loading via IPC
+
+    - name: workflowService
+      path: src/lib/services/workflow.service.ts
+      description: Workflow-related Tauri IPC calls (create, execute, restore)
+
+  orchestration:
+    - name: workflowExecutorService
+      path: src/lib/services/workflowExecutor.service.ts
+      description: Orchestrates message sending and streaming (save, stream, execute, tokens, persist)
+
+  storage:
+    - name: localStorageService
+      path: src/lib/services/localStorage.service.ts
+      description: Type-safe localStorage access for sidebar state, workflow selection, and status filter
+
+# =============================================================================
+# TAURI COMMANDS (by module)
+# =============================================================================
+commands:
+  agent:
+    file: src-tauri/src/commands/agent.rs
+    commands:
+      - { name: list_agents, returns: "Vec<AgentSummary>" }
+      - { name: get_agent_config, params: [agent_id], returns: AgentConfig }
+      - { name: create_agent, params: [config: AgentConfigCreate], returns: String }
+      - { name: update_agent, params: [agent_id, config: AgentConfigUpdate], returns: AgentConfig }
+      - { name: delete_agent, params: [agent_id], returns: "()" }
+
+  file_manager:
+    file: src-tauri/src/commands/file_manager.rs
+    commands:
+      - { name: validate_agent_folder, params: [path], returns: String }
+      - { name: list_trash, params: [folder_path], returns: "Vec<TrashEntry>" }
+      - { name: restore_from_trash_cmd, params: [trash_path, folder_path], returns: String }
+
+  skill:
+    file: src-tauri/src/commands/skill.rs
+    commands:
+      - { name: list_skills, returns: "Vec<SkillSummary>" }
+      - { name: get_skill, params: [skill_id], returns: Skill }
+      - { name: create_skill, params: [config: SkillCreate], returns: String }
+      - { name: update_skill, params: [skill_id, config: SkillUpdate], returns: Skill }
+      - { name: delete_skill, params: [skill_id], returns: "()" }
+      - { name: toggle_skill_enabled, params: [skill_id, enabled], returns: Skill }
+
+  workflow:
+    file: src-tauri/src/commands/workflow.rs
+    commands:
+      - { name: create_workflow, params: [name, agent_id], returns: String }
+      - { name: load_workflows, returns: "Vec<Workflow>" }
+      - { name: rename_workflow, params: [workflow_id, name], returns: Workflow }
+      - { name: delete_workflow, params: [workflow_id], returns: "()" }
+      - { name: delete_workflows_batch, params: [workflow_ids], returns: BatchDeleteResult }
+      - { name: load_workflow_full_state, params: [workflow_id], returns: WorkflowFullState }
+      - { name: move_workflow_to_folder, params: [workflow_id, "folder_id?"], returns: Workflow }
+      - { name: move_workflows_to_folder, params: [workflow_ids, "folder_id?"], returns: u64 }
+      - { name: toggle_workflow_pinned, params: [workflow_id], returns: Workflow }
+
+  workflow_folder:
+    file: src-tauri/src/commands/workflow_folder.rs
+    commands:
+      - { name: create_workflow_folder, params: [name, color], returns: WorkflowFolder }
+      - { name: list_workflow_folders, returns: "Vec<WorkflowFolder>" }
+      - { name: rename_workflow_folder, params: [folder_id, name], returns: WorkflowFolder }
+      - { name: update_folder_color, params: [folder_id, color], returns: WorkflowFolder }
+      - { name: delete_workflow_folder, params: [folder_id], returns: "()" }
+      - { name: reorder_workflow_folders, params: [folder_ids], returns: "()" }
+
+  streaming:
+    file: src-tauri/src/commands/streaming.rs
+    commands:
+      - { name: execute_workflow_streaming, params: [window, workflow_id, message, agent_id, locale], returns: WorkflowResult }
+      - { name: cancel_workflow_streaming, params: [workflow_id], returns: "()" }
+
+  tool_execution:
+    file: src-tauri/src/commands/tool_execution.rs
+    commands:
+      - { name: save_tool_execution, params: [workflow_id, message_id, agent_id, tool_type, tool_name, server_name, input_params, output_result, success, error_message, duration_ms, iteration], returns: String }
+      - { name: load_workflow_tool_executions, params: [workflow_id], returns: "Vec<ToolExecution>" }
+      - { name: load_message_tool_executions, params: [message_id], returns: "Vec<ToolExecution>" }
+      - { name: get_tool_execution, params: [execution_id], returns: ToolExecution }
+      - { name: delete_tool_execution, params: [execution_id], returns: "()" }
+      - { name: clear_workflow_tool_executions, params: [workflow_id], returns: u64 }
+
+  memory:
+    file: src-tauri/src/commands/memory.rs
+    commands:
+      - { name: add_memory, params: [memory_type, content, metadata, workflow_id], returns: String }
+      - { name: list_memories, params: [type_filter, workflow_id], returns: "Vec<Memory>" }
+      - { name: get_memory, params: [memory_id], returns: Memory }
+      - { name: delete_memory, params: [memory_id], returns: "()" }
+      - { name: search_memories, params: [query, limit, type_filter, threshold], returns: "Vec<MemorySearchResult>" }
+      - { name: clear_memories_by_type, params: [memory_type], returns: usize }
+
+  message:
+    file: src-tauri/src/commands/message.rs
+    commands:
+      - { name: save_message, params: [workflow_id, role, content, tokens_input, tokens_output, thinking_tokens], returns: String }
+      - { name: load_workflow_messages, params: [workflow_id], returns: "Vec<Message>" }
+      - { name: load_workflow_messages_paginated, params: [workflow_id, limit, offset], returns: PaginatedMessages }
+      - { name: delete_message, params: [message_id], returns: "()" }
+      - { name: clear_workflow_messages, params: [workflow_id], returns: u64 }
+      - { name: load_message_blocks, params: [message_id], returns: "Vec<ChatBlock>" }  # SA-019/P2
+
+  mcp:
+    file: src-tauri/src/commands/mcp.rs
+    commands:
+      - { name: list_mcp_servers, returns: "Vec<MCPServer>" }
+      - { name: get_mcp_server, params: [server_id], returns: MCPServer }
+      - { name: create_mcp_server, params: [config: MCPServerCreate], returns: MCPServerResponse }
+      - { name: update_mcp_server, params: [server_id, config: MCPServerUpdate], returns: MCPServerResponse }
+      - { name: delete_mcp_server, params: [server_id], returns: "()" }
+      - { name: test_mcp_server, params: [server_id], returns: MCPTestResult }
+      - { name: start_mcp_server, params: [server_id], returns: "()" }
+      - { name: stop_mcp_server, params: [server_id], returns: "()" }
+      - { name: list_mcp_tools, params: [server_id], returns: "Vec<MCPTool>" }
+      - { name: call_mcp_tool, params: [server_name, tool_name, arguments], returns: Value }
+      - { name: get_mcp_latency_metrics, params: [server_name], returns: "Vec<MCPLatencyMetrics>" }
+
+  custom_provider:
+    file: src-tauri/src/commands/custom_provider.rs
+    commands:
+      - { name: list_providers, returns: "Vec<ProviderInfo>" }
+      - { name: create_custom_provider, params: [name, display_name, base_url, api_key], returns: CustomProviderResponse }
+      - { name: update_custom_provider, params: [name, display_name, base_url, api_key, enabled], returns: CustomProviderResponse }
+      - { name: delete_custom_provider, params: [name], returns: "()" }
+
+  models:
+    file: src-tauri/src/commands/llm_models.rs
+    commands:
+      - { name: list_models, params: [provider], returns: "Vec<LLMModel>" }
+      - { name: get_model, params: [id], returns: LLMModel }
+      - { name: get_model_by_api_name, params: [api_name, provider], returns: LLMModel }
+      - { name: create_model, params: [data: CreateModelRequest], returns: LLMModel }
+      - { name: update_model, params: [id, data: UpdateModelRequest], returns: LLMModel }
+      - { name: delete_model, params: [id], returns: bool }
+      - { name: get_provider_settings, params: [provider], returns: ProviderSettings }
+      - { name: update_provider_settings, params: [provider, enabled, default_model_id, base_url], returns: ProviderSettings }
+      - { name: test_provider_connection, params: [provider], returns: ConnectionTestResult }
+      - { name: seed_builtin_models, returns: usize }
+
+  validation:
+    file: src-tauri/src/commands/validation.rs
+    commands:
+      - { name: create_validation_request, params: [workflow_id, validation_type, operation, details, risk_level], returns: ValidationRequest }
+      - { name: list_pending_validations, returns: "Vec<ValidationRequest>" }
+      - { name: list_workflow_validations, params: [workflow_id], returns: "Vec<ValidationRequest>" }
+      - { name: approve_validation, params: [validation_id], returns: "()" }
+      - { name: reject_validation, params: [validation_id, reason], returns: "()" }
+      - { name: get_validation_settings, returns: ValidationSettings }
+      - { name: update_validation_settings, params: [config], returns: ValidationSettings }
+      - { name: reset_validation_settings, returns: ValidationSettings }
+      - { name: delete_validation, params: [validation_id], returns: "()" }
+      - { name: list_available_tools, returns: "Vec<AvailableToolInfo>" }
+
+  prompt:
+    file: src-tauri/src/commands/prompt.rs
+    commands:
+      - { name: list_prompts, returns: "Vec<PromptSummary>" }
+      - { name: get_prompt, params: [prompt_id], returns: Prompt }
+      - { name: create_prompt, params: [config: PromptCreate], returns: String }
+      - { name: update_prompt, params: [prompt_id, config: PromptUpdate], returns: Prompt }
+      - { name: delete_prompt, params: [prompt_id], returns: "()" }
+      - { name: search_prompts, params: [query, category], returns: "Vec<PromptSummary>" }
+
+  embedding:
+    file: src-tauri/src/commands/embedding.rs
+    commands:
+      - { name: get_embedding_config, returns: EmbeddingConfigSettings }
+      - { name: save_embedding_config, params: [config], returns: "()" }
+      - { name: get_memory_stats, returns: MemoryStats }
+      - { name: update_memory, params: [memory_id, content, metadata, regenerate_embedding], returns: Memory }
+      - { name: export_memories, params: [format, type_filter], returns: String }
+      - { name: import_memories, params: [data], returns: ImportResult }
+      - { name: regenerate_embeddings, params: [memory_ids], returns: RegenerateResult }
+      - { name: reinit_embedding_service, returns: "()" }
+      - { name: test_embedding, params: [text], returns: EmbeddingTestResult }
+      - { name: get_memory_token_stats, params: [type_filter], returns: MemoryTokenStats }
+
+  security:
+    file: src-tauri/src/commands/security.rs
+    commands:
+      - { name: save_api_key, params: [provider, api_key], returns: "()" }
+      - { name: get_api_key, params: [provider], returns: String }
+      - { name: delete_api_key, params: [provider], returns: "()" }
+      - { name: has_api_key, params: [provider], returns: bool }
+      - { name: list_api_key_providers, returns: "Vec<String>" }
+
+  import_export:
+    file: src-tauri/src/commands/import_export.rs
+    commands:
+      - { name: prepare_export_preview, params: [selection], returns: ExportPreviewData }
+      - { name: generate_export_file, params: [selection, options, sanitization], returns: String }
+      - { name: save_export_to_file, params: [path, content], returns: usize, description: "Write export to validated file path (rejects .., system dirs)" }
+      - { name: validate_import, params: [data], returns: ImportValidation }
+      - { name: execute_import, params: [data, selection, resolutions, mcp_additions], returns: ImportResult }
+    removed:
+      - { name: read_import_file, reason: "Security: unused command with arbitrary filesystem read (SA-005 C1)" }
+
+  task:
+    file: src-tauri/src/commands/task.rs
+    commands:
+      - { name: create_task, params: [workflow_id, name, description, priority], returns: String }
+      - { name: get_task, params: [task_id], returns: Task }
+      - { name: list_workflow_tasks, params: [workflow_id], returns: "Vec<Task>" }
+      - { name: list_tasks_by_status, params: [status, workflow_id], returns: "Vec<Task>" }
+      - { name: update_task, params: [task_id, name, description, priority], returns: Task }
+      - { name: update_task_status, params: [task_id, status], returns: Task }
+      - { name: complete_task, params: [task_id, duration_ms], returns: Task }
+      - { name: delete_task, params: [task_id], returns: "()" }
+
+  thinking:
+    file: src-tauri/src/commands/thinking.rs
+    commands:
+      - { name: save_thinking_step, params: [workflow_id, message_id, agent_id, step_number, content, duration_ms, tokens], returns: String }
+      - { name: load_workflow_thinking_steps, params: [workflow_id], returns: "Vec<ThinkingStep>" }
+      - { name: load_message_thinking_steps, params: [message_id], returns: "Vec<ThinkingStep>" }
+      - { name: delete_thinking_step, params: [step_id], returns: "()" }
+      - { name: clear_workflow_thinking_steps, params: [workflow_id], returns: u64 }
+
+  migration:
+    file: src-tauri/src/commands/migration.rs
+    commands:
+      - { name: migrate_memory_schema, returns: MigrationResult }
+      - { name: get_memory_schema_status, returns: MemorySchemaStatus }
+      - { name: migrate_memory_v2_schema, returns: MigrationResult }
+      - { name: migrate_mcp_http_schema, returns: MigrationResult }
+      - { name: migrate_reasoning_effort, returns: MigrationResult }
+
+  user_question:
+    file: src-tauri/src/commands/user_question.rs
+    commands:
+      - { name: submit_user_response, params: [question_id, selected_options, text_response], returns: "()" }
+      - { name: get_pending_questions, params: [workflow_id], returns: "Vec<UserQuestion>" }
+      - { name: skip_question, params: [question_id], returns: "()" }
+
+  sub_agent_execution:
+    file: src-tauri/src/commands/sub_agent_execution.rs
+    commands:
+      - { name: load_workflow_sub_agent_executions, params: [workflow_id], returns: "Vec<SubAgentExecution>" }
+      - { name: clear_workflow_sub_agent_executions, params: [workflow_id], returns: u64 }
+
+# =============================================================================
+# TYPESCRIPT TYPES (key types by domain)
+# =============================================================================
+types_typescript:
+  agent:
+    file: src/types/agent.ts
+    types:
+      - { name: Agent, fields: [id, name, lifecycle, status, capabilities, tools, mcp_servers] }
+      - { name: ReasoningEffort, kind: type, values: [low, medium, high] }
+      - { name: AgentConfig, fields: [id, name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, reasoning_effort] }
+      - { name: AgentConfigCreate, fields: [name, lifecycle, llm, tools, mcp_servers, system_prompt, max_tool_iterations, reasoning_effort] }
+      - { name: AgentConfigUpdate, fields: [name, llm, tools, mcp_servers, system_prompt, max_tool_iterations, reasoning_effort] }
+      - { name: AgentSummary, fields: [id, name, lifecycle, provider, model, tools_count, mcp_servers_count] }
+      - { name: LLMConfig, fields: [provider, model, temperature, max_tokens] }
+      - { name: Lifecycle, kind: type, values: [permanent, temporary] }
+
+  workflow:
+    file: src/types/workflow.ts
+    types:
+      - { name: Workflow, fields: [id, name, agent_id, status, created_at, total_tokens_input, total_tokens_output] }
+      - { name: WorkflowResult, fields: [report, response, metrics, tools_used, mcp_calls, tool_executions] }
+      - { name: WorkflowMetrics, fields: [duration_ms, tokens_input, tokens_output, thinking_tokens, cost_usd, provider, model] }
+      - { name: WorkflowFullState, fields: [workflow, messages, tool_executions, thinking_steps] }
+      - { name: WorkflowStatus, kind: type, values: [idle, running, completed, error] }
+      - { name: BatchDeleteResult, fields: [deleted, skipped_running], description: "Result of batch workflow deletion (in workflow.rs commands)" }
+
+  sidebar:
+    file: src/types/sidebar.ts
+    types:
+      - { name: StatusFilter, kind: type, values: [all, idle, running, completed, error] }
+      - { name: ContextMenuItem, kind: interface, fields: [id, "labelKey?", "label?", "icon?", "variant?", "disabled?", "separator?"] }
+
+  message:
+    file: src/types/message.ts
+    types:
+      - { name: Message, fields: [id, workflow_id, role, content, tokens, tokens_input, tokens_output, thinking_tokens, model, provider, cost_usd, duration_ms, timestamp, sub_agents] }
+      - { name: SubAgentSummary, fields: [name, status, duration_ms, tokens_input, tokens_output] }
+      - { name: MessageCreate, fields: [workflow_id, role, content, tokens, tokens_input, tokens_output, thinking_tokens, model, provider, cost_usd, duration_ms] }
+      - { name: MessageRole, kind: type, values: [user, assistant, system] }
+
+  memory:
+    file: src/types/memory.ts
+    types:
+      - { name: Memory, fields: [id, type, content, workflow_id, metadata, created_at] }
+      - { name: MemorySearchResult, fields: [memory, score] }
+      - { name: MemoryType, kind: type, values: [user_pref, context, knowledge, decision] }
+
+  mcp:
+    file: src/types/mcp.ts
+    types:
+      - { name: MCPServer, fields: [id, name, enabled, command, args, env, description, status, tools] }
+      - { name: MCPServerResponse, fields: [server, "warning?"] }
+      - { name: MCPTool, fields: [name, description, input_schema] }
+      - { name: MCPTestResult, fields: [success, message, tools, resources, latency_ms] }
+      - { name: MCPServerStatus, kind: type, values: [stopped, starting, running, error] }
+
+  llm:
+    file: src/types/llm.ts
+    types:
+      - { name: LLMModel, fields: [id, provider, name, api_name, context_window, max_output_tokens, is_builtin] }
+      - { name: ProviderSettings, fields: [provider, enabled, default_model_id, api_key_configured, base_url] }
+      - { name: ConnectionTestResult, fields: [provider, success, latency_ms, error_message] }
+      - { name: ProviderType, kind: type, description: "BuiltinProvider | string (extensible for custom providers)" }
+
+  custom_provider:
+    file: src/types/custom-provider.ts
+    types:
+      - { name: ProviderInfo, fields: [id, displayName, isBuiltin, isCloud, requiresApiKey, hasBaseUrl, baseUrl, enabled] }
+      - { name: CreateCustomProviderRequest, fields: [name, displayName, baseUrl, apiKey] }
+      - { name: CustomProviderResponse, fields: [provider, "warning?"], description: "Response wrapping ProviderInfo + optional HTTP security warning" }
+
+  validation:
+    file: src/types/validation.ts
+    types:
+      - { name: ValidationRequest, fields: [id, workflow_id, type, operation, details, risk_level, status] }
+      - { name: ValidationSettings, fields: [mode, selectiveConfig, riskThresholds, timeoutSeconds] }
+      - { name: ValidationMode, kind: type, values: [auto, manual, selective] }
+      - { name: RiskLevel, kind: type, values: [low, medium, high, critical] }
+      - { name: AvailableToolInfo, fields: [name, category, requiresContext] }
+
+  prompt:
+    file: src/types/prompt.ts
+    types:
+      - { name: Prompt, fields: [id, name, description, category, content, variables] }
+      - { name: PromptSummary, fields: [id, name, description, category, variables_count] }
+      - { name: PromptCreate, fields: [name, description, category, content] }
+      - { name: PromptCategory, kind: type, values: [system, user, analysis, generation, coding, custom] }
+
+  skill:
+    file: src/types/skill.ts
+    types:
+      - { name: Skill, fields: [id, name, description, category, content, enabled, created_at, updated_at] }
+      - { name: SkillSummary, fields: [id, name, description, category, enabled, content_length, updated_at] }
+      - { name: SkillCreate, fields: [name, description, category, content] }
+      - { name: SkillUpdate, fields: ["name?", "description?", "category?", "content?", "enabled?"] }
+      - { name: SkillStoreState, fields: [skills, selectedId, loading, error, formMode, editingSkill] }
+      - { name: SkillCategory, kind: type, values: [system, coding, workflow, analysis, custom] }
+
+  streaming:
+    file: src/types/streaming.ts
+    types:
+      - { name: StreamChunk, fields: [workflow_id, chunk_type, content, tool, duration, sub_agent_id, user_question, question_id, tool_input, tool_output, tool_success, tokens_input, tokens_output, thinking_tokens] }
+      - { name: WorkflowComplete, fields: [workflow_id, status, error] }
+      - { name: ChunkType, kind: type, values: [token, tool_start, tool_end, reasoning, error, sub_agent_start, sub_agent_progress, sub_agent_complete, sub_agent_error, task_create, task_update, task_complete, user_question_start, user_question_complete, thinking_block, tool_call_complete, response_block] }
+
+  # SA-019/P2: Chat block types (Rust-only for now, TS types in P3)
+  chat_block:
+    file: src-tauri/src/models/chat_block.rs
+    types:
+      - { name: ChatBlock, fields: [block_type, sequence, data], description: "Unified block for block-by-block chat display" }
+      - { name: ChatBlockType, kind: enum, values: [thinking, tool_call, sub_agent] }
+    functions:
+      - { name: merge_into_chat_blocks, params: ["&[ToolExecution]", "&[ThinkingStep]"], returns: "Vec<ChatBlock>", description: "Merges tool executions + thinking steps sorted by sequence" }
+
+# =============================================================================
+# RUST MODELS (key models by domain)
+# =============================================================================
+types_rust:
+  agent:
+    file: src-tauri/src/models/agent.rs
+    types:
+      - { name: Agent, derives: [Serialize, Deserialize, Clone] }
+      - { name: AgentConfig, derives: [Serialize, Deserialize, Clone] }
+      - { name: AgentConfigCreate, derives: [Serialize, Deserialize, Clone] }
+      - { name: AgentConfigUpdate, derives: [Serialize, Deserialize, Clone] }
+      - { name: AgentSummary, derives: [Serialize, Deserialize, Clone] }
+      - { name: LLMConfig, derives: [Serialize, Deserialize, Clone] }
+      - { name: ReasoningEffort, kind: enum, values: [Low, Medium, High] }
+      - { name: Lifecycle, kind: enum, values: [Permanent, Temporary] }
+
+  workflow:
+    file: src-tauri/src/models/workflow.rs
+    types:
+      - { name: Workflow, derives: [Serialize, Deserialize, Clone] }
+      - { name: WorkflowCreate, derives: [Serialize, Clone] }
+      - { name: WorkflowResult, derives: [Serialize, Deserialize, Clone] }
+      - { name: WorkflowMetrics, derives: [Serialize, Deserialize, Clone] }
+      - { name: WorkflowStatus, kind: enum, values: [Idle, Running, Completed, Error] }
+
+  memory:
+    file: src-tauri/src/models/memory.rs
+    types:
+      - { name: Memory, derives: [Serialize, Deserialize, Clone] }
+      - { name: MemoryCreate, derives: [Serialize, Clone] }
+      - { name: MemoryWithEmbedding, derives: [Serialize, Deserialize, Clone] }
+      - { name: MemorySearchResult, derives: [Serialize, Deserialize, Clone] }
+      - { name: MemoryType, kind: enum, values: [UserPref, Context, Knowledge, Decision] }
+
+  mcp:
+    file: src-tauri/src/models/mcp.rs
+    types:
+      - { name: MCPServer, derives: [Serialize, Deserialize, Clone] }
+      - { name: MCPServerConfig, derives: [Serialize, Deserialize, Clone] }
+      - { name: MCPServerCreate, derives: [Serialize, Clone] }
+      - { name: MCPServerResponse, derives: [Serialize, Clone] }
+      - { name: MCPTool, derives: [Serialize, Deserialize, Clone] }
+      - { name: MCPTestResult, derives: [Serialize, Deserialize, Clone] }
+      - { name: MCPServerStatus, kind: enum, values: [Stopped, Starting, Running, Error] }
+
+  custom_provider:
+    file: src-tauri/src/models/custom_provider.rs
+    types:
+      - { name: CustomProvider, derives: [Serialize, Deserialize, Clone], description: "DB-facing custom provider metadata" }
+      - { name: ProviderInfo, derives: [Serialize, Clone], description: "Unified provider info returned to frontend (builtin + custom)" }
+      - { name: CustomProviderResponse, derives: [Serialize, Clone], description: "ProviderInfo + optional HTTP warning for non-HTTPS URLs" }
+
+  llm_provider:
+    file: src-tauri/src/llm/openai_compatible.rs
+    types:
+      - { name: OpenAiCompatibleProvider, description: "OpenAI-compatible HTTP provider with streaming, tool use support" }
+
+  llm_adapter:
+    file: src-tauri/src/llm/adapters/openai_adapter.rs
+    types:
+      - { name: OpenAiToolAdapter, description: "Tool adapter converting MCP tools to OpenAI function call format" }
+
+  skill:
+    file: src-tauri/src/models/skill.rs
+    types:
+      - { name: Skill, derives: [Serialize, Deserialize, Clone] }
+      - { name: SkillSummary, derives: [Serialize, Deserialize, Clone] }
+      - { name: SkillCreate, derives: [Serialize, Deserialize, Clone] }
+      - { name: SkillUpdate, derives: [Serialize, Deserialize, Clone] }
+      - { name: SkillCategory, kind: enum, values: [System, Coding, Workflow, Analysis, Custom] }
+
+  file_manager:
+    file: src-tauri/src/tools/file_manager/
+    types:
+      - { name: FileManagerTool, derives: [Debug], description: "Main tool struct with authorized_folders + AtomicBool cleanup flag" }
+      - { name: TrashEntry, derives: [Serialize, Deserialize, Clone, Debug], description: "Trash entry metadata (trash_path, original_relative_path, deleted_at, size_bytes)" }
+
+  validation:
+    file: src-tauri/src/models/validation.rs
+    types:
+      - { name: ValidationRequest, derives: [Serialize, Deserialize, Clone] }
+      - { name: ValidationSettings, derives: [Serialize, Deserialize, Clone] }
+      - { name: ValidationMode, kind: enum, values: [Auto, Manual, Selective] }
+      - { name: RiskLevel, kind: enum, values: [Low, Medium, High, Critical] }
+
+# =============================================================================
+# UTILITIES & HELPERS
+# =============================================================================
+utilities:
+  frontend:
+    - { name: getErrorMessage, path: src/lib/utils/error.ts, description: "Extract error message from any error type" }
+    - { name: formatErrorForDisplay, path: src/lib/utils/error.ts, description: "Strip Error:/invoke error: prefix for UI display" }
+    - { name: isAllowedScheme, path: src/lib/utils/url.ts, description: "URL scheme validation (blocks javascript:, data:, vbscript:)" }
+    - { name: formatTokenCount, path: src/lib/utils/activity.ts, description: "Format token count (e.g. '142 tok')" }
+    - { name: formatAbsoluteTimestamp, path: src/lib/utils/activity.ts, description: "Format ISO timestamp to localized absolute time" }
+    - { name: createModalController, path: src/lib/utils/modal.svelte.ts, description: "Create reactive modal state controller" }
+    - { name: createAsyncHandler, path: src/lib/utils/async.ts, description: "Wrap async functions with loading/error state" }
+    # SA-022/P6: validation/ merged into utils/
+    - { name: invokeValidated, path: src/lib/utils/validation-invoke.ts, description: "Zod-validated Tauri invoke wrapper" }
+    - { name: createValidatedInvoke, path: src/lib/utils/validation-invoke.ts, description: "Factory for typed Zod-validated invoke functions" }
+    - { name: validation-schemas, path: src/lib/utils/validation-schemas.ts, description: "Zod schemas for IPC response validation (LLM, Agent, Memory)" }
+    # SA-019/P4: mergeAndSortReasoningSteps + mergeToolExecutions removed (panel-merge.ts deleted)
+    - { name: adjustMenuPosition, path: src/lib/utils/contextMenu.ts, description: "Viewport-aware context menu position adjustment" }
+    - { name: getWorkflowIdsFromDrag, path: src/lib/utils/dragDrop.ts, description: "Extract workflow IDs from drag event data transfer" }
+    - { name: hasWorkflowDragData, path: src/lib/utils/dragDrop.ts, description: "Check if drag event contains workflow data" }
+    - { name: WORKFLOW_DRAG_TYPE, path: src/lib/utils/dragDrop.ts, description: "MIME type constant for workflow drag data" }
+    - { name: getNextFocusableIndex, path: src/lib/utils/contextMenu.ts, description: "Keyboard navigation: next focusable index skipping disabled items" }
+    - { name: i18n, path: src/lib/i18n/index.ts, description: "Internationalization store" }
+
+  backend:
+    - { name: query_limits, path: src-tauri/src/constants.rs, description: "DEFAULT_LIST_LIMIT: 1000, DEFAULT_MODELS_LIMIT: 100" }
+    - { name: app_constants, path: src-tauri/src/constants.rs, description: "App-wide constants: workflow timeouts, query_limits, command validation (SA-023/P4)" }
+    - { name: Validator, path: src-tauri/src/security/validation.rs, description: "Input validation utilities" }
+    - { name: validate_uuid_field, path: src-tauri/src/security/validation.rs, description: "Centralized UUID validation with warn logging (SA-007 DUP-1)" }
+    - { name: serialize_for_query, path: src-tauri/src/security/validation.rs, description: "Centralized JSON serialization for DB queries with warn logging (SA-007 DUP-2)" }
+    - { name: SecureKeyStore, path: src-tauri/src/security.rs, description: "AES-256-GCM encrypted key storage" }
+    - { name: sanitize_for_surrealdb, path: src-tauri/src/db/utils.rs, description: "Remove null chars + depth-limit (64) JSON for SurrealDB compatibility" }
+    - { name: check_http_warning, path: src-tauri/src/models/custom_provider.rs, description: "Returns warning for non-localhost HTTP URLs (API key exposure)" }
+    - { name: test_utils, path: src-tauri/src/test_utils.rs, description: "Shared test harness: setup_test_state(), seed_test_* helpers incl. seed_test_memory_with_embedding (cfg(test) only)" }
+    - { name: migration_guard, path: src-tauri/src/commands/migration.rs, description: "check_migration_applied/record_migration_applied with migration_log table (SA-005 H3)" }
+    - { name: validate_trimmed_name, path: src-tauri/src/tools/validation_helper.rs, description: "SA-017/OPT-7: Centralized trim+empty+maxlen+control-chars name validation" }
+    - { name: safe_truncate, path: src-tauri/src/tools/utils.rs, description: "UTF-8 safe string truncation (char-boundary aware)" }
+    - { name: OpenAiCompatibleProvider, path: src-tauri/src/llm/openai_compatible.rs, description: "HTTP-based OpenAI-compatible LLM provider with streaming and tool use" }
+    - { name: extract_count, path: src-tauri/src/db/utils.rs, description: "Extracts count value from SurrealDB COUNT() GROUP ALL query results (SA-007 DUP-3)" }
+    - { name: query_and_deserialize, path: src-tauri/src/commands/workflow.rs, description: "Generic query+deserialize helper for DB queries returning Vec<T: DeserializeOwned>" }
+    - { name: merge_agent_config, path: src-tauri/src/commands/agent.rs, description: "Merges partial AgentConfigUpdate with existing config, validating each field" }
+    - { name: connection_test_outcome, path: src-tauri/src/commands/llm_models.rs, description: "Converts test_connection() Result<bool,E> into ConnectionTestResult" }
+    - { name: persist_tool_executions, path: src-tauri/src/db/persistence.rs, description: "Shared persistence for tool executions (SA-014 P1, PAT_PERSIST_001)" }
+    - { name: persist_reasoning_steps, path: src-tauri/src/db/persistence.rs, description: "Shared persistence for reasoning steps (SA-014 P2, PAT_PERSIST_001)" }
+    - { name: aggregate_sub_agent_tokens, path: src-tauri/src/commands/streaming.rs, description: "Stores sub-agent tokens in separate fields (SA-014 P3, PAT_TOKEN_001)" }
+    - { name: merge_into_chat_blocks, path: src-tauri/src/models/chat_block.rs, description: "Merges tool_execution + thinking_step into ChatBlocks sorted by sequence (SA-019 P2)" }
+    - { name: resolve_agent_ref, path: src-tauri/src/tools/utils.rs, description: "Hybrid agent resolution: ID fast path + name slow path (SA-020 P3, PAT_AGENT_002)" }
+    - { name: get_by_name, path: src-tauri/src/agents/core/registry.rs, description: "Case-insensitive agent name lookup in AgentRegistry (SA-020 P2)" }
+    - { name: check_agent_name_unique, path: src-tauri/src/commands/agent.rs, description: "DB uniqueness check for agent names, case-insensitive (SA-020 P1)" }
+    - { name: is_generic_completion_message, path: src-tauri/src/agents/llm_agent.rs, description: "Detects generic completion fallback messages (SA-021, PAT_AGENT_003)" }
+    - { name: validate_path, path: src-tauri/src/tools/file_manager/security.rs, description: "6-layer path security validation for filesystem operations" }
+    - { name: validate_folder_for_authorization, path: src-tauri/src/tools/file_manager/security.rs, description: "Validate folder when user selects via UI dialog (exists, dir, perms, not system)" }
+    - { name: is_destructive_file_op, path: src-tauri/src/tools/validation_helper.rs, description: "Check if file operation is destructive (write, replace, delete, move, rename)" }
+    - { name: move_to_trash, path: src-tauri/src/tools/file_manager/trash.rs, description: "Safe deletion: copy to .zileo-trash with timestamp, remove original" }
+    - { name: cleanup_trash, path: src-tauri/src/tools/file_manager/trash.rs, description: "Two-phase eviction: time-based (30d) then size-based (100MB)" }
+    - { name: resolve_agent_folders, path: src-tauri/src/tools/factory.rs, description: "Query and canonicalize agent authorized folders for FileManagerTool" }
+    - { name: extract_thinking_from_message, path: src-tauri/src/llm/utils.rs, description: "Extract thinking/reasoning from OpenAI-compatible response formats (reasoning field or reasoning_details array)" }
+
+# =============================================================================
+# BACKEND TOOLS (LLM-facing tools in tool registry)
+# =============================================================================
+backend_tools:
+  - { name: FileManagerTool, path: src-tauri/src/tools/file_manager/tool.rs, description: "Sandboxed filesystem ops (10 operations) restricted to agent authorized folders. Trash-based deletion, overwrite backups." }
+  - { name: ReadSkillTool, path: src-tauri/src/tools/read_skill.rs, hidden: true, description: "Auto-injected when agent has skills. LLM reads skill content by name. Hidden from frontend UI." }
+  - { name: DelegateTaskTool, path: src-tauri/src/tools/delegate_task.rs, description: "Delegates sub-tasks to other agents" }
+  - { name: SpawnAgentTool, path: src-tauri/src/tools/spawn_agent.rs, description: "Spawns a new agent for parallel execution" }
+  - { name: ReadMemoryTool, path: src-tauri/src/tools/read_memory.rs, description: "Reads memories from semantic memory store" }
+  - { name: WriteMemoryTool, path: src-tauri/src/tools/write_memory.rs, description: "Writes memories to semantic memory store" }
+  - { name: TodoTool, path: src-tauri/src/tools/todo/tool.rs, description: "Task management for multi-step workflows" }
+  - { name: UserQuestionTool, path: src-tauri/src/tools/user_question/tool.rs, description: "Asks user questions during agent execution" }
+
+# =============================================================================
+# TAURI EVENTS (frontend listeners)
+# =============================================================================
+events:
+  menu_events:
+    description: "Events emitted by native menus, listened in +layout.svelte"
+    events:
+      - { name: open-legal-notice, source: "Help menu", handler: "+layout.svelte", action: "Opens LegalModal with type='legal-notice'" }
+      - { name: open-privacy-policy, source: "Help menu", handler: "+layout.svelte", action: "Opens LegalModal with type='privacy-policy'" }
+
+  workflow_events:
+    description: "Events for workflow streaming and updates"
+    events:
+      - { name: "workflow:{id}", source: "streaming.rs", handler: "streamingStore", action: "Stream chunks during workflow execution" }
+      - { name: validation_required, source: "validation.rs", handler: "validationStore", action: "Trigger validation modal" }
+
+# =============================================================================
+# NATIVE MENUS (Tauri)
+# =============================================================================
+menus:
+  help:
+    label: "Aide / Help"
+    location: "src-tauri/src/main.rs (setup)"
+    items:
+      - { id: legal-notice, label: "Mentions légales", event: open-legal-notice }
+      - { id: privacy-policy, label: "Politique de confidentialité", event: open-privacy-policy }
+      - { type: separator }
+      - { type: about, label: "À propos de Zileo Chat" }
+
+# =============================================================================
+# I18N KEYS (by feature)
+# =============================================================================
+i18n_keys:
+  legal:
+    count: 45
+    prefix: "legal_*, privacy_*"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-01-13"
+    description: "Legal notices and GDPR privacy policy translations"
+
+  activity_export:
+    count: 5
+    prefix: "activity_export_*"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-02-07"
+    description: "Activity export dialog and toast translations"
+
+  chat_bubble:
+    count: 7
+    prefix: "chat_copy_*, chat_copied, chat_metrics_*"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-02-08"
+    description: "Chat bubble redesign - copy, metrics, agents"
+
+  custom_providers:
+    count: 10
+    prefix: "llm_custom_provider_*, llm_add_custom_provider"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-02-12"
+    description: "Custom OpenAI-compatible provider management translations"
+
+  memory_export:
+    count: 1
+    prefix: "memory_export_*"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-02-20"
+    description: "Memory export dialog title"
+
+  file_manager:
+    count: 15
+    prefix: "agents_tool_file_manager*, agents_folder_*, agents_require_file_confirmation*, file_confirm_*"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-03-01"
+    description: "FileManagerTool - tool descriptions, folder management, confirmation dialogs"
+
+  reasoning_effort:
+    count: 7
+    prefix: "agents_reasoning_*, metrics_thinking_tokens"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-03-04"
+    description: "Reasoning effort dropdown (Off/Low/Medium/High) + thinking tokens metric label"
+
+  sa010_err2_error_messages:
+    count: 7
+    prefix: "validation_load_resources_failed, agents_mcp_load_failed, agents_llm_load_failed, memory_failed_refresh_stats, ie_refresh_failed"
+    files: ["src/messages/fr.json", "src/messages/en.json"]
+    added: "2026-02-20"
+    description: "SA-010 ERR-2: Error messages replacing console.error/warn in settings components"
+
+# =============================================================================
+# PATTERNS TO REUSE
+# =============================================================================
+patterns:
+  store_pattern:
+    description: "Use createCRUDStore factory for entity stores"
+    reference: src/lib/stores/factory/createCRUDStore.ts
+
+  command_pattern:
+    description: "#[tauri::command] with Result<T, String>, State<AppState>"
+    reference: src-tauri/src/commands/agent.rs
+
+  component_pattern:
+    description: "Svelte 5 with interface Props, $props(), type imports from $types"
+    reference: src/lib/components/ui/Button.svelte
+
+  modal_pattern:
+    description: "Modal with open prop, onclose callback, size variant"
+    reference: src/lib/components/ui/Modal.svelte
+
+# =============================================================================
+# QUICK LOOKUP
+# =============================================================================
+quick_lookup:
+  # Common searches
+  "need a button": Button in src/lib/components/ui/Button.svelte
+  "need a modal": Modal in src/lib/components/ui/Modal.svelte
+  "need a form input": Input, Select, Textarea in src/lib/components/ui/
+  "need loading state": Spinner, Skeleton in src/lib/components/ui/
+  "need to call backend": Check stores (invokes field) or add to existing command module
+  "need new type": Check types_typescript and types_rust - add to both if new
+  "need store with CRUD": Use createCRUDStore factory

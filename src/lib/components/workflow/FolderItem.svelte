@@ -25,6 +25,7 @@
 	import type { ContextMenuItem } from '$types/sidebar';
 	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
 	import { i18n } from '$lib/i18n';
+	import { getWorkflowIdsFromDrag, hasWorkflowDragData } from '$lib/utils/dragDrop';
 	import { tick } from 'svelte';
 
 	interface Props {
@@ -67,32 +68,15 @@
 	/** Whether a valid drag is hovering over this folder */
 	let dragOver = $state(false);
 
-	/**
-	 * Extract workflow IDs from drag event data
-	 */
-	function getWorkflowIds(event: DragEvent): string[] | null {
-		const data = event.dataTransfer?.getData('application/x-workflow-ids');
-		if (!data) return null;
-		try {
-			const ids: unknown = JSON.parse(data);
-			if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) {
-				return ids as string[];
-			}
-		} catch {
-			// Invalid JSON
-		}
-		return null;
-	}
-
 	function handleDragOver(event: DragEvent): void {
-		if (!onworkflowdrop || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		if (!onworkflowdrop || !event.dataTransfer || !hasWorkflowDragData(event)) return;
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
 		dragOver = true;
 	}
 
 	function handleDragEnter(event: DragEvent): void {
-		if (!onworkflowdrop || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		if (!onworkflowdrop || !hasWorkflowDragData(event)) return;
 		event.preventDefault();
 		dragOver = true;
 	}
@@ -107,7 +91,7 @@
 	function handleDrop(event: DragEvent): void {
 		event.preventDefault();
 		dragOver = false;
-		const ids = getWorkflowIds(event);
+		const ids = getWorkflowIdsFromDrag(event);
 		if (ids && ids.length > 0) {
 			onworkflowdrop?.(ids, folder.id);
 		}
@@ -185,7 +169,6 @@
 	class:drag-over={dragOver}
 	role="group"
 	aria-label={folder.name}
-	aria-dropeffect={onworkflowdrop ? 'move' : 'none'}
 	oncontextmenu={handleContextMenu}
 	ondragover={handleDragOver}
 	ondragenter={handleDragEnter}

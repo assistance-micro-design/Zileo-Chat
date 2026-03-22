@@ -29,6 +29,7 @@
 	import ContextMenu from '$lib/components/ui/ContextMenu.svelte';
 	import { EllipsisVertical, Pencil, Pin, PinOff, FolderInput, Trash2 } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { WORKFLOW_DRAG_TYPE } from '$lib/utils/dragDrop';
 	import { tick } from 'svelte';
 
 	/**
@@ -214,7 +215,7 @@
 			: [workflow.id];
 
 		event.dataTransfer.effectAllowed = 'move';
-		event.dataTransfer.setData('application/x-workflow-ids', JSON.stringify(ids));
+		event.dataTransfer.setData(WORKFLOW_DRAG_TYPE, JSON.stringify(ids));
 	}
 
 	/**
@@ -297,7 +298,7 @@
 	oncontextmenu={handleContextMenu}
 	aria-pressed={active}
 	aria-haspopup="menu"
-	aria-grabbed={dragging}
+	aria-roledescription="draggable item"
 	aria-label={`Workflow: ${workflow.name}`}
 >
 	{#if selectionMode}

@@ -1158,7 +1158,6 @@
   "sidebar_context_rename": "Rename",
   "sidebar_context_pin": "Pin to top",
   "sidebar_context_unpin": "Unpin",
-  "sidebar_context_move_to": "Move to folder...",
   "sidebar_context_delete": "Delete",
 
   "sidebar_selection_toggle": "Selection mode",
