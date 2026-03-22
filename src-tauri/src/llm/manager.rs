@@ -373,19 +373,12 @@ impl ProviderManager {
     /// Includes retry logic with exponential backoff and circuit
     /// breaker protection.
     ///
-    /// Note: This method intentionally does not accept `reasoning_effort`.
-    /// Most LLM providers do not support simultaneous tool calling and
-    /// extended thinking. The initial completion (before the tool loop)
-    /// uses `reasoning_effort` via `complete_with_provider()`.
+    /// `ToolCompletionParams` includes `reasoning_effort` for providers that support
+    /// simultaneous tool calling and extended thinking (e.g. Mistral, OpenAI-compatible).
     ///
     /// # Arguments
     /// * `provider` - Which provider to use
-    /// * `messages` - Conversation history as JSON messages
-    /// * `tools` - Tool definitions in OpenAI format
-    /// * `tool_choice` - How the model should use tools (provider-specific)
-    /// * `model` - Model to use
-    /// * `temperature` - Sampling temperature
-    /// * `max_tokens` - Maximum tokens to generate
+    /// * `params` - Tool completion parameters (messages, tools, model, etc.)
     ///
     /// # Returns
     /// Raw JSON response from the API (caller should use adapter to parse)
@@ -411,17 +404,7 @@ impl ProviderManager {
                     || {
                         let p = params.clone();
                         let prov = mistral.clone();
-                        async move {
-                            prov.complete_with_tools(
-                                &p.messages,
-                                &p.tools,
-                                p.tool_choice,
-                                &p.model,
-                                p.temperature,
-                                p.max_tokens,
-                            )
-                            .await
-                        }
+                        async move { prov.complete_with_tools(&p).await }
                     },
                     &self.retry_config,
                 )
@@ -433,17 +416,7 @@ impl ProviderManager {
                     || {
                         let p = params.clone();
                         let prov = ollama.clone();
-                        async move {
-                            prov.complete_with_tools(
-                                &p.messages,
-                                &p.tools,
-                                &p.model,
-                                p.temperature,
-                                p.max_tokens,
-                                p.context_window,
-                            )
-                            .await
-                        }
+                        async move { prov.complete_with_tools(&p).await }
                     },
                     &self.retry_config,
                 )
@@ -461,17 +434,7 @@ impl ProviderManager {
                     || {
                         let p = params.clone();
                         let prov = custom.clone();
-                        async move {
-                            prov.complete_with_tools(
-                                &p.messages,
-                                &p.tools,
-                                p.tool_choice,
-                                &p.model,
-                                p.temperature,
-                                p.max_tokens,
-                            )
-                            .await
-                        }
+                        async move { prov.complete_with_tools(&p).await }
                     },
                     &self.retry_config,
                 )

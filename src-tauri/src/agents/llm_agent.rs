@@ -919,6 +919,14 @@ impl Agent for LLMAgent {
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        // Extract workflow_id for event emission (same pattern as execute_with_mcp)
+        let event_workflow_id = task
+            .context
+            .get("workflow_id")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| task.id.clone());
+
         match llm_result {
             Ok(response) => {
                 info!(
@@ -929,6 +937,23 @@ impl Agent for LLMAgent {
                     duration_ms = duration_ms,
                     "LLM Agent task execution completed successfully"
                 );
+
+                // Emit thinking block if reasoning content is present
+                let mut reasoning_steps = vec![];
+                if let Some(ref thinking) = response.thinking_content {
+                    if !thinking.trim().is_empty() {
+                        self.emit_progress(StreamChunk::thinking_block(
+                            event_workflow_id.clone(),
+                            thinking.clone(),
+                        ));
+                        reasoning_steps.push(ReasoningStepData {
+                            content: thinking.clone(),
+                            duration_ms,
+                            sequence: 1,
+                            source: ReasoningSource::ModelThinking,
+                        });
+                    }
+                }
 
                 let content = format!(
                     "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Success\n\n## Response\n\n{}\n\n## Metrics\n- Provider: {}\n- Model: {}\n- Tokens (input/output): {}/{}\n- Duration: {}ms",
@@ -958,7 +983,7 @@ impl Agent for LLMAgent {
                         tools_used: vec![],
                         mcp_calls: vec![],
                         tool_executions: vec![],
-                        reasoning_steps: vec![],
+                        reasoning_steps,
                         iteration_metrics: vec![],
                     },
                     system_prompt: None,
@@ -1346,6 +1371,11 @@ impl Agent for LLMAgent {
                         temperature: self.config.llm.temperature,
                         max_tokens: self.config.llm.max_tokens,
                         context_window: self.config.llm.context_window,
+                        reasoning_effort: if self.config.llm.is_reasoning {
+                            self.config.reasoning_effort.clone()
+                        } else {
+                            None
+                        },
                     },
                 )
                 .await
@@ -1668,6 +1698,11 @@ impl Agent for LLMAgent {
                             temperature: self.config.llm.temperature,
                             max_tokens: self.config.llm.max_tokens,
                             context_window: self.config.llm.context_window,
+                            reasoning_effort: if self.config.llm.is_reasoning {
+                                self.config.reasoning_effort.clone()
+                            } else {
+                                None
+                            },
                         },
                     )
                     .await

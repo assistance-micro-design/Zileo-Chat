@@ -206,6 +206,8 @@ pub struct ToolCompletionParams {
     pub max_tokens: usize,
     /// Context window size (e.g. Ollama num_ctx)
     pub context_window: Option<usize>,
+    /// Reasoning effort level for thinking models (e.g. Mistral reasoning_effort)
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 /// Common trait for all LLM providers

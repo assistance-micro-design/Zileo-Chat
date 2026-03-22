@@ -14,7 +14,9 @@
 
 //! Ollama local provider implementation using rig-core
 
-use super::provider::{CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::provider::{
+    CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
+};
 use crate::models::agent::ReasoningEffort;
 use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
@@ -156,48 +158,43 @@ impl OllamaProvider {
     /// - mistral, mistral-nemo
     #[instrument(
         name = "ollama_complete_with_tools",
-        skip(self, messages, tools),
-        fields(provider = "ollama", model = %model, tools_count = tools.len())
+        skip(self, params),
+        fields(provider = "ollama", model = %params.model, tools_count = params.tools.len())
     )]
     pub async fn complete_with_tools(
         &self,
-        messages: &[serde_json::Value],
-        tools: &[serde_json::Value],
-        model: &str,
-        temperature: f32,
-        max_tokens: usize,
-        context_window: Option<usize>,
+        params: &ToolCompletionParams,
     ) -> Result<serde_json::Value, LLMError> {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
 
         // Build options with optional num_ctx
         let mut options = serde_json::json!({
-            "temperature": temperature,
-            "num_predict": max_tokens
+            "temperature": params.temperature,
+            "num_predict": params.max_tokens
         });
-        if let Some(ctx) = context_window {
+        if let Some(ctx) = params.context_window {
             options["num_ctx"] = serde_json::json!(ctx);
         }
 
         // Build request body with tools
         let mut body = serde_json::json!({
-            "model": model,
-            "messages": messages,
+            "model": params.model,
+            "messages": params.messages,
             "stream": false,
             "options": options
         });
 
         // Add tools if provided
-        if !tools.is_empty() {
-            body["tools"] = serde_json::json!(tools);
+        if !params.tools.is_empty() {
+            body["tools"] = serde_json::json!(params.tools);
         }
 
         debug!(
-            model = model,
-            temperature = temperature,
-            max_tokens = max_tokens,
-            tools_count = tools.len(),
+            model = %params.model,
+            temperature = params.temperature,
+            max_tokens = params.max_tokens,
+            tools_count = params.tools.len(),
             "Making Ollama API request with tools"
         );
 

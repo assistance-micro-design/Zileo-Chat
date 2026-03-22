@@ -147,14 +147,17 @@ impl ProviderToolAdapter for MistralToolAdapter {
     }
 
     fn extract_thinking(&self, response: &Value) -> Option<String> {
-        // Mistral reasoning models: content is an array with thinking blocks
-        // Try to extract from content array format
+        // Mistral reasoning models: content is an array with thinking blocks.
+        // Supports two formats:
+        // - Magistral: thinking is an array of text blocks
+        // - mistral-small with reasoning_effort: thinking is a plain string
         let content = response.pointer("/choices/0/message/content")?;
         let blocks = content.as_array()?;
 
         let mut thinking_parts = String::new();
         for block in blocks {
             if block.get("type").and_then(|t| t.as_str()) == Some("thinking") {
+                // Magistral format: thinking is an array of {type: "text", text: "..."}
                 if let Some(items) = block.get("thinking").and_then(|t| t.as_array()) {
                     for item in items {
                         if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
@@ -164,6 +167,13 @@ impl ProviderToolAdapter for MistralToolAdapter {
                             thinking_parts.push_str(text);
                         }
                     }
+                }
+                // mistral-small format: thinking is a plain string
+                else if let Some(text) = block.get("thinking").and_then(|t| t.as_str()) {
+                    if !thinking_parts.is_empty() {
+                        thinking_parts.push('\n');
+                    }
+                    thinking_parts.push_str(text);
                 }
             }
         }
@@ -176,10 +186,32 @@ impl ProviderToolAdapter for MistralToolAdapter {
     }
 
     fn extract_content(&self, response: &Value) -> Option<String> {
-        response
-            .pointer("/choices/0/message/content")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+        let content = response.pointer("/choices/0/message/content")?;
+
+        // Standard format: content is a string
+        if let Some(s) = content.as_str() {
+            return Some(s.to_string());
+        }
+
+        // Reasoning format: content is an array of blocks, extract text blocks
+        if let Some(blocks) = content.as_array() {
+            let mut text_parts = String::new();
+            for block in blocks {
+                if block.get("type").and_then(|t| t.as_str()) == Some("text") {
+                    if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                        if !text_parts.is_empty() {
+                            text_parts.push('\n');
+                        }
+                        text_parts.push_str(text);
+                    }
+                }
+            }
+            if !text_parts.is_empty() {
+                return Some(text_parts);
+            }
+        }
+
+        None
     }
 
     fn has_tool_calls(&self, response: &Value) -> bool {
