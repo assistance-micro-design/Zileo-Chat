@@ -341,32 +341,45 @@ pub async fn delete_workflows_batch(
         validated_ids.push(validated);
     }
 
-    // Check status for each workflow - reject running ones
+    // Check status for all workflows in a single query - reject running ones
     let mut to_delete = Vec::new();
     let mut skipped_running = Vec::new();
 
-    for id in &validated_ids {
-        let query = format!("SELECT status FROM workflow:`{}` LIMIT 1", id);
-        let json_results = state.db.query_json(&query).await.map_err(|e| {
-            error!(error = %e, workflow_id = %id, "Failed to check workflow status");
-            format!("Failed to check workflow status: {}", e)
-        })?;
+    let record_ids: Vec<String> = validated_ids
+        .iter()
+        .map(|id| format!("workflow:`{}`", id))
+        .collect();
+    let in_clause = record_ids.join(", ");
+    let query = format!(
+        "SELECT meta::id(id) AS id, status FROM workflow WHERE id IN [{}]",
+        in_clause
+    );
 
-        if let Some(row) = json_results.into_iter().next() {
-            let status_str = row
-                .get("status")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
+    let json_results = state.db.query_json(&query).await.map_err(|e| {
+        error!(error = %e, "Failed to check workflow statuses for batch delete");
+        format!("Failed to check workflow statuses: {}", e)
+    })?;
 
-            if status_str == "running" {
-                warn!(workflow_id = %id, "Skipping running workflow in batch delete");
-                skipped_running.push(id.clone());
-            } else {
-                to_delete.push(id.clone());
-            }
+    // Build a set of found IDs and their statuses
+    for row in json_results {
+        let id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let status_str = row
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        if status_str == "running" {
+            warn!(workflow_id = %id, "Skipping running workflow in batch delete");
+            skipped_running.push(id);
+        } else {
+            to_delete.push(id);
         }
-        // If workflow not found, silently skip (already deleted)
     }
+    // Workflows not found in results are silently skipped (already deleted)
 
     // Cascade delete each valid workflow
     let mut deleted: u64 = 0;
