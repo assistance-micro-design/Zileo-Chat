@@ -5,6 +5,30 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-03-22
+
+### Added
+
+- **Mistral reasoning support**: `reasoning_effort` parameter now sent to Mistral API for both chat and tool-call paths (previously silently dropped)
+- **Dual-format thinking blocks**: Mistral deserializer handles both array format (Magistral) and string format (mistral-small with reasoning_effort)
+- **Thinking display in simple path**: `execute()` (no-tools path) now emits `StreamChunk::thinking_block` so reasoning content is visible in UI
+- **3 new Mistral tests**: reasoning_effort serialization (2 tests) + string-format thinking deserialization
+
+### Changed
+
+- **Unified `complete_with_tools()` signatures**: All 3 providers (Mistral, Ollama, OpenAI-compatible) now accept `&ToolCompletionParams` instead of individual positional parameters
+- **`ToolCompletionParams`**: Added `reasoning_effort` field for providers that support thinking + tool calling simultaneously
+- **`MistralToolChatRequest`** / **`ToolChatRequest`**: Added `reasoning_effort` field to HTTP request body
+- **Manager `complete_with_tools()`**: Simplified from ~75 lines of destructuring to ~45 lines of uniform `prov.complete_with_tools(&p)` calls
+- **`context_window`**: Now traced in debug logs for all providers (was Ollama-only)
+
+### Fixed
+
+- **Mistral `extract_content()` with reasoning format**: Content returned as array of blocks (thinking + text) was not parsed, causing "Task completed" fallback instead of actual response
+- **Mistral `reasoning_effort` in tool-call loop**: `ToolCompletionParams` was missing the field, so Mistral never received it during tool iterations
+
+---
+
 ## [0.17.0] - 2026-03-22
 
 ### Added
@@ -535,4 +559,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
 [0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
 [0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0

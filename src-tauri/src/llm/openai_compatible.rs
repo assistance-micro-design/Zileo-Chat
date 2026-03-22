@@ -21,7 +21,9 @@
 //! Handles both standard and reasoning model response formats via
 //! a polymorphic content deserializer (string or array of content blocks).
 
-use super::provider::{CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams};
+use super::provider::{
+    CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
+};
 use crate::tools::utils::safe_truncate;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

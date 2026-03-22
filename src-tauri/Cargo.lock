@@ -8670,7 +8670,7 @@ dependencies = [
 
 [[package]]
 name = "zileo-chat"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
