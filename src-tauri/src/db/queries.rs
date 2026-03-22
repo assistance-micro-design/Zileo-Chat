@@ -35,50 +35,38 @@
 /// - `SELECT_BASE`: Core fields without WHERE/ORDER BY (for single workflow lookup)
 /// - `SELECT_LIST`: Full query for listing workflows (with ORDER BY)
 pub mod workflow {
-    /// Base SELECT fields for workflow queries.
-    /// Use with `format!("{} WHERE meta::id(id) = '{}'", SELECT_BASE, id)` for single lookup.
-    ///
-    /// Includes token metrics with NULL coalescing for backwards compatibility.
-    pub const SELECT_BASE: &str = r#"SELECT
-        meta::id(id) AS id,
-        name,
-        agent_id,
-        status,
-        created_at,
-        updated_at,
-        completed_at,
-        (total_tokens_input ?? 0) AS total_tokens_input,
-        (total_tokens_output ?? 0) AS total_tokens_output,
-        (total_cost_usd ?? 0.0) AS total_cost_usd,
-        model_id,
-        (current_context_tokens ?? 0) AS current_context_tokens,
-        (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
-        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output,
-        folder_id,
-        (pinned ?? false) AS pinned
-    FROM workflow"#;
+    /// Core field list shared by SELECT, RETURN, and list queries.
+    /// Single source of truth for workflow field selection with NULL coalescing.
+    const FIELDS: &str = "\
+        meta::id(id) AS id, \
+        name, \
+        agent_id, \
+        status, \
+        created_at, \
+        updated_at, \
+        completed_at, \
+        (total_tokens_input ?? 0) AS total_tokens_input, \
+        (total_tokens_output ?? 0) AS total_tokens_output, \
+        (total_cost_usd ?? 0.0) AS total_cost_usd, \
+        model_id, \
+        (current_context_tokens ?? 0) AS current_context_tokens, \
+        (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+        folder_id, \
+        (pinned ?? false) AS pinned";
+
+    /// Base SELECT for workflow queries (no WHERE/ORDER BY).
+    /// Use with `format!("{} WHERE meta::id(id) = '{}'", SELECT_BASE, id)`.
+    pub static SELECT_BASE: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(|| format!("SELECT {} FROM workflow", FIELDS));
 
     /// SELECT query for listing all workflows ordered by update time.
-    /// Use directly: `db.query_json(SELECT_LIST)`.
-    pub const SELECT_LIST: &str = r#"SELECT
-        meta::id(id) AS id,
-        name,
-        agent_id,
-        status,
-        created_at,
-        updated_at,
-        completed_at,
-        (total_tokens_input ?? 0) AS total_tokens_input,
-        (total_tokens_output ?? 0) AS total_tokens_output,
-        (total_cost_usd ?? 0.0) AS total_cost_usd,
-        model_id,
-        (current_context_tokens ?? 0) AS current_context_tokens,
-        (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input,
-        (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output,
-        folder_id,
-        (pinned ?? false) AS pinned
-    FROM workflow
-    ORDER BY updated_at DESC"#;
+    pub static SELECT_LIST: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(|| format!("{} ORDER BY updated_at DESC", *SELECT_BASE));
+
+    /// RETURN clause fields for UPDATE commands (rename, move, toggle pin).
+    /// Use with `format!("UPDATE workflow:`{}` SET ... RETURN {}", id, RETURN_FIELDS)`.
+    pub const RETURN_FIELDS: &str = FIELDS;
 
     /// Minimal SELECT fields for basic workflow validation (existence check).
     /// Used in execute_workflow/streaming where token metrics aren't needed yet.

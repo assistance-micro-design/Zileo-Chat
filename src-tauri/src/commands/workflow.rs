@@ -92,7 +92,7 @@ pub async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>,
     info!("Loading workflows");
 
     // Use centralized query constant
-    let query = wf_queries::SELECT_LIST;
+    let query = &*wf_queries::SELECT_LIST;
 
     let json_results = state.db.query_json(query).await.map_err(|e| {
         error!(error = %e, "Failed to load workflows");
@@ -139,15 +139,8 @@ pub async fn rename_workflow(
     let name_json = crate::security::serialize_for_query(&validated_name, "name")?;
 
     let query = format!(
-        "UPDATE workflow:`{}` SET name = {}, updated_at = time::now() RETURN \
-         meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
-         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
-         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
-         (current_context_tokens ?? 0) AS current_context_tokens, \
-         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
-         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
-         folder_id, (pinned ?? false) AS pinned",
-        validated_id, name_json
+        "UPDATE workflow:`{}` SET name = {}, updated_at = time::now() RETURN {}",
+        validated_id, name_json, wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
@@ -238,7 +231,7 @@ pub async fn load_workflow_full_state(
     // Build query strings for all 4 parallel queries
     let wf_query = format!(
         "{} WHERE meta::id(id) = '{}'",
-        wf_queries::SELECT_BASE,
+        &*wf_queries::SELECT_BASE,
         validated_id
     );
     let msg_query = format!(
@@ -447,15 +440,7 @@ pub async fn move_workflow_to_folder(
 
     let query = format!(
         "UPDATE workflow:`{}` SET {}, updated_at = time::now() RETURN {}",
-        validated_wf_id,
-        folder_clause,
-        "meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
-         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
-         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
-         (current_context_tokens ?? 0) AS current_context_tokens, \
-         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
-         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
-         folder_id, (pinned ?? false) AS pinned"
+        validated_wf_id, folder_clause, wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
@@ -552,15 +537,8 @@ pub async fn toggle_workflow_pinned(
     let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     let query = format!(
-        "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN \
-         meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
-         (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
-         (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
-         (current_context_tokens ?? 0) AS current_context_tokens, \
-         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
-         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
-         folder_id, (pinned ?? false) AS pinned",
-        validated_id
+        "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN {}",
+        validated_id, wf_queries::RETURN_FIELDS
     );
 
     let json_results = state.db.query_json(&query).await.map_err(|e| {
@@ -836,15 +814,9 @@ mod tests {
 
         // Toggle pin ON
         let query_on = format!(
-            "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN \
-             meta::id(id) AS id, name, agent_id, status, created_at, updated_at, completed_at, \
-             (total_tokens_input ?? 0) AS total_tokens_input, (total_tokens_output ?? 0) AS total_tokens_output, \
-             (total_cost_usd ?? 0.0) AS total_cost_usd, model_id, \
-             (current_context_tokens ?? 0) AS current_context_tokens, \
-             (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
-             (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
-             folder_id, (pinned ?? false) AS pinned",
-            workflow_id
+            "UPDATE workflow:`{}` SET pinned = !pinned, updated_at = time::now() RETURN {}",
+            workflow_id,
+            wf_queries::RETURN_FIELDS
         );
         let results_on = state
             .db
