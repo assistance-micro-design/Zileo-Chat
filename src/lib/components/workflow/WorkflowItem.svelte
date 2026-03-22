@@ -61,6 +61,8 @@
 		onmoveto?: (workflow: Workflow, folderId: string | null) => void;
 		/** Available folders for move-to menu */
 		folders?: WorkflowFolder[];
+		/** Set of selected IDs for multi-drag support */
+		selectedIds?: Set<string>;
 	}
 
 	let {
@@ -76,7 +78,8 @@
 		onselectiontoggle,
 		ontogglepin,
 		onmoveto,
-		folders = []
+		folders = [],
+		selectedIds = new Set<string>()
 	}: Props = $props();
 
 	let editing = $state(false);
@@ -185,6 +188,33 @@
 		}
 	}
 
+	/** Whether this item is currently being dragged */
+	let dragging = $state(false);
+
+	/**
+	 * Handle drag start - set workflow IDs in transfer data.
+	 * In multi-select mode with this item selected, drags all selected IDs.
+	 */
+	function handleDragStart(event: DragEvent): void {
+		if (editing || !event.dataTransfer) return;
+
+		dragging = true;
+
+		const ids = selectionMode && selected && selectedIds.size > 0
+			? [...selectedIds]
+			: [workflow.id];
+
+		event.dataTransfer.effectAllowed = 'move';
+		event.dataTransfer.setData('application/x-workflow-ids', JSON.stringify(ids));
+	}
+
+	/**
+	 * Handle drag end
+	 */
+	function handleDragEnd(): void {
+		dragging = false;
+	}
+
 	/**
 	 * Open context menu at position
 	 */
@@ -246,14 +276,19 @@
 	class="workflow-item"
 	class:active
 	class:selected
+	class:dragging
 	role="button"
 	tabindex="0"
+	draggable={!editing}
+	ondragstart={handleDragStart}
+	ondragend={handleDragEnd}
 	onclick={handleClick}
 	onkeydown={handleKeydown}
 	ondblclick={selectionMode ? undefined : startEdit}
 	oncontextmenu={handleContextMenu}
 	aria-pressed={active}
 	aria-haspopup="menu"
+	aria-grabbed={dragging}
 	aria-label={`Workflow: ${workflow.name}`}
 >
 	{#if selectionMode}
@@ -345,6 +380,10 @@
 		background: var(--color-accent-light);
 		border-color: var(--color-accent);
 		opacity: 0.9;
+	}
+
+	.workflow-item.dragging {
+		opacity: 0.4;
 	}
 
 	.selection-checkbox {

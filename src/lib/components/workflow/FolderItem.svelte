@@ -40,6 +40,8 @@
 		onrename?: (folder: WorkflowFolder, name: string) => void;
 		/** Delete handler */
 		ondelete?: (folder: WorkflowFolder) => void;
+		/** Drop handler for workflows dragged into this folder */
+		onworkflowdrop?: (workflowIds: string[], folderId: string) => void;
 		/** Children snippet (workflow items inside the folder) */
 		children: Snippet;
 	}
@@ -51,6 +53,7 @@
 		ontoggle,
 		onrename,
 		ondelete,
+		onworkflowdrop,
 		children
 	}: Props = $props();
 
@@ -60,6 +63,55 @@
 	let contextMenuOpen = $state(false);
 	let contextMenuX = $state(0);
 	let contextMenuY = $state(0);
+
+	/** Whether a valid drag is hovering over this folder */
+	let dragOver = $state(false);
+
+	/**
+	 * Extract workflow IDs from drag event data
+	 */
+	function getWorkflowIds(event: DragEvent): string[] | null {
+		const data = event.dataTransfer?.getData('application/x-workflow-ids');
+		if (!data) return null;
+		try {
+			const ids: unknown = JSON.parse(data);
+			if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) {
+				return ids as string[];
+			}
+		} catch {
+			// Invalid JSON
+		}
+		return null;
+	}
+
+	function handleDragOver(event: DragEvent): void {
+		if (!onworkflowdrop || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		dragOver = true;
+	}
+
+	function handleDragEnter(event: DragEvent): void {
+		if (!onworkflowdrop || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		event.preventDefault();
+		dragOver = true;
+	}
+
+	function handleDragLeave(event: DragEvent): void {
+		const related = event.relatedTarget as Node | null;
+		const container = event.currentTarget as HTMLElement;
+		if (related && container.contains(related)) return;
+		dragOver = false;
+	}
+
+	function handleDrop(event: DragEvent): void {
+		event.preventDefault();
+		dragOver = false;
+		const ids = getWorkflowIds(event);
+		if (ids && ids.length > 0) {
+			onworkflowdrop?.(ids, folder.id);
+		}
+	}
 
 	const contextMenuItems: ContextMenuItem[] = [
 		{ id: 'rename', labelKey: 'sidebar_folder_rename', icon: Pencil },
@@ -128,7 +180,18 @@
 	}
 </script>
 
-<div class="folder-item" role="group" aria-label={folder.name} oncontextmenu={handleContextMenu}>
+<div
+	class="folder-item"
+	class:drag-over={dragOver}
+	role="group"
+	aria-label={folder.name}
+	aria-dropeffect={onworkflowdrop ? 'move' : 'none'}
+	oncontextmenu={handleContextMenu}
+	ondragover={handleDragOver}
+	ondragenter={handleDragEnter}
+	ondragleave={handleDragLeave}
+	ondrop={handleDrop}
+>
 	<div
 		class="folder-header"
 		role="button"
@@ -193,6 +256,13 @@
 	.folder-item {
 		display: flex;
 		flex-direction: column;
+	}
+
+	.folder-item.drag-over {
+		outline: 2px dashed var(--color-accent);
+		outline-offset: -2px;
+		border-radius: var(--border-radius-md);
+		background: var(--color-accent-light);
 	}
 
 	.folder-header {

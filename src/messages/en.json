@@ -1179,5 +1179,8 @@
   "sidebar_folder_empty": "No workflows in this folder",
   "sidebar_folder_move_to": "Move to",
   "sidebar_folder_remove_from": "Remove from folder",
-  "sidebar_pin_section_title": "Pinned"
+  "sidebar_pin_section_title": "Pinned",
+
+  "sidebar_drag_drop_hint": "Drop here to move to this folder",
+  "sidebar_drag_drop_uncategorized": "Drop here to remove from folder"
 }

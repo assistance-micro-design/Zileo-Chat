@@ -1179,5 +1179,8 @@
   "sidebar_folder_empty": "Aucun workflow dans ce dossier",
   "sidebar_folder_move_to": "Deplacer vers",
   "sidebar_folder_remove_from": "Retirer du dossier",
-  "sidebar_pin_section_title": "Epingles"
+  "sidebar_pin_section_title": "Epingles",
+
+  "sidebar_drag_drop_hint": "Deposer ici pour deplacer dans ce dossier",
+  "sidebar_drag_drop_uncategorized": "Deposer ici pour retirer du dossier"
 }

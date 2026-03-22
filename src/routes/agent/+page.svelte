@@ -465,6 +465,21 @@ Uses extracted components, services, and stores for clean architecture.
 		}
 	}
 
+	/**
+	 * Move multiple workflows to a folder via drag & drop.
+	 */
+	async function handleWorkflowMove(workflowIds: string[], folderId: string | null): Promise<void> {
+		try {
+			if (workflowIds.length === 1) {
+				await workflowStore.moveToFolder(workflowIds[0], folderId);
+			} else {
+				await workflowStore.moveBatchToFolder(workflowIds, folderId);
+			}
+		} catch (err) {
+			toastStore.add({ type: 'error', title: getErrorMessage(err), message: '', persistent: false, duration: 5000 });
+		}
+	}
+
 	// ============================================================================
 	// Agent Management Functions
 	// ============================================================================
@@ -733,6 +748,7 @@ Uses extracted components, services, and stores for clean architecture.
 		onfolderdelete={handleDeleteFolder}
 		ontogglepin={handleTogglePin}
 		onmoveto={handleMoveToFolder}
+		onworkflowmove={handleWorkflowMove}
 	/>
 
 	<!-- Main Content -->

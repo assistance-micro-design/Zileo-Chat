@@ -80,6 +80,8 @@
 		recentlyCompletedIds?: Set<string>;
 		/** Set of workflow IDs with a pending user question */
 		questionPendingIds?: Set<string>;
+		/** Handler for workflows dropped into a folder (or null for uncategorized) */
+		onworkflowmove?: (workflowIds: string[], folderId: string | null) => void;
 	}
 
 	let {
@@ -104,7 +106,8 @@
 		onmoveto,
 		runningWorkflowIds = new Set<string>(),
 		recentlyCompletedIds = new Set<string>(),
-		questionPendingIds = new Set<string>()
+		questionPendingIds = new Set<string>(),
+		onworkflowmove
 	}: Props = $props();
 
 	/** Pinned workflows (shown at top) */
@@ -150,6 +153,62 @@
 	/** Uncategorized workflows grouped by date */
 	const dateGroups = $derived(groupByDate(uncategorizedWorkflows, 'updated_at'));
 
+	/** Whether a drag is hovering the uncategorized drop zone */
+	let uncategorizedDragOver = $state(false);
+
+	/**
+	 * Extract workflow IDs from drag event data
+	 */
+	function getWorkflowIds(event: DragEvent): string[] | null {
+		const data = event.dataTransfer?.getData('application/x-workflow-ids');
+		if (!data) return null;
+		try {
+			const ids: unknown = JSON.parse(data);
+			if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) {
+				return ids as string[];
+			}
+		} catch {
+			// Invalid JSON
+		}
+		return null;
+	}
+
+	function handleUncategorizedDragOver(event: DragEvent): void {
+		if (!onworkflowmove || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		uncategorizedDragOver = true;
+	}
+
+	function handleUncategorizedDragEnter(event: DragEvent): void {
+		if (!onworkflowmove || !event.dataTransfer?.types.includes('application/x-workflow-ids')) return;
+		event.preventDefault();
+		uncategorizedDragOver = true;
+	}
+
+	function handleUncategorizedDragLeave(event: DragEvent): void {
+		const related = event.relatedTarget as Node | null;
+		const container = event.currentTarget as HTMLElement;
+		if (related && container.contains(related)) return;
+		uncategorizedDragOver = false;
+	}
+
+	function handleUncategorizedDrop(event: DragEvent): void {
+		event.preventDefault();
+		uncategorizedDragOver = false;
+		const ids = getWorkflowIds(event);
+		if (ids && ids.length > 0) {
+			onworkflowmove?.(ids, null);
+		}
+	}
+
+	/**
+	 * Handle folder drop by delegating to onworkflowmove
+	 */
+	function handleFolderDrop(workflowIds: string[], folderId: string): void {
+		onworkflowmove?.(workflowIds, folderId);
+	}
+
 	/** Whether there are any sections above the date groups */
 	const hasSectionsAbove = $derived(
 		pinnedWorkflows.length > 0 ||
@@ -174,6 +233,7 @@
 		{ontogglepin}
 		{onmoveto}
 		{folders}
+		{selectedIds}
 	/>
 {/snippet}
 
@@ -288,6 +348,7 @@
 				ontoggle={() => onfoldertoggle?.(folder.id)}
 				onrename={onfolderrename}
 				ondelete={onfolderdelete}
+				onworkflowdrop={onworkflowmove ? handleFolderDrop : undefined}
 			>
 				{#if (folderWorkflowsMap[folder.id] ?? []).length === 0}
 					<p class="folder-empty-hint">{$i18n('sidebar_folder_empty')}</p>
@@ -299,16 +360,30 @@
 			</FolderItem>
 		{/each}
 
-		<!-- Uncategorized (by date) -->
-		{#each dateGroups as group, groupIdx (group.label)}
-			{#if hasSectionsAbove || groupIdx > 0}
-				<div class="section-divider"></div>
-			{/if}
-			<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>
-			{#each group.items as workflow (workflow.id)}
-				{@render workflowItemSnippet(workflow)}
-			{/each}
-		{/each}
+		<!-- Uncategorized (by date) - acts as drop zone to remove from folder -->
+		{#if dateGroups.length > 0}
+			<div
+				class="uncategorized-drop-zone"
+				class:drag-over={uncategorizedDragOver}
+				role="group"
+				aria-label={$i18n('sidebar_folder_uncategorized')}
+				ondragover={handleUncategorizedDragOver}
+				ondragenter={handleUncategorizedDragEnter}
+				ondragleave={handleUncategorizedDragLeave}
+				ondrop={handleUncategorizedDrop}
+				aria-dropeffect={onworkflowmove ? 'move' : 'none'}
+			>
+				{#each dateGroups as group, groupIdx (group.label)}
+					{#if hasSectionsAbove || groupIdx > 0}
+						<div class="section-divider"></div>
+					{/if}
+					<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>
+					{#each group.items as workflow (workflow.id)}
+						{@render workflowItemSnippet(workflow)}
+					{/each}
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -459,6 +534,17 @@
 		height: 1px;
 		background: var(--color-border);
 		margin: var(--spacing-sm) var(--spacing-md);
+	}
+
+	.uncategorized-drop-zone {
+		border-radius: var(--border-radius-md);
+		transition: outline var(--transition-fast), background var(--transition-fast);
+	}
+
+	.uncategorized-drop-zone.drag-over {
+		outline: 2px dashed var(--color-accent);
+		outline-offset: -2px;
+		background: var(--color-accent-light);
 	}
 
 	.folder-empty-hint {
