@@ -91,9 +91,9 @@ pub struct ExecutionResult {
     pub metrics: SubAgentMetrics,
     /// Error message if failed
     pub error_message: Option<String>,
-    /// Internal tool executions from sub-agent (SA-014 P1)
+    /// Internal tool executions from sub-agent
     pub tool_executions: Vec<ToolExecutionData>,
-    /// Internal reasoning steps from sub-agent (SA-014 P2)
+    /// Internal reasoning steps from sub-agent
     pub reasoning_steps: Vec<ReasoningStepData>,
 }
 
@@ -539,7 +539,7 @@ impl SubAgentExecutor {
         }
     }
 
-    /// Persists internal tool executions and reasoning steps from a sub-agent (SA-014 P1/P2).
+    /// Persists internal tool executions and reasoning steps from a sub-agent.
     ///
     /// This captures data that was previously silently dropped in `execute_with_heartbeat_timeout`.
     /// The data is saved to the same `tool_execution` and `thinking_step` tables as primary agent
@@ -1339,7 +1339,7 @@ mod tests {
         assert_eq!(result.metrics.duration_ms, 0);
         assert_eq!(result.metrics.tokens_input, 0);
         assert_eq!(result.metrics.tokens_output, 0);
-        // SA-014: New fields default to empty
+        // New fields default to empty
         assert!(result.tool_executions.is_empty());
         assert!(result.reasoning_steps.is_empty());
     }

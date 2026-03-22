@@ -103,6 +103,7 @@ fn validate_llm_config(llm: &LLMConfig) -> Result<LLMConfig, String> {
         temperature: llm.temperature,
         max_tokens: llm.max_tokens,
         is_reasoning: llm.is_reasoning,
+        context_window: llm.context_window,
     })
 }
 
@@ -716,6 +717,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 1000,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
@@ -752,6 +754,7 @@ mod tests {
                 temperature: 0.5,
                 max_tokens: 2000,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["tool_a".to_string(), "tool_b".to_string()],
             mcp_servers: vec!["serena".to_string()],
@@ -800,6 +803,7 @@ mod tests {
                 temperature: 0.8,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec![],
             mcp_servers: vec![],
@@ -850,6 +854,7 @@ mod tests {
                     temperature: 0.7,
                     max_tokens: 1000,
                     is_reasoning: false,
+                    context_window: None,
                 },
                 tools: vec![],
                 mcp_servers: vec![],
@@ -873,7 +878,7 @@ mod tests {
     }
 
     // ========================================================================
-    // SA-020/P1: Agent name uniqueness tests
+    // Agent name uniqueness tests
     // ========================================================================
 
     /// Seeds an agent with a given name in the database, returns its UUID.

@@ -486,7 +486,7 @@ mod tests {
     use super::*;
 
     // ProviderType Display and FromStr tests are in llm/provider.rs
-    // (canonical location after SA-023/P1 consolidation)
+    // (canonical location after consolidation)
 
     #[test]
     fn test_create_model_request_validation() {
@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(ollama.base_url, Some("http://localhost:11434".into()));
     }
 
-    /// SA-013 #12: base_url must always be present in serialized JSON.
+    /// base_url must always be present in serialized JSON.
     /// When None, it should serialize as `null` (not be absent),
     /// because TS declares `base_url: string | null`.
     #[test]
@@ -651,7 +651,7 @@ mod tests {
         );
     }
 
-    /// SA-013 #12: base_url serializes correctly when set.
+    /// base_url serializes correctly when set.
     #[test]
     fn test_provider_settings_base_url_serializes_when_set() {
         let settings = ProviderSettings::default_for(ProviderType::Ollama);
@@ -664,7 +664,7 @@ mod tests {
         );
     }
 
-    /// SA-013 #12: base_url roundtrip (serialize then deserialize).
+    /// base_url roundtrip (serialize then deserialize).
     #[test]
     fn test_provider_settings_base_url_roundtrip() {
         // With base_url = None (Mistral)

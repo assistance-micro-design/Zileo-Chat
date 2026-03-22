@@ -429,7 +429,7 @@ DEFINE INDEX OVERWRITE skill_enabled_idx ON skill FIELDS enabled;
 -- =============================================
 -- Table: migration_log
 -- Tracks applied database migrations to prevent re-execution
--- SA-005 H3: Migration guard for embedding-destructive operations
+-- Migration guard for embedding-destructive operations
 -- =============================================
 DEFINE TABLE OVERWRITE migration_log SCHEMAFULL;
 DEFINE FIELD OVERWRITE name ON migration_log TYPE string;

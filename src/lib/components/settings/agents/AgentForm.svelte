@@ -272,7 +272,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 				model,
 				temperature: selectedModel.temperature_default,
 				max_tokens: selectedModel.max_output_tokens,
-				is_reasoning: selectedModel.is_reasoning
+				is_reasoning: selectedModel.is_reasoning,
+				context_window: selectedModel.context_window
 			},
 			tools: selectedTools,
 			mcp_servers: selectedMcpServers,

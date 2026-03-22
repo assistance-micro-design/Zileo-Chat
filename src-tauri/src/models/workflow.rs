@@ -160,7 +160,7 @@ pub struct WorkflowResult {
     pub mcp_calls: Vec<String>,
     /// Detailed tool execution data for persistence
     pub tool_executions: Vec<WorkflowToolExecution>,
-    /// Pre-generated message ID used for block persistence (SA-019 P5)
+    /// Pre-generated message ID used for block persistence
     pub message_id: String,
 }
 

@@ -376,7 +376,7 @@ describe('Workflow Store', () => {
 		});
 	});
 
-	describe('workflowStore.loadWorkflows retry recovery (SA-011 H-002)', () => {
+	describe('workflowStore.loadWorkflows retry recovery', () => {
 		it('should expose error state when loadWorkflows fails', async () => {
 			vi.mocked(invoke).mockRejectedValueOnce(new Error('DB unavailable'));
 

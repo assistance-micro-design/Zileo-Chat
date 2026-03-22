@@ -357,7 +357,7 @@ describe('applyChunkToState', () => {
 		});
 	});
 
-	describe('thinking_block (SA-019)', () => {
+	describe('thinking_block', () => {
 		it('should add reasoning step from thinking_block chunk', () => {
 			const result = applyChunkToState(state, makeChunk({
 				chunk_type: 'thinking_block',
@@ -370,7 +370,7 @@ describe('applyChunkToState', () => {
 		});
 	});
 
-	describe('tool_call_complete (SA-019)', () => {
+	describe('tool_call_complete', () => {
 		it('should mark matching running tool as completed', () => {
 			let s = applyChunkToState(state, makeChunk({
 				chunk_type: 'tool_start',
@@ -390,7 +390,7 @@ describe('applyChunkToState', () => {
 		});
 	});
 
-	describe('response_block (SA-019)', () => {
+	describe('response_block', () => {
 		it('should set content and token count from response_block', () => {
 			const result = applyChunkToState(state, makeChunk({
 				chunk_type: 'response_block',

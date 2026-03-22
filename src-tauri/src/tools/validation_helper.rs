@@ -687,7 +687,7 @@ mod tests {
     use crate::models::{RiskThresholdConfig, SelectiveValidationConfig};
 
     // =========================================================================
-    // should_require_validation tests (SA-012 F8 refactoring coverage)
+    // should_require_validation tests
     // =========================================================================
 
     /// Helper to create ValidationSettings with custom mode, thresholds, and selective config.

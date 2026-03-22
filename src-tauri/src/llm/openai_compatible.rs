@@ -21,8 +21,7 @@
 //! Handles both standard and reasoning model response formats via
 //! a polymorphic content deserializer (string or array of content blocks).
 
-use super::provider::{LLMError, LLMResponse, ProviderType};
-use crate::models::agent::ReasoningEffort;
+use super::provider::{CompletionParams, LLMError, LLMResponse, ProviderType};
 use crate::tools::utils::safe_truncate;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -399,24 +398,7 @@ impl OpenAiCompatibleProvider {
     }
 
     /// Makes a completion request to the API.
-    #[instrument(
-        name = "openai_compat_complete",
-        skip(self, prompt, system_prompt),
-        fields(
-            provider = %self.provider_name,
-            model = %model,
-            prompt_len = prompt.len()
-        )
-    )]
-    pub async fn complete(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: &str,
-        temperature: f32,
-        max_tokens: usize,
-        reasoning_effort: Option<ReasoningEffort>,
-    ) -> Result<LLMResponse, LLMError> {
+    pub async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
         let api_key = self
             .api_key
             .read()
@@ -428,7 +410,11 @@ impl OpenAiCompatibleProvider {
             LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
         })?;
 
-        let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
+        let model = params.model.as_deref().unwrap_or("default");
+        let system_text = params
+            .system_prompt
+            .as_deref()
+            .unwrap_or("You are a helpful assistant.");
 
         let messages = vec![
             ChatMessage {
@@ -437,24 +423,24 @@ impl OpenAiCompatibleProvider {
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: prompt.to_string(),
+                content: params.prompt.clone(),
             },
         ];
 
         let request_body = ChatRequest {
             model: model.to_string(),
             messages,
-            temperature: Some(temperature),
-            max_tokens: Some(max_tokens),
-            reasoning_effort: reasoning_effort.map(|e| e.as_str().to_string()),
+            temperature: Some(params.temperature),
+            max_tokens: Some(params.max_tokens),
+            reasoning_effort: params.reasoning_effort.map(|e| e.as_str().to_string()),
         };
 
         let url = format!("{}/chat/completions", base_url);
 
         debug!(
             model = model,
-            temperature = temperature,
-            max_tokens = max_tokens,
+            temperature = params.temperature,
+            max_tokens = params.max_tokens,
             url = %url,
             "Making request to OpenAI-compatible API"
         );
@@ -524,7 +510,10 @@ impl OpenAiCompatibleProvider {
                 let word_count = text.split_whitespace().count();
                 ((word_count as f64) * 1.5).ceil() as usize
             };
-            (estimate(prompt) + estimate(system_text), estimate(&content))
+            (
+                estimate(&params.prompt) + estimate(system_text),
+                estimate(&content),
+            )
         };
 
         info!(

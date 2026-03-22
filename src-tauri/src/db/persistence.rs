@@ -14,7 +14,7 @@
 
 //! Shared persistence functions for tool executions and reasoning steps.
 //!
-//! Extracted from `commands/streaming.rs` (SA-014 P1/P2) to be reusable by both
+//! Extracted from `commands/streaming.rs` to be reusable by both
 //! the primary agent workflow execution and sub-agent executors.
 //!
 //! These functions persist batch data to the `tool_execution` and `thinking_step`

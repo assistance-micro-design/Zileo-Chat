@@ -142,6 +142,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 2000,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["tool1".to_string(), "tool2".to_string()],
             mcp_servers: vec!["mcp_server1".to_string()],

@@ -14,7 +14,7 @@
 
 //! Ollama local provider implementation using rig-core
 
-use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
+use super::provider::{CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType};
 use crate::models::agent::ReasoningEffort;
 use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
@@ -26,7 +26,7 @@ use rig::providers::ollama;
 use rig::client::CompletionClient;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Default Ollama server URL
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -166,19 +166,26 @@ impl OllamaProvider {
         model: &str,
         temperature: f32,
         max_tokens: usize,
+        context_window: Option<usize>,
     ) -> Result<serde_json::Value, LLMError> {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
+
+        // Build options with optional num_ctx
+        let mut options = serde_json::json!({
+            "temperature": temperature,
+            "num_predict": max_tokens
+        });
+        if let Some(ctx) = context_window {
+            options["num_ctx"] = serde_json::json!(ctx);
+        }
 
         // Build request body with tools
         let mut body = serde_json::json!({
             "model": model,
             "messages": messages,
             "stream": false,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "options": options
         });
 
         // Add tools if provided
@@ -252,25 +259,24 @@ impl OllamaProvider {
     ///
     /// Sends the `think` parameter to enable reasoning in supported models.
     /// Extracts `message.thinking` from the response as thinking content.
-    ///
-    /// # Arguments
-    /// * `prompt` - The user prompt
-    /// * `system_text` - System prompt text
-    /// * `model` - Model name
-    /// * `temperature` - Sampling temperature
-    /// * `max_tokens` - Maximum tokens to generate
-    /// * `effort` - Reasoning effort level (mapped to think parameter)
     async fn thinking_complete(
         &self,
         prompt: &str,
         system_text: &str,
         model: &str,
-        temperature: f32,
-        max_tokens: usize,
         effort: &ReasoningEffort,
+        params: &CompletionParams,
     ) -> Result<LLMResponse, LLMError> {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
+
+        let mut options = serde_json::json!({
+            "temperature": params.temperature,
+            "num_predict": params.max_tokens
+        });
+        if let Some(ctx) = params.context_window {
+            options["num_ctx"] = serde_json::json!(ctx);
+        }
 
         let body = serde_json::json!({
             "model": model,
@@ -279,23 +285,9 @@ impl OllamaProvider {
                 { "role": "user", "content": prompt }
             ],
             "stream": false,
-            "think": true,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "think": effort.as_str(),
+            "options": options
         });
-
-        // Ollama only supports think: true/false (no granular effort levels).
-        // The effort parameter is accepted for future compatibility but currently
-        // all levels map to think: true.
-        if *effort != ReasoningEffort::High {
-            warn!(
-                model = model,
-                effort = ?effort,
-                "Ollama does not support granular reasoning effort; using think=true regardless"
-            );
-        }
 
         debug!(model = model, "Making Ollama API request with thinking");
 
@@ -400,43 +392,22 @@ impl LLMProvider for OllamaProvider {
             .unwrap_or(false)
     }
 
-    #[instrument(
-        name = "ollama_complete",
-        skip(self, prompt, system_prompt),
-        fields(
-            provider = "ollama",
-            model = %model.unwrap_or("unknown"),
-            prompt_len = prompt.len()
-        )
-    )]
-    async fn complete(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        reasoning_effort: Option<ReasoningEffort>,
-    ) -> Result<LLMResponse, LLMError> {
-        let model_name = model.unwrap_or("llama3.2");
-        let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
+    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
+        let model_name = params.model.as_deref().unwrap_or("llama3.2");
+        let system_text = params
+            .system_prompt
+            .as_deref()
+            .unwrap_or("You are a helpful assistant.");
 
         // When reasoning_effort is set, use direct HTTP call to send `think` parameter
-        if let Some(ref effort) = reasoning_effort {
+        if let Some(ref effort) = params.reasoning_effort {
             debug!(
                 model = model_name,
                 effort = ?effort,
                 "Using direct HTTP call for Ollama thinking model"
             );
             return self
-                .thinking_complete(
-                    prompt,
-                    system_text,
-                    model_name,
-                    temperature,
-                    max_tokens,
-                    effort,
-                )
+                .thinking_complete(&params.prompt, system_text, model_name, effort, &params)
                 .await;
         }
 
@@ -447,23 +418,28 @@ impl LLMProvider for OllamaProvider {
 
         debug!(
             model = model_name,
-            temperature = temperature,
-            max_tokens = max_tokens,
+            temperature = params.temperature,
+            max_tokens = params.max_tokens,
             "Starting Ollama completion"
         );
 
-        let tokens_input_estimate = crate::llm::utils::estimate_tokens(prompt)
+        let tokens_input_estimate = crate::llm::utils::estimate_tokens(&params.prompt)
             + crate::llm::utils::estimate_tokens(system_text);
 
         // Build agent and execute prompt
-        let agent = client
+        let mut builder = client
             .agent(model_name)
             .preamble(system_text)
-            .temperature(temperature as f64)
-            .max_tokens(max_tokens as u64)
-            .build();
+            .temperature(params.temperature as f64)
+            .max_tokens(params.max_tokens as u64);
 
-        let response = agent.prompt(prompt).await.map_err(|e| {
+        if let Some(ctx) = params.context_window {
+            builder = builder.additional_params(serde_json::json!({"num_ctx": ctx}));
+        }
+
+        let agent = builder.build();
+
+        let response = agent.prompt(&params.prompt).await.map_err(|e| {
             let err_str = e.to_string();
             if err_str.contains("connection") || err_str.contains("refused") {
                 LLMError::ConnectionError(format!(
@@ -575,7 +551,15 @@ mod tests {
         let provider = test_ollama_provider();
 
         let result = provider
-            .complete("Hello", None, None, 0.7, 1000, None)
+            .complete(CompletionParams {
+                prompt: "Hello".to_string(),
+                system_prompt: None,
+                model: None,
+                temperature: 0.7,
+                max_tokens: 1000,
+                reasoning_effort: None,
+                context_window: None,
+            })
             .await;
 
         assert!(result.is_err());
@@ -590,5 +574,55 @@ mod tests {
         let custom_url = "http://localhost:11435";
         let provider = OllamaProvider::with_url(custom_url).expect("test with_url");
         assert_eq!(provider.provider_type(), ProviderType::Ollama);
+    }
+
+    #[test]
+    fn test_thinking_complete_effort_mapping() {
+        // Verify that effort.as_str() returns the correct string values
+        // that will be sent as the "think" parameter to Ollama API
+        assert_eq!(ReasoningEffort::Low.as_str(), "low");
+        assert_eq!(ReasoningEffort::Medium.as_str(), "medium");
+        assert_eq!(ReasoningEffort::High.as_str(), "high");
+
+        // Verify JSON body construction uses effort string, not boolean
+        let effort = ReasoningEffort::Low;
+        let body = serde_json::json!({
+            "think": effort.as_str(),
+        });
+        assert_eq!(body["think"], "low");
+
+        let effort = ReasoningEffort::High;
+        let body = serde_json::json!({
+            "think": effort.as_str(),
+        });
+        assert_eq!(body["think"], "high");
+    }
+
+    #[test]
+    fn test_num_ctx_included_in_options_when_provided() {
+        let context_window: Option<usize> = Some(32768);
+        let mut options = serde_json::json!({
+            "temperature": 0.7,
+            "num_predict": 4096
+        });
+        if let Some(ctx) = context_window {
+            options["num_ctx"] = serde_json::json!(ctx);
+        }
+        assert_eq!(options["num_ctx"], 32768);
+        assert_eq!(options["temperature"], 0.7);
+        assert_eq!(options["num_predict"], 4096);
+    }
+
+    #[test]
+    fn test_num_ctx_omitted_from_options_when_none() {
+        let context_window: Option<usize> = None;
+        let mut options = serde_json::json!({
+            "temperature": 0.7,
+            "num_predict": 4096
+        });
+        if let Some(ctx) = context_window {
+            options["num_ctx"] = serde_json::json!(ctx);
+        }
+        assert!(options.get("num_ctx").is_none());
     }
 }

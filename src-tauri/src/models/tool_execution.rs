@@ -77,7 +77,7 @@ pub struct ToolExecution {
     pub duration_ms: u64,
     /// Iteration number within the tool execution loop (0-indexed)
     pub iteration: u32,
-    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    /// Global ordering sequence within the execution
     #[serde(default)]
     pub sequence: u32,
     /// Timestamp when the execution was recorded
@@ -117,7 +117,7 @@ pub struct ToolExecutionCreate {
     pub duration_ms: u64,
     /// Iteration number
     pub iteration: u32,
-    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    /// Global ordering sequence within the execution
     pub sequence: u32,
 }
 

@@ -309,7 +309,7 @@ body {
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transform: translateZ(0); /* SA-017/PERF-1: GPU layer - shadow rasterized once */
+  transform: translateZ(0); /* GPU layer - shadow rasterized once */
 }
 
 .card-header {

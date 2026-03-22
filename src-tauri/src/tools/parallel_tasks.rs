@@ -1060,7 +1060,7 @@ mod tests {
         assert_eq!(MAX_SUB_AGENTS, 15);
     }
 
-    // --- SA-020/P5: ParallelTasksTool accepts agent_name ---
+    // --- ParallelTasksTool accepts agent_name ---
 
     #[test]
     fn test_validate_parallel_task_accepts_agent_id() {

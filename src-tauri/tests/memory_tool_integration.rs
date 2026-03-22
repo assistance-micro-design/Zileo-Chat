@@ -307,6 +307,7 @@ mod agent_config_tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],

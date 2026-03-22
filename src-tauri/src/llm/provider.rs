@@ -167,6 +167,47 @@ impl From<anyhow::Error> for LLMError {
     }
 }
 
+/// Parameters for a completion request.
+///
+/// Groups all parameters passed to `LLMProvider::complete()` to avoid
+/// long positional argument lists.
+#[derive(Debug, Clone)]
+pub struct CompletionParams {
+    /// The user prompt
+    pub prompt: String,
+    /// Optional system prompt
+    pub system_prompt: Option<String>,
+    /// Model to use (None for default)
+    pub model: Option<String>,
+    /// Sampling temperature (0.0-1.0)
+    pub temperature: f32,
+    /// Maximum tokens to generate
+    pub max_tokens: usize,
+    /// Reasoning effort level (None = no thinking)
+    pub reasoning_effort: Option<ReasoningEffort>,
+    /// Context window size from model config (e.g. Ollama num_ctx)
+    pub context_window: Option<usize>,
+}
+
+/// Parameters for a tool-augmented completion request.
+#[derive(Debug, Clone)]
+pub struct ToolCompletionParams {
+    /// Conversation history as JSON messages
+    pub messages: Vec<serde_json::Value>,
+    /// Tool definitions in OpenAI format
+    pub tools: Vec<serde_json::Value>,
+    /// How the model should use tools (provider-specific)
+    pub tool_choice: Option<serde_json::Value>,
+    /// Model to use
+    pub model: String,
+    /// Sampling temperature
+    pub temperature: f32,
+    /// Maximum tokens to generate
+    pub max_tokens: usize,
+    /// Context window size (e.g. Ollama num_ctx)
+    pub context_window: Option<usize>,
+}
+
 /// Common trait for all LLM providers
 #[async_trait]
 #[allow(dead_code)]
@@ -184,26 +225,7 @@ pub trait LLMProvider: Send + Sync {
     fn is_configured(&self) -> bool;
 
     /// Generates a completion for the given prompt
-    ///
-    /// # Arguments
-    /// * `prompt` - The user prompt
-    /// * `system_prompt` - Optional system prompt
-    /// * `model` - Model to use (None for default)
-    /// * `temperature` - Sampling temperature (0.0-1.0)
-    /// * `max_tokens` - Maximum tokens to generate
-    /// * `reasoning_effort` - Reasoning effort level (None = no thinking)
-    ///
-    /// # Returns
-    /// LLMResponse with the generated content and metrics
-    async fn complete(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        reasoning_effort: Option<ReasoningEffort>,
-    ) -> Result<LLMResponse, LLMError>;
+    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError>;
 }
 
 #[cfg(test)]

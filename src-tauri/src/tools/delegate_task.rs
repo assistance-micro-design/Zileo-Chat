@@ -751,7 +751,7 @@ mod tests {
         assert_eq!(MAX_SUB_AGENTS, 15);
     }
 
-    // --- SA-020/P4: DelegateTaskTool accepts agent_name ---
+    // --- DelegateTaskTool accepts agent_name ---
 
     #[test]
     fn test_validate_input_accepts_agent_id() {

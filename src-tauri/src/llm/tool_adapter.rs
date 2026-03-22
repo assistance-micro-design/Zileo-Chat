@@ -142,7 +142,7 @@ pub trait ProviderToolAdapter: Send + Sync {
     /// The text content if present, `None` if the response only contains tool calls
     fn extract_content(&self, response: &Value) -> Option<String>;
 
-    /// Extracts thinking content from a reasoning model's response (SA-019).
+    /// Extracts thinking content from a reasoning model's response.
     ///
     /// # Arguments
     /// * `response` - The raw JSON response from the provider

@@ -628,6 +628,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 1000,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec![],
             mcp_servers: vec![],

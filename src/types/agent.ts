@@ -94,6 +94,8 @@ export interface LLMConfig {
   max_tokens: number;
   /** Whether the model is a reasoning/thinking model (from DB) */
   is_reasoning: boolean;
+  /** Context window size in tokens (from model config, passed to providers like Ollama as num_ctx) */
+  context_window?: number;
 }
 
 /**

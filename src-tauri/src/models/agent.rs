@@ -149,6 +149,7 @@ fn default_llm_config() -> LLMConfig {
         temperature: default_temperature(),
         max_tokens: default_max_tokens(),
         is_reasoning: false,
+        context_window: None,
     }
 }
 
@@ -189,6 +190,10 @@ pub struct LLMConfig {
     /// Whether the model is a reasoning/thinking model (from DB)
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Context window size in tokens (from model config, passed to providers like Ollama as num_ctx)
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<usize>,
 }
 
 fn default_llm_provider() -> String {
@@ -345,6 +350,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: true,
+                context_window: None,
             },
             tools: vec![],
             mcp_servers: vec![],
@@ -375,6 +381,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec![],
             mcp_servers: vec![],
@@ -458,6 +465,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],
@@ -487,6 +495,7 @@ mod tests {
             temperature: 0.5,
             max_tokens: 2000,
             is_reasoning: false,
+            context_window: None,
         };
 
         let json = serde_json::to_string(&llm_config).unwrap();
@@ -510,6 +519,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["MemoryTool".to_string(), "TodoTool".to_string()],
             mcp_servers: vec![],
@@ -537,6 +547,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec![
                 "MemoryTool".to_string(),
@@ -571,6 +582,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 4096,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec![
                 "MemoryTool".to_string(),

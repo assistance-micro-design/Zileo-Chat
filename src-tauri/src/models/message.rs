@@ -315,7 +315,7 @@ mod tests {
         assert_eq!(MessageRole::System.to_string(), "system");
     }
 
-    /// SA-013 #6: Verify MessageCreate always serializes the `tokens` field.
+    /// Verify MessageCreate always serializes the `tokens` field.
     /// Rust `tokens: usize` is required, so it must always appear in JSON output.
     #[test]
     fn test_message_create_always_serializes_tokens() {
@@ -327,7 +327,7 @@ mod tests {
         );
     }
 
-    /// SA-013 #6: Defense-in-depth - MessageCreate should deserialize even without
+    /// Defense-in-depth - MessageCreate should deserialize even without
     /// the `tokens` field, defaulting to 0. This protects against incomplete JSON
     /// from external sources (import, tests).
     #[test]
@@ -349,7 +349,7 @@ mod tests {
         );
     }
 
-    /// SA-013 #6: Verify tokens value is preserved through serialization roundtrip.
+    /// Verify tokens value is preserved through serialization roundtrip.
     #[test]
     fn test_message_create_tokens_roundtrip() {
         let create = MessageCreate::assistant(

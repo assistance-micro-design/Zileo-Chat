@@ -34,7 +34,7 @@ use crate::agents::core::agent::{
 use crate::db::DBClient;
 use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
 use crate::llm::tool_adapter::ProviderToolAdapter;
-use crate::llm::{LLMError, ProviderManager, ProviderType};
+use crate::llm::{CompletionParams, LLMError, ProviderManager, ProviderType, ToolCompletionParams};
 use crate::mcp::MCPManager;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult, ToolChoiceMode};
 use crate::models::mcp::MCPTool;
@@ -905,12 +905,15 @@ impl Agent for LLMAgent {
             .provider_manager
             .complete_with_provider(
                 provider_type.clone(),
-                &prompt,
-                Some(&self.config.system_prompt),
-                Some(&self.config.llm.model),
-                self.config.llm.temperature,
-                self.config.llm.max_tokens,
-                reasoning_effort,
+                CompletionParams {
+                    prompt: prompt.clone(),
+                    system_prompt: Some(self.config.system_prompt.clone()),
+                    model: Some(self.config.llm.model.clone()),
+                    temperature: self.config.llm.temperature,
+                    max_tokens: self.config.llm.max_tokens,
+                    reasoning_effort,
+                    context_window: self.config.llm.context_window,
+                },
             )
             .await;
 
@@ -1335,12 +1338,15 @@ impl Agent for LLMAgent {
                 .provider_manager
                 .complete_with_tools(
                     provider_type.clone(),
-                    &messages,
-                    &tools_json,
-                    Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
-                    &self.config.llm.model,
-                    self.config.llm.temperature,
-                    self.config.llm.max_tokens,
+                    ToolCompletionParams {
+                        messages: messages.clone(),
+                        tools: tools_json.clone(),
+                        tool_choice: Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
+                        model: self.config.llm.model.clone(),
+                        temperature: self.config.llm.temperature,
+                        max_tokens: self.config.llm.max_tokens,
+                        context_window: self.config.llm.context_window,
+                    },
                 )
                 .await
             {
@@ -1654,12 +1660,15 @@ impl Agent for LLMAgent {
                     .provider_manager
                     .complete_with_tools(
                         provider_type.clone(),
-                        &messages,
-                        &empty_tools,
-                        None,
-                        &self.config.llm.model,
-                        self.config.llm.temperature,
-                        self.config.llm.max_tokens,
+                        ToolCompletionParams {
+                            messages: messages.clone(),
+                            tools: empty_tools.clone(),
+                            tool_choice: None,
+                            model: self.config.llm.model.clone(),
+                            temperature: self.config.llm.temperature,
+                            max_tokens: self.config.llm.max_tokens,
+                            context_window: self.config.llm.context_window,
+                        },
                     )
                     .await
                 {
@@ -1856,6 +1865,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 2000,
                 is_reasoning: false,
+                context_window: None,
             },
             tools: vec!["tool1".to_string()],
             mcp_servers: vec![],

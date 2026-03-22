@@ -80,7 +80,7 @@ export interface ExecutionResult {
 	metrics?: WorkflowMetrics;
 	/** The full workflow result */
 	workflowResult?: WorkflowResult;
-	/** Snapshot of execution blocks captured before reset (SA-019 P5) */
+	/** Snapshot of execution blocks captured before reset */
 	blocks?: ChatBlock[];
 }
 

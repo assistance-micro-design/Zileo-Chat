@@ -47,10 +47,10 @@ pub struct ThinkingStep {
     /// Number of tokens in this step (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<u64>,
-    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    /// Global ordering sequence within the execution
     #[serde(default)]
     pub sequence: u32,
-    /// Source of this reasoning step (SA-019 P1/B8): "agent_flow" or "model_thinking"
+    /// Source of this reasoning step: "agent_flow" or "model_thinking"
     #[serde(default = "default_source")]
     pub source: String,
     /// Timestamp when the step was recorded
@@ -83,9 +83,9 @@ pub struct ThinkingStepCreate {
     /// Token count (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<u64>,
-    /// Global ordering sequence within the execution (SA-019 P1/B8)
+    /// Global ordering sequence within the execution
     pub sequence: u32,
-    /// Source of this reasoning step (SA-019 P1/B8): "agent_flow" or "model_thinking"
+    /// Source of this reasoning step: "agent_flow" or "model_thinking"
     pub source: String,
 }
 

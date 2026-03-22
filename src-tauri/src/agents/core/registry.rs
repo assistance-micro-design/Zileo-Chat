@@ -196,6 +196,7 @@ mod tests {
                         temperature: 0.7,
                         max_tokens: 100,
                         is_reasoning: false,
+                        context_window: None,
                     },
                     tools: vec![],
                     mcp_servers: vec![],
@@ -366,7 +367,7 @@ mod tests {
         assert!(registry.list().await.is_empty());
     }
 
-    // SA-020/P2: get_by_name tests
+    // get_by_name tests
 
     #[tokio::test]
     async fn test_get_by_name_found() {

@@ -21,7 +21,7 @@ use crate::{
     agents::core::agent::Task,
     constants::workflow as wf_const,
     db::queries::workflow as wf_queries,
-    llm::pricing::calculate_cost_with_cache,
+    llm::pricing::{calculate_cost_with_cache, CostParams},
     models::{
         llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk, ThinkingStepCreate,
         Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
@@ -651,16 +651,16 @@ async fn load_model_pricing_info(
         }
     };
 
-    let cost_usd = calculate_cost_with_cache(
+    let cost_usd = calculate_cost_with_cache(&CostParams {
         tokens_input,
         tokens_output,
         cached_tokens,
         cache_write_tokens,
-        input_price,
-        output_price,
-        cache_read_price,
-        cache_write_price,
-    );
+        input_price_per_mtok: input_price,
+        output_price_per_mtok: output_price,
+        cache_read_price_per_mtok: cache_read_price,
+        cache_write_price_per_mtok: cache_write_price,
+    });
 
     info!(
         tokens_input = tokens_input,

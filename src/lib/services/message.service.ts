@@ -38,7 +38,7 @@ interface MessageCreate {
 	role: 'user' | 'assistant' | 'system';
 	content: string;
 	metrics?: WorkflowMetrics;
-	/** Pre-generated message ID for block association (SA-019 P5) */
+	/** Pre-generated message ID for block association */
 	messageId?: string;
 }
 

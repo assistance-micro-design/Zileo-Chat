@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(params.len(), 1);
     }
 
-    // --- SA-020/P3: resolve_agent_ref tests ---
+    // --- resolve_agent_ref tests ---
 
     /// Minimal test agent for resolve_agent_ref tests
     struct TestAgent {
@@ -452,6 +452,7 @@ mod tests {
                         temperature: 0.7,
                         max_tokens: 100,
                         is_reasoning: false,
+                        context_window: None,
                     },
                     tools: vec![],
                     mcp_servers: vec![],

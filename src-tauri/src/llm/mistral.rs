@@ -18,8 +18,7 @@
 //! Reasoning models return a different response format with thinking blocks
 //! that requires custom HTTP handling.
 
-use super::provider::{LLMError, LLMProvider, LLMResponse, ProviderType};
-use crate::models::agent::ReasoningEffort;
+use super::provider::{CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType};
 use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
 use rig::completion::Prompt;
@@ -607,37 +606,26 @@ impl LLMProvider for MistralProvider {
             .unwrap_or(false)
     }
 
-    #[instrument(
-        name = "mistral_complete",
-        skip(self, prompt, system_prompt),
-        fields(
-            provider = "mistral",
-            model = %model.unwrap_or("unknown"),
-            prompt_len = prompt.len()
-        )
-    )]
-    async fn complete(
-        &self,
-        prompt: &str,
-        system_prompt: Option<&str>,
-        model: Option<&str>,
-        temperature: f32,
-        max_tokens: usize,
-        reasoning_effort: Option<ReasoningEffort>,
-    ) -> Result<LLMResponse, LLMError> {
-        let model_name = model.unwrap_or("mistral-large-latest");
+    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
+        let model_name = params.model.as_deref().unwrap_or("mistral-large-latest");
 
         // Use custom HTTP client for reasoning models (e.g. Magistral)
         // because rig-core doesn't support their response format.
         // Mistral auto-thinks based on model type; no effort param sent.
-        if reasoning_effort.is_some() {
+        if params.reasoning_effort.is_some() {
             debug!(
                 model = model_name,
-                effort = ?reasoning_effort,
+                effort = ?params.reasoning_effort,
                 "Using custom HTTP client for reasoning model"
             );
             return self
-                .custom_complete(prompt, system_prompt, model_name, temperature, max_tokens)
+                .custom_complete(
+                    &params.prompt,
+                    params.system_prompt.as_deref(),
+                    model_name,
+                    params.temperature,
+                    params.max_tokens,
+                )
                 .await;
         }
 
@@ -649,14 +637,17 @@ impl LLMProvider for MistralProvider {
 
         debug!(
             model = model_name,
-            temperature = temperature,
-            max_tokens = max_tokens,
+            temperature = params.temperature,
+            max_tokens = params.max_tokens,
             "Starting Mistral completion"
         );
 
         // Include system prompt in input token count
-        let system_text = system_prompt.unwrap_or("You are a helpful assistant.");
-        let tokens_input_estimate = crate::llm::utils::estimate_tokens(prompt)
+        let system_text = params
+            .system_prompt
+            .as_deref()
+            .unwrap_or("You are a helpful assistant.");
+        let tokens_input_estimate = crate::llm::utils::estimate_tokens(&params.prompt)
             + crate::llm::utils::estimate_tokens(system_text);
 
         // Build agent and execute prompt
@@ -664,12 +655,12 @@ impl LLMProvider for MistralProvider {
         let agent = client
             .agent(model_name)
             .preamble(system_text)
-            .temperature(temperature as f64)
-            .max_tokens(max_tokens as u64)
+            .temperature(params.temperature as f64)
+            .max_tokens(params.max_tokens as u64)
             .build();
 
         let response = agent
-            .prompt(prompt)
+            .prompt(&params.prompt)
             .await
             .map_err(|e| LLMError::RequestFailed(e.to_string()))?;
 
@@ -771,7 +762,15 @@ mod tests {
         let provider = test_mistral_provider();
 
         let result = provider
-            .complete("Hello", None, None, 0.7, 1000, None)
+            .complete(CompletionParams {
+                prompt: "Hello".to_string(),
+                system_prompt: None,
+                model: None,
+                temperature: 0.7,
+                max_tokens: 1000,
+                reasoning_effort: None,
+                context_window: None,
+            })
             .await;
 
         assert!(result.is_err());

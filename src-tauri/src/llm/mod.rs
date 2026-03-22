@@ -48,7 +48,7 @@ pub mod tool_adapter;
 pub mod utils;
 
 pub use manager::ProviderManager;
-pub use provider::{LLMError, ProviderType};
+pub use provider::{CompletionParams, LLMError, ProviderType, ToolCompletionParams};
 
 // Re-export retry utilities for external use
 #[allow(unused_imports)]

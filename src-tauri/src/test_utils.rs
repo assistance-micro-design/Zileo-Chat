@@ -150,7 +150,7 @@ pub async fn seed_test_memory(db: &DBClient) -> String {
 
 /// Seeds a test memory WITH a 1024-dimension embedding vector.
 ///
-/// Used for testing migration guards (SA-005 H3) to verify
+/// Used for testing migration guards to verify
 /// that embeddings survive when migrations are re-run.
 pub async fn seed_test_memory_with_embedding(db: &DBClient) -> String {
     let id = uuid::Uuid::new_v4().to_string();

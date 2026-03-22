@@ -51,11 +51,11 @@ pub enum ChunkType {
     UserQuestionStart,
     /// User question completed (answered, skipped, or timed out)
     UserQuestionComplete,
-    /// Complete thinking block from reasoning model (SA-019)
+    /// Complete thinking block from reasoning model
     ThinkingBlock,
-    /// Tool call completed with full input/output details (SA-019)
+    /// Tool call completed with full input/output details
     ToolCallComplete,
-    /// Complete response block with real tokens (SA-019)
+    /// Complete response block with real tokens
     ResponseBlock,
 }
 
@@ -603,7 +603,7 @@ impl StreamChunk {
         }
     }
 
-    /// Creates a thinking block chunk from reasoning model output (SA-019).
+    /// Creates a thinking block chunk from reasoning model output.
     ///
     /// Emitted when a reasoning model returns thinking content.
     pub fn thinking_block(workflow_id: impl Into<String>, content: impl Into<String>) -> Self {
@@ -638,7 +638,7 @@ impl StreamChunk {
         }
     }
 
-    /// Creates a tool call complete chunk with full input/output details (SA-019).
+    /// Creates a tool call complete chunk with full input/output details.
     ///
     /// Replaces tool_end with enriched data for inline display.
     pub fn tool_call_complete(
@@ -680,7 +680,7 @@ impl StreamChunk {
         }
     }
 
-    /// Creates a response block chunk with complete content and real tokens (SA-019).
+    /// Creates a response block chunk with complete content and real tokens.
     ///
     /// Replaces progressive token streaming with a single complete response.
     pub fn response_block(
@@ -1099,7 +1099,7 @@ mod tests {
         assert!(!json.contains("question_id"));
     }
 
-    // SA-019: New chunk type tests
+    // New chunk type tests
 
     #[test]
     fn test_new_chunk_type_serialization() {
