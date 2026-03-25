@@ -67,7 +67,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let provider = $state('mistral');
 	let model = $state('mistral-large-latest');
 	let maxToolIterations = $state(50);
-	let reasoningEffort = $state<ReasoningEffort | null>(null);
+	let reasoningEffort = $state<ReasoningEffort | undefined>(undefined);
 	let selectedTools = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
 	let selectedSkills = $state<string[]>([]);
@@ -82,7 +82,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		provider = (agent?.llm.provider ?? 'mistral').toLowerCase();
 		model = agent?.llm.model ?? 'mistral-large-latest';
 		maxToolIterations = agent?.max_tool_iterations ?? 50;
-		reasoningEffort = agent?.reasoning_effort ?? null;
+		reasoningEffort = agent?.reasoning_effort;
 		selectedTools = agent?.tools ?? [];
 		selectedMcpServers = agent?.mcp_servers ?? [];
 		selectedSkills = agent?.skills ?? [];
@@ -483,7 +483,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 								class="form-select"
 								aria-describedby="reasoning-effort-help"
 							>
-								<option value={null}>{$i18n('agents_reasoning_off')}</option>
+								<option value={undefined}>{$i18n('agents_reasoning_off')}</option>
 								<option value="low">{$i18n('agents_reasoning_low')}</option>
 								<option value="medium">{$i18n('agents_reasoning_medium')}</option>
 								<option value="high">{$i18n('agents_reasoning_high')}</option>

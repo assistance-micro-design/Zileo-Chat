@@ -885,13 +885,9 @@ Returns aggregated results with:
                     )
                 })?;
 
-                if !tasks.is_array() {
-                    return Err(ToolError::InvalidInput(
-                        "'tasks' must be an array".to_string(),
-                    ));
-                }
-
-                let tasks_array = tasks.as_array().unwrap();
+                let tasks_array = tasks.as_array().ok_or_else(|| {
+                    ToolError::InvalidInput("'tasks' must be an array".to_string())
+                })?;
 
                 if tasks_array.is_empty() {
                     return Err(ToolError::InvalidInput(

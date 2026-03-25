@@ -57,11 +57,9 @@ pub struct Report {
 
 /// Report status
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum ReportStatus {
     Success,
     Failed,
-    Partial,
 }
 
 /// Source of a reasoning step
@@ -148,6 +146,94 @@ pub struct ReportMetrics {
     pub reasoning_steps: Vec<ReasoningStepData>,
     /// Per-iteration token breakdown (one entry per LLM API call in tool loop)
     pub iteration_metrics: Vec<IterationMetrics>,
+}
+
+impl ReportMetrics {
+    /// Creates a ReportMetrics with all fields zeroed/empty.
+    ///
+    /// Use this for early-return error reports where no LLM call was made.
+    /// Accepts `duration_ms` since even failed reports track elapsed time.
+    pub fn empty(duration_ms: u64) -> Self {
+        Self {
+            duration_ms,
+            tokens_input: 0,
+            tokens_output: 0,
+            context_tokens: 0,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
+            tools_used: vec![],
+            mcp_calls: vec![],
+            tool_executions: vec![],
+            reasoning_steps: vec![],
+            iteration_metrics: vec![],
+        }
+    }
+}
+
+impl Report {
+    /// Creates a failed report with a formatted error message.
+    ///
+    /// Provides consistent formatting for error reports across the agent.
+    ///
+    /// # Arguments
+    /// * `task_id` - The task identifier
+    /// * `agent_id` - The agent identifier (for the report header)
+    /// * `task_description` - Description of the task that failed
+    /// * `error_msg` - The error message to include
+    /// * `duration_ms` - Elapsed time in milliseconds
+    pub fn failed(
+        task_id: String,
+        agent_id: &str,
+        task_description: &str,
+        error_msg: String,
+        duration_ms: u64,
+    ) -> Self {
+        Self {
+            task_id,
+            status: ReportStatus::Failed,
+            content: format!(
+                "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n{}",
+                agent_id, task_description, error_msg
+            ),
+            response: error_msg,
+            metrics: ReportMetrics::empty(duration_ms),
+            system_prompt: None,
+            tools_json: None,
+        }
+    }
+
+    /// Creates a failed report with partial metrics (from a tool execution loop).
+    ///
+    /// Use this when an LLM call fails mid-execution and some token/tool metrics
+    /// have already been accumulated.
+    ///
+    /// # Arguments
+    /// * `task_id` - The task identifier
+    /// * `agent_id` - The agent identifier (for the report header)
+    /// * `task_description` - Description of the task that failed
+    /// * `error_msg` - The error message to include
+    /// * `metrics` - Accumulated metrics from partial execution
+    pub fn failed_with_metrics(
+        task_id: String,
+        agent_id: &str,
+        task_description: &str,
+        error_msg: String,
+        metrics: ReportMetrics,
+    ) -> Self {
+        Self {
+            task_id,
+            status: ReportStatus::Failed,
+            content: format!(
+                "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Failed\n\n## Error\n\n{}",
+                agent_id, task_description, error_msg
+            ),
+            response: error_msg,
+            metrics,
+            system_prompt: None,
+            tools_json: None,
+        }
+    }
 }
 
 /// Agent trait - unified interface for all agents

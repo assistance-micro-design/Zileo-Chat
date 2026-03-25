@@ -43,7 +43,9 @@
 //! - [`LLMAgent`] - Agent that uses real LLM calls via ProviderManager
 
 pub mod core;
+pub(crate) mod execution;
 pub mod llm_agent;
+pub(crate) mod prompt;
 pub mod simple_agent;
 
 pub use llm_agent::LLMAgent;

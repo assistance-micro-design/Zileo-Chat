@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-// Copyright 2025 Zileo-Chat-3 Contributors
-// SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { get } from 'svelte/store';
@@ -79,7 +77,7 @@ describe('Agent Store', () => {
 		require_file_confirmation: true,
 		system_prompt: 'You are a helpful assistant.',
 		max_tool_iterations: 50,
-		reasoning_effort: null
+		reasoning_effort: undefined
 	});
 
 	beforeEach(() => {
@@ -162,7 +160,7 @@ describe('Agent Store', () => {
 				require_file_confirmation: true,
 				system_prompt: 'Test prompt',
 				max_tool_iterations: 50,
-				reasoning_effort: null
+				reasoning_effort: undefined
 			};
 
 			mockInvoke.mockResolvedValueOnce(newAgentId); // create_agent
@@ -193,7 +191,7 @@ describe('Agent Store', () => {
 				require_file_confirmation: true,
 				system_prompt: '',
 				max_tool_iterations: 50,
-				reasoning_effort: null
+				reasoning_effort: undefined
 			};
 
 			mockInvoke.mockRejectedValueOnce(new Error('Validation failed'));
