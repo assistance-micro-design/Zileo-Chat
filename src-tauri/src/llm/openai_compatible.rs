@@ -21,10 +21,11 @@
 //! Handles both standard and reasoning model response formats via
 //! a polymorphic content deserializer (string or array of content blocks).
 
+use super::cache_control::apply_prompt_cache_control;
+use super::http::{self, ParsedContent};
 use super::provider::{
     CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
-use crate::tools::utils::safe_truncate;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -43,8 +44,6 @@ struct ChatRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
-    /// OpenAI-compatible reasoning effort parameter.
-    /// Sent as `"reasoning_effort": "low"/"medium"/"high"` for providers that support it.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
 }
@@ -59,8 +58,6 @@ struct ChatMessage {
 /// API response (handles both standard and reasoning models)
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
-    #[allow(dead_code)]
-    id: Option<String>,
     choices: Vec<ChatChoice>,
     usage: Option<ChatUsage>,
 }
@@ -72,39 +69,11 @@ struct ChatChoice {
     finish_reason: Option<String>,
 }
 
-/// Parsed content separating text from thinking blocks
-#[derive(Debug, Clone)]
-struct ParsedContent {
-    /// The text content (final answer)
-    text: String,
-    /// Thinking content from reasoning models (if present)
-    thinking: Option<String>,
-}
-
 /// Response message - content can be string or array of content blocks
 #[derive(Debug, Deserialize)]
 struct ChatResponseMessage {
-    #[allow(dead_code)]
-    role: String,
-    #[serde(deserialize_with = "deserialize_content")]
+    #[serde(deserialize_with = "http::deserialize_content")]
     content: ParsedContent,
-}
-
-/// Content block for reasoning models (thinking or text)
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-enum ContentBlock {
-    #[serde(rename = "thinking")]
-    Thinking { thinking: Vec<TextBlock> },
-    #[serde(rename = "text")]
-    Text { text: String },
-}
-
-/// Text block within thinking content
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct TextBlock {
-    text: String,
 }
 
 /// Usage statistics from API response
@@ -112,19 +81,6 @@ struct TextBlock {
 struct ChatUsage {
     prompt_tokens: usize,
     completion_tokens: usize,
-}
-
-/// API error response
-#[derive(Debug, Deserialize)]
-struct ApiErrorResponse {
-    #[serde(alias = "error")]
-    message: Option<ApiErrorDetail>,
-}
-
-/// Error detail in API response
-#[derive(Debug, Deserialize)]
-struct ApiErrorDetail {
-    message: String,
 }
 
 // ============================================================================
@@ -146,169 +102,6 @@ struct ToolChatRequest {
     tool_choice: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
-}
-
-// ============================================================================
-// Content Deserializer (supports both string and array formats)
-// ============================================================================
-
-/// Custom deserializer for content field that handles both string and array formats.
-/// Extracts thinking content from reasoning models into ParsedContent.
-fn deserialize_content<'de, D>(deserializer: D) -> Result<ParsedContent, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::{self, Visitor};
-
-    struct ContentVisitor;
-
-    impl<'de> Visitor<'de> for ContentVisitor {
-        type Value = ParsedContent;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a string or an array of content blocks")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            Ok(ParsedContent {
-                text: value.to_string(),
-                thinking: None,
-            })
-        }
-
-        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            Ok(ParsedContent {
-                text: value,
-                thinking: None,
-            })
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: de::SeqAccess<'de>,
-        {
-            let mut text_parts = String::new();
-            let mut thinking_parts = String::new();
-
-            while let Some(block) = seq.next_element::<ContentBlock>()? {
-                match block {
-                    ContentBlock::Thinking { thinking } => {
-                        for tb in &thinking {
-                            if !thinking_parts.is_empty() {
-                                thinking_parts.push('\n');
-                            }
-                            thinking_parts.push_str(&tb.text);
-                        }
-                        debug!("Reasoning model thinking blocks: {} items", thinking.len());
-                    }
-                    ContentBlock::Text { text } => {
-                        if !text_parts.is_empty() {
-                            text_parts.push('\n');
-                        }
-                        text_parts.push_str(&text);
-                    }
-                }
-            }
-
-            Ok(ParsedContent {
-                text: text_parts,
-                thinking: if thinking_parts.is_empty() {
-                    None
-                } else {
-                    Some(thinking_parts)
-                },
-            })
-        }
-    }
-
-    deserializer.deserialize_any(ContentVisitor)
-}
-
-// ============================================================================
-// Prompt Cache Control
-// ============================================================================
-
-/// Applies prompt cache control markers at strategic positions to maximize cache hits.
-///
-/// Places up to 3 `cache_control: { "type": "ephemeral" }` breakpoints:
-/// - **BP1**: System message (always, stable across iterations)
-/// - **BP2**: Last assistant message before current iteration (near-end of stable prefix)
-/// - **BP3**: Last tool message (exact boundary of stable prefix)
-///
-/// Only BP1 is applied for short conversations (< 3 messages).
-/// Required for Anthropic Claude models via OpenRouter. Harmlessly ignored
-/// by providers that cache automatically (OpenAI, DeepSeek, Gemini).
-fn apply_prompt_cache_control(messages: &[serde_json::Value]) -> Vec<serde_json::Value> {
-    // Find indices for BP2 and BP3 within the stable prefix.
-    // The last message is always new content (current iteration) and must NOT be marked.
-    let mut last_assistant_idx: Option<usize> = None;
-    let mut last_tool_idx: Option<usize> = None;
-
-    if messages.len() > 2 {
-        let stable_prefix = &messages[..messages.len() - 1];
-        for (i, msg) in stable_prefix.iter().enumerate().rev() {
-            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-            if last_tool_idx.is_none() && role == "tool" {
-                last_tool_idx = Some(i);
-            }
-            if last_assistant_idx.is_none() && role == "assistant" {
-                // Mark assistant if it's before the last tool, or if there's no tool
-                if last_tool_idx.is_none() || i < last_tool_idx.unwrap_or(usize::MAX) {
-                    last_assistant_idx = Some(i);
-                    break;
-                }
-            }
-        }
-    }
-
-    messages
-        .iter()
-        .enumerate()
-        .map(|(i, msg)| {
-            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-
-            let should_mark = match role {
-                "system" => true,
-                "assistant" => Some(i) == last_assistant_idx,
-                "tool" => Some(i) == last_tool_idx,
-                _ => false,
-            };
-
-            if should_mark {
-                if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
-                    let mut marked = serde_json::json!({
-                        "role": role,
-                        "content": [{
-                            "type": "text",
-                            "text": content,
-                            "cache_control": { "type": "ephemeral" }
-                        }]
-                    });
-                    // Preserve tool-specific fields
-                    if role == "tool" {
-                        if let Some(tool_call_id) = msg.get("tool_call_id") {
-                            marked["tool_call_id"] = tool_call_id.clone();
-                        }
-                        if let Some(name) = msg.get("name") {
-                            marked["name"] = name.clone();
-                        }
-                    }
-                    marked
-                } else {
-                    // Already multipart or non-string content: skip
-                    msg.clone()
-                }
-            } else {
-                msg.clone()
-            }
-        })
-        .collect()
 }
 
 // ============================================================================
@@ -456,46 +249,23 @@ impl OpenAiCompatibleProvider {
             "Making request to OpenAI-compatible API"
         );
 
-        let response = self
-            .http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| LLMError::RequestFailed(format!("HTTP request failed: {}", e)))?;
-
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|e| LLMError::RequestFailed(format!("Failed to read response body: {}", e)))?;
+        let (status, body) = http::send_and_read_body(
+            self.http_client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await,
+        )
+        .await?;
 
         if !status.is_success() {
-            let error_msg =
-                if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                    error_response
-                        .message
-                        .map(|e| e.message)
-                        .unwrap_or_else(|| body.clone())
-                } else {
-                    body.clone()
-                };
-            return Err(LLMError::RequestFailed(format!(
-                "{} API error ({}): {}",
-                self.provider_name, status, error_msg
-            )));
+            return Err(http::parse_api_error(&self.provider_name, status, &body));
         }
 
-        let chat_response: ChatResponse = serde_json::from_str(&body).map_err(|e| {
-            LLMError::RequestFailed(format!(
-                "Failed to parse {} response: {}. Body: {}",
-                self.provider_name,
-                e,
-                safe_truncate(&body, 500, true)
-            ))
-        })?;
+        let chat_response: ChatResponse =
+            http::parse_json_response(&self.provider_name, &body)?;
 
         let choice = chat_response
             .choices
@@ -514,18 +284,10 @@ impl OpenAiCompatibleProvider {
             thinking_content = Self::extract_thinking_from_raw(&body);
         }
 
-        let (tokens_input, tokens_output) = if let Some(usage) = chat_response.usage {
-            (usage.prompt_tokens, usage.completion_tokens)
-        } else {
-            let estimate = |text: &str| -> usize {
-                let word_count = text.split_whitespace().count();
-                ((word_count as f64) * 1.5).ceil() as usize
-            };
-            (
-                estimate(&params.prompt) + estimate(system_text),
-                estimate(&content),
-            )
-        };
+        let (tokens_input, tokens_output) = chat_response
+            .usage
+            .map(|u| (u.prompt_tokens, u.completion_tokens))
+            .unwrap_or((0, 0));
 
         info!(
             provider = %self.provider_name,
@@ -604,46 +366,23 @@ impl OpenAiCompatibleProvider {
             "Making request with tools to OpenAI-compatible API"
         );
 
-        let response = self
-            .http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| LLMError::RequestFailed(format!("HTTP request failed: {}", e)))?;
-
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|e| LLMError::RequestFailed(format!("Failed to read response body: {}", e)))?;
+        let (status, body) = http::send_and_read_body(
+            self.http_client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .send()
+                .await,
+        )
+        .await?;
 
         if !status.is_success() {
-            let error_msg =
-                if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&body) {
-                    error_response
-                        .message
-                        .map(|e| e.message)
-                        .unwrap_or_else(|| body.clone())
-                } else {
-                    body.clone()
-                };
-            return Err(LLMError::RequestFailed(format!(
-                "{} API error ({}): {}",
-                self.provider_name, status, error_msg
-            )));
+            return Err(http::parse_api_error(&self.provider_name, status, &body));
         }
 
-        let json_response: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            LLMError::RequestFailed(format!(
-                "Failed to parse {} response: {}. Body: {}",
-                self.provider_name,
-                e,
-                safe_truncate(&body, 500, true)
-            ))
-        })?;
+        let json_response: serde_json::Value =
+            http::parse_json_response(&self.provider_name, &body)?;
 
         if let Some(usage) = json_response.get("usage") {
             let prompt_tokens = usage
@@ -798,25 +537,15 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_standard_content() {
-        let json = r#"{"role": "assistant", "content": "Hello world"}"#;
+    fn test_chat_response_uses_shared_content_deserializer() {
+        // Integration test: ChatResponseMessage uses http::deserialize_content
+        let json = r#"{"content": [
+            {"type": "thinking", "thinking": "Step 1"},
+            {"type": "text", "text": "Answer"}
+        ]}"#;
         let msg: ChatResponseMessage = serde_json::from_str(json).expect("parse should succeed");
-        assert_eq!(msg.content.text, "Hello world");
-        assert!(msg.content.thinking.is_none());
-    }
-
-    #[test]
-    fn test_deserialize_reasoning_content() {
-        let json = r#"{
-            "role": "assistant",
-            "content": [
-                {"type": "thinking", "thinking": [{"type": "text", "text": "Let me think..."}]},
-                {"type": "text", "text": "The answer is 42"}
-            ]
-        }"#;
-        let msg: ChatResponseMessage = serde_json::from_str(json).expect("parse should succeed");
-        assert_eq!(msg.content.text, "The answer is 42");
-        assert_eq!(msg.content.thinking, Some("Let me think...".to_string()));
+        assert_eq!(msg.content.text, "Answer");
+        assert_eq!(msg.content.thinking, Some("Step 1".to_string()));
     }
 
     #[test]
@@ -840,245 +569,4 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[test]
-    fn test_cache_control_system_only_short_conversation() {
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "You are a helpful assistant."}),
-            serde_json::json!({"role": "user", "content": "Hello"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // System message should be converted to multipart with cache_control
-        let system = &result[0];
-        assert_eq!(system["role"], "system");
-        let content = system["content"]
-            .as_array()
-            .expect("content should be array");
-        assert_eq!(content.len(), 1);
-        assert_eq!(content[0]["type"], "text");
-        assert_eq!(content[0]["text"], "You are a helpful assistant.");
-        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
-
-        // User message should remain unchanged (only 2 messages, no extra breakpoints)
-        let user = &result[1];
-        assert_eq!(user["role"], "user");
-        assert_eq!(user["content"], "Hello");
-    }
-
-    #[test]
-    fn test_cache_control_no_system() {
-        let messages = vec![
-            serde_json::json!({"role": "user", "content": "Hello"}),
-            serde_json::json!({"role": "assistant", "content": "Hi there"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // Messages without system role should be unchanged
-        assert_eq!(result[0]["content"], "Hello");
-        assert_eq!(result[1]["content"], "Hi there");
-    }
-
-    #[test]
-    fn test_cache_control_already_multipart() {
-        let messages = vec![serde_json::json!({
-            "role": "system",
-            "content": [{"type": "text", "text": "Already multipart"}]
-        })];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // Non-string content should pass through unchanged
-        let content = result[0]["content"]
-            .as_array()
-            .expect("should remain array");
-        assert_eq!(content[0]["text"], "Already multipart");
-        assert!(content[0].get("cache_control").is_none());
-    }
-
-    #[test]
-    fn test_cache_control_multi_breakpoint_with_tools() {
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "System prompt"}),
-            serde_json::json!({"role": "user", "content": "Do something"}),
-            serde_json::json!({"role": "assistant", "content": "I will use a tool"}),
-            serde_json::json!({"role": "tool", "content": "Tool result 1", "tool_call_id": "call_1", "name": "MyTool"}),
-            serde_json::json!({"role": "assistant", "content": "Based on results..."}),
-            serde_json::json!({"role": "tool", "content": "Tool result 2", "tool_call_id": "call_2", "name": "MyTool"}),
-            serde_json::json!({"role": "assistant", "content": "Final answer"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // BP1: System message marked
-        assert!(result[0]["content"].is_array());
-        assert_eq!(
-            result[0]["content"][0]["cache_control"]["type"],
-            "ephemeral"
-        );
-
-        // User: unchanged
-        assert_eq!(result[1]["content"], "Do something");
-
-        // First assistant: unchanged (not the last before tool)
-        assert_eq!(result[2]["content"], "I will use a tool");
-
-        // First tool: unchanged
-        assert_eq!(result[3]["content"], "Tool result 1");
-
-        // BP2: Last assistant before last tool (index 4)
-        assert!(result[4]["content"].is_array());
-        assert_eq!(
-            result[4]["content"][0]["cache_control"]["type"],
-            "ephemeral"
-        );
-        assert_eq!(result[4]["content"][0]["text"], "Based on results...");
-
-        // BP3: Last tool message (index 5)
-        assert!(result[5]["content"].is_array());
-        assert_eq!(
-            result[5]["content"][0]["cache_control"]["type"],
-            "ephemeral"
-        );
-        assert_eq!(result[5]["content"][0]["text"], "Tool result 2");
-        // Tool fields preserved
-        assert_eq!(result[5]["tool_call_id"], "call_2");
-        assert_eq!(result[5]["name"], "MyTool");
-
-        // Last assistant: unchanged (new content, not cached)
-        assert_eq!(result[6]["content"], "Final answer");
-    }
-
-    #[test]
-    fn test_cache_control_no_tool_messages() {
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "System prompt"}),
-            serde_json::json!({"role": "user", "content": "Hello"}),
-            serde_json::json!({"role": "assistant", "content": "Response 1"}),
-            serde_json::json!({"role": "user", "content": "Follow up"}),
-            serde_json::json!({"role": "assistant", "content": "Response 2"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // BP1: System marked
-        assert!(result[0]["content"].is_array());
-        assert_eq!(
-            result[0]["content"][0]["cache_control"]["type"],
-            "ephemeral"
-        );
-
-        // No tool messages, so last_tool_idx is None.
-        // Last message (index 4) is excluded from stable prefix.
-        // BP2: assistant at index 2 (last assistant in stable prefix)
-        assert!(result[2]["content"].is_array());
-        assert_eq!(result[2]["content"][0]["text"], "Response 1");
-        assert_eq!(
-            result[2]["content"][0]["cache_control"]["type"],
-            "ephemeral"
-        );
-
-        // Other messages unchanged
-        assert_eq!(result[1]["content"], "Hello");
-        assert_eq!(result[3]["content"], "Follow up");
-        assert_eq!(result[4]["content"], "Response 2"); // Last msg: new content, not marked
-    }
-
-    #[test]
-    fn test_cache_control_last_message_is_assistant() {
-        // When last message is assistant (no trailing tool_result)
-        // BP2 should be the second-to-last assistant (before the last tool)
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "System prompt"}),
-            serde_json::json!({"role": "user", "content": "Do something"}),
-            serde_json::json!({"role": "assistant", "content": "Using tool"}),
-            serde_json::json!({"role": "tool", "content": "Result", "tool_call_id": "call_1"}),
-            serde_json::json!({"role": "assistant", "content": "New content"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // BP1: System
-        assert!(result[0]["content"].is_array());
-
-        // BP2: Assistant at index 2 (last assistant before last tool)
-        assert!(result[2]["content"].is_array());
-        assert_eq!(result[2]["content"][0]["text"], "Using tool");
-
-        // BP3: Last tool at index 3
-        assert!(result[3]["content"].is_array());
-        assert_eq!(result[3]["content"][0]["text"], "Result");
-
-        // Last assistant unchanged (new content)
-        assert_eq!(result[4]["content"], "New content");
-    }
-
-    #[test]
-    fn test_cache_control_idempotent() {
-        // Realistic scenario: system + user + assistant + tool + assistant (new)
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "System prompt"}),
-            serde_json::json!({"role": "user", "content": "Hello"}),
-            serde_json::json!({"role": "assistant", "content": "Using tool"}),
-            serde_json::json!({"role": "tool", "content": "Result", "tool_call_id": "call_1"}),
-            serde_json::json!({"role": "assistant", "content": "Final answer"}),
-        ];
-
-        let first_pass = apply_prompt_cache_control(&messages);
-        let second_pass = apply_prompt_cache_control(&first_pass);
-
-        // Second pass should not add more breakpoints (multipart content is skipped)
-        // System already multipart: skipped
-        assert!(second_pass[0]["content"].is_array());
-        let system_content = second_pass[0]["content"].as_array().unwrap();
-        assert_eq!(system_content.len(), 1); // Still 1 part, not doubled
-
-        // BP2 (assistant index 2) and BP3 (tool index 3) already multipart: skipped
-        assert!(second_pass[2]["content"].is_array());
-        assert!(second_pass[3]["content"].is_array());
-
-        // Last message still plain string (new content, never marked)
-        assert_eq!(second_pass[4]["content"], "Final answer");
-    }
-
-    #[test]
-    fn test_cache_control_max_three_breakpoints() {
-        // With many assistant/tool pairs, should only mark 3 positions
-        let messages = vec![
-            serde_json::json!({"role": "system", "content": "System"}),
-            serde_json::json!({"role": "user", "content": "Go"}),
-            serde_json::json!({"role": "assistant", "content": "A1"}),
-            serde_json::json!({"role": "tool", "content": "T1", "tool_call_id": "c1"}),
-            serde_json::json!({"role": "assistant", "content": "A2"}),
-            serde_json::json!({"role": "tool", "content": "T2", "tool_call_id": "c2"}),
-            serde_json::json!({"role": "assistant", "content": "A3"}),
-            serde_json::json!({"role": "tool", "content": "T3", "tool_call_id": "c3"}),
-            serde_json::json!({"role": "assistant", "content": "A4"}),
-        ];
-
-        let result = apply_prompt_cache_control(&messages);
-
-        // Count how many messages have cache_control
-        let marked_count = result
-            .iter()
-            .filter(|msg| {
-                msg["content"]
-                    .as_array()
-                    .map(|arr| arr.iter().any(|part| part.get("cache_control").is_some()))
-                    .unwrap_or(false)
-            })
-            .count();
-
-        // Should be exactly 3: system (BP1), last assistant before last tool (BP2=A3), last tool (BP3=T3)
-        assert_eq!(marked_count, 3);
-
-        // Verify correct positions
-        assert!(result[0]["content"].is_array()); // System BP1
-        assert_eq!(result[6]["content"][0]["text"], "A3"); // BP2
-        assert_eq!(result[7]["content"][0]["text"], "T3"); // BP3
-
-        // A4 (last assistant, new content) should NOT be marked
-        assert_eq!(result[8]["content"], "A4");
-    }
 }

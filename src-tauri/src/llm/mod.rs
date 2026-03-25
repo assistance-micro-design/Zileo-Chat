@@ -35,8 +35,10 @@
 //! ```
 
 pub mod adapters;
+mod cache_control;
 pub mod circuit_breaker;
 pub mod embedding;
+pub mod http;
 mod manager;
 mod mistral;
 mod ollama;
@@ -48,39 +50,5 @@ pub mod tool_adapter;
 pub mod utils;
 
 pub use manager::ProviderManager;
-pub use provider::{CompletionParams, LLMError, ProviderType, ToolCompletionParams};
-
-// Re-export retry utilities for external use
-#[allow(unused_imports)]
-pub use retry::{with_retry, RetryConfig};
-
-// Re-export circuit breaker utilities for external use
-#[allow(unused_imports)]
-pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
-
-// Re-export for future use (tools, external integrations)
-#[allow(unused_imports)]
-pub use mistral::MistralProvider;
-#[allow(unused_imports)]
-pub use ollama::OllamaProvider;
 pub use ollama::DEFAULT_OLLAMA_URL;
-#[allow(unused_imports)]
-pub use provider::{LLMProvider, LLMResponse};
-
-// Embedding service exports
-#[allow(unused_imports)]
-pub use embedding::{
-    EmbeddingConfig, EmbeddingError, EmbeddingProvider, EmbeddingService, MISTRAL_EMBED_DIMENSION,
-    MISTRAL_EMBED_MODEL, OLLAMA_MXBAI_DIMENSION, OLLAMA_NOMIC_DIMENSION,
-};
-
-// Tool adapter exports for JSON function calling
-// Exported for public API but consumed directly from submodules internally
-#[allow(unused_imports)]
-pub use adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
-#[allow(unused_imports)]
-pub use tool_adapter::{ProviderToolAdapter, TokenUsage};
-
-// Re-export OpenAI-compatible provider for custom provider commands
-#[allow(unused_imports)]
-pub use openai_compatible::OpenAiCompatibleProvider;
+pub use provider::{CompletionParams, LLMError, ProviderType, ToolCompletionParams};

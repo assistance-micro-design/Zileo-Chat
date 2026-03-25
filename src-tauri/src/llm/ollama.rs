@@ -14,11 +14,11 @@
 
 //! Ollama local provider implementation using rig-core
 
+use super::http;
 use super::provider::{
     CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
 };
 use crate::models::agent::ReasoningEffort;
-use crate::tools::utils::safe_truncate;
 use async_trait::async_trait;
 use rig::client::Nothing;
 use rig::completion::Prompt;
@@ -217,21 +217,11 @@ impl OllamaProvider {
         })?;
 
         if !status.is_success() {
-            return Err(LLMError::RequestFailed(format!(
-                "Ollama API error ({}): {}",
-                status, response_text
-            )));
+            return Err(http::parse_api_error("Ollama", status, &response_text));
         }
 
-        // Parse to JSON Value (caller will use adapter to extract specific fields)
         let json_response: serde_json::Value =
-            serde_json::from_str(&response_text).map_err(|e| {
-                LLMError::RequestFailed(format!(
-                    "Failed to parse Ollama response: {}. Body: {}",
-                    e,
-                    safe_truncate(&response_text, 500, true)
-                ))
-            })?;
+            http::parse_json_response("Ollama", &response_text)?;
 
         // Log basic info
         let has_tool_calls = json_response
@@ -307,15 +297,11 @@ impl OllamaProvider {
         })?;
 
         if !status.is_success() {
-            return Err(LLMError::RequestFailed(format!(
-                "Ollama API error ({}): {}",
-                status, response_text
-            )));
+            return Err(http::parse_api_error("Ollama", status, &response_text));
         }
 
-        let json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-            LLMError::RequestFailed(format!("Failed to parse Ollama response: {}", e))
-        })?;
+        let json: serde_json::Value =
+            http::parse_json_response("Ollama", &response_text)?;
 
         let content = json
             .pointer("/message/content")
@@ -329,20 +315,15 @@ impl OllamaProvider {
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string());
 
-        // Use actual token counts from Ollama if available
         let tokens_input = json
             .get("prompt_eval_count")
             .and_then(|v| v.as_u64())
-            .unwrap_or_else(|| {
-                crate::llm::utils::estimate_tokens(prompt) as u64
-                    + crate::llm::utils::estimate_tokens(system_text) as u64
-            }) as usize;
+            .unwrap_or(0) as usize;
 
         let tokens_output = json
             .get("eval_count")
             .and_then(|v| v.as_u64())
-            .unwrap_or_else(|| crate::llm::utils::estimate_tokens(&content) as u64)
-            as usize;
+            .unwrap_or(0) as usize;
 
         info!(
             tokens_input = tokens_input,
