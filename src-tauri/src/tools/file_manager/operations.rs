@@ -464,10 +464,7 @@ impl FileManagerTool {
                     })?;
                 tokio::fs::remove_file(&source_path).await.map_err(|e| {
                     let _ = std::fs::remove_file(&dest_path);
-                    ToolError::ExecutionFailed(format!(
-                        "Failed to remove source after copy: {}",
-                        e
-                    ))
+                    ToolError::ExecutionFailed(format!("Failed to remove source after copy: {}", e))
                 })?;
             } else {
                 return Err(ToolError::ExecutionFailed(

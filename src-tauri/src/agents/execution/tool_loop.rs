@@ -32,11 +32,7 @@ use crate::models::function_calling::ToolChoiceMode;
 use crate::models::streaming::{events, StreamChunk};
 use crate::models::workflow::IterationMetrics;
 use crate::models::AgentConfig;
-use crate::tools::{
-    context::AgentToolContext,
-    validation_helper::ValidationHelper,
-    ToolFactory,
-};
+use crate::tools::{context::AgentToolContext, validation_helper::ValidationHelper, ToolFactory};
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
@@ -368,7 +364,10 @@ pub(crate) async fn execute_simple(
     };
 
     if !provider_manager.is_provider_configured(provider_type.clone()) {
-        warn!(?provider_type, "Provider not configured, returning configuration error");
+        warn!(
+            ?provider_type,
+            "Provider not configured, returning configuration error"
+        );
         return Ok(Report::failed(
             task.id.clone(),
             &config.id,
@@ -420,10 +419,7 @@ pub(crate) async fn execute_simple(
                 if !thinking.trim().is_empty() {
                     emit_progress(
                         agent_context,
-                        StreamChunk::thinking_block(
-                            event_workflow_id.clone(),
-                            thinking.clone(),
-                        ),
+                        StreamChunk::thinking_block(event_workflow_id.clone(), thinking.clone()),
                     );
                     reasoning_steps.push(ReasoningStepData {
                         content: thinking.clone(),
@@ -528,7 +524,10 @@ pub(crate) async fn execute_with_tools(
         .provider_manager
         .is_provider_configured(provider_type.clone())
     {
-        warn!(?provider_type, "Provider not configured, returning configuration error");
+        warn!(
+            ?provider_type,
+            "Provider not configured, returning configuration error"
+        );
         return Ok(Report::failed(
             task.id.clone(),
             &ctx.config.id,
@@ -557,10 +556,7 @@ pub(crate) async fn execute_with_tools(
 
     let validation_helper = if let Some(factory) = ctx.tool_factory {
         let db = factory.get_db();
-        let app_handle = match ctx
-            .agent_context
-            .and_then(|c| c.app_handle.clone())
-        {
+        let app_handle = match ctx.agent_context.and_then(|c| c.app_handle.clone()) {
             Some(handle) => Some(handle),
             None => factory.get_app_handle().await,
         };
@@ -690,7 +686,10 @@ pub(crate) async fn execute_with_tools(
             emit_reasoning(
                 ctx.agent_context,
                 &event_workflow_id,
-                format!("Max tool iterations ({}) reached, stopping execution", max_iterations),
+                format!(
+                    "Max tool iterations ({}) reached, stopping execution",
+                    max_iterations
+                ),
                 start.elapsed().as_millis() as u64,
                 global_sequence,
                 ReasoningSource::AgentFlow,
@@ -819,7 +818,10 @@ pub(crate) async fn execute_with_tools(
                 if !content.trim().is_empty() {
                     final_response_content = content;
                 } else {
-                    warn!(iteration = iteration, "LLM returned empty content, treating as task completion");
+                    warn!(
+                        iteration = iteration,
+                        "LLM returned empty content, treating as task completion"
+                    );
                     final_response_content = format!(
                         "Task completed after {} iteration(s). Tool executions completed successfully.",
                         iteration
@@ -852,7 +854,11 @@ pub(crate) async fn execute_with_tools(
         emit_reasoning(
             ctx.agent_context,
             &event_workflow_id,
-            format!("Executing {} tool(s): {}", function_calls.len(), tool_names.join(", ")),
+            format!(
+                "Executing {} tool(s): {}",
+                function_calls.len(),
+                tool_names.join(", ")
+            ),
             start.elapsed().as_millis() as u64,
             global_sequence,
             ReasoningSource::AgentFlow,
@@ -871,13 +877,9 @@ pub(crate) async fn execute_with_tools(
                 StreamChunk::tool_start(event_workflow_id.clone(), call.name.clone()),
             );
 
-            let result = tools::execute_function_call(
-                call,
-                &call_ctx,
-                &mut tools_used,
-                &mut mcp_calls_made,
-            )
-            .await;
+            let result =
+                tools::execute_function_call(call, &call_ctx, &mut tools_used, &mut mcp_calls_made)
+                    .await;
 
             // Capture detailed execution data
             let exec_duration = exec_start.elapsed().as_millis() as u64;

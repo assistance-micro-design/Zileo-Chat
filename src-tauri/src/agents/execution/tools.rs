@@ -65,13 +65,10 @@ pub(crate) async fn get_mcp_server_summaries(
         }
     };
 
-    let direct_access: std::collections::HashSet<&String> =
-        config.mcp_servers.iter().collect();
+    let direct_access: std::collections::HashSet<&String> = config.mcp_servers.iter().collect();
 
     for server in all_servers {
-        if server.config.enabled
-            && server.status == crate::models::mcp::MCPServerStatus::Running
-        {
+        if server.config.enabled && server.status == crate::models::mcp::MCPServerStatus::Running {
             let name = server.config.name.clone();
             let has_direct_access = direct_access.contains(&name);
 
@@ -225,8 +222,7 @@ pub(crate) async fn execute_function_call(
                         FunctionCallResult::success(&call.id, &call.name, result.content)
                             .with_execution_time(start.elapsed().as_millis() as u64)
                     } else {
-                        let error_msg =
-                            result.error.unwrap_or_else(|| "Unknown error".to_string());
+                        let error_msg = result.error.unwrap_or_else(|| "Unknown error".to_string());
                         warn!(tool = %call.name, error = %error_msg, "MCP tool returned error");
                         FunctionCallResult::failure(&call.id, &call.name, error_msg)
                     }
@@ -241,7 +237,10 @@ pub(crate) async fn execute_function_call(
         }
     } else {
         // Execute local tool
-        let matching_tool = ctx.local_tools.iter().find(|t| t.definition().id == call.name);
+        let matching_tool = ctx
+            .local_tools
+            .iter()
+            .find(|t| t.definition().id == call.name);
 
         if let Some(tool) = matching_tool {
             tools_used.push(call.name.clone());
@@ -305,11 +304,7 @@ pub(crate) async fn execute_function_call(
                         .await
                     {
                         warn!(tool = %call.name, error = %e, "Tool validation rejected");
-                        return FunctionCallResult::failure(
-                            &call.id,
-                            &call.name,
-                            e.to_string(),
-                        );
+                        return FunctionCallResult::failure(&call.id, &call.name, e.to_string());
                     }
                 }
             }
@@ -326,7 +321,8 @@ pub(crate) async fn execute_function_call(
                 }
             }
         } else {
-            let available_tools: Vec<String> = ctx.local_tools
+            let available_tools: Vec<String> = ctx
+                .local_tools
                 .iter()
                 .map(|t| t.definition().id.clone())
                 .collect();

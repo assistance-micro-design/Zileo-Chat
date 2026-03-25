@@ -186,9 +186,8 @@ pub(crate) fn build_system_prompt_with_tools(
     // List MCP tools briefly with naming convention
     if !mcp_tools.is_empty() {
         tools_context.push_str("\n### MCP Tools (Direct Access)\n");
-        tools_context.push_str(
-            "MCP tools use the naming format `mcp__server__tool`. Use them directly.\n",
-        );
+        tools_context
+            .push_str("MCP tools use the naming format `mcp__server__tool`. Use them directly.\n");
         for (server_name, tool) in mcp_tools {
             tools_context.push_str(&format!(
                 "- **mcp__{}__{}**: {}\n",
@@ -268,8 +267,7 @@ You are currently running with the following configuration:
 
         // Add usage example
         config_section.push_str("\n\n**Example**: To assign MCP servers to sub-agents:\n");
-        config_section
-            .push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
+        config_section.push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
     }
 
     config_section.push_str(
