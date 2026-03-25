@@ -18,6 +18,7 @@
 //! All operations are restricted to user-configured authorized folders.
 
 pub mod helpers;
+pub mod operations;
 pub mod security;
 pub mod tool;
 pub mod trash;
