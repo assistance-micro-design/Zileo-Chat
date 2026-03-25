@@ -16,7 +16,10 @@
 //!
 //! These helpers are used to parse SurrealDB JSON values into typed MCP structures.
 
-use crate::models::mcp::MCPDeploymentMethod;
+use crate::mcp::protocol::{
+    MCPContent, MCPResourceDefinition, MCPToolCallResponse, MCPToolDefinition,
+};
+use crate::models::mcp::{MCPDeploymentMethod, MCPResource, MCPTool};
 use std::collections::HashMap;
 
 /// Parses a deployment method string into the enum variant.
@@ -65,6 +68,50 @@ pub fn parse_env_json(value: Option<&serde_json::Value>) -> HashMap<String, Stri
         .and_then(|v| v.as_str())
         .and_then(|s| serde_json::from_str::<HashMap<String, String>>(s).ok())
         .unwrap_or_default()
+}
+
+/// Converts a protocol tool definition to the model type.
+///
+/// Shared between `MCPServerHandle` and `MCPHttpHandle` to avoid duplication.
+pub fn convert_tool_definition(def: MCPToolDefinition) -> MCPTool {
+    MCPTool {
+        name: def.name,
+        description: def.description,
+        input_schema: def.input_schema,
+    }
+}
+
+/// Converts a protocol resource definition to the model type.
+///
+/// Shared between `MCPServerHandle` and `MCPHttpHandle` to avoid duplication.
+pub fn convert_resource_definition(def: MCPResourceDefinition) -> MCPResource {
+    MCPResource {
+        uri: def.uri,
+        name: def.name,
+        description: def.description,
+        mime_type: def.mime_type,
+    }
+}
+
+/// Extracts text content from an MCP tool call response.
+///
+/// Handles all content types:
+/// - `Text`: extracts the text directly
+/// - `Resource`: extracts the resource text (if available)
+/// - `Image`: skipped (cannot be converted to text)
+///
+/// Shared between `MCPServerHandle` and `MCPHttpHandle` to avoid duplication.
+pub fn extract_text_content(response: &MCPToolCallResponse) -> String {
+    response
+        .content
+        .iter()
+        .filter_map(|c| match c {
+            MCPContent::Text { text } => Some(text.as_str()),
+            MCPContent::Resource { resource } => resource.text.as_deref(),
+            MCPContent::Image { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

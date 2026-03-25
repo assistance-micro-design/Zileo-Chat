@@ -32,9 +32,8 @@
 //! - Each message is a single JSON line
 
 use crate::mcp::{
-    JsonRpcRequest, JsonRpcResponse, MCPContent, MCPError, MCPInitializeParams,
-    MCPInitializeResult, MCPResourceDefinition, MCPResourcesListResult, MCPResult,
-    MCPToolCallParams, MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
+    JsonRpcRequest, JsonRpcResponse, MCPError, MCPInitializeParams, MCPInitializeResult,
+    MCPResourcesListResult, MCPResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
 };
 use crate::models::mcp::{
     MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool,
@@ -344,7 +343,7 @@ impl MCPServerHandle {
         Ok(tools_result
             .tools
             .into_iter()
-            .map(|t| self.convert_tool_definition(t))
+            .map(crate::mcp::helpers::convert_tool_definition)
             .collect())
     }
 
@@ -365,28 +364,10 @@ impl MCPServerHandle {
         Ok(resources_result
             .resources
             .into_iter()
-            .map(|r| self.convert_resource_definition(r))
+            .map(crate::mcp::helpers::convert_resource_definition)
             .collect())
     }
 
-    /// Converts a protocol tool definition to the model type
-    fn convert_tool_definition(&self, def: MCPToolDefinition) -> MCPTool {
-        MCPTool {
-            name: def.name,
-            description: def.description,
-            input_schema: def.input_schema,
-        }
-    }
-
-    /// Converts a protocol resource definition to the model type
-    fn convert_resource_definition(&self, def: MCPResourceDefinition) -> MCPResource {
-        MCPResource {
-            uri: def.uri,
-            name: def.name,
-            description: def.description,
-            mime_type: def.mime_type,
-        }
-    }
 
     /// Calls a tool on the MCP server
     ///
@@ -460,20 +441,6 @@ impl MCPServerHandle {
         Ok(tool_response)
     }
 
-    /// Extracts text content from an MCP tool response
-    ///
-    /// Convenience method to get all text content from a tool response.
-    pub fn extract_text_content(response: &MCPToolCallResponse) -> String {
-        response
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                MCPContent::Text { text } => Some(text.as_str()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 
     /// Sends a JSON-RPC request and waits for response with timeout.
     ///
@@ -723,6 +690,7 @@ impl Drop for MCPServerHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::MCPContent;
     use std::collections::HashMap;
 
     fn create_test_config() -> MCPServerConfig {
@@ -805,7 +773,7 @@ mod tests {
             is_error: None,
         };
 
-        let text = MCPServerHandle::extract_text_content(&response);
+        let text = crate::mcp::helpers::extract_text_content(&response);
         assert_eq!(text, "First line\nSecond line");
     }
 
@@ -824,7 +792,7 @@ mod tests {
             is_error: None,
         };
 
-        let text = MCPServerHandle::extract_text_content(&response);
+        let text = crate::mcp::helpers::extract_text_content(&response);
         assert_eq!(text, "Text content");
     }
 

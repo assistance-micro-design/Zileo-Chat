@@ -61,5 +61,5 @@ pub mod test_utils;
 
 pub use commands::SecureKeyStore;
 pub use llm::ProviderManager;
-pub use mcp::{MCPClient, MCPError, MCPManager, MCPResult, MCPServerHandle};
+pub use mcp::{MCPError, MCPManager, MCPResult};
 pub use state::AppState;

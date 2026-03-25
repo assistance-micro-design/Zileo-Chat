@@ -34,8 +34,7 @@
 
 use crate::mcp::{
     JsonRpcRequest, JsonRpcResponse, MCPError, MCPInitializeParams, MCPInitializeResult,
-    MCPResourceDefinition, MCPResourcesListResult, MCPResult, MCPToolCallParams,
-    MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult,
+    MCPResourcesListResult, MCPResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
 };
 use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
@@ -362,7 +361,7 @@ impl MCPHttpHandle {
             self.tools = tools_result
                 .tools
                 .into_iter()
-                .map(|t| self.convert_tool_definition(t))
+                .map(crate::mcp::helpers::convert_tool_definition)
                 .collect();
 
             debug!(
@@ -386,7 +385,7 @@ impl MCPHttpHandle {
             self.resources = resources_result
                 .resources
                 .into_iter()
-                .map(|r| self.convert_resource_definition(r))
+                .map(crate::mcp::helpers::convert_resource_definition)
                 .collect();
 
             debug!(
@@ -399,24 +398,6 @@ impl MCPHttpHandle {
         Ok(())
     }
 
-    /// Converts MCP tool definition to our model type
-    fn convert_tool_definition(&self, def: MCPToolDefinition) -> MCPTool {
-        MCPTool {
-            name: def.name,
-            description: def.description,
-            input_schema: def.input_schema,
-        }
-    }
-
-    /// Converts MCP resource definition to our model type
-    fn convert_resource_definition(&self, def: MCPResourceDefinition) -> MCPResource {
-        MCPResource {
-            uri: def.uri,
-            name: def.name,
-            description: def.description,
-            mime_type: def.mime_type,
-        }
-    }
 
     /// Calls a tool on the MCP server
     ///
@@ -478,23 +459,6 @@ impl MCPHttpHandle {
         Ok(tool_response)
     }
 
-    /// Extracts text content from a tool response
-    pub fn extract_text_content(response: &MCPToolCallResponse) -> String {
-        use crate::mcp::MCPContent;
-
-        response
-            .content
-            .iter()
-            .filter_map(|c| match c {
-                MCPContent::Text { text } => Some(text.clone()),
-                MCPContent::Resource { resource } => {
-                    Some(resource.text.clone().unwrap_or_default())
-                }
-                MCPContent::Image { .. } => None, // Images cannot be converted to text
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 
     /// Sends a JSON-RPC request to the server
     /// Enforces minimum delay between consecutive HTTP requests to avoid rate-limiting.

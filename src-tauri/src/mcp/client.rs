@@ -368,8 +368,7 @@ impl MCPClient {
         arguments: serde_json::Value,
     ) -> MCPResult<String> {
         let response = self.call_tool_raw(tool_name, arguments).await?;
-        // Use the appropriate extract method based on transport
-        Ok(MCPServerHandle::extract_text_content(&response))
+        Ok(crate::mcp::helpers::extract_text_content(&response))
     }
 
     /// Enables or disables auto-reconnect

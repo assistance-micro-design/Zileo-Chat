@@ -48,28 +48,10 @@
 //! - [`http_handle`]: HTTP/SSE transport for remote MCP servers
 //! - [`client`]: High-level MCP client interface
 //! - [`manager`]: MCPManager for server registry and coordination
-//!
-//! ## Usage
-//!
-//! ```rust,ignore
-//! use zileo_chat::mcp::{MCPManager, MCPError};
-//!
-//! // Initialize manager with database
-//! let manager = MCPManager::new(db.clone()).await?;
-//!
-//! // Load servers from database
-//! manager.load_from_db().await?;
-//!
-//! // Or spawn a new server
-//! let server = manager.spawn_server(config).await?;
-//!
-//! // Call a tool
-//! let result = manager.call_tool("serena", "find_symbol", args).await?;
-//!
-//! // Shutdown all servers
-//! manager.shutdown().await?;
-//! ```
 
+// MCP modules contain public API items used by the lib crate and tests,
+// but not all are reachable from the binary target. The allow(dead_code)
+// prevents false positives in `cargo clippy --all-targets`.
 #[allow(dead_code)]
 pub mod circuit_breaker;
 #[allow(dead_code)]
@@ -79,7 +61,6 @@ pub mod error;
 pub mod helpers;
 #[allow(dead_code)]
 pub mod http_handle;
-#[allow(dead_code)]
 pub mod manager;
 #[allow(dead_code)]
 pub mod protocol;
@@ -88,24 +69,9 @@ pub mod server_handle;
 
 // Re-export commonly used types
 pub use error::{MCPError, MCPResult};
-#[allow(unused_imports)]
-pub use protocol::{
-    JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse, MCPClientCapabilities, MCPClientInfo,
-    MCPContent, MCPInitializeParams, MCPInitializeResult, MCPResourceContent,
-    MCPResourceDefinition, MCPResourcesListResult, MCPServerCapabilities, MCPServerInfo,
-    MCPToolCallParams, MCPToolCallResponse, MCPToolDefinition, MCPToolsListResult, MCP_CLIENT_NAME,
-    MCP_CLIENT_VERSION, MCP_PROTOCOL_VERSION,
-};
-
-// Re-export high-level types for convenience
-#[allow(unused_imports)]
-pub use circuit_breaker::{CircuitBreaker, CircuitState};
-#[allow(unused_imports)]
-pub use client::MCPClient;
-#[allow(unused_imports)]
-pub use helpers::{parse_deployment_method, parse_env_json};
-#[allow(unused_imports)]
-pub use http_handle::MCPHttpHandle;
 pub use manager::MCPManager;
 #[allow(unused_imports)]
-pub use server_handle::MCPServerHandle;
+pub use protocol::{
+    JsonRpcRequest, JsonRpcResponse, MCPContent, MCPInitializeParams, MCPInitializeResult,
+    MCPResourcesListResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
+};

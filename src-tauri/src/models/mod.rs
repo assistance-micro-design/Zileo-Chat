@@ -69,11 +69,6 @@ pub use memory::MemoryWithEmbedding;
 pub use streaming::{ChunkType, CompletionStatus};
 
 // Re-export MCP types
-#[allow(unused_imports)]
-pub use mcp::{
-    MCPCallLog, MCPDeploymentMethod, MCPResource, MCPServer, MCPServerConfig, MCPServerCreate,
-    MCPServerStatus, MCPTestResult, MCPTool, MCPToolCallRequest, MCPToolCallResult,
-};
 
 #[allow(unused_imports)]
 pub use agent::{Agent, AgentStatus};
