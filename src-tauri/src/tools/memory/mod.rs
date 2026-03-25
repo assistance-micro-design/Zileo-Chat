@@ -17,27 +17,23 @@
 //! This module provides the MemoryTool for agent contextual persistence
 //! with vector embeddings and semantic search capabilities.
 //!
+//! ## Architecture
+//!
+//! ```text
+//! mod.rs          - Module exports
+//! tool.rs         - Struct, constructor, Tool trait dispatch (~190 lines)
+//! definition.rs   - Tool definition (schema + LLM description)
+//! input.rs        - MemoryInput parsing + validation
+//! operations.rs   - Operation implementations (add, get, list, search, etc.)
+//! helpers.rs      - Shared core logic (used by both tool and commands)
+//! ```
+//!
 //! ## Features
 //!
 //! - Store and retrieve contextual memories
 //! - Semantic search using vector embeddings (HNSW index)
 //! - Workflow-scoped memory isolation
 //! - Multiple memory types (user_pref, context, knowledge, decision)
-//!
-//! ## Architecture
-//!
-//! ```text
-//! Agent
-//!   |
-//!   v
-//! MemoryTool
-//!   |
-//!   +---> EmbeddingService (Mistral/Ollama)
-//!   |
-//!   +---> DBClient (SurrealDB)
-//!          |
-//!          +---> HNSW Vector Index (1024D)
-//! ```
 //!
 //! ## Usage
 //!
@@ -63,7 +59,10 @@
 //! })).await?;
 //! ```
 
+mod definition;
 mod helpers;
+mod input;
+mod operations;
 mod tool;
 
 pub use helpers::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams};

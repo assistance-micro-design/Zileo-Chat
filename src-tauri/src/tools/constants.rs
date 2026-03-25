@@ -46,9 +46,6 @@ pub mod memory {
 
     /// Types that are stored as general (cross-workflow) by default
     pub const GENERAL_SCOPE_TYPES: &[&str] = &["user_pref", "knowledge"];
-    /// Types that are stored as workflow-scoped by default (complement of GENERAL_SCOPE_TYPES)
-    #[allow(dead_code)]
-    pub const WORKFLOW_SCOPE_TYPES: &[&str] = &["context", "decision"];
 }
 
 // ===== Todo Tool =====
