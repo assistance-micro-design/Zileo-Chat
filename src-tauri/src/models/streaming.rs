@@ -155,135 +155,71 @@ pub struct SubAgentStreamMetrics {
 }
 
 impl StreamChunk {
-    /// Creates a new tool start chunk
+    /// Creates a base chunk with all optional fields set to None.
+    ///
+    /// Used internally by all constructors to avoid repeating 25+ None fields.
+    fn base(workflow_id: impl Into<String>, chunk_type: ChunkType) -> Self {
+        Self {
+            workflow_id: workflow_id.into(),
+            chunk_type,
+            content: None,
+            tool: None,
+            duration: None,
+            sub_agent_id: None,
+            sub_agent_name: None,
+            parent_agent_id: None,
+            metrics: None,
+            progress: None,
+            task_id: None,
+            task_name: None,
+            task_status: None,
+            task_priority: None,
+            task_agent_name: None,
+            user_question: None,
+            question_id: None,
+            tokens_delta: None,
+            tokens_total: None,
+            tool_input: None,
+            tool_output: None,
+            tool_success: None,
+            tokens_input: None,
+            tokens_output: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
+        }
+    }
+
+    /// Creates a new tool start chunk.
     pub fn tool_start(workflow_id: String, tool: String) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::ToolStart,
-            content: None,
             tool: Some(tool),
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::ToolStart)
         }
     }
 
-    /// Creates a new tool end chunk
+    /// Creates a new tool end chunk.
     pub fn tool_end(workflow_id: String, tool: String, duration: u64) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::ToolEnd,
-            content: None,
             tool: Some(tool),
             duration: Some(duration),
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::ToolEnd)
         }
     }
 
-    /// Creates a new reasoning chunk
+    /// Creates a new reasoning chunk.
     pub fn reasoning(workflow_id: String, content: String) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::Reasoning,
             content: Some(content),
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::Reasoning)
         }
     }
 
-    /// Creates a new error chunk
+    /// Creates a new error chunk.
     pub fn error(workflow_id: String, error: String) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::Error,
             content: Some(error),
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::Error)
         }
     }
 
@@ -298,33 +234,11 @@ impl StreamChunk {
         task_description: String,
     ) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::SubAgentStart,
             content: Some(task_description),
-            tool: None,
-            duration: None,
             sub_agent_id: Some(sub_agent_id),
             sub_agent_name: Some(sub_agent_name),
             parent_agent_id: Some(parent_agent_id),
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::SubAgentStart)
         }
     }
 
@@ -339,34 +253,16 @@ impl StreamChunk {
         report: String,
         metrics: SubAgentStreamMetrics,
     ) -> Self {
+        let duration_ms = metrics.duration_ms;
         Self {
-            workflow_id,
-            chunk_type: ChunkType::SubAgentComplete,
             content: Some(report),
-            tool: None,
-            duration: Some(metrics.duration_ms),
+            duration: Some(duration_ms),
             sub_agent_id: Some(sub_agent_id),
             sub_agent_name: Some(sub_agent_name),
             parent_agent_id: Some(parent_agent_id),
             metrics: Some(metrics),
             progress: Some(100),
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::SubAgentComplete)
         }
     }
 
@@ -382,33 +278,12 @@ impl StreamChunk {
         duration_ms: u64,
     ) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::SubAgentError,
             content: Some(error_message),
-            tool: None,
             duration: Some(duration_ms),
             sub_agent_id: Some(sub_agent_id),
             sub_agent_name: Some(sub_agent_name),
             parent_agent_id: Some(parent_agent_id),
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::SubAgentError)
         }
     }
 
@@ -423,33 +298,12 @@ impl StreamChunk {
         agent_name: Option<String>,
     ) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::TaskCreate,
-            content: None,
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
             task_id: Some(task_id.into()),
             task_name: Some(task_name.into()),
             task_status: Some("pending".to_string()),
             task_priority: Some(priority),
             task_agent_name: agent_name,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::TaskCreate)
         }
     }
 
@@ -463,33 +317,10 @@ impl StreamChunk {
         status: impl Into<String>,
     ) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::TaskUpdate,
-            content: None,
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
             task_id: Some(task_id.into()),
             task_name: Some(task_name.into()),
             task_status: Some(status.into()),
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::TaskUpdate)
         }
     }
 
@@ -503,33 +334,11 @@ impl StreamChunk {
         duration: Option<u64>,
     ) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::TaskComplete,
-            content: None,
-            tool: None,
             duration,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
             task_id: Some(task_id.into()),
             task_name: Some(task_name.into()),
             task_status: Some("completed".to_string()),
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::TaskComplete)
         }
     }
 
@@ -538,33 +347,8 @@ impl StreamChunk {
     /// Emitted when an agent asks a question to the user and waits for response.
     pub fn user_question_start(workflow_id: String, payload: UserQuestionStreamPayload) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::UserQuestionStart,
-            content: None,
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
             user_question: Some(payload),
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::UserQuestionStart)
         }
     }
 
@@ -573,33 +357,8 @@ impl StreamChunk {
     /// Emitted when a user question is answered, skipped, or timed out.
     pub fn user_question_complete(workflow_id: String, question_id: String) -> Self {
         Self {
-            workflow_id,
-            chunk_type: ChunkType::UserQuestionComplete,
-            content: None,
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
             question_id: Some(question_id),
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::UserQuestionComplete)
         }
     }
 
@@ -608,33 +367,8 @@ impl StreamChunk {
     /// Emitted when a reasoning model returns thinking content.
     pub fn thinking_block(workflow_id: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::ThinkingBlock,
             content: Some(content.into()),
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::ThinkingBlock)
         }
     }
 
@@ -650,33 +384,12 @@ impl StreamChunk {
         success: bool,
     ) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::ToolCallComplete,
-            content: None,
             tool: Some(tool_name.into()),
             duration: Some(duration),
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
             tool_input: Some(input.into()),
             tool_output: Some(output.into()),
             tool_success: Some(success),
-            tokens_input: None,
-            tokens_output: None,
-            cached_tokens: None,
-            cache_write_tokens: None,
-            thinking_tokens: None,
+            ..Self::base(workflow_id, ChunkType::ToolCallComplete)
         }
     }
 
@@ -693,33 +406,13 @@ impl StreamChunk {
         thinking_tokens: Option<usize>,
     ) -> Self {
         Self {
-            workflow_id: workflow_id.into(),
-            chunk_type: ChunkType::ResponseBlock,
             content: Some(content.into()),
-            tool: None,
-            duration: None,
-            sub_agent_id: None,
-            sub_agent_name: None,
-            parent_agent_id: None,
-            metrics: None,
-            progress: None,
-            task_id: None,
-            task_name: None,
-            task_status: None,
-            task_priority: None,
-            task_agent_name: None,
-            user_question: None,
-            question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
-            tool_input: None,
-            tool_output: None,
-            tool_success: None,
             tokens_input: Some(tokens_input),
             tokens_output: Some(tokens_output),
             cached_tokens,
             cache_write_tokens,
             thinking_tokens,
+            ..Self::base(workflow_id, ChunkType::ResponseBlock)
         }
     }
 }
@@ -818,21 +511,7 @@ impl std::fmt::Display for SubAgentOperationType {
     }
 }
 
-/// Validation response event (approval or rejection)
-#[allow(dead_code)] // API type for Tauri event streaming
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValidationResponseEvent {
-    /// Validation request ID
-    pub validation_id: String,
-    /// Whether approved (true) or rejected (false)
-    pub approved: bool,
-    /// Rejection reason if not approved
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-}
-
-/// Event names for Tauri event emitters
-#[allow(dead_code)]
+/// Event names for Tauri event emitters.
 pub mod events {
     /// Streaming chunk event name
     pub const WORKFLOW_STREAM: &str = "workflow_stream";
@@ -840,16 +519,6 @@ pub mod events {
     pub const WORKFLOW_COMPLETE: &str = "workflow_complete";
     /// Validation required event name (sub-agent operations)
     pub const VALIDATION_REQUIRED: &str = "validation_required";
-    /// Validation response event name (approved/rejected)
-    pub const VALIDATION_RESPONSE: &str = "validation_response";
-    /// Sub-agent start event name
-    pub const SUB_AGENT_START: &str = "sub_agent_start";
-    /// Sub-agent progress event name
-    pub const SUB_AGENT_PROGRESS: &str = "sub_agent_progress";
-    /// Sub-agent complete event name
-    pub const SUB_AGENT_COMPLETE: &str = "sub_agent_complete";
-    /// Sub-agent error event name
-    pub const SUB_AGENT_ERROR: &str = "sub_agent_error";
 }
 
 #[cfg(test)]
@@ -858,17 +527,11 @@ mod tests {
 
     #[test]
     fn test_chunk_type_serialization() {
-        let chunk_type = ChunkType::ToolStart;
-        let json = serde_json::to_string(&chunk_type).unwrap();
-        assert_eq!(json, "\"tool_start\"");
-
-        let chunk_type = ChunkType::ToolEnd;
-        let json = serde_json::to_string(&chunk_type).unwrap();
-        assert_eq!(json, "\"tool_end\"");
-
-        let chunk_type = ChunkType::ThinkingBlock;
-        let json = serde_json::to_string(&chunk_type).unwrap();
-        assert_eq!(json, "\"thinking_block\"");
+        assert_eq!(serde_json::to_string(&ChunkType::ToolStart).unwrap(), "\"tool_start\"");
+        assert_eq!(serde_json::to_string(&ChunkType::ToolEnd).unwrap(), "\"tool_end\"");
+        assert_eq!(serde_json::to_string(&ChunkType::ThinkingBlock).unwrap(), "\"thinking_block\"");
+        assert_eq!(serde_json::to_string(&ChunkType::ToolCallComplete).unwrap(), "\"tool_call_complete\"");
+        assert_eq!(serde_json::to_string(&ChunkType::ResponseBlock).unwrap(), "\"response_block\"");
     }
 
     #[test]
@@ -1092,34 +755,16 @@ mod tests {
     }
 
     #[test]
-    fn test_user_question_fields_skipped_when_none() {
+    fn test_optional_fields_skipped_when_none() {
         let chunk = StreamChunk::reasoning("wf_001".to_string(), "Analyzing...".to_string());
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(!json.contains("user_question"));
         assert!(!json.contains("question_id"));
-    }
-
-    // New chunk type tests
-
-    #[test]
-    fn test_new_chunk_type_serialization() {
-        let chunk_type = ChunkType::ThinkingBlock;
-        assert_eq!(
-            serde_json::to_string(&chunk_type).unwrap(),
-            "\"thinking_block\""
-        );
-
-        let chunk_type = ChunkType::ToolCallComplete;
-        assert_eq!(
-            serde_json::to_string(&chunk_type).unwrap(),
-            "\"tool_call_complete\""
-        );
-
-        let chunk_type = ChunkType::ResponseBlock;
-        assert_eq!(
-            serde_json::to_string(&chunk_type).unwrap(),
-            "\"response_block\""
-        );
+        assert!(!json.contains("tool_input"));
+        assert!(!json.contains("tool_output"));
+        assert!(!json.contains("tool_success"));
+        assert!(!json.contains("tokens_input"));
+        assert!(!json.contains("tokens_output"));
     }
 
     #[test]
@@ -1202,14 +847,4 @@ mod tests {
         assert!(json.contains("\"tokens_output\":25"));
     }
 
-    #[test]
-    fn test_new_fields_skipped_when_none() {
-        let chunk = StreamChunk::reasoning("wf_001".to_string(), "Analyzing...".to_string());
-        let json = serde_json::to_string(&chunk).unwrap();
-        assert!(!json.contains("tool_input"));
-        assert!(!json.contains("tool_output"));
-        assert!(!json.contains("tool_success"));
-        assert!(!json.contains("tokens_input"));
-        assert!(!json.contains("tokens_output"));
-    }
 }

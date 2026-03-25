@@ -19,9 +19,6 @@
 //!
 //! These types are used by the provider adapters (MistralToolAdapter, OllamaToolAdapter)
 //! to convert between API-specific formats and our internal tool execution system.
-//!
-//! Note: This does NOT replace our existing Tool trait or ToolDefinition.
-//! The existing tool system is preserved; these types are only for API communication.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,9 +54,9 @@ pub struct FunctionCall {
     pub arguments: serde_json::Value,
 }
 
-#[allow(dead_code)] // Builder methods for API completeness
 impl FunctionCall {
     /// Creates a new FunctionCall with the given parameters.
+    #[cfg(test)]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -188,117 +185,14 @@ pub enum ToolChoiceMode {
     None,
 }
 
-#[allow(dead_code)] // Utility methods for API completeness
 impl ToolChoiceMode {
     /// Converts to the string representation used by most APIs.
+    #[cfg(test)]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Auto => "auto",
             Self::Required => "required",
             Self::None => "none",
-        }
-    }
-}
-
-/// Represents a chat message in the conversation history.
-///
-/// This is used for building multi-turn conversations with tool calls.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "role", rename_all = "lowercase")]
-pub enum ChatMessage {
-    /// System message (instructions).
-    System { content: String },
-
-    /// User message.
-    User { content: String },
-
-    /// Assistant message, optionally with tool calls.
-    Assistant {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        content: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        tool_calls: Option<Vec<AssistantToolCall>>,
-    },
-
-    /// Tool result message.
-    Tool {
-        tool_call_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
-        content: String,
-    },
-}
-
-/// Tool call structure as it appears in assistant messages.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssistantToolCall {
-    /// Unique identifier for the tool call.
-    pub id: String,
-
-    /// Type of the call (always "function" for our use case).
-    #[serde(rename = "type")]
-    pub call_type: String,
-
-    /// The function being called.
-    pub function: AssistantToolCallFunction,
-}
-
-/// Function details within a tool call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssistantToolCallFunction {
-    /// Name of the function.
-    pub name: String,
-
-    /// Arguments as a JSON string (Mistral) or object (Ollama).
-    /// We store as Value to handle both cases.
-    pub arguments: serde_json::Value,
-}
-
-#[allow(dead_code)] // Builder methods for API completeness
-impl ChatMessage {
-    /// Creates a system message.
-    pub fn system(content: impl Into<String>) -> Self {
-        Self::System {
-            content: content.into(),
-        }
-    }
-
-    /// Creates a user message.
-    pub fn user(content: impl Into<String>) -> Self {
-        Self::User {
-            content: content.into(),
-        }
-    }
-
-    /// Creates an assistant message with text content only.
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self::Assistant {
-            content: Some(content.into()),
-            tool_calls: None,
-        }
-    }
-
-    /// Creates an assistant message with tool calls.
-    pub fn assistant_with_tools(
-        content: Option<String>,
-        tool_calls: Vec<AssistantToolCall>,
-    ) -> Self {
-        Self::Assistant {
-            content,
-            tool_calls: Some(tool_calls),
-        }
-    }
-
-    /// Creates a tool result message.
-    pub fn tool_result(
-        call_id: impl Into<String>,
-        name: Option<String>,
-        content: impl Into<String>,
-    ) -> Self {
-        Self::Tool {
-            tool_call_id: call_id.into(),
-            name,
-            content: content.into(),
         }
     }
 }
@@ -354,26 +248,5 @@ mod tests {
 
         // Test default
         assert_eq!(ToolChoiceMode::default(), ToolChoiceMode::Auto);
-    }
-
-    #[test]
-    fn test_chat_message_serialization() {
-        let system = ChatMessage::system("You are helpful");
-        let json = serde_json::to_value(&system).unwrap();
-        assert_eq!(json["role"], "system");
-        assert_eq!(json["content"], "You are helpful");
-
-        let user = ChatMessage::user("Hello");
-        let json = serde_json::to_value(&user).unwrap();
-        assert_eq!(json["role"], "user");
-
-        let tool = ChatMessage::tool_result(
-            "call_1",
-            Some("MemoryTool".to_string()),
-            r#"{"success": true}"#,
-        );
-        let json = serde_json::to_value(&tool).unwrap();
-        assert_eq!(json["role"], "tool");
-        assert_eq!(json["tool_call_id"], "call_1");
     }
 }

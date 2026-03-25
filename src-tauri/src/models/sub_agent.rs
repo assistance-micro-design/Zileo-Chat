@@ -353,16 +353,9 @@ pub struct ParallelTaskResult {
 }
 
 /// Constants for sub-agent system.
-#[allow(dead_code)]
 pub mod constants {
     /// Maximum number of sub-agents per workflow
     pub const MAX_SUB_AGENTS: usize = 15;
-
-    /// Maximum length for task descriptions in database
-    pub const MAX_TASK_DESCRIPTION_LEN: usize = 10000;
-
-    /// Maximum length for result summaries in database
-    pub const MAX_RESULT_SUMMARY_LEN: usize = 5000;
 }
 
 #[cfg(test)]

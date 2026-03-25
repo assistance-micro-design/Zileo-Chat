@@ -243,36 +243,6 @@ impl MemoryCreateWithEmbedding {
     }
 }
 
-/// Memory entity with embedding vector (for DB storage)
-#[allow(dead_code)] // API type for semantic search/RAG operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryWithEmbedding {
-    /// Unique identifier (deserialized from SurrealDB Thing type)
-    #[serde(deserialize_with = "deserialize_thing_id")]
-    pub id: String,
-    /// Type of memory content
-    #[serde(rename = "type")]
-    pub memory_type: MemoryType,
-    /// Text content of the memory
-    pub content: String,
-    /// Vector embedding (1024D for Mistral/Ollama)
-    pub embedding: Vec<f32>,
-    /// Optional workflow ID for scoped memories
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workflow_id: Option<String>,
-    /// Additional metadata
-    pub metadata: serde_json::Value,
-    /// Importance score (0.0-1.0)
-    #[serde(default = "default_importance")]
-    pub importance: f64,
-    /// Optional expiration timestamp for TTL
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<DateTime<Utc>>,
-    /// Creation timestamp
-    #[serde(default = "Utc::now")]
-    pub created_at: DateTime<Utc>,
-}
-
 /// Memory search result with relevance score
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySearchResult {
@@ -380,24 +350,6 @@ mod tests {
 
         let json = serde_json::to_string(&memory).unwrap();
         assert!(json.contains("\"workflow_id\":\"wf_123\""));
-    }
-
-    #[test]
-    fn test_memory_with_embedding() {
-        let memory = MemoryWithEmbedding {
-            id: "mem_002".to_string(),
-            memory_type: MemoryType::Knowledge,
-            content: "Rust is a systems programming language".to_string(),
-            embedding: vec![0.1, 0.2, 0.3],
-            workflow_id: None,
-            metadata: serde_json::json!({}),
-            importance: 0.6,
-            expires_at: None,
-            created_at: Utc::now(),
-        };
-
-        let json = serde_json::to_string(&memory).unwrap();
-        assert!(json.contains("\"embedding\":[0.1,0.2,0.3]"));
     }
 
     #[test]
