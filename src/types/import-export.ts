@@ -24,7 +24,7 @@
  * @module types/import-export
  */
 
-import type { AgentSummary, LLMConfig, ReasoningEffort } from './agent';
+import type { AgentSummary, ReasoningEffort } from './agent';
 import type { PromptSummary } from './prompt';
 
 // ============ EXPORT TYPES ============
@@ -117,6 +117,21 @@ export interface ExportPackage {
 }
 
 /**
+ * Simplified LLM config for export (matches Rust LLMConfigExport).
+ * Only includes the essential fields needed to recreate an agent's LLM config.
+ */
+export interface LLMConfigExport {
+	/** Provider name (e.g., "Mistral", "Ollama") */
+	provider: string;
+	/** Model name */
+	model: string;
+	/** Sampling temperature */
+	temperature: number;
+	/** Maximum tokens to generate */
+	maxTokens: number;
+}
+
+/**
  * Agent data for export (includes timestamps if enabled).
  * Note: IDs are NOT exported - entities are identified by NAME.
  * A new UUID is generated on import.
@@ -125,7 +140,7 @@ export interface AgentExportData {
 	/** Agent name - used as unique identifier for import conflict detection */
 	name: string;
 	lifecycle: 'permanent' | 'temporary';
-	llm: LLMConfig;
+	llm: LLMConfigExport;
 	tools: string[];
 	mcpServers: string[];
 	skills: string[];
@@ -171,6 +186,10 @@ export interface LLMModelExportData {
 	isReasoning: boolean;
 	inputPricePerMtok: number;
 	outputPricePerMtok: number;
+	/** Cache read price per million tokens (for prompt caching providers) */
+	cacheReadPricePerMtok?: number;
+	/** Cache write price per million tokens (for prompt caching providers) */
+	cacheWritePricePerMtok?: number;
 	createdAt?: string;
 	updatedAt?: string;
 }

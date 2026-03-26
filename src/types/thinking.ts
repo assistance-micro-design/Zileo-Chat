@@ -49,6 +49,10 @@ export interface ThinkingStep {
 	duration_ms?: number;
 	/** Number of tokens in this step (optional) */
 	tokens?: number;
+	/** Global ordering sequence within execution (for interleaving with tool executions) */
+	sequence: number;
+	/** Source of this reasoning step: "agent_flow" (synthetic) or "model_thinking" (real model output) */
+	source: 'agent_flow' | 'model_thinking';
 	/** Timestamp when the step was recorded (ISO 8601 string) */
 	created_at: string;
 }

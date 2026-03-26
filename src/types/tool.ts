@@ -102,6 +102,8 @@ export interface ToolExecution {
 	duration_ms: number;
 	/** Iteration number in tool loop (0-indexed) */
 	iteration: number;
+	/** Global ordering sequence within execution (for interleaving with thinking steps) */
+	sequence: number;
 	/** Timestamp when recorded */
 	created_at: string;
 }

@@ -66,6 +66,8 @@ export interface SubAgentExecution {
   result_summary?: string;
   /** Error message if status is 'error' */
   error_message?: string;
+  /** Parent execution ID for hierarchical tracing (e.g., batch operations) */
+  parent_execution_id?: string;
   /** ISO timestamp when the execution was created */
   created_at: string;
   /** ISO timestamp when the execution completed (if completed) */

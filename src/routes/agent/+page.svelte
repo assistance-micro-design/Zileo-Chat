@@ -122,8 +122,8 @@ Uses extracted components, services, and stores for clean architecture.
 			description: t.description,
 			status: t.status,
 			priority: t.priority,
-			agent_name: t.agent_assigned ?? undefined,
-			duration_ms: t.duration_ms ?? undefined
+			agent_name: t.agent_assigned,
+			duration_ms: t.duration_ms
 		}));
 	}
 

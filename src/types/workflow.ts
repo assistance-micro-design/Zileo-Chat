@@ -20,25 +20,34 @@ import type { ThinkingStep } from './thinking';
 import type { ToolExecution, WorkflowToolExecution } from './tool';
 
 /**
- * Task as returned by Rust list_workflow_tasks command (snake_case fields).
+ * Task as returned by Rust task commands (snake_case fields).
  *
- * Synchronized with Rust `Task` model.
+ * Synchronized with Rust `Task` model (src-tauri/src/models/task.rs).
+ * Crosses IPC via: get_task, list_workflow_tasks, list_tasks_by_status, update_task.
  */
 export interface PersistedTask {
   /** Task unique identifier */
   id: string;
-  /** Task name */
+  /** Associated workflow ID */
+  workflow_id: string;
+  /** Task name (max 128 chars) */
   name: string;
-  /** Task description */
+  /** Detailed description (max 1000 chars) */
   description: string;
-  /** Agent assigned to this task (UUID or null) */
-  agent_assigned: string | null;
+  /** Agent responsible for this task (skip_serializing_if in Rust) */
+  agent_assigned?: string;
   /** Priority level (1=critical, 5=low) */
   priority: number;
   /** Current task status */
   status: 'pending' | 'in_progress' | 'completed' | 'blocked';
-  /** Execution duration in milliseconds */
-  duration_ms: number | null;
+  /** Task dependencies (other task IDs that must complete first) */
+  dependencies: string[];
+  /** Execution duration in milliseconds (skip_serializing_if in Rust) */
+  duration_ms?: number;
+  /** Creation timestamp (ISO 8601 string) */
+  created_at: string;
+  /** Completion timestamp (skip_serializing_if in Rust) */
+  completed_at?: string;
 }
 
 /**
