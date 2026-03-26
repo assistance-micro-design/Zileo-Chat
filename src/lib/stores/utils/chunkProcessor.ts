@@ -196,8 +196,8 @@ function handleTaskCreate(s: ChunkableState, c: StreamChunk): ChunkableState {
 		tasks: [
 			...s.tasks,
 			{
-				id: c.task_id!,
-				name: c.task_name!,
+				id: c.task_id ?? '',
+				name: c.task_name ?? '',
 				status: (c.task_status ?? 'pending') as ActiveTask['status'],
 				priority: c.task_priority ?? 3,
 				createdAt: Date.now(),

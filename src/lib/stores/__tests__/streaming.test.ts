@@ -17,11 +17,13 @@
 
 /**
  * Unit tests for the streaming store.
- * Tests token accumulation, tool tracking, reasoning steps, and state management.
+ * Tests production code paths: start, processChunkDirect, processCompleteDirect,
+ * restoreFrom, reset, cleanup.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
+import type { StreamChunk, WorkflowComplete } from '$types/streaming';
 
 // Mock Tauri's event API
 vi.mock('@tauri-apps/api/event', () => ({
@@ -30,83 +32,109 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 import { streamingStore, activeSubAgents } from '../streaming';
 
-/** Helper: check if streaming state has visible activities */
-function hasActivities(): boolean {
-	const s = streamingStore.getState();
-	return (
-		s.isStreaming ||
-		(s.completed &&
-			(s.tools.length > 0 ||
-				s.reasoning.length > 0 ||
-				s.subAgents.length > 0 ||
-				s.tasks.length > 0))
-	);
-}
-
 describe('streamingStore', () => {
 	beforeEach(async () => {
-		// Reset store before each test
-		await streamingStore.reset();
+		streamingStore.reset();
 	});
 
 	describe('initial state', () => {
 		it('should have correct initial values', () => {
-			const state = streamingStore.getState();
+			const state = get(streamingStore);
 			expect(state.isStreaming).toBe(false);
 			expect(state.content).toBe('');
 			expect(state.tools).toEqual([]);
 			expect(state.reasoning).toEqual([]);
+			expect(state.subAgents).toEqual([]);
+			expect(state.tasks).toEqual([]);
 			expect(state.error).toBe(null);
 			expect(state.cancelled).toBe(false);
 			expect(state.tokensReceived).toBe(0);
+			expect(state.workflowId).toBe(null);
 		});
 	});
 
-	describe('appendToken', () => {
-		it('should append tokens to content', () => {
-			streamingStore.appendToken('Hello');
-			expect(streamingStore.getState().content).toBe('Hello');
-
-			streamingStore.appendToken(' World');
-			expect(streamingStore.getState().content).toBe('Hello World');
+	describe('start', () => {
+		it('should set workflowId and mark as streaming', async () => {
+			await streamingStore.start('wf-1');
+			const state = get(streamingStore);
+			expect(state.workflowId).toBe('wf-1');
+			expect(state.isStreaming).toBe(true);
+			expect(state.content).toBe('');
 		});
 
-		it('should increment token count', () => {
-			streamingStore.appendToken('a');
-			streamingStore.appendToken('b');
-			streamingStore.appendToken('c');
-			expect(streamingStore.getState().tokensReceived).toBe(3);
+		it('should reset previous state when starting new workflow', async () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'reasoning',
+				content: 'old reasoning'
+			} as StreamChunk);
+
+			await streamingStore.start('wf-2');
+			const state = get(streamingStore);
+			expect(state.reasoning).toEqual([]);
+			expect(state.workflowId).toBe('wf-2');
 		});
 	});
 
-	describe('tool tracking', () => {
-		it('should track tool start', () => {
-			streamingStore.addToolStart('MemoryTool');
+	describe('processChunkDirect', () => {
+		it('should append reasoning steps', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'reasoning',
+				content: 'Analyzing request...'
+			} as StreamChunk);
 
-			const tools = streamingStore.getState().tools;
-			expect(tools).toHaveLength(1);
-			expect(tools[0].name).toBe('MemoryTool');
-			expect(tools[0].status).toBe('running');
-			expect(tools[0].startedAt).toBeDefined();
+			streamingStore.processChunkDirect({
+				chunk_type: 'reasoning',
+				content: 'Planning response...'
+			} as StreamChunk);
+
+			const state = get(streamingStore);
+			expect(state.reasoning).toHaveLength(2);
+			expect(state.reasoning[0].content).toBe('Analyzing request...');
+			expect(state.reasoning[0].stepNumber).toBe(1);
+			expect(state.reasoning[1].content).toBe('Planning response...');
+			expect(state.reasoning[1].stepNumber).toBe(2);
 		});
 
-		it('should complete tool with duration', () => {
-			streamingStore.addToolStart('MemoryTool');
-			streamingStore.completeToolEnd('MemoryTool', 150);
+		it('should track tool start and end', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_start',
+				tool: 'MemoryTool'
+			} as StreamChunk);
 
-			const tools = streamingStore.getState().tools;
-			expect(tools[0].status).toBe('completed');
-			expect(tools[0].duration).toBe(150);
+			let state = get(streamingStore);
+			expect(state.tools).toHaveLength(1);
+			expect(state.tools[0].name).toBe('MemoryTool');
+			expect(state.tools[0].status).toBe('running');
+
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_end',
+				tool: 'MemoryTool',
+				duration: 150
+			} as StreamChunk);
+
+			state = get(streamingStore);
+			expect(state.tools[0].status).toBe('completed');
+			expect(state.tools[0].duration).toBe(150);
 		});
 
-		it('should track multiple tools', () => {
-			streamingStore.addToolStart('MemoryTool');
-			streamingStore.addToolStart('TodoTool');
-			streamingStore.completeToolEnd('MemoryTool', 100);
+		it('should track multiple tools independently', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_start',
+				tool: 'MemoryTool'
+			} as StreamChunk);
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_start',
+				tool: 'TodoTool'
+			} as StreamChunk);
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_end',
+				tool: 'MemoryTool',
+				duration: 100
+			} as StreamChunk);
 
-			const tools = streamingStore.getState().tools;
-			const running = tools.filter((t) => t.status === 'running');
-			const completed = tools.filter((t) => t.status === 'completed');
+			const state = get(streamingStore);
+			const running = state.tools.filter((t) => t.status === 'running');
+			const completed = state.tools.filter((t) => t.status === 'completed');
 
 			expect(running).toHaveLength(1);
 			expect(running[0].name).toBe('TodoTool');
@@ -114,146 +142,234 @@ describe('streamingStore', () => {
 			expect(completed[0].name).toBe('MemoryTool');
 		});
 
-		it('should fail tool with error', () => {
-			streamingStore.addToolStart('MemoryTool');
-			streamingStore.failTool('MemoryTool', 'Connection failed');
+		it('should set error and stop streaming on error chunk', async () => {
+			await streamingStore.start('wf-1');
 
-			const tools = streamingStore.getState().tools;
-			expect(tools[0].status).toBe('error');
-			expect(tools[0].error).toBe('Connection failed');
-		});
-	});
+			streamingStore.processChunkDirect({
+				chunk_type: 'error',
+				content: 'Network error'
+			} as StreamChunk);
 
-	describe('reasoning steps', () => {
-		it('should add reasoning steps', () => {
-			streamingStore.addReasoning('Analyzing request...');
-			streamingStore.addReasoning('Planning response...');
-
-			const steps = streamingStore.getState().reasoning;
-			expect(steps).toHaveLength(2);
-			expect(steps[0].content).toBe('Analyzing request...');
-			expect(steps[0].stepNumber).toBe(1);
-			expect(steps[1].content).toBe('Planning response...');
-			expect(steps[1].stepNumber).toBe(2);
-		});
-	});
-
-	describe('error handling', () => {
-		it('should set error and stop streaming', () => {
-			// Manually set streaming state first
-			streamingStore.appendToken('Test');
-
-			streamingStore.setError('Network error');
-
-			const state = streamingStore.getState();
+			const state = get(streamingStore);
 			expect(state.error).toBe('Network error');
 			expect(state.isStreaming).toBe(false);
 		});
+
+		it('should handle sub-agent lifecycle', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'sub_agent_start',
+				sub_agent_id: 'sa-1',
+				sub_agent_name: 'Research Agent',
+				parent_agent_id: 'agent-1',
+				content: 'Research task'
+			} as StreamChunk);
+
+			let state = get(streamingStore);
+			expect(state.subAgents).toHaveLength(1);
+			expect(state.subAgents[0].name).toBe('Research Agent');
+			expect(state.subAgents[0].status).toBe('running');
+
+			streamingStore.processChunkDirect({
+				chunk_type: 'sub_agent_complete',
+				sub_agent_id: 'sa-1',
+				content: 'Research complete',
+				duration: 5000
+			} as StreamChunk);
+
+			state = get(streamingStore);
+			expect(state.subAgents[0].status).toBe('completed');
+			expect(state.subAgents[0].progress).toBe(100);
+		});
+
+		it('should handle task lifecycle', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'task_create',
+				task_id: 't-1',
+				task_name: 'Analyze data',
+				task_status: 'pending',
+				task_priority: 2
+			} as StreamChunk);
+
+			let state = get(streamingStore);
+			expect(state.tasks).toHaveLength(1);
+			expect(state.tasks[0].id).toBe('t-1');
+			expect(state.tasks[0].name).toBe('Analyze data');
+
+			streamingStore.processChunkDirect({
+				chunk_type: 'task_complete',
+				task_id: 't-1'
+			} as StreamChunk);
+
+			state = get(streamingStore);
+			expect(state.tasks[0].status).toBe('completed');
+		});
 	});
 
-	describe('completion', () => {
-		it('should mark as completed while keeping streaming activities visible', () => {
-			streamingStore.appendToken('Test');
-			streamingStore.addToolStart('MemoryTool');
-			streamingStore.complete();
+	describe('processCompleteDirect', () => {
+		it('should mark as completed on success', async () => {
+			await streamingStore.start('wf-1');
 
-			const state = streamingStore.getState();
+			streamingStore.processCompleteDirect({
+				workflow_id: 'wf-1',
+				status: 'completed'
+			} as WorkflowComplete);
+
+			const state = get(streamingStore);
 			expect(state.completed).toBe(true);
-			expect(hasActivities()).toBe(true);
+			expect(state.isStreaming).toBe(true); // isStreaming stays true until reset
 		});
 
-		it('should keep activities visible until explicitly reset', async () => {
-			streamingStore.appendToken('Test');
-			streamingStore.addReasoning('Step 1');
-			streamingStore.complete();
+		it('should set error and stop streaming on error completion', async () => {
+			await streamingStore.start('wf-1');
 
-			expect(streamingStore.getState().reasoning).toHaveLength(1);
-			expect(hasActivities()).toBe(true);
+			streamingStore.processCompleteDirect({
+				workflow_id: 'wf-1',
+				status: 'error',
+				error: 'Backend failure'
+			} as WorkflowComplete);
 
-			// After reset, activities are cleared
-			await streamingStore.reset();
-			expect(streamingStore.getState().reasoning).toHaveLength(0);
-			expect(hasActivities()).toBe(false);
+			const state = get(streamingStore);
+			expect(state.completed).toBe(true);
+			expect(state.error).toBe('Backend failure');
+			expect(state.isStreaming).toBe(false);
 		});
-	});
 
-	describe('cancellation', () => {
-		it('should cancel streaming', () => {
-			streamingStore.appendToken('Test');
-			streamingStore.cancel();
+		it('should mark as cancelled on cancellation', async () => {
+			await streamingStore.start('wf-1');
 
-			const state = streamingStore.getState();
+			streamingStore.processCompleteDirect({
+				workflow_id: 'wf-1',
+				status: 'cancelled'
+			} as WorkflowComplete);
+
+			const state = get(streamingStore);
+			expect(state.completed).toBe(true);
 			expect(state.cancelled).toBe(true);
 			expect(state.isStreaming).toBe(false);
 		});
 	});
 
-	describe('getContent', () => {
-		it('should return current content', () => {
-			streamingStore.appendToken('Hello');
-			streamingStore.appendToken(' World');
+	describe('restoreFrom', () => {
+		it('should restore state from background workflow', () => {
+			streamingStore.restoreFrom({
+				workflowId: 'wf-bg',
+				content: 'restored content',
+				tools: [{ name: 'Tool1', status: 'completed', startedAt: 1000, duration: 50 }],
+				reasoning: [{ content: 'step 1', timestamp: 1000, stepNumber: 1 }],
+				subAgents: [],
+				tasks: [],
+				tokensReceived: 42,
+				error: null,
+				status: 'running'
+			});
 
-			expect(streamingStore.getContent()).toBe('Hello World');
-		});
-	});
-
-	describe('getState', () => {
-		it('should return current state snapshot', () => {
-			streamingStore.appendToken('Test');
-			streamingStore.addToolStart('MemoryTool');
-
-			const state = streamingStore.getState();
-			expect(state.content).toBe('Test');
+			const state = get(streamingStore);
+			expect(state.workflowId).toBe('wf-bg');
+			expect(state.content).toBe('restored content');
 			expect(state.tools).toHaveLength(1);
-			expect(state.tokensReceived).toBe(1);
+			expect(state.reasoning).toHaveLength(1);
+			expect(state.tokensReceived).toBe(42);
+			expect(state.isStreaming).toBe(true);
+			expect(state.completed).toBe(false);
+		});
+
+		it('should restore completed state correctly', () => {
+			streamingStore.restoreFrom({
+				workflowId: 'wf-done',
+				content: 'done',
+				tools: [],
+				reasoning: [],
+				subAgents: [],
+				tasks: [],
+				tokensReceived: 10,
+				error: null,
+				status: 'completed'
+			});
+
+			const state = get(streamingStore);
+			expect(state.isStreaming).toBe(false);
+			expect(state.completed).toBe(true);
+			expect(state.cancelled).toBe(false);
+		});
+
+		it('should restore cancelled state correctly', () => {
+			streamingStore.restoreFrom({
+				workflowId: 'wf-cancel',
+				content: '',
+				tools: [],
+				reasoning: [],
+				subAgents: [],
+				tasks: [],
+				tokensReceived: 0,
+				error: null,
+				status: 'cancelled'
+			});
+
+			const state = get(streamingStore);
+			expect(state.isStreaming).toBe(false);
+			expect(state.cancelled).toBe(true);
 		});
 	});
 
 	describe('reset', () => {
 		it('should reset to initial state', async () => {
-			streamingStore.appendToken('Test');
-			streamingStore.addToolStart('MemoryTool');
-			streamingStore.addReasoning('Step 1');
-			streamingStore.setError('Error');
+			await streamingStore.start('wf-1');
+			streamingStore.processChunkDirect({
+				chunk_type: 'reasoning',
+				content: 'Step 1'
+			} as StreamChunk);
+			streamingStore.processChunkDirect({
+				chunk_type: 'tool_start',
+				tool: 'MemoryTool'
+			} as StreamChunk);
+			streamingStore.processChunkDirect({
+				chunk_type: 'error',
+				content: 'Error'
+			} as StreamChunk);
 
-			await streamingStore.reset();
+			streamingStore.reset();
 
-			const state = streamingStore.getState();
+			const state = get(streamingStore);
 			expect(state.content).toBe('');
 			expect(state.tools).toEqual([]);
 			expect(state.reasoning).toEqual([]);
 			expect(state.error).toBe(null);
 			expect(state.tokensReceived).toBe(0);
+			expect(state.workflowId).toBe(null);
 		});
 	});
 
-	describe('sub-agent initial state', () => {
+	describe('activeSubAgents derived store', () => {
 		it('should have empty sub-agents initially', () => {
 			const subAgents = get(activeSubAgents);
 			expect(subAgents).toEqual([]);
-			// Use direct checks instead of deprecated helper stores
-			expect(subAgents.filter((a) => a.status === 'running')).toEqual([]);
-			expect(subAgents.filter((a) => a.status === 'completed')).toEqual([]);
-			expect(subAgents.filter((a) => a.status === 'error')).toEqual([]);
-			expect(subAgents.some((a) => a.status === 'running')).toBe(false);
-			expect(subAgents.length).toBe(0);
 		});
-	});
 
-	describe('sub-agent state includes subAgents in state', () => {
-		it('should include subAgents in getState()', () => {
-			const state = streamingStore.getState();
-			expect(state.subAgents).toBeDefined();
-			expect(Array.isArray(state.subAgents)).toBe(true);
-		});
-	});
+		it('should reflect sub-agents from processChunkDirect', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'sub_agent_start',
+				sub_agent_id: 'sa-1',
+				sub_agent_name: 'Agent A',
+				parent_agent_id: 'p-1',
+				content: 'task'
+			} as StreamChunk);
 
-	describe('reset should clear sub-agents', () => {
-		it('should reset sub-agents to empty array', async () => {
-			await streamingStore.reset();
 			const subAgents = get(activeSubAgents);
-			expect(subAgents).toEqual([]);
-			expect(subAgents.length > 0).toBe(false);
+			expect(subAgents).toHaveLength(1);
+			expect(subAgents[0].name).toBe('Agent A');
+		});
+
+		it('should be cleared after reset', () => {
+			streamingStore.processChunkDirect({
+				chunk_type: 'sub_agent_start',
+				sub_agent_id: 'sa-1',
+				sub_agent_name: 'Agent A',
+				parent_agent_id: 'p-1',
+				content: 'task'
+			} as StreamChunk);
+
+			streamingStore.reset();
+			expect(get(activeSubAgents)).toEqual([]);
 		});
 	});
 });

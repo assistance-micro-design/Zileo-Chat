@@ -22,7 +22,7 @@
  * @module stores/streaming
  */
 
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import type { StreamChunk, WorkflowComplete } from '$types/streaming';
 import { applyChunkToState } from './utils/chunkProcessor';
 
@@ -298,123 +298,6 @@ export const streamingStore = {
 	},
 
 	/**
-	 * Appends a token to the streaming content.
-	 *
-	 * @param content - Token content to append
-	 */
-	appendToken(content: string): void {
-		store.update((s) => ({
-			...s,
-			content: s.content + content,
-			tokensReceived: s.tokensReceived + 1
-		}));
-	},
-
-	/**
-	 * Marks a tool as started.
-	 *
-	 * @param toolName - Name of the tool
-	 */
-	addToolStart(toolName: string): void {
-		store.update((s) => ({
-			...s,
-			tools: [
-				...s.tools,
-				{
-					name: toolName,
-					status: 'running' as ToolStatus,
-					startedAt: Date.now()
-				}
-			]
-		}));
-	},
-
-	/**
-	 * Marks a tool as completed.
-	 *
-	 * @param toolName - Name of the tool
-	 * @param duration - Execution duration in milliseconds
-	 */
-	completeToolEnd(toolName: string, duration: number): void {
-		store.update((s) => ({
-			...s,
-			tools: s.tools.map((t) =>
-				t.name === toolName && t.status === 'running'
-					? { ...t, status: 'completed' as ToolStatus, duration }
-					: t
-			)
-		}));
-	},
-
-	/**
-	 * Marks a tool as failed.
-	 *
-	 * @param toolName - Name of the tool
-	 * @param error - Error message
-	 */
-	failTool(toolName: string, error: string): void {
-		store.update((s) => ({
-			...s,
-			tools: s.tools.map((t) =>
-				t.name === toolName && t.status === 'running'
-					? { ...t, status: 'error' as ToolStatus, error }
-					: t
-			)
-		}));
-	},
-
-	/**
-	 * Adds a reasoning step.
-	 *
-	 * @param content - Reasoning content
-	 */
-	addReasoning(content: string): void {
-		store.update((s) => ({
-			...s,
-			reasoning: [
-				...s.reasoning,
-				{
-					content,
-					timestamp: Date.now(),
-					stepNumber: s.reasoning.length + 1
-				}
-			]
-		}));
-	},
-
-	/**
-	 * Sets an error state.
-	 *
-	 * @param error - Error message
-	 */
-	setError(error: string): void {
-		store.update((s) => ({
-			...s,
-			error,
-			isStreaming: false
-		}));
-	},
-
-	/**
-	 * Marks streaming as complete.
-	 * Sets completed flag but keeps isStreaming true until reset.
-	 */
-	complete(): void {
-		store.update((s) => ({ ...s, completed: true }));
-	},
-
-	/**
-	 * Marks streaming as cancelled.
-	 */
-	cancel(): void {
-		store.update((s) => ({
-			...s,
-			isStreaming: false,
-			cancelled: true
-		}));
-	},
-
-	/**
 	 * Cleanup any resources.
 	 * Event listeners are managed by backgroundWorkflowsStore, not this store.
 	 */
@@ -427,25 +310,6 @@ export const streamingStore = {
 	 */
 	reset(): void {
 		store.set(initialState);
-	},
-
-	/**
-	 * Gets the current streaming content.
-	 * Useful for extracting final content after streaming.
-	 *
-	 * @returns Current accumulated content
-	 */
-	getContent(): string {
-		return get(store).content;
-	},
-
-	/**
-	 * Gets the current state snapshot.
-	 *
-	 * @returns Current streaming state
-	 */
-	getState(): StreamingState {
-		return get(store);
 	}
 };
 

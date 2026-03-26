@@ -56,13 +56,7 @@ export const theme = {
 	 */
 	toggle: (): void => {
 		const currentTheme = get(store);
-		const nextTheme: Theme = currentTheme === 'light' ? 'dark' : 'light';
-
-		if (typeof document !== 'undefined') {
-			document.documentElement.setAttribute('data-theme', nextTheme);
-			localStorage.setItem('theme', nextTheme);
-		}
-		store.set(nextTheme);
+		theme.setTheme(currentTheme === 'light' ? 'dark' : 'light');
 	},
 
 	/**

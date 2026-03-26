@@ -90,40 +90,6 @@ export const userQuestionStore = {
 	},
 
 	/**
-	 * Handles incoming user_question_start streaming event.
-	 * Creates a new UserQuestion and adds it to pending queue.
-	 * @param payload - Question data from streaming event
-	 * @param workflowId - ID of the workflow this question belongs to
-	 */
-	handleQuestionStart(payload: UserQuestionStreamPayload, workflowId: string): void {
-		const question: UserQuestion = {
-			id: payload.questionId,
-			workflowId,
-			agentId: '',
-			question: payload.question,
-			questionType: payload.questionType,
-			options: payload.options,
-			textPlaceholder: payload.textPlaceholder,
-			textRequired: payload.textRequired,
-			context: payload.context,
-			status: 'pending',
-			createdAt: new Date().toISOString()
-		};
-
-		store.update((s) => {
-			// Limit queue size to prevent memory issues
-			const newPending = [...s.pendingQuestions, question].slice(-MAX_PENDING_QUESTIONS);
-			return {
-				...s,
-				pendingQuestions: newPending,
-				currentQuestion: s.currentQuestion ?? question,
-				isModalOpen: true,
-				error: null
-			};
-		});
-	},
-
-	/**
 	 * Handles a question event with workflow-aware modal behavior.
 	 * If the question belongs to the currently viewed workflow, opens the modal.
 	 * Otherwise, only queues the question (toast notification is handled by backgroundWorkflowsStore).
