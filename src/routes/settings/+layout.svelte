@@ -174,9 +174,10 @@ Each section is now a separate route for better performance and UX.
 <style>
 	.settings-page {
 		display: flex;
-		height: 100%;
 		flex: 1;
 		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	/* Sidebar */

@@ -238,8 +238,7 @@ fn test_safe_truncate_utf8_multibyte() {
     assert!(truncated.ends_with("..."));
 
     // Test with emojis (4-byte UTF-8)
-    let emoji_text =
-        "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
+    let emoji_text = "Test avec emojis X et Y et beaucoup de texte apres pour depasser la limite";
     let truncated = safe_truncate(emoji_text, 30, true);
     assert!(truncated.ends_with("..."));
 

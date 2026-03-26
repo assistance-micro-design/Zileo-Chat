@@ -353,7 +353,6 @@ impl ValidationHelper {
     }
 }
 
-
 #[cfg(test)]
 #[path = "validation_helper_tests.rs"]
 mod tests;

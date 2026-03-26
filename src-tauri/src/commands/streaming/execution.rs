@@ -20,8 +20,8 @@ use crate::{
     agents::core::agent::Task,
     db::queries::workflow as wf_queries,
     models::{
-        Prompt, StreamChunk, ThinkingStepCreate, Workflow, WorkflowComplete,
-        WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
+        Prompt, StreamChunk, ThinkingStepCreate, Workflow, WorkflowComplete, WorkflowMetrics,
+        WorkflowResult, WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
     AppState,
@@ -33,7 +33,9 @@ use uuid::Uuid;
 use super::helpers::{
     aggregate_sub_agent_tokens, emit_chunk, emit_complete, emit_error, load_conversation_history,
 };
-use super::pricing::{load_model_pricing_info, update_workflow_cumulative_metrics, CumulativeMetricsUpdate};
+use super::pricing::{
+    load_model_pricing_info, update_workflow_cumulative_metrics, CumulativeMetricsUpdate,
+};
 
 /// Executes a workflow with streaming events.
 ///
@@ -261,10 +263,7 @@ pub async fn execute_workflow_streaming(
     for step in &report.metrics.reasoning_steps {
         emit_chunk(
             &window,
-            StreamChunk::thinking_block(
-                validated_workflow_id.clone(),
-                step.content.clone(),
-            ),
+            StreamChunk::thinking_block(validated_workflow_id.clone(), step.content.clone()),
         );
         if step.content.len() > 100 {
             info!(

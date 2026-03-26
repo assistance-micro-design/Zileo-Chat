@@ -264,8 +264,7 @@ impl OpenAiCompatibleProvider {
             return Err(http::parse_api_error(&self.provider_name, status, &body));
         }
 
-        let chat_response: ChatResponse =
-            http::parse_json_response(&self.provider_name, &body)?;
+        let chat_response: ChatResponse = http::parse_json_response(&self.provider_name, &body)?;
 
         let choice = chat_response
             .choices
@@ -568,5 +567,4 @@ mod tests {
         let result = OpenAiCompatibleProvider::extract_thinking_from_raw(body);
         assert!(result.is_none());
     }
-
 }

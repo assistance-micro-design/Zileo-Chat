@@ -518,11 +518,26 @@ mod tests {
 
     #[test]
     fn test_chunk_type_serialization() {
-        assert_eq!(serde_json::to_string(&ChunkType::ToolStart).unwrap(), "\"tool_start\"");
-        assert_eq!(serde_json::to_string(&ChunkType::ToolEnd).unwrap(), "\"tool_end\"");
-        assert_eq!(serde_json::to_string(&ChunkType::ThinkingBlock).unwrap(), "\"thinking_block\"");
-        assert_eq!(serde_json::to_string(&ChunkType::ToolCallComplete).unwrap(), "\"tool_call_complete\"");
-        assert_eq!(serde_json::to_string(&ChunkType::ResponseBlock).unwrap(), "\"response_block\"");
+        assert_eq!(
+            serde_json::to_string(&ChunkType::ToolStart).unwrap(),
+            "\"tool_start\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChunkType::ToolEnd).unwrap(),
+            "\"tool_end\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChunkType::ThinkingBlock).unwrap(),
+            "\"thinking_block\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChunkType::ToolCallComplete).unwrap(),
+            "\"tool_call_complete\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChunkType::ResponseBlock).unwrap(),
+            "\"response_block\""
+        );
     }
 
     #[test]
@@ -531,7 +546,6 @@ mod tests {
         assert_eq!(chunk.chunk_type, ChunkType::ToolStart);
         assert_eq!(chunk.tool, Some("search".to_string()));
         assert!(chunk.content.is_none());
-
     }
 
     #[test]
@@ -834,5 +848,4 @@ mod tests {
         assert!(json.contains("\"tokens_input\":100"));
         assert!(json.contains("\"tokens_output\":25"));
     }
-
 }

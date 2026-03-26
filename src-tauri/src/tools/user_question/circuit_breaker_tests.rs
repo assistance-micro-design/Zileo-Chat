@@ -15,8 +15,7 @@ fn test_allow_question_when_closed() {
 
 #[test]
 fn test_opens_after_threshold_timeouts() {
-    let mut cb =
-        UserQuestionCircuitBreaker::new("test_wf".to_string(), 3, Duration::from_secs(60));
+    let mut cb = UserQuestionCircuitBreaker::new("test_wf".to_string(), 3, Duration::from_secs(60));
 
     // First two timeouts - still closed
     cb.record_timeout();
@@ -32,8 +31,7 @@ fn test_opens_after_threshold_timeouts() {
 
 #[test]
 fn test_rejects_when_open() {
-    let mut cb =
-        UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
+    let mut cb = UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
 
     cb.record_timeout();
     assert_eq!(cb.state(), CircuitState::Open);
@@ -116,8 +114,7 @@ fn test_skip_resets_like_success() {
 
 #[test]
 fn test_remaining_cooldown() {
-    let mut cb =
-        UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
+    let mut cb = UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
 
     // No cooldown when closed
     assert!(cb.remaining_cooldown().is_none());
@@ -132,8 +129,7 @@ fn test_remaining_cooldown() {
 
 #[test]
 fn test_reset() {
-    let mut cb =
-        UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
+    let mut cb = UserQuestionCircuitBreaker::new("test_wf".to_string(), 1, Duration::from_secs(60));
 
     cb.record_timeout();
     assert_eq!(cb.state(), CircuitState::Open);

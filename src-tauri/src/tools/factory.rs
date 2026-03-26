@@ -156,7 +156,6 @@ impl ToolFactory {
     }
 }
 
-
 #[cfg(test)]
 #[path = "factory_tests.rs"]
 mod tests;

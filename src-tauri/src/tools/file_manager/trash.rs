@@ -325,7 +325,6 @@ fn is_valid_trash_timestamp(s: &str) -> bool {
     chrono::NaiveDateTime::parse_from_str(s, TRASH_TIMESTAMP_FORMAT).is_ok()
 }
 
-
 #[cfg(test)]
 #[path = "trash_tests.rs"]
 mod tests;

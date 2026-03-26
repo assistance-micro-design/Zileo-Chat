@@ -283,7 +283,11 @@ mod tests {
                 "content": "Test content"
             }))
             .unwrap();
-            assert!(input.validate().is_ok(), "Type '{}' should be valid", memory_type);
+            assert!(
+                input.validate().is_ok(),
+                "Type '{}' should be valid",
+                memory_type
+            );
         }
     }
 
@@ -340,7 +344,11 @@ mod tests {
                 "threshold": threshold
             }))
             .unwrap();
-            assert!(input.validate().is_ok(), "Threshold {} should be valid", threshold);
+            assert!(
+                input.validate().is_ok(),
+                "Threshold {} should be valid",
+                threshold
+            );
         }
     }
 

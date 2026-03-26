@@ -277,7 +277,6 @@ impl Default for SubAgentCircuitBreaker {
     }
 }
 
-
 #[cfg(test)]
 #[path = "sub_agent_circuit_breaker_tests.rs"]
 mod tests;

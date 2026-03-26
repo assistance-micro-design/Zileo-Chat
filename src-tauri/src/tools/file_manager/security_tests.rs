@@ -232,8 +232,7 @@ fn test_validate_path_symlink_escape() {
 #[test]
 fn test_validate_folder_valid() {
     let tmp = setup_test_dir();
-    let result =
-        validate_folder_for_authorization(tmp.path().join("project").to_str().unwrap());
+    let result = validate_folder_for_authorization(tmp.path().join("project").to_str().unwrap());
     assert!(
         result.is_ok(),
         "Valid folder should be accepted: {:?}",
@@ -244,9 +243,8 @@ fn test_validate_folder_valid() {
 #[test]
 fn test_validate_folder_rejects_file() {
     let tmp = setup_test_dir();
-    let result = validate_folder_for_authorization(
-        tmp.path().join("project/src/main.rs").to_str().unwrap(),
-    );
+    let result =
+        validate_folder_for_authorization(tmp.path().join("project/src/main.rs").to_str().unwrap());
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not a directory"));
 }

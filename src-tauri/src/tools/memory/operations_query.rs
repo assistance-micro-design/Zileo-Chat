@@ -98,7 +98,11 @@ pub async fn list_memories(
         where_clause, limit
     );
 
-    let memories: Vec<Memory> = ctx.db.query_with_params(&query, params).await.map_err(db_error)?;
+    let memories: Vec<Memory> = ctx
+        .db
+        .query_with_params(&query, params)
+        .await
+        .map_err(db_error)?;
 
     debug!(count = memories.len(), scope = %scope, mode = %mode, "Memories listed");
 
@@ -277,7 +281,8 @@ pub async fn clear_by_type(
     // Use execute_with_params() for parameterized DELETE
     let (delete_query, params) = if let Some(ref wf_id) = workflow_id {
         (
-            "DELETE FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id".to_string(),
+            "DELETE FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id"
+                .to_string(),
             vec![
                 ("memory_type".to_string(), serde_json::json!(memory_type)),
                 ("workflow_id".to_string(), serde_json::json!(wf_id)),

@@ -368,7 +368,6 @@ impl MCPServerHandle {
             .collect())
     }
 
-
     /// Calls a tool on the MCP server
     ///
     /// # Arguments
@@ -440,7 +439,6 @@ impl MCPServerHandle {
 
         Ok(tool_response)
     }
-
 
     /// Sends a JSON-RPC request and waits for response with timeout.
     ///

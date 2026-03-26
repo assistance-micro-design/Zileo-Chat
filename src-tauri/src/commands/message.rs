@@ -469,4 +469,3 @@ pub async fn load_message_blocks(
 
     Ok(blocks)
 }
-

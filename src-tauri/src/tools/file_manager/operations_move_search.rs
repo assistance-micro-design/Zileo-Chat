@@ -444,4 +444,3 @@ fn search_file_content(
         }
     }
 }
-

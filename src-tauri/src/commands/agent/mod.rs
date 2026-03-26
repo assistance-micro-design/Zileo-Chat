@@ -38,9 +38,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
-use validation::{
-    format_reasoning_effort, merge_agent_config, validate_agent_create,
-};
+use validation::{format_reasoning_effort, merge_agent_config, validate_agent_create};
 
 /// Registers an LLMAgent in the registry with proper context
 async fn register_agent_runtime(state: &AppState, agent_id: &str, config: AgentConfig) {
@@ -242,9 +240,18 @@ pub async fn create_agent(
                 ("mcp_servers".to_string(), json!(agent_config.mcp_servers)),
                 ("skills".to_string(), json!(agent_config.skills)),
                 ("folders".to_string(), json!(agent_config.folders)),
-                ("require_file_confirmation".to_string(), json!(agent_config.require_file_confirmation)),
-                ("system_prompt".to_string(), json!(agent_config.system_prompt)),
-                ("max_tool_iterations".to_string(), json!(agent_config.max_tool_iterations)),
+                (
+                    "require_file_confirmation".to_string(),
+                    json!(agent_config.require_file_confirmation),
+                ),
+                (
+                    "system_prompt".to_string(),
+                    json!(agent_config.system_prompt),
+                ),
+                (
+                    "max_tool_iterations".to_string(),
+                    json!(agent_config.max_tool_iterations),
+                ),
             ],
         )
         .await
@@ -322,9 +329,18 @@ pub async fn update_agent(
                 ("mcp_servers".to_string(), json!(updated_config.mcp_servers)),
                 ("skills".to_string(), json!(updated_config.skills)),
                 ("folders".to_string(), json!(updated_config.folders)),
-                ("require_file_confirmation".to_string(), json!(updated_config.require_file_confirmation)),
-                ("system_prompt".to_string(), json!(updated_config.system_prompt)),
-                ("max_tool_iterations".to_string(), json!(updated_config.max_tool_iterations)),
+                (
+                    "require_file_confirmation".to_string(),
+                    json!(updated_config.require_file_confirmation),
+                ),
+                (
+                    "system_prompt".to_string(),
+                    json!(updated_config.system_prompt),
+                ),
+                (
+                    "max_tool_iterations".to_string(),
+                    json!(updated_config.max_tool_iterations),
+                ),
             ],
         )
         .await

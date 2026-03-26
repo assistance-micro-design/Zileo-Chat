@@ -20,8 +20,7 @@ use super::delegate_task::{ActiveDelegation, DelegateTaskTool};
 use crate::agents::core::agent::Task;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionCreate,
-    SubAgentStatus,
+    constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionCreate, SubAgentStatus,
 };
 use crate::models::Lifecycle;
 use crate::tools::sub_agent_executor::SubAgentExecutor;

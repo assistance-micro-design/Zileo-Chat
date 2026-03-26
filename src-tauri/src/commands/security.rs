@@ -194,4 +194,3 @@ pub async fn list_api_key_providers(
     info!(count = providers.len(), "API key providers listed");
     Ok(providers)
 }
-

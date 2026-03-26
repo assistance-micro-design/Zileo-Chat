@@ -338,7 +338,6 @@ Sub-agents return structured JSON with:
     )
 }
 
-
 #[cfg(test)]
 #[path = "utils_tests.rs"]
 mod tests;

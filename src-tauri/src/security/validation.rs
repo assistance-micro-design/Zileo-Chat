@@ -252,7 +252,6 @@ impl Validator {
 
         Ok(api_key.to_string())
     }
-
 }
 
 /// Serializes a value to a JSON string for safe inclusion in SurrealDB queries.
@@ -540,5 +539,4 @@ mod tests {
             Err(ValidationError::InvalidCharacters { .. })
         ));
     }
-
 }

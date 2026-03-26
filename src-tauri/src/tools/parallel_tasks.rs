@@ -243,9 +243,7 @@ impl ParallelTasksTool {
             is_primary_agent,
         }
     }
-
 }
-
 
 #[async_trait]
 impl Tool for ParallelTasksTool {
@@ -466,7 +464,6 @@ Returns aggregated results with:
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 #[path = "parallel_tasks_tests.rs"]

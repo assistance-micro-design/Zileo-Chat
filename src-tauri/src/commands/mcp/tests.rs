@@ -264,16 +264,16 @@ async fn test_mcp_call_log_write_read_cycle() {
     // Params should be a JSON string in DB (new format)
     let params_str = entry.get("params").expect("params missing");
     assert!(params_str.is_string(), "params should be stored as string");
-    let params: serde_json::Value = serde_json::from_str(params_str.as_str().unwrap())
-        .expect("params should be valid JSON");
+    let params: serde_json::Value =
+        serde_json::from_str(params_str.as_str().unwrap()).expect("params should be valid JSON");
     assert_eq!(params["symbol"], "MyClass");
     assert_eq!(params["include_body"], true);
 
     // Result should also be a JSON string
     let result_str = entry.get("result").expect("result missing");
     assert!(result_str.is_string(), "result should be stored as string");
-    let result: serde_json::Value = serde_json::from_str(result_str.as_str().unwrap())
-        .expect("result should be valid JSON");
+    let result: serde_json::Value =
+        serde_json::from_str(result_str.as_str().unwrap()).expect("result should be valid JSON");
     assert_eq!(result[0]["name"], "MyClass");
     assert_eq!(result[0]["line"], 42);
 }

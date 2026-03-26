@@ -244,8 +244,7 @@ impl MistralProvider {
             return Err(http::parse_api_error("Mistral", status, &body));
         }
 
-        let chat_response: MistralChatResponse =
-            http::parse_json_response("Mistral", &body)?;
+        let chat_response: MistralChatResponse = http::parse_json_response("Mistral", &body)?;
 
         let choice = chat_response
             .choices
@@ -366,8 +365,7 @@ impl MistralProvider {
             return Err(http::parse_api_error("Mistral", status, &body));
         }
 
-        let json_response: serde_json::Value =
-            http::parse_json_response("Mistral", &body)?;
+        let json_response: serde_json::Value = http::parse_json_response("Mistral", &body)?;
 
         // Log usage if available
         if let Some(usage) = json_response.get("usage") {
@@ -632,5 +630,4 @@ mod tests {
         let json = serde_json::to_value(&request).unwrap();
         assert!(json.get("reasoning_effort").is_none());
     }
-
 }

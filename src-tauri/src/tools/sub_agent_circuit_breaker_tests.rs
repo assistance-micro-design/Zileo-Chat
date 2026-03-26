@@ -1,7 +1,6 @@
 use super::*;
 use std::time::Duration;
 
-
 #[test]
 fn test_initial_state_is_closed() {
     let cb = SubAgentCircuitBreaker::with_defaults();

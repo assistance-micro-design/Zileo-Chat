@@ -49,8 +49,7 @@ async fn setup_test_state_for_orchestrator() -> AppState {
         .register("test_agent".to_string(), Arc::new(agent))
         .await;
 
-    let llm_manager =
-        Arc::new(crate::llm::ProviderManager::new().expect("test provider manager"));
+    let llm_manager = Arc::new(crate::llm::ProviderManager::new().expect("test provider manager"));
     let mcp_manager = Arc::new(
         crate::mcp::MCPManager::new(db.clone())
             .await
@@ -74,9 +73,9 @@ async fn setup_test_state_for_orchestrator() -> AppState {
             embedding_service.clone(),
         )),
         embedding_service,
-        streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
-            std::collections::HashMap::new(),
-        )),
+        streaming_cancellations: Arc::new(
+            tokio::sync::Mutex::new(std::collections::HashMap::new()),
+        ),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
     }
 }
@@ -224,8 +223,7 @@ async fn test_toggle_workflow_pinned() {
         .query_json(&query_on)
         .await
         .expect("Toggle ON failed");
-    let wf_on: Workflow =
-        serde_json::from_value(results_on.into_iter().next().unwrap()).unwrap();
+    let wf_on: Workflow = serde_json::from_value(results_on.into_iter().next().unwrap()).unwrap();
     assert!(wf_on.pinned, "Workflow should be pinned after first toggle");
 
     // Toggle pin OFF
@@ -235,8 +233,7 @@ async fn test_toggle_workflow_pinned() {
         .query_json(&query_off)
         .await
         .expect("Toggle OFF failed");
-    let wf_off: Workflow =
-        serde_json::from_value(results_off.into_iter().next().unwrap()).unwrap();
+    let wf_off: Workflow = serde_json::from_value(results_off.into_iter().next().unwrap()).unwrap();
     assert!(
         !wf_off.pinned,
         "Workflow should be unpinned after second toggle"

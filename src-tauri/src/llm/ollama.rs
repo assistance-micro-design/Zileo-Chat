@@ -220,8 +220,7 @@ impl OllamaProvider {
             return Err(http::parse_api_error("Ollama", status, &response_text));
         }
 
-        let json_response: serde_json::Value =
-            http::parse_json_response("Ollama", &response_text)?;
+        let json_response: serde_json::Value = http::parse_json_response("Ollama", &response_text)?;
 
         // Log basic info
         let has_tool_calls = json_response
@@ -300,8 +299,7 @@ impl OllamaProvider {
             return Err(http::parse_api_error("Ollama", status, &response_text));
         }
 
-        let json: serde_json::Value =
-            http::parse_json_response("Ollama", &response_text)?;
+        let json: serde_json::Value = http::parse_json_response("Ollama", &response_text)?;
 
         let content = json
             .pointer("/message/content")
@@ -320,10 +318,7 @@ impl OllamaProvider {
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
 
-        let tokens_output = json
-            .get("eval_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let tokens_output = json.get("eval_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
         info!(
             tokens_input = tokens_input,

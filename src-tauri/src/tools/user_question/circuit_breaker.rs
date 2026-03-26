@@ -253,7 +253,6 @@ impl UserQuestionCircuitBreaker {
     }
 }
 
-
 #[cfg(test)]
 #[path = "circuit_breaker_tests.rs"]
 mod tests;

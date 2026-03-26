@@ -2,10 +2,22 @@ use super::*;
 
 #[test]
 fn test_parse_memory_type_valid() {
-    assert!(matches!(parse_memory_type("user_pref"), Ok(MemoryType::UserPref)));
-    assert!(matches!(parse_memory_type("context"), Ok(MemoryType::Context)));
-    assert!(matches!(parse_memory_type("knowledge"), Ok(MemoryType::Knowledge)));
-    assert!(matches!(parse_memory_type("decision"), Ok(MemoryType::Decision)));
+    assert!(matches!(
+        parse_memory_type("user_pref"),
+        Ok(MemoryType::UserPref)
+    ));
+    assert!(matches!(
+        parse_memory_type("context"),
+        Ok(MemoryType::Context)
+    ));
+    assert!(matches!(
+        parse_memory_type("knowledge"),
+        Ok(MemoryType::Knowledge)
+    ));
+    assert!(matches!(
+        parse_memory_type("decision"),
+        Ok(MemoryType::Decision)
+    ));
 }
 
 #[test]
@@ -44,8 +56,14 @@ fn test_resolve_storage_scope_auto_workflow() {
     let wf = Some("wf_001".to_string());
 
     // context, decision -> workflow-scoped
-    assert_eq!(resolve_storage_scope("context", &input, &wf), Some("wf_001".to_string()));
-    assert_eq!(resolve_storage_scope("decision", &input, &wf), Some("wf_001".to_string()));
+    assert_eq!(
+        resolve_storage_scope("context", &input, &wf),
+        Some("wf_001".to_string())
+    );
+    assert_eq!(
+        resolve_storage_scope("decision", &input, &wf),
+        Some("wf_001".to_string())
+    );
 }
 
 #[test]

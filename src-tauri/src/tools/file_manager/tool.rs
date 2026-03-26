@@ -227,4 +227,3 @@ fn validate_required_params(operation: &str, input: &Value) -> ToolResult<()> {
 
     Ok(())
 }
-

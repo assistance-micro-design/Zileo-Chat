@@ -29,7 +29,8 @@ use crate::state::AppState;
 ///
 /// Uses `meta::id(id)` for clean UUIDs and `??` null coalescing for pricing
 /// fields to handle existing records created before pricing was added.
-const LLM_MODEL_SELECT_COLUMNS: &str = "meta::id(id) AS id, provider, name, api_name, context_window, \
+const LLM_MODEL_SELECT_COLUMNS: &str =
+    "meta::id(id) AS id, provider, name, api_name, context_window, \
      max_output_tokens, temperature_default, is_builtin, is_reasoning, \
      (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
      (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \

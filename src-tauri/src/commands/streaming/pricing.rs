@@ -148,7 +148,10 @@ pub struct CumulativeMetricsUpdate<'a> {
 }
 
 /// Updates workflow cumulative token counts, cost, model, and context size.
-pub async fn update_workflow_cumulative_metrics(state: &AppState, params: &CumulativeMetricsUpdate<'_>) {
+pub async fn update_workflow_cumulative_metrics(
+    state: &AppState,
+    params: &CumulativeMetricsUpdate<'_>,
+) {
     let CumulativeMetricsUpdate {
         workflow_id,
         tokens_input,

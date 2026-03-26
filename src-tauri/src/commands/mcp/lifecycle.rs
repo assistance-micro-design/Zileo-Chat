@@ -92,10 +92,7 @@ pub async fn test_mcp_server(
 /// - Starting fails
 #[tauri::command]
 #[instrument(name = "start_mcp_server", skip(state), fields(server_id = %id))]
-pub async fn start_mcp_server(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<MCPServer, String> {
+pub async fn start_mcp_server(id: String, state: State<'_, AppState>) -> Result<MCPServer, String> {
     let validated_id = validate_mcp_server_id(&id)?;
     info!(id = %validated_id, "Starting MCP server");
 
@@ -152,10 +149,7 @@ pub async fn start_mcp_server(
 /// - Stopping fails
 #[tauri::command]
 #[instrument(name = "stop_mcp_server", skip(state), fields(server_id = %id))]
-pub async fn stop_mcp_server(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<MCPServer, String> {
+pub async fn stop_mcp_server(id: String, state: State<'_, AppState>) -> Result<MCPServer, String> {
     let validated_id = validate_mcp_server_id(&id)?;
     info!(id = %validated_id, "Stopping MCP server");
 

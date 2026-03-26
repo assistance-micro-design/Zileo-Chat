@@ -234,7 +234,11 @@ impl TodoTool {
     /// * `task_id` - Task ID to complete
     /// * `duration_ms` - Optional execution duration in milliseconds
     #[instrument(skip(self))]
-    pub(crate) async fn complete_task(&self, task_id: &str, duration_ms: Option<u64>) -> ToolResult<Value> {
+    pub(crate) async fn complete_task(
+        &self,
+        task_id: &str,
+        duration_ms: Option<u64>,
+    ) -> ToolResult<Value> {
         let (update_query, update_params) = match duration_ms {
             Some(duration) => (
                 "UPDATE task SET status = $status, completed_at = time::now(), duration_ms = $duration WHERE meta::id(id) = $task_id RETURN name".to_string(),

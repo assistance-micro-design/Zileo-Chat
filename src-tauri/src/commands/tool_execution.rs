@@ -419,4 +419,3 @@ pub async fn clear_workflow_tool_executions(
     info!(count = count, "Workflow tool executions cleared");
     Ok(count)
 }
-

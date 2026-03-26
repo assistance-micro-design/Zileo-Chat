@@ -108,8 +108,8 @@ fn test_validate_input_missing_required_params() {
     assert!(result.is_err());
 
     // Replace without pattern
-    let result = tool
-        .validate_input(&json!({"operation": "replace", "path": "/tmp/x", "replacement": "b"}));
+    let result =
+        tool.validate_input(&json!({"operation": "replace", "path": "/tmp/x", "replacement": "b"}));
     assert!(result.is_err());
 
     // Move without destination

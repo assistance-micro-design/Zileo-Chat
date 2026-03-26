@@ -140,8 +140,15 @@ impl Tool for MemoryTool {
                 let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
                 let scope = params.scope.as_deref().unwrap_or("both");
                 let mode = params.mode.as_deref().unwrap_or("full");
-                operations_query::list_memories(&params, params.type_filter.as_deref(), limit, scope, mode, &ctx)
-                    .await
+                operations_query::list_memories(
+                    &params,
+                    params.type_filter.as_deref(),
+                    limit,
+                    scope,
+                    mode,
+                    &ctx,
+                )
+                .await
             }
 
             "search" => {
@@ -168,8 +175,12 @@ impl Tool for MemoryTool {
 
             "clear_by_type" => {
                 // SAFETY: validate_clear_by_type() ensures memory_type is Some
-                operations_query::clear_by_type(&params, params.memory_type.as_deref().unwrap(), &ctx)
-                    .await
+                operations_query::clear_by_type(
+                    &params,
+                    params.memory_type.as_deref().unwrap(),
+                    &ctx,
+                )
+                .await
             }
 
             // SAFETY: validate() rejects unknown operations, this branch is unreachable

@@ -126,9 +126,7 @@ pub async fn embed_mistral(
         .into_iter()
         .next()
         .map(|d| d.embedding)
-        .ok_or_else(|| {
-            EmbeddingError::InvalidResponse("No embedding in response".to_string())
-        })?;
+        .ok_or_else(|| EmbeddingError::InvalidResponse("No embedding in response".to_string()))?;
 
     let expected_dim = *dimension.read().await;
     if embedding.len() != expected_dim {
@@ -213,7 +211,10 @@ pub async fn embed_ollama(
     model: &str,
 ) -> Result<Vec<f32>, EmbeddingError> {
     let url = format!("{}/api/embeddings", base_url);
-    let request = OllamaEmbeddingRequest { model, prompt: text };
+    let request = OllamaEmbeddingRequest {
+        model,
+        prompt: text,
+    };
 
     debug!(model = model, url = %url, "Sending Ollama embedding request");
 

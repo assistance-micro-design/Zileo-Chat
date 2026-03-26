@@ -216,7 +216,6 @@ impl DelegateTaskTool {
             active_delegations: Arc::new(RwLock::new(Vec::new())),
         }
     }
-
 }
 
 #[async_trait]
@@ -373,7 +372,6 @@ EXAMPLE (by ID):
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 #[path = "delegate_task_tests.rs"]

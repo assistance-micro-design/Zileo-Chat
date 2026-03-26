@@ -74,10 +74,7 @@ pub fn resolve_query_workflow_id(
     input: &MemoryInput,
     default_workflow_id: &Option<String>,
 ) -> Option<String> {
-    input
-        .workflow_id
-        .clone()
-        .or(default_workflow_id.clone())
+    input.workflow_id.clone().or(default_workflow_id.clone())
 }
 
 /// Returns the default importance for a memory type.
@@ -92,9 +89,7 @@ pub(super) fn default_importance_for_type(memory_type: &str) -> f64 {
 }
 
 /// Returns the default expires_at for a memory type.
-pub(super) fn default_expires_at_for_type(
-    memory_type: &str,
-) -> Option<chrono::DateTime<Utc>> {
+pub(super) fn default_expires_at_for_type(memory_type: &str) -> Option<chrono::DateTime<Utc>> {
     match memory_type {
         "context" => Some(Utc::now() + Duration::days(mem_constants::DEFAULT_CONTEXT_TTL_DAYS)),
         _ => None,
@@ -216,7 +211,11 @@ pub async fn get_memory(memory_id: &str, ctx: &MemoryContext<'_>) -> ToolResult<
         WHERE meta::id(id) = $memory_id"#;
 
     let params = vec![("memory_id".to_string(), serde_json::json!(memory_id))];
-    let results: Vec<Memory> = ctx.db.query_with_params(query, params).await.map_err(db_error)?;
+    let results: Vec<Memory> = ctx
+        .db
+        .query_with_params(query, params)
+        .await
+        .map_err(db_error)?;
 
     match results.into_iter().next() {
         Some(memory) => Ok(serde_json::json!({
@@ -229,7 +228,6 @@ pub async fn get_memory(memory_id: &str, ctx: &MemoryContext<'_>) -> ToolResult<
         ))),
     }
 }
-
 
 #[cfg(test)]
 #[path = "operations_tests.rs"]

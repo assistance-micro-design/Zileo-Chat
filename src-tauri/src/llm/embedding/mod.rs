@@ -111,7 +111,6 @@ pub enum EmbeddingError {
     /// Timeout error
     #[error("Request timed out after {0}ms")]
     Timeout(u64),
-
 }
 
 impl From<reqwest::Error> for EmbeddingError {

@@ -38,9 +38,8 @@ use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
 use crate::models::sub_agent::SubAgentStatus;
 use crate::tools::{
-    context::AgentToolContext,
-    utils::sub_agent_description_template, Tool,
-    ToolDefinition, ToolError, ToolFactory, ToolResult,
+    context::AgentToolContext, utils::sub_agent_description_template, Tool, ToolDefinition,
+    ToolError, ToolFactory, ToolResult,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -417,7 +416,6 @@ EXAMPLE:
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 #[path = "spawn_agent_tests.rs"]

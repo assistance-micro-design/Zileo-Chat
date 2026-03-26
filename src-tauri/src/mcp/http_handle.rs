@@ -398,7 +398,6 @@ impl MCPHttpHandle {
         Ok(())
     }
 
-
     /// Calls a tool on the MCP server
     ///
     /// # Arguments
@@ -458,7 +457,6 @@ impl MCPHttpHandle {
 
         Ok(tool_response)
     }
-
 
     /// Sends a JSON-RPC request to the server
     /// Enforces minimum delay between consecutive HTTP requests to avoid rate-limiting.

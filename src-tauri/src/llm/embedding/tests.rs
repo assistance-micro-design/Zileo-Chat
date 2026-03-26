@@ -13,7 +13,10 @@
 // limitations under the License.
 
 use super::*;
-use providers::{MistralEmbeddingRequest, MistralEmbeddingResponse, OllamaEmbeddingRequest, OllamaEmbeddingResponse};
+use providers::{
+    MistralEmbeddingRequest, MistralEmbeddingResponse, OllamaEmbeddingRequest,
+    OllamaEmbeddingResponse,
+};
 
 // ---- EmbeddingError Tests ----
 

@@ -367,9 +367,7 @@ async fn export_models(
                 is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
                 input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),
                 output_price_per_mtok: row["output_price_per_mtok"].as_f64().unwrap_or(0.0),
-                cache_read_price_per_mtok: row["cache_read_price_per_mtok"]
-                    .as_f64()
-                    .unwrap_or(0.0),
+                cache_read_price_per_mtok: row["cache_read_price_per_mtok"].as_f64().unwrap_or(0.0),
                 cache_write_price_per_mtok: row["cache_write_price_per_mtok"]
                     .as_f64()
                     .unwrap_or(0.0),

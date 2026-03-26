@@ -233,7 +233,6 @@ pub fn expiration_filter() -> String {
     "(expires_at IS NONE OR expires_at > time::now())".to_string()
 }
 
-
 #[cfg(test)]
 #[path = "helpers_tests.rs"]
 mod tests;

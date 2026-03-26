@@ -395,8 +395,11 @@ mod tests {
     #[test]
     fn test_parse_api_error_raw_body() {
         let body = "Internal Server Error";
-        let err =
-            parse_api_error("TestProvider", reqwest::StatusCode::INTERNAL_SERVER_ERROR, body);
+        let err = parse_api_error(
+            "TestProvider",
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            body,
+        );
         let msg = err.to_string();
         assert!(msg.contains("Internal Server Error"));
     }

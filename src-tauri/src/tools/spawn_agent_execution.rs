@@ -16,17 +16,17 @@
 //!
 //! Contains spawn, list_children, and terminate operations.
 
-use super::spawn_agent::{SpawnAgentTool, SpawnParams, SpawnedChild, DEFAULT_SUB_AGENT_SYSTEM_PROMPT};
+use super::spawn_agent::{
+    SpawnAgentTool, SpawnParams, SpawnedChild, DEFAULT_SUB_AGENT_SYSTEM_PROMPT,
+};
 use crate::agents::core::agent::Task;
 use crate::agents::LLMAgent;
-use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus,
-};
 use crate::models::streaming::SubAgentOperationType;
+use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
+use crate::tools::constants::sub_agent::TASK_DESC_TRUNCATE_CHARS;
 use crate::tools::factory::ToolFactory;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
-use crate::tools::constants::sub_agent::TASK_DESC_TRUNCATE_CHARS;
 use crate::tools::utils::safe_truncate;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
@@ -165,7 +165,10 @@ impl SpawnAgentTool {
             name: name.to_string(),
             lifecycle: Lifecycle::Temporary,
             llm: LLMConfig {
-                provider: params.provider.unwrap_or(&parent_config.llm.provider).to_string(),
+                provider: params
+                    .provider
+                    .unwrap_or(&parent_config.llm.provider)
+                    .to_string(),
                 model: params.model.unwrap_or(&parent_config.llm.model).to_string(),
                 temperature: parent_config.llm.temperature,
                 max_tokens: parent_config.llm.max_tokens,
@@ -173,13 +176,16 @@ impl SpawnAgentTool {
                 context_window: parent_config.llm.context_window,
             },
             tools: sub_agent_tools,
-            mcp_servers: params.mcp_servers.unwrap_or_else(|| parent_config.mcp_servers.clone()),
+            mcp_servers: params
+                .mcp_servers
+                .unwrap_or_else(|| parent_config.mcp_servers.clone()),
             // Sub-agents inherit parent's skills
             skills: parent_config.skills.clone(),
             // Sub-agents inherit parent's folders and file confirmation setting
             folders: parent_config.folders.clone(),
             require_file_confirmation: parent_config.require_file_confirmation,
-            system_prompt: params.system_prompt
+            system_prompt: params
+                .system_prompt
                 .unwrap_or(DEFAULT_SUB_AGENT_SYSTEM_PROMPT)
                 .to_string(),
             // Sub-agents inherit parent's max_tool_iterations and reasoning_effort

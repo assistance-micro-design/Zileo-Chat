@@ -20,9 +20,12 @@ use tokio::sync::RwLock;
 use tracing::{info, instrument};
 
 use super::providers;
-use super::{EmbeddingError, EmbeddingProvider, DEFAULT_TIMEOUT_MS, MAX_BATCH_SIZE, MAX_EMBEDDING_TEXT_LENGTH};
 #[cfg(test)]
 use super::MISTRAL_EMBED_DIMENSION;
+use super::{
+    EmbeddingError, EmbeddingProvider, DEFAULT_TIMEOUT_MS, MAX_BATCH_SIZE,
+    MAX_EMBEDDING_TEXT_LENGTH,
+};
 
 /// Service for generating vector embeddings
 ///
