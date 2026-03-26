@@ -491,28 +491,6 @@ Combines Providers and Models sections.
 />
 
 <style>
-	.settings-section {
-		margin-bottom: var(--spacing-2xl);
-		padding-bottom: var(--spacing-xl);
-	}
-
-	.section-title {
-		font-size: var(--font-size-2xl);
-		font-weight: var(--font-weight-semibold);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-title-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-title-row .section-title {
-		margin-bottom: 0;
-	}
-
 	.section-header-row {
 		display: flex;
 		align-items: center;

@@ -88,9 +88,9 @@ export interface Workflow {
   /** Cumulative output tokens from sub-agents only */
   sub_agent_tokens_output: number;
   /** Cumulative cached input tokens for this workflow */
-  total_cached_tokens?: number;
+  total_cached_tokens: number | null;
   /** Cumulative cache-write tokens for this workflow */
-  total_cache_write_tokens?: number;
+  total_cache_write_tokens: number | null;
   /** Folder ID for organization (absent = uncategorized) */
   folder_id?: string;
   /** Whether this workflow is pinned to the top of the sidebar */

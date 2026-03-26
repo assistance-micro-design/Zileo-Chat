@@ -20,14 +20,10 @@ Manages theme selection (light/dark).
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { Card, HelpButton } from '$lib/components/ui';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import { Sun, Moon, ShieldCheck } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-
-	/** Current theme value - synced with theme store */
-	let currentTheme = $state<Theme>('light');
 
 	/**
 	 * Handle theme change
@@ -35,17 +31,6 @@ Manages theme selection (light/dark).
 	function handleThemeChange(newTheme: Theme): void {
 		theme.setTheme(newTheme);
 	}
-
-	onMount(() => {
-		// Subscribe to theme store and sync value
-		const unsubscribeTheme = theme.subscribe((value) => {
-			currentTheme = value;
-		});
-
-		return () => {
-			unsubscribeTheme();
-		};
-	});
 </script>
 
 <section class="settings-section">
@@ -63,7 +48,7 @@ Manages theme selection (light/dark).
 		<button
 			type="button"
 			class="theme-card"
-			class:selected={currentTheme === 'light'}
+			class:selected={$theme === 'light'}
 			onclick={() => handleThemeChange('light')}
 		>
 			<div class="theme-preview light">
@@ -86,7 +71,7 @@ Manages theme selection (light/dark).
 		<button
 			type="button"
 			class="theme-card"
-			class:selected={currentTheme === 'dark'}
+			class:selected={$theme === 'dark'}
 			onclick={() => handleThemeChange('dark')}
 		>
 			<div class="theme-preview dark">
