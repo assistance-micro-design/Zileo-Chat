@@ -24,6 +24,7 @@ Provides CRUD operations for agents with list view and form modal.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { invoke } from '@tauri-apps/api/core';
 	import {
 		agentStore,
 		agents,
@@ -32,6 +33,7 @@ Provides CRUD operations for agents with list view and form modal.
 		formMode,
 		editingAgent
 	} from '$lib/stores/agents';
+	import type { ProviderInfo } from '$types/custom-provider';
 	import AgentList from './AgentList.svelte';
 	import AgentForm from './AgentForm.svelte';
 	import { ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
@@ -55,11 +57,20 @@ Provides CRUD operations for agents with list view and form modal.
 	let agentToDelete = $state<string | null>(null);
 	let deleting = $state(false);
 
+	/** Provider ID -> display name mapping for AgentList */
+	let providerNames = $state<Record<string, string>>({});
+
 	/**
-	 * Loads agents on component mount
+	 * Loads agents and provider names on component mount
 	 */
-	onMount(() => {
+	onMount(async () => {
 		agentStore.loadAgents();
+		try {
+			const providers = await invoke<ProviderInfo[]>('list_providers');
+			providerNames = Object.fromEntries(providers.map((p) => [p.id, p.displayName]));
+		} catch {
+			// Non-blocking: provider names are cosmetic, fallback to raw ID
+		}
 	});
 
 	/**
@@ -164,6 +175,7 @@ Provides CRUD operations for agents with list view and form modal.
 		<AgentList
 			agents={$agents}
 			loading={$isLoading}
+			{providerNames}
 			onedit={handleEdit}
 			ondelete={handleDeleteRequest}
 		/>

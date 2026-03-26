@@ -23,6 +23,7 @@ Displays memories with filtering, search, and action buttons.
 -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { save } from '@tauri-apps/plugin-dialog';
 	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal, DeleteConfirmModal } from '$lib/components/ui';
@@ -390,7 +391,7 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	// Load memories on mount
-	$effect(() => {
+	onMount(() => {
 		loadMemories();
 	});
 </script>

@@ -22,6 +22,7 @@ Displays in a modal with markdown content editor.
 <script lang="ts">
 	import { Button, Input, Textarea, Select } from '$lib/components/ui';
 	import type { Skill, SkillCreate, SkillCategory } from '$types/skill';
+	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -63,20 +64,11 @@ Displays in a modal with markdown content editor.
 		nameValid && description.trim().length > 0 && content.trim().length > 0
 	);
 
-	// Category labels mapping for i18n
-	const categoryI18nKeys: Record<SkillCategory, string> = {
-		system: 'skills_category_system',
-		coding: 'skills_category_coding',
-		workflow: 'skills_category_workflow',
-		analysis: 'skills_category_analysis',
-		custom: 'skills_category_custom'
-	};
-
 	// Category options for Select
 	let categoryOptions = $derived(
-		(['system', 'coding', 'workflow', 'analysis', 'custom'] as SkillCategory[]).map((value) => ({
+		(Object.keys(SKILL_CATEGORY_I18N_KEYS) as SkillCategory[]).map((value) => ({
 			value,
-			label: t(categoryI18nKeys[value])
+			label: t(SKILL_CATEGORY_I18N_KEYS[value])
 		}))
 	);
 

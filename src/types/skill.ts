@@ -106,3 +106,11 @@ export const SKILL_CATEGORY_LABELS: Record<SkillCategory, string> = {
 	analysis: 'Analysis',
 	custom: 'Custom'
 };
+
+export const SKILL_CATEGORY_I18N_KEYS: Record<SkillCategory, string> = {
+	system: 'skills_category_system',
+	coding: 'skills_category_coding',
+	workflow: 'skills_category_workflow',
+	analysis: 'skills_category_analysis',
+	custom: 'skills_category_custom'
+};

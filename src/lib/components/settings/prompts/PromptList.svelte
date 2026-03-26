@@ -24,6 +24,7 @@ Shows prompt summary with actions for edit and delete.
 
 <script lang="ts">
 	import type { PromptSummary, PromptCategory } from '$types/prompt';
+	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
 	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
 	import { FileText, Edit, Trash2, Variable } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -58,22 +59,12 @@ Shows prompt summary with actions for edit and delete.
 		}, 300);
 	}
 
-	// Category labels mapping for i18n
-	const categoryI18nKeys: Record<PromptCategory, string> = {
-		system: 'prompts_category_system',
-		user: 'prompts_category_user',
-		analysis: 'prompts_category_analysis',
-		generation: 'prompts_category_generation',
-		coding: 'prompts_category_coding',
-		custom: 'prompts_category_custom'
-	};
-
 	// Category options with "All" option
 	let categoryOptions = $derived([
 		{ value: '', label: t('prompts_all_categories') },
-		...(['system', 'user', 'analysis', 'generation', 'coding', 'custom'] as PromptCategory[]).map((value) => ({
+		...(Object.keys(PROMPT_CATEGORY_I18N_KEYS) as PromptCategory[]).map((value) => ({
 			value,
-			label: t(categoryI18nKeys[value])
+			label: t(PROMPT_CATEGORY_I18N_KEYS[value])
 		}))
 	]);
 
@@ -171,7 +162,7 @@ Shows prompt summary with actions for edit and delete.
 									<h4 class="prompt-name">{prompt.name}</h4>
 								</div>
 								<Badge variant={getCategoryVariant(prompt.category)}>
-									{$i18n(categoryI18nKeys[prompt.category])}
+									{$i18n(PROMPT_CATEGORY_I18N_KEYS[prompt.category])}
 								</Badge>
 							</div>
 

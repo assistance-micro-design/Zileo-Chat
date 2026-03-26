@@ -27,6 +27,7 @@ Displays in a modal with variable detection and preview.
 	import { invoke } from '@tauri-apps/api/core';
 	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
+	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
 	import type { SkillSummary } from '$types/skill';
 	import { extractVariables, extractSkillReferences } from '$lib/stores/prompts';
 	import { i18n, t } from '$lib/i18n';
@@ -57,9 +58,11 @@ Displays in a modal with variable detection and preview.
 
 	// Skills state for insertion
 	let availableSkills = $state<SkillSummary[]>([]);
+	let contentTextarea = $state<HTMLTextAreaElement | null>(null);
 	const contentTextareaId = 'prompt-content-textarea';
 
 	onMount(async () => {
+		contentTextarea = document.getElementById(contentTextareaId) as HTMLTextAreaElement | null;
 		try {
 			const skills = await invoke<SkillSummary[]>('list_skills');
 			availableSkills = skills.filter((s) => s.enabled);
@@ -88,21 +91,11 @@ Displays in a modal with variable detection and preview.
 		availableSkills.filter((s) => !detectedSkills.includes(s.name))
 	);
 
-	// Category labels mapping for i18n
-	const categoryI18nKeys: Record<PromptCategory, string> = {
-		system: 'prompts_category_system',
-		user: 'prompts_category_user',
-		analysis: 'prompts_category_analysis',
-		generation: 'prompts_category_generation',
-		coding: 'prompts_category_coding',
-		custom: 'prompts_category_custom'
-	};
-
 	// Category options for Select
 	let categoryOptions = $derived(
-		(['system', 'user', 'analysis', 'generation', 'coding', 'custom'] as PromptCategory[]).map((value) => ({
+		(Object.keys(PROMPT_CATEGORY_I18N_KEYS) as PromptCategory[]).map((value) => ({
 			value,
-			label: t(categoryI18nKeys[value])
+			label: t(PROMPT_CATEGORY_I18N_KEYS[value])
 		}))
 	);
 
@@ -133,8 +126,8 @@ Displays in a modal with variable detection and preview.
 	 */
 	function insertSkillReference(skillName: string): void {
 		const ref = `{{skill:${skillName}}}`;
-		const textarea = document.getElementById(contentTextareaId) as HTMLTextAreaElement | null;
-		if (textarea) {
+		if (contentTextarea) {
+			const textarea = contentTextarea;
 			const start = textarea.selectionStart;
 			const end = textarea.selectionEnd;
 			content = content.substring(0, start) + ref + content.substring(end);

@@ -21,10 +21,9 @@ Manages LLM providers and models configuration.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { ProviderType } from '$types/llm';
+	import type { ProviderType, ProviderSettings } from '$types/llm';
 	import LLMSection from '$lib/components/settings/providers/LLMSection.svelte';
 	import APIKeysSection from '$lib/components/settings/providers/APIKeysSection.svelte';
-	import type { ProviderSettings } from '$types/llm';
 
 	/** Component reference for reload capability */
 	let llmSectionRef: LLMSection;
@@ -38,10 +37,12 @@ Manages LLM providers and models configuration.
 	let apiKeyIsCustom = $state(false);
 
 	/**
-	 * Opens API key configuration modal
+	 * Opens API key configuration modal with provider state from LLMSection
 	 */
-	function handleConfigureApiKey(provider: ProviderType, displayName?: string, isCustom?: boolean): void {
+	function handleConfigureApiKey(provider: ProviderType, hasKey: boolean, provSettings: ProviderSettings | null, displayName?: string, isCustom?: boolean): void {
 		apiKeyProvider = provider;
+		apiKeyHasKey = hasKey;
+		apiKeyProviderSettings = provSettings;
 		apiKeyProviderDisplayName = displayName;
 		apiKeyIsCustom = isCustom ?? false;
 		showApiKeyModal = true;

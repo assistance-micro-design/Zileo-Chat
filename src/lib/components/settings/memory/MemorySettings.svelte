@@ -24,6 +24,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Button, Select, Card, StatusIndicator, Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
@@ -33,6 +34,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		MemoryStats,
 		MemoryTokenStats
 	} from '$types/embedding';
+	import { EMBEDDING_MODELS } from '$types/embedding';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
@@ -94,17 +96,9 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	]);
 
 	/** Model options based on selected provider */
-	const modelOptions = $derived.by(() => {
-		const models: Record<EmbeddingProviderType, { value: string; label: string; dimension: number }[]> = {
-			mistral: [{ value: 'mistral-embed', label: 'Mistral Embed (1024D)', dimension: 1024 }],
-			ollama: [
-				{ value: 'nomic-embed-text', label: 'Nomic Embed Text (768D)', dimension: 768 },
-				{ value: 'mxbai-embed-large', label: 'MxBai Embed Large (1024D)', dimension: 1024 }
-			]
-		};
-
-		return models[editConfig.provider as EmbeddingProviderType] || [];
-	});
+	const modelOptions = $derived(
+		EMBEDDING_MODELS[editConfig.provider as EmbeddingProviderType] || []
+	);
 
 	/**
 	 * Loads the current embedding configuration
@@ -223,14 +217,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		const provider = event.currentTarget.value as EmbeddingProviderType;
 		editConfig.provider = provider;
 
-		const models: Record<EmbeddingProviderType, { value: string; label: string; dimension: number }[]> = {
-			mistral: [{ value: 'mistral-embed', label: 'Mistral Embed (1024D)', dimension: 1024 }],
-			ollama: [
-				{ value: 'nomic-embed-text', label: 'Nomic Embed Text (768D)', dimension: 768 },
-				{ value: 'mxbai-embed-large', label: 'MxBai Embed Large (1024D)', dimension: 1024 }
-			]
-		};
-		const providerModels = models[provider] || [];
+		const providerModels = EMBEDDING_MODELS[provider] || [];
 		if (providerModels.length > 0) {
 			editConfig.model = providerModels[0].value;
 			editConfig.dimension = providerModels[0].dimension;
@@ -258,7 +245,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	}
 
 	// Load config on mount
-	$effect(() => {
+	onMount(() => {
 		loadConfig();
 	});
 </script>

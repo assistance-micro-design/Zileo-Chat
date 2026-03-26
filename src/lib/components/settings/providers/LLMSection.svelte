@@ -25,6 +25,7 @@ Combines Providers and Models sections.
 	import type {
 		LLMModel,
 		ProviderType,
+		ProviderSettings,
 		CreateModelRequest,
 		UpdateModelRequest,
 		LLMState
@@ -62,7 +63,7 @@ Combines Providers and Models sections.
 	/** Props */
 	interface Props {
 		/** Callback when API key modal should be opened */
-		onConfigureApiKey: (provider: ProviderType, displayName?: string, isCustom?: boolean) => void;
+		onConfigureApiKey: (provider: ProviderType, hasApiKey: boolean, providerSettings: ProviderSettings | null, displayName?: string, isCustom?: boolean) => void;
 	}
 
 	let { onConfigureApiKey }: Props = $props();
@@ -317,7 +318,7 @@ Combines Providers and Models sections.
 					settings={llmState.providers[provInfo.id] ?? null}
 					hasApiKey={provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id)}
 					defaultModel={getProviderDefaultModel(provInfo.id)}
-					onConfigure={() => onConfigureApiKey(provInfo.id)}
+					onConfigure={() => onConfigureApiKey(provInfo.id, provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id), llmState.providers[provInfo.id] ?? null)}
 				>
 					{#snippet icon()}
 						{#if provInfo.id === 'mistral'}
@@ -338,7 +339,7 @@ Combines Providers and Models sections.
 					hasApiKey={providerHasApiKey(provInfo.id)}
 					defaultModel={getProviderDefaultModel(provInfo.id)}
 					isCustom={true}
-					onConfigure={() => onConfigureApiKey(provInfo.id, provInfo.displayName, true)}
+					onConfigure={() => onConfigureApiKey(provInfo.id, providerHasApiKey(provInfo.id), llmState.providers[provInfo.id] ?? null, provInfo.displayName, true)}
 					onDelete={() => handleDeleteProviderRequest(provInfo)}
 				>
 					{#snippet icon()}

@@ -36,13 +36,15 @@ Shows agent summary with actions for edit and delete.
 		agents: AgentSummary[];
 		/** Loading state */
 		loading: boolean;
+		/** Provider ID to display name mapping */
+		providerNames?: Record<string, string>;
 		/** Edit callback */
 		onedit: (agentId: string) => void;
 		/** Delete callback */
 		ondelete: (agentId: string) => void;
 	}
 
-	let { agents, loading, onedit, ondelete }: Props = $props();
+	let { agents, loading, providerNames = {}, onedit, ondelete }: Props = $props();
 
 	/**
 	 * Gets badge variant for lifecycle type
@@ -61,14 +63,10 @@ Shows agent summary with actions for edit and delete.
 	}
 
 	/**
-	 * Formats provider name for display
+	 * Formats provider name for display using the provider names map
 	 */
 	function formatProvider(provider: string): string {
-		const providers: Record<string, string> = {
-			Mistral: 'Mistral AI',
-			Ollama: 'Ollama'
-		};
-		return providers[provider] || provider;
+		return providerNames[provider] || provider;
 	}
 </script>
 

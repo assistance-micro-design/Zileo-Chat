@@ -21,6 +21,7 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 
 <script lang="ts">
 	import type { SkillSummary, SkillCategory } from '$types/skill';
+	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
 	import { Card, Badge, Button, StatusIndicator, Input, Select } from '$lib/components/ui';
 	import { BookMarked, Edit, Trash2, FileText } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -57,22 +58,13 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 		}, 300);
 	}
 
-	// Category labels mapping for i18n
-	const categoryI18nKeys: Record<SkillCategory, string> = {
-		system: 'skills_category_system',
-		coding: 'skills_category_coding',
-		workflow: 'skills_category_workflow',
-		analysis: 'skills_category_analysis',
-		custom: 'skills_category_custom'
-	};
-
 	// Category options with "All" option
 	let categoryOptions = $derived([
 		{ value: '', label: t('skills_all_categories') },
-		...(['system', 'coding', 'workflow', 'analysis', 'custom'] as SkillCategory[]).map(
+		...(Object.keys(SKILL_CATEGORY_I18N_KEYS) as SkillCategory[]).map(
 			(value) => ({
 				value,
-				label: t(categoryI18nKeys[value])
+				label: t(SKILL_CATEGORY_I18N_KEYS[value])
 			})
 		)
 	]);
@@ -181,7 +173,7 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 									<h4 class="skill-name">{skill.name}</h4>
 								</div>
 								<Badge variant={getCategoryVariant(skill.category)}>
-									{$i18n(categoryI18nKeys[skill.category])}
+									{$i18n(SKILL_CATEGORY_I18N_KEYS[skill.category])}
 								</Badge>
 							</div>
 

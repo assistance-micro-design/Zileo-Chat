@@ -98,3 +98,12 @@ export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
   coding: 'Coding',
   custom: 'Custom'
 };
+
+export const PROMPT_CATEGORY_I18N_KEYS: Record<PromptCategory, string> = {
+  system: 'prompts_category_system',
+  user: 'prompts_category_user',
+  analysis: 'prompts_category_analysis',
+  generation: 'prompts_category_generation',
+  coding: 'prompts_category_coding',
+  custom: 'prompts_category_custom'
+};
