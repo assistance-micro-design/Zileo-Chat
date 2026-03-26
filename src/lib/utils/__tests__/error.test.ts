@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, it, expect } from 'vitest';
-import { getErrorMessage, formatErrorForDisplay } from '../error';
+import { getErrorMessage } from '../error';
 
 describe('getErrorMessage', () => {
 	it('handles Error instances', () => {
@@ -45,20 +45,3 @@ describe('getErrorMessage', () => {
 	});
 });
 
-describe('formatErrorForDisplay', () => {
-	it('strips Error: prefix', () => {
-		expect(formatErrorForDisplay('Error: something went wrong')).toBe('something went wrong');
-	});
-
-	it('strips invoke error: prefix', () => {
-		expect(formatErrorForDisplay('invoke error: bad request')).toBe('bad request');
-	});
-
-	it('passes through clean messages', () => {
-		expect(formatErrorForDisplay('something went wrong')).toBe('something went wrong');
-	});
-
-	it('handles Error objects', () => {
-		expect(formatErrorForDisplay(new Error('test error'))).toBe('test error');
-	});
-});
