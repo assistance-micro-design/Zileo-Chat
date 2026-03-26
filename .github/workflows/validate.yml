@@ -39,42 +39,47 @@ jobs:
       - name: Test
         run: npm run test
 
-  backend:
+  backend-fmt:
     runs-on: ubuntu-latest
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h /
-
       - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev clang llvm
-
-      - name: Create frontend dist placeholder
-        run: mkdir -p build
+          components: rustfmt
 
       - name: Format check
         working-directory: src-tauri
         run: cargo fmt --check
 
+  backend-clippy:
+    needs: backend-fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Rust Backend
+        uses: ./.github/actions/setup-rust-backend
+        with:
+          rust-components: clippy
+          cache-key: clippy
+
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
+
+  backend-test:
+    needs: backend-fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Rust Backend
+        uses: ./.github/actions/setup-rust-backend
+        with:
+          rust-components: ''
+          cache-key: test
 
       - name: Test
         working-directory: src-tauri

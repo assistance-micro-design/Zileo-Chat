@@ -1,0 +1,39 @@
+name: 'Setup Rust Backend'
+description: 'Install Rust toolchain, system deps, and configure cache for backend CI'
+
+inputs:
+  rust-components:
+    description: 'Rust components to install (comma-separated)'
+    default: ''
+  cache-key:
+    description: 'Cache key suffix for swatinem/rust-cache'
+    required: true
+  save-cache:
+    description: 'Whether to save the cache after the job'
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: ${{ inputs.rust-components }}
+
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: './src-tauri -> target'
+        shared-key: validate-${{ inputs.cache-key }}
+        save-if: ${{ inputs.save-cache }}
+        cache-on-failure: true
+
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev clang llvm
+
+    - name: Create frontend dist placeholder
+      shell: bash
+      run: mkdir -p build
