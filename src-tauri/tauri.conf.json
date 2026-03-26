@@ -31,6 +31,31 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "icons/icon.icns"
-    ]
+    ],
+    "category": "Productivity",
+    "copyright": "Copyright 2026 Assistance Micro Design",
+    "publisher": "Assistance Micro Design",
+    "shortDescription": "Multi-agent AI desktop client with local-first privacy",
+    "longDescription": "Zileo Chat is a multi-agent desktop application that lets you orchestrate AI conversations with Mistral, Ollama, and OpenAI-compatible providers. Connect to external tools via MCP servers. All data stays local — you validate each step.",
+    "homepage": "https://assistance-micro-design.fr",
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "displayLanguageSelector": true,
+        "languages": ["French", "English"],
+        "startMenuFolder": "Zileo",
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.13"
+    },
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "priority": "optional",
+        "maintainers": ["Assistance Micro Design <assistance-micro-design@pm.me>"]
+      }
+    }
   }
 }
