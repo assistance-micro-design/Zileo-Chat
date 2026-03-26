@@ -23,7 +23,8 @@
 //! - [`restore_from_trash_cmd`] - Restore a file from trash
 
 use crate::tools::file_manager::security::validate_folder_for_authorization;
-use crate::tools::file_manager::trash::{self, TrashEntry};
+use crate::tools::file_manager::trash::TrashEntry;
+use crate::tools::file_manager::trash_management;
 use std::path::Path;
 use tracing::{info, instrument, warn};
 
@@ -73,7 +74,7 @@ pub async fn list_trash(folder_path: String) -> Result<Vec<TrashEntry>, String> 
         return Err(msg);
     }
 
-    trash::list_trash_entries(folder).map_err(|e| {
+    trash_management::list_trash_entries(folder).map_err(|e| {
         warn!(error = %e, "Failed to list trash entries");
         e.to_string()
     })
@@ -104,7 +105,7 @@ pub async fn restore_from_trash_cmd(
         return Err(msg);
     }
 
-    let restored = trash::restore_from_trash(trash, folder).map_err(|e| {
+    let restored = trash_management::restore_from_trash(trash, folder).map_err(|e| {
         warn!(error = %e, "Failed to restore from trash");
         e.to_string()
     })?;

@@ -61,9 +61,12 @@
 
 mod definition;
 mod helpers;
+mod helpers_search;
 mod input;
 mod operations;
+mod operations_query;
 mod tool;
 
-pub use helpers::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams};
+pub use helpers::{add_memory_core, AddMemoryParams, SearchParams};
+pub use helpers_search::search_memories_core;
 pub use tool::MemoryTool;

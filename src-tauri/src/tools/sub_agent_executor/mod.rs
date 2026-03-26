@@ -57,6 +57,7 @@
 
 pub mod activity_monitor;
 mod execution;
+mod execution_retry;
 mod records;
 
 use std::sync::Arc;

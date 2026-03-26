@@ -46,6 +46,10 @@
 //! })).await?;
 //! ```
 
+mod operations;
 mod tool;
+
+#[cfg(test)]
+mod tests;
 
 pub use tool::TodoTool;

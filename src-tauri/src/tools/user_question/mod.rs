@@ -49,6 +49,7 @@
 //! ```
 
 pub mod circuit_breaker;
+mod execution;
 mod tool;
 
 // Re-export for external use (e.g., orchestrator-level circuit breaker management)

@@ -28,7 +28,7 @@
 //! - `definition()` - Returns metadata for LLM understanding
 //! - `execute()` - Performs the tool action with JSON input/output
 //! - `validate_input()` - Validates parameters before execution
-//! - `requires_confirmation()` - Whether human confirmation is needed
+//! - `validate_input()` - Validates parameters before execution
 //!
 //! # Available Tools
 //!
@@ -56,52 +56,39 @@ pub mod calculator;
 pub mod constants;
 pub mod context;
 pub mod delegate_task;
+mod delegate_task_execution;
 pub mod factory;
+mod factory_creation;
 pub mod file_manager;
 pub mod memory;
 pub mod parallel_tasks;
+mod parallel_tasks_execution;
 pub mod read_skill;
 pub mod registry;
 pub mod response;
 pub mod spawn_agent;
+mod spawn_agent_execution;
 pub mod sub_agent_circuit_breaker;
 pub mod sub_agent_executor;
 pub mod todo;
 pub mod user_question;
 pub mod utils;
 pub mod validation_helper;
+mod validation_helper_requests;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
-// Re-export tools for agent integration
-#[allow(unused_imports)]
+// Re-export tools used via crate::tools:: paths
 pub use calculator::CalculatorTool;
-#[allow(unused_imports)]
 pub use context::AgentToolContext;
-#[allow(unused_imports)]
-pub use delegate_task::DelegateTaskTool;
-#[allow(unused_imports)]
 pub use factory::ToolFactory;
-#[allow(unused_imports)]
 pub use file_manager::FileManagerTool;
-#[allow(unused_imports)]
 pub use memory::MemoryTool;
-#[allow(unused_imports)]
-pub use parallel_tasks::ParallelTasksTool;
-#[allow(unused_imports)]
 pub use read_skill::ReadSkillTool;
-#[allow(unused_imports)]
-pub use registry::TOOL_REGISTRY;
-#[allow(unused_imports)]
-pub use spawn_agent::SpawnAgentTool;
-#[allow(unused_imports)]
-pub use sub_agent_circuit_breaker::SubAgentCircuitBreaker;
-#[allow(unused_imports)]
 pub use todo::TodoTool;
-#[allow(unused_imports)]
 pub use user_question::UserQuestionTool;
 
 /// Tool definition metadata for LLM understanding.
@@ -125,7 +112,6 @@ pub struct ToolDefinition {
 }
 
 /// Tool execution result type.
-#[allow(dead_code)]
 pub type ToolResult<T> = Result<T, ToolError>;
 
 /// Errors that can occur during tool execution.
@@ -134,7 +120,6 @@ pub type ToolResult<T> = Result<T, ToolError>;
 /// - Clear explanation of what went wrong
 /// - Suggestion for how to fix the issue
 /// - Context about the operation that failed
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ToolError {
     /// Invalid input parameters - check the input_schema for valid format
@@ -220,7 +205,7 @@ impl From<String> for ToolError {
 /// 1. **definition()**: Return comprehensive metadata including JSON schemas
 /// 2. **execute()**: Handle all operations via operation dispatch
 /// 3. **validate_input()**: Validate against JSON schema before execution
-/// 4. **requires_confirmation()**: Return true for destructive operations
+/// 4. Set `requires_confirmation: true` in ToolDefinition for destructive operations
 ///
 /// # Example Implementation
 ///
@@ -250,7 +235,6 @@ impl From<String> for ToolError {
 ///     }
 /// }
 /// ```
-#[allow(dead_code)]
 #[async_trait]
 pub trait Tool: Send + Sync {
     /// Returns tool definition with description for LLM.
@@ -280,16 +264,6 @@ pub trait Tool: Send + Sync {
     /// - Values are within valid ranges
     /// - Operation-specific requirements
     fn validate_input(&self, input: &Value) -> ToolResult<()>;
-
-    /// Returns true if tool requires human confirmation.
-    ///
-    /// Override to return `true` for:
-    /// - Destructive operations (delete, drop)
-    /// - External system modifications
-    /// - Operations with side effects
-    fn requires_confirmation(&self) -> bool {
-        false
-    }
 }
 
 #[cfg(test)]

@@ -53,7 +53,7 @@ mod tool_factory_tests {
         let tool = result.unwrap();
         assert_eq!(tool.definition().id, "MemoryTool");
         assert_eq!(tool.definition().name, "Memory Manager");
-        assert!(!tool.requires_confirmation());
+        assert!(!tool.definition().requires_confirmation);
     }
 
     #[tokio::test]

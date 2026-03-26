@@ -19,8 +19,13 @@
 
 pub mod helpers;
 pub mod operations;
+mod operations_move_search;
 pub mod security;
 pub mod tool;
 pub mod trash;
+pub mod trash_management;
+
+#[cfg(test)]
+mod tests;
 
 pub use tool::FileManagerTool;

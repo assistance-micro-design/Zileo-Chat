@@ -16,9 +16,8 @@
 //!
 //! This tool allows agents to ask questions to users through a modal interface.
 
-use crate::db::{sanitize_for_surrealdb, DBClient};
-use crate::models::streaming::{events, StreamChunk};
-use crate::models::{QuestionOption, UserQuestionCreate, UserQuestionStreamPayload};
+use crate::db::DBClient;
+use crate::models::QuestionOption;
 use crate::tools::constants::user_question as uq_const;
 use crate::tools::user_question::circuit_breaker::UserQuestionCircuitBreaker;
 use crate::tools::utils::{validate_length, validate_not_empty};
@@ -28,22 +27,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
-use tracing::{debug, info, instrument, warn};
-use uuid::Uuid;
+use tauri::AppHandle;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AskInput {
-    operation: String,
-    question: String,
+pub(crate) struct AskInput {
+    pub(crate) operation: String,
+    pub(crate) question: String,
     #[serde(rename = "questionType")]
-    question_type: String,
-    options: Option<Vec<QuestionOption>>,
+    pub(crate) question_type: String,
+    pub(crate) options: Option<Vec<QuestionOption>>,
     #[serde(rename = "textPlaceholder")]
-    text_placeholder: Option<String>,
+    pub(crate) text_placeholder: Option<String>,
     #[serde(rename = "textRequired")]
-    text_required: Option<bool>,
-    context: Option<String>,
+    pub(crate) text_required: Option<bool>,
+    pub(crate) context: Option<String>,
 }
 
 /// Tool for asking questions to users.
@@ -66,15 +63,15 @@ struct AskInput {
 /// This prevents spamming questions when users are unresponsive.
 pub struct UserQuestionTool {
     /// Database client for persistence
-    db: Arc<DBClient>,
+    pub(crate) db: Arc<DBClient>,
     /// Current workflow ID (scope)
-    workflow_id: String,
+    pub(crate) workflow_id: String,
     /// Agent ID using this tool
-    agent_id: String,
+    pub(crate) agent_id: String,
     /// Tauri app handle for emitting streaming events
-    app_handle: Option<AppHandle>,
+    pub(crate) app_handle: Option<AppHandle>,
     /// Circuit breaker for timeout resilience
-    circuit_breaker: RwLock<UserQuestionCircuitBreaker>,
+    pub(crate) circuit_breaker: RwLock<UserQuestionCircuitBreaker>,
 }
 
 impl UserQuestionTool {
@@ -129,7 +126,7 @@ impl UserQuestionTool {
     ///
     /// # Errors
     /// Returns `ToolError::ValidationFailed` if validation fails
-    fn validate_ask_input(&self, input: &AskInput) -> ToolResult<()> {
+    pub(crate) fn validate_ask_input(&self, input: &AskInput) -> ToolResult<()> {
         validate_not_empty(&input.question, "question")?;
         validate_length(&input.question, uq_const::MAX_QUESTION_LENGTH, "question")?;
 
@@ -179,322 +176,6 @@ impl UserQuestionTool {
         }
 
         Ok(())
-    }
-
-    /// Creates a question record in the database.
-    ///
-    /// # Arguments
-    /// * `question_id` - UUID of the question
-    /// * `input` - Question details
-    ///
-    /// # Errors
-    /// Returns `ToolError::ExecutionFailed` if DB operation fails
-    async fn create_question_record(&self, question_id: &str, input: &AskInput) -> ToolResult<()> {
-        let options_json = serde_json::to_string(
-            &input.options.as_ref().cloned().unwrap_or_default(),
-        )
-        .map_err(|e| ToolError::ExecutionFailed(format!("Failed to serialize options: {}", e)))?;
-
-        // Create question in DB
-        let create_data = UserQuestionCreate {
-            workflow_id: self.workflow_id.clone(),
-            agent_id: self.agent_id.clone(),
-            question: input.question.clone(),
-            question_type: input.question_type.clone(),
-            options: options_json.clone(),
-            text_placeholder: input.text_placeholder.clone(),
-            text_required: input.text_required.unwrap_or(false),
-            context: input.context.clone(),
-            status: "pending".to_string(),
-        };
-
-        // Use execute_with_params for CREATE (CLAUDE.md SurrealDB SDK 2.x pattern)
-        let json_data = serde_json::to_value(&create_data)
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to encode JSON: {}", e)))?;
-        // Sanitize to remove null characters that cause SurrealDB panics
-        let json_data = sanitize_for_surrealdb(json_data);
-        let query = format!("CREATE user_question:`{}` CONTENT $data", question_id);
-
-        info!(question_id = %question_id, "Creating user question in DB");
-
-        self.db
-            .execute_with_params(&query, vec![("data".to_string(), json_data)])
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create question: {}", e)))?;
-
-        // Verify the question was created
-        let verify_query = format!("SELECT status FROM user_question:`{}`", question_id);
-        let verify_result: Vec<serde_json::Value> =
-            self.db.query_json(&verify_query).await.map_err(|e| {
-                ToolError::ExecutionFailed(format!("Failed to verify question creation: {}", e))
-            })?;
-
-        if verify_result.is_empty() {
-            return Err(ToolError::ExecutionFailed(format!(
-                "Question was not created in DB: {}",
-                question_id
-            )));
-        }
-
-        info!(question_id = %question_id, verify_result = ?verify_result, "Created and verified user question");
-
-        Ok(())
-    }
-
-    /// Emits a question start event to the frontend.
-    ///
-    /// # Arguments
-    /// * `question_id` - UUID of the question
-    /// * `input` - Question details
-    fn emit_question_event(&self, question_id: &str, input: &AskInput) {
-        if let Some(ref handle) = self.app_handle {
-            let payload = UserQuestionStreamPayload {
-                question_id: question_id.to_string(),
-                question: input.question.clone(),
-                question_type: input.question_type.clone(),
-                options: input.options.clone(),
-                text_placeholder: input.text_placeholder.clone(),
-                text_required: input.text_required.unwrap_or(false),
-                context: input.context.clone(),
-            };
-
-            let chunk = StreamChunk::user_question_start(self.workflow_id.clone(), payload);
-
-            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
-                warn!(error = %e, "Failed to emit user_question_start event");
-            }
-        }
-    }
-
-    /// Emits a question completion event to the frontend.
-    ///
-    /// # Arguments
-    /// * `question_id` - UUID of the question
-    fn emit_completion_event(&self, question_id: &str) {
-        if let Some(ref handle) = self.app_handle {
-            let chunk = StreamChunk::user_question_complete(
-                self.workflow_id.clone(),
-                question_id.to_string(),
-            );
-
-            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
-                warn!(error = %e, "Failed to emit user_question_complete event");
-            }
-        }
-    }
-
-    /// Asks a question to the user and waits for response.
-    ///
-    /// # Arguments
-    /// * `input` - Question details including type, options, and context
-    ///
-    /// # Circuit Breaker
-    ///
-    /// Before asking, checks if the circuit breaker allows new questions.
-    /// If the circuit is open (too many recent timeouts), returns an error immediately.
-    /// After receiving a response, updates the circuit breaker state:
-    /// - Success: resets timeout count
-    /// - Timeout: increments count, may open circuit
-    /// - Skip: treated as success (user actively responded)
-    #[instrument(skip(self), fields(workflow_id = %self.workflow_id, agent_id = %self.agent_id))]
-    async fn ask_question(&self, input: AskInput) -> ToolResult<Value> {
-        // Check circuit breaker before asking
-        {
-            let mut cb = self.circuit_breaker.write().map_err(|e| {
-                ToolError::ExecutionFailed(format!("Circuit breaker lock poisoned: {}", e))
-            })?;
-            if !cb.allow_question() {
-                let remaining = cb
-                    .remaining_cooldown()
-                    .map(|d| d.as_secs())
-                    .unwrap_or(uq_const::CIRCUIT_COOLDOWN_SECS);
-                warn!(
-                    workflow_id = %self.workflow_id,
-                    circuit_state = ?cb.state(),
-                    timeout_count = cb.timeout_count(),
-                    remaining_cooldown_secs = remaining,
-                    "Circuit breaker open - rejecting question"
-                );
-                return Err(ToolError::ExecutionFailed(format!(
-                    "User appears unresponsive ({} consecutive timeouts). \
-                     Question rejected. Retry in {} seconds.",
-                    cb.timeout_count(),
-                    remaining
-                )));
-            }
-        }
-
-        self.validate_ask_input(&input)?;
-
-        let question_id = Uuid::new_v4().to_string();
-        self.create_question_record(&question_id, &input).await?;
-        self.emit_question_event(&question_id, &input);
-
-        // Wait for response and update circuit breaker based on result
-        let response = self.wait_for_response(&question_id).await;
-
-        // Update circuit breaker based on response
-        match &response {
-            Ok(_) => {
-                if let Ok(mut cb) = self.circuit_breaker.write() {
-                    cb.record_success();
-                    debug!(workflow_id = %self.workflow_id, "Circuit breaker: recorded success");
-                }
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                if error_msg.contains("Timeout") || error_msg.contains("timed out") {
-                    if let Ok(mut cb) = self.circuit_breaker.write() {
-                        cb.record_timeout();
-                        warn!(
-                            workflow_id = %self.workflow_id,
-                            circuit_state = ?cb.state(),
-                            timeout_count = cb.timeout_count(),
-                            "Circuit breaker: recorded timeout"
-                        );
-                    }
-                } else if error_msg.contains("skipped") {
-                    // Skip is an active user choice, treat like success
-                    if let Ok(mut cb) = self.circuit_breaker.write() {
-                        cb.record_skip();
-                        debug!(workflow_id = %self.workflow_id, "Circuit breaker: recorded skip");
-                    }
-                }
-                // Other errors don't affect circuit breaker
-            }
-        }
-
-        self.emit_completion_event(&question_id);
-
-        response
-    }
-
-    /// Waits for user response with progressive polling and configurable timeout.
-    ///
-    /// Starts with 500ms intervals and gradually increases to 5s.
-    /// Times out after `DEFAULT_TIMEOUT_SECS` (5 minutes) and updates DB status to "timeout".
-    #[instrument(skip(self))]
-    async fn wait_for_response(&self, question_id: &str) -> ToolResult<Value> {
-        let timeout = Duration::from_secs(uq_const::DEFAULT_TIMEOUT_SECS);
-        let start = std::time::Instant::now();
-        let mut interval_idx = 0;
-
-        loop {
-            // Check timeout first
-            if start.elapsed() > timeout {
-                warn!(
-                    question_id = %question_id,
-                    elapsed_secs = start.elapsed().as_secs(),
-                    timeout_secs = uq_const::DEFAULT_TIMEOUT_SECS,
-                    "User question timeout"
-                );
-
-                // Update DB status to timeout
-                let update_query = format!(
-                    "UPDATE user_question:`{}` SET status = 'timeout'",
-                    question_id
-                );
-                if let Err(e) = self.db.execute(&update_query).await {
-                    warn!(error = %e, "Failed to update question status to timeout");
-                }
-
-                return Err(ToolError::ExecutionFailed(format!(
-                    "Timeout waiting for user response after {} seconds",
-                    uq_const::DEFAULT_TIMEOUT_SECS
-                )));
-            }
-
-            // Query question status
-            let query = format!(
-                "SELECT status, selected_options, text_response FROM user_question:`{}`",
-                question_id
-            );
-
-            let result: Vec<serde_json::Value> = self
-                .db
-                .query_json(&query)
-                .await
-                .map_err(|e| ToolError::ExecutionFailed(format!("DB query failed: {}", e)))?;
-
-            if let Some(record) = result.first() {
-                debug!(question_id = %question_id, record = ?record, "Poll result");
-
-                let status = record
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("pending");
-
-                debug!(question_id = %question_id, status = %status, "Parsed status");
-
-                match status {
-                    "answered" => {
-                        let selected_json = record
-                            .get("selected_options")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("[]");
-                        let selected: Vec<String> =
-                            serde_json::from_str(selected_json).map_err(|e| {
-                                ToolError::ExecutionFailed(format!(
-                                    "Failed to parse selected_options JSON: {}",
-                                    e
-                                ))
-                            })?;
-
-                        let text = record
-                            .get("text_response")
-                            .and_then(|v| v.as_str())
-                            .map(String::from);
-
-                        info!(question_id = %question_id, "User answered question");
-
-                        return Ok(json!({
-                            "success": true,
-                            "selectedOptions": selected,
-                            "textResponse": text,
-                            "message": "User response received"
-                        }));
-                    }
-                    "skipped" => {
-                        warn!(question_id = %question_id, "User skipped question");
-                        return Err(ToolError::ExecutionFailed(
-                            "Question skipped by user".into(),
-                        ));
-                    }
-                    "timeout" => {
-                        // Status was already set to timeout (possibly by another process)
-                        return Err(ToolError::ExecutionFailed("Question timed out".into()));
-                    }
-                    "pending" => {
-                        // Continue polling
-                    }
-                    _ => {
-                        return Err(ToolError::ExecutionFailed(format!(
-                            "Invalid question status: {}",
-                            status
-                        )));
-                    }
-                }
-            }
-
-            // Progressive delay
-            let delay = uq_const::POLL_INTERVALS_MS
-                .get(interval_idx)
-                .copied()
-                .unwrap_or(5000);
-
-            debug!(
-                question_id = %question_id,
-                delay_ms = delay,
-                elapsed_secs = start.elapsed().as_secs(),
-                "Waiting for user response"
-            );
-
-            tokio::time::sleep(Duration::from_millis(delay)).await;
-
-            if interval_idx < uq_const::POLL_INTERVALS_MS.len() - 1 {
-                interval_idx += 1;
-            }
-        }
     }
 }
 
@@ -673,9 +354,5 @@ ERROR HANDLING:
         }
 
         Ok(())
-    }
-
-    fn requires_confirmation(&self) -> bool {
-        false
     }
 }

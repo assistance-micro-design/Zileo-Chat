@@ -20,6 +20,7 @@
 use super::definition::build_definition;
 use super::input::MemoryInput;
 use super::operations::{self, MemoryContext};
+use super::operations_query;
 use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
 use crate::tools::constants::memory::{DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD};
@@ -132,14 +133,14 @@ impl Tool for MemoryTool {
 
             "describe" => {
                 let scope = params.scope.as_deref().unwrap_or("both");
-                operations::describe_memories(&params, scope, &ctx).await
+                operations_query::describe_memories(&params, scope, &ctx).await
             }
 
             "list" => {
                 let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
                 let scope = params.scope.as_deref().unwrap_or("both");
                 let mode = params.mode.as_deref().unwrap_or("full");
-                operations::list_memories(&params, params.type_filter.as_deref(), limit, scope, mode, &ctx)
+                operations_query::list_memories(&params, params.type_filter.as_deref(), limit, scope, mode, &ctx)
                     .await
             }
 
@@ -148,7 +149,7 @@ impl Tool for MemoryTool {
                 let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
                 let threshold = params.threshold.unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
                 let scope = params.scope.as_deref().unwrap_or("both");
-                operations::search_memories(
+                operations_query::search_memories(
                     &params,
                     params.query.as_deref().unwrap(),
                     limit,
@@ -162,12 +163,12 @@ impl Tool for MemoryTool {
 
             "delete" => {
                 // SAFETY: validate_get_or_delete() ensures memory_id is Some
-                operations::delete_memory(params.memory_id.as_deref().unwrap(), &ctx).await
+                operations_query::delete_memory(params.memory_id.as_deref().unwrap(), &ctx).await
             }
 
             "clear_by_type" => {
                 // SAFETY: validate_clear_by_type() ensures memory_type is Some
-                operations::clear_by_type(&params, params.memory_type.as_deref().unwrap(), &ctx)
+                operations_query::clear_by_type(&params, params.memory_type.as_deref().unwrap(), &ctx)
                     .await
             }
 
@@ -180,10 +181,5 @@ impl Tool for MemoryTool {
     fn validate_input(&self, input: &Value) -> ToolResult<()> {
         let parsed = MemoryInput::from_json(input)?;
         parsed.validate()
-    }
-
-    /// Returns false - memory operations are reversible, no confirmation needed.
-    fn requires_confirmation(&self) -> bool {
-        false
     }
 }

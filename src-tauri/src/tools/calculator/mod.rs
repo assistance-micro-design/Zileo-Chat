@@ -24,6 +24,10 @@
 //! - Utility (abs, sign, degrees, radians)
 //! - Mathematical constants (PI, E, TAU, SQRT2, LN2, LN10)
 
+mod operations;
 mod tool;
+
+#[cfg(test)]
+mod tests;
 
 pub use tool::CalculatorTool;
