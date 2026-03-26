@@ -65,6 +65,7 @@ keyring = { version = "3.6", features = [
     "sync-secret-service",    # Linux Secret Service (Gnome Keyring/KWallet)
 ] }
 aes-gcm = "0.10"
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3.24"

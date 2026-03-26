@@ -26,6 +26,3 @@ pub use keystore::{KeyStore, KeyStoreError};
 pub use validation::serialize_for_query;
 pub use validation::validate_uuid_field;
 pub use validation::Validator;
-// ValidationError is used in tests
-#[allow(unused_imports)]
-pub use validation::ValidationError;

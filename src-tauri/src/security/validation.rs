@@ -56,11 +56,6 @@ pub enum ValidationError {
     #[error("Input contains invalid characters: {details}")]
     InvalidCharacters { details: String },
 
-    /// Input format is invalid (used for record ID validation)
-    #[error("Invalid format for {field}: {details}")]
-    #[allow(dead_code)]
-    InvalidFormat { field: String, details: String },
-
     /// UUID format is invalid
     #[error("Invalid UUID format: {value}")]
     InvalidUuid { value: String },
@@ -258,67 +253,6 @@ impl Validator {
         Ok(api_key.to_string())
     }
 
-    /// Sanitizes a string for safe inclusion in logs (removes sensitive data patterns).
-    ///
-    /// This does NOT sanitize for database queries - use parameterized queries instead.
-    #[allow(dead_code)]
-    pub fn sanitize_for_logging(input: &str) -> String {
-        // Truncate long strings for logging (UTF-8 safe: count chars, not bytes)
-        const MAX_LOG_CHARS: usize = 500;
-        let char_count = input.chars().count();
-        if char_count > MAX_LOG_CHARS {
-            let truncated: String = input.chars().take(MAX_LOG_CHARS).collect();
-            format!("{}...[truncated]", truncated)
-        } else {
-            input.to_string()
-        }
-    }
-
-    /// Validates that a string is safe for use as a SurrealDB record ID part.
-    ///
-    /// Rules:
-    /// - Cannot be empty
-    /// - Only alphanumeric, underscore, hyphen allowed
-    /// - Cannot start with a number
-    #[allow(dead_code)]
-    pub fn validate_record_id_part(
-        part: &str,
-        field_name: &str,
-    ) -> Result<String, ValidationError> {
-        let trimmed = part.trim();
-
-        if trimmed.is_empty() {
-            return Err(ValidationError::Empty {
-                field: field_name.to_string(),
-            });
-        }
-
-        if trimmed
-            .chars()
-            .next()
-            .map(|c| c.is_numeric())
-            .unwrap_or(false)
-        {
-            return Err(ValidationError::InvalidFormat {
-                field: field_name.to_string(),
-                details: "cannot start with a number".to_string(),
-            });
-        }
-
-        if !trimmed
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(ValidationError::InvalidCharacters {
-                details: format!(
-                    "{} can only contain alphanumeric characters, underscore, and hyphen",
-                    field_name
-                ),
-            });
-        }
-
-        Ok(trimmed.to_string())
-    }
 }
 
 /// Serializes a value to a JSON string for safe inclusion in SurrealDB queries.
@@ -607,31 +541,4 @@ mod tests {
         ));
     }
 
-    // Sanitize for logging tests
-    #[test]
-    fn test_sanitize_for_logging_short() {
-        let result = Validator::sanitize_for_logging("short string");
-        assert_eq!(result, "short string");
-    }
-
-    #[test]
-    fn test_sanitize_for_logging_long() {
-        let long_string = "a".repeat(1000);
-        let result = Validator::sanitize_for_logging(&long_string);
-        assert!(result.ends_with("...[truncated]"));
-        assert!(result.len() < 1000);
-    }
-
-    // Record ID part validation tests
-    #[test]
-    fn test_validate_record_id_part_valid() {
-        assert!(Validator::validate_record_id_part("workflow", "table").is_ok());
-        assert!(Validator::validate_record_id_part("agent_state", "table").is_ok());
-    }
-
-    #[test]
-    fn test_validate_record_id_part_starts_with_number() {
-        let result = Validator::validate_record_id_part("123workflow", "table");
-        assert!(matches!(result, Err(ValidationError::InvalidFormat { .. })));
-    }
 }

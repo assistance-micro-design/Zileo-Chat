@@ -272,111 +272,16 @@ impl Default for KeyStore {
     }
 }
 
-/// Simple base64 encoding (no external dependency)
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+
 fn base64_encode(data: &[u8]) -> String {
-    use std::io::Write;
-    let mut output = Vec::new();
-    {
-        let mut encoder = Base64Encoder::new(&mut output);
-        encoder.write_all(data).expect("base64 encoding failed");
-    }
-    String::from_utf8(output).expect("base64 is always valid utf8")
+    STANDARD.encode(data)
 }
 
-/// Simple base64 decoding
 fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
-    Base64Decoder::decode(s)
-}
-
-/// Simple base64 encoder
-struct Base64Encoder<W: std::io::Write> {
-    writer: W,
-}
-
-impl<W: std::io::Write> Base64Encoder<W> {
-    fn new(writer: W) -> Self {
-        Self { writer }
-    }
-}
-
-impl<W: std::io::Write> std::io::Write for Base64Encoder<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-        for chunk in buf.chunks(3) {
-            let b0 = chunk[0] as usize;
-            let b1 = chunk.get(1).copied().unwrap_or(0) as usize;
-            let b2 = chunk.get(2).copied().unwrap_or(0) as usize;
-
-            let c0 = ALPHABET[b0 >> 2];
-            let c1 = ALPHABET[((b0 & 0x03) << 4) | (b1 >> 4)];
-            let c2 = if chunk.len() > 1 {
-                ALPHABET[((b1 & 0x0f) << 2) | (b2 >> 6)]
-            } else {
-                b'='
-            };
-            let c3 = if chunk.len() > 2 {
-                ALPHABET[b2 & 0x3f]
-            } else {
-                b'='
-            };
-
-            self.writer.write_all(&[c0, c1, c2, c3])?;
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()
-    }
-}
-
-/// Simple base64 decoder
-struct Base64Decoder;
-
-impl Base64Decoder {
-    fn decode(s: &str) -> Result<Vec<u8>, String> {
-        fn char_to_val(c: u8) -> Result<u8, String> {
-            match c {
-                b'A'..=b'Z' => Ok(c - b'A'),
-                b'a'..=b'z' => Ok(c - b'a' + 26),
-                b'0'..=b'9' => Ok(c - b'0' + 52),
-                b'+' => Ok(62),
-                b'/' => Ok(63),
-                b'=' => Ok(0), // Padding
-                _ => Err(format!("Invalid base64 character: {}", c as char)),
-            }
-        }
-
-        let s = s.trim();
-        if s.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let bytes = s.as_bytes();
-        if !bytes.len().is_multiple_of(4) {
-            return Err("Invalid base64 length".to_string());
-        }
-
-        let mut result = Vec::with_capacity(bytes.len() * 3 / 4);
-
-        for chunk in bytes.chunks(4) {
-            let v0 = char_to_val(chunk[0])?;
-            let v1 = char_to_val(chunk[1])?;
-            let v2 = char_to_val(chunk[2])?;
-            let v3 = char_to_val(chunk[3])?;
-
-            result.push((v0 << 2) | (v1 >> 4));
-            if chunk[2] != b'=' {
-                result.push((v1 << 4) | (v2 >> 2));
-            }
-            if chunk[3] != b'=' {
-                result.push((v2 << 6) | v3);
-            }
-        }
-
-        Ok(result)
-    }
+    STANDARD
+        .decode(s.trim())
+        .map_err(|e| format!("Invalid base64: {}", e))
 }
 
 #[cfg(test)]

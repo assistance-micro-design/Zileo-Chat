@@ -17,8 +17,6 @@
 //! Provides secure storage and retrieval of API keys for LLM providers
 //! using OS keychain + AES-256-GCM encryption.
 
-#[cfg(test)]
-use crate::security::ValidationError;
 use crate::security::{KeyStore, KeyStoreError, Validator};
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -197,76 +195,3 @@ pub async fn list_api_key_providers(
     Ok(providers)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Converts internal validation errors to user-friendly messages (test helper).
-    fn validation_error_to_string(e: ValidationError) -> String {
-        match e {
-            ValidationError::Empty { field } => format!("{} cannot be empty", field),
-            ValidationError::TooLong { max, actual } => {
-                format!("Input too long: maximum {} characters, got {}", max, actual)
-            }
-            ValidationError::TooShort { min, actual } => {
-                format!(
-                    "Input too short: minimum {} characters, got {}",
-                    min, actual
-                )
-            }
-            ValidationError::InvalidCharacters { details } => {
-                format!("Invalid characters: {}", details)
-            }
-            ValidationError::InvalidFormat { field, details } => {
-                format!("Invalid {}: {}", field, details)
-            }
-            ValidationError::InvalidUuid { value } => {
-                format!("Invalid ID format: {}", value)
-            }
-        }
-    }
-
-    #[test]
-    fn test_secure_keystore_creation() {
-        // Should not panic - just verify creation works
-        let _store = SecureKeyStore::new_without_encryption();
-    }
-
-    #[test]
-    fn test_validation_error_to_string_empty() {
-        let e = ValidationError::Empty {
-            field: "provider".to_string(),
-        };
-        let msg = validation_error_to_string(e);
-        assert!(msg.contains("provider"));
-        assert!(msg.contains("empty"));
-    }
-
-    #[test]
-    fn test_validation_error_to_string_too_long() {
-        let e = ValidationError::TooLong {
-            max: 100,
-            actual: 150,
-        };
-        let msg = validation_error_to_string(e);
-        assert!(msg.contains("100"));
-        assert!(msg.contains("150"));
-    }
-
-    #[test]
-    fn test_validation_error_to_string_too_short() {
-        let e = ValidationError::TooShort { min: 16, actual: 5 };
-        let msg = validation_error_to_string(e);
-        assert!(msg.contains("16"));
-        assert!(msg.contains("5"));
-    }
-
-    #[test]
-    fn test_validation_error_to_string_invalid_chars() {
-        let e = ValidationError::InvalidCharacters {
-            details: "no spaces allowed".to_string(),
-        };
-        let msg = validation_error_to_string(e);
-        assert!(msg.contains("no spaces allowed"));
-    }
-}

@@ -265,7 +265,6 @@ pub fn find_authorized_folder<'a>(
         .find(|folder| path.starts_with(folder))
 }
 
-
 #[cfg(test)]
 #[path = "security_tests.rs"]
 mod tests;

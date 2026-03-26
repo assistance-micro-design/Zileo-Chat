@@ -99,40 +99,6 @@ impl AppState {
         })
     }
 
-    /// Sets the Tauri app handle for event emission.
-    ///
-    /// This should be called in the Tauri setup hook after the app is built.
-    /// Uses std::sync::RwLock for synchronous access.
-    #[allow(dead_code)] // Test-only: production uses ToolFactory::set_app_handle via main.rs
-    pub fn set_app_handle(&self, handle: AppHandle) {
-        if let Ok(mut guard) = self.app_handle.write() {
-            *guard = Some(handle);
-        }
-    }
-
-    /// Gets the app handle if available.
-    #[allow(dead_code)] // Test-only: production uses ToolFactory::get_app_handle via llm_agent.rs
-    pub fn get_app_handle(&self) -> Option<AppHandle> {
-        self.app_handle.read().ok().and_then(|guard| guard.clone())
-    }
-
-    /// Updates the embedding service configuration.
-    ///
-    /// Called when user configures embedding settings in the Settings UI.
-    /// This will update the tool factory to use the new embedding service.
-    #[allow(dead_code)] // Test-only: production accesses embedding_service field directly
-    pub async fn set_embedding_service(&self, service: Option<Arc<EmbeddingService>>) {
-        *self.embedding_service.write().await = service.clone();
-        // Note: Tool instances already created won't be updated.
-        // New tool instances will use the updated embedding service.
-    }
-
-    /// Gets the current embedding service if configured.
-    #[allow(dead_code)] // Test-only: production accesses embedding_service field directly
-    pub async fn get_embedding_service(&self) -> Option<Arc<EmbeddingService>> {
-        self.embedding_service.read().await.clone()
-    }
-
     /// Creates a cancellation token for a workflow and stores it.
     /// Returns the token for use with tokio::select!
     pub async fn create_cancellation_token(&self, workflow_id: &str) -> CancellationToken {
@@ -142,18 +108,6 @@ impl AppState {
             .await
             .insert(workflow_id.to_string(), token.clone());
         token
-    }
-
-    /// Checks if a workflow has been requested to cancel
-    /// Note: Used in tests only - production code uses CancellationToken::is_cancelled() directly
-    #[allow(dead_code)] // Test-only: production uses CancellationToken::is_cancelled() directly
-    pub async fn is_cancelled(&self, workflow_id: &str) -> bool {
-        self.streaming_cancellations
-            .lock()
-            .await
-            .get(workflow_id)
-            .map(|token| token.is_cancelled())
-            .unwrap_or(false)
     }
 
     /// Marks a workflow for cancellation by cancelling its token
@@ -475,7 +429,7 @@ mod tests {
 
         // Initially no embedding service
         assert!(
-            state.get_embedding_service().await.is_none(),
+            state.embedding_service.read().await.is_none(),
             "Embedding service should be None initially"
         );
 
@@ -483,19 +437,18 @@ mod tests {
         let provider = EmbeddingProvider::ollama();
         let service =
             Arc::new(EmbeddingService::with_provider(provider).expect("test embedding service"));
-        state.set_embedding_service(Some(service.clone())).await;
+        *state.embedding_service.write().await = Some(service.clone());
 
         // Verify it's set
-        let retrieved = state.get_embedding_service().await;
         assert!(
-            retrieved.is_some(),
+            state.embedding_service.read().await.is_some(),
             "Embedding service should be set after configuration"
         );
 
         // Clear embedding service
-        state.set_embedding_service(None).await;
+        *state.embedding_service.write().await = None;
         assert!(
-            state.get_embedding_service().await.is_none(),
+            state.embedding_service.read().await.is_none(),
             "Embedding service should be None after clearing"
         );
     }
@@ -538,11 +491,7 @@ mod tests {
         // Create a cancellation token first
         let token = state.create_cancellation_token(workflow_id).await;
 
-        // Initially not cancelled (token exists but not cancelled)
-        assert!(
-            !state.is_cancelled(workflow_id).await,
-            "Workflow should not be cancelled initially"
-        );
+        // Initially not cancelled
         assert!(
             !token.is_cancelled(),
             "Token should not be cancelled initially"
@@ -551,10 +500,6 @@ mod tests {
         // Request cancellation
         state.request_cancellation(workflow_id).await;
         assert!(
-            state.is_cancelled(workflow_id).await,
-            "Workflow should be cancelled after request"
-        );
-        assert!(
             token.is_cancelled(),
             "Token should be cancelled after request"
         );
@@ -562,7 +507,11 @@ mod tests {
         // Clear cancellation (removes token from map)
         state.clear_cancellation(workflow_id).await;
         assert!(
-            !state.is_cancelled(workflow_id).await,
+            !state
+                .streaming_cancellations
+                .lock()
+                .await
+                .contains_key(workflow_id),
             "Workflow should not be in map after clearing"
         );
     }
@@ -576,25 +525,25 @@ mod tests {
         let state = AppState::new(db_path_str).await.unwrap();
 
         // Create tokens for multiple workflows
-        let _token1 = state.create_cancellation_token("wf1").await;
-        let _token2 = state.create_cancellation_token("wf2").await;
-        let _token3 = state.create_cancellation_token("wf3").await;
+        let token1 = state.create_cancellation_token("wf1").await;
+        let token2 = state.create_cancellation_token("wf2").await;
+        let token3 = state.create_cancellation_token("wf3").await;
 
         // Cancel all three
         state.request_cancellation("wf1").await;
         state.request_cancellation("wf2").await;
         state.request_cancellation("wf3").await;
 
-        assert!(state.is_cancelled("wf1").await);
-        assert!(state.is_cancelled("wf2").await);
-        assert!(state.is_cancelled("wf3").await);
-        assert!(!state.is_cancelled("wf4").await); // Never created
+        assert!(token1.is_cancelled());
+        assert!(token2.is_cancelled());
+        assert!(token3.is_cancelled());
 
         // Clear one
         state.clear_cancellation("wf2").await;
-        assert!(state.is_cancelled("wf1").await);
-        assert!(!state.is_cancelled("wf2").await); // Removed from map
-        assert!(state.is_cancelled("wf3").await);
+        let map = state.streaming_cancellations.lock().await;
+        assert!(map.contains_key("wf1"));
+        assert!(!map.contains_key("wf2")); // Removed from map
+        assert!(map.contains_key("wf3"));
     }
 
     #[tokio::test]
