@@ -1,12 +1,12 @@
 # Schéma Database SurrealDB
 
-> **Version** : 1.1
+> **Version** : 1.2
 > **SurrealDB** : ~2.6
 > **Type** : Graph relationnel avec support vectoriel
 
 ## Vue d'Ensemble
 
-**Total : 17 tables**
+**Total : 18 tables**
 
 ```
 workflow ─────────────┐
@@ -26,6 +26,7 @@ llm_model ────────────→ provider_settings
 custom_provider ──────→ (linked via provider name)
 
 skill (standalone)
+workflow_folder ──────→ workflow (grouping)
 migration_log (schema versioning)
 ```
 
@@ -40,12 +41,22 @@ Représente un workflow multi-agents avec son cycle de vie complet.
 - `name` : string (éditable utilisateur)
 - `status` : enum (idle, running, completed, error)
 - `agent_id` : string (agent principal)
+- `total_tokens_input` : int DEFAULT 0
+- `total_tokens_output` : int DEFAULT 0
+- `total_cost_usd` : float DEFAULT 0.0
+- `model_id` : string?
+- `current_context_tokens` : int DEFAULT 0
+- `sub_agent_tokens_input` : int DEFAULT 0
+- `sub_agent_tokens_output` : int DEFAULT 0
+- `folder_id` : string? (reference workflow_folder)
+- `pinned` : bool DEFAULT false
 - `created_at` : datetime
 - `updated_at` : datetime
 - `completed_at` : datetime?
 
 **Relations**
-- → `agent_state` (créateur)
+- → `agent` (créateur)
+- → `workflow_folder` (optionnel)
 - → `message[]` (historique conversation)
 - → `task[]` (tâches décomposées)
 - → `validation_request[]` (demandes validation utilisateur)
@@ -98,21 +109,24 @@ Messages conversation workflow (user, assistant, system).
 
 **Champs**
 - `id` : UUID
-- `workflow_id` : UUID
+- `workflow_id` : string
 - `role` : enum (user, assistant, system)
 - `content` : string
-- `tokens` : object (input, output)
-- `reasoning_steps` : array<object>? (si modèle supporte)
+- `tokens_input` : int?
+- `tokens_output` : int?
+- `model` : string?
+- `provider` : string?
+- `cost_usd` : float?
+- `duration_ms` : int?
+- `thinking_tokens` : int?
 - `timestamp` : datetime
 
 **Relations**
 - → `workflow` (appartenance)
-- → `agent_state` (si role=assistant)
 
 **Indexes**
-- `workflow_id` (historique conversation)
-- `timestamp` (ordre chronologique)
-- `role` (filtrage par type)
+- `message_workflow_idx` ON workflow_id
+- `message_timestamp_idx` ON timestamp
 
 **Requête type** : Historique messages workflow ordonné
 
@@ -449,6 +463,25 @@ Documents de compétences (instructions markdown) assignables aux agents.
 - `skill_enabled_idx` ON enabled
 
 **Usage** : Les skills sont assignes aux agents via le champ `agent.skills` (array de noms). Le ReadSkillTool permet aux agents de lire les instructions a l'execution.
+
+---
+
+### workflow_folder
+
+Dossiers de regroupement des workflows dans la sidebar.
+
+**Champs**
+- `id` : UUID
+- `name` : string
+- `color` : string (#RRGGBB)
+- `sort_order` : int
+- `created_at` : datetime
+- `updated_at` : datetime
+
+**Indexes**
+- `unique_folder_id` ON id (UNIQUE)
+
+**Usage** : Les workflows peuvent etre associes a un dossier via `workflow.folder_id`. Reordonnable via `sort_order`.
 
 ---
 

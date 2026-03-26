@@ -1,6 +1,6 @@
 # Frontend Specifications
 
-> **Stack**: SvelteKit 2.49.1 | Svelte 5.53.6 | Vite 7.2.6 | Tauri 2
+> **Stack**: SvelteKit 2.53.4 | Svelte 5.53.6 | Vite 7.3.1 | Tauri 2
 > **Target**: Desktop/Laptop uniquement | Fullscreen mode
 > **Architecture**: Multi-workflow simultané avec indicateurs temps réel
 
@@ -1290,29 +1290,34 @@ async fn save_workflow_state(id: String, state: WorkflowState) -> Result<(), Str
 
 ## 5. Architecture Composants Réutilisables
 
-### Component Library (95 Total Components)
+### Component Library (98 Total Components)
 
 ```
 src/lib/components/
-├─ ui/                  # 18 atomic UI components
-│  ├─ Button.svelte
+├─ ui/                  # 19 atomic UI components
 │  ├─ Badge.svelte
+│  ├─ Button.svelte
 │  ├─ Card.svelte
+│  ├─ ContextMenu.svelte
+│  ├─ DeleteConfirmModal.svelte
+│  ├─ ErrorBanner.svelte
+│  ├─ HelpButton.svelte
 │  ├─ Input.svelte
-│  ├─ Select.svelte
-│  ├─ Textarea.svelte
-│  ├─ Modal.svelte
-│  ├─ Spinner.svelte
-│  ├─ ProgressBar.svelte
-│  ├─ StatusIndicator.svelte
-│  ├─ Skeleton.svelte
 │  ├─ LanguageSelector.svelte
+│  ├─ MarkdownRenderer.svelte
+│  ├─ Modal.svelte
+│  ├─ ProgressBar.svelte
+│  ├─ Select.svelte
+│  ├─ Skeleton.svelte
+│  ├─ Spinner.svelte
+│  ├─ StatusIndicator.svelte
+│  ├─ Textarea.svelte
 │  ├─ ToastContainer.svelte
 │  └─ ToastItem.svelte
 ├─ layout/              # 3 layout containers
 │  ├─ AppContainer.svelte
-│  ├─ Sidebar.svelte
-│  └─ RightSidebar.svelte
+│  ├─ FloatingMenu.svelte
+│  └─ Sidebar.svelte
 ├─ navigation/          # 1 navigation element
 │  └─ NavItem.svelte
 ├─ agent/               # 3 agent page sections (2-column layout)
@@ -1321,17 +1326,22 @@ src/lib/components/
 │  └─ WorkflowSidebar.svelte
 ├─ chat/                # 11 chat components
 │  ├─ ChatInput.svelte
+│  ├─ ExecutionSpinner.svelte
 │  ├─ MessageBubble.svelte
 │  ├─ MessageList.svelte
 │  ├─ MessageListSkeleton.svelte
+│  ├─ MessageMetrics.svelte
 │  ├─ PromptSelectorModal.svelte
-│  ├─ ReasoningStep.svelte
-│  ├─ StreamingMessage.svelte
-│  └─ ToolExecution.svelte
-├─ workflow/            # 9 workflow components
+│  ├─ SubAgentBlock.svelte
+│  ├─ ThinkingBlock.svelte
+│  ├─ TodoTasksBlock.svelte
+│  └─ ToolCallBlock.svelte
+├─ workflow/            # 11 workflow components
 │  ├─ AgentSelector.svelte
+│  ├─ FolderItem.svelte
 │  ├─ MetricsBar.svelte
 │  ├─ NewWorkflowModal.svelte
+│  ├─ StatusFilters.svelte
 │  ├─ TokenDisplay.svelte
 │  ├─ UserQuestionModal.svelte
 │  ├─ ValidationModal.svelte
@@ -1339,7 +1349,7 @@ src/lib/components/
 │  ├─ WorkflowItemCompact.svelte
 │  └─ WorkflowList.svelte
 ├─ legal/               # 1 legal component
-│  └─ LicensesModal.svelte
+│  └─ LegalModal.svelte
 ├─ mcp/                 # 3 MCP management components
 │  ├─ MCPServerCard.svelte
 │  ├─ MCPServerForm.svelte

@@ -4,7 +4,7 @@
 
 ## Vue d'Ensemble
 
-**Version actuelle** : 0.15.1
+**Version actuelle** : 0.18.0
 **Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
 **Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
 **CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
@@ -48,7 +48,7 @@ xcode-select --install
 ```json
 {
   "productName": "Zileo Chat",
-  "version": "0.15.1",
+  "version": "0.18.0",
   "identifier": "com.zileo.chat",
   "build": {
     "frontendDist": "../build",
@@ -117,17 +117,17 @@ npm run tauri:build
 ```
 
 **Avantages** : Pas installation, portable, compatible toutes distros
-**Output** : `zileo-chat_0.15.1_amd64.AppImage`
+**Output** : `zileo-chat_0.18.0_amd64.AppImage`
 
 #### .deb (Debian/Ubuntu)
 Build produit automatiquement les deux formats.
 
 **Installation** :
 ```bash
-sudo dpkg -i zileo-chat_0.15.1_amd64.deb
+sudo dpkg -i zileo-chat_0.18.0_amd64.deb
 ```
 
-**Output** : `zileo-chat_0.15.1_amd64.deb`
+**Output** : `zileo-chat_0.18.0_amd64.deb`
 
 ---
 
@@ -146,7 +146,7 @@ codesign --sign "Developer ID Application: Your Name" \
   src-tauri/target/release/bundle/macos/Zileo\ Chat.app
 ```
 
-**Output prevu** : `zileo-chat_0.15.1_x64.dmg`
+**Output prevu** : `zileo-chat_0.18.0_x64.dmg`
 
 ---
 
@@ -224,9 +224,9 @@ explorer "src-tauri\target\release\bundle\msi"
 ```
 src-tauri/target/release/bundle/
 ├── msi/
-│   └── zileo-chat_0.15.1_x64-setup.msi    # Installer MSI
+│   └── zileo-chat_0.18.0_x64-setup.msi    # Installer MSI
 └── nsis/
-    └── zileo-chat_0.15.1_x64-setup.exe    # Installer NSIS (alternative)
+    └── zileo-chat_0.18.0_x64-setup.exe    # Installer NSIS (alternative)
 ```
 
 #### Script Automatise Windows
@@ -330,7 +330,7 @@ npm run tauri dev
 npm run tauri build
 
 # Installer pour tester
-Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.15.1_x64-setup.msi"
+Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.18.0_x64-setup.msi"
 ```
 
 #### Checklist Pre-Build Windows
@@ -411,7 +411,7 @@ Chaque OS est builde sur son propre runner en parallele.
 2. Commit final des changements
 3. Aller dans **History**
 4. Clic droit sur le commit → **Create Tag**
-5. Nom : `v0.15.1-beta` (ou version suivante)
+5. Nom : `v0.18.0-beta` (ou version suivante)
 6. **Push origin** (inclut automatiquement le tag)
 
 #### Via CLI
@@ -423,8 +423,8 @@ npm run lint && npm run check
 cd src-tauri && cargo clippy && cargo test
 
 # Creer et pousser le tag
-git tag v0.15.1-beta
-git push origin v0.15.1-beta
+git tag v0.18.0-beta
+git push origin v0.18.0-beta
 ```
 
 #### Finalisation sur GitHub
@@ -525,7 +525,7 @@ Ajouter dans `tauri.conf.json` :
 npx tauri signer generate
 
 # Signer release
-npx tauri signer sign zileo-chat_0.15.1_amd64.AppImage
+npx tauri signer sign zileo-chat_0.18.0_amd64.AppImage
 ```
 
 Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
@@ -626,8 +626,8 @@ git push origin :refs/tags/v0.1.1
 
 **3. Republier version stable** (exemple)
 ```bash
-git tag v0.15.1-hotfix
-git push origin v0.15.1-hotfix
+git tag v0.18.0-hotfix
+git push origin v0.18.0-hotfix
 ```
 
 **4. Communiquer** : Release notes + notification utilisateurs

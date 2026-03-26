@@ -42,8 +42,9 @@ Les outils sont instancies dynamiquement via `ToolFactory`:
 ```rust
 use crate::tools::ToolFactory;
 
-let factory = ToolFactory::new(db.clone(), embedding_service);
-let tool = factory.create_tool("MemoryTool", Some("wf_001".into()), "agent_id".into())?;
+let factory = ToolFactory::new(db.clone(), embedding_ref);
+// embedding_ref: Arc<RwLock<Option<Arc<EmbeddingService>>>>
+let tool = factory.create_tool("MemoryTool", Some("wf_001".into()), "agent_id".into(), app_handle).await?;
 ```
 
 ---
@@ -639,7 +640,7 @@ Closed → [3 timeouts] → Open → [60s cooldown] → HalfOpen
 
 ### Auto-Injection
 
-Le ReadSkillTool est injecte automatiquement dans `llm_agent.rs` quand :
+Le ReadSkillTool est injecte automatiquement dans `agents/execution/tools.rs` quand :
 1. L'agent a `skills.len() > 0`
 2. `"ReadSkillTool"` n'est pas deja dans sa liste de tools
 
@@ -649,7 +650,7 @@ Les sous-agents heritent des skills de leur agent parent (`spawn_agent.rs`).
 
 ### Prompt Template Integration
 
-La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans le pipeline de streaming (`streaming.rs`) :
+La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans le pipeline de streaming (`commands/streaming/execution.rs`) :
 ```
 {{skill:coding-standards}} → [Skill: coding-standards]
 Before proceeding, read the skill "coding-standards" using the ReadSkill tool and follow its instructions.
@@ -783,9 +784,13 @@ Pour activer le FileManagerTool sur un agent:
 
 **Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
 
-**Implementation** : `src-tauri/src/agents/llm_agent.rs`
+**Implementation** :
+- `src-tauri/src/agents/llm_agent.rs` (struct, constructeurs)
+- `src-tauri/src/agents/execution/tools.rs` (setup tools, auto-injection)
+- `src-tauri/src/agents/execution/tool_loop.rs` (boucle d'execution)
+- `src-tauri/src/agents/prompt.rs` (construction du prompt)
 
-**Statut** : Implemented (Phase 5)
+**Statut** : Implemented
 
 ### Architecture d'Exécution
 
@@ -806,21 +811,33 @@ ToolFactory  MCPManager
    LLM Provider (continue)
 ```
 
-### Format des Tool Calls (XML)
+### Format des Tool Calls (JSON Function Calling)
 
-**Appel d'un tool** (dans la réponse LLM):
-```xml
-<tool_call name="MemoryTool">
-{"operation": "add", "type": "knowledge", "content": "Important information to remember"}
-</tool_call>
+**Appel d'un tool** (dans la reponse LLM, format OpenAI/Mistral standard):
+```json
+{
+  "tool_calls": [{
+    "id": "call_abc123",
+    "type": "function",
+    "function": {
+      "name": "MemoryTool",
+      "arguments": "{\"operation\":\"add\",\"type\":\"knowledge\",\"content\":\"Important info\"}"
+    }
+  }]
+}
 ```
 
-**Résultat d'un tool** (retourné au LLM):
-```xml
-<tool_result name="MemoryTool" success="true">
-{"id": "mem_abc123", "message": "Memory added successfully"}
-</tool_result>
+**Resultat d'un tool** (retourne au LLM):
+```json
+{
+  "role": "tool",
+  "tool_call_id": "call_abc123",
+  "name": "MemoryTool",
+  "content": "{\"id\":\"mem_abc123\",\"message\":\"Memory added\"}"
+}
 ```
+
+Le parsing est fait via `adapter.parse_tool_calls()` (trait `ToolAdapter` dans `llm/tool_adapter.rs`), avec des implementations par provider (Mistral, Ollama, OpenAI-compatible).
 
 ### Boucle d'Exécution
 
@@ -864,27 +881,24 @@ loop {
 ### Constructeurs LLMAgent
 
 ```rust
-// Sans tools (comportement basique)
-let agent = LLMAgent::new(config, provider);
+// Avec factory (tools locaux)
+let agent = LLMAgent::with_factory(config, provider_manager, tool_factory);
 
-// Avec tools (exécution complète)
-let agent = LLMAgent::with_tools(config, provider, tool_factory, mcp_manager);
-
-// Avec factory seulement (tools locaux uniquement)
-let agent = LLMAgent::with_factory(config, provider, tool_factory);
+// Avec context (agent principal - acces aux sub-agent tools)
+let agent = LLMAgent::with_context(config, provider_manager, tool_factory, agent_context);
 ```
 
-### Méthodes Clés
+> **Note**: `LLMAgent::new()` et `with_tools()` ont ete supprimes (dead code). Seuls `with_factory` et `with_context` existent.
 
-| Méthode | Description |
-|---------|-------------|
-| `create_local_tools()` | Crée les instances de tools via ToolFactory |
-| `get_mcp_tool_definitions()` | Récupère les définitions des tools MCP |
-| `build_system_prompt_with_tools()` | Injecte les définitions dans le system prompt |
-| `parse_tool_calls()` | Parse les balises `<tool_call>` de la réponse |
-| `execute_local_tool()` | Exécute un tool via ToolFactory |
-| `execute_mcp_tool()` | Exécute un tool via MCPManager |
-| `format_tool_results()` | Formate les résultats en XML |
+### Methodes Cles
+
+| Methode | Fichier | Description |
+|---------|---------|-------------|
+| `build_tools_section()` | `agents/execution/tools.rs` | Cree les instances tools via ToolFactory + auto-injection ReadSkillTool |
+| `build_system_prompt()` | `agents/prompt.rs` | Injecte les definitions tools dans le system prompt |
+| `adapter.parse_tool_calls()` | `llm/tool_adapter.rs` | Parse les tool_calls JSON de la reponse LLM |
+| `adapter.format_tool_result()` | `llm/tool_adapter.rs` | Formate les resultats en JSON pour le LLM |
+| `adapter.has_tool_calls()` | `llm/tool_adapter.rs` | Detecte la presence de tool calls dans la reponse |
 | `strip_tool_calls()` | Supprime les balises tool de la réponse finale |
 
 ### Tests

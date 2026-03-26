@@ -1619,28 +1619,32 @@ Create `src/styles/variables.css`:
 
 ```
 src/lib/components/
-  ui/                        # 13 atomic components
+  ui/                        # 19 atomic components
+    Badge.svelte             # 4 semantic variants
     Button.svelte            # 4 variants, 4 sizes
     Card.svelte              # Flexible snippet slots
-    Modal.svelte             # Accessible dialog
-    Badge.svelte             # 4 semantic variants
+    ContextMenu.svelte       # Right-click context menu
+    DeleteConfirmModal.svelte # Confirmation dialog for deletions
+    ErrorBanner.svelte       # Error message display
+    HelpButton.svelte        # Help tooltip trigger
     Input.svelte             # 6 input types
-    Select.svelte            # Dropdown with options
-    Textarea.svelte          # Multi-line input
+    LanguageSelector.svelte  # i18n language picker
+    MarkdownRenderer.svelte  # Markdown content display
+    Modal.svelte             # Accessible dialog
     ProgressBar.svelte       # Progress indicator
+    Select.svelte            # Dropdown with options
+    Skeleton.svelte          # Loading placeholder (3 variants)
     Spinner.svelte           # Loading spinner
     StatusIndicator.svelte   # Status dots (4 states)
-    Skeleton.svelte          # Loading placeholder (3 variants)
-    LanguageSelector.svelte  # i18n language picker
+    Textarea.svelte          # Multi-line input
+    ToastContainer.svelte    # Toast notification container
+    ToastItem.svelte         # Individual toast notification
   layout/
     AppContainer.svelte
     FloatingMenu.svelte
     Sidebar.svelte
-    ContentArea.svelte
   navigation/
     NavItem.svelte
-    FilterBar.svelte
-    SearchBox.svelte
 ```
 
 **Note**: Table styles are provided as CSS classes (`.table`, `.table-container`) rather than a dedicated Svelte component. Use the CSS patterns documented in the [Table section](#table).
@@ -1799,11 +1803,7 @@ Option 2: Create wrapper component:
 ### Global Styles Import
 
 ```css
-/* src/app.css */
-@import './styles/variables.css';
-@import './styles/reset.css';
-@import './styles/components.css';
-@import './styles/utilities.css';
+/* src/styles/global.css - fichier unique contenant toutes les variables, reset, composants et utilitaires */
 ```
 
 ---

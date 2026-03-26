@@ -14,12 +14,12 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| **Backend (all)** | 80+ | 2286 |
-| **Frontend Unit** | 12 | 260 |
-| **Frontend E2E** | 10 | 112 |
-| **Total** | **102+** | **~2658** |
+| **Backend (lib)** | 80+ | 1076 |
+| **Backend (bin/integration)** | 5+ | 48 |
+| **Frontend Unit** | 16 | 285 |
+| **Total** | **101+** | **~1409** |
 
-> **Last Updated**: 2026-03-08
+> **Last Updated**: 2026-03-26
 
 ---
 
@@ -106,17 +106,15 @@ cargo test -- --nocapture # With logs
 
 **Module Coverage** :
 
-| Module | Files | Tests | Key Areas |
-|--------|-------|-------|-----------|
-| tools | 14 | 210 | CalculatorTool (63), MemoryTool (55+), TodoTool (26) |
-| models | 18 | 144 | Data structures, serialization |
-| llm | 9 | 95 | Provider adapters, embedding, pricing |
-| commands | 16 | 75 | Tauri command validation |
-| mcp | 6 | 44 | Protocol, error handling, server management |
-| agents | 4 | 34 | LLM agent, orchestrator, registry |
-| security | 2 | 30 | Input validation (24), keystore (6) |
-| state | 1 | 10 | Application state management |
-| db | 1 | 5 | Database client |
+| Module | Files (with tests) | Tests | Key Areas |
+|--------|-------------------|-------|-----------|
+| tools | 26 | ~274 | CalculatorTool, MemoryTool, TodoTool, FileManager, UserQuestion, ReadSkill, SubAgent |
+| models | 21 | ~199 | Data structures, serialization |
+| llm | 18 | ~140 | Provider adapters, embedding, pricing, tool_adapter |
+| mcp | 8 | ~78 | Protocol, error handling, server management |
+| commands | 16 | ~65 | Tauri command validation |
+| security | 2 | ~35 | Input validation, keystore |
+| agents | 5 | ~13 | LLM agent, orchestrator, registry |
 
 ---
 

@@ -59,9 +59,10 @@ pub trait Tool: Send + Sync {
     fn definition(&self) -> ToolDefinition;
     async fn execute(&self, input: Value) -> ToolResult<Value>;
     fn validate_input(&self, input: &Value) -> ToolResult<()>;
-    fn requires_confirmation(&self) -> bool;
 }
 ```
+
+**Note**: `requires_confirmation` est un champ de `ToolDefinition`, pas une methode du trait.
 
 ### Creation via ToolFactory
 
@@ -95,10 +96,11 @@ Le `TOOL_REGISTRY` est un singleton global (`std::sync::LazyLock`) pour la decou
 | TodoTool | Basic | false |
 | CalculatorTool | Basic | false |
 | UserQuestionTool | Basic | false |
+| FileManagerTool | Basic | false |
+| ReadSkillTool | Hidden | false |
 | SpawnAgentTool | SubAgent | true |
 | DelegateTaskTool | SubAgent | true |
 | ParallelTasksTool | SubAgent | true |
-| ReadSkillTool | Hidden | false |
 
 ### API du Registry
 
@@ -124,7 +126,7 @@ if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
 let metadata = TOOL_REGISTRY.get("SpawnAgentTool");
 
 // Lister par categorie
-let basic = TOOL_REGISTRY.basic_tools();        // ["MemoryTool", "TodoTool", "CalculatorTool"]
+let basic = TOOL_REGISTRY.basic_tools();        // ["MemoryTool", "TodoTool", "CalculatorTool", "UserQuestionTool", "FileManagerTool"]
 let sub_agent = TOOL_REGISTRY.sub_agent_tools(); // ["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"]
 
 // Valider avec erreur descriptive
@@ -1519,24 +1521,24 @@ Lecture de documents de competences (skills) contenant des instructions et du co
 | `list` | Uniquement les skills dans `agent_skills` ET `enabled = true` en DB | - |
 | `read` | `name` doit etre dans `agent_skills` ET `enabled = true` en DB | `PermissionDenied` ou `NotFound` |
 
-### Auto-Injection (llm_agent.rs)
+### Auto-Injection (agents/execution/tools.rs)
 
 ```rust
 // Auto-inject ReadSkillTool when agent has skills assigned
-if !self.config.skills.is_empty()
+if !config.skills.is_empty()
     && !tool_names.iter().any(|t| t == "ReadSkillTool")
 {
     tool_names.push("ReadSkillTool".to_string());
 }
 ```
 
-Quand injecte, le factory appelle `resolve_agent_skills(agent_id)` pour recuperer la liste des noms de skills depuis la table `agent` en DB.
+Quand injecte, le factory appelle `resolve_agent_skills(agent_id)` (`tools/factory_creation.rs`) pour recuperer la liste des noms de skills depuis la table `agent` en DB.
 
 Les sous-agents heritent des skills du parent (`spawn_agent.rs`: `skills: parent_config.skills.clone()`).
 
 ### Prompt Template Integration
 
-La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans `streaming.rs` :
+La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans `commands/streaming/execution.rs` :
 ```
 {{skill:coding-standards}}
 → [Skill: coding-standards]
@@ -1701,9 +1703,9 @@ let query = QueryBuilder::new("memory")
     .build();
 ```
 
-### sub_agent_executor.rs
+### sub_agent_executor/
 
-**Fichier**: `src-tauri/src/tools/sub_agent_executor.rs`
+**Repertoire**: `src-tauri/src/tools/sub_agent_executor/` (mod.rs, execution.rs, activity_monitor.rs, execution_retry.rs, records.rs)
 
 Logique commune pour les sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
 
@@ -1752,7 +1754,7 @@ Chaque erreur inclut un **message actionnable** avec suggestion de correction.
 | `src-tauri/src/tools/response.rs` | ResponseBuilder fluent API |
 | `src-tauri/src/tools/utils.rs` | Validation + QueryBuilder |
 | `src-tauri/src/tools/context.rs` | AgentToolContext pour sub-agent tools |
-| `src-tauri/src/tools/sub_agent_executor.rs` | Logique commune sub-agents |
+| `src-tauri/src/tools/sub_agent_executor/` | Logique commune sub-agents (execution, retry, activity monitor, records) |
 | `src-tauri/src/tools/validation_helper.rs` | ValidationHelper pour file ops + sub-agent ops |
 | `src-tauri/src/tools/memory/tool.rs` | Implementation MemoryTool |
 | `src-tauri/src/tools/memory/mod.rs` | Module memory exports |

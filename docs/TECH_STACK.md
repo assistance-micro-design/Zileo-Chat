@@ -1,12 +1,12 @@
 # Stack Technique : Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 1 Mars 2026**
+> **Versions actuelles du projet : 26 Mars 2026**
 > Versions de production utilisees dans le projet (compatibilite testee).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.49.1 | Svelte 5.53.6
+Frontend  : SvelteKit 2.53.4 | Svelte 5.53.6
 Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
@@ -18,14 +18,14 @@ Desktop   : Tauri (cross-platform)
 
 **Core Framework**:
 - **svelte**: 5.53.6
-- **@sveltejs/kit**: ^2.49.1
+- **@sveltejs/kit**: ^2.53.4
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
-- **vite**: ^7.2.6
+- **vite**: ^7.3.1
 
 **TypeScript**:
 - **typescript**: ^5.9.3
-- **svelte-check**: ^4.3.5
+- **svelte-check**: ^4.4.4
 
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.9.0
@@ -38,7 +38,7 @@ Desktop   : Tauri (cross-platform)
 
 **Content Processing**:
 - **dompurify**: ^3.3.1 (HTML sanitization)
-- **marked**: ^17.0.1 (Markdown rendering)
+- **marked**: ^17.0.4 (Markdown rendering)
 - **zod**: ^4.3.6 (Schema validation)
 
 **Testing**:
@@ -53,7 +53,7 @@ Desktop   : Tauri (cross-platform)
 - **@typescript-eslint/eslint-plugin**: ^8.0.0
 - **@typescript-eslint/parser**: ^8.54.0
 - **typescript-eslint**: ^8.53.1
-- **globals**: ^17.2.0
+- **globals**: ^17.4.0
 
 ### Backend (Cargo.toml)
 
@@ -65,7 +65,7 @@ Desktop   : Tauri (cross-platform)
 - **tauri-plugin-dialog**: 2.6.0
 
 **LLM & Multi-Agent**:
-- **rig-core**: 0.31.0 - LLM abstraction framework
+- **rig-core**: 0.32.0 - LLM abstraction framework
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures-util**: 0.3.31 (stream utilities)
 
@@ -78,7 +78,7 @@ Desktop   : Tauri (cross-platform)
 
 **Async Runtime**:
 - **tokio**: 1.49.0 (features: rt-multi-thread, macros, sync, time)
-- **tokio-util**: 0.7.18 (features: rt)
+- **tokio-util**: 0.7 (features: rt)
 
 **Error Handling**:
 - **anyhow**: 1.0
@@ -291,7 +291,7 @@ cargo --version   # >= 1.93.0
 - Report enforcement mechanism for agents
 - Code organization: barrel exports, kebab-case filenames, dead code removal
 - 24 security audits completed
-- Test count: 2286 backend + 260 frontend = 2546 total
+- Test count: 1076 backend (lib) + 260 frontend = 1336 total (at time of audit)
 
 **6 Feb 2026 - Background Workflow Execution**:
 - New stores: `backgroundWorkflowsStore`, `toastStore`
@@ -343,7 +343,7 @@ cargo --version   # >= 1.93.0
 **5 Dec 2025 - Initial Production Versions**:
 - Tauri 2.x with plugin-dialog and plugin-opener
 - SurrealDB 2.4.0 with kv-rocksdb for embedded desktop use
-- **rig-core 0.31.0** for multi-provider LLM abstraction (current version)
+- **rig-core 0.32.0** for multi-provider LLM abstraction (current version)
 - async-trait 0.1 and futures 0.3 for multi-agent async patterns
 - keyring 3.6 + aes-gcm 0.10 for secure API key storage
 - @lucide/svelte 0.563.1 for UI icons

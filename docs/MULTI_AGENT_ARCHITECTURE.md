@@ -62,9 +62,9 @@ Agent Principal (Orchestrator)
 [Données structurées]
 
 ## Tools Used
-- `SurrealDBTool`: 3 queries (avg 45ms)
-- `AnalyticsTool`: 1 aggregation (230ms)
-- `CacheTool`: 2 hits, 1 miss
+- `MemoryTool`: 3 search (avg 45ms)
+- `TodoTool`: 2 create, 1 complete (120ms)
+- `FileManagerTool`: 1 read (30ms)
 
 ## MCP Servers Called
 - `serena::find_symbol`: auth/user.rs → 12 symbols
@@ -105,14 +105,16 @@ Les agents sont créés par l'utilisateur via l'interface Settings:
 3. **Remplir le formulaire**:
    - Nom de l'agent (1-64 caracteres)
    - Lifecycle (Permanent/Temporary)
-   - Provider LLM (Mistral/Ollama/Demo)
+   - Provider LLM (Mistral/Ollama/Custom)
    - Modele (ex: mistral-large-latest)
    - Temperature (0.0-2.0)
    - Max tokens (256-128000)
    - Max tool iterations (1-200, default: 50)
    - Reasoning effort (low/medium/high, or null for no thinking)
-   - Tools actives (MemoryTool, TodoTool, CalculatorTool)
+   - Tools actives (MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool)
+   - Skills (documents de competences assignables a l'agent)
    - MCP Servers (depuis ceux configures)
+   - Folders (dossiers autorises pour FileManagerTool)
    - System Prompt (1-10000 caracteres)
 
 **Frontend Store** (`src/lib/stores/agents.ts`):
@@ -125,7 +127,9 @@ const agentId = await agentStore.createAgent({
   lifecycle: 'permanent',
   llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
   tools: ['MemoryTool', 'TodoTool'],
+  skills: ['coding-standards', 'git-workflow'],
   mcp_servers: ['serena'],
+  folders: ['/home/user/projects'],
   system_prompt: 'You are a helpful assistant...',
   max_tool_iterations: 50,  // 1-200
   reasoning_effort: 'medium' // For thinking models: 'low', 'medium', 'high', or null
@@ -823,12 +827,14 @@ CIRCUIT_COOLDOWN_SECS = 60;     // 60s avant recovery
 
 ### Agent State
 
-**Permanent Agents** → SurrealDB
+**Permanent Agents** → SurrealDB (table `agent`)
 ```sql
-DEFINE TABLE agent_state SCHEMAFULL;
-DEFINE FIELD agent_id ON agent_state TYPE string;
-DEFINE FIELD state ON agent_state TYPE object;
-DEFINE FIELD updated_at ON agent_state TYPE datetime;
+DEFINE TABLE agent SCHEMAFULL;
+DEFINE FIELD name ON agent TYPE string;
+DEFINE FIELD lifecycle ON agent TYPE string;
+DEFINE FIELD llm ON agent TYPE object;
+DEFINE FIELD tools ON agent TYPE array<string>;
+-- Voir DATABASE_SCHEMA.md pour le schema complet
 ```
 
 **Temporary Agents** → In-memory (Tokio)
@@ -916,9 +922,9 @@ Agent interface reste identique grâce à abstraction Rig.rs.
 - Errors: 2 (timeout)
 
 ## Tools Usage
-- SurrealDBTool: 89 calls (avg 42ms) - 98% success
-- AnalyticsTool: 34 calls (avg 180ms) - 100% success
-- CacheTool: 156 calls - 87% hit rate
+- MemoryTool: 89 calls (avg 42ms) - 98% success
+- TodoTool: 34 calls (avg 15ms) - 100% success
+- FileManagerTool: 23 calls (avg 30ms) - 100% success
 
 ## MCP Servers Usage
 - serena: 23 calls (avg 120ms)
@@ -994,17 +1000,27 @@ L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
 
 | Tool | Description | Operations |
 |------|-------------|------------|
-| **MemoryTool** | Persistence vectorielle | describe, add, get, list, search, delete, clear_by_type |
-| **TodoTool** | Gestion taches workflow | create, get, update, list, complete, delete |
-| **CalculatorTool** | Calculs mathematiques | evaluate (expressions: +, -, *, /, ^, sqrt, sin, cos, tan, log, ln) |
+| **MemoryTool** | Persistence vectorielle | add, get, describe, list, search, delete |
+| **TodoTool** | Gestion taches workflow | create, get, update_status, list, complete, delete |
+| **CalculatorTool** | Calculs mathematiques | unary (sin, cos, sqrt, etc.), binary (add, subtract, etc.), constant |
+| **UserQuestionTool** | Questions human-in-the-loop | ask (checkbox, text, mixed) |
+| **FileManagerTool** | Operations fichiers sandboxees | list, read, write, replace, create, delete, move, rename, search_glob, search_content |
 
 **Sub-Agent Tools** (accessibles uniquement par l'agent principal):
 
 | Tool | Description | Operations |
 |------|-------------|------------|
 | **SpawnAgentTool** | Cree et execute sous-agent temporaire | spawn, list_children, terminate |
-| **DelegateTaskTool** | Delegation sequentielle a agent existant (par ID ou nom) | delegate |
-| **ParallelTasksTool** | Execution parallele multiple taches (par ID ou nom) | parallel_execute |
+| **DelegateTaskTool** | Delegation sequentielle a agent existant (par ID ou nom) | delegate, list_agents |
+| **ParallelTasksTool** | Execution parallele multiple taches (par ID ou nom) | execute_batch |
+
+**Hidden Tools** (auto-injectes, pas visibles dans l'UI):
+
+| Tool | Description | Operations |
+|------|-------------|------------|
+| **ReadSkillTool** | Lecture de documents de competences (skills) | read, list |
+
+> Auto-injecte quand l'agent a des skills assignes (`agent.skills`). Permet au LLM de lire les instructions contenues dans les skills avant d'effectuer les taches associees.
 
 **Contraintes Sub-Agent Tools**:
 - Maximum 15 sous-agents par workflow (`MAX_SUB_AGENTS`)
@@ -1015,7 +1031,7 @@ L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
 
 ### Decision Matrix
 
-Les tools disponibles : MemoryTool et TodoTool (via ToolFactory)
+Les tools disponibles : MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool (via ToolFactory)
 Les MCP servers sont ajoutés par l'utilisateur via Settings.
 
 ### Agent Auto-Selection
@@ -1130,6 +1146,13 @@ zileo-chat-3/
 │  │  ├─ calculator/          # CalculatorTool
 │  │  │  ├─ mod.rs
 │  │  │  └─ tool.rs
+│  │  ├─ user_question/       # UserQuestionTool
+│  │  │  ├─ mod.rs
+│  │  │  └─ tool.rs
+│  │  ├─ file_manager/        # FileManagerTool (sandboxed)
+│  │  │  ├─ mod.rs
+│  │  │  └─ tool.rs
+│  │  ├─ read_skill.rs        # ReadSkillTool (hidden, auto-injected)
 │  │  ├─ spawn_agent.rs       # SpawnAgentTool
 │  │  ├─ delegate_task.rs     # DelegateTaskTool
 │  │  ├─ parallel_tasks.rs    # ParallelTasksTool
@@ -1137,7 +1160,7 @@ zileo-chat-3/
 │  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker
 │  │  └─ validation_helper.rs # Human-in-the-loop validation
 │  │
-│  ├─ commands/               # Tauri IPC commands (22 modules, 137 commands)
+│  ├─ commands/               # Tauri IPC commands (22 modules, 134 commands)
 │  │  ├─ agent.rs             # Agent CRUD
 │  │  ├─ workflow.rs          # Workflow management
 │  │  ├─ streaming.rs         # SSE streaming
@@ -1176,8 +1199,9 @@ use std::sync::LazyLock;
 pub static TOOL_REGISTRY: LazyLock<ToolRegistry> = LazyLock::new(ToolRegistry::new);
 
 pub enum ToolCategory {
-    Basic,      // MemoryTool, TodoTool, CalculatorTool
+    Basic,      // MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool
     SubAgent,   // SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+    Hidden,     // ReadSkillTool
 }
 
 // Usage

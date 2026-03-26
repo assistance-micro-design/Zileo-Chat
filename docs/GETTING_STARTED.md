@@ -103,11 +103,11 @@ zileo-chat-3/
 │  │  ├─ settings/          # Page Settings (10 sections)
 │  │  └─ agent/             # Page Agent (chat principal)
 │  ├─ lib/
-│  │  ├─ components/        # 95 composants Svelte
-│  │  │  ├─ ui/             # Composants atomiques (18)
-│  │  │  ├─ layout/         # Layout (4)
+│  │  ├─ components/        # 98 composants Svelte
+│  │  │  ├─ ui/             # Composants atomiques (19)
+│  │  │  ├─ layout/         # Layout (3)
 │  │  │  ├─ chat/           # Chat UI (11)
-│  │  │  ├─ workflow/       # Gestion workflows (9)
+│  │  │  ├─ workflow/       # Gestion workflows (11)
 │  │  │  ├─ settings/       # Sections settings (33)
 │  │  │  ├─ onboarding/     # Assistant premier lancement (9)
 │  │  │  ├─ agent/          # Agent UI (3)
@@ -115,24 +115,24 @@ zileo-chat-3/
 │  │  │  ├─ mcp/            # MCP components (3)
 │  │  │  ├─ navigation/     # Navigation (1)
 │  │  │  └─ legal/          # Legal (1)
-│  │  ├─ stores/            # 18 stores Svelte
+│  │  ├─ stores/            # 21 stores Svelte
 │  │  ├─ services/          # Couche business logic
 │  │  └─ i18n/              # Internationalisation
-│  ├─ types/                # Définitions TypeScript (23 fichiers)
+│  ├─ types/                # Définitions TypeScript (26 fichiers)
 │  ├─ messages/             # Traductions (en.json, fr.json)
 │  └─ app.html              # Template HTML
 │
 ├─ src-tauri/               # Backend Rust
 │  ├─ src/
 │  │  ├─ main.rs            # Entry point
-│  │  ├─ commands/          # 22 modules (137 commandes Tauri)
+│  │  ├─ commands/          # 22 modules (134 commandes Tauri)
 │  │  ├─ agents/            # Système multi-agents
 │  │  ├─ llm/               # Rig.rs integration (Mistral, Ollama)
 │  │  ├─ mcp/               # MCP client/server
 │  │  ├─ tools/             # 9 outils (Memory, Todo, Calculator, UserQuestion, FileManager, ReadSkill, SpawnAgent, DelegateTask, ParallelTasks)
 │  │  ├─ models/            # Structs Rust (sync avec TS)
 │  │  ├─ security/          # Keystore + validation
-│  │  └─ db/                # SurrealDB client (17 tables)
+│  │  └─ db/                # SurrealDB client (18 tables)
 │  ├─ Cargo.toml            # Dépendances Rust
 │  └─ tauri.conf.json       # Config Tauri
 │

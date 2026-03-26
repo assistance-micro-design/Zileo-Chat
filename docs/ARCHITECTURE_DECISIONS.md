@@ -2,7 +2,7 @@
 
 > **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation) | 2026-03-01 (post-audit sécurité)
 > **Phase** : Phase 8 complète + Security Audit Remediation
-> **Statut** : Décisions validées et implémentées (137 commandes Tauri, 95 composants Svelte, ~2546 tests)
+> **Statut** : Décisions validées et implémentées (134 commandes Tauri, 98 composants Svelte, ~1361 tests)
 
 ---
 
@@ -116,7 +116,7 @@ zileo-chat-3/
 - agent → memory (one-to-many)
 - memory ↔ memory (many-to-many, relations sémantiques)
 
-> **Note Implémentation** : Le schéma final contient 16 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `user_question`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
+> **Note Implémentation** : Le schéma final contient 18 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `custom_provider`, `user_question`, `workflow_folder`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
 
 **Pas de schéma rigide** :
 - SurrealDB = schemaless possible

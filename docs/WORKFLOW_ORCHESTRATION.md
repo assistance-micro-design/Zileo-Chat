@@ -3,7 +3,7 @@
 > **Objectif** : Definir comment l'agent principal determine l'execution parallele ou sequentielle des operations au sein d'un workflow
 
 **Status** : Implementation Complete (Phase 5 + Background Execution + Security Audit)
-**Version** : 2.3 | **Derniere mise a jour** : 2026-03-01
+**Version** : 2.4 | **Derniere mise a jour** : 2026-03-26
 
 ---
 
@@ -35,17 +35,21 @@
 
 ## Implementation Backend
 
-### Tauri Commands (7 total)
+### Tauri Commands (11 total)
 
-| Command | Signature | File:Line |
-|---------|-----------|-----------|
-| `create_workflow` | `async fn create_workflow(name: String, agent_id: String, state: State<'_, AppState>) -> Result<String, String>` | commands/workflow.rs:23-62 |
-| `execute_workflow` | `async fn execute_workflow(workflow_id: String, message: String, agent_id: String, state: State<'_, AppState>) -> Result<WorkflowResult, String>` | commands/workflow.rs:75-213 |
-| `load_workflows` | `async fn load_workflows(state: State<'_, AppState>) -> Result<Vec<Workflow>, String>` | commands/workflow.rs:221-260 |
-| `delete_workflow` | `async fn delete_workflow(workflow_id: String, state: State<'_, AppState>) -> Result<(), String>` | commands/workflow.rs:275-389 |
-| `load_workflow_full_state` | `async fn load_workflow_full_state(workflow_id: String, state: State<'_, AppState>) -> Result<WorkflowFullState, String>` | commands/workflow.rs:408-602 |
-| `execute_workflow_streaming` | `async fn execute_workflow_streaming(window: Window, workflow_id: String, message: String, agent_id: String, locale: String, state: State<'_, AppState>) -> Result<WorkflowResult, String>` | commands/streaming.rs:50-648 |
-| `cancel_workflow_streaming` | `async fn cancel_workflow_streaming(workflow_id: String, state: State<'_, AppState>) -> Result<(), String>` | commands/streaming.rs:687-704 |
+| Command | Signature | File |
+|---------|-----------|------|
+| `create_workflow` | `(name: String, agent_id: String, state: State<AppState>) -> Result<String, String>` | commands/workflow.rs |
+| `load_workflows` | `(state: State<AppState>) -> Result<Vec<Workflow>, String>` | commands/workflow.rs |
+| `rename_workflow` | `(workflow_id: String, name: String, state: State<AppState>) -> Result<Workflow, String>` | commands/workflow.rs |
+| `delete_workflow` | `(workflow_id: String, state: State<AppState>) -> Result<(), String>` | commands/workflow.rs |
+| `load_workflow_full_state` | `(workflow_id: String, state: State<AppState>) -> Result<WorkflowFullState, String>` | commands/workflow.rs |
+| `delete_workflows_batch` | `(workflow_ids: Vec<String>, state: State<AppState>) -> Result<BatchDeleteResult, String>` | commands/workflow.rs |
+| `move_workflow_to_folder` | `(workflow_id: String, folder_id: Option<String>, state: State<AppState>) -> Result<Workflow, String>` | commands/workflow.rs |
+| `move_workflows_to_folder` | `(workflow_ids: Vec<String>, folder_id: Option<String>, state: State<AppState>) -> Result<u64, String>` | commands/workflow.rs |
+| `toggle_workflow_pinned` | `(workflow_id: String, state: State<AppState>) -> Result<Workflow, String>` | commands/workflow.rs |
+| `execute_workflow_streaming` | `(window: Window, workflow_id: String, message: String, agent_id: String, locale: String, ..., state: State<AppState>) -> Result<(), String>` | commands/streaming/execution.rs |
+| `cancel_workflow_streaming` | `(workflow_id: String, state: State<AppState>) -> Result<(), String>` | commands/streaming/execution.rs |
 
 ### Tauri Events (8 total)
 
