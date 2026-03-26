@@ -28,6 +28,7 @@
 <script lang="ts">
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { i18n } from '$lib/i18n';
+	import { openUrl } from '@tauri-apps/plugin-opener';
 
 	/**
 	 * LegalModal props
@@ -46,6 +47,10 @@
 	let title = $derived(
 		type === 'legal-notice' ? $i18n('legal_notice_title') : $i18n('privacy_policy_title')
 	);
+
+	async function handleExternalLink(url: string): Promise<void> {
+		await openUrl(url);
+	}
 </script>
 
 <Modal {open} {title} {onclose}>
@@ -70,7 +75,27 @@
 				<h3>{$i18n('legal_contact')}</h3>
 				<p>
 					<strong>Email:</strong>
-					<a href="mailto:assistance-micro-design@pm.me">assistance-micro-design@pm.me</a>
+					<a
+						href="mailto:assistance-micro-design@pm.me"
+						onclick={(e: MouseEvent) => {
+							e.preventDefault();
+							handleExternalLink('mailto:assistance-micro-design@pm.me');
+						}}
+					>
+						assistance-micro-design@pm.me
+					</a>
+				</p>
+				<p>
+					<strong>{$i18n('legal_website')}:</strong>
+					<a
+						href="https://assistance-micro-design.fr"
+						onclick={(e: MouseEvent) => {
+							e.preventDefault();
+							handleExternalLink('https://assistance-micro-design.fr');
+						}}
+					>
+						assistance-micro-design.fr
+					</a>
 				</p>
 			</div>
 		{:else}

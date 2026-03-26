@@ -53,8 +53,7 @@
     "linux": {
       "deb": {
         "section": "utils",
-        "priority": "optional",
-        "maintainers": ["Assistance Micro Design <assistance-micro-design@pm.me>"]
+        "priority": "optional"
       }
     }
   }

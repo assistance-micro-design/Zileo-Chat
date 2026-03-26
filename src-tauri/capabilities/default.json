@@ -23,6 +23,8 @@
         { "url": "vbscript:*" }
       ]
     },
+    "core:window:allow-theme",
+    "core:window:allow-set-theme",
     "opener:deny-open-path",
     "opener:allow-reveal-item-in-dir",
     "dialog:default"
