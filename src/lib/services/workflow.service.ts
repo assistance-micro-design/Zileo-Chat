@@ -23,8 +23,6 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
-import type { RestorationResult } from '$types/services';
-import { getErrorMessage } from '$lib/utils/error';
 
 /**
  * Service for workflow operations.
@@ -105,6 +103,48 @@ export const WorkflowService = {
 	},
 
 	/**
+	 * Batch delete multiple workflows.
+	 *
+	 * @param workflowIds - Array of workflow IDs to delete
+	 * @returns Result with deleted count and skipped running IDs
+	 */
+	async deleteBatch(workflowIds: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
+		return invoke<{ deleted: number; skipped_running: string[] }>('delete_workflows_batch', { workflowIds });
+	},
+
+	/**
+	 * Move a single workflow to a folder (or remove from folder).
+	 *
+	 * @param workflowId - The workflow ID to move
+	 * @param folderId - Target folder ID, or null to remove from folder
+	 * @returns Updated workflow entity
+	 */
+	async moveToFolder(workflowId: string, folderId: string | null): Promise<Workflow> {
+		return invoke<Workflow>('move_workflow_to_folder', { workflowId, folderId });
+	},
+
+	/**
+	 * Move multiple workflows to a folder (or remove from folder).
+	 *
+	 * @param workflowIds - Array of workflow IDs to move
+	 * @param folderId - Target folder ID, or null to remove from folder
+	 * @returns Number of workflows moved
+	 */
+	async moveBatchToFolder(workflowIds: string[], folderId: string | null): Promise<number> {
+		return invoke<number>('move_workflows_to_folder', { workflowIds, folderId });
+	},
+
+	/**
+	 * Toggle the pinned state of a workflow.
+	 *
+	 * @param workflowId - The workflow ID to toggle
+	 * @returns Updated workflow entity
+	 */
+	async togglePinned(workflowId: string): Promise<Workflow> {
+		return invoke<Workflow>('toggle_workflow_pinned', { workflowId });
+	},
+
+	/**
 	 * Get full workflow state including messages and activities.
 	 *
 	 * @param workflowId - Workflow ID to retrieve
@@ -112,34 +152,5 @@ export const WorkflowService = {
 	 */
 	async getFullState(workflowId: string): Promise<WorkflowFullState> {
 		return invoke<WorkflowFullState>('load_workflow_full_state', { workflowId });
-	},
-
-	/**
-	 * Restore a workflow state from database.
-	 *
-	 * @param workflowId - Workflow ID to restore
-	 * @returns Restoration result with counts and success status
-	 */
-	async restoreState(workflowId: string): Promise<RestorationResult> {
-		try {
-			const state = await this.getFullState(workflowId);
-			return {
-				success: true,
-				workflowId,
-				messagesCount: state.messages?.length ?? 0,
-				activitiesCount:
-					(state.tool_executions?.length ?? 0) +
-					(state.thinking_steps?.length ?? 0) +
-					0 // sub_agent_executions not in WorkflowFullState yet
-			};
-		} catch (e) {
-			return {
-				success: false,
-				workflowId,
-				messagesCount: 0,
-				activitiesCount: 0,
-				error: getErrorMessage(e)
-			};
-		}
 	}
 };

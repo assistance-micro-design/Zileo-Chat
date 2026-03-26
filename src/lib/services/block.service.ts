@@ -28,16 +28,16 @@ import type { Message } from '$types/message';
 /**
  * Service for loading persisted ChatBlocks from the database.
  */
-export class BlockService {
+export const BlockService = {
 	/**
 	 * Load execution blocks for a single message.
 	 *
 	 * @param messageId - The message ID to load blocks for
 	 * @returns Array of ChatBlocks ordered by sequence
 	 */
-	static async loadForMessage(messageId: string): Promise<ChatBlock[]> {
+	async loadForMessage(messageId: string): Promise<ChatBlock[]> {
 		return invoke('load_message_blocks', { messageId });
-	}
+	},
 
 	/**
 	 * Load execution blocks for all assistant messages in a list.
@@ -46,11 +46,10 @@ export class BlockService {
 	 * @param messages - Array of messages to load blocks for
 	 * @returns Map of message ID to ChatBlock array
 	 */
-	static async loadForMessages(messages: Message[]): Promise<Map<string, ChatBlock[]>> {
+	async loadForMessages(messages: Message[]): Promise<Map<string, ChatBlock[]>> {
 		const assistantMessages = messages.filter((m) => m.role === 'assistant');
 		const result = new Map<string, ChatBlock[]>();
 
-		// Load blocks for all assistant messages in parallel
 		const entries = await Promise.all(
 			assistantMessages.map(async (msg): Promise<[string, ChatBlock[]]> => {
 				try {
@@ -70,4 +69,4 @@ export class BlockService {
 
 		return result;
 	}
-}
+};

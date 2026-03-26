@@ -25,8 +25,8 @@ import type { Workflow } from '$types/workflow';
 import type { StatusFilter } from '$types/sidebar';
 
 import { writable, derived, get } from 'svelte/store';
-import { invoke } from '@tauri-apps/api/core';
 import { getErrorMessage } from '$lib/utils/error';
+import { WorkflowService } from '$lib/services/workflow.service';
 
 /**
  * State interface for the reactive workflow store
@@ -79,7 +79,7 @@ export const workflowStore = {
 	async loadWorkflows(): Promise<void> {
 		workflowWritable.update((s) => ({ ...s, loading: true, error: null }));
 		try {
-			const workflows = await invoke<Workflow[]>('load_workflows');
+			const workflows = await WorkflowService.loadAll();
 			workflowWritable.update((s) => ({ ...s, workflows, loading: false }));
 		} catch (e) {
 			const error = getErrorMessage(e);
@@ -132,10 +132,7 @@ export const workflowStore = {
 	 * @returns Result with deleted count and skipped running IDs
 	 */
 	async deleteBatch(ids: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
-		const result = await invoke<{ deleted: number; skipped_running: string[] }>(
-			'delete_workflows_batch',
-			{ workflowIds: ids }
-		);
+		const result = await WorkflowService.deleteBatch(ids);
 		workflowWritable.update((s) => ({
 			...s,
 			workflows: s.workflows.filter((w) => !ids.includes(w.id) || result.skipped_running.includes(w.id)),
@@ -151,10 +148,7 @@ export const workflowStore = {
 	 * @param folderId - Target folder ID, or null to remove from folder
 	 */
 	async moveToFolder(workflowId: string, folderId: string | null): Promise<void> {
-		const updated = await invoke<Workflow>('move_workflow_to_folder', {
-			workflowId,
-			folderId
-		});
+		const updated = await WorkflowService.moveToFolder(workflowId, folderId);
 		workflowWritable.update((s) => ({
 			...s,
 			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
@@ -169,10 +163,7 @@ export const workflowStore = {
 	 * @returns Number of workflows moved
 	 */
 	async moveBatchToFolder(workflowIds: string[], folderId: string | null): Promise<number> {
-		const moved = await invoke<number>('move_workflows_to_folder', {
-			workflowIds,
-			folderId
-		});
+		const moved = await WorkflowService.moveBatchToFolder(workflowIds, folderId);
 		workflowWritable.update((s) => ({
 			...s,
 			workflows: s.workflows.map((w) =>
@@ -188,7 +179,7 @@ export const workflowStore = {
 	 * @param workflowId - The workflow ID to toggle
 	 */
 	async togglePinned(workflowId: string): Promise<void> {
-		const updated = await invoke<Workflow>('toggle_workflow_pinned', { workflowId });
+		const updated = await WorkflowService.togglePinned(workflowId);
 		workflowWritable.update((s) => ({
 			...s,
 			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
