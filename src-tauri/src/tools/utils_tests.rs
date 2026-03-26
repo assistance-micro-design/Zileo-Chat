@@ -127,9 +127,8 @@ impl TestAgent {
 
 #[async_trait]
 impl Agent for TestAgent {
-    async fn execute(&self, task: Task) -> anyhow::Result<Report> {
+    async fn execute(&self, _task: Task) -> anyhow::Result<Report> {
         Ok(Report {
-            task_id: task.id,
             status: ReportStatus::Success,
             content: "Test report".to_string(),
             response: "Test report".to_string(),
@@ -147,7 +146,6 @@ impl Agent for TestAgent {
                 iteration_metrics: vec![],
                 thinking_tokens: None,
             },
-            tools_json: None,
         })
     }
 

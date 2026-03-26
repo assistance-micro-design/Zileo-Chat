@@ -141,7 +141,6 @@ mod tests {
             tokio::time::sleep(tokio::time::Duration::from_millis(self.delay_ms)).await;
 
             Ok(Report {
-                task_id: task.id.clone(),
                 status: ReportStatus::Success,
                 content: format!("Report from agent {}: {}", self.config.id, task.description),
                 response: format!("Report from agent {}: {}", self.config.id, task.description),
@@ -159,7 +158,6 @@ mod tests {
                     reasoning_steps: vec![],
                     iteration_metrics: vec![],
                 },
-                tools_json: None,
             })
         }
 

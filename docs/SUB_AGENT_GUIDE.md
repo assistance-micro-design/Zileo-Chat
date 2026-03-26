@@ -420,10 +420,6 @@ import type {
   RiskLevel
 } from '$types/sub-agent';
 
-// Constants
-import { SUB_AGENT_CONSTANTS, SUB_AGENT_EVENTS, VALIDATION_EVENTS } from '$types/sub-agent';
-
-console.log(SUB_AGENT_CONSTANTS.MAX_SUB_AGENTS); // 15
 ```
 
 ---

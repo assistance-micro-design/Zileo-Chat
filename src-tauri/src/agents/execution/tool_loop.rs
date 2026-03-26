@@ -354,7 +354,6 @@ pub(crate) async fn execute_simple(
         Err(e) => {
             error!(error = %e, "Invalid provider type in config");
             return Ok(Report::failed(
-                task.id.clone(),
                 &config.id,
                 &task.description,
                 format!("Invalid provider configuration: {}", e),
@@ -369,7 +368,6 @@ pub(crate) async fn execute_simple(
             "Provider not configured, returning configuration error"
         );
         return Ok(Report::failed(
-            task.id.clone(),
             &config.id,
             &task.description,
             format!(
@@ -443,7 +441,6 @@ pub(crate) async fn execute_simple(
             );
 
             Ok(Report {
-                task_id: task.id,
                 status: ReportStatus::Success,
                 content,
                 response: response.content.clone(),
@@ -461,13 +458,11 @@ pub(crate) async fn execute_simple(
                     reasoning_steps,
                     iteration_metrics: vec![],
                 },
-                tools_json: None,
             })
         }
         Err(e) => {
             error!(error = %e, "LLM call failed");
             Ok(Report::failed(
-                task.id,
                 &config.id,
                 &task.description,
                 format_llm_error(&e),
@@ -510,7 +505,6 @@ pub(crate) async fn execute_with_tools(
         Err(e) => {
             error!(error = %e, "Invalid provider type in config");
             return Ok(Report::failed(
-                task.id.clone(),
                 &ctx.config.id,
                 &task.description,
                 format!("Invalid provider configuration: {}", e),
@@ -528,7 +522,6 @@ pub(crate) async fn execute_with_tools(
             "Provider not configured, returning configuration error"
         );
         return Ok(Report::failed(
-            task.id.clone(),
             &ctx.config.id,
             &task.description,
             format!(
@@ -627,8 +620,6 @@ pub(crate) async fn execute_with_tools(
         .get("conversation_messages")
         .and_then(|v| v.as_array())
         .cloned();
-
-    let is_first_message = existing_messages.is_none();
 
     let mut messages: Vec<serde_json::Value> = if let Some(existing) = existing_messages {
         let mut msgs: Vec<serde_json::Value> = existing;
@@ -760,7 +751,6 @@ pub(crate) async fn execute_with_tools(
                 );
                 metrics.duration_ms = start.elapsed().as_millis() as u64;
                 return Ok(Report::failed_with_metrics(
-                    task.id,
                     &ctx.config.id,
                     &task.description,
                     format_llm_error(&e),
@@ -1000,15 +990,9 @@ pub(crate) async fn execute_with_tools(
     metrics.duration_ms = duration_ms;
 
     Ok(Report {
-        task_id: task.id,
         status: ReportStatus::Success,
         content,
         response: final_response_content,
         metrics,
-        tools_json: if is_first_message {
-            Some(serde_json::Value::Array(tools_json))
-        } else {
-            None
-        },
     })
 }

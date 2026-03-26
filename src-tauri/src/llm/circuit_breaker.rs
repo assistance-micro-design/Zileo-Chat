@@ -67,16 +67,6 @@ impl Default for CircuitBreakerConfig {
 }
 
 impl CircuitBreakerConfig {
-    /// Creates a new configuration with custom values
-    #[allow(dead_code)] // API completeness - custom configuration builder
-    pub fn new(failure_threshold: u32, cooldown_secs: u64, success_threshold: u32) -> Self {
-        Self {
-            failure_threshold,
-            cooldown_duration: Duration::from_secs(cooldown_secs),
-            success_threshold,
-        }
-    }
-
     /// Creates a configuration optimized for LLM providers with longer cooldowns
     pub fn for_llm_provider() -> Self {
         Self {
@@ -153,19 +143,6 @@ impl CircuitBreaker {
             state: Arc::new(RwLock::new(CircuitBreakerState::default())),
             provider_name,
         }
-    }
-
-    /// Creates a new circuit breaker with default configuration
-    #[allow(dead_code)] // API completeness - alternative constructor
-    pub fn with_defaults(provider_name: String) -> Self {
-        Self::new(CircuitBreakerConfig::for_llm_provider(), provider_name)
-    }
-
-    /// Gets the current state of the circuit breaker
-    #[allow(dead_code)] // API completeness - state inspection
-    pub async fn state(&self) -> CircuitState {
-        let state = self.state.read().await;
-        state.state
     }
 
     /// Checks if the circuit breaker allows requests to pass through
@@ -298,10 +275,23 @@ impl CircuitBreaker {
         }
     }
 
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl CircuitBreaker {
+    /// Creates a new circuit breaker with default configuration
+    pub fn with_defaults(provider_name: String) -> Self {
+        Self::new(CircuitBreakerConfig::for_llm_provider(), provider_name)
+    }
+
+    /// Gets the current state of the circuit breaker
+    pub async fn state(&self) -> CircuitState {
+        let state = self.state.read().await;
+        state.state
+    }
+
     /// Resets the circuit breaker to closed state
-    ///
-    /// This should only be used for manual intervention or testing.
-    #[allow(dead_code)] // Manual intervention API
     pub async fn reset(&self) {
         let mut state = self.state.write().await;
         info!(
@@ -313,7 +303,6 @@ impl CircuitBreaker {
     }
 
     /// Gets statistics about the circuit breaker
-    #[allow(dead_code)] // API completeness - status monitoring
     pub async fn stats(&self) -> CircuitBreakerStats {
         let state = self.state.read().await;
         CircuitBreakerStats {
@@ -327,8 +316,8 @@ impl CircuitBreaker {
 }
 
 /// Statistics about the circuit breaker state
+#[cfg(test)]
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CircuitBreakerStats {
     /// Current state
     pub state: CircuitState,
@@ -342,7 +331,7 @@ pub struct CircuitBreakerStats {
     pub config: CircuitBreakerConfig,
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 impl CircuitBreakerStats {
     /// Returns the time remaining until the circuit can transition to half-open
     pub fn cooldown_remaining(&self) -> Option<Duration> {

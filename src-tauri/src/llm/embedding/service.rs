@@ -38,9 +38,6 @@ pub struct EmbeddingService {
     pub(super) provider: Arc<RwLock<Option<EmbeddingProvider>>>,
     /// Expected embedding dimension
     pub(super) dimension: Arc<RwLock<usize>>,
-    /// Request timeout in milliseconds
-    #[allow(dead_code)]
-    timeout_ms: u64,
 }
 
 impl EmbeddingService {
@@ -56,7 +53,6 @@ impl EmbeddingService {
             client,
             provider: Arc::new(RwLock::new(None)),
             dimension: Arc::new(RwLock::new(MISTRAL_EMBED_DIMENSION)),
-            timeout_ms: DEFAULT_TIMEOUT_MS,
         })
     }
 
@@ -72,7 +68,6 @@ impl EmbeddingService {
             client,
             provider: Arc::new(RwLock::new(Some(provider))),
             dimension: Arc::new(RwLock::new(dimension)),
-            timeout_ms: DEFAULT_TIMEOUT_MS,
         })
     }
 

@@ -192,32 +192,6 @@ export interface SubAgentStreamEvent {
   };
 }
 
-/**
- * Constants for sub-agent system.
- */
-export const SUB_AGENT_CONSTANTS = {
-  /** Maximum number of sub-agents per workflow */
-  MAX_SUB_AGENTS: 15,
-  /** Maximum length for task descriptions */
-  MAX_TASK_DESCRIPTION_LEN: 10000,
-  /** Maximum length for result summaries */
-  MAX_RESULT_SUMMARY_LEN: 5000,
-} as const;
-
-/**
- * Sub-agent stream event names for Tauri listeners.
- */
-export const SUB_AGENT_EVENTS = {
-  /** Event emitted when a sub-agent starts execution */
-  SUB_AGENT_START: 'sub_agent_start',
-  /** Event emitted for sub-agent progress updates */
-  SUB_AGENT_PROGRESS: 'sub_agent_progress',
-  /** Event emitted when a sub-agent completes */
-  SUB_AGENT_COMPLETE: 'sub_agent_complete',
-  /** Event emitted when a sub-agent encounters an error */
-  SUB_AGENT_ERROR: 'sub_agent_error',
-} as const;
-
 // =============================================================================
 // Validation Types for Human-in-the-Loop
 // =============================================================================
@@ -263,12 +237,3 @@ export interface ValidationResponseEvent {
   reason?: string;
 }
 
-/**
- * Validation event names for Tauri listeners.
- */
-export const VALIDATION_EVENTS = {
-  /** Event emitted when validation is required */
-  VALIDATION_REQUIRED: 'validation_required',
-  /** Event emitted when validation response is received */
-  VALIDATION_RESPONSE: 'validation_response',
-} as const;

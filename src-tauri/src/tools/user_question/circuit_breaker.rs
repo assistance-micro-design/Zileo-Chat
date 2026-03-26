@@ -215,12 +215,6 @@ impl UserQuestionCircuitBreaker {
         self.timeout_count
     }
 
-    /// Returns the configured cooldown duration.
-    #[allow(dead_code)]
-    pub fn cooldown(&self) -> Duration {
-        self.cooldown
-    }
-
     /// Returns remaining cooldown time before circuit can transition to half-open.
     ///
     /// Returns `None` if circuit is not open or cooldown has elapsed.
@@ -239,9 +233,17 @@ impl UserQuestionCircuitBreaker {
         })
     }
 
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl UserQuestionCircuitBreaker {
+    /// Returns the configured cooldown duration.
+    pub fn cooldown(&self) -> Duration {
+        self.cooldown
+    }
+
     /// Resets the circuit breaker to closed state.
-    ///
-    /// Use with caution - typically only for testing or manual intervention.
     pub fn reset(&mut self) {
         self.state = CircuitState::Closed;
         self.timeout_count = 0;

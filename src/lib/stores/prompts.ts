@@ -245,14 +245,6 @@ export function interpolateVariables(content: string, values: Record<string, str
 }
 
 /**
- * Check if all required variables have values
- */
-export function getMissingVariables(content: string, values: Record<string, string>): string[] {
-	const required = extractVariables(content);
-	return required.filter((name) => !values[name] || values[name].trim() === '');
-}
-
-/**
  * Extract skill references from content (frontend version)
  * Mirrors backend Prompt::detect_skill_references
  *

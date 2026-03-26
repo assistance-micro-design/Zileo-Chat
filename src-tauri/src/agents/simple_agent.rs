@@ -69,7 +69,6 @@ impl Agent for SimpleAgent {
         let duration_ms = start.elapsed().as_millis() as u64;
 
         let report = Report {
-            task_id: task.id.clone(),
             status: ReportStatus::Success,
             response: task.description.clone(),
             content,
@@ -87,7 +86,6 @@ impl Agent for SimpleAgent {
                 reasoning_steps: vec![],
                 iteration_metrics: vec![],
             },
-            tools_json: None,
         };
 
         info!(

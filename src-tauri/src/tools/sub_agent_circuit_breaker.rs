@@ -204,36 +204,6 @@ impl SubAgentCircuitBreaker {
         }
     }
 
-    /// Returns the current state of the circuit.
-    #[allow(dead_code)] // Test-only: production uses record_failure/record_success/should_allow
-    pub fn state(&self) -> CircuitState {
-        self.state
-    }
-
-    /// Returns the current failure count.
-    #[allow(dead_code)] // Test-only: used for test assertions on circuit state
-    pub fn failure_count(&self) -> u32 {
-        self.failure_count
-    }
-
-    /// Returns the configured failure threshold.
-    #[allow(dead_code)] // Used in tests and by external code
-    pub fn failure_threshold(&self) -> u32 {
-        self.failure_threshold
-    }
-
-    /// Returns the configured cooldown duration.
-    #[allow(dead_code)] // Used in tests and by external code
-    pub fn cooldown(&self) -> Duration {
-        self.cooldown
-    }
-
-    /// Returns the time since last failure, if any.
-    #[allow(dead_code)] // Used in tests and by external code
-    pub fn time_since_last_failure(&self) -> Option<Duration> {
-        self.last_failure.map(|t| t.elapsed())
-    }
-
     /// Returns remaining cooldown time before circuit can transition to half-open.
     ///
     /// Returns `None` if circuit is not open or cooldown has elapsed.
@@ -259,10 +229,36 @@ impl SubAgentCircuitBreaker {
         self.remaining_cooldown().map(|d| d.as_secs()).unwrap_or(0)
     }
 
+}
+
+#[cfg(test)]
+impl SubAgentCircuitBreaker {
+    /// Returns the current state of the circuit.
+    pub fn state(&self) -> CircuitState {
+        self.state
+    }
+
+    /// Returns the current failure count.
+    pub fn failure_count(&self) -> u32 {
+        self.failure_count
+    }
+
+    /// Returns the configured failure threshold.
+    pub fn failure_threshold(&self) -> u32 {
+        self.failure_threshold
+    }
+
+    /// Returns the configured cooldown duration.
+    pub fn cooldown(&self) -> Duration {
+        self.cooldown
+    }
+
+    /// Returns the time since last failure, if any.
+    pub fn time_since_last_failure(&self) -> Option<Duration> {
+        self.last_failure.map(|t| t.elapsed())
+    }
+
     /// Resets the circuit breaker to closed state.
-    ///
-    /// Use with caution - typically only for testing or manual intervention.
-    #[allow(dead_code)] // Used in tests and for manual intervention
     pub fn reset(&mut self) {
         self.state = CircuitState::Closed;
         self.failure_count = 0;
