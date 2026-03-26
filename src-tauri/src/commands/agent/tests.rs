@@ -12,61 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::agents::SimpleAgent;
 use crate::db::DBClient;
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
-use crate::state::AppState;
 use std::sync::Arc;
-use tempfile::tempdir;
 
-/// Helper to create test AppState with registry
-async fn setup_test_state() -> AppState {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
-    let db_path = temp_dir.path().join("test_db");
-    let db_path_str = db_path.to_str().unwrap();
-
-    let db = Arc::new(
-        DBClient::new(db_path_str)
-            .await
-            .expect("Failed to create test DB"),
-    );
-    db.initialize_schema()
-        .await
-        .expect("Failed to initialize schema");
-
-    let registry = Arc::new(AgentRegistry::new());
-    let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));
-    let llm_manager =
-        Arc::new(crate::llm::ProviderManager::new().expect("test provider manager"));
-    let mcp_manager = Arc::new(
-        crate::mcp::MCPManager::new(db.clone())
-            .await
-            .expect("Failed to create MCP manager"),
-    );
-
-    // Leak temp_dir to keep it alive during test
-    std::mem::forget(temp_dir);
-
-    // Create shared embedding service reference
-    let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
-
-    AppState {
-        db: db.clone(),
-        registry,
-        orchestrator,
-        llm_manager,
-        mcp_manager,
-        tool_factory: Arc::new(crate::tools::ToolFactory::new(
-            db,
-            embedding_service.clone(),
-        )),
-        embedding_service,
-        streaming_cancellations: Arc::new(tokio::sync::Mutex::new(
-            std::collections::HashMap::new(),
-        )),
-        app_handle: Arc::new(std::sync::RwLock::new(None)),
-    }
+async fn setup_test_state() -> crate::state::AppState {
+    crate::test_utils::setup_test_state().await
 }
 
 /// Creates a test AgentConfig with sensible defaults

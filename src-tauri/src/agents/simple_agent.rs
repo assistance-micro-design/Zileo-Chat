@@ -87,7 +87,6 @@ impl Agent for SimpleAgent {
                 reasoning_steps: vec![],
                 iteration_metrics: vec![],
             },
-            system_prompt: None,
             tools_json: None,
         };
 

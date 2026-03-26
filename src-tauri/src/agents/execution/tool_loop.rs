@@ -461,7 +461,6 @@ pub(crate) async fn execute_simple(
                     reasoning_steps,
                     iteration_metrics: vec![],
                 },
-                system_prompt: None,
                 tools_json: None,
             })
         }
@@ -631,34 +630,33 @@ pub(crate) async fn execute_with_tools(
 
     let is_first_message = existing_messages.is_none();
 
-    let (mut messages, system_prompt_for_report): (Vec<serde_json::Value>, Option<String>) =
-        if let Some(existing) = existing_messages {
-            let mut msgs: Vec<serde_json::Value> = existing;
-            msgs.push(serde_json::json!({
-                "role": "user",
-                "content": task.description
-            }));
-            debug!(
-                existing_messages_count = msgs.len() - 1,
-                "Continuing conversation with existing context"
-            );
-            (msgs, None)
-        } else {
-            let system_prompt = prompt::build_system_prompt_with_tools(
-                ctx.config,
-                &local_tools,
-                &mcp_tools,
-                &mcp_server_summaries,
-                locale.as_deref(),
-            );
-            let base_prompt = prompt::build_prompt(&task);
-            let msgs = vec![
-                serde_json::json!({"role": "system", "content": system_prompt}),
-                serde_json::json!({"role": "user", "content": base_prompt}),
-            ];
-            debug!("First message: building new system prompt with tools");
-            (msgs, Some(system_prompt))
-        };
+    let mut messages: Vec<serde_json::Value> = if let Some(existing) = existing_messages {
+        let mut msgs: Vec<serde_json::Value> = existing;
+        msgs.push(serde_json::json!({
+            "role": "user",
+            "content": task.description
+        }));
+        debug!(
+            existing_messages_count = msgs.len() - 1,
+            "Continuing conversation with existing context"
+        );
+        msgs
+    } else {
+        let system_prompt = prompt::build_system_prompt_with_tools(
+            ctx.config,
+            &local_tools,
+            &mcp_tools,
+            &mcp_server_summaries,
+            locale.as_deref(),
+        );
+        let base_prompt = prompt::build_prompt(&task);
+        let msgs = vec![
+            serde_json::json!({"role": "system", "content": system_prompt}),
+            serde_json::json!({"role": "user", "content": base_prompt}),
+        ];
+        debug!("First message: building new system prompt with tools");
+        msgs
+    };
 
     // Tool execution loop
     let mut final_response_content = String::new();
@@ -1007,7 +1005,6 @@ pub(crate) async fn execute_with_tools(
         content,
         response: final_response_content,
         metrics,
-        system_prompt: system_prompt_for_report,
         tools_json: if is_first_message {
             Some(serde_json::Value::Array(tools_json))
         } else {

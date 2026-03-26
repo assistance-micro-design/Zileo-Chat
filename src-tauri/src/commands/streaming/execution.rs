@@ -12,26 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Streaming workflow execution with real-time events.
+//! Streaming workflow execution commands.
 //!
-//! Provides Tauri commands for executing workflows with streaming
-//! responses via Tauri events.
+//! Tauri commands for executing and cancelling workflows with real-time events.
 
 use crate::{
     agents::core::agent::Task,
-    constants::workflow as wf_const,
     db::queries::workflow as wf_queries,
-    llm::pricing::{calculate_cost_with_cache, CostParams},
     models::{
-        llm_models::LLMModel, streaming::events, Message, Prompt, StreamChunk, ThinkingStepCreate,
-        Workflow, WorkflowComplete, WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
+        Prompt, StreamChunk, ThinkingStepCreate, Workflow, WorkflowComplete,
+        WorkflowMetrics, WorkflowResult, WorkflowToolExecution,
     },
     security::{validate_uuid_field, Validator},
     AppState,
 };
-use tauri::{Emitter, State, Window};
+use tauri::{State, Window};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
+
+use super::helpers::{
+    aggregate_sub_agent_tokens, emit_chunk, emit_complete, emit_error, load_conversation_history,
+};
+use super::pricing::{load_model_pricing_info, update_workflow_cumulative_metrics, CumulativeMetricsUpdate};
 
 /// Executes a workflow with streaming events.
 ///
@@ -248,56 +250,28 @@ pub async fn execute_workflow_streaming(
         }
     };
 
-    // Execution completed successfully - process the report
     let duration = start_time.elapsed().as_millis() as u64;
-
-    // Emit tool end
-    emit_chunk(
-        &window,
-        StreamChunk::tool_end(
-            validated_workflow_id.clone(),
-            validated_agent_id.clone(),
-            duration,
-        ),
+    info!(
+        duration_ms = duration,
+        task_id = %task_id,
+        "Streaming execution completed, processing report"
     );
 
-    // If this is the first message, save the system prompt for future conversations
-    // This enables context reuse without reconstruction
-    if let Some(ref system_prompt) = report.system_prompt {
-        let system_message_id = Uuid::new_v4().to_string();
-        let system_content = system_prompt.clone();
-
-        // Save system prompt as a system message (uses db.create with bind params
-        // instead of format!() to prevent SurrealQL injection - ERR_SEC_001)
-        let system_msg = crate::models::MessageCreate {
-            workflow_id: validated_workflow_id.clone(),
-            role: "system".to_string(),
-            content: system_content.clone(),
-            tokens: 0,
-            tokens_input: Some(0),
-            tokens_output: Some(0),
-            model: None,
-            provider: None,
-            cost_usd: None,
-            duration_ms: None,
-            thinking_tokens: None,
-        };
-
-        match state
-            .db
-            .create("message", &system_message_id, system_msg)
-            .await
-        {
-            Err(e) => {
-                warn!(error = %e, "Failed to persist system prompt as message");
-            }
-            Ok(_) => {
-                info!(
-                    system_message_id = %system_message_id,
-                    system_prompt_len = system_content.len(),
-                    "Saved system prompt for workflow context reuse"
-                );
-            }
+    // Emit thinking blocks from report
+    for step in &report.metrics.reasoning_steps {
+        emit_chunk(
+            &window,
+            StreamChunk::thinking_block(
+                validated_workflow_id.clone(),
+                step.content.clone(),
+            ),
+        );
+        if step.content.len() > 100 {
+            info!(
+                step_source = %step.source,
+                content_len = step.content.len(),
+                "Emitted thinking block"
+            );
         }
     }
 
@@ -361,14 +335,16 @@ pub async fn execute_workflow_streaming(
     // Update workflow with cumulative tokens, cost, model_id, and current context size
     update_workflow_cumulative_metrics(
         &state,
-        &validated_workflow_id,
-        report.metrics.tokens_input,
-        report.metrics.tokens_output,
-        report.metrics.cached_tokens,
-        report.metrics.cache_write_tokens,
-        pricing.cost_usd,
-        &pricing.model_id,
-        report.metrics.context_tokens,
+        &CumulativeMetricsUpdate {
+            workflow_id: &validated_workflow_id,
+            tokens_input: report.metrics.tokens_input,
+            tokens_output: report.metrics.tokens_output,
+            cached_tokens: report.metrics.cached_tokens,
+            cache_write_tokens: report.metrics.cache_write_tokens,
+            cost_usd: pricing.cost_usd,
+            model_id: &pricing.model_id,
+            context_tokens: report.metrics.context_tokens,
+        },
     )
     .await;
 
@@ -461,359 +437,6 @@ pub async fn execute_workflow_streaming(
     Ok(result)
 }
 
-/// Helper function to emit a stream chunk event.
-fn emit_chunk(window: &Window, chunk: StreamChunk) {
-    if let Err(e) = window.emit(events::WORKFLOW_STREAM, &chunk) {
-        warn!(error = %e, "Failed to emit stream chunk");
-    }
-}
-
-/// Helper function to emit a completion event.
-fn emit_complete(window: &Window, complete: WorkflowComplete) {
-    if let Err(e) = window.emit(events::WORKFLOW_COMPLETE, &complete) {
-        warn!(error = %e, "Failed to emit completion event");
-    }
-}
-
-/// Helper function to emit an error and completion.
-fn emit_error(window: &Window, workflow_id: &str, error: &str) {
-    emit_chunk(
-        window,
-        StreamChunk::error(workflow_id.to_string(), error.to_string()),
-    );
-    emit_complete(
-        window,
-        WorkflowComplete::failed(workflow_id.to_string(), error.to_string()),
-    );
-}
-
-/// Loads conversation history and builds the context payload for the LLM.
-///
-/// Returns the history context JSON and the number of loaded messages.
-async fn load_conversation_history(
-    state: &AppState,
-    workflow_id: &str,
-    locale: &str,
-) -> (serde_json::Value, usize) {
-    let history_query = format!(
-        r#"SELECT
-            meta::id(id) AS id,
-            workflow_id,
-            role,
-            content,
-            tokens,
-            tokens_input,
-            tokens_output,
-            model,
-            provider,
-            cost_usd,
-            duration_ms,
-            timestamp
-        FROM message
-        WHERE workflow_id = $wf_id
-        ORDER BY timestamp ASC
-        LIMIT {}"#,
-        wf_const::MESSAGE_HISTORY_LIMIT
-    );
-
-    let history_json = state
-        .db
-        .query_json_with_params(
-            &history_query,
-            vec![("wf_id".to_string(), serde_json::json!(workflow_id))],
-        )
-        .await
-        .unwrap_or_default();
-    let conversation_history: Vec<Message> = history_json
-        .into_iter()
-        .filter_map(|v| serde_json::from_value(v).ok())
-        .collect();
-
-    let has_system_message = conversation_history
-        .iter()
-        .any(|msg| matches!(msg.role, crate::models::MessageRole::System));
-
-    let history_count = conversation_history.len();
-
-    let history_context = if has_system_message && !conversation_history.is_empty() {
-        let api_messages: Vec<serde_json::Value> = conversation_history
-            .iter()
-            .map(|msg| {
-                serde_json::json!({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-            })
-            .collect();
-        serde_json::json!({
-            "conversation_messages": api_messages,
-            "is_primary_agent": true,
-            "workflow_id": workflow_id,
-            "locale": locale
-        })
-    } else {
-        serde_json::json!({
-            "is_primary_agent": true,
-            "workflow_id": workflow_id,
-            "locale": locale
-        })
-    };
-
-    info!(
-        history_count = history_count,
-        has_system_message = has_system_message,
-        is_continuation = has_system_message && !conversation_history.is_empty(),
-        "Loaded conversation history for context"
-    );
-
-    (history_context, history_count)
-}
-
-/// Pricing information for a model, loaded from agent config and database.
-struct ModelPricingInfo {
-    provider: String,
-    model: String,
-    model_id: String,
-    cost_usd: f64,
-}
-
-/// Loads agent configuration and model pricing info, then calculates cost.
-///
-/// Supports cached token pricing: when `cached_tokens` or `cache_write_tokens`
-/// is provided, the cost splits input tokens between regular, cache-read, and cache-write rates.
-async fn load_model_pricing_info(
-    state: &AppState,
-    agent_id: &str,
-    tokens_input: usize,
-    tokens_output: usize,
-    cached_tokens: Option<usize>,
-    cache_write_tokens: Option<usize>,
-) -> ModelPricingInfo {
-    let (provider, model) = match state.registry.get(agent_id).await {
-        Some(agent) => {
-            let config = agent.config();
-            (config.llm.provider.clone(), config.llm.model.clone())
-        }
-        None => ("Unknown".to_string(), agent_id.to_string()),
-    };
-
-    let (input_price, output_price, cache_read_price, cache_write_price, model_id) = {
-        let provider_lower = provider.to_lowercase();
-        let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
-             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
-             created_at, updated_at \
-             FROM llm_model WHERE api_name = $model_name AND provider = $provider_name";
-
-        match state
-            .db
-            .db
-            .query(model_query)
-            .bind(("model_name", model.clone()))
-            .bind(("provider_name", provider_lower.clone()))
-            .await
-        {
-            Ok(mut response) => {
-                let models: Result<Vec<LLMModel>, _> = response.take(0);
-                match models {
-                    Ok(mut m) if !m.is_empty() => {
-                        let loaded_model = m.remove(0);
-                        info!(
-                            model_api_name = %model,
-                            model_id = %loaded_model.id,
-                            input_price = loaded_model.input_price_per_mtok,
-                            output_price = loaded_model.output_price_per_mtok,
-                            cache_read_price = loaded_model.cache_read_price_per_mtok,
-                            cache_write_price = loaded_model.cache_write_price_per_mtok,
-                            "Loaded model for pricing"
-                        );
-                        (
-                            loaded_model.input_price_per_mtok,
-                            loaded_model.output_price_per_mtok,
-                            loaded_model.cache_read_price_per_mtok,
-                            loaded_model.cache_write_price_per_mtok,
-                            loaded_model.id,
-                        )
-                    }
-                    _ => {
-                        warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
-                        (0.0, 0.0, 0.0, 0.0, model.clone())
-                    }
-                }
-            }
-            Err(e) => {
-                warn!(error = %e, "Failed to load model for pricing, using defaults");
-                (0.0, 0.0, 0.0, 0.0, model.clone())
-            }
-        }
-    };
-
-    let cost_usd = calculate_cost_with_cache(&CostParams {
-        tokens_input,
-        tokens_output,
-        cached_tokens,
-        cache_write_tokens,
-        input_price_per_mtok: input_price,
-        output_price_per_mtok: output_price,
-        cache_read_price_per_mtok: cache_read_price,
-        cache_write_price_per_mtok: cache_write_price,
-    });
-
-    info!(
-        tokens_input = tokens_input,
-        tokens_output = tokens_output,
-        cached_tokens = ?cached_tokens,
-        cache_write_tokens = ?cache_write_tokens,
-        input_price = input_price,
-        output_price = output_price,
-        cache_read_price = cache_read_price,
-        cache_write_price = cache_write_price,
-        cost_usd = cost_usd,
-        "Calculated token cost"
-    );
-
-    ModelPricingInfo {
-        provider,
-        model,
-        model_id,
-        cost_usd,
-    }
-}
-
-/// Updates workflow cumulative token counts, cost, model, and context size.
-#[allow(clippy::too_many_arguments)]
-async fn update_workflow_cumulative_metrics(
-    state: &AppState,
-    workflow_id: &str,
-    tokens_input: usize,
-    tokens_output: usize,
-    cached_tokens: Option<usize>,
-    cache_write_tokens: Option<usize>,
-    cost_usd: f64,
-    model_id: &str,
-    context_tokens: usize,
-) {
-    let cached = cached_tokens.unwrap_or(0);
-    let cache_write = cache_write_tokens.unwrap_or(0);
-    let update_query = format!(
-        "UPDATE workflow:`{}` SET \
-            total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
-            total_tokens_output = (total_tokens_output ?? 0) + $tokens_out, \
-            total_cached_tokens = (total_cached_tokens ?? 0) + $cached, \
-            total_cache_write_tokens = (total_cache_write_tokens ?? 0) + $cache_write, \
-            total_cost_usd = (total_cost_usd ?? 0.0) + $cost, \
-            model_id = $model_id, \
-            current_context_tokens = $context_tokens, \
-            updated_at = time::now()",
-        workflow_id
-    );
-
-    info!(
-        tokens_in = tokens_input,
-        tokens_out = tokens_output,
-        cached = cached,
-        cache_write = cache_write,
-        cost = cost_usd,
-        model_id = %model_id,
-        "Executing workflow token update"
-    );
-
-    if let Err(e) = state
-        .db
-        .db
-        .query(&update_query)
-        .bind(("tokens_in", tokens_input))
-        .bind(("tokens_out", tokens_output))
-        .bind(("cached", cached))
-        .bind(("cache_write", cache_write))
-        .bind(("cost", cost_usd))
-        .bind(("model_id", model_id.to_string()))
-        .bind(("context_tokens", context_tokens))
-        .await
-    {
-        error!(error = %e, "Failed to update workflow cumulative tokens");
-    } else {
-        info!(
-            workflow_id = %workflow_id,
-            tokens_input = tokens_input,
-            tokens_output = tokens_output,
-            cached_tokens = cached,
-            cache_write_tokens = cache_write,
-            current_context = context_tokens,
-            cost_usd = cost_usd,
-            model_id = %model_id,
-            "Updated workflow cumulative tokens and context"
-        );
-    }
-}
-
-/// Aggregates sub-agent tokens into separate workflow fields.
-///
-/// Queries all completed sub_agent_execution records for this workflow
-/// and stores their token totals in sub_agent_tokens_input/output.
-/// These are kept separate from total_tokens_input/output (main agent only)
-/// so the frontend can display both independently and compute combined totals.
-async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
-    let sum_query = "SELECT math::sum(tokens_input) AS total_in, \
-                            math::sum(tokens_output) AS total_out \
-                     FROM sub_agent_execution \
-                     WHERE workflow_id = $wf_id AND status = 'completed' \
-                     GROUP ALL";
-
-    match state
-        .db
-        .db
-        .query(sum_query)
-        .bind(("wf_id", workflow_id.to_string()))
-        .await
-    {
-        Ok(mut response) => {
-            let result: Option<serde_json::Value> = response.take(0).unwrap_or(None);
-            if let Some(row) = result {
-                let tokens_in = row.get("total_in").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                let tokens_out =
-                    row.get("total_out").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-
-                if tokens_in > 0 || tokens_out > 0 {
-                    let update_query = format!(
-                        "UPDATE workflow:`{}` SET \
-                            sub_agent_tokens_input = $tokens_in, \
-                            sub_agent_tokens_output = $tokens_out",
-                        workflow_id
-                    );
-
-                    if let Err(e) = state
-                        .db
-                        .db
-                        .query(&update_query)
-                        .bind(("tokens_in", tokens_in))
-                        .bind(("tokens_out", tokens_out))
-                        .await
-                    {
-                        error!(error = %e, "Failed to store sub-agent tokens");
-                    } else {
-                        info!(
-                            workflow_id = %workflow_id,
-                            sub_agent_tokens_in = tokens_in,
-                            sub_agent_tokens_out = tokens_out,
-                            "Stored sub-agent tokens in separate fields"
-                        );
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to query sub-agent tokens for aggregation");
-        }
-    }
-}
-
-// persist_tool_executions_batch and persist_reasoning_steps_batch
-// moved to db::persistence module for reuse by sub-agent executor
-
 /// Cancels a streaming workflow execution immediately.
 ///
 /// Triggers the cancellation token associated with the workflow, causing the
@@ -842,8 +465,7 @@ pub async fn cancel_workflow_streaming(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::models::streaming::CompletionStatus;
+    use crate::models::streaming::{events, CompletionStatus, StreamChunk, WorkflowComplete};
 
     #[test]
     fn test_stream_chunk_creation() {

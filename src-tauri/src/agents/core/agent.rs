@@ -45,9 +45,6 @@ pub struct Report {
     pub response: String,
     /// Execution metrics
     pub metrics: ReportMetrics,
-    /// System prompt used (for persistence on first message)
-    /// Only populated on first message of a workflow
-    pub system_prompt: Option<String>,
     /// Tools JSON definition (for persistence on first message)
     /// Only populated on first message of a workflow
     /// Reserved for future use (caching tool definitions between messages)
@@ -198,7 +195,6 @@ impl Report {
             ),
             response: error_msg,
             metrics: ReportMetrics::empty(duration_ms),
-            system_prompt: None,
             tools_json: None,
         }
     }
@@ -230,7 +226,6 @@ impl Report {
             ),
             response: error_msg,
             metrics,
-            system_prompt: None,
             tools_json: None,
         }
     }

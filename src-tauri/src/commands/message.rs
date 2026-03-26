@@ -470,29 +470,3 @@ pub async fn load_message_blocks(
     Ok(blocks)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_max_message_content_len() {
-        // 100KB should be enough for most message content
-        assert_eq!(cmd_const::MAX_MESSAGE_CONTENT_LEN, 100_000);
-    }
-
-    #[test]
-    fn test_valid_roles() {
-        let valid_roles = vec!["user", "assistant", "system"];
-        for role in valid_roles {
-            assert!(matches!(role, "user" | "assistant" | "system"));
-        }
-    }
-
-    #[test]
-    fn test_invalid_role_detection() {
-        let invalid_roles = vec!["admin", "bot", ""];
-        for role in invalid_roles {
-            assert!(!matches!(role, "user" | "assistant" | "system"));
-        }
-    }
-}

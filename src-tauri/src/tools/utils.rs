@@ -489,7 +489,6 @@ mod tests {
                     iteration_metrics: vec![],
                     thinking_tokens: None,
                 },
-                system_prompt: None,
                 tools_json: None,
             })
         }

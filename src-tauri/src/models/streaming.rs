@@ -198,15 +198,6 @@ impl StreamChunk {
         }
     }
 
-    /// Creates a new tool end chunk.
-    pub fn tool_end(workflow_id: String, tool: String, duration: u64) -> Self {
-        Self {
-            tool: Some(tool),
-            duration: Some(duration),
-            ..Self::base(workflow_id, ChunkType::ToolEnd)
-        }
-    }
-
     /// Creates a new reasoning chunk.
     pub fn reasoning(workflow_id: String, content: String) -> Self {
         Self {
@@ -541,9 +532,6 @@ mod tests {
         assert_eq!(chunk.tool, Some("search".to_string()));
         assert!(chunk.content.is_none());
 
-        let chunk = StreamChunk::tool_end("wf_001".to_string(), "search".to_string(), 150);
-        assert_eq!(chunk.chunk_type, ChunkType::ToolEnd);
-        assert_eq!(chunk.duration, Some(150));
     }
 
     #[test]

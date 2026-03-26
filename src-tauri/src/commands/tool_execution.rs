@@ -420,35 +420,3 @@ pub async fn clear_workflow_tool_executions(
     Ok(count)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_max_tool_name_len() {
-        // Verify the constant is set to a reasonable value
-        assert_eq!(cmd_const::MAX_TOOL_NAME_LEN, 128);
-    }
-
-    #[test]
-    fn test_valid_tool_types() {
-        let valid_types = vec!["local", "mcp"];
-        for tool_type in valid_types {
-            assert!(matches!(tool_type, "local" | "mcp"));
-        }
-    }
-
-    #[test]
-    fn test_invalid_tool_type_detection() {
-        let invalid_types = vec!["remote", "internal", ""];
-        for tool_type in invalid_types {
-            assert!(!matches!(tool_type, "local" | "mcp"));
-        }
-    }
-
-    #[test]
-    fn test_max_params_size() {
-        // 50KB should be enough for most tool params
-        assert_eq!(cmd_const::MAX_PARAMS_SIZE, 50 * 1024);
-    }
-}
