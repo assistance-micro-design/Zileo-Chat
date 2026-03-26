@@ -109,7 +109,6 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedAgentId: string | null;
 		currentMaxIterations: number;
 		currentContextWindow: number;
-		messages: Message[];
 		messagesLoading: boolean;
 	}
 
@@ -135,7 +134,6 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedAgentId: null,
 		currentMaxIterations: 50,
 		currentContextWindow: 128000,
-		messages: [],
 		messagesLoading: false
 	};
 
@@ -152,11 +150,14 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Aggregated page state */
 	let pageState = $state<PageState>(initialPageState);
 
+	/** Chat messages (read-only, only reassigned — no deep proxy needed) */
+	let messages = $state.raw<Message[]>([]);
+
 	/** Persisted blocks per message */
 	let messageBlocks = new SvelteMap<string, ChatBlock[]>();
 
-	/** Persisted tasks for the current workflow */
-	let persistedTasks = $state<TodoTaskDisplay[]>([]);
+	/** Persisted tasks for the current workflow (read-only, only reassigned) */
+	let persistedTasks = $state.raw<TodoTaskDisplay[]>([]);
 
 	/** Resolved tasks: real-time store during execution of THIS workflow, persisted otherwise.
 	 *  Resolves agent UUIDs to display names via $agents store. */
@@ -221,7 +222,7 @@ Uses extracted components, services, and stores for clean architecture.
 		try {
 			// Load messages
 			const result = await MessageService.loadWithSubAgents(workflowId);
-			pageState.messages = result.messages;
+			messages = result.messages;
 			if (result.error) {
 				toastStore.add({
 					type: 'error',
@@ -270,7 +271,7 @@ Uses extracted components, services, and stores for clean architecture.
 		const id = await WorkflowService.create(name, agentId);
 
 		pageState.selectedWorkflowId = id;
-		pageState.messages = [];
+		messages = [];
 
 		await workflowStore.loadWorkflows();
 		await selectWorkflow(id);
@@ -334,7 +335,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 			if (pageState.selectedWorkflowId === workflowId) {
 				pageState.selectedWorkflowId = null;
-				pageState.messages = [];
+				messages = [];
 			}
 
 			modalState = { type: 'none' };
@@ -374,7 +375,7 @@ Uses extracted components, services, and stores for clean architecture.
 		// Clear selection if current workflow was deleted
 		if (pageState.selectedWorkflowId && ids.includes(pageState.selectedWorkflowId) && !result.skipped_running.includes(pageState.selectedWorkflowId)) {
 			pageState.selectedWorkflowId = null;
-			pageState.messages = [];
+			messages = [];
 		}
 
 		return result;
@@ -510,13 +511,13 @@ Uses extracted components, services, and stores for clean architecture.
 			},
 			{
 				onUserMessage: (msg) => {
-					pageState.messages = [...pageState.messages, msg];
+					messages = [...messages, msg];
 				},
 				onAssistantMessage: (msg) => {
-					pageState.messages = [...pageState.messages, msg];
+					messages = [...messages, msg];
 				},
 				onError: (msg) => {
-					pageState.messages = [...pageState.messages, msg];
+					messages = [...messages, msg];
 				}
 			}
 		);
@@ -721,7 +722,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 			<!-- Chat Container -->
 			<ChatContainer
-				messages={pageState.messages}
+				messages={messages}
 				messagesLoading={pageState.messagesLoading}
 				{messageBlocks}
 				executionBlocks={$executionBlocks$}

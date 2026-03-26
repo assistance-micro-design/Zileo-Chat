@@ -34,11 +34,12 @@ use crate::models::{AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSumm
 use crate::security::Validator;
 use crate::state::AppState;
 use crate::tools::context::AgentToolContext;
+use serde_json::json;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use validation::{
-    format_reasoning_effort, merge_agent_config, serialize_agent_fields, validate_agent_create,
+    format_reasoning_effort, merge_agent_config, validate_agent_create,
 };
 
 /// Registers an LLMAgent in the registry with proper context
@@ -205,45 +206,52 @@ pub async fn create_agent(
         reasoning_effort,
     };
 
-    let fields = serialize_agent_fields(&agent_config)?;
     let reasoning_sql = format_reasoning_effort(&agent_config);
 
     let query = format!(
-        "CREATE agent:`{}` CONTENT {{
-            id: '{}',
-            name: {},
-            lifecycle: '{}',
-            llm: {},
-            tools: {},
-            mcp_servers: {},
-            skills: {},
-            folders: {},
-            require_file_confirmation: {},
-            system_prompt: {},
-            max_tool_iterations: {},
-            reasoning_effort: {},
+        "CREATE agent:`{agent_id}` CONTENT {{
+            id: '{agent_id}',
+            name: $name,
+            lifecycle: $lifecycle,
+            llm: $llm,
+            tools: $tools,
+            mcp_servers: $mcp_servers,
+            skills: $skills,
+            folders: $folders,
+            require_file_confirmation: $require_file_confirmation,
+            system_prompt: $system_prompt,
+            max_tool_iterations: $max_tool_iterations,
+            reasoning_effort: {reasoning_sql},
             created_at: time::now(),
             updated_at: time::now()
-        }}",
-        agent_id,
-        agent_id,
-        fields.name_json,
-        lifecycle_str,
-        fields.llm_json,
-        fields.tools_json,
-        fields.mcp_json,
-        fields.skills_json,
-        fields.folders_json,
-        fields.require_file_confirmation,
-        fields.prompt_json,
-        agent_config.max_tool_iterations,
-        reasoning_sql
+        }}"
     );
 
-    state.db.execute(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to persist agent to database");
-        format!("Failed to persist agent: {}", e)
-    })?;
+    let llm_value = serde_json::to_value(&agent_config.llm)
+        .map_err(|e| format!("Failed to serialize LLM config: {}", e))?;
+
+    state
+        .db
+        .execute_with_params(
+            &query,
+            vec![
+                ("name".to_string(), json!(agent_config.name)),
+                ("lifecycle".to_string(), json!(lifecycle_str)),
+                ("llm".to_string(), llm_value),
+                ("tools".to_string(), json!(agent_config.tools)),
+                ("mcp_servers".to_string(), json!(agent_config.mcp_servers)),
+                ("skills".to_string(), json!(agent_config.skills)),
+                ("folders".to_string(), json!(agent_config.folders)),
+                ("require_file_confirmation".to_string(), json!(agent_config.require_file_confirmation)),
+                ("system_prompt".to_string(), json!(agent_config.system_prompt)),
+                ("max_tool_iterations".to_string(), json!(agent_config.max_tool_iterations)),
+            ],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to persist agent to database");
+            format!("Failed to persist agent: {}", e)
+        })?;
 
     register_agent_runtime(state.inner(), &agent_id, agent_config).await;
 
@@ -283,39 +291,47 @@ pub async fn update_agent(
             e
         })?;
 
-    let fields = serialize_agent_fields(&updated_config)?;
     let reasoning_sql = format_reasoning_effort(&updated_config);
 
     let query = format!(
-        "UPDATE agent:`{}` SET
-            name = {},
-            llm = {},
-            tools = {},
-            mcp_servers = {},
-            skills = {},
-            folders = {},
-            require_file_confirmation = {},
-            system_prompt = {},
-            max_tool_iterations = {},
-            reasoning_effort = {},
-            updated_at = time::now()",
-        validated_id,
-        fields.name_json,
-        fields.llm_json,
-        fields.tools_json,
-        fields.mcp_json,
-        fields.skills_json,
-        fields.folders_json,
-        fields.require_file_confirmation,
-        fields.prompt_json,
-        updated_config.max_tool_iterations,
-        reasoning_sql
+        "UPDATE agent:`{validated_id}` SET
+            name = $name,
+            llm = $llm,
+            tools = $tools,
+            mcp_servers = $mcp_servers,
+            skills = $skills,
+            folders = $folders,
+            require_file_confirmation = $require_file_confirmation,
+            system_prompt = $system_prompt,
+            max_tool_iterations = $max_tool_iterations,
+            reasoning_effort = {reasoning_sql},
+            updated_at = time::now()"
     );
 
-    state.db.execute(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to update agent in database");
-        format!("Failed to update agent: {}", e)
-    })?;
+    let llm_value = serde_json::to_value(&updated_config.llm)
+        .map_err(|e| format!("Failed to serialize LLM config: {}", e))?;
+
+    state
+        .db
+        .execute_with_params(
+            &query,
+            vec![
+                ("name".to_string(), json!(updated_config.name)),
+                ("llm".to_string(), llm_value),
+                ("tools".to_string(), json!(updated_config.tools)),
+                ("mcp_servers".to_string(), json!(updated_config.mcp_servers)),
+                ("skills".to_string(), json!(updated_config.skills)),
+                ("folders".to_string(), json!(updated_config.folders)),
+                ("require_file_confirmation".to_string(), json!(updated_config.require_file_confirmation)),
+                ("system_prompt".to_string(), json!(updated_config.system_prompt)),
+                ("max_tool_iterations".to_string(), json!(updated_config.max_tool_iterations)),
+            ],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to update agent in database");
+            format!("Failed to update agent: {}", e)
+        })?;
 
     state.registry.unregister_any(&validated_id).await;
     register_agent_runtime(state.inner(), &validated_id, updated_config.clone()).await;

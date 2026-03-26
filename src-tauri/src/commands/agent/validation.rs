@@ -19,7 +19,6 @@
 use crate::constants::commands as cmd_const;
 use crate::llm::ProviderType;
 use crate::models::{AgentConfig, AgentConfigCreate, AgentConfigUpdate, LLMConfig};
-use crate::security::serialize_for_query;
 use crate::tools::registry::TOOL_REGISTRY;
 use crate::tools::validation_helper::validate_trimmed_name;
 
@@ -253,32 +252,6 @@ pub fn merge_agent_config(
 // ---------------------------------------------------------------------------
 // Database serialization
 // ---------------------------------------------------------------------------
-
-/// Serialized agent configuration fields for database operations
-pub struct SerializedAgentFields {
-    pub name_json: String,
-    pub llm_json: String,
-    pub tools_json: String,
-    pub mcp_json: String,
-    pub skills_json: String,
-    pub folders_json: String,
-    pub require_file_confirmation: bool,
-    pub prompt_json: String,
-}
-
-/// Serializes agent configuration fields for database storage
-pub fn serialize_agent_fields(config: &AgentConfig) -> Result<SerializedAgentFields, String> {
-    Ok(SerializedAgentFields {
-        name_json: serialize_for_query(&config.name, "name")?,
-        llm_json: serialize_for_query(&config.llm, "LLM config")?,
-        tools_json: serialize_for_query(&config.tools, "tools")?,
-        mcp_json: serialize_for_query(&config.mcp_servers, "MCP servers")?,
-        skills_json: serialize_for_query(&config.skills, "skills")?,
-        folders_json: serialize_for_query(&config.folders, "folders")?,
-        require_file_confirmation: config.require_file_confirmation,
-        prompt_json: serialize_for_query(&config.system_prompt, "system prompt")?,
-    })
-}
 
 /// Formats reasoning_effort for SurrealDB storage
 pub fn format_reasoning_effort(config: &AgentConfig) -> String {

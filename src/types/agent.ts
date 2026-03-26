@@ -24,31 +24,6 @@ export type ReasoningEffort = 'low' | 'medium' | 'high';
 export type Lifecycle = 'permanent' | 'temporary';
 
 /**
- * Agent status
- */
-export type AgentStatus = 'available' | 'busy';
-
-/**
- * Agent entity
- */
-export interface Agent {
-  /** Unique identifier */
-  id: string;
-  /** Agent name */
-  name: string;
-  /** Lifecycle type */
-  lifecycle: Lifecycle;
-  /** Current status */
-  status: AgentStatus;
-  /** List of capabilities */
-  capabilities: string[];
-  /** List of available tools */
-  tools: string[];
-  /** List of MCP servers used */
-  mcp_servers: string[];
-}
-
-/**
  * Agent configuration
  */
 export interface AgentConfig {
