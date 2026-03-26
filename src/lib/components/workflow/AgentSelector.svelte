@@ -72,7 +72,7 @@
 	/**
 	 * Get model info for display
 	 */
-	const modelInfo = $derived(() => {
+	const modelInfo = $derived.by(() => {
 		if (!selectedAgent) return null;
 		return `${selectedAgent.provider} / ${selectedAgent.model}`;
 	});
@@ -80,7 +80,7 @@
 	/**
 	 * Get tools count for display
 	 */
-	const toolsInfo = $derived(() => {
+	const toolsInfo = $derived.by(() => {
 		if (!selectedAgent) return null;
 		const tools = selectedAgent.tools_count;
 		const mcp = selectedAgent.mcp_servers_count;
@@ -118,11 +118,11 @@
 	{#if selectedAgent}
 		<div class="agent-info">
 			<span class="agent-lifecycle">{selectedAgent.lifecycle}</span>
-			{#if modelInfo()}
-				<span class="agent-model">{modelInfo()}</span>
+			{#if modelInfo}
+				<span class="agent-model">{modelInfo}</span>
 			{/if}
-			{#if toolsInfo()}
-				<span class="agent-capabilities">{toolsInfo()}</span>
+			{#if toolsInfo}
+				<span class="agent-capabilities">{toolsInfo}</span>
 			{/if}
 		</div>
 	{/if}

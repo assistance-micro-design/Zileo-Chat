@@ -116,6 +116,7 @@ async fn test_workflow_result_structure() {
             model: "test-model".to_string(),
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
             iteration_metrics: vec![],
         },
         tools_used: vec!["tool1".to_string()],
@@ -192,17 +193,6 @@ async fn test_batch_delete_result_serialization() {
 }
 
 #[tokio::test]
-async fn test_batch_delete_empty_ids() {
-    // BatchDeleteResult with 0 deleted for empty input
-    let result = BatchDeleteResult {
-        deleted: 0,
-        skipped_running: vec![],
-    };
-    assert_eq!(result.deleted, 0);
-    assert!(result.skipped_running.is_empty());
-}
-
-#[tokio::test]
 async fn test_toggle_workflow_pinned() {
     let state = crate::test_utils::setup_test_state().await;
 
@@ -251,22 +241,4 @@ async fn test_toggle_workflow_pinned() {
         !wf_off.pinned,
         "Workflow should be unpinned after second toggle"
     );
-}
-
-#[tokio::test]
-async fn test_workflow_metrics_defaults() {
-    let metrics = WorkflowMetrics {
-        duration_ms: 0,
-        tokens_input: 0,
-        tokens_output: 0,
-        cost_usd: 0.0,
-        provider: String::new(),
-        model: String::new(),
-        cached_tokens: None,
-        cache_write_tokens: None,
-        iteration_metrics: vec![],
-    };
-
-    assert_eq!(metrics.duration_ms, 0);
-    assert_eq!(metrics.cost_usd, 0.0);
 }

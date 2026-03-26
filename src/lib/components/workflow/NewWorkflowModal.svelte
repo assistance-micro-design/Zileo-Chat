@@ -32,6 +32,7 @@
 	import type { AgentSummary } from '$types/agent';
 	import { Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { getErrorMessage } from '$lib/utils/error';
 	import { tick } from 'svelte';
 
 	/**
@@ -91,7 +92,12 @@
 		}
 
 		isSubmitting = true;
-		oncreate(trimmedName, chosenAgentId);
+		try {
+			oncreate(trimmedName, chosenAgentId);
+		} catch (e) {
+			error = getErrorMessage(e);
+			isSubmitting = false;
+		}
 	}
 
 	/**

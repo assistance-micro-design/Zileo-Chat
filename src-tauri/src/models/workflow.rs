@@ -214,6 +214,9 @@ pub struct WorkflowMetrics {
     /// Cache-write tokens for this execution (if provider supports caching)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<usize>,
+    /// Thinking/reasoning tokens for this execution (if reasoning model)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<usize>,
     /// Per-iteration token breakdown (one entry per LLM API call)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iteration_metrics: Vec<IterationMetrics>,
@@ -357,6 +360,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 cached_tokens: None,
                 cache_write_tokens: None,
+                thinking_tokens: None,
                 iteration_metrics: vec![],
             },
             tools_used: vec!["tool1".to_string(), "tool2".to_string()],
@@ -385,6 +389,7 @@ mod tests {
             model: "llama3".to_string(),
             cached_tokens: None,
             cache_write_tokens: None,
+            thinking_tokens: None,
             iteration_metrics: vec![],
         };
 

@@ -409,6 +409,7 @@ pub async fn execute_workflow_streaming(
             model: pricing.model,
             cached_tokens: report.metrics.cached_tokens,
             cache_write_tokens: report.metrics.cache_write_tokens,
+            thinking_tokens: report.metrics.thinking_tokens,
             iteration_metrics: report.metrics.iteration_metrics.clone(),
         },
         tools_used: report.metrics.tools_used.clone(),
