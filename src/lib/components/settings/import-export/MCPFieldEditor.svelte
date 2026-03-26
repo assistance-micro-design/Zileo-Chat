@@ -30,8 +30,6 @@ Allows clearing sensitive env vars and excluding servers from export.
 
 	/** Props */
 	interface Props {
-		/** MCP server ID */
-		serverId: string;
 		/** MCP server name */
 		serverName: string;
 		/** Environment variable keys */
@@ -42,8 +40,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 		onchange: (config: MCPSanitizationConfig) => void;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	let { serverId, serverName, envKeys, sanitization, onchange }: Props = $props();
+	let { serverName, envKeys, sanitization, onchange }: Props = $props();
 
 	/**
 	 * Checks if an env key is sensitive

@@ -165,7 +165,6 @@ pub struct MCPServer {
 /// Wraps `MCPServer` with an optional security warning (e.g., HTTP usage).
 /// Mirrors the `CustomProviderResponse` pattern from custom_provider.rs.
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct MCPServerResponse {
     /// Server data
     pub server: MCPServer,

@@ -273,7 +273,7 @@ Includes validation and environment variable editor.
 
 	<div class="form-section">
 		<div class="env-header">
-			<span class="form-label" id="env-vars-label">{$i18n('mcp_form_env_label')}</span>
+			<span class="env-label" id="env-vars-label">{$i18n('mcp_form_env_label')}</span>
 			<Button
 				type="button"
 				variant="ghost"
@@ -294,7 +294,7 @@ Includes validation and environment variable editor.
 					<div class="env-row">
 						<input
 							type="text"
-							class="form-input env-key"
+							class="env-input env-key"
 							value={envVar.key}
 							oninput={(e) => { formData.env[index].key = e.currentTarget.value; }}
 							placeholder={$i18n('mcp_form_env_key_placeholder')}
@@ -303,20 +303,21 @@ Includes validation and environment variable editor.
 						<span class="env-equals">=</span>
 						<input
 							type="text"
-							class="form-input env-value"
+							class="env-input env-value"
 							value={envVar.value}
 							oninput={(e) => { formData.env[index].value = e.currentTarget.value; }}
 							placeholder={$i18n('mcp_form_env_value_placeholder')}
 							aria-label={$i18n('mcp_form_env_value_arialabel')}
 						/>
-						<button
+						<Button
 							type="button"
-							class="btn btn-ghost btn-icon env-remove"
+							variant="ghost"
+							size="icon"
 							onclick={() => removeEnvVar(index)}
-							aria-label={$i18n('mcp_form_env_remove_arialabel')}
+							ariaLabel={$i18n('mcp_form_env_remove_arialabel')}
 						>
 							<X size={16} />
-						</button>
+						</Button>
 					</div>
 				{/each}
 			</div>
@@ -387,6 +388,27 @@ Includes validation and environment variable editor.
 		gap: var(--spacing-xs);
 	}
 
+	.env-label {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.env-input {
+		padding: var(--spacing-sm) var(--spacing-md);
+		font-size: var(--font-size-sm);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-sm);
+		background: var(--color-bg-primary);
+		color: var(--color-text-primary);
+		outline: none;
+		transition: border-color 0.2s;
+	}
+
+	.env-input:focus {
+		border-color: var(--color-primary);
+	}
+
 	.env-header {
 		display: flex;
 		align-items: center;
@@ -438,7 +460,7 @@ Includes validation and environment variable editor.
 		font-family: var(--font-family-mono);
 	}
 
-	.env-remove {
+	.env-row :global(button:last-child) {
 		flex-shrink: 0;
 	}
 

@@ -47,34 +47,6 @@ export interface LLMResponse {
 }
 
 /**
- * Provider status information
- */
-export interface ProviderStatus {
-  /** Provider type */
-  provider: string;
-  /** Whether the provider is configured */
-  configured: boolean;
-  /** Current default model */
-  default_model: string;
-  /** Available models */
-  available_models: string[];
-}
-
-/**
- * Complete LLM configuration response
- */
-export interface LLMConfigResponse {
-  /** Active provider */
-  active_provider: string;
-  /** Mistral configuration status */
-  mistral: ProviderStatus;
-  /** Ollama configuration status */
-  ollama: ProviderStatus;
-  /** Ollama server URL */
-  ollama_url: string;
-}
-
-/**
  * Default Ollama server URL.
  * Keep in sync with Rust: src-tauri/src/llm/ollama.rs::DEFAULT_OLLAMA_URL
  */

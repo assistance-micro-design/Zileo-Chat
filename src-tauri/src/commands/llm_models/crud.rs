@@ -25,6 +25,18 @@ use crate::db::count_exists;
 use crate::models::llm_models::{CreateModelRequest, LLMModel, UpdateModelRequest};
 use crate::state::AppState;
 
+/// SELECT column list for LLM model queries.
+///
+/// Uses `meta::id(id)` for clean UUIDs and `??` null coalescing for pricing
+/// fields to handle existing records created before pricing was added.
+const LLM_MODEL_SELECT_COLUMNS: &str = "meta::id(id) AS id, provider, name, api_name, context_window, \
+     max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+     (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
+     (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
+     (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
+     (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
+     created_at, updated_at";
+
 // ============================================================================
 // List / Get
 // ============================================================================
@@ -48,14 +60,8 @@ pub async fn list_models(
     // Use ?? (null coalescing) for pricing fields to handle existing records without these fields
     let result: Vec<LLMModel> = if let Some(ref pt) = provider_filter {
         let query = format!(
-            "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
-             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
-             created_at, updated_at \
-             FROM llm_model WHERE provider = $provider LIMIT {}",
+            "SELECT {} FROM llm_model WHERE provider = $provider LIMIT {}",
+            LLM_MODEL_SELECT_COLUMNS,
             query_limits::DEFAULT_MODELS_LIMIT
         );
         state
@@ -71,14 +77,8 @@ pub async fn list_models(
             })?
     } else {
         let query = format!(
-            "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-             max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-             (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-             (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-             (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
-             (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
-             created_at, updated_at \
-             FROM llm_model LIMIT {}",
+            "SELECT {} FROM llm_model LIMIT {}",
+            LLM_MODEL_SELECT_COLUMNS,
             query_limits::DEFAULT_MODELS_LIMIT
         );
         state
@@ -110,15 +110,8 @@ pub async fn get_model(id: String, state: State<'_, AppState>) -> Result<LLMMode
     info!("Getting model");
 
     let query = format!(
-        "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-         (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
-         (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
-         created_at, updated_at \
-         FROM llm_model:`{}`",
-        id
+        "SELECT {} FROM llm_model:`{}`",
+        LLM_MODEL_SELECT_COLUMNS, id
     );
 
     let mut result: Vec<LLMModel> = state
@@ -154,19 +147,15 @@ pub async fn get_model_by_api_name(
 
     let provider_lower = provider.to_lowercase();
 
-    let query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
-         max_output_tokens, temperature_default, is_builtin, is_reasoning, \
-         (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
-         (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
-         (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
-         (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
-         created_at, updated_at \
-         FROM llm_model WHERE api_name = $api_name AND provider = $provider";
+    let query = format!(
+        "SELECT {} FROM llm_model WHERE api_name = $api_name AND provider = $provider",
+        LLM_MODEL_SELECT_COLUMNS
+    );
 
     let mut result: Vec<LLMModel> = state
         .db
         .query_with_params(
-            query,
+            &query,
             vec![
                 ("api_name".to_string(), serde_json::json!(api_name)),
                 ("provider".to_string(), serde_json::json!(provider_lower)),

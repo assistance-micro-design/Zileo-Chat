@@ -118,7 +118,6 @@ Uses ExportEntitySection for collapsible entity sections.
 
 							{#if envKeys.length > 0 && sanitization}
 								<MCPFieldEditor
-									serverId={serverId}
 									serverName={server.name}
 									{envKeys}
 									{sanitization}

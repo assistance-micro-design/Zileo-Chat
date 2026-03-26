@@ -114,17 +114,16 @@ Marks sensitive keys as required.
 
 				<div class="env-fields">
 					{#each missingKeys as key (key)}
-						{@const sensitive = isSensitiveKey(key)}
 						<div class="env-field">
 							<div class="field-header">
 								<label class="field-label" for="env-{serverId}-{key}">
 									{key}
-									{#if sensitive}
+									{#if isSensitiveKey(key)}
 										<span class="required-mark">*</span>
 									{/if}
 								</label>
 								<div class="field-badges">
-									{#if sensitive}
+									{#if isSensitiveKey(key)}
 										<Badge variant="error">{$i18n('ie_sensitive')}</Badge>
 									{:else}
 										<Badge variant="primary">{$i18n('ie_optional')}</Badge>
@@ -133,10 +132,10 @@ Marks sensitive keys as required.
 							</div>
 							<Input
 								id="env-{serverId}-{key}"
-								type={sensitive ? 'password' : 'text'}
+								type={isSensitiveKey(key) ? 'password' : 'text'}
 								value={getEnvValue(key)}
 								placeholder={$i18n('ie_enter_value_for').replace('{key}', key)}
-								required={sensitive}
+								required={isSensitiveKey(key)}
 								oninput={(e) => updateEnvValue(key, e.currentTarget.value)}
 							/>
 						</div>
