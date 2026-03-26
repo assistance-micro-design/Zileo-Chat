@@ -43,10 +43,3 @@ Manages prompt library configuration.
 <section class="settings-section">
 	<PromptSettings />
 </section>
-
-<style>
-	.settings-section {
-		margin-bottom: var(--spacing-2xl);
-		padding-bottom: var(--spacing-xl);
-	}
-</style>

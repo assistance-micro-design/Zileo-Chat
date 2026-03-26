@@ -20,6 +20,8 @@
   "nav_skip_to_content": "Skip to main content",
 
   "page_redirecting": "Redirecting to Agent page...",
+  "settings_redirecting": "Redirecting to providers...",
+  "settings_click_if_not_redirected": "Click here if not redirected",
 
   "agent_loading": "Loading agents...",
   "agent_loading_description": "Please wait while we load your configured agents.",

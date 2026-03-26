@@ -20,6 +20,8 @@
   "nav_skip_to_content": "Aller au contenu principal",
 
   "page_redirecting": "Redirection vers la page Agent...",
+  "settings_redirecting": "Redirection vers les fournisseurs...",
+  "settings_click_if_not_redirected": "Cliquez ici si non redirige",
 
   "agent_loading": "Chargement des agents...",
   "agent_loading_description": "Veuillez patienter pendant le chargement de vos agents.",

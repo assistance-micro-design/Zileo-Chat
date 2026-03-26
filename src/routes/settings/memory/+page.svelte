@@ -36,6 +36,13 @@ Manages memory configuration and memory list with lazy loading.
 	/** Reference for MemorySettings to refresh stats */
 	let memorySettingsRef = $state<{ refreshStats: () => Promise<void> } | undefined>(undefined);
 
+	/**
+	 * Handle cross-page refresh events (from import/export)
+	 */
+	function handleSettingsRefresh(): void {
+		memorySettingsRef?.refreshStats();
+	}
+
 	onMount(() => {
 		Promise.all([
 			import('$lib/components/settings/memory/MemorySettings.svelte'),
@@ -48,6 +55,11 @@ Manages memory configuration and memory list with lazy loading.
 			.catch((err: unknown) => {
 				loadError = getErrorMessage(err);
 			});
+
+		window.addEventListener('settings:refresh', handleSettingsRefresh);
+		return () => {
+			window.removeEventListener('settings:refresh', handleSettingsRefresh);
+		};
 	});
 </script>
 
@@ -97,28 +109,6 @@ Manages memory configuration and memory list with lazy loading.
 </section>
 
 <style>
-	.settings-section {
-		margin-bottom: var(--spacing-2xl);
-		padding-bottom: var(--spacing-xl);
-	}
-
-	.section-title {
-		font-size: var(--font-size-2xl);
-		font-weight: var(--font-weight-semibold);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-title-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-title-row .section-title {
-		margin-bottom: 0;
-	}
-
 	.memory-subsections {
 		display: flex;
 		flex-direction: column;
@@ -139,11 +129,4 @@ Manages memory configuration and memory list with lazy loading.
 		border-bottom: 1px solid var(--color-border);
 	}
 
-	.lazy-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-xl);
-	}
 </style>

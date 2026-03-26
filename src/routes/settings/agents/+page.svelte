@@ -80,17 +80,3 @@ Manages agent configuration with lazy loading.
 	{/if}
 </section>
 
-<style>
-	.settings-section {
-		margin-bottom: var(--spacing-2xl);
-		padding-bottom: var(--spacing-xl);
-	}
-
-	.lazy-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-md);
-		padding: var(--spacing-xl);
-	}
-</style>

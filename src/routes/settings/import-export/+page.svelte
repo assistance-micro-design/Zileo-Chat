@@ -27,20 +27,10 @@ Manages settings import and export functionality.
 	 * Used after import operation completes.
 	 */
 	function handleImportRefresh(): void {
-		// Only dispatch events in browser context
-		if (typeof window !== 'undefined') {
-			window.dispatchEvent(new CustomEvent('settings:refresh'));
-		}
+		window.dispatchEvent(new CustomEvent('settings:refresh'));
 	}
 </script>
 
 <section class="settings-section">
 	<ImportExportSettings onRefreshNeeded={handleImportRefresh} />
 </section>
-
-<style>
-	.settings-section {
-		margin-bottom: var(--spacing-2xl);
-		padding-bottom: var(--spacing-xl);
-	}
-</style>
