@@ -408,7 +408,7 @@ impl LLMProvider for OllamaProvider {
         let mut builder = client
             .agent(model_name)
             .preamble(system_text)
-            .temperature(params.temperature as f64)
+            .temperature(params.temperature)
             .max_tokens(params.max_tokens as u64);
 
         if let Some(ctx) = params.context_window {

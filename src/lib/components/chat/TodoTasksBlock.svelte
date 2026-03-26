@@ -27,6 +27,7 @@ Visible during and after execution.
 	import { ListTodo, CheckCircle, Circle, Loader, Ban } from '@lucide/svelte';
 	import type { TodoTaskDisplay } from '$types/chat-block';
 	import { i18n } from '$lib/i18n';
+	import { formatDuration } from '$lib/utils/duration';
 
 	interface Props {
 		/** Tasks to display */
@@ -78,33 +79,9 @@ Visible during and after execution.
 	 * Get display label for priority.
 	 */
 	function priorityLabel(priority: number): string {
-		switch (priority) {
-			case 1:
-				return 'P1';
-			case 2:
-				return 'P2';
-			case 3:
-				return 'P3';
-			case 4:
-				return 'P4';
-			case 5:
-				return 'P5';
-			default:
-				return `P${priority}`;
-		}
+		return `P${priority}`;
 	}
 
-	/**
-	 * Format duration from milliseconds to a human-readable string.
-	 */
-	function formatDuration(ms: number): string {
-		if (ms < 1000) return `${ms}ms`;
-		const seconds = ms / 1000;
-		if (seconds < 60) return `${seconds.toFixed(1)}s`;
-		const minutes = Math.floor(seconds / 60);
-		const remainingSeconds = Math.round(seconds % 60);
-		return `${minutes}m${remainingSeconds}s`;
-	}
 </script>
 
 {#if tasks.length > 0}

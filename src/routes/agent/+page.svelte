@@ -92,7 +92,7 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/stores/folders';
 	import { withToastError } from '$lib/utils/async';
 	import { getErrorMessage } from '$lib/utils/error';
-	import type { Workflow, WorkflowFolder } from '$types/workflow';
+	import type { Workflow, WorkflowFolder, PersistedTask } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
 	// ============================================================================
@@ -103,17 +103,6 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Aggregated page state interface for cleaner state management.
 	 * Groups 8 related UI/data variables into single reactive object.
 	 */
-	/** Task as returned by Rust list_workflow_tasks command (snake_case fields) */
-	interface PersistedTask {
-		id: string;
-		name: string;
-		description: string;
-		agent_assigned: string | null;
-		priority: number;
-		status: 'pending' | 'in_progress' | 'completed' | 'blocked';
-		duration_ms: number | null;
-	}
-
 	interface PageState {
 		leftSidebarCollapsed: boolean;
 		selectedWorkflowId: string | null;
@@ -122,6 +111,21 @@ Uses extracted components, services, and stores for clean architecture.
 		currentContextWindow: number;
 		messages: Message[];
 		messagesLoading: boolean;
+	}
+
+	/**
+	 * Maps persisted tasks from Rust snake_case format to TodoTaskDisplay.
+	 */
+	function mapPersistedTasks(tasks: PersistedTask[]): TodoTaskDisplay[] {
+		return tasks.map((t) => ({
+			id: t.id,
+			name: t.name,
+			description: t.description,
+			status: t.status,
+			priority: t.priority,
+			agent_name: t.agent_assigned ?? undefined,
+			duration_ms: t.duration_ms ?? undefined
+		}));
 	}
 
 	/** Initial page state with localStorage restoration */
@@ -246,15 +250,7 @@ Uses extracted components, services, and stores for clean architecture.
 			persistedTasks = [];
 			try {
 				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
-				persistedTasks = tasks.map((t) => ({
-					id: t.id,
-					name: t.name,
-					description: t.description,
-					status: t.status,
-					priority: t.priority,
-					agent_name: t.agent_assigned ?? undefined,
-					duration_ms: t.duration_ms ?? undefined
-				}));
+				persistedTasks = mapPersistedTasks(tasks);
 			} catch {
 				// Tasks are optional; silently continue if loading fails
 			}
@@ -540,15 +536,7 @@ Uses extracted components, services, and stores for clean architecture.
 				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', {
 					workflowId: pageState.selectedWorkflowId
 				});
-				persistedTasks = tasks.map((t) => ({
-					id: t.id,
-					name: t.name,
-					description: t.description,
-					status: t.status,
-					priority: t.priority,
-					agent_name: t.agent_assigned ?? undefined,
-					duration_ms: t.duration_ms ?? undefined
-				}));
+				persistedTasks = mapPersistedTasks(tasks);
 			} catch {
 				// Tasks are optional; silently continue
 			}

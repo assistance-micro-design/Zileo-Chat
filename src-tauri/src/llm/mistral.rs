@@ -44,7 +44,7 @@ struct MistralChatRequest {
     model: String,
     messages: Vec<MistralMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
+    temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,7 +96,7 @@ struct MistralToolChatRequest {
     model: String,
     messages: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
+    temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -188,7 +188,7 @@ impl MistralProvider {
         prompt: &str,
         system_prompt: Option<&str>,
         model: &str,
-        temperature: f32,
+        temperature: f64,
         max_tokens: usize,
         reasoning_effort: Option<&ReasoningEffort>,
     ) -> Result<LLMResponse, LLMError> {
@@ -462,7 +462,7 @@ impl LLMProvider for MistralProvider {
         let agent = client
             .agent(model_name)
             .preamble(system_text)
-            .temperature(params.temperature as f64)
+            .temperature(params.temperature)
             .max_tokens(params.max_tokens as u64)
             .build();
 

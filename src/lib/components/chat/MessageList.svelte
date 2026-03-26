@@ -79,7 +79,7 @@
 
 	/* Performance mode: enable CSS containment for long lists */
 	.message-list.performance-mode {
-		contain: strict;
+		contain: layout style;
 	}
 
 	.message-wrapper {

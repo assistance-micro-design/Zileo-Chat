@@ -319,8 +319,6 @@ mod agent_config_tests {
             reasoning_effort: None,
         };
 
-        assert!(config.has_valid_tools());
-        assert!(config.validate_tools().is_empty());
         assert!(config.tools.contains(&"MemoryTool".to_string()));
     }
 }

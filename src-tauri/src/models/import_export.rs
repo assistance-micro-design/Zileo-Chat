@@ -184,7 +184,7 @@ pub struct AgentExportData {
 pub struct LLMConfigExport {
     pub provider: String,
     pub model: String,
-    pub temperature: f32,
+    pub temperature: f64,
     pub max_tokens: usize,
 }
 
@@ -220,7 +220,7 @@ pub struct LLMModelExportData {
     pub api_name: String,
     pub context_window: usize,
     pub max_output_tokens: usize,
-    pub temperature_default: f32,
+    pub temperature_default: f64,
     pub is_builtin: bool,
     #[serde(default)]
     pub is_reasoning: bool,

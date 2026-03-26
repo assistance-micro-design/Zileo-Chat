@@ -42,7 +42,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import type { ProviderInfo } from '$types/custom-provider';
 	import type { AgentConfig, AgentConfigCreate, Lifecycle, ReasoningEffort } from '$types/agent';
 	import type { SkillSummary } from '$types/skill';
-	import { Button, Input, Textarea, Card, Badge } from '$lib/components/ui';
+	import { Button, Input, Textarea, Card, Badge, Select } from '$lib/components/ui';
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
@@ -475,21 +475,22 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					</div>
 
 					{#if selectedModel?.is_reasoning}
-						<div class="form-field">
-							<label class="field-label" for="reasoning-effort">{$i18n('agents_reasoning_effort')}</label>
-							<select
-								id="reasoning-effort"
-								bind:value={reasoningEffort}
-								class="form-select"
-								aria-describedby="reasoning-effort-help"
-							>
-								<option value={undefined}>{$i18n('agents_reasoning_off')}</option>
-								<option value="low">{$i18n('agents_reasoning_low')}</option>
-								<option value="medium">{$i18n('agents_reasoning_medium')}</option>
-								<option value="high">{$i18n('agents_reasoning_high')}</option>
-							</select>
-							<span id="reasoning-effort-help" class="field-help">{$i18n('agents_reasoning_tooltip')}</span>
-						</div>
+						<Select
+							id="reasoning-effort"
+							label={$i18n('agents_reasoning_effort')}
+							value={reasoningEffort ?? ''}
+							options={[
+								{ value: '', label: $i18n('agents_reasoning_off') },
+								{ value: 'low', label: $i18n('agents_reasoning_low') },
+								{ value: 'medium', label: $i18n('agents_reasoning_medium') },
+								{ value: 'high', label: $i18n('agents_reasoning_high') }
+							]}
+							onchange={(e) => {
+								const v = e.currentTarget.value;
+								reasoningEffort = v ? v as ReasoningEffort : undefined;
+							}}
+							help={$i18n('agents_reasoning_tooltip')}
+						/>
 					{/if}
 
 					<Input

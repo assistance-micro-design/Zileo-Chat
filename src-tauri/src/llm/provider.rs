@@ -180,7 +180,7 @@ pub struct CompletionParams {
     /// Model to use (None for default)
     pub model: Option<String>,
     /// Sampling temperature (0.0-1.0)
-    pub temperature: f32,
+    pub temperature: f64,
     /// Maximum tokens to generate
     pub max_tokens: usize,
     /// Reasoning effort level (None = no thinking)
@@ -201,7 +201,7 @@ pub struct ToolCompletionParams {
     /// Model to use
     pub model: String,
     /// Sampling temperature
-    pub temperature: f32,
+    pub temperature: f64,
     /// Maximum tokens to generate
     pub max_tokens: usize,
     /// Context window size (e.g. Ollama num_ctx)

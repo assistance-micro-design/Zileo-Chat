@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tools::registry::TOOL_REGISTRY;
 use serde::{Deserialize, Serialize};
 
 /// Reasoning effort level for thinking models.
@@ -45,35 +44,6 @@ pub enum Lifecycle {
     #[default]
     Permanent,
     Temporary,
-}
-
-/// Agent status
-#[allow(dead_code)] // API type for frontend-backend serialization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentStatus {
-    Available,
-    Busy,
-}
-
-/// Agent entity
-#[allow(dead_code)] // API type for frontend-backend serialization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Agent {
-    /// Unique identifier
-    pub id: String,
-    /// Agent name
-    pub name: String,
-    /// Lifecycle type
-    pub lifecycle: Lifecycle,
-    /// Current status
-    pub status: AgentStatus,
-    /// List of capabilities
-    pub capabilities: Vec<String>,
-    /// List of available tools
-    pub tools: Vec<String>,
-    /// List of MCP servers used
-    pub mcp_servers: Vec<String>,
 }
 
 /// Agent configuration
@@ -153,25 +123,6 @@ fn default_llm_config() -> LLMConfig {
     }
 }
 
-#[allow(dead_code)]
-impl AgentConfig {
-    /// Validates tool names against known tools in the registry.
-    ///
-    /// Returns a list of invalid tool names, or empty if all are valid.
-    pub fn validate_tools(&self) -> Vec<String> {
-        self.tools
-            .iter()
-            .filter(|t| !TOOL_REGISTRY.has_tool(t))
-            .cloned()
-            .collect()
-    }
-
-    /// Returns true if all configured tools are known.
-    pub fn has_valid_tools(&self) -> bool {
-        self.validate_tools().is_empty()
-    }
-}
-
 /// LLM provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LLMConfig {
@@ -183,7 +134,7 @@ pub struct LLMConfig {
     pub model: String,
     /// Sampling temperature
     #[serde(default = "default_temperature")]
-    pub temperature: f32,
+    pub temperature: f64,
     /// Maximum tokens to generate
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
@@ -204,7 +155,7 @@ fn default_llm_model() -> String {
     "mistral-large-latest".to_string()
 }
 
-fn default_temperature() -> f32 {
+fn default_temperature() -> f64 {
     0.7
 }
 
@@ -324,6 +275,23 @@ impl From<&AgentConfig> for AgentSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::registry::TOOL_REGISTRY;
+
+    impl AgentConfig {
+        /// Validates tool names against known tools in the registry.
+        pub(crate) fn validate_tools(&self) -> Vec<String> {
+            self.tools
+                .iter()
+                .filter(|t| !TOOL_REGISTRY.has_tool(t))
+                .cloned()
+                .collect()
+        }
+
+        /// Returns true if all configured tools are known.
+        pub(crate) fn has_valid_tools(&self) -> bool {
+            self.validate_tools().is_empty()
+        }
+    }
 
     #[test]
     fn test_reasoning_effort_serialization() {
@@ -421,39 +389,6 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_status_serialization() {
-        let status = AgentStatus::Available;
-        let json = serde_json::to_string(&status).unwrap();
-        assert_eq!(json, "\"available\"");
-
-        let busy = AgentStatus::Busy;
-        let busy_json = serde_json::to_string(&busy).unwrap();
-        assert_eq!(busy_json, "\"busy\"");
-    }
-
-    #[test]
-    fn test_agent_serialization() {
-        let agent = Agent {
-            id: "agent_001".to_string(),
-            name: "Test Agent".to_string(),
-            lifecycle: Lifecycle::Permanent,
-            status: AgentStatus::Available,
-            capabilities: vec!["capability1".to_string(), "capability2".to_string()],
-            tools: vec!["tool1".to_string()],
-            mcp_servers: vec!["server1".to_string()],
-        };
-
-        let json = serde_json::to_string(&agent).unwrap();
-        let deserialized: Agent = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(deserialized.id, agent.id);
-        assert_eq!(deserialized.name, agent.name);
-        assert!(matches!(deserialized.lifecycle, Lifecycle::Permanent));
-        assert!(matches!(deserialized.status, AgentStatus::Available));
-        assert_eq!(deserialized.capabilities.len(), 2);
-    }
-
-    #[test]
     fn test_agent_config_serialization() {
         let config = AgentConfig {
             id: "agent_config_001".to_string(),
@@ -483,7 +418,7 @@ mod tests {
         assert_eq!(deserialized.id, config.id);
         assert_eq!(deserialized.llm.provider, "Mistral");
         assert_eq!(deserialized.llm.model, "mistral-large");
-        assert!((deserialized.llm.temperature - 0.7).abs() < f32::EPSILON);
+        assert!((deserialized.llm.temperature - 0.7).abs() < f64::EPSILON);
         assert_eq!(deserialized.llm.max_tokens, 4096);
     }
 
@@ -503,7 +438,7 @@ mod tests {
 
         assert_eq!(deserialized.provider, llm_config.provider);
         assert_eq!(deserialized.model, llm_config.model);
-        assert!((deserialized.temperature - llm_config.temperature).abs() < f32::EPSILON);
+        assert!((deserialized.temperature - llm_config.temperature).abs() < f64::EPSILON);
         assert_eq!(deserialized.max_tokens, llm_config.max_tokens);
     }
 

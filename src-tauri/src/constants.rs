@@ -67,9 +67,9 @@ pub mod commands {
     /// Maximum length for system prompts
     pub const MAX_SYSTEM_PROMPT_LEN: usize = 10000;
     /// Minimum temperature value for LLM
-    pub const MIN_TEMPERATURE: f32 = 0.0;
+    pub const MIN_TEMPERATURE: f64 = 0.0;
     /// Maximum temperature value for LLM
-    pub const MAX_TEMPERATURE: f32 = 2.0;
+    pub const MAX_TEMPERATURE: f64 = 2.0;
     /// Minimum max_tokens value
     pub const MIN_MAX_TOKENS: usize = 256;
     /// Maximum max_tokens value

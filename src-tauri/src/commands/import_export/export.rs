@@ -274,7 +274,7 @@ async fn export_agents(
                 llm: LLMConfigExport {
                     provider: llm["provider"].as_str().unwrap_or("").to_string(),
                     model: llm["model"].as_str().unwrap_or("").to_string(),
-                    temperature: llm["temperature"].as_f64().unwrap_or(0.7) as f32,
+                    temperature: llm["temperature"].as_f64().unwrap_or(0.7),
                     max_tokens: llm["max_tokens"].as_u64().unwrap_or(4096) as usize,
                 },
                 tools: row["tools"]
@@ -362,7 +362,7 @@ async fn export_models(
                 api_name: row["api_name"].as_str().unwrap_or("").to_string(),
                 context_window: row["context_window"].as_u64().unwrap_or(0) as usize,
                 max_output_tokens: row["max_output_tokens"].as_u64().unwrap_or(0) as usize,
-                temperature_default: row["temperature_default"].as_f64().unwrap_or(0.7) as f32,
+                temperature_default: row["temperature_default"].as_f64().unwrap_or(0.7),
                 is_builtin: row["is_builtin"].as_bool().unwrap_or(false),
                 is_reasoning: row["is_reasoning"].as_bool().unwrap_or(false),
                 input_price_per_mtok: row["input_price_per_mtok"].as_f64().unwrap_or(0.0),

@@ -20,6 +20,28 @@ import type { ThinkingStep } from './thinking';
 import type { ToolExecution, WorkflowToolExecution } from './tool';
 
 /**
+ * Task as returned by Rust list_workflow_tasks command (snake_case fields).
+ *
+ * Synchronized with Rust `Task` model.
+ */
+export interface PersistedTask {
+  /** Task unique identifier */
+  id: string;
+  /** Task name */
+  name: string;
+  /** Task description */
+  description: string;
+  /** Agent assigned to this task (UUID or null) */
+  agent_assigned: string | null;
+  /** Priority level (1=critical, 5=low) */
+  priority: number;
+  /** Current task status */
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  /** Execution duration in milliseconds */
+  duration_ms: number | null;
+}
+
+/**
  * Workflow status representing the current state of a workflow
  */
 export type WorkflowStatus = 'idle' | 'running' | 'completed' | 'error';

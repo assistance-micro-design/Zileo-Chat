@@ -27,7 +27,6 @@
 	import { Clock, Copy, Check, AlertCircle } from '@lucide/svelte';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
-	import { getErrorMessage } from '$lib/utils/error';
 
 	/**
 	 * MessageBubble props
@@ -61,8 +60,7 @@
 			setTimeout(() => {
 				copied = false;
 			}, 2000);
-		} catch (e) {
-			const _msg = getErrorMessage(e);
+		} catch {
 			copyError = true;
 			setTimeout(() => {
 				copyError = false;

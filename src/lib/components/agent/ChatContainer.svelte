@@ -167,6 +167,38 @@ Main chat area with message display, execution blocks inline, and input controls
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
+			{#snippet renderBlock(block: ChatBlock, _index: number)}
+				{#if block.block_type === 'thinking'}
+					{@const data = block.data as ThinkingBlockData}
+					<ThinkingBlock
+						content={data.content}
+						source={data.source}
+					/>
+				{:else if block.block_type === 'tool_call'}
+					{@const data = block.data as ToolCallBlockData}
+					<ToolCallBlock
+						toolName={data.tool_name}
+						toolType={data.tool_type}
+						serverName={data.server_name}
+						inputParams={data.input_params}
+						outputResult={data.output_result}
+						success={data.success}
+						errorMessage={data.error_message}
+						durationMs={data.duration_ms}
+					/>
+				{:else if block.block_type === 'sub_agent'}
+					{@const data = block.data as SubAgentBlockData}
+					<SubAgentBlock
+						agentName={data.agent_name}
+						status={data.status}
+						durationMs={data.duration_ms}
+						tokensInput={data.tokens_input}
+						tokensOutput={data.tokens_output}
+						reportSummary={data.report_summary}
+					/>
+				{/if}
+			{/snippet}
+
 			<!-- Message List with Persisted Blocks -->
 			<div class="message-list-with-blocks">
 				{#each messages as message (message.id)}
@@ -179,35 +211,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						{#if message.role === 'assistant' && getBlocksForMessage(message.id).length > 0}
 							<div class="persisted-blocks">
 								{#each getBlocksForMessage(message.id) as block, i (`${block.block_type}-${i}`)}
-									{#if block.block_type === 'thinking'}
-										{@const data = block.data as ThinkingBlockData}
-										<ThinkingBlock
-											content={data.content}
-											source={data.source}
-										/>
-									{:else if block.block_type === 'tool_call'}
-										{@const data = block.data as ToolCallBlockData}
-										<ToolCallBlock
-											toolName={data.tool_name}
-											toolType={data.tool_type}
-											serverName={data.server_name}
-											inputParams={data.input_params}
-											outputResult={data.output_result}
-											success={data.success}
-											errorMessage={data.error_message}
-											durationMs={data.duration_ms}
-										/>
-									{:else if block.block_type === 'sub_agent'}
-										{@const data = block.data as SubAgentBlockData}
-										<SubAgentBlock
-											agentName={data.agent_name}
-											status={data.status}
-											durationMs={data.duration_ms}
-											tokensInput={data.tokens_input}
-											tokensOutput={data.tokens_output}
-											reportSummary={data.report_summary}
-										/>
-									{/if}
+									{@render renderBlock(block, i)}
 								{/each}
 							</div>
 						{/if}
@@ -219,35 +223,7 @@ Main chat area with message display, execution blocks inline, and input controls
 			{#if isExecuting || executionBlocks.length > 0}
 				<div class="execution-blocks">
 					{#each executionBlocks as block, i (`${block.block_type}-${i}`)}
-						{#if block.block_type === 'thinking'}
-							{@const data = block.data as ThinkingBlockData}
-							<ThinkingBlock
-								content={data.content}
-								source={data.source}
-							/>
-						{:else if block.block_type === 'tool_call'}
-							{@const data = block.data as ToolCallBlockData}
-							<ToolCallBlock
-								toolName={data.tool_name}
-								toolType={data.tool_type}
-								serverName={data.server_name}
-								inputParams={data.input_params}
-								outputResult={data.output_result}
-								success={data.success}
-								errorMessage={data.error_message}
-								durationMs={data.duration_ms}
-							/>
-						{:else if block.block_type === 'sub_agent'}
-							{@const data = block.data as SubAgentBlockData}
-							<SubAgentBlock
-								agentName={data.agent_name}
-								status={data.status}
-								durationMs={data.duration_ms}
-								tokensInput={data.tokens_input}
-								tokensOutput={data.tokens_output}
-								reportSummary={data.report_summary}
-							/>
-						{/if}
+						{@render renderBlock(block, i)}
 					{/each}
 
 					{#if isExecuting}
