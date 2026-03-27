@@ -143,26 +143,20 @@ impl Tool for ReadSkillTool {
         ToolDefinition {
             id: "ReadSkillTool".to_string(),
             name: "ReadSkill".to_string(),
+            summary: "Read skill documents containing instructions and context".to_string(),
             description: r#"Reads skill documents containing instructions and context.
 
 USE THIS TOOL WHEN:
 - You need to follow specific instructions or conventions for a task
 - A skill is listed in your available skills and is relevant to your current task
-- You need detailed guidelines before performing an action
 
 OPERATIONS:
 - "list": List all available skills (name + description)
 - "read" (default): Read the full content of a skill by name
 
-BEST PRACTICES:
-- Read relevant skills BEFORE performing related actions
-- Use "list" first if unsure which skills are available
-- Skills contain markdown instructions - follow them carefully
-
 EXAMPLES:
-1. List skills: {"operation": "list"}
-2. Read a skill: {"name": "coding-standards"}
-3. Read with explicit operation: {"operation": "read", "name": "git-workflow"}"#
+1. List: {"operation": "list"}
+2. Read: {"name": "coding-standards"}"#
                 .to_string(),
 
             input_schema: json!({

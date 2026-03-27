@@ -185,77 +185,27 @@ impl Tool for UserQuestionTool {
         ToolDefinition {
             id: "UserQuestionTool".to_string(),
             name: "User Question Tool".to_string(),
-            description: format!(
-                r#"Asks the user a question and waits for their response with configurable input types.
+            summary: "Ask the user a question and wait for their response".to_string(),
+            description: r#"Asks the user a question and waits for their response with configurable input types.
 
 USE THIS TOOL WHEN:
 - You need user input to proceed (clarification, choice, confirmation)
 - A decision cannot be made autonomously
-- User preferences or validation is required
-- Multiple valid options exist and user preference matters
 - Confirming potentially destructive or irreversible actions
 
 DO NOT USE THIS TOOL WHEN:
 - The answer is already in the conversation context
 - You can make a reasonable default choice
-- The question is rhetorical or for confirmation of obvious facts
-- The circuit breaker is active (after {} consecutive timeouts)
-- Questions exceed {} characters (simplify the question)
-- You have more than {} options (reduce or group options)
-
-IMPORTANT CONSTRAINTS:
-- Timeout: {} minutes (returns error if no response)
-- Circuit breaker: After {} consecutive timeouts, tool blocks for {} seconds
-- Maximum {} options for checkbox type
-- Question length: max {} characters
-- Context length: max {} characters
-
-QUESTION TYPES:
-- checkbox: Multiple choice with predefined options (user selects one or more)
-- text: Free-form text input with optional placeholder
-- mixed: Both options AND text input available
 
 OPERATIONS:
 - ask: Present question to user and wait for response
-
-BEST PRACTICES:
-- Keep questions clear and concise
-- Provide meaningful option labels for checkbox type
-- Use context parameter to explain why you're asking
-- Handle timeout errors gracefully (circuit may be open)
+  Question types: checkbox (multiple choice), text (free-form), mixed (options + text)
 
 EXAMPLES:
-1. Checkbox question:
-   {{"operation": "ask", "question": "Which database should we use?", "questionType": "checkbox", "options": [{{"id": "pg", "label": "PostgreSQL"}}, {{"id": "mysql", "label": "MySQL"}}]}}
-
-2. Text input:
-   {{"operation": "ask", "question": "What should be the API endpoint name?", "questionType": "text", "textPlaceholder": "e.g., /api/v1/users"}}
-
-3. Mixed (options + text):
-   {{"operation": "ask", "question": "Select a template or describe custom:", "questionType": "mixed", "options": [{{"id": "basic", "label": "Basic template"}}], "textPlaceholder": "Custom description..."}}
-
-4. With context explanation:
-   {{"operation": "ask", "question": "Should we proceed with the migration?", "questionType": "checkbox", "options": [{{"id": "yes", "label": "Yes, proceed"}}, {{"id": "no", "label": "No, cancel"}}], "context": "The migration will affect 1500 records and cannot be easily reverted."}}
-
-5. Required text with options:
-   {{"operation": "ask", "question": "Choose a database and explain why:", "questionType": "mixed", "options": [{{"id": "pg", "label": "PostgreSQL"}}, {{"id": "mysql", "label": "MySQL"}}, {{"id": "mongo", "label": "MongoDB"}}], "textPlaceholder": "Explain your choice...", "textRequired": true}}
-
-ERROR HANDLING:
-- Timeout error: User didn't respond in {} minutes. Consider retrying or proceeding with defaults.
-- Circuit breaker open: Too many timeouts. Wait {} seconds before retrying.
-- Invalid options: Ensure each option has both "id" and "label" fields."#,
-                uq_const::CIRCUIT_FAILURE_THRESHOLD,
-                uq_const::MAX_QUESTION_LENGTH,
-                uq_const::MAX_OPTIONS,
-                uq_const::DEFAULT_TIMEOUT_SECS / 60,
-                uq_const::CIRCUIT_FAILURE_THRESHOLD,
-                uq_const::CIRCUIT_COOLDOWN_SECS,
-                uq_const::MAX_OPTIONS,
-                uq_const::MAX_QUESTION_LENGTH,
-                uq_const::MAX_CONTEXT_LENGTH,
-                uq_const::DEFAULT_TIMEOUT_SECS / 60,
-                uq_const::CIRCUIT_COOLDOWN_SECS
-            ),
+1. Checkbox: {"operation": "ask", "question": "Which database?", "questionType": "checkbox", "options": [{"id": "pg", "label": "PostgreSQL"}, {"id": "mysql", "label": "MySQL"}]}
+2. Text: {"operation": "ask", "question": "API endpoint name?", "questionType": "text", "textPlaceholder": "e.g., /api/v1/users"}
+3. Mixed: {"operation": "ask", "question": "Select or describe:", "questionType": "mixed", "options": [{"id": "basic", "label": "Basic"}], "textPlaceholder": "Custom..."}"#
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

@@ -89,10 +89,38 @@ impl Tool for FileManagerTool {
         ToolDefinition {
             id: "FileManagerTool".to_string(),
             name: "File Manager".to_string(),
+            summary: "Read, write, search, and organize files within authorized directories"
+                .to_string(),
             description: format!(
-                "Manage files within authorized directories. Operations: list, read, \
-                write, replace, create, delete, move, rename, search_glob, search_content. \
-                All paths must be within the authorized folders. {}",
+                r#"Manages files within authorized directories with sandboxed access.
+
+USE THIS TOOL WHEN:
+- You need to read, write, or modify files for the user
+- You need to search for files by name pattern or content
+- You need to organize files (move, rename, delete)
+
+DO NOT USE THIS TOOL WHEN:
+- The path is outside authorized directories (will be rejected)
+- You need to execute files (use appropriate tool instead)
+
+OPERATIONS:
+- list: List directory contents
+- read: Read file content (with optional offset/limit)
+- write: Create or overwrite a file
+- replace: Replace text in a file (old_text -> new_text)
+- create: Create a new empty file or directory
+- delete: Move to trash (.zileo-trash/)
+- move: Move file to another authorized directory
+- rename: Rename file in place
+- search_glob: Find files matching a glob pattern
+- search_content: Search text content across files
+
+EXAMPLES:
+1. List: {{"operation": "list", "path": "/project/src"}}
+2. Read: {{"operation": "read", "path": "/project/main.rs"}}
+3. Search: {{"operation": "search_content", "path": "/project", "pattern": "TODO"}}
+
+{}"#,
                 folders_desc
             ),
             input_schema: json!({

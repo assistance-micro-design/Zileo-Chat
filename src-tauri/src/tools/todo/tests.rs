@@ -8,7 +8,8 @@ fn test_tool_definition() {
     let definition = ToolDefinition {
         id: "TodoTool".to_string(),
         name: "Todo Task Manager".to_string(),
-        description: "Test".to_string(),
+        summary: "Manage a structured task list for complex workflows".to_string(),
+        description: "Todo task manager tool for tests".to_string(),
         input_schema: serde_json::json!({}),
         output_schema: serde_json::json!({}),
         requires_confirmation: false,

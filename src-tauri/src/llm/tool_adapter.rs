@@ -296,6 +296,7 @@ mod tests {
         let tool = ToolDefinition {
             id: "TestTool".to_string(),
             name: "Test Tool".to_string(),
+            summary: "A test tool".to_string(),
             description: "A test tool".to_string(),
             input_schema: json!({
                 "type": "object",

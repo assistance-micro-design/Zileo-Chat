@@ -159,6 +159,7 @@ pub(crate) fn build_system_prompt_with_tools(
     mcp_tools: &[(String, MCPTool)],
     mcp_server_summaries: &[MCPServerSummary],
     locale: Option<&str>,
+    has_delegation_tools: bool,
 ) -> String {
     let mut sections = vec![config.system_prompt.clone()];
 
@@ -174,16 +175,16 @@ pub(crate) fn build_system_prompt_with_tools(
          The API will provide the tool schemas; use function calls to invoke them.\n",
     );
 
-    // List local tools briefly
+    // Local tools: summary only (full description is in the API tools parameter)
     if !local_tools.is_empty() {
         tools_context.push_str("\n### Local Tools\n");
         for tool in local_tools {
             let def = tool.definition();
-            tools_context.push_str(&format!("- **{}**: {}\n", def.name, def.description));
+            tools_context.push_str(&format!("- **{}**: {}\n", def.name, def.summary));
         }
     }
 
-    // List MCP tools briefly with naming convention
+    // MCP tools: full description (short descriptions, no duplication issue)
     if !mcp_tools.is_empty() {
         tools_context.push_str("\n### MCP Tools (Direct Access)\n");
         tools_context
@@ -198,22 +199,16 @@ pub(crate) fn build_system_prompt_with_tools(
 
     sections.push(tools_context);
 
-    // Add skills context if agent has skills assigned
+    // Skills: list only (usage instructions are in the agent's system_prompt)
     if !config.skills.is_empty() {
-        let mut skills_section = String::from("## Available Skills\n\n");
-        skills_section.push_str(
-            "You have the following skills assigned. Use the ReadSkill tool to read their content before performing related tasks.\n\n",
-        );
+        let mut skills_section = String::from("## Available Skills\n");
         for skill_name in &config.skills {
             skills_section.push_str(&format!("- `{}`\n", skill_name));
         }
-        skills_section.push_str(
-            "\nUse `ReadSkill` with `{\"operation\": \"list\"}` for descriptions, or `{\"name\": \"skill-name\"}` to read content.",
-        );
         sections.push(skills_section);
     }
 
-    // Add agent configuration context
+    // Agent configuration context
     let now = Local::now();
 
     let language_display = match locale {
@@ -227,52 +222,59 @@ pub(crate) fn build_system_prompt_with_tools(
         r#"## Your Configuration
 
 **Current Date and Time**: {} (local timezone)
-**User Language**: {} - Always respond in this language unless explicitly asked otherwise.
-
-You are currently running with the following configuration:
-- **Provider**: {}
-- **Model**: {}"#,
+**User Language**: {} - Always respond in this language unless explicitly asked otherwise."#,
         now.format("%A %d %B %Y, %H:%M:%S"),
         language_display,
-        config.llm.provider,
-        config.llm.model,
     );
 
-    // Add detailed MCP server information with descriptions
-    if mcp_server_summaries.is_empty() {
-        config_section.push_str("\n- **Available MCP Servers**: None configured or running");
-    } else {
-        config_section.push_str("\n\n### Available MCP Servers for Delegation\n");
-        config_section.push_str(
-            "These servers can be assigned to sub-agents using the `mcp_servers` parameter (use server name).\n",
-        );
-        config_section.push_str(
-            "**Note**: If you already have direct access to an MCP (listed in 'MCP Tools' above), use it directly instead of delegating.\n",
-        );
-
-        for server in mcp_server_summaries {
-            let access_marker = if server.has_direct_access {
-                "[DIRECT]"
-            } else {
-                "[DELEGATE]"
-            };
-            config_section.push_str(&format!(
-                "\n- **{}** {} - {} - {} tools\n",
-                server.name,
-                access_marker,
-                server.description.as_deref().unwrap_or("No description"),
-                server.tools_count
-            ));
-        }
-
-        // Add usage example
-        config_section.push_str("\n\n**Example**: To assign MCP servers to sub-agents:\n");
-        config_section.push_str("```json\n{\"mcp_servers\": [\"Serena\", \"Context7\"]}\n```\n");
+    // Provider/Model only if agent has delegation tools
+    if has_delegation_tools {
+        config_section.push_str(&format!(
+            "\n\nYou are currently running with the following configuration:\n- **Provider**: {}\n- **Model**: {}",
+            config.llm.provider,
+            config.llm.model,
+        ));
     }
 
-    config_section.push_str(
-        "\n\nWhen spawning sub-agents, you can specify provider/model/mcp_servers or let them inherit from your configuration.",
-    );
+    // MCP Delegation: only [DELEGATE] servers, only if has_delegation_tools
+    if has_delegation_tools && !mcp_server_summaries.is_empty() {
+        let delegate_servers: Vec<_> = mcp_server_summaries
+            .iter()
+            .filter(|s| !s.has_direct_access)
+            .collect();
+
+        if !delegate_servers.is_empty() {
+            config_section.push_str("\n\n### Available MCP Servers for Delegation\n");
+            for server in &delegate_servers {
+                config_section.push_str(&format!(
+                    "- **{}** - {} - {} tools\n",
+                    server.name,
+                    server.description.as_deref().unwrap_or("No description"),
+                    server.tools_count
+                ));
+            }
+            config_section.push_str(&format!(
+                "\n**Example**: To assign MCP servers to sub-agents:\n```json\n{{\"mcp_servers\": [{}]}}\n```\n",
+                delegate_servers
+                    .iter()
+                    .map(|s| format!("\"{}\"", s.name))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+            config_section.push_str(
+                "\nWhen spawning sub-agents, you can specify provider/model/mcp_servers or let them inherit from your configuration.",
+            );
+        } else {
+            config_section.push_str(
+                "\nWhen spawning sub-agents, you can specify provider/model or let them inherit from your configuration.",
+            );
+        }
+    } else if has_delegation_tools {
+        config_section.push_str(
+            "\nWhen spawning sub-agents, you can specify provider/model or let them inherit from your configuration.",
+        );
+    }
+
     sections.push(config_section);
 
     sections.join("\n\n")

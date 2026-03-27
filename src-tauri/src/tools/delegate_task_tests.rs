@@ -6,7 +6,8 @@ fn test_tool_definition() {
     let definition = ToolDefinition {
         id: "DelegateTaskTool".to_string(),
         name: "Delegate Task".to_string(),
-        description: "Test".to_string(),
+        summary: "Delegate a task to the parent orchestrator agent".to_string(),
+        description: "Delegate task tool for tests".to_string(),
         input_schema: serde_json::json!({}),
         output_schema: serde_json::json!({}),
         requires_confirmation: false,

@@ -261,6 +261,7 @@ mod tests {
         ToolDefinition {
             id: "MemoryTool".to_string(),
             name: "Memory Tool".to_string(),
+            summary: "Store and retrieve memory".to_string(),
             description: "Store and retrieve memory".to_string(),
             input_schema: json!({
                 "type": "object",

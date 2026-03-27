@@ -7,7 +7,8 @@ fn test_tool_definition() {
     let definition = ToolDefinition {
         id: "SpawnAgentTool".to_string(),
         name: "Spawn Sub-Agent".to_string(),
-        description: "Test".to_string(),
+        summary: "Spawn a sub-agent for complex or specialized tasks".to_string(),
+        description: "Spawn agent tool for tests".to_string(),
         input_schema: serde_json::json!({}),
         output_schema: serde_json::json!({}),
         requires_confirmation: false,

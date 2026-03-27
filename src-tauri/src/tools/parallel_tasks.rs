@@ -253,59 +253,24 @@ impl Tool for ParallelTasksTool {
 USE THIS TOOL WHEN:
 - You need to run multiple independent analyses simultaneously
 - Tasks don't depend on each other and can run concurrently
-- You want to gather information from multiple specialized agents at once
 
 DO NOT USE WHEN:
 - Tasks depend on each other's results (use sequential delegation instead)
 - You have only one task (use DelegateTaskTool instead)
-- Tasks need to share state or context
-
-⚠️ CONTEXT ISOLATION - CRITICAL:
-Each agent receives ONLY its own prompt. Agents have NO access to your conversation, other tasks' prompts, or shared state.
-You MUST include ALL necessary information in each prompt independently.
-
-CONSTRAINTS:
-- Maximum 3 tasks per batch
-- All tasks execute concurrently (total time ≈ slowest task)
-- Tasks must be independent - no cross-task dependencies
 
 OPERATIONS:
-- execute_batch: Run multiple tasks in parallel
-  Required: tasks (array of {(agent_id OR agent_name), prompt})
+- execute_batch: Run multiple tasks in parallel (max 3 per batch)
+  Required: tasks (array of {agent_name or agent_id, prompt})
 
-PROMPT GUIDELINES:
-1. Each prompt must be fully self-contained
-2. Specify expected report format in each prompt
-3. Include all data each agent needs to process
+Note: Each agent receives ONLY its own prompt. Include all necessary context per task.
 
-EXAMPLE (by name - preferred):
-{
-  "operation": "execute_batch",
-  "tasks": [
-    {"agent_name": "Database Agent", "prompt": "TASK: Analyze database performance.\n\nCONTEXT: Production DB, 50k users.\n\nFOCUS: Slow queries, missing indexes.\n\nREPORT: Summary + findings with severity."},
-    {"agent_name": "Security Agent", "prompt": "TASK: Review API security.\n\nCONTEXT: REST API, JWT auth.\n\nFOCUS: Auth bypass, injection risks.\n\nREPORT: Summary + vulnerabilities with severity."},
-    {"agent_name": "UI Agent", "prompt": "TASK: Check accessibility.\n\nCONTEXT: React frontend.\n\nFOCUS: WCAG 2.1 compliance.\n\nREPORT: Summary + violations with fixes."}
-  ]
-}
-
-EXAMPLE (by ID):
-{
-  "operation": "execute_batch",
-  "tasks": [
-    {"agent_id": "550e8400-e29b-41d4-a716-446655440000", "prompt": "TASK: Analyze..."}
-  ]
-}
-
-RESULT FORMAT:
-Returns aggregated results with:
-- success: true if ALL tasks succeeded
-- completed/failed: task counts
-- results: array with each task's report and metrics
-- aggregated_report: combined markdown from all tasks"#;
+EXAMPLES:
+1. Batch: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Analyze performance..."}, {"agent_name": "Security Agent", "prompt": "Review API security..."}]}"#;
 
         ToolDefinition {
             id: "ParallelTasksTool".to_string(),
             name: "Parallel Tasks".to_string(),
+            summary: "Execute multiple independent tasks in parallel across agents".to_string(),
             description: sub_agent_description_template(tool_specific_desc),
 
             input_schema: parallel_tasks_input_schema(),

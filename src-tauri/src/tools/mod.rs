@@ -93,15 +93,24 @@ pub use user_question::UserQuestionTool;
 
 /// Tool definition metadata for LLM understanding.
 ///
-/// Contains all information needed for an LLM to understand when and how
-/// to use a tool. The description is critical for tool selection.
+/// - `summary`: One-line description used in the system prompt (lightweight)
+/// - `description`: Full description sent via the API `tools` parameter
+///
+/// Convention for `description`:
+/// 1. First line = summary (same as `summary` field)
+/// 2. USE THIS TOOL WHEN (3-5 bullets)
+/// 3. DO NOT USE THIS TOOL WHEN (2-4 bullets)
+/// 4. OPERATIONS (1 line per operation)
+/// 5. EXAMPLES (2-3 JSON examples)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     /// Unique tool identifier (e.g., "TodoTool")
     pub id: String,
     /// Human-readable name
     pub name: String,
-    /// Description for LLM (critical for tool selection)
+    /// One-line summary for system prompt (avoids token waste vs full description)
+    pub summary: String,
+    /// Full description sent via the API `tools` parameter
     pub description: String,
     /// JSON Schema for input validation (OpenAPI 3.0 format)
     pub input_schema: Value,
@@ -311,6 +320,7 @@ mod tests {
         let definition = ToolDefinition {
             id: "TestTool".to_string(),
             name: "Test Tool".to_string(),
+            summary: "A test tool".to_string(),
             description: "A test tool".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",

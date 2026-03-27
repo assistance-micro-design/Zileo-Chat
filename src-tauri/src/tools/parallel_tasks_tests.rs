@@ -6,7 +6,8 @@ fn test_tool_definition() {
     let definition = ToolDefinition {
         id: "ParallelTasksTool".to_string(),
         name: "Parallel Tasks".to_string(),
-        description: "Test".to_string(),
+        summary: "Execute multiple independent tasks concurrently".to_string(),
+        description: "Parallel tasks tool for tests".to_string(),
         input_schema: serde_json::json!({}),
         output_schema: serde_json::json!({}),
         requires_confirmation: false,

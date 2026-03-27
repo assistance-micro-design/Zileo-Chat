@@ -27,6 +27,7 @@ fn memory_tool_definition() -> ToolDefinition {
     ToolDefinition {
         id: "MemoryTool".to_string(),
         name: "Memory Tool".to_string(),
+        summary: "Store and retrieve contextual memory".to_string(),
         description: "Store and retrieve contextual memory for the conversation.".to_string(),
         input_schema: json!({
             "type": "object",
@@ -73,6 +74,7 @@ fn mcp_tool_definition() -> ToolDefinition {
     ToolDefinition {
         id: "mcp__serena__find_symbol".to_string(),
         name: "Find Symbol".to_string(),
+        summary: "Find symbols in the codebase by name pattern".to_string(),
         description: "Find symbols in the codebase by name pattern.".to_string(),
         input_schema: json!({
             "type": "object",

@@ -586,13 +586,23 @@ pub(crate) async fn execute_with_tools(
     )
     .await;
 
+    let has_delegation_tools = ctx
+        .config
+        .tools
+        .iter()
+        .any(|t| t == "SpawnAgentTool" || t == "DelegateTaskTool" || t == "ParallelTasksTool");
+
     let (mcp_tools, mcp_server_summaries) = if let Some(ref mcp) = mcp_manager {
         let mcp_tool_defs = if !ctx.config.mcp_servers.is_empty() {
             tools::get_mcp_tool_definitions(ctx.config, mcp).await
         } else {
             Vec::new()
         };
-        let summaries = tools::get_mcp_server_summaries(ctx.config, mcp).await;
+        let summaries = if has_delegation_tools {
+            tools::get_mcp_server_summaries(ctx.config, mcp).await
+        } else {
+            Vec::new()
+        };
         (mcp_tool_defs, summaries)
     } else {
         (Vec::new(), Vec::new())
@@ -639,6 +649,7 @@ pub(crate) async fn execute_with_tools(
             &mcp_tools,
             &mcp_server_summaries,
             locale.as_deref(),
+            has_delegation_tools,
         );
         let base_prompt = prompt::build_prompt(&task);
         let msgs = vec![

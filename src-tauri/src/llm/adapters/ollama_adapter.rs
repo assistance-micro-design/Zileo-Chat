@@ -238,6 +238,7 @@ mod tests {
         ToolDefinition {
             id: "TodoTool".to_string(),
             name: "Todo Tool".to_string(),
+            summary: "Manage todo items".to_string(),
             description: "Manage todo items".to_string(),
             input_schema: json!({
                 "type": "object",

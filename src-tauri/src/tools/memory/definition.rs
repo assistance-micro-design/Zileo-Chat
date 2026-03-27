@@ -14,9 +14,6 @@
 
 //! Tool definition (schema + LLM description) for the MemoryTool.
 
-use crate::tools::constants::memory::{
-    DEFAULT_LIMIT, DEFAULT_SIMILARITY_THRESHOLD, MAX_CONTENT_LENGTH, MAX_LIMIT,
-};
 use crate::tools::ToolDefinition;
 
 /// Builds the ToolDefinition for MemoryTool.
@@ -27,90 +24,35 @@ pub fn build_definition() -> ToolDefinition {
     ToolDefinition {
         id: "MemoryTool".to_string(),
         name: "Memory Manager".to_string(),
-        description: format!(
-            r#"Manages persistent memory for contextual awareness and knowledge retrieval.
+        summary: "Store, search, and retrieve persistent memories by semantic similarity"
+            .to_string(),
+        description: r#"Manages persistent memory for contextual awareness and knowledge retrieval.
 
 USE THIS TOOL WHEN:
 - You need to store important information for future reference
 - You want to search past memories by semantic similarity
 - You need to maintain context across conversations
 - You want to organize knowledge by type (user_pref, context, knowledge, decision)
-- You need to retrieve previously stored decisions or user preferences
 
 DO NOT USE THIS TOOL WHEN:
 - Information is only relevant to the current message (use conversation context)
-- Storing duplicate content already in memory (search first!)
-- The content exceeds {} characters (split into smaller chunks)
-- For temporary calculations or intermediate values (use CalculatorTool or conversation)
+- Storing duplicate content already in memory (search first)
+- For temporary calculations or intermediate values
 
 OPERATIONS:
-- describe: Overview of available memories (counts, types, tags) - call this first!
-- add: Store new memory with auto-scoping by type and embedding generation
+- describe: Overview of available memories (counts, types, tags)
+- add: Store new memory (type required: user_pref, context, knowledge, decision)
 - get: Retrieve specific memory by ID
-- list: View memories with optional type filter and scope (supports compact mode)
-- search: Find semantically similar memories using vector search (ranked by relevance + importance + recency)
+- list: View memories with optional type filter and scope
+- search: Find semantically similar memories via vector search
 - delete: Remove a memory
 - clear_by_type: Bulk delete all memories of a specific type
 
-AUTO-SCOPING (for add):
-- user_pref, knowledge -> stored as GENERAL (cross-workflow, accessible everywhere)
-- context, decision -> stored as WORKFLOW-SCOPED (tied to current workflow)
-- Override with scope parameter: "general" forces cross-workflow, "workflow" forces workflow-scoped
-
-SCOPE PARAMETER (for list/search/describe):
-- "both" (default): Shows workflow-specific AND general memories
-- "workflow": Only memories from current workflow
-- "general": Only global memories (not tied to any workflow)
-
-CONSTRAINTS:
-- Content length: max {} characters
-- List/search default limit: {} results (max {})
-- Similarity threshold: {:.1} (0-1 scale)
-
-BEST PRACTICES:
-- Use 'knowledge' type for facts and domain expertise
-- Use 'decision' type for rationale behind choices
-- Use 'context' type for conversation-specific information
-- Use 'user_pref' type for user preferences and settings
-- Use scope='both' to see all available memories
-- Search before adding to avoid duplicates
-
 EXAMPLES:
-1. Discover available memories (always start here):
-   {{"operation": "describe"}}
-
-2. Compact listing (token-efficient):
-   {{"operation": "list", "mode": "compact"}}
-
-3. Search all memories (ranked by relevance + importance + recency):
-   {{"operation": "search", "query": "vector database indexing", "limit": 5}}
-
-4. Store knowledge (auto-scoped to general):
-   {{"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}}
-
-5. Store user preference (auto-scoped to general):
-   {{"operation": "add", "type": "user_pref", "content": "User prefers detailed explanations with examples", "tags": ["communication", "style"]}}
-
-6. Store decision (auto-scoped to current workflow):
-   {{"operation": "add", "type": "decision", "content": "Chose PostgreSQL over MongoDB because the data is highly relational"}}
-
-7. Store context (auto-scoped to workflow, auto-expires in 7 days):
-   {{"operation": "add", "type": "context", "content": "User is working on database migration project"}}
-
-8. Force a decision to be global (override auto-scope):
-   {{"operation": "add", "type": "decision", "content": "Company policy: always use RGPD-compliant storage", "scope": "general"}}
-
-9. Delete a memory:
-   {{"operation": "delete", "memory_id": "mem_abc123"}}
-
-10. Clear all context memories:
-    {{"operation": "clear_by_type", "type": "context"}}"#,
-            MAX_CONTENT_LENGTH,
-            MAX_CONTENT_LENGTH,
-            DEFAULT_LIMIT,
-            MAX_LIMIT,
-            DEFAULT_SIMILARITY_THRESHOLD
-        ),
+1. Describe: {"operation": "describe"}
+2. Search: {"operation": "search", "query": "vector database indexing", "limit": 5}
+3. Add: {"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}"#
+            .to_string(),
 
         input_schema: serde_json::json!({
             "type": "object",

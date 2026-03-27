@@ -164,9 +164,15 @@ pub(crate) fn collect_tool_definitions(
     }
 
     for (server_name, mcp_tool) in mcp_tools {
+        let summary = mcp_tool
+            .description
+            .split_once('.')
+            .map(|(first, _)| first.trim().to_string())
+            .unwrap_or_else(|| mcp_tool.description.clone());
         definitions.push(ToolDefinition {
             id: format!("mcp__{}__{}", server_name, mcp_tool.name),
             name: mcp_tool.name.clone(),
+            summary,
             description: mcp_tool.description.clone(),
             input_schema: mcp_tool.input_schema.clone(),
             output_schema: serde_json::json!({}),

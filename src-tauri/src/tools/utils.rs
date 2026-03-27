@@ -325,15 +325,8 @@ pub fn sub_agent_description_template(tool_specific_text: &str) -> String {
         r#"{}
 
 PRIMARY AGENT ONLY:
-- Only the primary/root agent can use this tool
-- Sub-agents cannot use sub-agent tools (max depth: 1)
-- Maximum {} sub-agent operations per workflow
-
-RESPONSE FORMAT:
-Sub-agents return structured JSON with:
-- success: boolean
-- result: string (summary or error message)
-- metrics: execution time, tokens used"#,
+- Only the primary/root agent can use this tool (max depth: 1)
+- Maximum {} sub-agent operations per workflow"#,
         tool_specific_text, MAX_SUB_AGENTS
     )
 }

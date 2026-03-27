@@ -351,14 +351,6 @@ fn test_timeout_is_reasonable() {
 // ===== Documentation Tests =====
 
 #[test]
-fn test_definition_description_mentions_timeout() {
-    let tool = create_test_tool();
-    let def = tool.definition();
-    // Description should mention the timeout
-    assert!(def.description.contains("5 minutes") || def.description.contains("Timeout"));
-}
-
-#[test]
 fn test_definition_description_mentions_question_types() {
     let tool = create_test_tool();
     let def = tool.definition();

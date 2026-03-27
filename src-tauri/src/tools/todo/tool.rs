@@ -83,47 +83,32 @@ impl Tool for TodoTool {
         ToolDefinition {
             id: "TodoTool".to_string(),
             name: "Task Manager".to_string(),
-            description: r#"Manages workflow tasks for structured decomposition and progress tracking.
+            summary: "Manage workflow tasks for decomposition and progress tracking".to_string(),
+            description:
+                r#"Manages workflow tasks for structured decomposition and progress tracking.
 
 USE THIS TOOL WHEN:
 - Breaking down a complex task into smaller, trackable steps
 - Tracking the status of a multi-step workflow
-- When the workflow involves distinct phases that need monitoring
-- When you need to report progress to the user
+- You need to report progress to the user
 
 DO NOT USE THIS TOOL WHEN:
-- For a simple, single-step task (just do it directly)
-- To track conversation state (use MemoryTool instead)
-- For trivial operations that don't need decomposition
-
-WORKFLOW PATTERN:
-1. Create tasks to plan the work breakdown
-2. Update status to "in_progress" when starting each task
-3. Complete tasks when done (optionally with duration)
-4. Delete tasks that are no longer relevant
+- Simple, single-step task (just do it directly)
+- Tracking conversation state (use MemoryTool instead)
 
 OPERATIONS:
 - create: Create new task (name, optional description, priority 1-5)
 - get: Get task details by ID
-- update_status: Change task status (pending/in_progress/completed/blocked)
+- update_status: Change status (pending/in_progress/completed/blocked)
 - list: List tasks (optional status_filter)
 - complete: Mark task as completed with optional duration_ms
 - delete: Remove a task
 
-PRIORITY SCALE:
-1 = Critical (must be done first)
-2 = High
-3 = Medium (default)
-4 = Low
-5 = Nice-to-have
-
 EXAMPLES:
-1. Create: {"operation": "create", "name": "Analyze DB schema", "description": "Review all tables", "priority": 1}
+1. Create: {"operation": "create", "name": "Analyze DB schema", "priority": 1}
 2. Start: {"operation": "update_status", "task_id": "uuid", "status": "in_progress"}
-3. List: {"operation": "list", "status_filter": "pending"}
-4. Complete: {"operation": "complete", "task_id": "uuid", "duration_ms": 5000}
-5. Delete: {"operation": "delete", "task_id": "uuid"}"#
-                .to_string(),
+3. Complete: {"operation": "complete", "task_id": "uuid", "duration_ms": 5000}"#
+                    .to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {

@@ -196,51 +196,34 @@ impl Tool for SpawnAgentTool {
         let available_tools_str = available_tools.join(", ");
 
         let tool_specific_desc = format!(
-            r#"Spawns temporary sub-agents to execute tasks in parallel or sequence.
+            r#"Spawns temporary sub-agents to execute specialized tasks.
 
 USE THIS TOOL WHEN:
 - You need to parallelize work across multiple specialized tasks
 - A task requires different tools or context than your current configuration
-- You want to delegate a specific analysis or research task
 
 DO NOT USE WHEN:
 - Simple single-step tasks that don't benefit from delegation
 - You need shared state or conversation context between agents
-- Real-time user interaction is needed during execution
-
-⚠️ CONTEXT ISOLATION - CRITICAL:
-Sub-agents receive ONLY the prompt string. They have NO access to your conversation history, memory, or state.
-You MUST include ALL necessary information directly in the prompt - never reference "the code above" or "as discussed".
-
-AVAILABLE TOOLS FOR SUB-AGENTS: {available_tools_str}
-Sub-agents cannot use sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool).
-
-AVAILABLE MCP SERVERS: See the "Available MCP Servers" section in your configuration.
-Assign servers using the `mcp_servers` parameter with server IDs.
 
 OPERATIONS:
-- spawn: Create and execute a temporary sub-agent
-  Required: name, prompt
-  Optional: system_prompt, tools, mcp_servers, provider, model
-
+- spawn: Create and execute a temporary sub-agent (required: name, prompt; optional: system_prompt, tools, mcp_servers, provider, model)
 - list_children: See spawned sub-agents and remaining slots
-
 - terminate: Cancel a running sub-agent
 
-PROMPT GUIDELINES:
-1. State the task objective explicitly
-2. Include all data the sub-agent needs to process
-3. Specify the expected report format
-4. Set scope boundaries if needed
+Available tools for sub-agents: {available_tools_str}
+Note: Sub-agents receive ONLY the prompt string. Include all necessary context.
 
-EXAMPLE:
-{{"operation": "spawn", "name": "SecurityAuditor", "prompt": "TASK: Audit this authentication code for vulnerabilities.\n\nCODE:\n```rust\nfn authenticate(user: &str, pass: &str) -> bool {{\n    let query = format!(\"SELECT * FROM users WHERE name='{{}}'\", user);\n    // ...\n}}\n```\n\nFOCUS: SQL injection, input validation, auth bypass.\n\nREPORT FORMAT:\n- Summary (1-2 sentences)\n- Findings with severity (critical/high/medium/low)\n- Recommendations", "tools": ["MemoryTool"]}}"#,
+EXAMPLES:
+1. Spawn: {{"operation": "spawn", "name": "Analyst", "prompt": "Analyze the users table schema...", "tools": ["MemoryTool"]}}
+2. List: {{"operation": "list_children"}}"#,
             available_tools_str = available_tools_str
         );
 
         ToolDefinition {
             id: "SpawnAgentTool".to_string(),
             name: "Spawn Sub-Agent".to_string(),
+            summary: "Spawn a temporary sub-agent to execute a specialized task".to_string(),
             description: sub_agent_description_template(&tool_specific_desc),
 
             input_schema: serde_json::json!({

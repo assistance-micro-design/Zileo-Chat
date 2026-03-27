@@ -235,40 +235,21 @@ USE THIS TOOL WHEN:
 DO NOT USE WHEN:
 - You need custom tools or configuration (use SpawnAgentTool instead)
 - Simple single-step tasks that don't need agent expertise
-- You need shared state between agents
-
-⚠️ CONTEXT ISOLATION - CRITICAL:
-Delegated agents receive ONLY the prompt string. They have NO access to your conversation history, memory, or state.
-You MUST include ALL necessary information directly in the prompt.
-
-SPAWN vs DELEGATE:
-- Delegate: Permanent agents with fixed configuration
-- Spawn: Temporary agents with custom configuration
 
 OPERATIONS:
-- delegate: Execute task via permanent agent
-  Required: (agent_id OR agent_name) + prompt
-  If both agent_id and agent_name provided, agent_id takes priority.
-
+- delegate: Execute task via permanent agent (requires agent_name or agent_id + prompt)
 - list_agents: Show available agents for delegation
 
-PROMPT GUIDELINES:
-1. State the task objective explicitly
-2. Include all data the agent needs to process
-3. Specify the expected report format
-4. Set scope boundaries if needed
+Note: Delegated agents receive ONLY the prompt string. Include all necessary context.
 
-EXAMPLE (by name - preferred):
-{"operation": "delegate", "agent_name": "Database Agent", "prompt": "TASK: Analyze the users table..."}
-
-EXAMPLE (by ID):
-{"operation": "delegate", "agent_id": "550e8400-e29b-41d4-a716-446655440000", "prompt": "TASK: Analyze..."}
-
-{"operation": "list_agents"}"#;
+EXAMPLES:
+1. Delegate: {"operation": "delegate", "agent_name": "Database Agent", "prompt": "Analyze the users table..."}
+2. List: {"operation": "list_agents"}"#;
 
         ToolDefinition {
             id: "DelegateTaskTool".to_string(),
             name: "Delegate Task".to_string(),
+            summary: "Delegate a task to an existing permanent LLM agent".to_string(),
             description: sub_agent_description_template(tool_specific_desc),
 
             input_schema: delegate_task_input_schema(),
