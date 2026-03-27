@@ -76,8 +76,8 @@
 
   --color-success: #10b981;
   --color-success-light: #d1fae5;
-  --color-warning: #f59e0b;
-  --color-warning-light: #fef3c7;
+  --color-warning: #b45309;
+  --color-warning-light: #78350f;
   --color-error: #ef4444;
   --color-error-light: #fee2e2;
 
@@ -609,8 +609,8 @@ body {
 }
 
 .badge-warning {
-  background: var(--color-warning-light);
-  color: var(--color-warning);
+  background: var(--color-warning);
+  color: white;
 }
 
 .badge-error {

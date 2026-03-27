@@ -28,9 +28,9 @@ Displays a list of checkboxes with select all/deselect all functionality.
 	/** Props */
 	interface Props {
 		/** Type of entity being selected */
-		entityType: 'agent' | 'mcp' | 'model' | 'prompt';
-		/** Array of items to select from */
-		items: Array<{ id: string; name: string }>;
+		entityType: 'agent' | 'mcp' | 'model' | 'prompt' | 'skill' | 'custom_provider';
+		/** Array of items to select from. Must have `id` and optionally `name` or `displayName` for label. */
+		items: Array<{ id: string; name?: string; displayName?: string }>;
 		/** Array of selected item IDs */
 		selected: string[];
 		/** Callback when selection changes */
@@ -46,7 +46,9 @@ Displays a list of checkboxes with select all/deselect all functionality.
 		agent: 'ie_entity_agents',
 		mcp: 'ie_entity_mcp_servers',
 		model: 'ie_entity_models',
-		prompt: 'ie_entity_prompts'
+		prompt: 'ie_entity_prompts',
+		skill: 'ie_entity_skills',
+		custom_provider: 'ie_entity_custom_providers'
 	};
 
 	/** Get translated label for entity type */
@@ -120,7 +122,7 @@ Displays a list of checkboxes with select all/deselect all functionality.
 						onchange={() => toggleItem(item.id)}
 						{disabled}
 					/>
-					<span class="item-name">{item.name}</span>
+					<span class="item-name">{item.name || item.displayName || item.id}</span>
 				</label>
 			{/each}
 		</div>

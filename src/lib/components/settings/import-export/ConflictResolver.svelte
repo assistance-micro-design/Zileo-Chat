@@ -47,13 +47,15 @@ Supports bulk resolution with "Apply to all" option.
 	 * Get badge variant for entity type
 	 */
 	function getEntityTypeBadge(
-		type: 'agent' | 'mcp' | 'model' | 'prompt'
+		type: string
 	): 'primary' | 'success' | 'warning' | 'error' {
-		const variants = {
-			agent: 'primary' as const,
-			mcp: 'success' as const,
-			model: 'warning' as const,
-			prompt: 'error' as const
+		const variants: Record<string, 'primary' | 'success' | 'warning' | 'error'> = {
+			agent: 'primary',
+			mcp: 'success',
+			model: 'warning',
+			prompt: 'error',
+			skill: 'primary',
+			custom_provider: 'success'
 		};
 		return variants[type] || 'primary';
 	}
@@ -61,12 +63,14 @@ Supports bulk resolution with "Apply to all" option.
 	/**
 	 * Get entity type label
 	 */
-	function getEntityTypeLabel(type: 'agent' | 'mcp' | 'model' | 'prompt'): string {
-		const keys = {
+	function getEntityTypeLabel(type: string): string {
+		const keys: Record<string, string> = {
 			agent: 'ie_entity_agent',
 			mcp: 'ie_entity_mcp_server',
 			model: 'ie_entity_model',
-			prompt: 'ie_entity_prompt'
+			prompt: 'ie_entity_prompt',
+			skill: 'ie_entity_skill',
+			custom_provider: 'ie_entity_custom_provider'
 		};
 		return $i18n(keys[type] || type);
 	}

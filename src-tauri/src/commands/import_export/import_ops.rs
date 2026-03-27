@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Per-entity import operations.
+//! Per-entity import operations (schema v1.1).
 //!
 //! Each function handles importing a specific entity type with conflict resolution.
+//! Import order: custom_providers -> models -> mcp_servers -> skills -> agents -> prompts
 
 use crate::db::client::DBClient;
 use crate::db::sanitize_for_surrealdb;
@@ -27,6 +28,7 @@ use super::helpers::{
 };
 
 /// Imports agent entities with conflict resolution.
+/// Includes all v1.1 fields: folders, require_file_confirmation, llm.is_reasoning, llm.context_window.
 pub async fn import_agents(
     db: &DBClient,
     agents: &[AgentExportData],
@@ -55,6 +57,8 @@ pub async fn import_agents(
                         "model": agent.llm.model,
                         "temperature": agent.llm.temperature,
                         "max_tokens": agent.llm.max_tokens,
+                        "is_reasoning": agent.llm.is_reasoning,
+                        "context_window": agent.llm.context_window,
                     },
                     "tools": agent.tools,
                     "mcp_servers": agent.mcp_servers,
@@ -62,6 +66,8 @@ pub async fn import_agents(
                     "system_prompt": agent.system_prompt,
                     "max_tool_iterations": agent.max_tool_iterations,
                     "reasoning_effort": agent.reasoning_effort,
+                    "folders": agent.folders,
+                    "require_file_confirmation": agent.require_file_confirmation,
                 }));
                 match persist_imported_entity(db, "agent", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.agents += 1,
@@ -211,6 +217,97 @@ pub async fn import_prompts(
                     Err(e) => t.errors.push(ImportError {
                         entity_type: "prompt".to_string(),
                         entity_id: prompt.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Imports skill entities with conflict resolution (v1.1).
+pub async fn import_skills(
+    db: &DBClient,
+    skills: &[SkillExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    t: &mut ImportTracking<'_>,
+) {
+    for skill in skills {
+        match resolve_import_entity(db, "skill", "skill", &skill.name, selected, resolutions).await
+        {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => {
+                t.skipped.skills += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "name": name,
+                    "description": skill.description,
+                    "category": skill.category,
+                    "content": skill.content,
+                    "enabled": skill.enabled,
+                }));
+                match persist_imported_entity(db, "skill", &id, data, is_overwrite).await {
+                    Ok(()) => t.imported.skills += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "skill".to_string(),
+                        entity_id: skill.name.clone(),
+                        error: e,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+/// Imports custom provider entities with conflict resolution (v1.1).
+/// Custom providers use name as primary key (not UUID).
+pub async fn import_custom_providers(
+    db: &DBClient,
+    providers: &[CustomProviderExportData],
+    selected: &[String],
+    resolutions: &HashMap<String, ConflictResolution>,
+    t: &mut ImportTracking<'_>,
+) {
+    for provider in providers {
+        match resolve_import_entity(
+            db,
+            "custom_provider",
+            "custom_provider",
+            &provider.name,
+            selected,
+            resolutions,
+        )
+        .await
+        {
+            ImportAction::NotSelected => continue,
+            ImportAction::Skipped => {
+                t.skipped.custom_providers += 1;
+                continue;
+            }
+            ImportAction::Import {
+                id,
+                name,
+                is_overwrite,
+            } => {
+                let data = sanitize_for_surrealdb(serde_json::json!({
+                    "name": name,
+                    "display_name": provider.display_name,
+                    "base_url": provider.base_url,
+                    "enabled": provider.enabled,
+                }));
+                match persist_imported_entity(db, "custom_provider", &id, data, is_overwrite).await
+                {
+                    Ok(()) => t.imported.custom_providers += 1,
+                    Err(e) => t.errors.push(ImportError {
+                        entity_type: "custom_provider".to_string(),
+                        entity_id: provider.name.clone(),
                         error: e,
                     }),
                 }

@@ -47,7 +47,9 @@ Uses ExportEntitySection for collapsible entity sections.
 		preview.agents.length +
 			preview.mcpServers.length +
 			preview.models.length +
-			preview.prompts.length
+			preview.prompts.length +
+			(preview.skills?.length || 0) +
+			(preview.customProviders?.length || 0)
 	);
 
 	/** Expanded state for all sections */
@@ -55,7 +57,9 @@ Uses ExportEntitySection for collapsible entity sections.
 		agents: false,
 		mcp: false,
 		models: false,
-		prompts: false
+		prompts: false,
+		skills: false,
+		customProviders: false
 	});
 </script>
 
@@ -180,6 +184,52 @@ Uses ExportEntitySection for collapsible entity sections.
 							{#if prompt.description}
 								<span class="meta-text">{prompt.description}</span>
 							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</ExportEntitySection>
+	{/if}
+
+	<!-- Skills Section (v1.1) -->
+	{#if preview.skills?.length > 0}
+		<ExportEntitySection
+			title={$i18n('ie_entity_skills')}
+			count={preview.skills.length}
+			expanded={expanded.skills}
+			onToggle={() => (expanded.skills = !expanded.skills)}
+		>
+			<div class="items-list">
+				{#each preview.skills as skill (skill.id ?? skill.name)}
+					<div class="item">
+						<span class="item-name">{skill.name}</span>
+						<div class="item-meta">
+							<Badge variant="primary">{skill.category}</Badge>
+							<Badge variant={skill.enabled ? 'success' : 'error'}>
+								{skill.enabled ? $i18n('ie_enabled') : $i18n('ie_disabled')}
+							</Badge>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</ExportEntitySection>
+	{/if}
+
+	<!-- Custom Providers Section (v1.1) -->
+	{#if preview.customProviders?.length > 0}
+		<ExportEntitySection
+			title={$i18n('ie_entity_custom_providers')}
+			count={preview.customProviders.length}
+			expanded={expanded.customProviders}
+			onToggle={() => (expanded.customProviders = !expanded.customProviders)}
+		>
+			<div class="items-list">
+				{#each preview.customProviders as provider (provider.id ?? provider.name)}
+					<div class="item">
+						<span class="item-name">{provider.displayName}</span>
+						<div class="item-meta">
+							<span class="meta-text">{provider.name}</span>
+							<span class="meta-text">{provider.baseUrl}</span>
 						</div>
 					</div>
 				{/each}

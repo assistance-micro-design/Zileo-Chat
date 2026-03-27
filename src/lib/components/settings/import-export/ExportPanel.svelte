@@ -40,6 +40,8 @@ Multi-step process: entity selection, options, preview, and export.
 	import type { MCPServerConfig } from '$types/mcp';
 	import type { LLMModel } from '$types/llm';
 	import type { PromptSummary } from '$types/prompt';
+	import type { SkillSummary } from '$types/skill';
+	import type { ProviderInfo } from '$types/custom-provider';
 
 	/** Props */
 	interface Props {
@@ -57,12 +59,16 @@ Multi-step process: entity selection, options, preview, and export.
 	let mcpServers = $state<MCPServerConfig[]>([]);
 	let models = $state<LLMModel[]>([]);
 	let prompts = $state<PromptSummary[]>([]);
+	let skills = $state<SkillSummary[]>([]);
+	let customProviders = $state<ProviderInfo[]>([]);
 
 	/** Selection state */
 	let selectedAgents = $state<string[]>([]);
 	let selectedMcpServers = $state<string[]>([]);
 	let selectedModels = $state<string[]>([]);
 	let selectedPrompts = $state<string[]>([]);
+	let selectedSkills = $state<string[]>([]);
+	let selectedCustomProviders = $state<string[]>([]);
 
 	/** Export options */
 	let includeTimestamps = $state(false);
@@ -83,15 +89,15 @@ Multi-step process: entity selection, options, preview, and export.
 		agents: selectedAgents,
 		mcpServers: selectedMcpServers,
 		models: selectedModels,
-		prompts: selectedPrompts
+		prompts: selectedPrompts,
+		skills: selectedSkills,
+		customProviders: selectedCustomProviders
 	});
 
 	/** Check if any entities are selected */
 	const hasSelection = $derived(
-		selectedAgents.length > 0 ||
-			selectedMcpServers.length > 0 ||
-			selectedModels.length > 0 ||
-			selectedPrompts.length > 0
+		selectedAgents.length + selectedMcpServers.length + selectedModels.length +
+			selectedPrompts.length + selectedSkills.length + selectedCustomProviders.length > 0
 	);
 
 	/**
@@ -101,12 +107,17 @@ Multi-step process: entity selection, options, preview, and export.
 		loading = true;
 		error = null;
 		try {
-			[agents, mcpServers, models, prompts] = await Promise.all([
+			const allProviders = await Promise.all([
 				invoke<AgentSummary[]>('list_agents'),
 				invoke<MCPServerConfig[]>('list_mcp_servers'),
 				invoke<LLMModel[]>('list_models'),
-				invoke<PromptSummary[]>('list_prompts')
+				invoke<PromptSummary[]>('list_prompts'),
+				invoke<SkillSummary[]>('list_skills'),
+				invoke<ProviderInfo[]>('list_providers')
 			]);
+			[agents, mcpServers, models, prompts, skills] = allProviders;
+			// Filter to custom providers only (not builtins)
+			customProviders = allProviders[5].filter((p) => !p.isBuiltin);
 		} catch (err) {
 			error = `${$i18n('ie_load_entities_failed')}: ${getErrorMessage(err)}`;
 		} finally {
@@ -215,7 +226,9 @@ Multi-step process: entity selection, options, preview, and export.
 				exportPackage.manifest.counts.agents +
 				exportPackage.manifest.counts.mcpServers +
 				exportPackage.manifest.counts.models +
-				exportPackage.manifest.counts.prompts;
+				exportPackage.manifest.counts.prompts +
+				(exportPackage.manifest.counts.skills || 0) +
+				(exportPackage.manifest.counts.customProviders || 0);
 
 			// Extract filename from path for display
 			const savedFilename = filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
@@ -246,6 +259,8 @@ Multi-step process: entity selection, options, preview, and export.
 		selectedMcpServers = [];
 		selectedModels = [];
 		selectedPrompts = [];
+		selectedSkills = [];
+		selectedCustomProviders = [];
 		includeTimestamps = false;
 		sanitizeMcp = true;
 		preview = null;
@@ -367,6 +382,18 @@ Multi-step process: entity selection, options, preview, and export.
 								items={prompts}
 								selected={selectedPrompts}
 								onchange={(ids) => (selectedPrompts = ids)}
+							/>
+							<EntitySelector
+								entityType="skill"
+								items={skills}
+								selected={selectedSkills}
+								onchange={(ids) => (selectedSkills = ids)}
+							/>
+							<EntitySelector
+								entityType="custom_provider"
+								items={customProviders}
+								selected={selectedCustomProviders}
+								onchange={(ids) => (selectedCustomProviders = ids)}
 							/>
 						</div>
 					</div>

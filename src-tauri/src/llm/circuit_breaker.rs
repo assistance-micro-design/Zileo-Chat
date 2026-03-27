@@ -274,7 +274,6 @@ impl CircuitBreaker {
             }
         }
     }
-
 }
 
 #[cfg(test)]

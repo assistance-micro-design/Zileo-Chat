@@ -14,11 +14,13 @@
 
 //! Export Commands
 //!
-//! Tauri commands for exporting configuration entities.
+//! Tauri commands for exporting configuration entities (schema v1.1).
 //!
 //! - `prepare_export_preview` - Get preview data for selected entities
 //! - `generate_export_file` - Generate export JSON with sanitization applied
 //! - `save_export_to_file` - Save export content to a file
+//!
+//! Supported entities: Agents, MCP Servers, Models, Prompts, Skills, Custom Providers.
 
 use crate::db::client::DBClient;
 use crate::models::import_export::*;
@@ -70,12 +72,14 @@ pub async fn prepare_export_preview(
         mcp_servers: Vec::new(),
         models: Vec::new(),
         prompts: Vec::new(),
+        skills: Vec::new(),
+        custom_providers: Vec::new(),
         mcp_env_keys: HashMap::new(),
     };
 
     // Load agent summaries
     for agent_id in &selection.agents {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers FROM agent WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, folders FROM agent WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(&state.db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
             preview.agents.push(AgentExportSummary {
@@ -86,6 +90,8 @@ pub async fn prepare_export_preview(
                 model: llm["model"].as_str().unwrap_or("").to_string(),
                 tools_count: row["tools"].as_array().map(|a| a.len()).unwrap_or(0),
                 mcp_servers_count: row["mcp_servers"].as_array().map(|a| a.len()).unwrap_or(0),
+                skills_count: row["skills"].as_array().map(|a| a.len()).unwrap_or(0),
+                folders_count: row["folders"].as_array().map(|a| a.len()).unwrap_or(0),
             });
         }
     }
@@ -129,11 +135,49 @@ pub async fn prepare_export_preview(
         }
     }
 
+    // Load skill summaries
+    for skill_id in &selection.skills {
+        let query = "SELECT meta::id(id) AS id, name, category, enabled, content FROM skill WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(&state.db, query, skill_id, "skill").await? {
+            let content_len = row["content"].as_str().map(|s| s.len()).unwrap_or(0);
+            preview.skills.push(SkillExportSummary {
+                id: Some(row["id"].as_str().unwrap_or("").to_string()),
+                name: row["name"].as_str().unwrap_or("Unknown").to_string(),
+                category: row["category"].as_str().unwrap_or("custom").to_string(),
+                enabled: row["enabled"].as_bool().unwrap_or(true),
+                content_length: content_len,
+            });
+        }
+    }
+
+    // Load custom provider summaries (queried by name, not UUID)
+    for provider_name in &selection.custom_providers {
+        let query = "SELECT name, display_name, base_url FROM custom_provider WHERE name = $name";
+        let results: Vec<serde_json::Value> = state
+            .db
+            .db
+            .query(query)
+            .bind(("name", provider_name.to_string()))
+            .await
+            .map(|mut r| r.take(0).unwrap_or_default())
+            .map_err(|e| format!("Failed to query custom provider: {}", e))?;
+        if let Some(row) = results.into_iter().next() {
+            preview.custom_providers.push(CustomProviderExportSummary {
+                id: Some(row["name"].as_str().unwrap_or("").to_string()),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                display_name: row["display_name"].as_str().unwrap_or("").to_string(),
+                base_url: row["base_url"].as_str().unwrap_or("").to_string(),
+            });
+        }
+    }
+
     tracing::info!(
         agents = preview.agents.len(),
         mcp_servers = preview.mcp_servers.len(),
         models = preview.models.len(),
         prompts = preview.prompts.len(),
+        skills = preview.skills.len(),
+        custom_providers = preview.custom_providers.len(),
         "Export preview prepared"
     );
 
@@ -174,9 +218,19 @@ pub async fn generate_export_file(
         export_mcp_servers(&state.db, &selection.mcp_servers, ts, &sanitization).await?;
     let models = export_models(&state.db, &selection.models, ts).await?;
     let prompts = export_prompts(&state.db, &selection.prompts, ts).await?;
+    let skills = export_skills(&state.db, &selection.skills, ts).await?;
+    let custom_providers = export_custom_providers(&state.db, &selection.custom_providers).await?;
 
     // Build export package
-    let package = ExportPackage::new(agents, mcp_servers, models, prompts, None);
+    let package = ExportPackage::new(
+        agents,
+        mcp_servers,
+        models,
+        prompts,
+        skills,
+        custom_providers,
+        None,
+    );
 
     // Serialize to JSON
     let json = serde_json::to_string_pretty(&package)
@@ -265,9 +319,18 @@ async fn export_agents(
 ) -> Result<Vec<AgentExportData>, String> {
     let mut agents = Vec::new();
     for agent_id in agent_ids {
-        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, reasoning_effort, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, system_prompt, max_tool_iterations, reasoning_effort, folders, require_file_confirmation, created_at, updated_at FROM agent WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, agent_id, "agent").await? {
             let llm = &row["llm"];
+            let extract_string_array = |val: &serde_json::Value| -> Vec<String> {
+                val.as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
             agents.push(AgentExportData {
                 name: row["name"].as_str().unwrap_or("").to_string(),
                 lifecycle: row["lifecycle"].as_str().unwrap_or("permanent").to_string(),
@@ -276,36 +339,21 @@ async fn export_agents(
                     model: llm["model"].as_str().unwrap_or("").to_string(),
                     temperature: llm["temperature"].as_f64().unwrap_or(0.7),
                     max_tokens: llm["max_tokens"].as_u64().unwrap_or(4096) as usize,
+                    is_reasoning: llm["is_reasoning"].as_bool().unwrap_or(false),
+                    context_window: llm["context_window"].as_u64().map(|v| v as usize),
                 },
-                tools: row["tools"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                mcp_servers: row["mcp_servers"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                skills: row["skills"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                tools: extract_string_array(&row["tools"]),
+                mcp_servers: extract_string_array(&row["mcp_servers"]),
+                skills: extract_string_array(&row["skills"]),
                 system_prompt: row["system_prompt"].as_str().unwrap_or("").to_string(),
                 max_tool_iterations: row["max_tool_iterations"].as_u64().unwrap_or(50) as usize,
                 reasoning_effort: row["reasoning_effort"].as_str().and_then(|s| {
                     serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
                 }),
+                folders: extract_string_array(&row["folders"]),
+                require_file_confirmation: row["require_file_confirmation"]
+                    .as_bool()
+                    .unwrap_or(true),
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });
@@ -400,4 +448,57 @@ async fn export_prompts(
         }
     }
     Ok(prompts)
+}
+
+/// Exports skill entities from the database (v1.1).
+async fn export_skills(
+    db: &DBClient,
+    skill_ids: &[String],
+    include_timestamps: bool,
+) -> Result<Vec<SkillExportData>, String> {
+    let mut skills = Vec::new();
+    for skill_id in skill_ids {
+        let query = "SELECT meta::id(id) AS id, name, description, category, content, enabled, created_at, updated_at FROM skill WHERE meta::id(id) = $id";
+        if let Some(row) = query_entity_by_id(db, query, skill_id, "skill").await? {
+            skills.push(SkillExportData {
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().unwrap_or("").to_string(),
+                category: row["category"].as_str().unwrap_or("custom").to_string(),
+                content: row["content"].as_str().unwrap_or("").to_string(),
+                enabled: row["enabled"].as_bool().unwrap_or(true),
+                created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
+                updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
+            });
+        }
+    }
+    Ok(skills)
+}
+
+/// Exports custom provider entities from the database (v1.1).
+/// Custom providers use name as primary key (not UUID).
+async fn export_custom_providers(
+    db: &DBClient,
+    provider_names: &[String],
+) -> Result<Vec<CustomProviderExportData>, String> {
+    let mut providers = Vec::new();
+    for name in provider_names {
+        let query = "SELECT name, display_name, base_url, enabled, created_at FROM custom_provider WHERE name = $name";
+        let results: Vec<serde_json::Value> = db
+            .db
+            .query(query)
+            .bind(("name", name.to_string()))
+            .await
+            .map(|mut r| r.take(0).unwrap_or_default())
+            .map_err(|e| format!("Failed to query custom provider '{}': {}", name, e))?;
+        if let Some(row) = results.into_iter().next() {
+            providers.push(CustomProviderExportData {
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                display_name: row["display_name"].as_str().unwrap_or("").to_string(),
+                base_url: row["base_url"].as_str().unwrap_or("").to_string(),
+                enabled: row["enabled"].as_bool().unwrap_or(true),
+                created_at: row["created_at"].as_str().map(String::from),
+            });
+        }
+    }
+    Ok(providers)
 }

@@ -39,6 +39,7 @@ Orchestrates the multi-step import process:
 		ImportValidation,
 		ImportSelection,
 		ImportConflict,
+		ImportWarning,
 		ConflictResolution,
 		MCPAdditions,
 		ConfigImportResult,
@@ -66,7 +67,9 @@ Orchestrates the multi-step import process:
 		agents: [],
 		mcpServers: [],
 		models: [],
-		prompts: []
+		prompts: [],
+		skills: [],
+		customProviders: []
 	});
 	let resolutions = $state<Record<string, ConflictResolution>>({});
 	let mcpAdditionsMap = $state<Record<string, MCPAdditions>>({});
@@ -93,6 +96,10 @@ Orchestrates the multi-step import process:
 					return selection.models.includes(conflict.entityName);
 				case 'prompt':
 					return selection.prompts.includes(conflict.entityName);
+				case 'skill':
+					return selection.skills.includes(conflict.entityName);
+				case 'custom_provider':
+					return selection.customProviders.includes(conflict.entityName);
 				default:
 					return false;
 			}
@@ -155,7 +162,9 @@ Orchestrates the multi-step import process:
 					agents: validation.entities.agents.map((a) => a.name),
 					mcpServers: validation.entities.mcpServers.map((s) => s.name),
 					models: validation.entities.models.map((m) => m.name),
-					prompts: validation.entities.prompts.map((p) => p.name)
+					prompts: validation.entities.prompts.map((p) => p.name),
+					skills: (validation.entities.skills || []).map((s) => s.name),
+					customProviders: (validation.entities.customProviders || []).map((p) => p.name)
 				};
 
 				// Initialize MCP additions for servers with missing env
@@ -284,11 +293,54 @@ Orchestrates the multi-step import process:
 		currentStep = 'upload';
 		importData = null;
 		validation = null;
-		selection = { agents: [], mcpServers: [], models: [], prompts: [] };
+		selection = { agents: [], mcpServers: [], models: [], prompts: [], skills: [], customProviders: [] };
 		resolutions = {};
 		mcpAdditionsMap = {};
 		error = null;
 		result = null;
+	}
+
+	/**
+	 * Resolve warning detail/action using i18n keys based on warningType.
+	 * Falls back to raw backend strings if no i18n key matches.
+	 */
+	function getWarningDetail(warning: ImportWarning): string {
+		const keyMap: Record<string, string> = {
+			missing_dependency: warning.detail.includes('model') ? 'ie_warn_missing_model'
+				: warning.detail.includes('MCP') ? 'ie_warn_missing_mcp'
+				: warning.detail.includes('skill') ? 'ie_warn_missing_skill'
+				: warning.detail.includes('provider') ? 'ie_warn_missing_provider'
+				: '',
+			machine_specific: 'ie_warn_folders',
+			default_applied: warning.detail.includes('API key') ? 'ie_warn_api_keys' : 'ie_warn_defaults_applied',
+			builtin_model: 'ie_warn_builtin_model'
+		};
+		const key = keyMap[warning.warningType] || '';
+		if (!key) return warning.detail;
+
+		// Extract name from detail for interpolation (e.g., "model 'mistral-small' not found")
+		const nameMatch = warning.detail.match(/'([^']+)'/);
+		const countMatch = warning.detail.match(/^(\d+)/);
+		let translated = $i18n(key);
+		if (nameMatch) translated = translated.replace('{name}', nameMatch[1]);
+		if (countMatch) translated = translated.replace('{count}', countMatch[1]);
+		return translated;
+	}
+
+	function getWarningAction(warning: ImportWarning): string {
+		const keyMap: Record<string, string> = {
+			missing_dependency: warning.detail.includes('model') ? 'ie_warn_missing_model_action'
+				: warning.detail.includes('MCP') ? 'ie_warn_missing_mcp_action'
+				: warning.detail.includes('skill') ? 'ie_warn_missing_skill_action'
+				: warning.detail.includes('provider') ? 'ie_warn_missing_provider_action'
+				: '',
+			machine_specific: 'ie_warn_folders_action',
+			default_applied: warning.detail.includes('API key') ? 'ie_warn_api_keys_action' : 'ie_warn_defaults_applied_action',
+			builtin_model: 'ie_warn_builtin_model_action'
+		};
+		const key = keyMap[warning.warningType] || '';
+		if (!key) return warning.action;
+		return $i18n(key);
 	}
 
 	/**
@@ -309,10 +361,9 @@ Orchestrates the multi-step import process:
 		if (currentStep === 'preview') {
 			// At least one entity must be selected
 			const hasSelection =
-				selection.agents.length > 0 ||
-				selection.mcpServers.length > 0 ||
-				selection.models.length > 0 ||
-				selection.prompts.length > 0;
+				selection.agents.length + selection.mcpServers.length +
+				selection.models.length + selection.prompts.length +
+				selection.skills.length + selection.customProviders.length > 0;
 			return hasSelection;
 		}
 
@@ -419,12 +470,24 @@ Orchestrates the multi-step import process:
 					<Card>
 						{#snippet body()}
 							<div class="warnings">
-								<Badge variant="warning">{$i18n('ie_warnings')}</Badge>
-								<ul class="warning-list">
-									{#each previewValidation.warnings as warning (warning)}
-										<li>{warning}</li>
+								<div class="warnings-title">
+									<AlertCircle size={16} />
+									<span>{$i18n('ie_warnings')} ({previewValidation.warnings.length})</span>
+								</div>
+								<div class="warning-list">
+									{#each previewValidation.warnings as warning, i (i)}
+										<div class="warning-item" class:warning-high={warning.severity === 'high'} class:warning-medium={warning.severity === 'medium'} class:warning-info={warning.severity === 'info'}>
+											<div class="warning-header">
+												<Badge variant={warning.severity === 'high' ? 'error' : warning.severity === 'medium' ? 'warning' : 'primary'}>
+													{warning.severity}
+												</Badge>
+												<span class="warning-entity">{warning.entity}</span>
+											</div>
+											<p class="warning-detail">{getWarningDetail(warning)}</p>
+											<p class="warning-action">{getWarningAction(warning)}</p>
+										</div>
 									{/each}
-								</ul>
+								</div>
 							</div>
 						{/snippet}
 					</Card>
@@ -490,9 +553,15 @@ Orchestrates the multi-step import process:
 										{#if completeResult.imported.prompts > 0}
 											<Badge variant="success">{completeResult.imported.prompts} {$i18n('ie_entity_prompts')}</Badge>
 										{/if}
+										{#if completeResult.imported.skills > 0}
+											<Badge variant="success">{completeResult.imported.skills} {$i18n('ie_entity_skills')}</Badge>
+										{/if}
+										{#if completeResult.imported.customProviders > 0}
+											<Badge variant="success">{completeResult.imported.customProviders} {$i18n('ie_entity_custom_providers')}</Badge>
+										{/if}
 									</div>
 								</div>
-								{#if completeResult.skipped.agents > 0 || completeResult.skipped.mcpServers > 0 || completeResult.skipped.models > 0 || completeResult.skipped.prompts > 0}
+								{#if completeResult.skipped.agents + completeResult.skipped.mcpServers + completeResult.skipped.models + completeResult.skipped.prompts + (completeResult.skipped.skills || 0) + (completeResult.skipped.customProviders || 0) > 0}
 									<div class="result-row">
 										<span class="result-label">{$i18n('ie_skipped')}</span>
 										<div class="result-counts">
@@ -508,10 +577,26 @@ Orchestrates the multi-step import process:
 											{#if completeResult.skipped.prompts > 0}
 												<Badge variant="warning">{completeResult.skipped.prompts} {$i18n('ie_entity_prompts')}</Badge>
 											{/if}
+											{#if completeResult.skipped.skills > 0}
+												<Badge variant="warning">{completeResult.skipped.skills} {$i18n('ie_entity_skills')}</Badge>
+											{/if}
+											{#if completeResult.skipped.customProviders > 0}
+												<Badge variant="warning">{completeResult.skipped.customProviders} {$i18n('ie_entity_custom_providers')}</Badge>
+											{/if}
 										</div>
 									</div>
 								{/if}
 							</div>
+							{#if completeResult.postImportActions && completeResult.postImportActions.length > 0}
+								<div class="post-import-actions">
+									<Badge variant="warning">{$i18n('ie_post_import_actions')}</Badge>
+									<ul class="action-list">
+										{#each completeResult.postImportActions as action, i (i)}
+											<li>{action}</li>
+										{/each}
+									</ul>
+								</div>
+							{/if}
 							{#if completeResult.errors.length > 0}
 								<div class="errors">
 									<Badge variant="error">{$i18n('ie_errors')}</Badge>
@@ -685,12 +770,92 @@ Orchestrates the multi-step import process:
 		gap: var(--spacing-sm);
 	}
 
-	.warning-list,
+	.warnings-title {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.warning-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		margin-top: var(--spacing-sm);
+	}
+
+	.warning-item {
+		padding: var(--spacing-sm) var(--spacing-md);
+		border-radius: var(--border-radius-sm);
+		border-left: 3px solid var(--color-border);
+		background: var(--color-bg-secondary);
+	}
+
+	.warning-item.warning-high {
+		border-left-color: var(--color-error);
+	}
+
+	.warning-item.warning-medium {
+		border-left-color: var(--color-warning);
+	}
+
+	.warning-item.warning-info {
+		border-left-color: var(--color-primary);
+	}
+
+	.warning-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.warning-entity {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
+
+	.warning-detail {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
+
+	.warning-action {
+		margin: var(--spacing-xs) 0 0 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		font-style: italic;
+	}
+
 	.error-list {
 		margin: 0;
 		padding-left: var(--spacing-lg);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
+	}
+
+	.post-import-actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		width: 100%;
+		max-width: 600px;
+		text-align: left;
+	}
+
+	.action-list {
+		margin: 0;
+		padding-left: var(--spacing-lg);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
+
+	.action-list li {
+		margin-bottom: var(--spacing-xs);
 	}
 
 	.executing-content {

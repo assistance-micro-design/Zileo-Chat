@@ -42,13 +42,15 @@ Uses data-driven loops for summary cards and entity lists.
 	let { validation, selection, onSelectionChange }: Props = $props();
 
 	/** Entity type definitions for data-driven rendering */
-	type EntityType = 'agents' | 'mcpServers' | 'models' | 'prompts';
+	type EntityType = 'agents' | 'mcpServers' | 'models' | 'prompts' | 'skills' | 'customProviders';
 
 	const entityDefs: Array<{ type: EntityType; titleKey: string }> = [
 		{ type: 'agents', titleKey: 'ie_entity_agents' },
 		{ type: 'mcpServers', titleKey: 'ie_entity_mcp_servers' },
 		{ type: 'models', titleKey: 'ie_entity_models' },
-		{ type: 'prompts', titleKey: 'ie_entity_prompts' }
+		{ type: 'prompts', titleKey: 'ie_entity_prompts' },
+		{ type: 'skills', titleKey: 'ie_entity_skills' },
+		{ type: 'customProviders', titleKey: 'ie_entity_custom_providers' }
 	];
 
 	/**
@@ -141,6 +143,12 @@ Uses data-driven loops for summary cards and entity lists.
 		}
 		if (type === 'prompts' && 'category' in item) {
 			return String(item.category);
+		}
+		if (type === 'skills' && 'category' in item) {
+			return String(item.category);
+		}
+		if (type === 'customProviders' && 'displayName' in item) {
+			return String(item.displayName);
 		}
 		return null;
 	}
@@ -290,6 +298,7 @@ Uses data-driven loops for summary cards and entity lists.
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}
+
 
 	@media (max-width: 768px) {
 		.summary-cards {

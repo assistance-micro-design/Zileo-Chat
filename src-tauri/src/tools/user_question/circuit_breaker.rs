@@ -232,7 +232,6 @@ impl UserQuestionCircuitBreaker {
             }
         })
     }
-
 }
 
 #[cfg(test)]

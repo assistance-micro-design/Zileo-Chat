@@ -228,7 +228,6 @@ impl SubAgentCircuitBreaker {
     pub fn remaining_cooldown_secs(&self) -> u64 {
         self.remaining_cooldown().map(|d| d.as_secs()).unwrap_or(0)
     }
-
 }
 
 #[cfg(test)]
