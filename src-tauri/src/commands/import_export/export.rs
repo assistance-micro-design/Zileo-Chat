@@ -34,10 +34,6 @@ use super::helpers::{
     apply_mcp_sanitization, extract_optional_timestamp, load_mcp_preview, query_entity_by_id,
 };
 
-// ============================================================================
-// Export Commands
-// ============================================================================
-
 /// Prepares export preview data for the selected entities.
 ///
 /// Returns summaries of all selected entities plus MCP env var keys
@@ -248,10 +244,6 @@ pub async fn generate_export_file(
     Ok(json)
 }
 
-// ============================================================================
-// File Operations
-// ============================================================================
-
 /// Saves export content to a file at the specified path.
 ///
 /// # Arguments
@@ -306,10 +298,6 @@ pub async fn save_export_to_file(path: String, content: String) -> Result<usize,
 
     Ok(content.len())
 }
-
-// ============================================================================
-// Per-Entity Export Helpers
-// ============================================================================
 
 /// Exports agent entities from the database.
 async fn export_agents(

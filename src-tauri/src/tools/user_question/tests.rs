@@ -49,8 +49,6 @@ fn create_test_tool() -> UserQuestionTool {
     create_test_tool_sync()
 }
 
-// ===== Definition Tests =====
-
 #[test]
 fn test_definition_has_correct_id() {
     let tool = create_test_tool();
@@ -124,8 +122,6 @@ fn test_definition_requires_confirmation_is_false() {
     let def = tool.definition();
     assert!(!def.requires_confirmation);
 }
-
-// ===== validate_input Tests =====
 
 #[test]
 fn test_validate_input_missing_operation() {
@@ -213,7 +209,6 @@ fn test_validate_input_not_object() {
     assert!(err.to_string().contains("must be an object"));
 }
 
-// ===== Question Validation Tests (via execute - would need async) =====
 // Note: These tests demonstrate what WOULD be tested in integration tests.
 // For unit tests, we focus on synchronous validation in validate_input().
 
@@ -249,8 +244,6 @@ fn test_valid_statuses_constant() {
     );
 }
 
-// ===== Helper Tests for QuestionOption =====
-
 #[test]
 fn test_question_option_serialization() {
     let option = QuestionOption {
@@ -274,8 +267,6 @@ fn test_question_option_deserialization() {
     assert_eq!(option.id, "opt1");
     assert_eq!(option.label, "Option 1");
 }
-
-// ===== Edge Case Tests =====
 
 #[test]
 fn test_validate_input_empty_strings() {
@@ -323,8 +314,6 @@ fn test_validate_input_extra_fields() {
     assert!(result.is_ok());
 }
 
-// ===== Boundary Tests for Constants =====
-
 #[test]
 fn test_max_question_length_boundary() {
     // This would be tested in integration tests with execute()
@@ -347,8 +336,6 @@ fn test_timeout_is_reasonable() {
     assert!(timeout >= 60, "Timeout should be at least 1 minute");
     assert!(timeout <= 600, "Timeout should be at most 10 minutes");
 }
-
-// ===== Documentation Tests =====
 
 #[test]
 fn test_definition_description_mentions_question_types() {

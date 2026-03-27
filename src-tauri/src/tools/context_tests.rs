@@ -126,10 +126,6 @@ async fn test_context_without_cancellation_token() {
     assert!(context2.cancellation_token.is_none());
 }
 
-// =========================================================================
-// Circuit Breaker Tests
-// =========================================================================
-
 #[tokio::test]
 async fn test_context_with_circuit_breaker() {
     let state = create_test_state().await;

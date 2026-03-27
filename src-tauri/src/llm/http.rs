@@ -28,10 +28,6 @@ use crate::tools::utils::safe_truncate;
 use serde::Deserialize;
 use tracing::debug;
 
-// ============================================================================
-// Shared Content Types
-// ============================================================================
-
 /// Parsed content from an LLM API response, separating text from thinking blocks.
 ///
 /// Used by all providers that return reasoning model responses.
@@ -199,10 +195,6 @@ where
     deserializer.deserialize_any(ContentVisitor)
 }
 
-// ============================================================================
-// Shared Error Response Types
-// ============================================================================
-
 /// API error response format (shared across OpenAI-compatible APIs).
 ///
 /// Supports both `{"message": {...}}` and `{"error": {...}}` via serde alias.
@@ -217,10 +209,6 @@ pub struct ApiErrorResponse {
 pub struct ApiErrorDetail {
     pub message: String,
 }
-
-// ============================================================================
-// Shared HTTP Helpers
-// ============================================================================
 
 /// Sends an HTTP request and reads the response body as text.
 ///

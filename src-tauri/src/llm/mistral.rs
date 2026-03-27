@@ -34,10 +34,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
-// ============================================================================
-// Mistral API Request/Response Types
-// ============================================================================
-
 /// API request body for Mistral chat completions
 #[derive(Debug, Serialize)]
 struct MistralChatRequest {
@@ -85,10 +81,6 @@ struct MistralUsage {
     prompt_tokens: usize,
     completion_tokens: usize,
 }
-
-// ============================================================================
-// Function Calling Types (JSON format - OpenAI compatible)
-// ============================================================================
 
 /// API request body for Mistral chat completions with tools
 #[derive(Debug, Serialize)]

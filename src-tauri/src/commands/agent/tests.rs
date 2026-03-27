@@ -165,10 +165,6 @@ async fn test_multiple_agents_listing() {
     assert_eq!(agents.len(), 5);
 }
 
-// ========================================================================
-// Agent name uniqueness tests
-// ========================================================================
-
 /// Seeds an agent with a given name in the database, returns its UUID.
 /// Note: omit created_at/updated_at - schema defaults to time::now() (ERR_SURREAL_007).
 async fn seed_agent_in_db(db: &DBClient, name: &str) -> String {

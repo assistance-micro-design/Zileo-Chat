@@ -46,6 +46,7 @@ use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::sub_agent::SubAgentStatus;
 use crate::tools::context::AgentToolContext;
+use crate::tools::task_bridge::extract_task_ids;
 use crate::tools::utils::{resolve_agent_ref, sub_agent_description_template};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -99,6 +100,18 @@ fn validate_delegate_operation(input: &Value) -> ToolResult<()> {
                 .to_string(),
         ));
     }
+
+    // task_ids is optional, but if present must be a non-empty array
+    if let Some(task_ids) = input.get("task_ids") {
+        if let Some(arr) = task_ids.as_array() {
+            if arr.is_empty() {
+                return Err(ToolError::InvalidInput(
+                    "task_ids array cannot be empty if provided".to_string(),
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -125,6 +138,11 @@ fn delegate_task_input_schema() -> Value {
             "prompt": {
                 "type": "string",
                 "description": "COMPLETE prompt for the agent. Must include task, any data needed, and expected report format. This is the ONLY input the agent receives."
+            },
+            "task_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional task IDs to assign to the delegated agent. Tasks will be reassigned (agent_assigned updated) and their content injected into the agent's context. Use TodoTool to create tasks first."
             }
         },
         "required": ["operation"]
@@ -223,7 +241,7 @@ impl Tool for DelegateTaskTool {
     fn definition(&self) -> ToolDefinition {
         let tool_specific_desc = r#"Delegates tasks to existing permanent LLM agents.
 
-⚠️ LLM AGENTS ONLY - NOT MCP SERVERS:
+WARNING: LLM AGENTS ONLY - NOT MCP SERVERS:
 - Use agent_name (preferred) or agent_id (UUID) to identify the target agent
 - DO NOT use MCP server IDs here (e.g., "mcp-xxx-7tj9p")
 - For MCP tools, call them DIRECTLY: server_id:tool_name
@@ -237,14 +255,15 @@ DO NOT USE WHEN:
 - Simple single-step tasks that don't need agent expertise
 
 OPERATIONS:
-- delegate: Execute task via permanent agent (requires agent_name or agent_id + prompt)
+- delegate: Execute task via permanent agent (requires agent_name or agent_id + prompt, optional task_ids)
 - list_agents: Show available agents for delegation
 
-Note: Delegated agents receive ONLY the prompt string. Include all necessary context.
+Note: Delegated agents receive the prompt + any assigned tasks in context. Use TodoTool to create tasks first, then pass their IDs via task_ids.
 
 EXAMPLES:
 1. Delegate: {"operation": "delegate", "agent_name": "Database Agent", "prompt": "Analyze the users table..."}
-2. List: {"operation": "list_agents"}"#;
+2. With tasks: {"operation": "delegate", "agent_name": "DB Agent", "prompt": "Complete these tasks", "task_ids": ["task_1", "task_2"]}
+3. List: {"operation": "list_agents"}"#;
 
         ToolDefinition {
             id: "DelegateTaskTool".to_string(),
@@ -312,7 +331,8 @@ EXAMPLES:
 
                 // Resolve via ID or name lookup
                 let resolved_id = resolve_agent_ref(&self.registry, agent_ref).await?;
-                self.delegate(&resolved_id, prompt).await
+                let task_ids = extract_task_ids(&input);
+                self.delegate(&resolved_id, prompt, task_ids).await
             }
 
             "list_agents" => self.list_agents().await,

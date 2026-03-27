@@ -46,10 +46,6 @@ mod tests;
 use crate::constants::commands as cmd_const;
 use crate::llm::ProviderType;
 
-// ============================================================================
-// Validation Helpers (shared across submodules)
-// ============================================================================
-
 /// Validates a model ID string.
 ///
 /// Ensures the ID is non-empty, within length limits, and contains only safe

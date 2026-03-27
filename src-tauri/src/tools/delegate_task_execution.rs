@@ -24,6 +24,7 @@ use crate::models::sub_agent::{
 };
 use crate::models::Lifecycle;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
+use crate::tools::task_bridge::resolve_and_reassign_tasks;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
 use serde_json::Value;
@@ -31,7 +32,12 @@ use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 impl DelegateTaskTool {
-    pub(crate) async fn delegate(&self, agent_id: &str, prompt: &str) -> ToolResult<Value> {
+    pub(crate) async fn delegate(
+        &self,
+        agent_id: &str,
+        prompt: &str,
+        task_ids: Option<Vec<String>>,
+    ) -> ToolResult<Value> {
         // 1. Check if this agent is the primary (workflow starter)
         if !self.is_primary_agent {
             return Err(ToolError::PermissionDenied(
@@ -186,15 +192,28 @@ impl DelegateTaskTool {
         // 10c. Emit sub_agent_start event via unified executor
         executor.emit_start_event(agent_id, &agent_name, prompt);
 
-        // 11. Create task for agent
+        // 10d. Resolve task_ids if provided
+        let assigned_tasks = if let Some(ref ids) = task_ids {
+            Some(resolve_and_reassign_tasks(&self.db, ids, &self.workflow_id, agent_id).await?)
+        } else {
+            None
+        };
+
+        // 11. Create task for agent with optional assigned_tasks in context
+        let mut context = serde_json::json!({
+            "workflow_id": self.workflow_id,
+            "delegator_agent_id": self.current_agent_id,
+            "is_delegation": true
+        });
+
+        if let Some(ref tasks) = assigned_tasks {
+            context["assigned_tasks"] = serde_json::json!(tasks);
+        }
+
         let task = Task {
             id: format!("delegate_{}", Uuid::new_v4()),
             description: prompt.to_string(),
-            context: serde_json::json!({
-                "workflow_id": self.workflow_id,
-                "delegator_agent_id": self.current_agent_id,
-                "is_delegation": true
-            }),
+            context,
         };
 
         // 12. Execute via unified executor with retry and heartbeat monitoring

@@ -6,8 +6,6 @@ fn calculator() -> CalculatorTool {
     CalculatorTool::new()
 }
 
-// ==================== Unary Operations ====================
-
 #[tokio::test]
 async fn test_sin_zero() {
     let tool = calculator();
@@ -317,8 +315,6 @@ async fn test_trunc() {
     assert!((res - (-3.0)).abs() < 1e-10);
 }
 
-// ==================== Binary Operations ====================
-
 #[tokio::test]
 async fn test_add() {
     let tool = calculator();
@@ -494,8 +490,6 @@ async fn test_nroot_negative_even_error() {
     assert!(result.is_err());
 }
 
-// ==================== Constants ====================
-
 #[tokio::test]
 async fn test_constant_pi() {
     let tool = calculator();
@@ -572,8 +566,6 @@ async fn test_constant_unknown() {
     assert!(result.is_err());
 }
 
-// ==================== Validation ====================
-
 #[test]
 fn test_validate_missing_operation() {
     let tool = calculator();
@@ -642,8 +634,6 @@ fn test_validate_valid_constant() {
     let result = tool.validate_input(&json!({"operation": "constant", "name": "pi"}));
     assert!(result.is_ok());
 }
-
-// ==================== Tool Trait ====================
 
 #[test]
 fn test_definition() {

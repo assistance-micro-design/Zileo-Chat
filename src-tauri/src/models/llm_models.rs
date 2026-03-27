@@ -21,10 +21,6 @@ use crate::llm::{ProviderType, DEFAULT_OLLAMA_URL};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-// ============================================================================
-// LLM Model
-// ============================================================================
-
 /// LLM model definition (builtin or custom).
 ///
 /// Models can be either builtin (shipped with the application and immutable)
@@ -110,10 +106,6 @@ impl LLMModel {
         }
     }
 }
-
-// ============================================================================
-// Create Model Request
-// ============================================================================
 
 /// Request payload for creating a new custom model.
 ///
@@ -222,10 +214,6 @@ impl CreateModelRequest {
         Ok(())
     }
 }
-
-// ============================================================================
-// Update Model Request
-// ============================================================================
 
 /// Request payload for updating an existing model.
 ///
@@ -374,10 +362,6 @@ impl UpdateModelRequest {
     }
 }
 
-// ============================================================================
-// Provider Settings
-// ============================================================================
-
 /// Configuration settings for a provider.
 ///
 /// Stores per-provider settings including enabled state, default model,
@@ -426,10 +410,6 @@ impl ProviderSettings {
     }
 }
 
-// ============================================================================
-// Connection Test Result
-// ============================================================================
-
 /// Result of a provider connection test.
 ///
 /// Contains success status, latency measurement, and any error details.
@@ -476,10 +456,6 @@ impl ConnectionTestResult {
 pub fn get_all_builtin_models() -> Vec<LLMModel> {
     Vec::new()
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

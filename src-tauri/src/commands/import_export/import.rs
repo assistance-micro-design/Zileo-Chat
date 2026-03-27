@@ -34,10 +34,6 @@ use super::import_ops::{
     import_skills,
 };
 
-// ============================================================================
-// Import Commands
-// ============================================================================
-
 /// Validates an import file and detects conflicts with existing entities.
 ///
 /// # Returns
@@ -279,10 +275,6 @@ pub async fn execute_import(
     })
 }
 
-// ============================================================================
-// Per-Entity Validation Helpers
-// ============================================================================
-
 /// Builds agent summaries and detects name conflicts.
 async fn validate_agents(
     db: &DBClient,
@@ -442,10 +434,6 @@ async fn validate_custom_providers(
     }
     summaries
 }
-
-// ============================================================================
-// Cross-Dependency Validation (v1.1)
-// ============================================================================
 
 /// Validates cross-entity dependencies and generates structured warnings.
 /// Checks that agents' referenced models, MCP servers, skills, and custom providers
@@ -616,10 +604,6 @@ async fn name_exists_in_db(db: &DBClient, table: &str, name: &str) -> bool {
         .unwrap_or_default();
     results.first().and_then(|r| r["c"].as_u64()).unwrap_or(0) > 0
 }
-
-// ============================================================================
-// Post-Import Actions (v1.1)
-// ============================================================================
 
 /// Generates actionable post-import items for entities that were actually imported.
 /// Re-checks dependencies after import to account for entities created during import.

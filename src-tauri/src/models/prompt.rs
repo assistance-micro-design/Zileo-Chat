@@ -34,8 +34,6 @@ static SKILL_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\{\{skill:([a-zA-Z0-9_-]+)\}\}").expect("Invalid skill regex pattern")
 });
 
-// ===== Enums =====
-
 /// Category for organizing prompts
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -61,8 +59,6 @@ impl std::fmt::Display for PromptCategory {
         }
     }
 }
-
-// ===== Structs =====
 
 /// Variable detected in prompt content
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,8 +121,6 @@ pub struct PromptUpdate {
     pub content: Option<String>,
 }
 
-// ===== Variable Detection and Interpolation =====
-
 impl Prompt {
     /// Extract variables from content using {{variable_name}} pattern
     ///
@@ -185,13 +179,9 @@ impl From<&Prompt> for PromptSummary {
     }
 }
 
-// ===== Validation Constants =====
-
 pub const MAX_PROMPT_NAME_LEN: usize = 128;
 pub const MAX_PROMPT_DESCRIPTION_LEN: usize = 1000;
 pub const MAX_PROMPT_CONTENT_LEN: usize = 50000;
-
-// ===== Tests =====
 
 #[cfg(test)]
 mod tests {
@@ -275,8 +265,6 @@ mod tests {
         assert_eq!(summary.name, "Test Prompt");
         assert_eq!(summary.variables_count, 1);
     }
-
-    // ===== Skill Interpolation Tests =====
 
     #[test]
     fn test_interpolate_skills_basic() {

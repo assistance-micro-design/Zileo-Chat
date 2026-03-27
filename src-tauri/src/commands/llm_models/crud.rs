@@ -38,10 +38,6 @@ const LLM_MODEL_SELECT_COLUMNS: &str =
      (cache_write_price_per_mtok ?? 0.0) AS cache_write_price_per_mtok, \
      created_at, updated_at";
 
-// ============================================================================
-// List / Get
-// ============================================================================
-
 /// Lists all LLM models, optionally filtered by provider.
 #[tauri::command]
 #[instrument(name = "list_models", skip(state), fields(provider))]
@@ -173,10 +169,6 @@ pub async fn get_model_by_api_name(
         format!("Model not found: {} (provider: {})", api_name, provider)
     })
 }
-
-// ============================================================================
-// Create / Update / Delete
-// ============================================================================
 
 /// Creates a new custom LLM model.
 #[tauri::command]

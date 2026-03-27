@@ -31,10 +31,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
-// ============================================================================
-// OpenAI-compatible API Types
-// ============================================================================
-
 /// API request body for chat completions
 #[derive(Debug, Serialize)]
 struct ChatRequest {
@@ -83,10 +79,6 @@ struct ChatUsage {
     completion_tokens: usize,
 }
 
-// ============================================================================
-// Function Calling Types
-// ============================================================================
-
 /// API request body for chat completions with tools
 #[derive(Debug, Serialize)]
 struct ToolChatRequest {
@@ -103,10 +95,6 @@ struct ToolChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
 }
-
-// ============================================================================
-// OpenAI-Compatible Provider
-// ============================================================================
 
 /// Generic provider for any OpenAI-compatible API.
 ///

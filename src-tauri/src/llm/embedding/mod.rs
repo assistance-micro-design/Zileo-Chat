@@ -40,10 +40,6 @@ use thiserror::Error;
 #[cfg(test)]
 use super::ollama::DEFAULT_OLLAMA_URL;
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 /// Mistral embedding API endpoint
 pub(crate) const MISTRAL_EMBEDDING_URL: &str = "https://api.mistral.ai/v1/embeddings";
 
@@ -72,10 +68,6 @@ pub const MAX_BATCH_SIZE: usize = 96;
 
 /// Default timeout for embedding requests (milliseconds)
 pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
-
-// ============================================================================
-// Error Types
-// ============================================================================
 
 /// Errors that can occur during embedding operations
 #[derive(Debug, Error)]
@@ -124,10 +116,6 @@ impl From<reqwest::Error> for EmbeddingError {
         }
     }
 }
-
-// ============================================================================
-// Provider Configuration
-// ============================================================================
 
 /// Embedding provider configuration
 #[derive(Debug, Clone)]
@@ -215,10 +203,6 @@ impl EmbeddingProvider {
         }
     }
 }
-
-// ============================================================================
-// Configuration Types
-// ============================================================================
 
 /// Embedding configuration for persistence
 #[cfg(test)]

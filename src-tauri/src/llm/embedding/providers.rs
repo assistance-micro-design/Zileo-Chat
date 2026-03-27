@@ -22,10 +22,6 @@ use tracing::{debug, warn};
 
 use super::{EmbeddingError, MISTRAL_EMBEDDING_URL};
 
-// ============================================================================
-// API Request/Response Types
-// ============================================================================
-
 /// Mistral embedding API request
 #[derive(Debug, Serialize)]
 pub(super) struct MistralEmbeddingRequest<'a> {
@@ -78,10 +74,6 @@ pub(super) struct OllamaEmbeddingRequest<'a> {
 pub(super) struct OllamaEmbeddingResponse {
     pub embedding: Vec<f32>,
 }
-
-// ============================================================================
-// Mistral Embedding
-// ============================================================================
 
 /// Embeds text using Mistral API.
 pub async fn embed_mistral(
@@ -198,10 +190,6 @@ pub async fn embed_batch_mistral(
 
     Ok(embeddings)
 }
-
-// ============================================================================
-// Ollama Embedding
-// ============================================================================
 
 /// Embeds text using Ollama API.
 pub async fn embed_ollama(

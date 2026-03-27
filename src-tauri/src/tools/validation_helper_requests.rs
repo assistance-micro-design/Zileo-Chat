@@ -31,10 +31,6 @@ use uuid::Uuid;
 use super::utils::safe_truncate;
 
 impl ValidationHelper {
-    // =========================================================================
-    // Sub-Agent Validation
-    // =========================================================================
-
     /// Requests validation for a sub-agent operation.
     ///
     /// Checks ValidationSettings, then delegates to `create_and_wait_validation()`.
@@ -149,10 +145,6 @@ impl ValidationHelper {
         })
     }
 
-    // =========================================================================
-    // Local Tool Validation
-    // =========================================================================
-
     /// Requests validation for a local tool execution.
     ///
     /// # Arguments
@@ -214,10 +206,6 @@ impl ValidationHelper {
             "arguments_preview": safe_truncate(&arguments.to_string(), 200, true)
         })
     }
-
-    // =========================================================================
-    // MCP Tool Validation
-    // =========================================================================
 
     /// Requests validation for an MCP server tool call.
     ///
@@ -282,10 +270,6 @@ impl ValidationHelper {
             "arguments_preview": safe_truncate(&arguments.to_string(), 200, true)
         })
     }
-
-    // =========================================================================
-    // File Operation Validation
-    // =========================================================================
 
     /// Requests validation for a destructive file operation.
     ///

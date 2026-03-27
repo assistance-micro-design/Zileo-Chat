@@ -1,85 +1,7 @@
 use super::tool::TodoTool;
 use crate::db::DBClient;
-use crate::tools::{Tool, ToolDefinition, ToolError};
+use crate::tools::{Tool, ToolError};
 use std::sync::Arc;
-
-#[test]
-fn test_tool_definition() {
-    let definition = ToolDefinition {
-        id: "TodoTool".to_string(),
-        name: "Todo Task Manager".to_string(),
-        summary: "Manage a structured task list for complex workflows".to_string(),
-        description: "Todo task manager tool for tests".to_string(),
-        input_schema: serde_json::json!({}),
-        output_schema: serde_json::json!({}),
-        requires_confirmation: false,
-    };
-
-    assert_eq!(definition.id, "TodoTool");
-    assert!(!definition.requires_confirmation);
-}
-
-#[test]
-fn test_input_validation_create() {
-    let valid_input = serde_json::json!({
-        "operation": "create",
-        "name": "Test task",
-        "description": "A test task",
-        "priority": 2
-    });
-
-    assert!(valid_input.is_object());
-    assert_eq!(valid_input["operation"], "create");
-    assert!(valid_input.get("name").is_some());
-}
-
-#[test]
-fn test_input_validation_update_status() {
-    let valid_input = serde_json::json!({
-        "operation": "update_status",
-        "task_id": "task_001",
-        "status": "in_progress"
-    });
-
-    assert!(valid_input.is_object());
-    assert!(valid_input.get("task_id").is_some());
-    assert!(valid_input.get("status").is_some());
-}
-
-#[test]
-fn test_input_validation_list() {
-    let valid_input = serde_json::json!({
-        "operation": "list",
-        "status_filter": "pending"
-    });
-
-    assert!(valid_input.is_object());
-    assert_eq!(valid_input["operation"], "list");
-}
-
-#[test]
-fn test_priority_values() {
-    for p in 1..=5u8 {
-        assert!((1..=5).contains(&p));
-    }
-
-    assert!(!(1..=5).contains(&0u8));
-    assert!(!(1..=5).contains(&6u8));
-}
-
-#[test]
-fn test_valid_statuses() {
-    let valid_statuses = ["pending", "in_progress", "completed", "blocked"];
-
-    assert!(valid_statuses.contains(&"pending"));
-    assert!(valid_statuses.contains(&"in_progress"));
-    assert!(valid_statuses.contains(&"completed"));
-    assert!(valid_statuses.contains(&"blocked"));
-    assert!(!valid_statuses.contains(&"done"));
-    assert!(!valid_statuses.contains(&"started"));
-}
-
-// ==================== Integration Tests ====================
 
 mod integration {
     use super::*;
@@ -93,7 +15,13 @@ mod integration {
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let tool = TodoTool::new(db, "wf_test".to_string(), "test_agent".to_string(), None);
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "test_agent".to_string(),
+            None,
+            true,
+        );
 
         (tool, temp_dir)
     }
@@ -466,9 +394,285 @@ mod integration {
             other => panic!("Expected NotFound error, got: {:?}", other),
         }
     }
-}
+    #[tokio::test]
+    async fn test_list_agent_tasks_requires_primary() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_agent_tasks_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
 
-// ==================== SQL Injection Tests ====================
+        // Sub-agent (is_primary_agent = false)
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "sub_agent".to_string(),
+            None,
+            false,
+        );
+
+        let input = serde_json::json!({
+            "operation": "list_agent_tasks",
+            "agent_id": "other_agent"
+        });
+
+        let result = tool.execute(input).await;
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::PermissionDenied(msg)) => {
+                assert!(msg.contains("primary agent"));
+            }
+            other => panic!("Expected PermissionDenied, got: {:?}", other),
+        }
+    }
+
+    /// Helper to create a minimal agent record in DB for resolve_agent_ref tests.
+    async fn create_agent_record(db: &DBClient, agent_id: &str, name: &str) {
+        db.execute_with_params(
+            &format!(
+                "CREATE agent:`{}` SET \
+                 name = $name, \
+                 lifecycle = 'permanent', \
+                 system_prompt = 'test', \
+                 tools = [], \
+                 mcp_servers = [], \
+                 skills = [], \
+                 folders = [], \
+                 llm = {{ provider: 'ollama', model: 'test', temperature: 0.7, max_tokens: 1000 }}, \
+                 max_tool_iterations = 10",
+                agent_id
+            ),
+            vec![("name".to_string(), serde_json::json!(name))],
+        )
+        .await
+        .expect("Create agent record should work");
+    }
+
+    #[tokio::test]
+    async fn test_list_agent_tasks_primary_succeeds() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_list_agent_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        // Create agent record so resolve_agent_ref works
+        create_agent_record(&db, "test_agent", "Test Agent").await;
+
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "test_agent".to_string(),
+            None,
+            true,
+        );
+
+        // Create a task assigned to test_agent
+        let create_input = serde_json::json!({
+            "operation": "create",
+            "name": "Agent task",
+            "description": "Assigned to test_agent",
+            "priority": 1
+        });
+        tool.execute(create_input)
+            .await
+            .expect("Create should work");
+
+        // Lookup by ID
+        let input = serde_json::json!({
+            "operation": "list_agent_tasks",
+            "agent_id": "test_agent"
+        });
+
+        let result = tool.execute(input).await;
+        assert!(
+            result.is_ok(),
+            "list_agent_tasks should succeed: {:?}",
+            result
+        );
+
+        let response = result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["agent_id"], "test_agent");
+        assert_eq!(response["total"], 1);
+
+        // Lookup by name
+        let input_by_name = serde_json::json!({
+            "operation": "list_agent_tasks",
+            "agent_name": "Test Agent"
+        });
+
+        let result_by_name = tool.execute(input_by_name).await;
+        assert!(
+            result_by_name.is_ok(),
+            "list_agent_tasks by name should succeed: {:?}",
+            result_by_name
+        );
+
+        let response_by_name = result_by_name.unwrap();
+        assert_eq!(response_by_name["total"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_reassign_tasks_requires_primary() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_reassign_perm_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "sub_agent".to_string(),
+            None,
+            false,
+        );
+
+        let input = serde_json::json!({
+            "operation": "reassign_tasks",
+            "task_ids": ["task_1"],
+            "new_agent_id": "other_agent"
+        });
+
+        let result = tool.execute(input).await;
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::PermissionDenied(msg)) => {
+                assert!(msg.contains("primary agent"));
+            }
+            other => panic!("Expected PermissionDenied, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reassign_tasks_validates_empty_ids() {
+        let (tool, _temp) = create_test_tool().await;
+
+        let input = serde_json::json!({
+            "operation": "reassign_tasks",
+            "task_ids": [],
+            "new_agent_id": "other_agent"
+        });
+
+        let result = tool.execute(input).await;
+        assert!(result.is_err());
+        match result {
+            Err(ToolError::InvalidInput(msg)) => {
+                assert!(msg.contains("empty"));
+            }
+            other => panic!("Expected InvalidInput, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reassign_tasks_succeeds() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_reassign_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        // Create agent records so resolve_agent_ref works
+        create_agent_record(&db, "test_agent", "Test Agent").await;
+        create_agent_record(&db, "new_agent", "New Agent").await;
+
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "test_agent".to_string(),
+            None,
+            true,
+        );
+
+        // Create a task
+        let create_result = tool
+            .execute(serde_json::json!({
+                "operation": "create",
+                "name": "Task to reassign",
+                "priority": 1
+            }))
+            .await
+            .expect("Create should work");
+        let task_id = create_result["task_id"].as_str().unwrap().to_string();
+
+        // Reassign by ID
+        let input = serde_json::json!({
+            "operation": "reassign_tasks",
+            "task_ids": [task_id],
+            "new_agent_id": "new_agent"
+        });
+
+        let result = tool.execute(input).await;
+        assert!(result.is_ok(), "reassign should succeed: {:?}", result);
+
+        let response = result.unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["reassigned_count"], 1);
+        assert_eq!(response["new_agent_id"], "new_agent");
+    }
+
+    #[tokio::test]
+    async fn test_subagent_only_sees_own_tasks() {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test_scoping_db");
+        let db_path_str = db_path.to_str().unwrap().to_string();
+        let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
+        db.initialize_schema().await.expect("Schema init failed");
+
+        // Primary creates tasks assigned to different agents
+        let primary = TodoTool::new(
+            db.clone(),
+            "wf_test".to_string(),
+            "primary_agent".to_string(),
+            None,
+            true,
+        );
+
+        primary
+            .execute(serde_json::json!({
+                "operation": "create",
+                "name": "Primary task",
+                "priority": 1
+            }))
+            .await
+            .expect("Create should work");
+
+        // Sub-agent creates a task (auto-assigned to sub_agent)
+        let sub = TodoTool::new(
+            db.clone(),
+            "wf_test".to_string(),
+            "sub_agent".to_string(),
+            None,
+            false,
+        );
+
+        sub.execute(serde_json::json!({
+            "operation": "create",
+            "name": "Sub task",
+            "priority": 2
+        }))
+        .await
+        .expect("Create should work");
+
+        // Primary sees all tasks
+        let primary_list = primary
+            .execute(serde_json::json!({"operation": "list"}))
+            .await
+            .unwrap();
+        assert_eq!(primary_list["count"], 2, "Primary should see all tasks");
+
+        // Sub-agent only sees its own task
+        let sub_list = sub
+            .execute(serde_json::json!({"operation": "list"}))
+            .await
+            .unwrap();
+        assert_eq!(sub_list["count"], 1, "Sub-agent should only see own tasks");
+
+        let task_name = sub_list["tasks"][0]["name"].as_str().unwrap();
+        assert_eq!(task_name, "Sub task");
+    }
+}
 
 mod sql_injection {
     use super::*;
@@ -482,7 +686,13 @@ mod sql_injection {
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
         db.initialize_schema().await.expect("Schema init failed");
 
-        let tool = TodoTool::new(db, "wf_test".to_string(), "test_agent".to_string(), None);
+        let tool = TodoTool::new(
+            db,
+            "wf_test".to_string(),
+            "test_agent".to_string(),
+            None,
+            true,
+        );
 
         (tool, temp_dir)
     }
@@ -683,6 +893,7 @@ mod sql_injection {
             "wf_test' OR '1'='1".to_string(),
             "test_agent".to_string(),
             None,
+            true,
         );
 
         let create_input = serde_json::json!({

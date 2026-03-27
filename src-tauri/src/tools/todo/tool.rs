@@ -46,6 +46,9 @@ pub struct TodoTool {
     pub(crate) agent_id: String,
     /// Tauri app handle for emitting streaming events
     pub(crate) app_handle: Option<AppHandle>,
+    /// Whether this is the primary workflow agent.
+    /// Primary agents see all workflow tasks; sub-agents only see their own.
+    pub(crate) is_primary_agent: bool,
 }
 
 impl TodoTool {
@@ -56,22 +59,26 @@ impl TodoTool {
     /// * `workflow_id` - Workflow ID to scope tasks to
     /// * `agent_id` - Agent ID using this tool
     /// * `app_handle` - Optional Tauri app handle for emitting events
+    /// * `is_primary_agent` - Whether this is the primary workflow agent.
+    ///   Primary agents see all tasks; sub-agents only see their own.
     ///
     /// # Example
     /// ```ignore
-    /// let tool = TodoTool::new(db.clone(), "wf_001".into(), "db_agent".into(), None);
+    /// let tool = TodoTool::new(db.clone(), "wf_001".into(), "db_agent".into(), None, true);
     /// ```
     pub fn new(
         db: Arc<DBClient>,
         workflow_id: String,
         agent_id: String,
         app_handle: Option<AppHandle>,
+        is_primary_agent: bool,
     ) -> Self {
         Self {
             db,
             workflow_id,
             agent_id,
             app_handle,
+            is_primary_agent,
         }
     }
 }
@@ -91,6 +98,8 @@ USE THIS TOOL WHEN:
 - Breaking down a complex task into smaller, trackable steps
 - Tracking the status of a multi-step workflow
 - You need to report progress to the user
+- Reviewing tasks assigned to a sub-agent (primary agent only)
+- Reassigning tasks between agents (primary agent only)
 
 DO NOT USE THIS TOOL WHEN:
 - Simple, single-step task (just do it directly)
@@ -100,21 +109,25 @@ OPERATIONS:
 - create: Create new task (name, optional description, priority 1-5)
 - get: Get task details by ID
 - update_status: Change status (pending/in_progress/completed/blocked)
-- list: List tasks (optional status_filter)
+- list: List tasks (optional status_filter). Sub-agents only see their own tasks.
 - complete: Mark task as completed with optional duration_ms
 - delete: Remove a task
+- list_agent_tasks: List tasks assigned to a specific agent with completion stats (primary only)
+- reassign_tasks: Reassign tasks to a different agent (primary only)
 
 EXAMPLES:
 1. Create: {"operation": "create", "name": "Analyze DB schema", "priority": 1}
 2. Start: {"operation": "update_status", "task_id": "uuid", "status": "in_progress"}
-3. Complete: {"operation": "complete", "task_id": "uuid", "duration_ms": 5000}"#
+3. Complete: {"operation": "complete", "task_id": "uuid", "duration_ms": 5000}
+4. Review: {"operation": "list_agent_tasks", "agent_name": "Database Agent"}
+5. Reassign: {"operation": "reassign_tasks", "task_ids": ["id1", "id2"], "agent_name": "Security Agent"}"#
                     .to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "operation": {
                         "type": "string",
-                        "enum": ["create", "get", "update_status", "list", "complete", "delete"],
+                        "enum": ["create", "get", "update_status", "list", "complete", "delete", "list_agent_tasks", "reassign_tasks"],
                         "description": "Operation to perform"
                     },
                     "name": {
@@ -154,6 +167,23 @@ EXAMPLES:
                     "duration_ms": {
                         "type": "integer",
                         "description": "Execution duration in milliseconds (for complete)"
+                    },
+                    "agent_id": {
+                        "type": "string",
+                        "description": "Target agent ID or name (for list_agent_tasks). Either agent_id or agent_name required."
+                    },
+                    "agent_name": {
+                        "type": "string",
+                        "description": "Target agent name (for list_agent_tasks/reassign_tasks). Alternative to agent_id/new_agent_id."
+                    },
+                    "task_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Task IDs to reassign (for reassign_tasks)"
+                    },
+                    "new_agent_id": {
+                        "type": "string",
+                        "description": "New agent ID or name for reassignment (for reassign_tasks). Either new_agent_id or agent_name required."
                     }
                 },
                 "required": ["operation"]
@@ -243,6 +273,47 @@ EXAMPLES:
                 self.delete_task(task_id).await
             }
 
+            "list_agent_tasks" => {
+                let agent_ref = input["agent_id"]
+                    .as_str()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| {
+                        input["agent_name"]
+                            .as_str()
+                            .filter(|s| !s.trim().is_empty())
+                    })
+                    .ok_or_else(|| {
+                        ToolError::InvalidInput(
+                            "Missing 'agent_id' or 'agent_name' for list_agent_tasks".to_string(),
+                        )
+                    })?;
+                let status_filter = input["status_filter"].as_str();
+                self.list_agent_tasks(agent_ref, status_filter).await
+            }
+
+            "reassign_tasks" => {
+                let task_ids: Vec<String> = input["task_ids"]
+                    .as_array()
+                    .ok_or_else(|| ToolError::InvalidInput("Missing task_ids array".to_string()))?
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+                let new_agent_ref = input["new_agent_id"]
+                    .as_str()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| {
+                        input["agent_name"]
+                            .as_str()
+                            .filter(|s| !s.trim().is_empty())
+                    })
+                    .ok_or_else(|| {
+                        ToolError::InvalidInput(
+                            "Missing 'new_agent_id' or 'agent_name' for reassign_tasks".to_string(),
+                        )
+                    })?;
+                self.reassign_tasks(&task_ids, new_agent_ref).await
+            }
+
             _ => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",
                 operation
@@ -298,6 +369,41 @@ EXAMPLES:
                 }
             }
             "list" => {} // No required params
+            "list_agent_tasks" => {
+                let has_agent_id = input
+                    .get("agent_id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.trim().is_empty());
+                let has_agent_name = input
+                    .get("agent_name")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.trim().is_empty());
+                if !has_agent_id && !has_agent_name {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'agent_id' or 'agent_name' for list_agent_tasks".to_string(),
+                    ));
+                }
+            }
+            "reassign_tasks" => {
+                if input.get("task_ids").is_none() {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'task_ids' for reassign_tasks".to_string(),
+                    ));
+                }
+                let has_new_agent_id = input
+                    .get("new_agent_id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.trim().is_empty());
+                let has_agent_name = input
+                    .get("agent_name")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|s| !s.trim().is_empty());
+                if !has_new_agent_id && !has_agent_name {
+                    return Err(ToolError::InvalidInput(
+                        "Missing 'new_agent_id' or 'agent_name' for reassign_tasks".to_string(),
+                    ));
+                }
+            }
             _ => {
                 return Err(ToolError::InvalidInput(format!(
                     "Unknown operation: {}",

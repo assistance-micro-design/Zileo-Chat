@@ -319,10 +319,6 @@ fn test_deserialize_mcp_call_log_from_legacy_object_params() {
     assert_eq!(log.result[0]["name"], "MyClass");
 }
 
-// =========================================================================
-// MCP HTTP warning tests
-// =========================================================================
-
 #[test]
 fn test_check_mcp_http_warning_docker_no_warning() {
     let config = MCPServerConfig {

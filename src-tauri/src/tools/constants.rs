@@ -17,7 +17,6 @@
 //! Application-wide constants (workflow, query_limits, commands) are in
 //! [`crate::constants`].
 
-// ===== Memory Tool =====
 pub mod memory {
     pub const MAX_CONTENT_LENGTH: usize = 50_000;
     pub const DEFAULT_LIMIT: usize = 10;
@@ -48,7 +47,6 @@ pub mod memory {
     pub const GENERAL_SCOPE_TYPES: &[&str] = &["user_pref", "knowledge"];
 }
 
-// ===== Todo Tool =====
 pub mod todo {
     pub const MAX_NAME_LENGTH: usize = 128;
     pub const MAX_DESCRIPTION_LENGTH: usize = 1000;
@@ -61,7 +59,6 @@ pub mod todo {
     pub const TASK_SELECT_FIELDS: &str = "meta::id(id) AS id, workflow_id, name, description, agent_assigned, priority, status, dependencies, duration_ms, created_at, completed_at";
 }
 
-// ===== User Question Tool =====
 #[allow(dead_code)]
 pub mod user_question {
     pub const MAX_QUESTION_LENGTH: usize = 2000;
@@ -89,7 +86,6 @@ pub mod user_question {
     pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
 }
 
-// ===== Sub-Agent Tools =====
 #[allow(unused_imports)]
 pub mod sub_agent {
     pub use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
@@ -136,7 +132,6 @@ pub mod sub_agent {
     pub const INITIAL_RETRY_DELAY_MS: u64 = 500;
 }
 
-// ===== Calculator Tool =====
 #[allow(dead_code)]
 pub mod calculator {
     /// Maximum supported value (to prevent overflow)

@@ -152,7 +152,8 @@ impl ToolFactory {
 
             "TodoTool" => {
                 let wf_id = workflow_id.unwrap_or_else(|| "default".to_string());
-                let tool = TodoTool::new(self.db.clone(), wf_id, agent_id, app_handle);
+                // Default to primary agent when created via create_tool() (backward compat)
+                let tool = TodoTool::new(self.db.clone(), wf_id, agent_id, app_handle, true);
                 info!("TodoTool instance created");
                 Ok(Arc::new(tool))
             }
@@ -307,8 +308,25 @@ impl ToolFactory {
         }
 
         match tool_name {
-            // Basic tools (delegate to create_tool)
-            "MemoryTool" | "TodoTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool"
+            // TodoTool needs is_primary_agent for scoping (sub-agents only see own tasks)
+            "TodoTool" => {
+                let wf_id = workflow_id.unwrap_or_else(|| "default".to_string());
+                let tool = TodoTool::new(
+                    self.db.clone(),
+                    wf_id,
+                    agent_id,
+                    context.app_handle.clone(),
+                    is_primary_agent,
+                );
+                info!(
+                    is_primary_agent = is_primary_agent,
+                    "TodoTool instance created with context"
+                );
+                Ok(Arc::new(tool))
+            }
+
+            // Other basic tools (delegate to create_tool)
+            "MemoryTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool"
             | "FileManagerTool" => {
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)

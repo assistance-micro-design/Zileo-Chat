@@ -343,7 +343,6 @@ async fn main() -> anyhow::Result<()> {
             commands::user_question::skip_question,
         ])
         .setup(|app| {
-            // === Create native Help menu with legal notices ===
             let legal_notice = MenuItemBuilder::with_id("legal-notice", "Mentions l\u{00e9}gales")
                 .build(app)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

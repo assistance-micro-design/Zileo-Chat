@@ -91,10 +91,6 @@ fn test_inactivity_timeout_constants() {
     );
 }
 
-// =========================================================================
-// CancellationToken Tests
-// =========================================================================
-
 #[test]
 fn test_cancellation_token_clone_shares_state() {
     let token = CancellationToken::new();
@@ -137,10 +133,6 @@ async fn test_cancellation_token_async_cancellation() {
     assert!(result.is_ok(), "Task should complete after cancellation");
     assert_eq!(result.unwrap().unwrap(), "cancelled");
 }
-
-// =========================================================================
-// Retry with Exponential Backoff Tests
-// =========================================================================
 
 #[test]
 fn test_retry_constants() {
@@ -260,10 +252,6 @@ fn test_is_retryable_error_unknown_errors() {
     ));
     assert!(!SubAgentExecutor::is_retryable_error(""));
 }
-
-// =========================================================================
-// Correlation ID (parent_execution_id) Tests
-// =========================================================================
 
 #[test]
 fn test_create_execution_record_with_parent_default_none() {

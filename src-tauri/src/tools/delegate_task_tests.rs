@@ -1,21 +1,5 @@
 use super::*;
-use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, DelegateResult, SubAgentMetrics};
-
-#[test]
-fn test_tool_definition() {
-    let definition = ToolDefinition {
-        id: "DelegateTaskTool".to_string(),
-        name: "Delegate Task".to_string(),
-        summary: "Delegate a task to the parent orchestrator agent".to_string(),
-        description: "Delegate task tool for tests".to_string(),
-        input_schema: serde_json::json!({}),
-        output_schema: serde_json::json!({}),
-        requires_confirmation: false,
-    };
-
-    assert_eq!(definition.id, "DelegateTaskTool");
-    assert!(!definition.requires_confirmation);
-}
+use crate::models::sub_agent::{DelegateResult, SubAgentMetrics};
 
 #[test]
 fn test_active_delegation_serialization() {
@@ -31,30 +15,6 @@ fn test_active_delegation_serialization() {
     assert!(json.contains("db_agent"));
     assert!(json.contains("Database Agent"));
     assert!(json.contains("running"));
-}
-
-#[test]
-fn test_input_validation_delegate() {
-    let valid_input = serde_json::json!({
-        "operation": "delegate",
-        "agent_id": "db_agent",
-        "prompt": "Analyze the database schema"
-    });
-
-    assert!(valid_input.is_object());
-    assert_eq!(valid_input["operation"], "delegate");
-    assert!(valid_input.get("agent_id").is_some());
-    assert!(valid_input.get("prompt").is_some());
-}
-
-#[test]
-fn test_input_validation_list() {
-    let valid_input = serde_json::json!({
-        "operation": "list_agents"
-    });
-
-    assert!(valid_input.is_object());
-    assert_eq!(valid_input["operation"], "list_agents");
 }
 
 #[test]
@@ -75,13 +35,6 @@ fn test_delegate_result_serialization() {
     assert!(json.contains("\"agent_id\":\"db_agent\""));
     assert!(json.contains("\"duration_ms\":1500"));
 }
-
-#[test]
-fn test_max_sub_agents_constant() {
-    assert_eq!(MAX_SUB_AGENTS, 15);
-}
-
-// --- DelegateTaskTool accepts agent_name ---
 
 #[test]
 fn test_validate_input_accepts_agent_id() {
@@ -128,5 +81,55 @@ fn test_definition_has_agent_name_property() {
     assert!(
         properties.contains_key("agent_id"),
         "Schema must still contain agent_id property"
+    );
+}
+
+#[test]
+fn test_definition_has_task_ids_property() {
+    let schema = delegate_task_input_schema();
+    let properties = schema["properties"].as_object().unwrap();
+    assert!(
+        properties.contains_key("task_ids"),
+        "Schema must contain task_ids property"
+    );
+}
+
+#[test]
+fn test_validate_delegate_with_task_ids() {
+    let input = serde_json::json!({
+        "operation": "delegate",
+        "agent_name": "DB Agent",
+        "prompt": "Analyze",
+        "task_ids": ["task_1", "task_2"]
+    });
+    let result = validate_delegate_operation(&input);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_validate_delegate_empty_task_ids_error() {
+    let input = serde_json::json!({
+        "operation": "delegate",
+        "agent_name": "DB Agent",
+        "prompt": "Analyze",
+        "task_ids": []
+    });
+    let result = validate_delegate_operation(&input);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, ToolError::InvalidInput(_)));
+}
+
+#[test]
+fn test_validate_delegate_without_task_ids_ok() {
+    let input = serde_json::json!({
+        "operation": "delegate",
+        "agent_name": "DB Agent",
+        "prompt": "Analyze"
+    });
+    let result = validate_delegate_operation(&input);
+    assert!(
+        result.is_ok(),
+        "delegate without task_ids should still work"
     );
 }

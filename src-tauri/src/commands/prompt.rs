@@ -25,8 +25,6 @@ use crate::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
-// ===== Validation Helpers =====
-
 fn validate_prompt_name(name: &str) -> Result<String, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -64,8 +62,6 @@ fn validate_prompt_content(content: &str) -> Result<String, String> {
     }
     Ok(content.to_string())
 }
-
-// ===== Commands =====
 
 /// List all prompts (returns lightweight summaries)
 #[tauri::command]

@@ -611,10 +611,6 @@ mod tests {
         assert!(MEMORY_SCHEMA_MIGRATION.contains("embedding = NONE"));
     }
 
-    // =========================================================================
-    // Migration guard tests
-    // =========================================================================
-
     #[tokio::test]
     async fn test_check_migration_not_applied() {
         let state = setup_test_state().await;

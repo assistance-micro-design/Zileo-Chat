@@ -27,8 +27,6 @@ use std::sync::LazyLock;
 static SKILL_NAME_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_-]+$").expect("Invalid skill name regex pattern"));
 
-// ===== Enums =====
-
 /// Category for organizing skills
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -52,8 +50,6 @@ impl std::fmt::Display for SkillCategory {
         }
     }
 }
-
-// ===== Structs =====
 
 /// Full skill entity (from database)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,8 +99,6 @@ pub struct SkillUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 }
-
-// ===== Validation =====
 
 /// Maximum length for skill name
 pub const MAX_SKILL_NAME_LEN: usize = 128;
@@ -161,8 +155,6 @@ pub fn validate_skill_content(content: &str) -> Result<String, String> {
     }
     Ok(content.to_string())
 }
-
-// ===== Tests =====
 
 #[cfg(test)]
 mod tests {

@@ -29,10 +29,6 @@ pub const MCP_CLIENT_NAME: &str = "Zileo Chat";
 /// Application version used in MCP client info
 pub const MCP_CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// =============================================================================
-// JSON-RPC 2.0 Core Types
-// =============================================================================
-
 /// JSON-RPC request ID
 ///
 /// Can be a number, string, or null according to the JSON-RPC 2.0 spec.
@@ -179,10 +175,6 @@ impl JsonRpcError {
     }
 }
 
-// =============================================================================
-// MCP Initialize Types
-// =============================================================================
-
 /// MCP Initialize request parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -312,10 +304,6 @@ pub struct MCPServerInfo {
     pub version: String,
 }
 
-// =============================================================================
-// MCP Tools Types
-// =============================================================================
-
 /// MCP Tool definition from server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -401,10 +389,6 @@ pub struct MCPResourceContent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blob: Option<String>,
 }
-
-// =============================================================================
-// MCP Resources Types
-// =============================================================================
 
 /// MCP Resource definition from server
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -46,6 +46,7 @@ use crate::mcp::MCPManager;
 use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
 use crate::tools::context::AgentToolContext;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
+use crate::tools::task_bridge::extract_task_ids;
 use crate::tools::utils::{resolve_agent_ref, sub_agent_description_template};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -65,6 +66,9 @@ pub struct ParallelTaskSpec {
     pub agent_name: String,
     /// Complete prompt for the agent
     pub prompt: String,
+    /// Optional task IDs to assign to this agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_ids: Option<Vec<String>>,
 }
 
 /// Prepared execution context containing all resources needed for parallel execution.
@@ -146,6 +150,11 @@ fn parallel_tasks_input_schema() -> Value {
                         "prompt": {
                             "type": "string",
                             "description": "COMPLETE prompt for this agent"
+                        },
+                        "task_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional task IDs to assign to this agent"
                         }
                     },
                     "required": ["prompt"]
@@ -260,12 +269,13 @@ DO NOT USE WHEN:
 
 OPERATIONS:
 - execute_batch: Run multiple tasks in parallel (max 3 per batch)
-  Required: tasks (array of {agent_name or agent_id, prompt})
+  Required: tasks (array of {agent_name or agent_id, prompt, optional task_ids})
 
-Note: Each agent receives ONLY its own prompt. Include all necessary context per task.
+Note: Each agent receives its prompt + any assigned tasks in context. Use TodoTool to create tasks first, then pass their IDs via task_ids per task.
 
 EXAMPLES:
-1. Batch: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Analyze performance..."}, {"agent_name": "Security Agent", "prompt": "Review API security..."}]}"#;
+1. Batch: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Analyze performance..."}, {"agent_name": "Security Agent", "prompt": "Review API security..."}]}
+2. With tasks: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Complete assigned tasks", "task_ids": ["t1", "t2"]}]}"#;
 
         ToolDefinition {
             id: "ParallelTasksTool".to_string(),
@@ -358,10 +368,13 @@ EXAMPLES:
                         .map(|a| a.config().name.clone())
                         .unwrap_or_else(|| resolved_id.clone());
 
+                    let task_ids = extract_task_ids(t);
+
                     tasks.push(ParallelTaskSpec {
                         agent_id: resolved_id,
                         agent_name,
                         prompt,
+                        task_ids,
                     });
                 }
 

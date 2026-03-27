@@ -283,10 +283,6 @@ pub async fn delete_validation(
     Ok(())
 }
 
-// =====================================================
-// Validation Settings Commands (Global Configuration)
-// =====================================================
-
 /// Gets the current validation settings.
 /// Returns default settings if none are configured.
 ///
@@ -428,10 +424,6 @@ pub async fn reset_validation_settings(
     Ok(settings)
 }
 
-// =====================================================
-// Helper Functions
-// =====================================================
-
 /// Internal helper to get validation settings without State wrapper
 async fn get_validation_settings_internal(
     state: &State<'_, AppState>,
@@ -505,10 +497,6 @@ fn apply_audit_config(
     }
     Ok(())
 }
-
-// =====================================================
-// Tool Discovery Commands
-// =====================================================
 
 /// Information about an available tool for validation settings
 #[derive(Debug, Clone, Serialize)]

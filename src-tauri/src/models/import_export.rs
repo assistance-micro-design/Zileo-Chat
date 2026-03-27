@@ -44,10 +44,6 @@ use std::collections::HashMap;
 
 use crate::models::agent::ReasoningEffort;
 
-// ============================================================================
-// Export Types
-// ============================================================================
-
 /// Selection of entities to export.
 /// At least one entity must be selected.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,10 +180,6 @@ pub struct ExportPackage {
     #[serde(default)]
     pub custom_providers: Vec<CustomProviderExportData>,
 }
-
-// ============================================================================
-// Entity Export Data
-// ============================================================================
 
 /// Agent data for export.
 /// Note: IDs are NOT exported - entities are identified by NAME.
@@ -334,10 +326,6 @@ pub struct CustomProviderExportData {
     pub created_at: Option<String>,
 }
 
-// ============================================================================
-// Preview Summaries
-// ============================================================================
-
 /// Preview data returned before finalizing export.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -430,10 +418,6 @@ pub struct CustomProviderExportSummary {
     pub display_name: String,
     pub base_url: String,
 }
-
-// ============================================================================
-// Import Types
-// ============================================================================
 
 /// Selection of entities to import.
 /// Note: These are entity NAMES, not IDs (IDs are not in the export file).
@@ -579,10 +563,6 @@ pub struct ImportError {
     pub error: String,
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 /// Current schema version for export packages
 pub const EXPORT_SCHEMA_VERSION: &str = "1.1";
 
@@ -604,10 +584,6 @@ pub const SENSITIVE_ENV_PATTERNS: &[&str] = &[
     "CREDENTIAL",
     "PRIVATE_KEY",
 ];
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
 
 impl ExportPackage {
     /// Creates a new export package with the given entities.
@@ -689,10 +665,6 @@ pub fn extract_custom_provider_name(provider: &str) -> Option<String> {
         None
     }
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

@@ -20,10 +20,6 @@
 //!
 //! - [`estimate_tokens`] - Estimates token count using word-based approximation
 
-// ============================================================================
-// Token Estimation
-// ============================================================================
-
 /// Estimates token count using word-based approximation.
 ///
 /// French/English text averages ~1.3-1.5 tokens per word.
@@ -47,10 +43,6 @@ pub fn estimate_tokens(text: &str) -> usize {
     let estimate = ((word_count as f64) * 1.5).ceil() as usize;
     estimate.max(1)
 }
-
-// ============================================================================
-// Thinking Extraction (OpenAI/OpenRouter format)
-// ============================================================================
 
 /// Extracts thinking/reasoning content from an OpenAI-format message object.
 ///
@@ -88,10 +80,6 @@ pub fn extract_thinking_from_message(message: &serde_json::Value) -> Option<Stri
 
     None
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

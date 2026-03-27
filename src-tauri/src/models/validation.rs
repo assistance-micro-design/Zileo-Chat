@@ -158,10 +158,6 @@ impl std::fmt::Display for ValidationStatus {
     }
 }
 
-// =====================================================
-// Validation Settings Types (Global Configuration)
-// =====================================================
-
 /// Timeout behavior when validation request expires
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

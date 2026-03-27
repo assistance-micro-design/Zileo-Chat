@@ -25,10 +25,6 @@ fn create_tool_with_dir(tmp: &TempDir) -> FileManagerTool {
     }
 }
 
-// ========================================================
-// validate_input tests
-// ========================================================
-
 #[test]
 fn test_validate_input_missing_operation() {
     let tool = FileManagerTool {
@@ -125,10 +121,6 @@ fn test_validate_input_missing_required_params() {
     assert!(result.is_err());
 }
 
-// ========================================================
-// definition tests
-// ========================================================
-
 #[test]
 fn test_definition_empty_folders() {
     let tool = FileManagerTool {
@@ -156,10 +148,6 @@ fn test_definition_with_folders() {
     assert!(def.description.contains("Authorized directories:"));
     assert!(def.description.contains("/home/user/docs"));
 }
-
-// ========================================================
-// op_list tests
-// ========================================================
 
 #[tokio::test]
 async fn test_op_list_basic() {
@@ -247,10 +235,6 @@ async fn test_op_list_not_directory() {
     assert!(result.is_err());
 }
 
-// ========================================================
-// op_read tests
-// ========================================================
-
 #[tokio::test]
 async fn test_op_read_text_file() {
     let tmp = create_test_dir();
@@ -309,10 +293,6 @@ async fn test_op_read_nonexistent() {
     assert!(result.is_err());
 }
 
-// ========================================================
-// op_write tests
-// ========================================================
-
 #[tokio::test]
 async fn test_op_write_new_file() {
     let tmp = create_test_dir();
@@ -359,10 +339,6 @@ async fn test_op_write_overwrite_with_backup() {
     let content = fs::read_to_string(&file_path).expect("read");
     assert_eq!(content, "updated");
 }
-
-// ========================================================
-// op_replace tests
-// ========================================================
 
 #[tokio::test]
 async fn test_op_replace_literal() {
@@ -436,10 +412,6 @@ async fn test_op_replace_no_match() {
     assert!(val["backup"].is_null());
 }
 
-// ========================================================
-// op_create tests
-// ========================================================
-
 #[tokio::test]
 async fn test_op_create_file() {
     let tmp = create_test_dir();
@@ -499,10 +471,6 @@ async fn test_op_create_already_exists() {
     assert!(result.unwrap_err().to_string().contains("already exists"));
 }
 
-// ========================================================
-// op_delete tests
-// ========================================================
-
 #[tokio::test]
 async fn test_op_delete_file() {
     let tmp = create_test_dir();
@@ -544,10 +512,6 @@ async fn test_op_delete_directory_rejected() {
         .to_string()
         .contains("Only files can be deleted"));
 }
-
-// ========================================================
-// op_move tests
-// ========================================================
 
 #[tokio::test]
 async fn test_op_move_file() {
@@ -593,10 +557,6 @@ async fn test_op_move_destination_exists() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("already exists"));
 }
-
-// ========================================================
-// op_rename tests
-// ========================================================
 
 #[tokio::test]
 async fn test_op_rename_file() {
@@ -658,10 +618,6 @@ async fn test_op_rename_empty_name() {
     assert!(result.unwrap_err().to_string().contains("empty"));
 }
 
-// ========================================================
-// op_search_glob tests
-// ========================================================
-
 #[tokio::test]
 async fn test_op_search_glob() {
     let tmp = create_test_dir();
@@ -709,10 +665,6 @@ async fn test_op_search_glob_recursive() {
     let val = result.unwrap();
     assert_eq!(val["count"], 2);
 }
-
-// ========================================================
-// op_search_content tests
-// ========================================================
 
 #[tokio::test]
 async fn test_op_search_content_literal() {
@@ -801,10 +753,6 @@ async fn test_op_search_content_with_context() {
     assert_eq!(after[0], "line5");
     assert_eq!(after[1], "line6");
 }
-
-// ========================================================
-// Permission tests (uses security module)
-// ========================================================
 
 #[tokio::test]
 async fn test_operation_outside_authorized() {

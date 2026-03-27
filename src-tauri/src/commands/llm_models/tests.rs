@@ -15,10 +15,6 @@
 use super::*;
 use crate::constants::commands as cmd_const;
 
-// ========================================================================
-// Validation Helper Tests
-// ========================================================================
-
 #[test]
 fn test_validate_model_id_valid() {
     assert!(validate_model_id("550e8400-e29b-41d4-a716-446655440000").is_ok());
@@ -87,10 +83,6 @@ fn test_validate_provider_string_error_message() {
 fn test_max_model_id_len_constant() {
     assert_eq!(cmd_const::MAX_MODEL_ID_LEN, 128);
 }
-
-// ========================================================================
-// Injection Safety Tests
-// ========================================================================
 
 mod injection_tests {
     use crate::test_utils::setup_test_state;

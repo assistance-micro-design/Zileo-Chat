@@ -563,10 +563,6 @@ pub async fn toggle_workflow_pinned(
     Ok(workflow)
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 /// Executes a query_json call and deserializes the results into a typed Vec.
 ///
 /// Shared between execute_workflow, load_workflow_full_state, and similar commands

@@ -25,8 +25,6 @@ use crate::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
-// ===== Commands =====
-
 /// List all skills (returns lightweight summaries with content_length)
 #[tauri::command]
 #[instrument(name = "list_skills", skip(state))]

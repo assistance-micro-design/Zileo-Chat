@@ -28,7 +28,6 @@
 //! - `definition()` - Returns metadata for LLM understanding
 //! - `execute()` - Performs the tool action with JSON input/output
 //! - `validate_input()` - Validates parameters before execution
-//! - `validate_input()` - Validates parameters before execution
 //!
 //! # Available Tools
 //!
@@ -70,6 +69,7 @@ pub mod spawn_agent;
 mod spawn_agent_execution;
 pub mod sub_agent_circuit_breaker;
 pub mod sub_agent_executor;
+pub mod task_bridge;
 pub mod todo;
 pub mod user_question;
 pub mod utils;

@@ -137,10 +137,6 @@ mod tests {
         TempDir::new_in(&home).expect("Failed to create temp dir")
     }
 
-    // ========================================================
-    // format_file_info tests
-    // ========================================================
-
     #[test]
     fn test_format_file_info_for_file() {
         let tmp = create_test_dir();
@@ -183,10 +179,6 @@ mod tests {
         let path_str = info["path"].as_str().expect("path should be string");
         assert!(path_str.ends_with("data.json"));
     }
-
-    // ========================================================
-    // is_text_file tests
-    // ========================================================
 
     #[test]
     fn test_is_text_file_with_text() {
@@ -234,10 +226,6 @@ mod tests {
         assert!(!is_text_file(&file_path));
     }
 
-    // ========================================================
-    // ensure_parent_exists tests
-    // ========================================================
-
     #[test]
     fn test_ensure_parent_exists_creates_parents() {
         let tmp = create_test_dir();
@@ -267,10 +255,6 @@ mod tests {
         let result = ensure_parent_exists(Path::new("/file.txt"));
         assert!(result.is_ok());
     }
-
-    // ========================================================
-    // Constants tests
-    // ========================================================
 
     #[test]
     fn test_constants_values() {

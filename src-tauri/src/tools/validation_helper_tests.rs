@@ -2,10 +2,6 @@ use super::*;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::{RiskThresholdConfig, SelectiveValidationConfig};
 
-// =========================================================================
-// should_require_validation tests
-// =========================================================================
-
 /// Helper to create ValidationSettings with custom mode, thresholds, and selective config.
 fn make_settings(
     mode: ValidationMode,
@@ -175,10 +171,6 @@ fn test_should_require_validation_selective_auto_approve_low() {
     ));
 }
 
-// =========================================================================
-// Existing tests
-// =========================================================================
-
 #[test]
 fn test_determine_risk_level() {
     assert_eq!(
@@ -346,10 +338,6 @@ fn test_spawn_details_utf8_prompt() {
     let preview = details["prompt_preview"].as_str().unwrap();
     assert!(preview.ends_with("..."), "Preview should end with ellipsis");
 }
-
-// =========================================================================
-// File operation validation tests
-// =========================================================================
 
 #[test]
 fn test_is_destructive_file_op() {

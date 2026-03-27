@@ -24,10 +24,6 @@ fn canonical(path: &Path) -> PathBuf {
     path.canonicalize().expect("canonicalize")
 }
 
-// ========================================================
-// validate_path: Happy path tests
-// ========================================================
-
 #[test]
 fn test_validate_path_existing_file() {
     let tmp = setup_test_dir();
@@ -98,10 +94,6 @@ fn test_validate_path_multiple_authorized_folders() {
     );
     assert!(result2.is_ok());
 }
-
-// ========================================================
-// validate_path: Security rejection tests
-// ========================================================
 
 #[test]
 fn test_validate_path_rejects_null_bytes() {
@@ -225,10 +217,6 @@ fn test_validate_path_symlink_escape() {
     );
 }
 
-// ========================================================
-// validate_folder_for_authorization tests
-// ========================================================
-
 #[test]
 fn test_validate_folder_valid() {
     let tmp = setup_test_dir();
@@ -274,10 +262,6 @@ fn test_validate_folder_rejects_null_bytes() {
     assert!(result.unwrap_err().contains("null bytes"));
 }
 
-// ========================================================
-// is_system_directory tests
-// ========================================================
-
 #[test]
 fn test_is_system_directory() {
     #[cfg(not(target_os = "windows"))]
@@ -295,10 +279,6 @@ fn test_is_system_directory() {
     }
 }
 
-// ========================================================
-// check_directory_permissions tests
-// ========================================================
-
 #[test]
 fn test_check_permissions_valid_dir() {
     let tmp = setup_test_dir();
@@ -311,10 +291,6 @@ fn test_check_permissions_nonexistent() {
     let result = check_directory_permissions(Path::new("/nonexistent/xyz"));
     assert!(result.is_err());
 }
-
-// ========================================================
-// find_authorized_folder tests
-// ========================================================
 
 #[test]
 fn test_find_authorized_folder_found() {

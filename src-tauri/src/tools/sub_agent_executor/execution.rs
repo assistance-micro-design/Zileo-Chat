@@ -36,10 +36,6 @@ use super::activity_monitor::ActivityMonitor;
 use super::{ExecutionResult, SubAgentExecutor};
 
 impl SubAgentExecutor {
-    // =========================================================================
-    // Circuit Breaker Integration
-    // =========================================================================
-
     /// Checks if the circuit breaker allows execution.
     ///
     /// If a circuit breaker is configured and the circuit is open (system unhealthy),
@@ -82,10 +78,6 @@ impl SubAgentExecutor {
             guard.record_failure();
         }
     }
-
-    // =========================================================================
-    // Execution with Heartbeat-based Inactivity Timeout
-    // =========================================================================
 
     /// Executes an agent with inactivity timeout monitoring, cancellation, and circuit breaker.
     ///

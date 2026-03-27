@@ -37,6 +37,60 @@ use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 impl TodoTool {
+    /// Resolves an agent reference (ID or name) to an agent ID via DB lookup.
+    ///
+    /// Tries direct ID first, then falls back to case-insensitive name lookup.
+    async fn resolve_agent_ref(&self, agent_ref: &str) -> ToolResult<String> {
+        let trimmed = agent_ref.trim();
+        if trimmed.is_empty() {
+            return Err(ToolError::InvalidInput(
+                "Agent reference cannot be empty".to_string(),
+            ));
+        }
+
+        // Try ID lookup first
+        let id_params = vec![("agent_ref".to_string(), serde_json::json!(trimmed))];
+        let id_results: Vec<Value> = self
+            .db
+            .query_with_params(
+                "SELECT meta::id(id) AS id FROM agent WHERE meta::id(id) = $agent_ref LIMIT 1",
+                id_params,
+            )
+            .await
+            .map_err(db_error)?;
+
+        if let Some(row) = id_results.first() {
+            if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
+                return Ok(id.to_string());
+            }
+        }
+
+        // Fallback: name lookup (case-insensitive)
+        let name_params = vec![("name".to_string(), serde_json::json!(trimmed))];
+        let name_results: Vec<Value> = self
+            .db
+            .query_with_params(
+                "SELECT meta::id(id) AS id FROM agent WHERE string::lowercase(name) = string::lowercase($name) LIMIT 1",
+                name_params,
+            )
+            .await
+            .map_err(db_error)?;
+
+        if let Some(row) = name_results.first() {
+            if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
+                debug!(agent_ref = %trimmed, resolved_id = %id, "Resolved agent by name");
+                return Ok(id.to_string());
+            }
+        }
+
+        Err(ToolError::NotFound(format!(
+            "Agent '{}' not found by ID or name",
+            trimmed
+        )))
+    }
+}
+
+impl TodoTool {
     /// Helper method to emit streaming events.
     ///
     /// If no app_handle is available, the event is silently skipped.
@@ -174,6 +228,15 @@ impl TodoTool {
                 serde_json::json!(self.workflow_id.clone()),
             );
 
+        // Sub-agents only see their own tasks; primary agent sees all
+        if !self.is_primary_agent {
+            builder = builder.where_eq_param(
+                "agent_assigned",
+                "agent_id",
+                serde_json::json!(self.agent_id.clone()),
+            );
+        }
+
         if let Some(status) = status_filter {
             builder = builder.where_eq_param("status", "status_filter", serde_json::json!(status));
         }
@@ -310,5 +373,150 @@ impl TodoTool {
             task_id,
             "Task deleted successfully",
         ))
+    }
+
+    /// Lists tasks assigned to a specific agent.
+    ///
+    /// Only the primary agent can review other agents' tasks.
+    ///
+    /// # Arguments
+    /// * `target_agent_id` - Agent ID whose tasks to list
+    /// * `status_filter` - Optional status filter
+    #[instrument(skip(self))]
+    pub(crate) async fn list_agent_tasks(
+        &self,
+        agent_ref: &str,
+        status_filter: Option<&str>,
+    ) -> ToolResult<Value> {
+        if !self.is_primary_agent {
+            return Err(ToolError::PermissionDenied(
+                "Only the primary agent can review other agents' tasks.".to_string(),
+            ));
+        }
+
+        validate_not_empty(agent_ref, "agent_id or agent_name")?;
+
+        // Resolve agent reference (ID or name) to agent_id
+        let target_agent_id = self.resolve_agent_ref(agent_ref).await?;
+
+        let mut builder = ParamQueryBuilder::new("task")
+            .select(&[
+                "name",
+                "description",
+                "status",
+                "priority",
+                "agent_assigned",
+                "created_at",
+            ])
+            .where_eq_param(
+                "workflow_id",
+                "wf_id",
+                serde_json::json!(self.workflow_id.clone()),
+            )
+            .where_eq_param(
+                "agent_assigned",
+                "target_agent",
+                serde_json::json!(target_agent_id),
+            );
+
+        if let Some(status) = status_filter {
+            builder = builder.where_eq_param("status", "status_filter", serde_json::json!(status));
+        }
+
+        let (query, params) = builder
+            .order_by("priority", false)
+            .limit(query_limits::DEFAULT_LIST_LIMIT)
+            .build();
+
+        let tasks: Vec<Value> = self
+            .db
+            .query_with_params(&query, params)
+            .await
+            .map_err(db_error)?;
+
+        let total = tasks.len();
+        let completed = tasks
+            .iter()
+            .filter(|t| t.get("status").and_then(|s| s.as_str()) == Some("completed"))
+            .count();
+        let pending = total - completed;
+
+        debug!(
+            target_agent = %target_agent_id,
+            total = total,
+            completed = completed,
+            "Listed agent tasks"
+        );
+
+        Ok(serde_json::json!({
+            "success": true,
+            "agent_id": target_agent_id,
+            "workflow_id": self.workflow_id,
+            "total": total,
+            "completed": completed,
+            "pending": pending,
+            "tasks": tasks
+        }))
+    }
+
+    /// Reassigns tasks to a different agent.
+    ///
+    /// Only the primary agent can reassign tasks.
+    ///
+    /// # Arguments
+    /// * `task_ids` - Task IDs to reassign
+    /// * `new_agent_id` - New agent ID to assign tasks to
+    #[instrument(skip(self))]
+    pub(crate) async fn reassign_tasks(
+        &self,
+        task_ids: &[String],
+        new_agent_ref: &str,
+    ) -> ToolResult<Value> {
+        if !self.is_primary_agent {
+            return Err(ToolError::PermissionDenied(
+                "Only the primary agent can reassign tasks.".to_string(),
+            ));
+        }
+
+        if task_ids.is_empty() {
+            return Err(ToolError::InvalidInput(
+                "task_ids cannot be empty".to_string(),
+            ));
+        }
+        validate_not_empty(new_agent_ref, "new_agent_id or agent_name")?;
+
+        // Resolve agent reference (ID or name) to agent_id
+        let new_agent_id = self.resolve_agent_ref(new_agent_ref).await?;
+
+        let params = vec![
+            ("wf_id".to_string(), serde_json::json!(self.workflow_id)),
+            ("task_ids".to_string(), serde_json::json!(task_ids)),
+            ("new_agent".to_string(), serde_json::json!(new_agent_id)),
+        ];
+
+        let result: Vec<Value> = self
+            .db
+            .query_with_params(
+                "UPDATE task SET agent_assigned = $new_agent \
+                 WHERE workflow_id = $wf_id AND meta::id(id) IN $task_ids \
+                 RETURN meta::id(id) AS id, name, agent_assigned",
+                params,
+            )
+            .await
+            .map_err(db_error)?;
+
+        info!(
+            reassigned = result.len(),
+            new_agent = %new_agent_id,
+            "Tasks reassigned"
+        );
+
+        Ok(serde_json::json!({
+            "success": true,
+            "reassigned_count": result.len(),
+            "new_agent_id": new_agent_id,
+            "tasks": result,
+            "message": format!("{} task(s) reassigned to agent '{}'", result.len(), new_agent_id)
+        }))
     }
 }

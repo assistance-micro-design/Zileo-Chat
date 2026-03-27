@@ -24,6 +24,7 @@ use crate::models::sub_agent::{
     SubAgentMetrics,
 };
 use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
+use crate::tools::task_bridge::resolve_and_reassign_tasks;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
 use serde_json::Value;
@@ -32,10 +33,6 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 impl ParallelTasksTool {
-    // =========================================================================
-    // Helper functions for execute_batch() - Reduce Cyclomatic Complexity
-    // =========================================================================
-
     /// Validates task specifications for batch execution.
     ///
     /// Checks:
@@ -182,16 +179,30 @@ impl ParallelTasksTool {
                 );
             }
 
+            // Resolve task_ids if provided for this task
+            let mut context = serde_json::json!({
+                "workflow_id": self.workflow_id,
+                "parent_agent_id": self.current_agent_id,
+                "batch_id": batch_id,
+                "is_parallel_task": true
+            });
+
+            if let Some(ref ids) = task_spec.task_ids {
+                let assigned = resolve_and_reassign_tasks(
+                    &self.db,
+                    ids,
+                    &self.workflow_id,
+                    &task_spec.agent_id,
+                )
+                .await?;
+                context["assigned_tasks"] = serde_json::json!(assigned);
+            }
+
             // Create Task for orchestrator
             let task = Task {
                 id: format!("parallel_{}_{}", batch_id, task_spec.agent_id),
                 description: task_spec.prompt.clone(),
-                context: serde_json::json!({
-                    "workflow_id": self.workflow_id,
-                    "parent_agent_id": self.current_agent_id,
-                    "batch_id": batch_id,
-                    "is_parallel_task": true
-                }),
+                context,
             };
 
             orchestrator_tasks.push((task_spec.agent_id.clone(), task));
@@ -404,26 +415,11 @@ impl ParallelTasksTool {
         }
     }
 
-    // =========================================================================
-    // Main execute_batch() - Refactored for CC~6
-    // =========================================================================
-
     /// Executes multiple tasks in parallel.
     ///
     /// # Arguments
-    /// * `tasks` - Vector of (agent_id, prompt) pairs
+    /// * `tasks` - Vector of task specifications (agent + prompt pairs)
     /// * `wait_all` - Whether to wait for all tasks (currently always true)
-    ///
-    /// # Refactoring
-    ///
-    /// This function has been refactored to reduce cyclomatic complexity from ~20 to ~6.
-    /// Logic has been extracted into helper functions:
-    /// - `validate_tasks()` - Input validation
-    /// - `validate_mcp_servers()` - MCP server validation (informational)
-    /// - `request_human_validation()` - Human-in-the-loop approval
-    /// - `prepare_execution()` - DB records and task preparation
-    /// - `run_parallel_tasks()` - JoinSet parallel execution
-    /// - `process_results()` - Result processing and report generation
     #[instrument(skip(self, tasks), fields(
         current_agent_id = %self.current_agent_id,
         workflow_id = %self.workflow_id,
@@ -475,7 +471,4 @@ impl ParallelTasksTool {
         serde_json::to_value(&batch_result)
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to serialize result: {}", e)))
     }
-
-    // NOTE: update_execution_record() removed during refactoring
-    // Now using SubAgentExecutor::update_execution_record() for unified DB updates
 }
