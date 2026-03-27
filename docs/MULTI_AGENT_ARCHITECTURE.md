@@ -1,1257 +1,272 @@
-# Architecture Multi-Agent
+# Multi-Agent Architecture
 
-> **Stack**: Rust + Rig.rs + MCP + Tauri 2 + SurrealDB
-> **Objectif**: Système hiérarchique d'agents réutilisables avec communication standardisée
+> **Stack**: Rust + Tauri 2 + MCP + SurrealDB
+> **Goal**: Hierarchical system of reusable agents with standardized communication
 
-## Principes Fondamentaux
+## Core Principles
 
-### Gestion Dynamique des Agents (v1.0)
+### Dynamic Agent Management
 
-**Aucun agent par défaut** - L'utilisateur crée tous ses agents via l'interface Settings.
+**No default agents** - The user creates all agents via the Settings UI.
 
-**CRUD Complet via UI**:
-- **Create**: Formulaire avec configuration LLM, tools, MCP servers, system prompt
-- **Read**: Liste des agents avec résumé (provider, model, tools count)
-- **Update**: Modification des paramètres (lifecycle non modifiable)
-- **Delete**: Suppression avec confirmation
+| Aspect | Detail |
+|--------|--------|
+| **CRUD** | UI form with LLM config, tools, MCP servers, skills, system prompt |
+| **Persistence** | `agent` table in SurrealDB |
+| **Unique names** | Case-insensitive, validated on both frontend and backend |
+| **Hybrid resolution** | UUID (fast path) or name via `AgentRegistry.get_by_name()` |
+| **Loading** | Automatic at startup via `load_agents_from_db()` |
 
-**Persistence**: Agents stockés dans SurrealDB (table `agent`)
+### Agent Hierarchy
 
-**Contrainte UNIQUE** : Les noms d'agents sont uniques (case-insensitive). Le backend et le frontend valident les doublons.
+The system uses a two-level hierarchy: a primary agent (orchestrator) coordinates permanent specialized agents (persisted in SurrealDB) and temporary agents (limited lifecycle, auto-destroyed, not persisted).
 
-**Resolution Hybride** : Les agents peuvent être référencés par UUID ou par nom via `resolve_agent_ref()`. Le UUID est prioritaire (fast path), le nom est résolu via `AgentRegistry.get_by_name()` (case-insensitive, trim).
+**Primary Agent**:
+- Orchestrates complex tasks
+- Delegates to specialized agents via sub-agent tools
+- Creates temporary agents
+- Aggregates reports
+- Manages the lifecycle of temporary agents
 
-**Chargement**: Agents chargés automatiquement au démarrage via `load_agents_from_db()`
+**Critical rule**: Sub-agents CANNOT spawn other sub-agents. Only the primary orchestrator can spawn and coordinate sub-agents.
 
-### Hiérarchie d'Agents
-```
-Agent Principal (Orchestrator)
-├─ Agent Spécialisé 1 (permanent)
-├─ Agent Spécialisé 2 (permanent)
-└─ Agent Temporaire (lifecycle limité)
-```
+---
 
-**Agent Principal**
-- Orchestre les tâches complexes
-- Délègue aux agents spécialisés
-- Crée les agents temporaires
-- Agrège les rapports
-- Gère le cycle de vie des agents temporaires
+## Inter-Agent Communication
 
-**Agents Spécialisés** (permanents)
-- Persistent state via SurrealDB
-- Réutilisables cross-sessions
+### Standard Protocol: Markdown Reports
 
-**Agents Temporaires**
-- Créés pour tâches ponctuelles
-- Auto-destruction après completion
-- Pas de persistence state
+Each agent produces a structured markdown report containing: agent ID, task description, status (Success/Failed/In Progress), duration, structured results, tools used with call counts, MCP servers called, next actions checklist, and metadata (provider, tokens, cost, tool/MCP call counts).
 
-## Communication Inter-Agent
-
-### Protocol Standard: Markdown Reports
-
-**Format Unifié**
-```markdown
-# Agent Report: [Agent_ID]
-**Task**: [Description]
-**Status**: ✅ Success | ❌ Failed | 🔄 In Progress
-**Duration**: [temps]
-
-## Results
-[Données structurées]
-
-## Tools Used
-- `MemoryTool`: 3 search (avg 45ms)
-- `TodoTool`: 2 create, 1 complete (120ms)
-- `FileManagerTool`: 1 read (30ms)
-
-## MCP Servers Called
-- `serena::find_symbol`: auth/user.rs → 12 symbols
-- `context7::get_library_docs`: surrealdb/query → 4 examples
-
-## Next Actions
-- [ ] Action 1
-- [ ] Action 2
-
-## Metadata
-- Provider: Mistral Large
-- Tokens: Input 1.2K | Output 450
-- Cost: €0.003
-- Tools: 6 calls (280ms total)
-- MCP: 2 servers (320ms total)
-```
-
-**Avantages**
-- Human-readable & machine-parsable
-- Chainable (output → input)
-- Auditable
+**Advantages**: Human-readable, machine-parsable, chainable (output becomes input), auditable.
 
 ### Transport Layer
 
-**Stdio** (agents locaux)
-- Communication inter-process
-- Performance optimale
-- Synchronisation via channels Rust
+Inter-process communication via Rust channels (stdio, optimal performance).
 
-## Création d'Agents
+---
 
-### Via Settings UI (Méthode Principale)
+## Agent Creation
 
-Les agents sont créés par l'utilisateur via l'interface Settings:
+### Via Settings UI (Primary Method)
 
-1. **Aller dans Settings > Agents**
-2. **Cliquer "Create Agent"**
-3. **Remplir le formulaire**:
-   - Nom de l'agent (1-64 caracteres)
-   - Lifecycle (Permanent/Temporary)
-   - Provider LLM (Mistral/Ollama/Custom)
-   - Modele (ex: mistral-large-latest)
-   - Temperature (0.0-2.0)
-   - Max tokens (256-128000)
-   - Max tool iterations (1-200, default: 50)
-   - Reasoning effort (low/medium/high, or null for no thinking)
-   - Tools actives (MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool)
-   - Skills (documents de competences assignables a l'agent)
-   - MCP Servers (depuis ceux configures)
-   - Folders (dossiers autorises pour FileManagerTool)
-   - System Prompt (1-10000 caracteres)
+1. Settings > Agents > Create Agent
+2. Configure: name (1-64 chars), lifecycle, provider, model, temperature, max tokens, max tool iterations (1-200), reasoning effort, tools, skills, MCP servers, folders, system prompt
 
-**Frontend Store** (`src/lib/stores/agents.ts`):
-```typescript
-import { agentStore } from '$lib/stores/agents';
+See `src/lib/stores/agents.ts` for frontend store implementation.
 
-// Creer un agent
-const agentId = await agentStore.createAgent({
-  name: 'My Agent',
-  lifecycle: 'permanent',
-  llm: { provider: 'Mistral', model: 'mistral-large-latest', temperature: 0.7, max_tokens: 4096 },
-  tools: ['MemoryTool', 'TodoTool'],
-  skills: ['coding-standards', 'git-workflow'],
-  mcp_servers: ['serena'],
-  folders: ['/home/user/projects'],
-  system_prompt: 'You are a helpful assistant...',
-  max_tool_iterations: 50,  // 1-200
-  reasoning_effort: 'medium' // For thinking models: 'low', 'medium', 'high', or null
-});
+### Backend Interface
 
-// Lister les agents
-await agentStore.loadAgents();
-```
+**Agent Trait** - Core methods:
 
-### Interface Rust
+| Method | Description |
+|--------|-------------|
+| `execute(task)` | Basic execution |
+| `execute_with_mcp(task, mcp_manager)` | Execution with MCP support (primary method) |
+| `capabilities()` | List of capabilities |
+| `lifecycle()` | Permanent or Temporary |
+| `tools()` / `mcp_servers()` | Configured tools and MCP servers |
+| `config()` | Full configuration |
 
-**Trait Agent** (`src-tauri/src/agents/core/agent.rs`):
-```rust
-#[async_trait]
-pub trait Agent: Send + Sync {
-    // Execution (MCP-aware est la methode principale)
-    async fn execute(&self, task: Task) -> anyhow::Result<Report>;
-    async fn execute_with_mcp(
-        &self,
-        task: Task,
-        mcp_manager: Option<Arc<MCPManager>>
-    ) -> anyhow::Result<Report>;
+**Input/Output types**:
 
-    // Metadata
-    fn capabilities(&self) -> Vec<String>;
-    fn lifecycle(&self) -> Lifecycle;
-    fn tools(&self) -> Vec<String>;
-    fn mcp_servers(&self) -> Vec<String>;
-    fn system_prompt(&self) -> String;
-    fn config(&self) -> &AgentConfig;
-}
-```
+| Type | Role | Key Fields |
+|------|------|------------|
+| `Task` | Input | id, description, context (JSON) |
+| `Report` | Output | task_id, status (Success/Failed), content (markdown), metrics |
+| `ReportMetrics` | Metrics | duration_ms, tokens, tools_used, mcp_calls, tool_executions |
 
-**Types Associes**:
-```rust
-// Input (agent.rs)
-pub struct Task {
-    pub id: String,
-    pub description: String,
-    pub context: serde_json::Value,
-}
+**LLMAgent constructors**: `with_tools` (basic tools), `with_factory` (custom factory), `with_context` (primary agent with sub-agent tools).
 
-// Output (agent.rs)
-pub struct Report {
-    pub task_id: String,
-    pub status: ReportStatus,  // Success | Failed | Partial
-    pub content: String,       // Markdown content
-    pub metrics: ReportMetrics,
-    pub system_prompt: Option<String>,
-    pub tools_json: Option<Value>,
-}
+See `src-tauri/src/agents/` for implementation.
 
-pub struct ReportMetrics {
-    pub duration_ms: u64,
-    pub tokens_input: usize,
-    pub tokens_output: usize,
-    pub tools_used: Vec<String>,
-    pub mcp_calls: Vec<String>,
-    pub tool_executions: Vec<ToolExecutionData>,
-}
-```
+---
 
-**LLMAgent** (`src-tauri/src/agents/llm_agent.rs`):
-```rust
-// Constructeurs disponibles:
+## Sub-Agent Delegation
 
-// Basic (sans tools)
-pub fn new(config: AgentConfig, provider_manager: Arc<ProviderManager>) -> Self
+### Task Scoping
 
-// Avec basic tools (MemoryTool, TodoTool, CalculatorTool)
-pub fn with_tools(
-    config: AgentConfig,
-    provider_manager: Arc<ProviderManager>,
-    db: Arc<DBClient>
-) -> Self
+The primary agent decomposes complex tasks and delegates them. It analyzes dependencies to determine execution order: independent tasks run in parallel via `futures::join_all`, while data-dependent tasks run sequentially. Results are aggregated into a unified markdown report, followed by cleanup (temporary agents destroyed, reports persisted, metrics logged).
 
-// Avec factory custom (pour embedding service)
-pub fn with_factory(
-    config: AgentConfig,
-    provider_manager: Arc<ProviderManager>,
-    tool_factory: Arc<ToolFactory>
-) -> Self
-
-// Avec context (agent principal - acces aux sub-agent tools)
-pub fn with_context(
-    config: AgentConfig,
-    provider_manager: Arc<ProviderManager>,
-    tool_factory: Arc<ToolFactory>,
-    agent_context: AgentToolContext
-) -> Self
-
-// Execution avec MCP
-let report = agent.execute_with_mcp(task, Some(mcp_manager)).await?;
-```
-
-### Format Configuration TOML (Design Pattern - Non Implemente)
-
-> **Note**: Les fichiers TOML ne sont PAS utilises actuellement. Les agents sont
-> crees via l'UI et stockes dans SurrealDB. Ces exemples sont des **patterns de design**
-> pour reference architecturale uniquement.
->
-> **Tools implementes**: `MemoryTool`, `TodoTool`, `CalculatorTool`
-> **Sub-Agent Tools**: `SpawnAgentTool`, `DelegateTaskTool`, `ParallelTasksTool`
-
-```toml
-# EXEMPLE DE DESIGN PATTERN (non utilise en production)
-# agents/config/db_agent.toml
-[agent]
-id = "db_agent"
-name = "Database Agent"
-description = "Gestion requetes et analytics DB"
-lifecycle = "Permanent" # ou "Temporary"
-
-[llm]
-provider = "Mistral" # Phase 1: Mistral|Ollama
-model = "mistral-large"
-temperature = 0.7
-max_tokens = 4096
-
-[capabilities]
-primary = ["DatabaseQuery", "Analytics"]
-secondary = ["DataExport"]
-
-[tools]
-# Tools disponibles (voir section "Tools Disponibles" pour liste complete)
-enabled = [
-    "MemoryTool",    # Implemente
-    "TodoTool",      # Implemente
-    "CalculatorTool" # Implemente
-]
-
-[tools.SurrealDBTool]
-connection = "ws://localhost:8000"
-namespace = "zileo"
-database = "chat"
-permissions = ["SELECT", "CREATE", "UPDATE"] # pas DELETE
-
-[tools.AnalyticsTool]
-cache_ttl = 300 # 5min cache
-max_aggregations = 10
-
-[mcp_servers]
-# MCP servers externes accessibles
-enabled = ["serena", "context7"]
-# Agents peuvent appeler ces MCP servers pour capabilities étendues
-
-[mcp_servers.serena]
-capabilities = ["find_symbol", "read_file", "search_pattern"]
-scope = "project" # project|file|system
-
-[mcp_servers.context7]
-capabilities = ["get_library_docs"]
-libraries = ["surrealdb", "tokio"]
-
-[context]
-max_history = 20 # messages
-shared_pool = true # accès shared context
-isolation_level = "agent" # agent|task|global
-
-[monitoring]
-metrics_enabled = true
-trace_calls = true
-log_level = "info"
-
-[prompts]
-# System prompt définissant rôle et comportement
-system_prompt = """
-You are a specialized Database Agent for the Zileo Chat application.
-
-## Role
-Expert in SurrealDB queries, data analytics, and database optimization.
-
-## Expertise
-- SurrealQL query construction and optimization
-- Data aggregations and analytics
-- Performance monitoring (slow queries, indexes)
-- Schema validation and migrations
-
-## Tools Usage
-- `SurrealDBTool`: Direct DB access, use for all CRUD operations
-  - Always use parameterized queries (prevent injection)
-  - Respect permissions: SELECT, CREATE, UPDATE (no DELETE)
-  - Timeout: 30s max per query
-
-- `AnalyticsTool`: Use for aggregations, cache results 5min
-  - Max 10 concurrent aggregations
-  - Prefer pre-computed metrics when available
-
-- `QueryBuilderTool`: Use for complex queries requiring validation
-  - Validates syntax before execution
-  - Suggests optimizations
-
-## MCP Servers Usage
-- `serena`: Use find_symbol to locate DB-related code before changes
-  - Scope: project-wide search
-  - Find schema definitions, query patterns
-
-- `context7`: Get official SurrealDB documentation
-  - Use for syntax reference, best practices
-  - Libraries: surrealdb, tokio
-
-## Constraints
-- NEVER execute DELETE without explicit user confirmation
-- ALWAYS validate input data before queries
-- ALWAYS log slow queries (>100ms) for monitoring
-- Return structured data in JSON format
-- Include execution time in all reports
-
-## Response Format
-Generate markdown reports with:
-- Query executed (sanitized)
-- Results summary (count, time)
-- Tools/MCP used with metrics
-- Recommendations (indexes, optimizations)
-"""
-
-# Templates pour tâches courantes
-[prompts.templates.query_users]
-template = """
-Task: Query users with filters
-Filters: {filters}
-Required fields: {fields}
-
-Steps:
-1. Use QueryBuilderTool to construct safe query
-2. Execute via SurrealDBTool
-3. Return results with count and execution time
-"""
-
-[prompts.templates.analytics]
-template = """
-Task: Generate analytics report
-Metric: {metric}
-Time range: {time_range}
-
-Steps:
-1. Check AnalyticsTool cache first
-2. If miss, query via SurrealDBTool
-3. Cache results (TTL 5min)
-4. Format report with visualizable data
-"""
-```
-
-**Exemples Configurations par Type**
-
-```toml
-# agents/config/api_agent.toml
-[agent]
-id = "api_agent"
-lifecycle = "Permanent"
-
-[tools]
-enabled = ["HTTPClientTool", "RateLimiterTool", "CacheTool"]
-
-[tools.HTTPClientTool]
-timeout = 30
-retry_attempts = 3
-allowed_domains = ["api.example.com", "*.trusted.io"]
-
-[mcp_servers]
-enabled = ["playwright", "context7"]
-
-[prompts]
-system_prompt = """
-You are an API Integration Agent specialized in external service communication.
-
-## Role
-Expert in REST/GraphQL APIs, rate limiting, caching strategies.
-
-## Tools Usage
-- `HTTPClientTool`: All external HTTP calls
-  - Timeout: 30s, 3 retry attempts
-  - Only call whitelisted domains
-  - Log all 4xx/5xx errors
-
-- `RateLimiterTool`: Enforce limits before calls
-  - Check quota before each request
-  - Implement exponential backoff
-
-- `CacheTool`: Cache GET responses
-  - TTL based on Cache-Control headers
-  - Invalidate on related mutations
-
-## MCP Servers Usage
-- `playwright`: Validate API endpoints E2E
-- `context7`: Get API client library docs
-
-## Constraints
-- NEVER expose API keys in logs/reports
-- ALWAYS validate response schemas
-- ALWAYS respect rate limits
-- Implement circuit breaker (5 fails → pause 60s)
-"""
-```
-
-```toml
-# agents/config/ui_agent.toml
-[agent]
-id = "ui_agent"
-lifecycle = "Temporary"
-ttl = 3600
-
-[llm]
-provider = "Ollama" # Phase 1: Local, gratuit
-
-[tools]
-enabled = ["ComponentGeneratorTool", "A11yValidatorTool"]
-
-[mcp_servers]
-enabled = ["playwright", "context7"]
-
-[prompts]
-system_prompt = """
-You are a UI Component Agent specialized in Svelte 5 components.
-
-## Role
-Expert in component generation, accessibility, responsive design.
-
-## Tools Usage
-- `ComponentGeneratorTool`: Generate Svelte 5 components
-  - Follow project design system
-  - Use runes syntax ($state, $derived, $effect)
-  - TypeScript strict mode
-
-- `A11yValidatorTool`: Validate WCAG AA compliance
-  - Check semantic HTML
-  - Validate ARIA labels
-  - Test keyboard navigation
-
-## MCP Servers Usage
-- `playwright`: Visual regression tests, a11y audits
-- `context7`: Get Svelte 5 official patterns
-
-## Constraints
-- ALWAYS generate accessible components (WCAG AA minimum)
-- ALWAYS use semantic HTML
-- ALWAYS include TypeScript types
-- NEVER use deprecated Svelte syntax
-- Components must be mobile-first responsive
-"""
-
-[prompts.templates.generate_form]
-template = """
-Task: Generate form component
-Fields: {fields}
-Validation: {validation_rules}
-
-Steps:
-1. Use context7 for Svelte 5 form patterns
-2. Generate component with ComponentGeneratorTool
-3. Validate accessibility with A11yValidatorTool
-4. Test with playwright (keyboard navigation)
-"""
-```
-
-### Système de Prompts
-
-**Structure Prompt Complet**
-```
-[System Prompt de l'Agent]
-+
-[Contexte Partagé] (historique conversation, user preferences)
-+
-[Task Template] (si applicable)
-+
-[Task Spécifique] (paramètres utilisateur)
-```
-
-**Anatomy System Prompt**
-```markdown
-## Role
-Définition claire: qui est l'agent, son domaine d'expertise
-
-## Expertise
-Compétences techniques spécifiques, domaines de connaissance
-
-## Tools Usage
-Pour chaque tool:
-  - Quand l'utiliser
-  - Comment l'utiliser (paramètres, contraintes)
-  - Limites et timeouts
-
-## MCP Servers Usage
-Pour chaque MCP:
-  - Capabilities utilisées
-  - Patterns d'utilisation
-  - Scope et limitations
-
-## Constraints
-Règles strictes (NEVER/ALWAYS)
-Validations requises
-Limites de sécurité
-
-## Response Format
-Structure attendue des rapports
-Métriques à inclure
-Format données (JSON, MD, etc.)
-```
-
-**Templates de Tâches**
-
-Templates réutilisables pour opérations courantes avec placeholders:
-```toml
-[prompts.templates.crud_operation]
-template = """
-Task: {operation} on {entity}
-Data: {data}
-Validation: {rules}
-
-Steps:
-1. Validate input with {validation_tool}
-2. Execute {operation} via {execution_tool}
-3. Log operation with metadata
-4. Return result with {format}
-"""
-variables = ["operation", "entity", "data", "rules", "validation_tool", "execution_tool", "format"]
-```
-
-**Composition Dynamique**
-
-```rust
-fn compose_prompt(agent: &Agent, task: &Task, context: &Context) -> String {
-    let mut prompt = agent.system_prompt();
-
-    // Ajouter contexte partagé
-    if context.shared_pool {
-        prompt.push_str(&format!("\n## Shared Context\n{}", context.history));
-    }
-
-    // Ajouter template si match
-    if let Some(template) = agent.find_template(&task.type) {
-        prompt.push_str(&template.render(&task.params));
-    }
-
-    // Ajouter task spécifique
-    prompt.push_str(&format!("\n## Current Task\n{}", task.description));
-
-    prompt
-}
-```
-
-**Exemples Prompts par Spécialisation**
-
-```toml
-# agents/config/rag_agent.toml
-[prompts]
-system_prompt = """
-You are a RAG (Retrieval-Augmented Generation) Agent.
-
-## Role
-Expert in semantic search, context retrieval, and relevance ranking.
-
-## Expertise
-- Vector embeddings generation (Mistral, Ollama)
-- Semantic similarity search
-- Hybrid search (keyword + vector)
-- Context window optimization
-
-## Tools Usage
-- `EmbeddingsTool`: Generate embeddings for queries and documents
-  - Model: text-embedding-3-small
-  - Dimensions: 1536
-  - Batch size: max 100 documents
-
-- `VectorSearchTool`: Search in vector database
-  - Algorithm: HNSW
-  - top_k: configurable (default 5)
-  - Distance: cosine similarity
-
-## MCP Servers Usage
-- `serena`: Find relevant code snippets semantically
-  - search_pattern with semantic mode
-- `context7`: Enrich results with official docs
-
-## Constraints
-- ALWAYS generate embeddings for user query first
-- ALWAYS rank results by relevance score
-- Include relevance scores in report (threshold: 0.7)
-- Maximum context size: 8K tokens
-"""
-
-[prompts.templates.semantic_search]
-template = """
-Task: Semantic search for "{query}"
-Top K: {top_k}
-Filters: {filters}
-
-Steps:
-1. Generate query embedding via EmbeddingsTool
-2. Search vectors via VectorSearchTool (top_k={top_k})
-3. Filter by relevance threshold (>0.7)
-4. Enrich top results with context7 if applicable
-5. Return ranked results with scores
-"""
-```
-
-```toml
-# agents/config/code_agent.toml
-[prompts]
-system_prompt = """
-You are a Code Quality Agent specialized in refactoring and optimization.
-
-## Role
-Expert in code analysis, refactoring, and quality improvements.
-
-## Expertise
-- AST-based refactoring (safe transformations)
-- Code smell detection
-- Performance optimizations
-- Pattern enforcement
-
-## Tools Usage
-- `RefactorTool`: AST-based code transformations
-  - safe_mode: enabled by default
-  - Supports: extract method, inline, rename
-  - Validates syntax before/after
-
-## MCP Servers Usage
-- `serena`: Symbol-level operations
-  - find_symbol: locate refactor targets
-  - find_referencing_symbols: impact analysis
-  - rename_symbol: safe renaming with refs
-
-- `context7`: Best practices and patterns
-  - Language-specific style guides
-  - Framework conventions
-
-## Constraints
-- NEVER refactor without running tests after
-- ALWAYS use serena to find all references before rename
-- ALWAYS preserve functionality (behavior-preserving)
-- Safe mode CANNOT be disabled
-- Maximum refactor scope: single file (use multi-agent for larger)
-"""
-```
-
-**Best Practices Prompts**
-
-1. **Spécificité**: Définir rôle précis, pas générique
-2. **Tools First**: Expliquer QUAND et COMMENT utiliser chaque tool/MCP
-3. **Contraintes Claires**: NEVER/ALWAYS pour règles strictes
-4. **Format Structuré**: Sections standardisées (Role, Tools, Constraints)
-5. **Templates Réutilisables**: Factoriser opérations courantes
-6. **Variables Explicites**: Documenter placeholders dans templates
-7. **Validation**: Inclure étapes de validation dans prompts
-8. **Metrics**: Demander métriques spécifiques dans rapports
-
-### Registry Pattern
-
-```rust
-AgentRegistry::register("db_agent", DBAgent::new());
-AgentRegistry::spawn_temporary("task_123", TaskAgent::new());
-AgentRegistry::get("db_agent").execute(task);
-AgentRegistry::cleanup_temporary();
-```
-
-## Workflow Multi-Agent
-
-### Règle Architecture Critique
-
-**⚠️ LIMITATION SOUS-AGENTS** : Les sous-agents NE PEUVENT PAS lancer d'autres sous-agents
-
-**Raison** :
-- Réutilisabilité code maximale
-- Contrôle centralisé orchestration
-- Évite récursion complexe
-- Simplifie debugging et traçabilité
-
-**Seul l'Agent Principal (Orchestrateur)** peut spawner et coordonner des sous-agents, tools et MCP servers.
-
-**Voir** : [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md) pour détails sur orchestration intra-workflow
-
-### Orchestration
-
-**1. Task Decomposition** (Agent Principal uniquement)
-```
-Complex Task → [SubTask1, SubTask2, SubTask3]
-```
-
-**2. Agent Assignment**
-```
-SubTask1 → DB Agent (permanent)
-SubTask2 → API Agent (permanent)
-SubTask3 → Custom Agent (temporaire)
-```
-
-**3. Analyse Dépendances** (Parallel vs Sequential)
-```
-Si pas dépendances → Parallel
-Si dépendances données → Sequential
-```
-
-**4. Parallel Execution** (opérations indépendantes)
-```rust
-let reports = join_all(vec![
-    agent1.execute(task1),
-    agent2.execute(task2),
-    agent3.execute(task3),
-]).await;
-```
-
-**5. Sequential Execution** (opérations dépendantes)
-```rust
-let result1 = agent1.execute(task1).await?;
-let result2 = agent2.execute(task2_needs(result1)).await?;
-let result3 = agent3.execute(task3_needs(result2)).await?;
-```
-
-**6. Report Aggregation**
-```
-[Report1, Report2, Report3] → Unified Report (MD)
-```
-
-**7. Cleanup**
-```
-Temporary agents → destroy()
-Reports → SurrealDB storage
-Metrics → monitoring
-```
-
-### Communication Patterns
-
-**Request/Response**
-```
-Principal → Task → Agent Spécialisé
-Agent Spécialisé → Report (MD) → Principal
-```
-
-**Event-Driven**
-```
-Agent → Event → Event Bus → Subscribers
-```
-
-**Streaming**
-```
-Agent → Stream<Chunk> → Principal (SSE)
-```
-
-### Report Enforcement
-
-Le système détecte les agents qui retournent des rapports génériques ("Task completed after N iteration(s)") et force un appel LLM supplémentaire avec un tableau d'outils vide pour générer un rapport markdown structuré.
-
-**Mécanisme** :
-1. Détection du pattern générique dans le rapport retourné
-2. Appel LLM follow-up avec `tools: []` (compatible Ollama)
-3. Le LLM génère un rapport markdown détaillé sans pouvoir appeler d'outils
-4. 6 tests TDD couvrent ce mécanisme
-
-### Reprise sur Erreur et Idempotence
-
-Pour garantir la robustesse des workflows, notamment lors d'erreurs passagères (ex: réseau), le système intègre des stratégies de reprise.
-
-- **Idempotence**: Chaque sous-tâche déléguée par l'orchestrateur se voit assigner un identifiant unique. Les agents utilisent cet identifiant pour s'assurer qu'une opération n'est pas exécutée plusieurs fois en cas de relance.
-
-- **Politique de Reprise**: L'orchestrateur peut être configuré pour relancer automatiquement une tâche échouée, souvent avec un délai progressif (ex: exponential backoff) pour ne pas surcharger un service externe.
-
-- **Journal des Tâches**: Un suivi persistant des tâches et de leur statut (ex: dans SurrealDB) permet à l'orchestrateur de ne reprendre que les étapes qui n'ont pas encore été complétées avec succès.
-
-### Patterns de Résilience (v1.0)
-
-Le système sub-agent implémente plusieurs patterns de résilience:
-
-**Inactivity Timeout with Heartbeat**
-- Monitoring toutes les 30 secondes
-- Timeout après 300s d'inactivité (pas de tokens, tool calls, ou réponses MCP)
-- Évite de couper les exécutions longues légitimes
-
-**Retry with Exponential Backoff**
-```rust
-// Stratégie de retry
-MAX_RETRY_ATTEMPTS = 2;        // 3 tentatives totales
-INITIAL_RETRY_DELAY_MS = 500;  // 500ms, 1000ms, 2000ms
-```
-- Erreurs retryables: timeout, network, rate limit, 502/503/429
-- Erreurs non-retryables: cancelled, permission denied, invalid
-
-**Circuit Breaker**
-```rust
-CIRCUIT_FAILURE_THRESHOLD = 3;  // Ouvre après 3 échecs
-CIRCUIT_COOLDOWN_SECS = 60;     // 60s avant recovery
-```
-- États: Closed → Open → HalfOpen → Closed
-- Empêche les cascade failures
-
-**Graceful Cancellation**
-- CancellationToken propagé aux sub-agents
-- Réponse immédiate à la demande d'annulation
-- Cleanup des ressources
-
-**Hierarchical Tracing**
-- `parent_execution_id` pour corrélation batch → tasks
-- Logs structurés avec correlation IDs
-
-## State Management
-
-### Agent State
-
-**Permanent Agents** → SurrealDB (table `agent`)
-```sql
-DEFINE TABLE agent SCHEMAFULL;
-DEFINE FIELD name ON agent TYPE string;
-DEFINE FIELD lifecycle ON agent TYPE string;
-DEFINE FIELD llm ON agent TYPE object;
-DEFINE FIELD tools ON agent TYPE array<string>;
--- Voir DATABASE_SCHEMA.md pour le schema complet
-```
-
-**Temporary Agents** → In-memory (Tokio)
-```rust
-HashMap<AgentId, AgentState> // cleanup on destroy
-```
-
-### Conversation Context
-
-**Shared Context Pool**
-- Accessible à tous agents
-- Évite redondance contexte
-- Optimise token usage
-
-**Agent-Specific Context**
-- Isolé par agent
-- Sécurité & privacy
-- Cleanup automatique
-
-## Extensibilité
-
-### Ajouter Nouveau Agent
-
-**1. Définir Capabilities**
-```rust
-enum Capability {
-    DatabaseQuery,
-    APICall,
-    EmailSend, // nouveau
-}
-```
-
-**2. Implémenter Trait**
-```rust
-struct EmailAgent;
-impl Agent for EmailAgent {
-    async fn execute(&self, task: Task) -> Report { /* */ }
-    fn capabilities(&self) -> Vec<Capability> {
-        vec![Capability::EmailSend]
-    }
-    fn lifecycle(&self) -> Lifecycle { Lifecycle::Permanent }
-}
-```
-
-**3. Configuration**
-```toml
-# agents/config/email_agent.toml
-id = "email_agent"
-provider = "Mistral"
-capabilities = ["EmailSend"]
-lifecycle = "Permanent"
-tools = ["SMTPTool"]
-```
-
-**4. Register**
-```rust
-AgentRegistry::register("email_agent", EmailAgent::new());
-```
-
-### Provider Switching
-
-Change provider sans modifier agent logic:
-```toml
-# config avant
-provider = "Mistral"
-
-# config après
-provider = "Ollama"
-```
-
-Agent interface reste identique grâce à abstraction Rig.rs.
-**Phase 1** : Mistral ↔ Ollama
-
-## Monitoring & Observability
-
-### Métriques par Agent
-
-```markdown
-# Agent Metrics: db_agent
-- Tasks executed: 142
-- Success rate: 98.5%
-- Avg duration: 230ms
-- Token usage: 45K
-- Cost: €0.23
-- Errors: 2 (timeout)
-
-## Tools Usage
-- MemoryTool: 89 calls (avg 42ms) - 98% success
-- TodoTool: 34 calls (avg 15ms) - 100% success
-- FileManagerTool: 23 calls (avg 30ms) - 100% success
-
-## MCP Servers Usage
-- serena: 23 calls (avg 120ms)
-  - find_symbol: 15 calls
-  - read_file: 8 calls
-- context7: 12 calls (avg 340ms)
-  - get_library_docs: 12 calls
-```
-
-### Health Checks
-
-```rust
-AgentRegistry::health_check("db_agent") → AgentHealth {
-    status: Healthy | Degraded | Down,
-    last_success: DateTime,
-    error_rate: f32,
-}
-```
-
-### Distributed Tracing
-
-- Request ID propagation
-- Agent call chain tracking
-- Performance bottleneck identification
-
-## Exécution des Tools (v1.0)
-
-### Format Tool Calls
-
-Les agents utilisent le **JSON Function Calling** standard (OpenAI/Mistral):
-
-**Format JSON Function Calling** (standard OpenAI/Mistral):
-
-```json
-// Tool call dans la reponse LLM
-{
-  "tool_calls": [{
-    "id": "call_abc123",
-    "type": "function",
-    "function": {
-      "name": "MemoryTool",
-      "arguments": "{\"operation\":\"add\",\"type\":\"knowledge\",\"content\":\"Info\"}"
-    }
-  }]
-}
-
-// Resultat tool renvoye au LLM
-{
-  "role": "tool",
-  "tool_call_id": "call_abc123",
-  "name": "MemoryTool",
-  "content": "{\"id\":\"mem_abc123\",\"message\":\"Memory added\"}"
-}
-```
-
-### Boucle d'Execution
-
-L'agent LLM execute une boucle jusqu'a ce qu'il n'y ait plus d'appels tools:
-
-1. **Build System Prompt**: Injection des definitions tools (JSON schema)
-2. **Appel LLM**: Envoie le prompt au provider (Mistral/Ollama)
-3. **Parse Tool Calls**: Extraction via `adapter.parse_tool_calls()` (JSON)
-4. **Execution Tools**:
-   - Tools locaux via `ToolFactory` (MemoryTool, TodoTool, CalculatorTool)
-   - Tools MCP via `MCPManager`
-5. **Format Results**: Conversion via `adapter.format_tool_result()` (JSON)
-6. **Feedback Loop**: Retour des resultats au LLM pour continuation
-7. **Repeter** jusqu'a `max_tool_iterations` (defaut: 50) ou pas de tool calls
-
-### Tools Disponibles
-
-**Basic Tools** (accessibles par tous les agents):
+### Sub-Agent Tools
 
 | Tool | Description | Operations |
 |------|-------------|------------|
-| **MemoryTool** | Persistence vectorielle | add, get, describe, list, search, delete |
-| **TodoTool** | Gestion taches workflow | create, get, update_status, list, complete, delete |
-| **CalculatorTool** | Calculs mathematiques | unary (sin, cos, sqrt, etc.), binary (add, subtract, etc.), constant |
-| **UserQuestionTool** | Questions human-in-the-loop | ask (checkbox, text, mixed) |
-| **FileManagerTool** | Operations fichiers sandboxees | list, read, write, replace, create, delete, move, rename, search_glob, search_content |
+| **SpawnAgentTool** | Creates and executes a temporary sub-agent | spawn, list_children, terminate |
+| **DelegateTaskTool** | Sequential delegation to an existing agent (by ID or name) | delegate, list_agents |
+| **ParallelTasksTool** | Parallel execution of multiple tasks (by ID or name) | execute_batch |
 
-**Sub-Agent Tools** (accessibles uniquement par l'agent principal):
+**Constraints**:
+- Maximum 15 sub-agents per workflow (`MAX_SUB_AGENTS`)
+- Only accessible when `is_primary_agent = true`
+- "Prompt In, Report Out" pattern (no shared context)
+- Sub-agents CANNOT spawn other sub-agents
+
+### Task Bridge (TodoTool Integration)
+
+TodoTool tasks are scoped per agent:
+- **Primary agent**: Sees all tasks in the workflow
+- **Sub-agent**: Only sees tasks assigned to it via `task_ids` in DelegateTask/ParallelTasks
+
+---
+
+## System Prompt Architecture
+
+### Full Prompt Structure
+
+The complete prompt is assembled from: the agent's system prompt, a tools section (summary for local tools, full description for MCP tools), a skills list (instructions loaded via ReadSkillTool), provider/model and MCP delegation info (only if the agent has delegation tools), conversation history, and the specific task.
+
+### System Prompt Anatomy
+
+| Section | Content |
+|---------|---------|
+| **Role** | Clear definition: who the agent is, its domain of expertise |
+| **Expertise** | Specific technical skills |
+| **Tools Usage** | For each tool: when, how, limits |
+| **MCP Servers Usage** | Capabilities, patterns, scope |
+| **Constraints** | Strict rules (NEVER/ALWAYS) |
+| **Response Format** | Report structure, expected metrics |
+
+### Prompt Best Practices
+
+1. **Specificity**: Precise role, not generic
+2. **Tools First**: Explain WHEN and HOW to use each tool/MCP
+3. **Clear Constraints**: NEVER/ALWAYS for strict rules
+4. **Structured Format**: Standardized sections
+5. **Validation**: Include validation steps
+6. **Metrics**: Request specific metrics in reports
+
+---
+
+## Available Tools
+
+### Basic Tools (accessible by all agents)
 
 | Tool | Description | Operations |
 |------|-------------|------------|
-| **SpawnAgentTool** | Cree et execute sous-agent temporaire | spawn, list_children, terminate |
-| **DelegateTaskTool** | Delegation sequentielle a agent existant (par ID ou nom) | delegate, list_agents |
-| **ParallelTasksTool** | Execution parallele multiple taches (par ID ou nom) | execute_batch |
+| **MemoryTool** | Vector persistence | add, get, describe, list, search, delete |
+| **TodoTool** | Workflow task management | create, get, update_status, list, complete, delete |
+| **CalculatorTool** | Mathematical calculations | unary (sin, cos, tan, sqrt, exp, ln, abs, floor, ceil, round), binary (pow, log, min, max), constant (pi, e, tau) |
+| **UserQuestionTool** | Human-in-the-loop questions | ask (checkbox, text, mixed) |
+| **FileManagerTool** | Sandboxed file operations | list, read, write, replace, create, delete, move, rename, search_glob, search_content |
 
-**Hidden Tools** (auto-injectes, pas visibles dans l'UI):
+### Hidden Tools (auto-injected)
 
-| Tool | Description | Operations |
-|------|-------------|------------|
-| **ReadSkillTool** | Lecture de documents de competences (skills) | read, list |
+| Tool | Description | Condition |
+|------|-------------|-----------|
+| **ReadSkillTool** | Reads skill documents | Agent has assigned skills |
 
-> Auto-injecte quand l'agent a des skills assignes (`agent.skills`). Permet au LLM de lire les instructions contenues dans les skills avant d'effectuer les taches associees.
+### Tool Execution Loop
 
-**Contraintes Sub-Agent Tools**:
-- Maximum 15 sous-agents par workflow (`MAX_SUB_AGENTS`)
-- Uniquement accessible via `is_primary_agent = true`
-- Pattern "Prompt In, Report Out" (pas de contexte partage)
-
-## Sélection Intelligente Tools & MCP
-
-### Decision Matrix
-
-Les tools disponibles : MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool (via ToolFactory)
-Les MCP servers sont ajoutés par l'utilisateur via Settings.
-
-### Agent Auto-Selection
-
-```rust
-// Agent choisit tool ou MCP selon contexte
-impl Agent {
-    async fn select_capability(&self, need: Need) -> Capability {
-        match need {
-            Need::DatabaseQuery => {
-                if self.has_tool("SurrealDBTool") {
-                    Capability::Tool("SurrealDBTool")
-                } else {
-                    Capability::Fallback // erreur
-                }
-            },
-            Need::CodeSearch => {
-                if self.has_mcp("serena") {
-                    Capability::MCP("serena::find_symbol")
-                } else {
-                    Capability::Tool("GrepTool") // fallback
-                }
-            }
-        }
-    }
-}
-```
-
-## Supervision et Intervention Humaine (Human-in-the-Loop)
-
-Pour garantir la securite des actions critiques, l'architecture utilise un systeme de validation via Tauri commands.
-
-**Implementation** (`src-tauri/src/commands/validation.rs`):
-```typescript
-// Creer une demande de validation
-await invoke('create_validation_request', {
-  workflowId: string,
-  validationType: 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op',
-  operation: string,
-  details: Record<string, unknown>,
-  riskLevel: 'low' | 'medium' | 'high'
-});
-
-// Lister les validations en attente
-const pending = await invoke<ValidationRequest[]>('list_pending_validations');
-
-// Approuver ou rejeter
-await invoke('approve_validation', { validationId });
-await invoke('reject_validation', { validationId, reason: 'Not approved' });
-```
-
-**Processus**:
-1. **Declenchement**: Agent cree une `ValidationRequest` pour operations sensibles
-2. **Mise en Pause**: Statut passe a `pending`, frontend affiche la demande
-3. **Validation**: Utilisateur approuve/rejette via UI
-4. **Reprise**: Agent continue si approuve, annule si rejete
-
-**Stockage**: Table `validation_request` dans SurrealDB
-
-## Sécurité
-
-### Isolation
-
-- Sandboxing tools per agent
-- Permission-based tool access
-- Input validation strict
-
-### Audit Trail
-
-```markdown
-# Agent Audit: api_agent
-[2025-11-22 14:32] Task: external_api_call
-[2025-11-22 14:32] Tool: HTTPClient → api.example.com
-[2025-11-22 14:33] Status: ✅ Success (245ms)
-[2025-11-22 14:33] Report: saved → reports/api_agent_20251122_143201.md
-```
-
-### Rate Limiting
-
-- Per-agent limits (évite abuse)
-- Per-provider limits (coûts)
-- Fallback cascade si limite atteinte
-
-## Architecture Fichiers
-
-```
-zileo-chat-3/
-├─ src-tauri/src/
-│  ├─ agents/                 # Systeme multi-agent
-│  │  ├─ mod.rs               # Re-exports
-│  │  ├─ core/
-│  │  │  ├─ mod.rs
-│  │  │  ├─ agent.rs          # Trait Agent + Task/Report types
-│  │  │  ├─ registry.rs       # AgentRegistry (thread-safe)
-│  │  │  └─ orchestrator.rs   # AgentOrchestrator
-│  │  ├─ llm_agent.rs         # LLMAgent implementation
-│  │  └─ simple_agent.rs      # SimpleAgent (testing)
-│  │
-│  ├─ tools/                  # Custom tools
-│  │  ├─ mod.rs               # Re-exports
-│  │  ├─ factory.rs           # ToolFactory
-│  │  ├─ registry.rs          # TOOL_REGISTRY global
-│  │  ├─ constants.rs         # Shared constants
-│  │  ├─ utils.rs             # DB/validation utilities
-│  │  ├─ response.rs          # JSON response builder
-│  │  ├─ memory/              # MemoryTool
-│  │  │  ├─ mod.rs
-│  │  │  └─ tool.rs
-│  │  ├─ todo/                # TodoTool
-│  │  │  ├─ mod.rs
-│  │  │  └─ tool.rs
-│  │  ├─ calculator/          # CalculatorTool
-│  │  │  ├─ mod.rs
-│  │  │  └─ tool.rs
-│  │  ├─ user_question/       # UserQuestionTool
-│  │  │  ├─ mod.rs
-│  │  │  └─ tool.rs
-│  │  ├─ file_manager/        # FileManagerTool (sandboxed)
-│  │  │  ├─ mod.rs
-│  │  │  └─ tool.rs
-│  │  ├─ read_skill.rs        # ReadSkillTool (hidden, auto-injected)
-│  │  ├─ spawn_agent.rs       # SpawnAgentTool
-│  │  ├─ delegate_task.rs     # DelegateTaskTool
-│  │  ├─ parallel_tasks.rs    # ParallelTasksTool
-│  │  ├─ sub_agent_executor.rs # Shared utilities (retry, heartbeat, metrics)
-│  │  ├─ sub_agent_circuit_breaker.rs # Circuit breaker
-│  │  └─ validation_helper.rs # Human-in-the-loop validation
-│  │
-│  ├─ commands/               # Tauri IPC commands (22 modules, 134 commands)
-│  │  ├─ agent.rs             # Agent CRUD
-│  │  ├─ workflow.rs          # Workflow management
-│  │  ├─ streaming.rs         # SSE streaming
-│  │  ├─ validation.rs        # Human-in-the-loop
-│  │  ├─ memory.rs            # Memory commands
-│  │  ├─ skill.rs             # Skill CRUD
-│  │  ├─ llm_models.rs        # LLM model management
-│  │  └─ ...                  # 14 more modules
-│  │
-│  ├─ models/                 # Rust structs
-│  │  ├─ agent.rs             # AgentConfig, Lifecycle, etc.
-│  │  └─ ...
-│  │
-│  └─ llm/                    # LLM provider integration
-│     ├─ mod.rs
-│     └─ manager.rs           # ProviderManager (Rig.rs)
-│
-├─ src/                       # Frontend (SvelteKit)
-│  ├─ lib/stores/agents.ts    # Agent store
-│  └─ types/agent.ts          # TypeScript types
-│
-└─ docs/
-   └─ MULTI_AGENT_ARCHITECTURE.md  # This file
-```
-
-**Note**: Les agents sont crees dynamiquement via l'UI et stockes dans SurrealDB.
-Il n'y a pas de fichiers TOML de configuration - les exemples TOML dans ce document
-sont des patterns de reference pour la conception.
+1. Build system prompt with tool definitions (JSON schema)
+2. Call the LLM provider (Mistral/Ollama/Custom)
+3. Parse tool calls via `adapter.parse_tool_calls()`
+4. Execute: local tools via `ToolFactory`, MCP tools via `MCPManager`
+5. Format results via `adapter.format_tool_result()`, feed back to LLM, repeat until `max_tool_iterations` (default: 50) or no more tool calls
 
 ### Tool Registry
 
-Le systeme utilise un registre global (`tools/registry.rs`) pour la decouverte des tools:
-
-```rust
-use std::sync::LazyLock;
-pub static TOOL_REGISTRY: LazyLock<ToolRegistry> = LazyLock::new(ToolRegistry::new);
-
-pub enum ToolCategory {
-    Basic,      // MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool
-    SubAgent,   // SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
-    Hidden,     // ReadSkillTool
-}
-
-// Usage
-if TOOL_REGISTRY.has_tool("MemoryTool") { ... }
-let basic = TOOL_REGISTRY.basic_tools();      // Vec<&str>
-let sub_agent = TOOL_REGISTRY.sub_agent_tools(); // Vec<&str>
-TOOL_REGISTRY.validate("UnknownTool")?;       // Returns error
-```
+Global `TOOL_REGISTRY` (`tools/registry.rs`) with 3 categories: Basic, SubAgent, Hidden. Provides validation and tool discovery.
 
 ### ToolFactory
 
-Creation de tools avec contexte (`tools/factory.rs`):
+Creates tools with context: distinguishes primary agents (with sub-agent tools) from sub-agents (without sub-agent tools) via `is_primary_agent`.
 
-```rust
-// Pour agents principaux (avec sub-agent tools)
-let tools = factory.create_tools_with_context(
-    &["MemoryTool", "TodoTool"],
-    Some(workflow_id),
-    agent_id,
-    Some(agent_context),  // AgentToolContext
-    true                  // is_primary_agent
-);
+See `src-tauri/src/tools/` for implementation.
 
-// Pour sous-agents (sans sub-agent tools)
-let tools = factory.create_tools_with_context(
-    &["MemoryTool"],
-    Some(workflow_id),
-    sub_agent_id,
-    None,                 // Pas de contexte
-    false                 // NOT primary
-);
-```
+---
 
-**Contrainte cle**: Si `is_primary_agent = false`, les sub-agent tools sont bloques.
+## Multi-Agent Workflow
+
+### Communication Patterns
+
+| Pattern | Flow |
+|---------|------|
+| **Request/Response** | Primary -> Task -> Specialized Agent -> Report (MD) -> Primary |
+| **Streaming** | Agent -> Stream of chunks -> Primary (SSE via Tauri events) |
+
+### Report Enforcement
+
+The system detects generic reports ("Task completed after N iteration(s)") and forces an additional LLM call with `tools: []` to generate a structured markdown report. Covered by 6 TDD tests.
+
+### Resilience Patterns
+
+| Pattern | Configuration | Description |
+|---------|---------------|-------------|
+| **Inactivity Timeout** | 300s, heartbeat 30s | Monitoring without cutting legitimate long executions |
+| **Retry + Backoff** | 3 attempts, 500ms initial | Retryable errors: timeout, network, rate limit, 502/503/429 |
+| **Circuit Breaker** | 3 failures -> 60s cooldown | States: Closed -> Open -> HalfOpen -> Closed |
+| **Graceful Cancellation** | CancellationToken propagation | Immediate response, resource cleanup |
+| **Hierarchical Tracing** | parent_execution_id | Batch -> task correlation |
+
+### Idempotency and Recovery
+
+- Each subtask has a unique identifier to prevent double execution
+- Configurable retry policy (exponential backoff)
+- Persistent task journal in SurrealDB
+
+---
+
+## Human-in-the-Loop Validation
+
+| Mode | Behavior |
+|------|----------|
+| **Auto** | Immediate execution |
+| **Manual** | Validation for ALL operations |
+| **Selective** | Validation by type (tools, sub_agents, mcp) |
+
+Available overrides: `auto_approve_low` (Manual mode), `always_confirm_high` (Auto mode).
+
+See `src-tauri/src/tools/validation_helper.rs` and `src-tauri/src/commands/validation.rs` for implementation.
+
+---
+
+## State Management
+
+| Type | Storage | Lifecycle |
+|------|---------|-----------|
+| Permanent Agents | SurrealDB (`agent` table) | Persistent across sessions |
+| Temporary Agents | In-memory (Tokio HashMap) | Cleanup on destroy |
+| Shared Context Pool | Accessible to all agents | Optimizes token usage |
+| Agent-Specific Context | Isolated per agent | Automatic cleanup |
+
+---
+
+## Security
+
+- **Isolation**: Sandboxed tools per agent, permission-based tool access
+- **Input Validation**: Strict validation on all inputs
+- **Audit Trail**: Agent call chain tracking, request ID propagation
+- **Rate Limiting**: Per-agent and per-provider limits
+
+---
+
+## File Structure
+
+| Area | Path |
+|------|------|
+| Agent core | `src-tauri/src/agents/core/` (agent.rs, registry.rs, orchestrator.rs) |
+| LLM agent | `src-tauri/src/agents/llm_agent.rs` |
+| Prompt building | `src-tauri/src/agents/prompt.rs` |
+| Execution loop | `src-tauri/src/agents/execution/` |
+| Tool factory | `src-tauri/src/tools/factory.rs` |
+| Tool registry | `src-tauri/src/tools/registry.rs` |
+| Basic tools | `src-tauri/src/tools/` (memory, todo, calculator, user_question, file_manager) |
+| Hidden tools | `src-tauri/src/tools/read_skill.rs` |
+| Sub-agent tools | `src-tauri/src/tools/` (spawn_agent, delegate_task, parallel_tasks, sub_agent_executor, sub_agent_circuit_breaker) |
+| Validation | `src-tauri/src/tools/validation_helper.rs` |
+| Commands | `src-tauri/src/commands/` (22 modules, 134 commands) |
+| Models | `src-tauri/src/models/` |
+| LLM providers | `src-tauri/src/llm/` |
+| Frontend store | `src/lib/stores/agents.ts` |
+| Frontend types | `src/types/agent.ts` |
+
+---
 
 ## References
 
-**Frameworks Rust**
-- Rig.rs: Agent framework + multi-provider
-- Swarms-rs: Enterprise multi-agent orchestration
-- Ractor: Actor model pour Rust
+**Protocols**: MCP 2025-06-18, A2A Protocol, JSON-RPC 2.0
 
-**Protocols**
-- MCP 2025-03-26: Communication standardisée
-- A2A Protocol: Agent-to-Agent communication
-- JSON-RPC 2.0: Message exchange
+**Patterns**: Actor Model, Factory Pattern, Registry Pattern, Strategy Pattern (provider switching), Chain of Responsibility (tool chains)
 
-**Patterns**
-- Actor Model: Isolation + message-passing
-- Factory Pattern: Création agents uniformisée
-- Registry Pattern: Découverte dynamique
-- Strategy Pattern: Provider switching
-- Chain of Responsibility: Tool chains
+**Related Docs**: [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md), [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md), [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)

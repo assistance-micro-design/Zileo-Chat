@@ -1,146 +1,88 @@
 # Zileo Chat 3 - Documentation
 
-Application desktop multi-agents avec interface conversationnelle.
+Multi-agent desktop application with conversational interface.
 
-## Stack Technique
+## Tech Stack
 
-**Frontend** : SvelteKit 2.53.4 + Svelte 5.53.6 + Vite 7.3.1
-**Backend** : Rust 1.93.0 + Tauri 2
-**Database** : SurrealDB ~2.6
-**LLM Framework** : Rig.rs 0.32.0 (multi-provider)
-**LLM Providers Phase 1** : Mistral + Ollama
-**Protocol** : MCP 2025-06-18 (SDK officiel Anthropic)
+**Frontend**: SvelteKit 2.53.4 + Svelte 5.53.6 + Vite 7.3.1
+**Backend**: Rust 1.93.0 + Tauri 2
+**Database**: SurrealDB ~2.6
+**LLM Framework**: Rig.rs 0.32.0 (multi-provider)
+**LLM Providers**: Mistral + Ollama + OpenAI-compatible (custom)
+**Protocol**: MCP 2025-06-18 (Anthropic official SDK)
 
 ## Architecture
 
 ```
 Frontend (SvelteKit)
-    ↓ Tauri IPC
+    | Tauri IPC
 Backend (Rust)
-    ├─ Agent Orchestrator
-    ├─ MCP Client/Server
-    └─ Rig.rs (LLM)
-    ↓
-SurrealDB + MCP Servers externes
+    |-- Agent Orchestrator
+    |-- MCP Client/Server
+    +-- Rig.rs (LLM)
+    |
+SurrealDB + External MCP Servers
 ```
 
-## Documentation par Catégorie
+## Documentation Index
 
-### 🏗️ Architecture & Décisions
+### Architecture & Decisions
 
-**[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)**
-Toutes les décisions architecturales avec justifications : structure projet, database, sécurité, features, deployment
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | All architectural decisions with rationale |
+| [TECH_STACK.md](TECH_STACK.md) | Exact versions, prerequisites, official resources |
+| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Full SurrealDB schema: tables, relations, indexes |
 
-**[TECH_STACK.md](TECH_STACK.md)**
-Versions exactes de toutes les technologies, prérequis, ressources officielles
+### Multi-Agent & LLM
 
-**[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)**
-Schéma complet SurrealDB : tables, relations, indexes, queries
+| Document | Description |
+|----------|-------------|
+| [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md) | Hierarchical agent system, sub-agent delegation, communication |
+| [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md) | Parallel vs sequential orchestration, execution flows |
+| [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) | All 9 agent tools: Todo, Memory, UserQuestion, Sub-Agent, File, Report, Skill |
 
-### 🤖 Multi-Agents & LLM
+### Frontend & UX
 
-**[MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md)**
-Système hiérarchique agents (Principal, Spécialisés, Temporaires), communication markdown, registry, prompts
+| Document | Description |
+|----------|-------------|
+| [FRONTEND_SPECIFICATIONS.md](FRONTEND_SPECIFICATIONS.md) | Routes, components, stores, state management |
+| [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) | Colors, typography, components, themes, accessibility |
 
-**[WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md)**
-Orchestration intra-workflow : exécution parallèle vs séquentielle des sous-agents/tools/MCP selon dépendances
+### Development & Deployment
 
-**[AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md)**
-Outils natifs agents : Todo, Memory (vectorielle), UserQuestion, Sub-Agent tools
+| Document | Description |
+|----------|-------------|
+| [GETTING_STARTED.md](GETTING_STARTED.md) | Installation, configuration, first run |
+| [API_REFERENCE.md](API_REFERENCE.md) | Tauri IPC commands, types, events |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Build & packaging: Linux, macOS, Windows |
+| [TESTING_STRATEGY.md](TESTING_STRATEGY.md) | Test strategy: unit, integration, CI/CD |
 
-**[TOOLS_REFERENCE.md](TOOLS_REFERENCE.md)**
-Reference complete des 9 tools avec exemples JSON et patterns de securite
+## Getting Started
 
-**[SUB_AGENT_GUIDE.md](SUB_AGENT_GUIDE.md)**
-Guide sous-agents : SpawnAgentTool, DelegateTaskTool, ParallelTasksTool
+1. [GETTING_STARTED.md](GETTING_STARTED.md) - Set up your environment
+2. [TECH_STACK.md](TECH_STACK.md) - Understand versions and tools
+3. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Learn the design rationale
+4. [API_REFERENCE.md](API_REFERENCE.md) - Explore the API
 
-### 🔌 MCP (Model Context Protocol)
+## Key Principles
 
-**[MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md)**
-Guide configuration MCP servers : npx, uvx, docker, transports, sécurité
+- **Agent hierarchy**: Orchestrator > Specialized (persistent) > Temporary
+- **Security first**: Encrypted API keys, input validation, audit logging, human-in-the-loop
+- **Streaming**: Real-time LLM responses
+- **Embedded DB**: SurrealDB with RocksDB for desktop
+- **Extensible**: MCP servers, modular agents, provider switching via config
 
-### 🎨 Frontend & UX
+## External Resources
 
-**[FRONTEND_SPECIFICATIONS.md](FRONTEND_SPECIFICATIONS.md)**
-Spécifications complètes UI/UX : pages (Settings, Agent), multi-workflow, validation human-in-the-loop, composants et utilities réutilisables
+- **MCP**: https://modelcontextprotocol.io
+- **Rig.rs**: https://rig.rs
+- **Tauri v2**: https://v2.tauri.app
+- **SvelteKit**: https://kit.svelte.dev
+- **SurrealDB**: https://surrealdb.com
 
-**[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)**
-Systeme de design complet : couleurs, typographie, composants UI, theme light/dark, accessibilite
+## Status
 
-### 🚀 Développement & Déploiement
-
-**[GETTING_STARTED.md](GETTING_STARTED.md)**
-Guide démarrage : installation, configuration, premier workflow
-
-**[API_REFERENCE.md](API_REFERENCE.md)**
-Référence Tauri commands : IPC, types, événements
-
-**[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
-Build et packaging : Linux (AppImage, .deb), macOS (.dmg), Windows (.msi)
-
-**[TESTING_STRATEGY.md](TESTING_STRATEGY.md)**
-Stratégie tests : unitaires, intégration, E2E, CI/CD
-
-## Workflows Documentation
-
-### Nouveau Contributeur
-1. [GETTING_STARTED.md](GETTING_STARTED.md) → Setup environnement
-2. [TECH_STACK.md](TECH_STACK.md) → Versions et outils
-3. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) → Comprendre choix
-4. [API_REFERENCE.md](API_REFERENCE.md) → Référence technique
-
-### Implémentation Features
-1. [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md) → Création agents
-2. [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md) → Orchestration parallèle/séquentielle
-3. [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) → Outils disponibles
-4. [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md) → Configuration MCP
-5. [API_REFERENCE.md](API_REFERENCE.md) → Tauri commands
-
-### Intégration LLM & MCP
-1. [MCP_CONFIGURATION_GUIDE.md](MCP_CONFIGURATION_GUIDE.md) → Configuration serveurs MCP
-2. [TOOLS_REFERENCE.md](TOOLS_REFERENCE.md) → Tools disponibles
-3. [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) → Documentation outils
-
-### Deployment
-1. [TESTING_STRATEGY.md](TESTING_STRATEGY.md) → Tests validation
-2. [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) → Build & packaging
-3. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) → Config production
-
-## Principes Projet
-
-### Architecture
-- **Hiérarchie agents** : Orchestrateur → Spécialisés (permanent) → Temporaires
-- **Communication** : Markdown reports standardisés
-- **Abstraction** : Rig.rs pour multi-provider, MCP pour standardisation
-
-### Sécurité
-- **Production-ready dès v1** : API keys encryptées, validation inputs, audit logging
-- **Human-in-the-loop** : Validation opérations critiques (suppression, modifications sensibles)
-- **Isolation** : Sandboxing tools, permissions minimales par agent
-
-### Performance
-- **Streaming** : Réponses LLM temps réel
-- **Caching** : Responses, embeddings, prompts
-- **Embedded DB** : SurrealDB RocksDB pour desktop
-
-### Évolutivité
-- **Agents modulaires** : Factory pattern, registry dynamique
-- **Provider switching** : Configuration uniquement (pas code)
-- **MCP extensible** : Ajout servers sans modification agents
-
-## Ressources Externes
-
-**MCP** : https://modelcontextprotocol.io
-**Rig.rs** : https://rig.rs
-**Tauri v2** : https://v2.tauri.app
-**SvelteKit** : https://kit.svelte.dev
-**SurrealDB** : https://surrealdb.com
-
-## Status Documentation
-
-- **Cohérente** : Interdépendances vérifiées
-- **Complète** : Toutes sections couvertes
-- **Tests** : ~1076 backend lib tests, ~285 frontend tests (~1361 total)
-- **Sécurité** : 24 audits de sécurité complétés
-
-Dernière validation : 2026-03-26
+- ~1083 backend lib tests + ~285 frontend tests
+- 24 security audits completed
+- Last validation: 2026-03-27

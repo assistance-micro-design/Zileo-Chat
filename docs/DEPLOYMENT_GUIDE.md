@@ -1,462 +1,116 @@
-# Guide Deploiement
+# Deployment Guide
 
-> Build, packaging et distribution multi-OS
+> Build, packaging, and multi-OS distribution
 
-## Vue d'Ensemble
+## Overview
 
-**Version actuelle** : 0.18.0
-**Strategie** : Linux + macOS + Windows (parallel via GitHub Actions)
-**Format** : AppImage, .deb (Linux), .dmg (macOS), .msi (Windows)
-**CI/CD** : GitHub Actions (workflows dans `.github/workflows/`)
-**Auto-updates** : Non configure (prevu v1.5)
+| Item | Value |
+|------|-------|
+| **Version** | 0.18.0 |
+| **Strategy** | Linux + macOS + Windows (parallel via GitHub Actions) |
+| **Formats** | AppImage, .deb (Linux), .dmg (macOS), .msi (Windows) |
+| **CI/CD** | GitHub Actions (`.github/workflows/`) |
+| **Auto-updates** | Not configured (planned for v1.5) |
 
 ---
 
-## Prérequis Build
+## Build Prerequisites
 
 ### Linux (Ubuntu/Debian)
-```bash
-sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev
-```
+
+Install system packages: `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`.
 
 ### macOS
-```bash
-xcode-select --install
-```
 
-**Requis** : macOS 10.15+ (Catalina)
+Install Xcode CLI tools: `xcode-select --install`. Required: macOS 10.15+ (Catalina).
 
 ### Windows
-**Requis** :
-- Visual Studio Build Tools 2019+
-- WebView2 Runtime (installé auto si absent)
+
+- Visual Studio Build Tools 2022 with "Desktop development with C++"
+- Rust with MSVC toolchain: `rustup default stable-msvc`
+- Node.js 20+ LTS
+- WebView2 Runtime (pre-installed on recent Windows 10/11)
+
+See `scripts/setup-windows.ps1` for automated setup.
 
 ---
 
-## Configuration Build
+## Build
 
-### tauri.conf.json (Configuration Reelle)
+### Available Scripts
 
-```json
-{
-  "productName": "Zileo Chat",
-  "version": "0.18.0",
-  "identifier": "com.zileo.chat",
-  "build": {
-    "frontendDist": "../build",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  },
-  "app": {
-    "windows": [{ "title": "Zileo Chat", "width": 1200, "height": 800 }],
-    "security": {
-      "csp": "default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.ico",
-      "icons/icon.icns"
-    ]
-  }
-}
-```
+| Command | Description |
+|---------|-------------|
+| `npm run tauri:dev` | Development with HMR |
+| `npm run tauri:build` | Production build (release) |
 
-**Note** : Les icons incluent aussi `Zileo-icon.png` (branding custom).
+Output: `src-tauri/target/release/bundle/`
+
+Release profile: `lto = true`, `strip = true`, `opt-level = 3`, `panic = "abort"`, `codegen-units = 1`.
 
 ---
 
-## Build Local
+## Packaging by OS
 
-### Scripts Disponibles (package.json)
+### Linux
 
-```bash
-npm run tauri:dev      # Developpement avec HMR
-npm run tauri:build    # Build production
-```
+The production build automatically generates AppImage and .deb via `npm run tauri:build`.
 
-### Development Build
-```bash
-npm run tauri:build
-```
+- **AppImage**: Portable, compatible with all distros. Output: `zileo-chat_X.Y.Z_amd64.AppImage`
+- **.deb**: For Debian/Ubuntu. Install: `sudo dpkg -i zileo-chat_X.Y.Z_amd64.deb`
 
-**Output** : `src-tauri/target/release/bundle/`
+### macOS
 
-### Release Build
-```bash
-npm run tauri:build
-```
+The build produces a .dmg via `npm run tauri:build`. Code signing is required for public distribution (Developer ID Application certificate).
 
-**Note** : Le profil release est utilise par defaut avec LTO (`lto = true`, `strip = true`, `opt-level = 3`, `panic = "abort"`, `codegen-units = 1`).
+### Windows
 
----
+The build produces MSI and NSIS installers via `npm run tauri:build`.
 
-## Packaging par OS
+Output:
+- `src-tauri/target/release/bundle/msi/zileo-chat_X.Y.Z_x64-setup.msi`
+- `src-tauri/target/release/bundle/nsis/zileo-chat_X.Y.Z_x64-setup.exe`
 
-### Linux (Configure)
-
-Les targets sont configures dans tauri.conf.json : `"all"` (tous les formats disponibles par OS)
-
-#### AppImage (Universal)
-```bash
-npm run tauri:build
-```
-
-**Avantages** : Pas installation, portable, compatible toutes distros
-**Output** : `zileo-chat_0.18.0_amd64.AppImage`
-
-#### .deb (Debian/Ubuntu)
-Build produit automatiquement les deux formats.
-
-**Installation** :
-```bash
-sudo dpkg -i zileo-chat_0.18.0_amd64.deb
-```
-
-**Output** : `zileo-chat_0.18.0_amd64.deb`
-
----
-
-### macOS (Prevu)
-
-> **Statut** : Configure via `bundle.targets: "all"` dans tauri.conf.json.
-
-#### .dmg (Image Disque)
-```bash
-npm run tauri:build
-```
-
-**Code Signing** (requis distribution publique) :
-```bash
-codesign --sign "Developer ID Application: Your Name" \
-  src-tauri/target/release/bundle/macos/Zileo\ Chat.app
-```
-
-**Output prevu** : `zileo-chat_0.18.0_x64.dmg`
-
----
-
-### Windows (Guide Complet)
-
-#### Prerequisites Windows
-
-**1. Visual Studio Build Tools 2022** (obligatoire)
-
-```powershell
-# Via winget (recommande)
-winget install Microsoft.VisualStudio.2022.BuildTools
-
-# OU telecharger: https://visualstudio.microsoft.com/visual-cpp-build-tools/
-```
-
-Lors de l'installation, selectionner:
-- "Desktop development with C++"
-- Windows 10/11 SDK
-
-**2. Rust avec toolchain MSVC**
-
-```powershell
-# Installer Rust
-winget install Rustlang.Rustup
-
-# OU telecharger: https://rustup.rs/
-
-# Configurer le toolchain MSVC (IMPORTANT)
-rustup default stable-msvc
-
-# Verifier
-rustup show
-# Doit afficher: stable-x86_64-pc-windows-msvc (default)
-```
-
-**3. Node.js 20+**
-
-```powershell
-winget install OpenJS.NodeJS.LTS
-
-# Verifier
-node --version   # >= 20.x
-```
-
-**4. WebView2 Runtime**
-
-Normalement pre-installe sur Windows 10/11 recent. Si absent:
-```powershell
-winget install Microsoft.EdgeWebView2Runtime
-```
-
-#### Build Manuel Windows
-
-```powershell
-# 1. Cloner le projet
-git clone https://github.com/xxx/Zileo-Chat-3.git
-cd Zileo-Chat-3
-
-# 2. Installer les dependances
-npm ci
-
-# 3. Valider le projet (optionnel mais recommande)
-npm run check
-npm run lint
-
-# 4. Build release
-npm run tauri build
-
-# 5. Le MSI est genere dans:
-explorer "src-tauri\target\release\bundle\msi"
-```
-
-**Output** :
-```
-src-tauri/target/release/bundle/
-├── msi/
-│   └── zileo-chat_0.18.0_x64-setup.msi    # Installer MSI
-└── nsis/
-    └── zileo-chat_0.18.0_x64-setup.exe    # Installer NSIS (alternative)
-```
-
-#### Script Automatise Windows
-
-Un script PowerShell est fourni pour automatiser le setup complet:
-
-```powershell
-# Telecharger et executer le script
-cd Zileo-Chat-3
-
-# Setup complet (installe prerequisites si manquants + build)
-powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
-
-# Build uniquement (prerequisites deja installes)
-powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -SkipPrerequisites
-
-# Mode developpement (lance l'app sans build release)
-powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1 -DevMode
-```
-
-**Options du script:**
-| Option | Description |
-|--------|-------------|
-| (aucune) | Setup complet + build release |
-| `-SkipPrerequisites` | Passe la verification/installation des prerequisites |
-| `-DevMode` | Lance `npm run tauri dev` au lieu de build |
-
-#### Troubleshooting Windows
-
-**Erreur: "MSVC not found"**
-```powershell
-# Verifier le toolchain
-rustup show
-
-# Si "gnu" au lieu de "msvc":
-rustup default stable-msvc
-```
-
-**Erreur: "link.exe not found"**
-```powershell
-# Reinstaller Visual Studio Build Tools avec les composants C++
-winget install Microsoft.VisualStudio.2022.BuildTools `
-  --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-**Erreur: "WebView2 not found"**
-```powershell
-winget install Microsoft.EdgeWebView2Runtime
-```
-
-**Build tres lent (premiere fois)**
-
-Normal! La premiere compilation Rust telecharge et compile toutes les dependances (~10-15 min).
-Les builds suivants sont beaucoup plus rapides (~2-5 min).
-
-Pour accelerer:
-```powershell
-# Utiliser plus de CPU cores
-$env:CARGO_BUILD_JOBS = "8"
-npm run tauri build
-```
-
-**Erreur: "npm ci failed"**
-```powershell
-# Nettoyer et reinstaller
-npm cache clean --force
-Remove-Item -Recurse -Force node_modules
-npm ci
-```
-
-#### Workflow Complet Windows
-
-```powershell
-# === SETUP INITIAL (une seule fois) ===
-
-# 1. Installer prerequisites
-winget install Microsoft.VisualStudio.2022.BuildTools
-winget install Rustlang.Rustup
-winget install OpenJS.NodeJS.LTS
-
-# 2. Configurer Rust
-rustup default stable-msvc
-
-# 3. Cloner le projet
-git clone https://github.com/xxx/Zileo-Chat-3.git
-cd Zileo-Chat-3
-
-# 4. Installer dependances npm
-npm ci
-
-
-# === DEVELOPPEMENT (quotidien) ===
-
-# Lancer en mode dev (hot reload)
-npm run tauri dev
-
-
-# === BUILD RELEASE ===
-
-# Generer l'installeur MSI
-npm run tauri build
-
-# Installer pour tester
-Start-Process "src-tauri\target\release\bundle\msi\zileo-chat_0.18.0_x64-setup.msi"
-```
-
-#### Checklist Pre-Build Windows
-
-```powershell
-# Verifier tous les prerequisites
-rustc --version          # >= 1.93.0
-rustup show              # stable-x86_64-pc-windows-msvc
-node --version           # >= 20.x
-npm --version            # >= 10.x
-
-# Verifier Visual Studio Build Tools
-# Ouvrir "Developer PowerShell for VS 2022" - si ca marche, c'est OK
-```
+See `scripts/setup-windows.ps1` for automated build with options: `-SkipPrerequisites`, `-DevMode`.
 
 ---
 
 ## CI/CD Pipeline
 
-### Validation Locale
+### Local Validation
 
-```bash
-# Frontend validation
-npm run lint              # ESLint
-npm run check             # svelte-check + TypeScript
-npm run test              # Vitest unit tests
+**Frontend**: `npm run lint && npm run check && npm run test`
 
-# Backend validation
-cd src-tauri
-cargo fmt --check         # Format verification
-cargo clippy -- -D warnings  # Linting
-cargo test                # Unit tests
-```
+**Backend**: `cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
-### GitHub Actions - Configuration Active
+### GitHub Actions
 
-**Statut** : Configure et fonctionnel dans `.github/workflows/`
+Tauri does NOT support cross-compilation. Each OS is built on its own runner in parallel.
 
-**Contrainte importante** : Tauri ne supporte PAS la cross-compilation.
-Chaque OS est builde sur son propre runner en parallele.
+| Workflow | Trigger | Action |
+|----------|---------|--------|
+| `validate.yml` | PR to main | Lint + Type check + Tests (frontend + backend, parallel jobs) |
+| `release.yml` | Tag `v*` or `workflow_dispatch` | Build 3 OS + Draft release with artifacts |
 
-#### Workflow Release (`.github/workflows/release.yml`)
-
-**Declencheur** : Push de tag `v*` ou `workflow_dispatch` (manuel)
-
-**Fonctionnement** :
-- Build parallele sur 3 OS (Ubuntu, macOS, Windows)
-- Cree une release draft avec tous les artifacts
-- Detecte automatiquement les pre-releases (beta, alpha)
-- Genere les checksums SHA256
-
-**Artifacts generes** :
+**Artifacts generated by release**:
 - `zileo-chat_X.Y.Z_amd64.AppImage` (Linux)
-- `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
+- `zileo-chat_X.Y.Z_amd64.deb` (Linux)
 - `zileo-chat_X.Y.Z_x64.dmg` (macOS)
 - `zileo-chat_X.Y.Z_x64.msi` (Windows)
 
-#### Workflow Validate (`.github/workflows/validate.yml`)
+### Creating a Release
 
-**Declencheur** : PR vers `main` uniquement
+1. Verify synchronized versions (`package.json`, `Cargo.toml`, `tauri.conf.json`)
+2. Create and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+3. Release workflow triggers automatically
+4. Verify artifacts in the draft release on GitHub
+5. Edit release notes and publish
 
-**Jobs paralleles** :
-1. **Frontend** : `npm run lint` + `npm run check` + `npm run test`
-2. **Backend** : `cargo fmt --check` + `cargo clippy` + `cargo test`
+### Dependabot
 
-#### Resume des Workflows
+Configured in `.github/dependabot.yml`: weekly updates for npm, cargo, github-actions (monthly). PRs labeled `skip-changelog`.
 
-| Workflow | Declencheur | Action |
-|----------|-------------|--------|
-| `validate.yml` | PR vers main | Lint + Type check + Tests (frontend + backend) |
-| `release.yml` | Tag `v*` ou manuel | Build 3 OS + Release draft |
-
-### Creer une Release
-
-#### Via GitHub Desktop (Recommande)
-
-1. Verifier versions synchronisees (`package.json`, `Cargo.toml`, `tauri.conf.json`)
-2. Commit final des changements
-3. Aller dans **History**
-4. Clic droit sur le commit → **Create Tag**
-5. Nom : `v0.18.0-beta` (ou version suivante)
-6. **Push origin** (inclut automatiquement le tag)
-
-#### Via CLI
-
-```bash
-# Verifier que tout est propre
-git status
-npm run lint && npm run check
-cd src-tauri && cargo clippy && cargo test
-
-# Creer et pousser le tag
-git tag v0.18.0-beta
-git push origin v0.18.0-beta
-```
-
-#### Finalisation sur GitHub
-
-1. Aller dans **Releases** → La draft release apparait
-2. Verifier les artifacts (4 fichiers attendus)
-3. Editer les release notes (generees automatiquement via labels)
-4. Cliquer **Publish release**
-
-### Configuration Dependabot
-
-Fichier : `.github/dependabot.yml`
-
-Mises a jour automatiques hebdomadaires pour :
-- **npm** : Dependencies frontend
-- **cargo** : Dependencies Rust
-- **github-actions** : Actions CI (mensuel)
-
-Les PRs de dependabot ont le label `skip-changelog` pour ne pas polluer les release notes.
-
-### Templates GitHub
-
-| Fichier | Usage |
-|---------|-------|
-| `.github/ISSUE_TEMPLATE/bug_report.md` | Template pour signaler des bugs |
-| `.github/ISSUE_TEMPLATE/feature_request.md` | Template pour proposer des features |
-| `.github/PULL_REQUEST_TEMPLATE.md` | Checklist pour les PR |
-| `.github/release.yml` | Configuration auto-generation release notes |
-
-### Labels pour Release Notes
-
-Les release notes sont generees automatiquement selon les labels des PRs :
+### Labels for Release Notes
 
 | Label | Section |
 |-------|---------|
@@ -465,228 +119,91 @@ Les release notes sont generees automatiquement selon les labels des PRs :
 | `bug`, `fix` | Bug Fixes |
 | `performance` | Performance |
 | `documentation` | Documentation |
-| `dependencies` | Exclu des notes |
+| `dependencies` | Excluded from notes |
 
 ---
 
-## Distribution
+## Environments
 
-### GitHub Releases (Automatise)
+| Aspect | Development | Production |
+|--------|-------------|------------|
+| Build | Debug (`npm run tauri:dev`) | Release (`npm run tauri:build`) |
+| DB | SurrealDB embedded (RocksDB) | SurrealDB embedded (RocksDB) |
+| Security | - | API keys via keyring + AES-256, CSP |
 
-**Processus** :
-1. Creer tag `v*` (via GitHub Desktop ou CLI)
-2. Push le tag → GitHub Actions se declenche
-3. Build automatique sur 3 OS en parallele
-4. Release draft creee avec tous les artifacts
-5. Publier manuellement apres verification
-
-**Assets generes automatiquement** :
-- `zileo-chat_X.Y.Z_amd64.AppImage` (Linux Universal)
-- `zileo-chat_X.Y.Z_amd64.deb` (Linux Debian/Ubuntu)
-- `zileo-chat_X.Y.Z_x64.dmg` (macOS)
-- `zileo-chat_X.Y.Z_x64.msi` (Windows)
-
-### Checksums (Manuel)
-
-Si vous souhaitez generer des checksums manuellement :
-```bash
-sha256sum zileo-chat_* > SHA256SUMS
-sha256sum -c SHA256SUMS  # Verification
-```
-
-**Note** : Les checksums ne sont pas generes automatiquement par le workflow.
+No separate staging environment (desktop application).
 
 ---
 
-## Auto-Updates (Prevu v1.5)
+## Environment Variables
 
-> **Statut** : Non configure. La configuration updater n'existe pas dans tauri.conf.json.
-
-### Configuration Requise (Quand Active)
-
-Ajouter dans `tauri.conf.json` :
-```json
-{
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": ["https://releases.zileo.com/{{target}}/{{current_version}}"],
-      "dialog": true,
-      "pubkey": "PUBLIC_KEY_HERE"
-    }
-  }
-}
-```
-
-### Commandes Tauri (Reference)
-
-```bash
-# Generer keypair
-npx tauri signer generate
-
-# Signer release
-npx tauri signer sign zileo-chat_0.18.0_amd64.AppImage
-```
-
-Voir documentation Tauri : https://v2.tauri.app/plugin/updater/
+| Variable | Production | Development | Impact |
+|----------|-----------|-------------|--------|
+| `SURREAL_SYNC_DATA` | `true` (required) | `false` (default) | Without this variable, RocksDB is NOT crash-safe. Enables WAL synchronization. |
+| `SURREAL_LOG` | `error` | `debug` | Verbose logging impacts performance in production. |
 
 ---
 
-## Environnements
+## Auto-Updates (Planned for v1.5)
 
-### Development
-- **Build** : Debug mode via `npm run tauri:dev`
-- **DB** : SurrealDB embedded (RocksDB local)
-- **Logs** : Configure via tracing-subscriber (env-filter)
-
-### Production
-- **Build** : Release via `npm run tauri:build`
-- **DB** : SurrealDB embedded (RocksDB)
-- **Security** : API keys via keyring + AES-256, CSP configure
-
-**Note** : Pas d'environnement staging separe (application desktop).
-
----
-
-## Variables d'Environnement Critiques
-
-### SURREAL_SYNC_DATA (CRITICAL - Production)
-
-**IMPORTANT**: Cette variable DOIT etre configuree en production pour garantir la securite des donnees.
-
-```bash
-# Production (OBLIGATOIRE)
-export SURREAL_SYNC_DATA=true
-
-# Development (optionnel, defaut: false)
-export SURREAL_SYNC_DATA=false
-```
-
-**Impact**:
-- Sans cette variable, RocksDB/SurrealKV n'est PAS crash-safe
-- En cas de crash ou coupure electrique, les donnees peuvent etre corrompues
-- Active la synchronisation WAL (Write-Ahead Log) pour durabilite
-
-**Reference**: [SurrealDB Performance Best Practices](https://surrealdb.com/docs/surrealdb/reference-guide/performance-best-practices)
-
-### SURREAL_LOG (Production)
-
-```bash
-# Production (performance optimale)
-export SURREAL_LOG=error
-
-# Development (debug)
-export SURREAL_LOG=debug
-```
-
-**Impact**: Le logging verbose a un impact significatif sur les performances en production.
-
----
-
-## Monitoring Post-Release (Prevu)
-
-> **Statut** : Aucun monitoring configure. Sentry n'est pas integre.
-
-### Crash Reports (Prevu)
-
-Pour integrer Sentry, ajouter dans Cargo.toml :
-```toml
-sentry = "0.32"
-```
-
-### Analytics
-
-**Approche recommandee** : Telemetry opt-in (privacy-first)
-- Version OS utilisée
-- Version app
-- Crashes (anonymisés)
-- Pas données utilisateur
-
-### Feedback
-
-**GitHub Issues** : Bug reports + feature requests
-**Discord/Forum** : Support communauté
+Not currently configured. Will require adding the `updater` plugin in `tauri.conf.json` with endpoints, dialog, and pubkey. See Tauri documentation: https://v2.tauri.app/plugin/updater/
 
 ---
 
 ## Rollback Strategy
 
-### Probleme Post-Release
-
-**1. Identifier version stable precedente**
-```bash
-git tag -l "v*"
-```
-
-**2. Supprimer tag problematique** (exemple)
-```bash
-git tag -d v0.1.1
-git push origin :refs/tags/v0.1.1
-```
-
-**3. Republier version stable** (exemple)
-```bash
-git tag v0.18.0-hotfix
-git push origin v0.18.0-hotfix
-```
-
-**4. Communiquer** : Release notes + notification utilisateurs
+1. Identify previous stable version: `git tag -l "v*"`
+2. Delete problematic tag (local + remote)
+3. Create and push a hotfix tag
+4. Communicate via release notes
 
 ---
 
-## Checklist Release
+## Release Checklist
 
 ### Pre-Release
-- [ ] Tests passent : `npm run test` + `cargo test`
-- [ ] Lint OK : `npm run lint` + `cargo clippy -- -D warnings`
-- [ ] Type check OK : `npm run check`
-- [ ] Format OK : `cargo fmt --check`
-- [ ] Version synchronisee (`package.json` + `tauri.conf.json` + `Cargo.toml`)
-- [ ] Changelog mis a jour
 
-### Release (Automatise via GitHub Actions)
-- [ ] Tag cree et pushe : `git tag vX.Y.Z && git push origin vX.Y.Z`
-- [ ] Workflow release termine sans erreur
-- [ ] artifacts presents dans la draft release
-- [ ] Release notes verifiees et editees si besoin
-- [ ] Release publiee
+- [ ] Tests: `npm run test` + `cargo test`
+- [ ] Lint: `npm run lint` + `cargo clippy --all-targets -- -D warnings`
+- [ ] Type check: `npm run check`
+- [ ] Format: `cargo fmt --check`
+- [ ] Versions synchronized (`package.json` + `tauri.conf.json` + `Cargo.toml`)
+- [ ] Changelog updated
+
+### Release
+
+- [ ] Tag created and pushed
+- [ ] Release workflow completed without errors
+- [ ] Artifacts present in the draft release
+- [ ] Release notes verified
+- [ ] Release published
 
 ### Post-Release
-- [ ] Test installation sur machine propre (au moins 1 OS)
-- [ ] Verification checksums SHA256
-- [ ] Feedback utilisateurs collecte
-- [ ] Hotfix si critique (rollback si necessaire)
+
+- [ ] Installation tested on a clean machine (at least 1 OS)
+- [ ] User feedback collected
+- [ ] Hotfix if critical
 
 ---
 
-## Troubleshooting
+## Troubleshooting FAQ
 
-### Build Failed Linux
-
-**Error** : Missing webkit2gtk
-**Solution** : Installer deps système (voir Prérequis Build)
-
-### Build Failed macOS
-
-**Error** : Code signing failed
-**Solution** : Vérifier certificat Developer ID valide
-
-### Build Failed Windows
-
-**Error** : WebView2 not found
-**Solution** : Installer WebView2 Runtime manuellement
-
-### Large Binary Size
-
-**Solutions** :
-1. **Enable LTO** : Deja configure dans Cargo.toml (`lto = true`, `strip = true`, `codegen-units = 1`)
-2. Optimize dependencies : Exclude unused features dans Cargo.toml
+| Problem | Solution |
+|---------|----------|
+| Missing webkit2gtk (Linux) | Install system deps (see Build Prerequisites) |
+| Code signing failed (macOS) | Verify valid Developer ID certificate |
+| WebView2 not found (Windows) | `winget install Microsoft.EdgeWebView2Runtime` |
+| MSVC not found (Windows) | `rustup default stable-msvc` |
+| link.exe not found (Windows) | Reinstall VS Build Tools with C++ components |
+| Very slow build (first time) | Normal (~10-15 min). Subsequent builds: ~2-5 min |
+| npm ci failed | `npm cache clean --force`, delete `node_modules`, `npm ci` |
+| Large binary size | LTO already configured. Optimize dependencies (exclude unused features) |
 
 ---
 
-## Références
+## References
 
-**Tauri Build** : https://v2.tauri.app/develop/build/
-**Tauri Updater** : https://v2.tauri.app/plugin/updater/
-**Code Signing** : https://v2.tauri.app/distribute/sign/
-**GitHub Actions** : https://docs.github.com/actions
+- **Tauri Build**: https://v2.tauri.app/develop/build/
+- **Tauri Updater**: https://v2.tauri.app/plugin/updater/
+- **Code Signing**: https://v2.tauri.app/distribute/sign/
+- **GitHub Actions**: https://docs.github.com/actions

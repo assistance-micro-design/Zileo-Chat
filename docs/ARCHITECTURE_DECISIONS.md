@@ -1,1154 +1,377 @@
-# Décisions Architecture Projet
+# Architecture Decisions
 
-> **Date** : 2025-11-23 (décisions initiales) | 2025-12-09 (validation implémentation) | 2026-03-01 (post-audit sécurité)
-> **Phase** : Phase 8 complète + Security Audit Remediation
-> **Statut** : Décisions validées et implémentées (134 commandes Tauri, 98 composants Svelte, ~1361 tests)
-
----
-
-## 1. Architecture & Stack
-
-### Question 2 : Structure Projet
-
-**Décision** : **From Scratch avec structure Tauri standard**
-
-**Raisons** :
-- Templates Tauri génériques = overhead inutile pour architecture multi-agents
-- Contrôle total structure dossiers pour agents/prompts/tools
-- Pas de dépendances template obsolètes
-
-**Structure Reelle** :
-```
-zileo-chat-3/
-├─ src/                    # Frontend SvelteKit
-│  ├─ routes/              # Pages (settings, agent)
-│  ├─ lib/components/      # Composants UI réutilisables
-│  └─ stores/              # State management Svelte
-│
-├─ src-tauri/              # Backend Rust
-│  ├─ agents/              # Système multi-agents
-│  │  ├─ core/             # Orchestrateur, registry, agent.rs
-│  │  ├─ llm_agent.rs      # Agent LLM principal
-│  │  └─ simple_agent.rs   # Agent simple
-│  ├─ llm/                 # Rig.rs integration, providers
-│  ├─ mcp/                 # MCP client/server (SDK officiel)
-│  ├─ tools/               # Tools (Memory, Todo, Calculator, UserQuestion, SubAgent)
-│  ├─ db/                  # SurrealDB client, schemas
-│  ├─ security/            # Keystore + validation
-│  └─ commands/            # Tauri commands (IPC)
-│
-└─ docs/                   # Documentation projet
-```
-
-**Avantages** :
-- Clarté organisation (agents, llm, mcp séparés)
-- Scalabilité (ajout agents/tools facile)
-- Maintenance (responsabilités claires)
+> Last updated: 2026-03-27 | Phase 8 complete + Security Audit Remediation + Code Quality Refactoring
+> Validated and implemented. 1000+ tests passing across backend and frontend.
 
 ---
 
-### Question 3 : Mono-repo ou Packages
+## 1. Architecture and Stack
 
-**Décision** : **Mono-repo**
+### Q2: Project Structure
 
-**Raisons** :
-- Frontend + Backend couplés (Tauri natif)
-- Pas de versioning indépendant nécessaire
-- Simplification développement (un repo, un build)
-- Coordination agents/tools/UI dans même codebase
+**Decision**: From scratch with standard Tauri structure (monorepo).
 
-**Pas Multi-packages** car :
-- Overhead gestion versions entre packages
-- Complexité inutile pour application desktop
-- Pas de réutilisation externe prévue
+**Rationale**:
+- Generic Tauri templates add overhead for a multi-agent architecture
+- Full control over folder organization for agents/prompts/tools
+- Frontend (SvelteKit) and backend (Rust) are tightly coupled via Tauri IPC, no need for multi-package versioning
 
----
+### Q3: Monorepo
 
-## 2. Database & Persistence
+**Decision**: Single monorepo, no multi-package setup.
 
-### Question 4 : Schéma SurrealDB
-
-**Décision** : **Schéma complet avec relations graph**
-
-**Raisons** :
-- Multi-agents = relations complexes (agent → workflow → tasks → memory)
-- SurrealDB = graph natif, exploiter capacités
-- Queries relationnelles essentielles (ex: "tous workflows agent X")
-
-**Entités Principales** :
-
-**workflow**
-- Identité : id, name, status
-- Relations : → agent (créateur), → messages, → tasks, → validations
-- Temporal : created_at, updated_at, completed_at
-
-**agent_state**
-- Identité : agent_id, lifecycle (permanent/temporary)
-- Relations : → workflows créés, → tools utilisés
-- Persistence : configuration, metrics
-
-**memory**
-- Identité : id, type (user_pref, context, knowledge)
-- Vectoriel : embedding, dimensions
-- Relations : → workflow source, → agent créateur
-- Metadata : tags, priority, timestamp
-
-**message**
-- Identité : id, role (user/assistant/system)
-- Relations : → workflow, → agent
-- Content : text, tokens, reasoning_steps
-
-**validation_request**
-- Identité : id, type (tool, sub_agent, mcp, file_op, db_op)
-- Relations : → workflow, → agent
-- Decision : approved/rejected, user_id, timestamp
-
-**task**
-- Identité : id, name, status (pending, in_progress, completed)
-- Relations : → workflow, → agent_assigned
-- Tracking : priority, duration, dependencies
-
-**Relations Graph** :
-- workflow ↔ agent (many-to-one)
-- workflow → messages (one-to-many)
-- workflow → tasks (one-to-many)
-- workflow → validations (one-to-many)
-- agent → memory (one-to-many)
-- memory ↔ memory (many-to-many, relations sémantiques)
-
-> **Note Implémentation** : Le schéma final contient 18 tables incluant les entités ci-dessus plus : `agent`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `custom_provider`, `user_question`, `workflow_folder`. Voir `docs/DATABASE_SCHEMA.md` pour le schéma complet.
-
-**Pas de schéma rigide** :
-- SurrealDB = schemaless possible
-- Mais DEFINE TABLE/FIELD pour validation données critiques
+**Rationale**:
+- Desktop app with no external reuse planned
+- One repo, one build, simplified coordination
 
 ---
 
-### Question 5 : Workflow Versioning
+## 2. Database and Persistence
 
-**Décision** : **Audit trail simplifié, pas versioning complet**
+### Q4: SurrealDB Schema
 
-**Raisons** :
-- Audit trail = suffisant pour debug et compliance
-- Versioning complet = complexité excessive pour v1
-- Focus : traçabilité actions, pas rollback workflows
+**Decision**: Full schema with graph relations (SCHEMAFULL tables with DEFINE TABLE/FIELD).
 
-**Audit Trail Contient** :
-- Tous state changes workflow (idle → running → completed)
-- Toutes validations user (approved/rejected avec timestamp)
-- Tous tool calls (params, duration, success/error)
-- Tous MCP server calls (latency, résultats)
+**Rationale**:
+- Multi-agent system requires complex relations (agent -> workflow -> tasks -> memory)
+- SurrealDB graph capabilities exploited natively
+- Relational queries essential for cross-entity lookups
 
-**Pas Versioning Complet** :
-- Pas snapshots état intermédiaires
-- Pas rollback automatique
-- Pas diff entre versions
+**Core entities**: `agent`, `workflow`, `memory`, `message`, `validation_request`, `task`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `custom_provider`, `user_question`, `workflow_folder`, `skill`.
 
-**Suffisant pour** :
-- Debugging (reproduire problème)
-- Compliance (traçabilité décisions)
-- Analytics (patterns usage)
+**Memory types**: `user_pref`, `context`, `knowledge`, `decision`. Vectorial embeddings for semantic search.
 
----
+**Graph relations**: workflow <-> agent (many-to-one), workflow -> messages/tasks/validations (one-to-many), agent -> memory (one-to-many), memory <-> memory (semantic links).
 
-### Question 6 : Retention Policy
+See `docs/DATABASE_SCHEMA.md` for the complete schema.
 
-**Décision** : **Retention différenciée par type**
+### Q5: Workflow Versioning
 
-**Workflows** :
-- **Completed** : 90 jours → archivage (JSON export)
-- **Error** : 180 jours (debug long terme)
-- **Running** : Pas suppression auto (gestion manuelle)
+**Decision**: Simplified audit trail, not full versioning.
 
-**Logs** :
-- **Application logs** : 30 jours
-- **Audit logs** : 1 an (compliance)
-- **Metrics** : 90 jours (agrégation mensuelle après)
+**Rationale**:
+- Audit trail sufficient for debugging and compliance
+- Full versioning (snapshots, rollback, diff) excessive for v1
+- Tracks: all state changes, validations, tool calls, MCP calls with timestamps
 
-**Memory** :
-- **Temporary** (workflow-specific) : Suppression avec workflow
-- **Permanent** (user preferences, knowledge) : Pas expiration
-- **Pruning** : Manuel ou basé sur score pertinence
+### Q6: Retention Policy
 
-**Reports Agents** :
-- **Recent** : 30 jours en DB
-- **Archived** : Export filesystem, compression
-- **Cleanup** : Automatique tâche schedulée
+**Decision**: Differentiated retention by data type.
+
+- **Workflows**: completed 90d, error 180d, running no auto-delete
+- **Logs**: app 30d, audit 1y, metrics 90d (monthly aggregation after)
+- **Memory**: temporary (deleted with workflow), permanent (no expiry), pruning by relevance score
+- **Reports**: 30d in DB, then archived to filesystem
 
 ---
 
-## 3. Security & Operations
+## 3. Security and Operations
 
-### Question 7 : Security Level
+### Q7: Security Level
 
-**Décision** : **Production-ready dès v1**
+**Decision**: Production-ready from v1.
 
-**Raisons** :
-- Application manipule données utilisateur sensibles
-- Appels LLM avec API keys = surface attaque
-- Desktop app = accès filesystem/system
+**Rationale**:
+- App handles sensitive user data and LLM API keys
+- Desktop app has filesystem/system access
+- Measures: encrypted secrets, input validation, sanitization before DB/LLM, process isolation for MCP servers, audit logging
 
-**Mesures Production-Ready** :
+Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth (local desktop app).
 
-**Secrets Management**
-- API keys jamais en clair (encrypted storage)
-- Rotation keys supportée (pas automatique v1)
-- Variables env pour dev/staging
+### Q8: API Keys Storage
 
-**Input Validation**
-- Tous inputs utilisateur validés (types, ranges)
-- Sanitization avant DB/LLM
-- Protection injection (SQL, prompt injection)
+**Decision**: OS-native secure storage via Tauri (Keychain / Credential Manager / libsecret) with additional AES-256 encryption.
 
-**Process Isolation**
-- MCP servers externes : Docker containers
-- Sandboxing tools sensibles (file operations)
-- Permissions minimales par agent
+**Rationale**:
+- Defense in depth: OS keystore + app-level encryption
+- Keys read only at LLM call time, temporary encrypted cache during session
+- No plaintext keys in memory longer than necessary
+- API keys are never exported (Import/Export omits them, warns user to reconfigure)
 
-**Audit & Monitoring**
-- Logging toutes opérations sensibles
-- Anomaly detection basique (rate abuse)
-- User notifications opérations critiques
+### Q9: Logging Framework
 
-**Pas Overkill** :
-- Pas pentesting externe v1
-- Pas certification SOC2 v1
-- Pas multi-factor auth (desktop local)
+**Decision**: `tracing` (Tokio ecosystem) with structured JSON logging and spans.
 
----
+**Rationale**:
+- Async-first, compatible with Tokio runtime
+- Contextual fields (agent_id, workflow_id, tool_name) for multi-agent correlation
+- Levels: ERROR/WARN/INFO/DEBUG/TRACE. Dev: console formatted. Prod: rotated JSON files.
 
-### Question 8 : API Keys Storage
+### Q10: Error Handling
 
-**Décision** : **Tauri secure storage + encryption**
+**Decision**: `anyhow` + `thiserror` combined.
 
-**Raisons** :
-- Tauri fournit API secure storage natif OS
-- Encryption additionnelle = defense in depth
-- Pas besoin vault externe (overhead)
-
-**Stratégie** :
-
-**Stockage** :
-- MacOS : Keychain
-- Windows : Credential Manager
-- Linux : Secret Service (libsecret)
-
-**Encryption Additionnelle** :
-- Keys encryptées avant storage (AES-256)
-- Clé encryption dérivée de machine ID + user
-- Jamais keys en plaintext memory longtemps
-
-**Accès** :
-- Lecture keys uniquement au moment call LLM
-- Cache temporaire encrypted (durée session)
-- Cleanup automatique fin application
-
-**Suffisant v1** :
-- Pas HSM (Hardware Security Module)
-- Pas rotation automatique
-- Pas multi-user (desktop = single user)
+**Rationale**:
+- `anyhow` for application code (commands, propagation with `.context()`)
+- `thiserror` for library code (agents, mcp, tools) with typed public errors
+- IPC boundary: errors converted to user-friendly strings, never stack traces in UI
+- Recovery strategy: graceful degradation, no `panic!` in production, workflow pause on critical error
 
 ---
 
-### Question 9 : Logging Framework
+## 4. LLM Providers
 
-**Décision** : **tracing (Tokio ecosystem)**
+### Q12: Provider Routing
 
-**Raisons** :
-- Async-first (compatible Tokio natif)
-- Structured logging (JSON)
-- Distributed tracing (spans pour multi-agents)
-- Écosystème mature Rust
+**Decision**: User choice with intelligent suggestions. No auto-routing.
 
-**Capacités Nécessaires** :
+**Supported providers**:
+- **Mistral**: Cloud API via api.mistral.ai (small/large/medium models, reasoning via Magistral)
+- **Ollama**: Local inference, privacy-first, free
+- **Custom providers (OpenAI-compatible)**: Any provider exposing `/v1/chat/completions` (OpenRouter, RouterLab, etc.)
 
-**Structured Logs** :
-- JSON format pour agrégation
-- Fields contextuels (agent_id, workflow_id, tool_name)
-- Corrélation events multi-agents
+**Behavior**:
+- User selects provider per agent configuration
+- Last choice persisted as default
+- Fallback: proposed (not silent) if provider is down, user approves or rejects
+- Suggestions based on task complexity (small model for simple tasks, large for reasoning)
 
-**Levels** :
-- ERROR : Failures bloquants
-- WARN : Problèmes non-bloquants (fallback utilisé)
-- INFO : Opérations importantes (workflow start/end)
-- DEBUG : Détails internes (dev seulement)
-- TRACE : Verbeux extrême (disabled prod)
+### Q12b: Provider Resilience
 
-**Spans** :
-- Trace workflow complet (start → end)
-- Sub-spans par agent execution
-- Sub-spans par tool call
-- Latency automatique par span
+**Decision**: Multi-layer protection with rate limiting + retry + circuit breaker.
 
-**Output** :
-- Dev : Console formaté (human-readable)
-- Prod : Fichiers rotatifs + JSON
-- Future : Possible export metrics endpoint
-
-**Pas Alternatives** :
-- `log` : Pas structured, pas spans
-- `env_logger` : Trop simple, pas async-first
-- `slog` : Moins écosystème Tokio
+**Rationale**:
+- Rate limiting: 1 req/s minimum delay (Mistral Free Tier compliance)
+- Retry: 3 max with exponential backoff (1s, 2s, 4s), capped at 30s. Non-retryable: auth errors, circuit open
+- Circuit breaker: 3 consecutive failures -> 60s cooldown, half-open for test request
+- HTTP connection pooling: centralized reqwest::Client, 5 idle connections/host, 300s timeout
 
 ---
 
-### Question 10 : Error Handling
+## 5. Tools and Agents
 
-**Décision** : **anyhow + thiserror combinés**
+### Q5b: Built-in Tools
 
-**Raisons** :
-- Combinaison = best of both worlds
-- anyhow : Propagation simple, context chaining
-- thiserror : Custom errors typés publics
+**Decision**: Extensible tool system with built-in tools and MCP integration.
 
-**Usage** :
+**Built-in tools (9)**: Calculator, Memory, Todo, UserQuestion, FileManager, ReadSkill (hidden, auto-injected), SpawnAgent, DelegateTask, ParallelTasks. TaskBridge is a scoping module, not a standalone tool.
 
-**anyhow** :
-- Applications code (main, commands)
-- Propagation rapide erreurs (?)
-- Context ajouté (.context("operation failed"))
+**MCP tools**: Discovered dynamically from user-configured MCP servers. Cached with 1h TTL.
 
-**thiserror** :
-- Libraries internes (agents, mcp, tools)
-- Erreurs typées publiques
-- Pattern matching erreurs
+### Q5c: ToolDefinition Summary/Description Split
 
-**Stratégie Globale** :
+**Decision**: Every ToolDefinition has two fields: `summary` (1-line) and `description` (structured, full guidance).
 
-**Boundaries** :
-- IPC Tauri : Conversion Error → String user-friendly
-- LLM calls : Retry strategy (exponential backoff)
-- DB operations : Transaction rollback auto
-- MCP calls : Timeout + fallback
+**Rationale**:
+- `summary` used in system prompt for token efficiency (lightweight context)
+- `description` used in API `tools` parameter (full structured guidance with USE/DON'T USE bullets, operations, examples)
+- MCP tools auto-extract `summary` from first sentence of their description
+- Skills listed by name only in system prompt (instructions loaded via ReadSkill)
+- Provider/model/MCP delegation info injected only if agent has delegation tools
 
-**User-Facing** :
-- Jamais stack traces côté UI
-- Messages clairs actions correctives
-- Logging détails backend seulement
+### Q5d: Task Bridge
 
-**Recovery** :
-- Graceful degradation (fallback providers)
-- Pas panic! en production
-- Workflow pause si erreur critique, pas abort
+**Decision**: TaskBridge for TodoTool primary/sub-agent scoping with task_ids in DelegateTask/ParallelTasks.
+
+**Rationale**:
+- Sub-agents need scoped access to parent tasks without global state
+- task_ids parameter in delegation tools enables explicit task assignment
+- Clean separation between orchestrator and worker agent contexts
 
 ---
 
-## 4. Features Priority
+## 6. MCP Configuration
 
-### Question 11 : MCP Servers Priority
+### Q11: MCP Servers
 
-**Décision** : **Pas de serveurs MCP pré-intégrés - Configuration utilisateur**
+**Decision**: No pre-integrated MCP servers. User configures via Settings > MCP.
 
-**Raisons** :
-- Flexibilité maximale : utilisateur choisit ses servers
-- Pas de dépendances bundlées
-- Configuration via Settings > MCP
-- Support commandes standard (docker, npx, uvx)
+**Rationale**:
+- Maximum flexibility: user chooses servers based on needs (privacy, cost, performance)
+- Supports docker, npx, uvx, and custom binary commands
+- Templates suggested for popular servers (serena, context7, playwright)
 
-**Fonctionnement** :
+**Deployment approaches** (documented, not imposed):
+- Docker local (privacy, offline)
+- NPX/UVX (simple install)
+- SaaS distant (no maintenance, scaling)
 
-**Configuration Format** :
-```json
-{
-  "mcpServers": {
-    "nom_server": {
-      "command": "docker|npx|uvx",
-      "args": ["array", "arguments"],
-      "env": { "VAR": "valeur" }
-    }
-  }
-}
-```
+### Q17: MCP Deployment Guidance
 
-**Interface Settings** :
-- Section MCP avec liste servers configurés
-- Boutons Add/Edit/Delete/Test
-- Templates suggérés (serena, context7, playwright)
-- Documentation inline (command nécessite quoi)
+**Decision**: Document multiple approaches, let user choose.
 
-**Application Responsabilité** :
-- Exécuter command configurée
-- Gérer communication (stdio/HTTP selon command)
-- Monitoring status (online/offline)
-- Logs erreurs
+**Rationale**:
+- Application executes any valid command configuration
+- Documentation provides trade-offs per approach (privacy vs performance vs cost)
+- Recommended: Docker for sensitive code, SaaS for public data, NPX/UVX for development
 
-**Pas de Priorité Implémentation** :
-- Utilisateur décide quels servers installer
-- Pas de servers "par défaut"
-- Documentation guide pour servers populaires
+### Q18: Hot-Reload Registry
 
-### Question 12 : Provider Routing
+**Decision**: Static configuration at startup (v1). Restart required for changes.
 
-**Décision** : **User choice avec suggestions intelligentes**
+**Rationale**:
+- Hot-reload adds significant complexity
+- Adding MCP servers is infrequent
+- Future v2 consideration if user demand is high
 
-**Raisons** :
-- Utilisateur contrôle coûts (providers différents = pricing différent)
-- Transparence : user sait quel LLM utilisé
-- Suggestions = aide sans imposer
+### Q19: Error Recovery Strategy
 
-**Providers Phase 1** : Mistral + Ollama
-- **Mistral** : Cloud API, performant, coût modéré
-- **Ollama** : Local, gratuit, privacy-first
+**Decision**: Graceful degradation with user notification.
 
-**Fonctionnement** :
+- **Level 1**: Automatic retry (3x exponential backoff) for transient errors
+- **Level 2**: Fallback (skip unavailable tool, continue workflow, notify user)
+- **Level 3**: User decision (pause workflow, offer Retry/Skip/Abort)
+- Never silent failure: always logged, user informed if workflow impacted
 
-**Sélection User** :
-- Interface : Dropdown providers configurés
-- Par workflow : User choisit provider au démarrage
-- Persistance : Dernier choix mémorisé par défaut
+### Q25: MCP Resilience and Monitoring
 
-**Suggestions Intelligentes** :
-- **Task simple** : Suggestion Mistral small (rapide, cheap)
-- **Task complexe** : Suggestion Mistral large (reasoning)
-- **Code generation** : Suggestion Ollama codellama (local)
-- **Privacy prioritaire** : Suggestion Ollama (local, gratuit)
+**Decision**: Circuit breaker + health checks + latency metrics.
 
-**Pas Auto-Routing Forcé** :
-- Respect choix user même si suggestion différente
-- Warning si choix non-optimal (ex: Opus pour tâche simple)
-
-**Fallback Automatique** :
-- Si provider choisi down : Proposition switch auto
-- User approuve ou rejette fallback
-- Pas switch silencieux (transparence)
+- Circuit breaker: 3 failures -> 60s cooldown, per-server state
+- Health checks: background task every 5min using refresh_tools() as probe
+- Latency metrics: P50/P95/P99 from mcp_call_log table (last 1h window)
+- Tool caching: 1h TTL, invalidated on errors
+- ID lookup table: O(1) server operations via id_to_name HashMap
 
 ---
 
-### Question 13 : Testing Coverage
+## 7. Features and Testing
 
-**Décision** : **Critical paths prioritaires + minimum coverage**
+### Q13: Testing Coverage
 
-**Raisons** :
-- 100% coverage = impossible/coûteux pour v1
-- Focus : chemins critiques = ROI maximum
-- Tests E2E prioritaires sur unit tests exhaustifs
+**Decision**: Critical paths prioritized with minimum coverage targets.
 
-**Critical Paths** :
+**Critical paths tested**:
+- Workflow execution (input -> agent -> LLM -> streaming response)
+- Agent orchestration (multi-agent workflows, inter-agent reports)
+- Tools execution (MCP calls, DB operations, memory vectorial retrieval)
+- Validation human-in-the-loop (approve/reject flow)
 
-**Workflow Execution** :
-- User input → Agent processing → LLM call → Response streaming
-- Validation human-in-the-loop (approve/reject)
-- Error handling et recovery
+**Targets**: ~70% backend critical modules. Frontend: E2E for main workflows. 1000+ tests across Rust and TypeScript.
 
-**Agent Orchestration** :
-- Création workflow multi-agents
-- Communication inter-agents (reports)
-- State persistence et reload
+### Q14: CI/CD Pipeline
 
-**Tools Execution** :
-- MCP tool calls (success + error cases)
-- Database operations (CRUD)
-- Memory storage/retrieval vectorielle
+**Decision**: GitHub Actions with parallel jobs.
 
-**Target Coverage** :
-- **Backend Rust** : ~70% critical modules
-- **Frontend Svelte** : Tests E2E chemins principaux
-- **Integration** : Tous workflows end-to-end
-
-**Pas Testé Exhaustivement** :
-- UI composants isolés (tests unitaires tous composants = overkill)
-- Edge cases rares (< 1% usage)
-- Configuration parsing (validation schéma suffit)
+- **On PR**: linting (clippy --all-targets, eslint), unit tests, build check, security audit
+- **On merge to main**: full test suite, multi-platform build (Linux, macOS, Windows)
+- **On tag push (v*)**: multi-platform draft release with artifacts
 
 ---
 
-### Question 14 : CI/CD Pipeline
+## 8. Deployment
 
-**Décision** : **GitHub Actions (si GitHub) ou GitLab CI**
+### Q15: Target OS
 
-**Raisons** :
-- Gratuit pour projets privés/publics
-- Intégration native repos
-- Templates Rust + Tauri disponibles
+**Decision**: Linux first, then macOS, Windows Phase 2.
 
-**Pipeline Minimum** :
+- Linux: primary development platform, AppImage + .deb
+- macOS: easy Tauri cross-compile, .dmg
+- Windows: .msi (future, lower priority)
 
-**On Push (branches feature)** :
-- Linting (clippy Rust, eslint frontend)
-- Unit tests backend
-- Build check (compilation success)
+### Q16: Auto-Updates
 
-**On PR (vers main)** :
-- Tests integration
-- Security audit (cargo audit)
-- Coverage report
+**Decision**: Manual updates v1, Tauri built-in updater planned for v1.5.
 
-**On Merge (main)** :
-- Build releases (Linux, macOS, Windows)
-- Tests E2E complets
-- Packaging artifacts
-
-**Deployment** :
-- Pas auto-deploy v1 (release manuelle)
-- Artifacts publiés GitHub Releases
-- Future : Auto-updates intégré app
+**Rationale**:
+- Young application with frequent breaking changes
+- v1: GitHub Releases (manual download)
+- v1.5: Tauri updater with user notification and approval (never silent updates)
 
 ---
 
-## 5. Deployment
+## 9. Frontend State Management
 
-### Question 15 : OS Cibles
+### Q20: Store Patterns
 
-**Décision** : **Linux prioritaire, puis macOS, Windows Phase 2**
+**Decision**: CRUD factory as canonical pattern for persisted entities, with documented alternatives.
 
-**Raisons** :
+| Pattern | Use Case | Examples |
+|---------|----------|----------|
+| **CRUD Factory** (canonical) | Entities with DB persistence | agents.ts, prompts.ts |
+| **Pure Functions** | API calls without local state | llm.ts, mcp.ts |
+| **Event-Driven** | Tauri real-time events | streaming.ts, validation.ts |
+| **Custom Factory** | localStorage persistence | theme.ts, locale.ts |
 
-**Linux First** :
-- Platform développement principale
-- Testing simplifié
-- SurrealDB embedded natif Linux
+**Rules**:
+- New persisted entity -> use createCRUDStore factory
+- Pure API calls -> pure functions (component manages its own state)
+- Tauri events -> event-driven with mandatory init/cleanup/reset lifecycle
+- Never duplicate: one pattern per store (hybrid pattern is deprecated)
 
-**macOS Phase 1.5** :
-- Build facile (Tauri cross-platform)
-- Large user base développeurs
-- Testing nécessaire (signature app)
+### Q21: Svelte 5 Runes Migration
 
-**Windows Phase 2** :
-- Complexité packaging (MSI, code signing)
-- Testing environnement requis
-- Priorité moindre si app dev-focused
+**Decision**: COMPLETED. All components and stores use Svelte 5 runes.
 
-**Packaging Formats** :
-- Linux : AppImage (universal) + .deb (Debian/Ubuntu)
-- macOS : .dmg (distribution standard)
-- Windows : .msi (future)
+**Result**:
+- Full migration to $state, $derived, $effect runes
+- Snippets ({#snippet} + {@render}) replace slots
+- {@attach} replaces use:action
+- $props() replaces export let
+- createContext replaces setContext/getContext
 
----
+### Q22: Utility Factories
 
-### Question 16 : Auto-Updates
+**Decision**: Factories for repetitive patterns (modal controllers, async handlers).
 
-**Décision** : **Non nécessaire v1, prévu v1.5**
-
-**Raisons** :
-
-**v1 : Manual Updates** :
-- Application jeune = breaking changes fréquents
-- User contrôle installation timing
-- Pas infrastructure update server nécessaire
-
-**v1.5 : Auto-Updates** :
-- Tauri built-in updater (intégré framework)
-- Notification user : "Update disponible"
-- User choisit install maintenant ou plus tard
-
-**Jamais Silent Updates** :
-- Transparence : user approuve updates
-- Rollback possible si problème
-- Release notes affichées
-
-**Infrastructure** :
-- v1 : GitHub Releases (manual download)
-- v1.5 : Tauri updater + releases JSON manifest
+**Rationale**:
+- Modal controller factory reduces ~30 lines per modal instance
+- Async handler factory eliminates repetitive try/catch/finally boilerplate
+- Both use Svelte 5 runes (.svelte.ts files) for reactive state outside components
 
 ---
 
-## 6. MCP Configuration (Nouvelles Questions)
+## 10. Settings Page Architecture
 
-### Question 17 : Guidance Deployment MCP (Documentation Utilisateur)
+### Q26: Settings Navigation
 
-**Décision** : **Documenter approches multiples, laisser choix utilisateur**
+**Decision**: Route-based navigation instead of scroll-based.
 
-**Clarification** :
-- Application n'impose pas méthode déploiement
-- Utilisateur choisit selon besoins (privacy, coût, performance)
-- Application exécute configuration fournie
+**Rationale**:
+- Scroll-based IntersectionObserver caused 30-60 callbacks/sec
+- 798-line monolithic page was unmaintainable
+- Route-based enables code splitting, browser history, shareable URLs
 
-**Approches Supportées** :
-
-**1. Docker Local**
-- **Commande** : `docker run -i --rm image:tag`
-- **Avantages** : Privacy (données locales), gratuit, offline
-- **Inconvénients** : Nécessite Docker, maintenance images
-- **Use Cases** : Serena (code sensible), Playwright (tests contrôlés)
-
-**2. NPX (Node.js)**
-- **Commande** : `npx -y @package/mcp-server`
-- **Avantages** : Installation simple, peut être local ou SaaS
-- **Inconvénients** : Nécessite Node.js
-- **Use Cases** : Servers JS/TS, peut pointer vers SaaS si package client
-
-**3. UVX (Python)**
-- **Commande** : `uvx mcp-server-package`
-- **Avantages** : Isolation environnements Python, rapide
-- **Inconvénients** : Nécessite Python + uv
-- **Use Cases** : Servers Python (SQLite, data processing)
-
-**4. SaaS Distant**
-- **Commande** : Client pointant vers API (via NPX/binaire)
-- **Avantages** : Pas maintenance, performance élevée, scaling auto
-- **Inconvénients** : Coûts, dépendance réseau, privacy moindre
-- **Use Cases** : Context7 (docs publiques), servers externes managés
-
-**Documentation Utilisateur** :
-
-**Templates Settings** :
-- Pré-remplis pour servers populaires
-- Explications inline (Docker vs NPX vs UVX)
-- Trade-offs clairement indiqués
-
-**Guide Installation** :
-- Comment installer Docker / Node / Python
-- Exemples configurations complètes
-- Troubleshooting erreurs communes
-
-**Recommandations par Use Case** :
-- **Privacy critique** → Docker local
-- **Performance/scaling** → SaaS managé
-- **Développement** → NPX/UVX local
-- **Production** → Hybride selon sensibilité données
-
-**Application Rôle** :
-- Exécuter toute command valide (docker, npx, uvx, binaire custom)
-- Pas préférence imposée
-- Monitoring status indépendant méthode
+**Routes**: `/settings/providers`, `/settings/agents`, `/settings/mcp`, `/settings/memory`, `/settings/validation`, `/settings/prompts`, `/settings/skills`, `/settings/import-export`, `/settings/theme`.
 
 ---
 
-### Question 18 : Hot-Reload Registry
+## 11. Import/Export
 
-**Décision** : **Configuration statique au démarrage (v1)**
+### Q27: Import/Export Schema v1.1
 
-**Raisons** :
-- Hot-reload = complexité technique élevée
-- Use case rare (combien fois ajout MCP server ?)
-- Restart app acceptable v1
+**Decision**: Versioned schema (v1.0 backward compatible, v1.1 current) with 6 entity types.
 
-**v1 Behavior** :
-- Configuration chargée au startup
-- Modification config → Restart app required
-- Message user : "Restart to apply changes"
-
-**Future v2** :
-- Hot-reload si demande forte users
-- Complexité justifiée si usage fréquent
+**Rationale**:
+- Schema v1.1 adds skills and custom providers to the original 4 entity types
+- Import order enforces dependency resolution: custom_providers -> models -> mcp_servers -> skills -> agents -> prompts
+- Cross-entity references by NAME (not UUID) so orphan refs are safe (user creates missing entity later)
+- API keys never exported (OS keyring) with structured ImportWarning for user guidance
+- `SUPPORTED_SCHEMA_VERSIONS = ["1.0", "1.1"]` for backward compatibility
+- postImportActions in ImportResult for actionable post-import checklist
 
 ---
 
-### Question 19 : Error Recovery Strategy
+## 12. Database Query Safety
 
-**Décision** : **Graceful degradation + User notification**
+### Q24: Parameterized Queries
 
-**Strategy Multi-Level** :
+**Decision**: Enforce parameterized queries and LIMIT on all list operations.
 
-**Level 1 : Retry Automatique**
-- Timeout transient (réseau) : 3 retries exponential backoff
-- Pas notification user si success après retry
-
-**Level 2 : Fallback**
-- MCP server down : Skip tool call, continuer workflow
-- Notification user : "Tool X unavailable, continuing without"
-- Workflow pas aborted
-
-**Level 3 : User Decision**
-- Erreur persistante (3 retries failed) : Pause workflow
-- Notification user : "Server X down. Retry / Skip / Abort ?"
-- User choisit action
-
-**Jamais Silent Failure** :
-- Toujours logging erreur (même si recovered)
-- User informé si impact workflow
-- Metrics erreurs pour monitoring
+**Rationale**:
+- SQL injection prevention (security audit remediation)
+- Memory protection from unbounded queries
+- All WHERE clauses with user input use bind parameters via `query_with_params()` / `execute_with_params()`
+- Default limits: 1000 for list operations, 100 for models, 500 for logs/messages
+- Transaction support with automatic rollback on failure
 
 ---
 
-## Récapitulatif Décisions
-
-### ✅ Architecture
-- Structure : From scratch, mono-repo
-- MCP : SDK officiel Anthropic
-
-### ✅ Database
-- Schéma : Complet avec relations graph
-- Versioning : Audit trail simplifié
-- Retention : Différenciée par type (30-180 jours)
-
-### ✅ Security
-- Level : Production-ready v1
-- API Keys : Tauri secure storage + encryption
-- Logging : tracing (structured, spans)
-- Errors : anyhow + thiserror
-
-### ✅ Features
-- MCP : Configuration utilisateur (pas de serveurs pré-intégrés)
-- Provider : User choice + suggestions intelligentes (Mistral + Ollama Phase 1)
-- Testing : Critical paths (~70% backend)
-- CI/CD : GitHub Actions / GitLab CI
-
-### ✅ Deployment
-- OS : Linux → macOS → Windows (progressif)
-- Updates : Manual v1, auto v1.5
-
-### ✅ MCP Ops
-- Deployment : Hybride (Docker local dev, SaaS prod option)
-- Hot-reload : Non v1 (restart required)
-- Error recovery : Retry → Fallback → User decision
-
-### ✅ Frontend State
-- Store pattern : CRUD factory canonique, pure functions acceptable
-- Event-driven : Cleanup lifecycle obligatoire
-- Runes migration : Completee (Svelte 5 runes utilisees partout)
-
----
-
-## Statut Implémentation (Décembre 2025)
-
-**Phases Complétées** :
-1. ✅ Phase 0 : Security Critical (SurrealDB 2.4.0, CSP, API key validation, MCP env security)
-2. ✅ Phase 1 : Frontend Stability (store cleanup methods, memory leak fixes, error utility)
-3. ✅ Phase 2 : DB/Backend Quick Wins (release profile, constants, response builder)
-4. ✅ Phase 3 : Types & Polish (type sync, nullability convention, AVAILABLE_TOOLS constant)
-5. ✅ Phase 4 : MCP Quick Wins (tool caching, HTTP pooling, latency metrics)
-6. ✅ Phase 5 : Strategic Backend/DB (parameterized queries, transactions, query limits)
-7. ✅ Phase 6 : Strategic MCP (circuit breaker, ID lookup table, health checks)
-8. ✅ Phase 7 : Strategic Frontend (settings decomposition, lazy loading, cache TTL)
-9. ✅ Phase 8 : LLM Optimizations (rate limiter, retry, circuit breaker, HTTP pooling, utils)
-
-**Total Tests** : ~2546 passing (2286 backend + 260 frontend)
-**Code Quality** : 0 errors across all validations (clippy, eslint, svelte-check)
-**Security Audit** : 24 audits remédiés, incluant SurrealQL injection, input validation, dependency cleanup
-
-**Différé Post-v1** :
-- specta + tauri-specta (BLOCKED: incompatible with Tauri 2.10.x)
-- Rate limiting sensitive ops, prompt injection guard
-- thiserror migration, live query API
-- Superforms integration
-
-**Documentation Technique** :
-- Schéma DB : `docs/DATABASE_SCHEMA.md`
-- API Reference : `docs/API_REFERENCE.md`
-- Stack Technique : `docs/TECH_STACK.md`
-- Guide MCP : `docs/MCP_CONFIGURATION_GUIDE.md`
-
----
-
-## 7. Frontend State Management (Stores)
-
-### Question 20 : Store Pattern Canonique
-
-**Décision** : **Factory CRUD comme pattern canonique pour entités persistées**
-
-**Raisons** :
-- Pattern agents.ts/prompts.ts prouvé et maintenable
-- Réduction duplication via createCRUDStore factory
-- Derived stores pour consommation optimisée
-- Intégration Tauri IPC standardisée
-
-**Patterns Reconnus** :
-
-| Pattern | Stores | Use Case | Status |
-|---------|--------|----------|--------|
-| **CRUD Factory** | agents.ts, prompts.ts | Entités avec CRUD backend | ✅ Canonique |
-| **Pure Functions** | llm.ts, mcp.ts | API calls sans state local | ✅ Acceptable |
-| **Event-Driven** | streaming.ts, validation.ts, userQuestion.ts | Events Tauri real-time | ✅ Acceptable |
-| **Custom Factory** | theme.ts, locale.ts, onboarding.ts | Persistence localStorage | ✅ Acceptable |
-| **Hybrid** | workflows.ts (legacy) | Duplication pure + reactive | ⚠️ Deprecated |
-
-**Pattern CRUD Factory (Canonique)** :
-
-```typescript
-// src/lib/stores/factory/createCRUDStore.ts
-const store = createCRUDStore<TFull, TCreate, TUpdate, TSummary>({
-  name: 'entity',
-  commands: {
-    list: 'list_entities',
-    get: 'get_entity',
-    create: 'create_entity',
-    update: 'update_entity',
-    delete: 'delete_entity'
-  }
-});
-
-// Exports derived stores
-export const items = derived(store, $s => $s.items);
-export const selected = derived(store, $s => $s.selected);
-export const isLoading = derived(store, $s => $s.loading);
-```
-
-**Pattern Pure Functions (Acceptable)** :
-
-```typescript
-// Utilisé pour: opérations async sans state local nécessaire
-// Exemple: llm.ts, mcp.ts
-
-export async function listModels(provider: string): Promise<LLMModel[]> {
-  return invoke('list_models', { provider });
-}
-
-// Pas de store writable - le composant gère son propre state
-```
-
-**Pattern Event-Driven (Acceptable)** :
-
-```typescript
-// Utilisé pour: événements Tauri real-time
-// Exemple: streaming.ts, validation.ts
-
-const store = writable<State>(initialState);
-let unlisteners: UnlistenFn[] = [];
-
-export const streamingStore = {
-  subscribe: store.subscribe,
-
-  async init() {
-    // IMPORTANT: Cleanup obligatoire pour éviter memory leaks
-    if (isInitialized) await this.cleanup();
-
-    unlisteners.push(
-      await listen<StreamChunk>('workflow_stream', (event) => {
-        store.update(s => processChunk(s, event.payload));
-      })
-    );
-  },
-
-  async cleanup() {
-    for (const unlisten of unlisteners) unlisten();
-    unlisteners = [];
-  }
-};
-```
-
-**Pattern Deprecated (À Éviter)** :
-
-```typescript
-// NE PAS FAIRE: Duplication pure functions + reactive store
-// Exemple legacy: workflows.ts avait les deux patterns
-
-// ❌ Deprecated
-export async function loadWorkflows(): Promise<Workflow[]> { ... }
-export const workflowStore = { loadWorkflows: async () => { ... } };
-
-// ✅ Correct: Un seul pattern par store
-```
-
-**Règles** :
-
-1. **Nouvelle entité persistée** → Utiliser `createCRUDStore` factory
-2. **API calls pures** → Pure functions (si pas besoin de state réactif)
-3. **Events Tauri** → Event-driven avec cleanup obligatoire
-4. **Persistence locale** → Custom factory avec localStorage
-
-**Gestion Mémoire (Event-Driven)** :
-
-Les stores event-driven DOIVENT implémenter:
-- `init()` avec guard contre double initialisation
-- `cleanup()` pour libérer tous les listeners
-- `reset()` appelant cleanup + reinitialisation state
-
-```typescript
-// Pattern obligatoire pour stores avec listeners
-let isInitialized = false;
-
-async init() {
-  if (isInitialized) {
-    console.warn('Store already initialized');
-    await this.cleanup();
-  }
-  isInitialized = true;
-  // ... setup listeners
-}
-
-async cleanup() {
-  for (const unlisten of unlisteners) unlisten();
-  unlisteners = [];
-  isInitialized = false;
-}
-```
-
----
-
-### Question 20bis : Patterns State Management
-
-**Décision** : **Documentation explicite des 3 patterns acceptés**
-
-**Raison** : Clarifier pour la maintenance quels patterns sont canoniques vs acceptables.
-
-| Pattern | Cas d'usage | Exemples | Status |
-|---------|-------------|----------|--------|
-| **CRUD Factory** | Entités avec persistance DB | agents.ts, prompts.ts | Canonique |
-| **Pure Functions** | Données complexes, selectors | llm.ts, mcp.ts | Acceptable |
-| **Isolated Component** | Sections autonomes | MemorySettings.svelte | Acceptable |
-
-**CRUD Factory** :
-- Utiliser `createCRUDStore` pour nouvelles entités
-- Exports: `items`, `selected`, `isLoading` derived stores
-- Intégration Tauri IPC standardisée
-
-**Pure Functions** :
-- Fonctions async immutables retournant Promise
-- State locale gérée par le composant consommateur
-- Idéal pour: chargement données, selectors
-- Exemple pattern:
-```typescript
-// Pure state updaters
-export function setModels(state: LLMState, models: LLMModel[]): LLMState
-
-// Async actions
-export async function loadAllLLMData(): Promise<LLMData>
-
-// Selectors
-export function getModelsByProvider(state: LLMState, provider: ProviderType): LLMModel[]
-```
-
-**Isolated Component** :
-- Composant Svelte avec son propre state ($state runes)
-- Charge ses données au mount
-- Utilisé pour sections autonomes (MemorySettings, ValidationSettings)
-- Pas de store global nécessaire
-
----
-
-### Question 21 : Migration Svelte 5 Runes
-
-**Décision** : **Différée - Migration post-v1 si bénéfice prouvé**
-
-**Raisons** :
-- Stores Svelte 4 actuels fonctionnent avec Svelte 5
-- Migration = effort 8-16h sans gain fonctionnel immédiat
-- Runes = optimisation performance (2-3x) mais overhead migration
-- Priorité v1 = stabilité, pas refactoring
-
-**Stratégie Migration Future** :
-1. Bottom-up : composants feuilles d'abord
-2. Un store à la fois
-3. Tests avant/après chaque migration
-4. Documentation patterns runes
-
-**Coexistence** :
-- Stores writable/derived coexistent avec runes
-- Pas de breaking change Svelte 5 sur stores
-- Migration graduelle possible
-
----
-
-### Question 22 : Utility Factories (Phase 7 Quick Win)
-
-**Décision** : **Factories pour patterns répétitifs (modal, async handlers)**
-
-**Raisons** :
-- Réduction duplication code (~30 lignes par modal)
-- Patterns cohérents dans toute l'application
-- Svelte 5 runes pour state réactif hors composants
-
-**Modal Controller Factory** :
-
-```typescript
-// src/lib/utils/modal.svelte.ts
-// Utilise .svelte.ts pour accès aux runes ($state) hors composants
-
-const mcpModal = createModalController<MCPServerConfig>();
-
-// API
-mcpModal.show       // boolean - modal visible
-mcpModal.mode       // 'create' | 'edit'
-mcpModal.editing    // T | undefined - item en cours d'édition
-mcpModal.openCreate()   // Ouvre en mode création
-mcpModal.openEdit(item) // Ouvre en mode édition
-mcpModal.close()        // Ferme et reset
-```
-
-**Async Handler Factory** :
-
-```typescript
-// src/lib/utils/async.ts
-// Élimine pattern try/catch/finally répétitif
-
-const handleSave = createAsyncHandler(
-  () => invoke('save_data', { data }),
-  {
-    setLoading: (l) => saving = l,
-    onSuccess: (result) => { /* ... */ },
-    onError: (error) => { /* ... */ }
-  }
-);
-```
-
-**Usage dans Settings** :
-- `mcpModal` : Modal création/édition serveurs MCP
-- `modelModal` : Modal création/édition modèles LLM
-- Réduit ~60 lignes de boilerplate dans +page.svelte
-
----
-
-## 8. Performance & Resilience Optimizations (Phase 6-8)
-
-### Question 23 : LLM Provider Resilience
-
-**Décision** : **Multi-layer protection avec rate limiting + retry + circuit breaker**
-
-**Raisons** :
-- Mistral Free Tier impose 1 req/s limit (429 errors si dépassé)
-- Transients réseau nécessitent stratégie retry
-- Providers unhealthy doivent fail fast (circuit breaker)
-
-**Stratégie** :
-
-**Rate Limiting** :
-- 1 request per second minimum delay (`MIN_DELAY_BETWEEN_CALLS_MS = 1000`)
-- Applied before every LLM API call
-- Compatible Mistral Free Tier et Ollama
-- Implementation: `src-tauri/src/llm/manager.rs` et `retry.rs`
-
-**Retry Mechanism** :
-- 3 max retries avec exponential backoff (1s, 2s, 4s)
-- Max delay capped à 30s
-- Retryable errors: ConnectionError, RequestFailed, StreamingError
-- Non-retryable: NotConfigured, InvalidProvider, MissingApiKey, CircuitOpen
-- Implementation: `src-tauri/src/llm/retry.rs`
-
-**Circuit Breaker** :
-- 3 consecutive failures → open state (60s cooldown)
-- Half-open state permet test request
-- Prevent cascade failures
-- Reuse pattern MCP (unified resilience)
-- Implementation: `src-tauri/src/llm/circuit_breaker.rs`
-
-**HTTP Connection Pooling** :
-- Centralized `reqwest::Client` in ProviderManager
-- Pool: 5 idle connections per host
-- Timeout: 300s (long completions)
-- Shared across Mistral and Ollama providers
-
----
-
-### Question 24 : Database Query Safety
-
-**Décision** : **Enforce parameterized queries + LIMIT on all list operations**
-
-**Raisons** :
-- SQL injection prevention (Phase 5 security audit)
-- Memory explosion protection from unbounded queries
-- Safe handling special characters (apostrophes, quotes, newlines)
-
-**Stratégie** :
-
-**Parameterized Queries** :
-- All WHERE clauses with user input use bind parameters
-- Methods: `query_with_params()`, `execute_with_params()`, `query_json_with_params()`
-- Replaces string concatenation with `format!()`
-- Implementation: `src-tauri/src/db/client.rs`
-
-```rust
-// Safe Pattern
-db.query_with_params(
-    "SELECT * FROM memory WHERE type = $type AND workflow_id = $wf_id",
-    vec![
-        ("type".to_string(), json!("knowledge")),
-        ("wf_id".to_string(), json!(workflow_id)),
-    ]
-).await?;
-
-// UNSAFE - DO NOT USE
-let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
-```
-
-**Query Limits**:
-- Default 1000 for list operations (agents, memories, tasks)
-- Default 100 for models
-- Default 500 for MCP logs, messages
-- Constants: `src-tauri/src/constants::query_limits`
-
-**Transaction Support** :
-- `transaction_with_params()` for atomic multi-query operations
-- Automatic rollback on any failure
-- Use case: workflow + messages creation atomique
-
----
-
-### Question 25 : MCP Resilience & Monitoring
-
-**Décision** : **Circuit breaker + health checks + latency metrics**
-
-**Raisons** :
-- MCP servers externes = points de failure potentiels
-- Need proactive health detection
-- Latency monitoring pour SLA
-
-**Stratégie** :
-
-**Circuit Breaker** (Phase 6):
-- 3 failures → 60s cooldown
-- Per-server state tracking
-- Implementation: `src-tauri/src/mcp/circuit_breaker.rs`
-
-**Health Checks** (Phase 6):
-- Background task every 5 minutes (configurable)
-- Uses `refresh_tools()` as health probe
-- Updates circuit breaker state
-- Methods: `start_health_checks()`, `stop_health_checks()`
-
-**Latency Metrics** (Phase 4):
-- P50, P95, P99 percentiles from `mcp_call_log` table
-- Command: `get_mcp_latency_metrics`
-- Time window: last 1 hour
-- Type: `MCPLatencyMetrics { server_name, p50_ms, p95_ms, p99_ms, total_calls }`
-
-**Tool Caching** (Phase 4):
-- TTL: 1 hour
-- Invalidated on tool call errors
-- Reduces network overhead for tool discovery
-
-**ID Lookup Table** (Phase 6):
-- O(1) server operations via `id_to_name` HashMap
-- Replaces O(n) scan for stop/get/restart operations
-
----
-
-## 9. Frontend Performance Optimizations (Dec 2025)
-
-### Question 26 : Settings Page Architecture
-
-**Décision** : **Route-based navigation instead of scroll-based**
-
-**Raisons** :
-- IntersectionObserver with 3 thresholds caused 30-60 callbacks/sec during scroll
-- 798-line monolithic +page.svelte difficult to maintain
-- backdrop-filter blur causing 15-30% GPU degradation
-- No code splitting possible with scroll-based approach
-
-**Solution** :
-
-**Route Structure**:
-```
-/settings
-  +layout.svelte   (sidebar navigation)
-  +layout.ts       (pathname data)
-  +page.svelte     (redirect → /settings/providers)
-  /providers/+page.svelte
-  /agents/+page.svelte (lazy)
-  /mcp/+page.svelte
-  /memory/+page.svelte (lazy)
-  /validation/+page.svelte
-  /prompts/+page.svelte
-  /import-export/+page.svelte
-  /theme/+page.svelte
-```
-
-**Performance Benefits**:
-- Code splitting: only load requested section
-- No IntersectionObserver needed
-- Native browser history (Back/Forward)
-- Shareable URLs per section
-- ~50-100 lines per page vs 798 monolithic
-
-**Complementary Optimizations**:
-
-| ID | Item | Impact | Status |
-|---|---|---|---|
-| Remove backdrop-filter blur | 15-30% GPU | Active |
-| getFilteredModelsMemoized() | ~5-10% JS | Active |
-| Virtual scrolling MemoryList | 20 vs 20000 DOM nodes | Active |
-
-**Obsoleted Optimizations** (superseded by route-based):
-- Single threshold IntersectionObserver
-- will-change scroll (not needed with routes)
-- RAF debounce IntersectionObserver
-- CSS contain on grids (not implemented)
-- .is-scrolling animation pause (not implemented)
-
-**Implementation Files**:
-- Layout: `src/routes/settings/+layout.svelte`
-- CSS: `src/styles/global.css` (lines 694, 889)
-- Store: `src/lib/stores/llm.ts` (getFilteredModelsMemoized)
-- Components: `MCPSection.svelte`, `LLMSection.svelte`, `AgentList.svelte`, `MemoryList.svelte`
-
----
+## Summary of Decisions
+
+| Area | Key Decision |
+|------|-------------|
+| Architecture | Monorepo, from scratch, Tauri + SvelteKit + Rust |
+| Database | SurrealDB SCHEMAFULL, graph relations, audit trail, differentiated retention |
+| Security | Production-ready v1, OS keystore + AES-256, tracing, anyhow + thiserror |
+| Providers | Mistral + Ollama + Custom (OpenAI-compatible), user choice, multi-layer resilience |
+| Tools | Built-in (9 tools) + MCP, ToolDefinition summary/description split, TaskBridge scoping |
+| MCP | User-configured, no pre-integrated servers, circuit breaker + health checks |
+| Testing | Critical paths, 1000+ tests, GitHub Actions CI |
+| Deployment | Linux first, manual updates v1, auto-updates v1.5 |
+| Frontend | CRUD factory stores, Svelte 5 runes (completed), route-based settings |
+| Import/Export | Schema v1.1, 6 entity types, cross-ref by name, no API key export |
+
+**Technical documentation**: `docs/DATABASE_SCHEMA.md`, `docs/API_REFERENCE.md`, `docs/TECH_STACK.md`.
+
+**Deferred post-v1**: specta + tauri-specta (Tauri 2.x incompatible), rate limiting sensitive ops, prompt injection guard, thiserror migration, live query API, Superforms integration.

@@ -1,12 +1,16 @@
-# Stratégie Tests
+# Testing Strategy
 
-> Tests unitaires, intégration, E2E, CI/CD
+> Unit tests, integration, E2E, CI/CD
 
-## Objectifs
+## Objectives
 
-**Coverage Target** : ~70% critical paths backend
-**Focus** : Chemins critiques > coverage exhaustif
-**Philosophy** : Tests E2E prioritaires > Unit tests exhaustifs
+| Item | Value |
+|------|-------|
+| **Coverage Target** | ~70% critical paths backend |
+| **Focus** | Critical paths over exhaustive coverage |
+| **Philosophy** | TDD (Red-Green-Refactor) for testable logic |
+
+For bugs, a reproduction test is written BEFORE the fix.
 
 ---
 
@@ -14,18 +18,18 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| **Backend (lib)** | 80+ | 1076 |
-| **Backend (bin/integration)** | 5+ | 48 |
-| **Frontend Unit** | 16 | 285 |
-| **Total** | **101+** | **~1409** |
+| Backend (lib) | 80+ | 1086 |
+| Backend (bin/integration) | 5+ | 48 |
+| Frontend Unit | 16 | 285 |
+| **Total** | **101+** | **~1419** |
 
-> **Last Updated**: 2026-03-26
+> Last Updated: 2026-03-27
 
 ---
 
 ## Test Dependencies
 
-### Frontend (package.json devDependencies)
+### Frontend (devDependencies)
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -33,7 +37,7 @@
 | @playwright/test | ^1.58.0 | E2E testing framework |
 | jsdom | ^27.4.0 | DOM environment for testing |
 
-### Backend (Cargo.toml dev-dependencies)
+### Backend (dev-dependencies)
 
 | Crate | Version | Purpose |
 |-------|---------|---------|
@@ -43,68 +47,36 @@
 
 ## Critical Paths
 
-### 1. Workflow Execution
-- User input → Agent processing → LLM call → Response streaming
-- Validation human-in-the-loop (approve/reject)
-- Error handling et recovery
-
-### 2. Agent Orchestration
-- Création workflow multi-agents
-- Communication inter-agents (reports markdown)
-- State persistence et reload
-
-### 3. Tools Execution
-- MCP tool calls (success + error cases)
-- Database operations (CRUD)
-- Memory storage/retrieval vectorielle
+1. **Workflow Execution**: User input -> Agent processing -> LLM call -> Response streaming, human-in-the-loop validation, error handling and recovery
+2. **Agent Orchestration**: Multi-agent workflows, inter-agent communication (markdown reports), state persistence and reload
+3. **Tools Execution**: MCP tool calls (success + error), database CRUD, vector memory storage/retrieval
 
 ---
 
-## Tests Backend (Rust)
+## Test Categories
 
-### Approche TDD (Red-Green-Refactor)
+| Type | Scope | Tools | Location |
+|------|-------|-------|----------|
+| Backend Unit | Individual modules | `cargo test --lib` | `src-tauri/src/**/*.rs` |
+| Backend Integration | Cross-module workflows | `cargo test --test '*'` | `src-tauri/tests/` |
+| Frontend Unit | Stores, utils, types | `npm run test` | `src/lib/**/__tests__/`, `src/types/__tests__/` |
+| Frontend E2E | Full user scenarios | `npm run test:e2e` | `tests/`, `tests/e2e/` |
 
-Pour toute logique testable (Rust pure functions, TS utils/stores), l'approche TDD est obligatoire :
-1. **RED** : Ecrire un test qui echoue definissant le comportement attendu
-2. **GREEN** : Ecrire le minimum de code pour faire passer le test
-3. **REFACTOR** : Nettoyer en gardant les tests verts
+---
 
-Pour les bugs, un test de reproduction est ecrit AVANT la correction.
+## Backend Tests (Rust)
 
-### Shared Test Harness (test_utils.rs)
+### Shared Test Harness
 
-Un module partage `src-tauri/src/test_utils.rs` fournit :
-- `setup_test_state()` : Cree un AppState complet avec DB en memoire
-- 10+ seed helpers : `seed_agent()`, `seed_workflow()`, `seed_message()`, etc.
-- Utilise par les tests unitaires et d'integration
+Module `src-tauri/src/test_utils.rs` provides:
+- `setup_test_state()`: Complete AppState with in-memory DB
+- 10+ seed helpers: `seed_agent()`, `seed_workflow()`, `seed_message()`, etc.
+
+No mocking library used. Tests use real implementations with temporary databases via `tempfile::tempdir()`.
 
 ### Unit Tests (80+ files)
 
-**Localisation** : `src-tauri/src/**/*.rs`
-
-**Pattern** :
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_memory_add() {
-        let context = create_test_context();
-        let result = memory_tool.add(&context, content).await;
-        assert!(result.is_ok());
-    }
-}
-```
-
-**Exécution** :
-```bash
-cargo test               # All tests
-cargo test --lib         # Library tests only
-cargo test -- --nocapture # With logs
-```
-
-**Module Coverage** :
+See `src-tauri/src/` for Rust test modules.
 
 | Module | Files (with tests) | Tests | Key Areas |
 |--------|-------------------|-------|-----------|
@@ -116,232 +88,55 @@ cargo test -- --nocapture # With logs
 | security | 2 | ~35 | Input validation, keystore |
 | agents | 5 | ~13 | LLM agent, orchestrator, registry |
 
----
-
-### Integration Tests (2 files)
-
-**Localisation** : `src-tauri/tests/`
+### Integration Tests
 
 | File | Tests | Description |
 |------|-------|-------------|
 | `memory_tool_integration.rs` | 20 | MemoryTool with ToolFactory integration |
 | `sub_agent_tools_integration.rs` | 26 | Sub-agent tools with context and validation |
 
-**Pattern** :
-```rust
-// tests/memory_tool_integration.rs
-fn create_test_db_path() -> (tempfile::TempDir, String) {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
-    let db_path = temp_dir.path().join("integration_test_db");
-    (temp_dir, db_path.to_str().unwrap().to_string())
-}
-
-#[tokio::test]
-async fn test_memory_workflow_integration() {
-    let (_temp, db_path) = create_test_db_path();
-    // Setup isolated test DB
-    // Execute tool operations
-    // Assert results
-    // Temp dir auto-cleanup
-}
-```
-
-**Exécution** :
-```bash
-cargo test --test memory_tool_integration
-cargo test --test sub_agent_tools_integration
-cargo test --test '*'  # All integration tests
-```
+See `src-tauri/tests/` for integration test files.
 
 ---
 
-### Test Helpers
+## Frontend Tests (SvelteKit)
 
-**Tempfile Pattern** (for isolated test databases):
-```rust
-use tempfile::tempdir;
+### Unit Tests (285 tests, 16 files)
 
-fn create_test_db_path() -> (tempfile::TempDir, String) {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
-    let db_path = temp_dir.path().join("test_db");
-    (temp_dir, db_path.to_str().unwrap().to_string())
-}
-```
-
-**Create Test Helpers** (common pattern across modules):
-```rust
-// tools/factory.rs
-fn create_test_factory() -> ToolFactory { ... }
-
-// tools/memory/tool.rs
-fn create_test_tool() -> MemoryTool { ... }
-
-// tools/context.rs
-fn create_test_state() -> ToolExecutionState { ... }
-
-// agents/core/orchestrator.rs
-fn create_test_config() -> AgentConfig { ... }
-```
-
-**JSON Construction** (for tool execution tests):
-```rust
-use serde_json::json;
-
-let input = json!({
-    "operation": "add",
-    "memory_type": "knowledge",
-    "content": "test content"
-});
-```
-
-**Note**: No mocking library (mockall) used. Tests use real implementations with temporary databases.
-
----
-
-## Tests Frontend (SvelteKit)
-
-### Unit Tests (260 tests, 12 files)
-
-**Localisation** : `src/lib/**/__tests__/*.test.ts`, `src/types/__tests__/*.test.ts`
-
-**Test Files** :
+See `src/lib/` for TypeScript test files.
 
 | File | Tests | Target |
 |------|-------|--------|
-| `lib/utils/__tests__/debounce.test.ts` | 10 | Debounce/throttle utilities |
-| `lib/utils/__tests__/dateGrouping.test.ts` | - | Temporal grouping |
-| `lib/utils/__tests__/error.test.ts` | - | Error handling utilities |
-| `lib/utils/__tests__/url.test.ts` | - | URL validation utilities |
-| `lib/stores/__tests__/agents.test.ts` | 22 | Agent CRUD operations |
-| `lib/stores/__tests__/streaming.test.ts` | 18 | Real-time workflow execution |
-| `lib/stores/__tests__/llm.test.ts` | 57 | LLM models and providers |
-| `lib/stores/__tests__/workflows.test.ts` | 36 | Workflow state management |
-| `lib/stores/__tests__/chunkProcessor.test.ts` | - | Chunk processing |
-| `lib/stores/__tests__/execution-blocks.test.ts` | 25 | Block-by-block display |
-| `types/__tests__/embedding.test.ts` | 15 | Embedding config validation |
+| `stores/__tests__/llm.test.ts` | 57 | LLM models and providers |
+| `stores/__tests__/workflows.test.ts` | 36 | Workflow state management |
+| `stores/__tests__/execution-blocks.test.ts` | 25 | Block-by-block display |
+| `stores/__tests__/agents.test.ts` | 22 | Agent CRUD operations |
+| `stores/__tests__/streaming.test.ts` | 18 | Real-time workflow execution |
 | `types/__tests__/memory.test.ts` | 16 | Memory structure validation |
+| `types/__tests__/embedding.test.ts` | 15 | Embedding config validation |
+| `utils/__tests__/debounce.test.ts` | 10 | Debounce/throttle utilities |
+| (others) | - | Error handling, URL validation, date grouping, chunk processing |
 
-**Config** : `vitest.config.ts`
-```typescript
-export default defineConfig({
-  plugins: [svelte({ hot: !process.env.VITEST })],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    alias: {
-      $lib: '/src/lib',
-      $app: '/src/app',
-    }
-  }
-});
-```
-
-**Exécution** :
-```bash
-npm run test          # Run unit tests
-npm run test:watch    # Watch mode
-npm run test:coverage # Generate coverage report
-```
-
-**Pattern** (Store-based testing, no @testing-library/svelte):
-```typescript
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { get } from 'svelte/store';
-import { llmStore, models, isLoading } from '$lib/stores/llm';
-
-// Mock Tauri
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn()
-}));
-
-describe('llmStore', () => {
-  beforeEach(() => {
-    llmStore.reset();
-  });
-
-  it('loads models from backend', async () => {
-    vi.mocked(invoke).mockResolvedValue([{ id: 'mistral', name: 'Mistral' }]);
-    await llmStore.loadModels();
-    expect(get(models)).toHaveLength(1);
-    expect(get(isLoading)).toBe(false);
-  });
-});
-```
-
----
+**Pattern**: Store-based testing (no @testing-library/svelte). Tauri IPC mocked via `vi.mock('@tauri-apps/api/core')`.
 
 ### E2E Tests (112 tests, 10 files)
 
-**Localisation** : `tests/` and `tests/e2e/`
-
-**Test Files** :
-
 | File | Tests | Description |
 |------|-------|-------------|
+| `e2e/sub-agent-scenarios.spec.ts` | 20 | Sub-agent UI and validation |
+| `e2e/accessibility.spec.ts` | 17 | WCAG 2.1 AA compliance |
+| `e2e/theme-toggle.spec.ts` | 15 | Light/dark mode switching |
+| `e2e/workflow-persistence.spec.ts` | 13 | State persistence across reloads |
+| `e2e/settings-config.spec.ts` | 12 | Provider and theme settings |
+| `e2e/chat-interaction.spec.ts` | 10 | Chat UI and messages |
+| `e2e/workflow-crud.spec.ts` | 10 | Workflow CRUD operations |
+| `settings-page.spec.ts` | 7 | Settings LLM provider config |
 | `navigation.spec.ts` | 4 | Basic page routing |
 | `agent-page.spec.ts` | 4 | Agent page UI structure |
-| `settings-page.spec.ts` | 7 | Settings LLM provider config |
-| `e2e/workflow-crud.spec.ts` | 10 | Workflow CRUD operations |
-| `e2e/chat-interaction.spec.ts` | 10 | Chat UI and messages |
-| `e2e/settings-config.spec.ts` | 12 | Provider and theme settings |
-| `e2e/theme-toggle.spec.ts` | 15 | Light/dark mode switching |
-| `e2e/accessibility.spec.ts` | 17 | WCAG 2.1 AA compliance |
-| `e2e/workflow-persistence.spec.ts` | 13 | State persistence across reloads |
-| `e2e/sub-agent-scenarios.spec.ts` | 20 | Sub-agent UI and validation |
-
-**Config** : `playwright.config.ts`
-```typescript
-export default defineConfig({
-  testDir: './tests',
-  fullyParallel: true,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  use: {
-    baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
-  },
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    timeout: 120000,
-  },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-  ],
-});
-```
-
-**Exécution** :
-```bash
-npm run test:e2e       # Run all E2E tests
-npm run test:e2e:ui    # Playwright UI mode
-npm run test:e2e:debug # Debug with headed browser
-```
-
-**Pattern** :
-```typescript
-import { test, expect } from '@playwright/test';
-
-test('theme toggle persists across reload', async ({ page }) => {
-  await page.goto('/settings');
-  await page.waitForLoadState('networkidle');
-
-  // Toggle to dark mode
-  await page.click('[data-testid="theme-toggle"]');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-
-  // Verify persistence
-  await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-});
-```
 
 ---
 
-## Tests MCP (44 tests, 6 files)
-
-**Localisation** : `src-tauri/src/mcp/`
+## MCP Tests (44 tests, 6 files)
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -352,202 +147,62 @@ test('theme toggle persists across reload', async ({ page }) => {
 | `client.rs` | 4 | MCP client operations |
 | `manager.rs` | 3 | Multi-server coordination |
 
-**Couverture** :
-- Protocol message parsing (request/response/notification)
-- Error code handling and error chain
-- Server connection and disconnection
-- Tool discovery (list_tools)
-- Tool execution with parameters
-- HTTP and stdio transport
-
----
-
-## Tests Database
-
-### Database Client (5 tests)
-
-**Localisation** : `src-tauri/src/db/client.rs`
-
-**Couverture** :
-- Connection initialization
-- Query execution
-- Transaction handling
-- Error propagation
-
-### Embedding Tests (25 tests)
-
-**Localisation** : `src-tauri/src/llm/embedding.rs`
-
-**Couverture** :
-- Embedding model configuration
-- Vector generation
-- Dimension validation
-- Provider-specific adapters
-
-```rust
-#[tokio::test]
-async fn test_embedding_dimensions() {
-    let config = EmbeddingConfig {
-        provider: "ollama".to_string(),
-        model: "nomic-embed-text".to_string(),
-        dimensions: 768,
-    };
-    assert_eq!(config.dimensions, 768);
-}
-```
-
-### Model Data Tests (144 tests, 18 files)
-
-**Localisation** : `src-tauri/src/models/*.rs`
-
-| File | Tests | Coverage |
-|------|-------|----------|
-| `streaming.rs` | 14 | StreamChunk, WorkflowComplete |
-| `task.rs` | 13 | Task CRUD, status transitions |
-| `prompt.rs` | 12 | Prompt templates, variables |
-| `mcp.rs` | 11 | MCP server config, tool schema |
-| `llm_models.rs` | 9 | LLMModel, provider settings |
-| `memory.rs` | 9 | Memory types, search params |
-| `agent.rs` | 9 | AgentConfig, lifecycle |
-| `sub_agent.rs` | 9 | Sub-agent execution tracking |
-| (others) | 58 | Serialization, validation |
-
-**Pattern** :
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_workflow_status_serialization() {
-        let status = WorkflowStatus::Running;
-        let json = serde_json::to_string(&status).unwrap();
-        assert_eq!(json, "\"running\"");
-    }
-}
-```
-
 ---
 
 ## CI/CD Pipeline
 
-### GitHub Actions
+### GitHub Actions (validate.yml)
 
-**Workflow** : `.github/workflows/test.yml`
+Triggered on PR to main. Two parallel jobs:
 
-#### On PR (validate.yml)
-```yaml
-name: Validate
-on:
-  pull_request:
-    branches: [main]
+1. **Frontend**: `npm install` -> `npm run lint` -> `npm run check` -> `npm run test`
+2. **Backend**: `cargo clippy --all-targets -- -D warnings` -> `cargo test`
 
-jobs:
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm install
-      - run: npm run lint
-      - run: npm run check
-      - run: npm run test
-
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
-```
-
-#### Additional PR Checks
-```yaml
-  test-integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo test --test '*'
-
-  test-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm install
-      - run: npx playwright install
-      - run: npm run tauri build
-      - run: npm run test:e2e
-
-  security-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo audit
-      - run: npm audit
-
-  coverage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo tarpaulin --out Xml
-      - uses: codecov/codecov-action@v3
-```
+See `.github/workflows/validate.yml` for full configuration.
 
 ---
 
-## Testing Best Practices
+## Best Practices
 
 ### Backend
-- **Isolation** : Tests indépendants via `tempfile::tempdir()` pour DB isolées
-- **Async** : Utiliser `#[tokio::test]` pour async functions
-- **Cleanup** : Auto-cleanup via TempDir Drop trait
-- **No Mocks** : Real implementations with isolated test databases
-- **Helpers** : `create_test_*()` functions for common setup
+
+- **Isolation**: Independent tests via `tempfile::tempdir()` for isolated DB
+- **Async**: `#[tokio::test]` for async functions
+- **Cleanup**: Auto-cleanup via TempDir Drop trait
+- **No Mocks**: Real implementations with isolated test databases
+- **Helpers**: `create_test_*()` functions for common setup
 
 ### Frontend
-- **Store Testing** : Test Svelte stores with `get()` from `svelte/store`
-- **Tauri Mocking** : Mock `@tauri-apps/api/core` with `vi.fn()`
-- **State Reset** : `beforeEach()` hooks reset store state
-- **Type Validation** : Tests verify TypeScript type compatibility
+
+- **Store Testing**: Test Svelte stores with `get()` from `svelte/store`
+- **Tauri Mocking**: Mock `@tauri-apps/api/core` with `vi.fn()`
+- **State Reset**: `beforeEach()` hooks reset store state
+- **Type Validation**: Tests verify TypeScript type compatibility
 
 ### E2E
-- **Network Idle** : Use `waitForLoadState('networkidle')` for stability
-- **Parallel** : `fullyParallel: true` for fast execution
-- **Retries** : 2 retries in CI, 0 locally
-- **Accessibility** : 17 WCAG 2.1 AA compliance tests
-- **Trace** : Capture traces on first retry for debugging
+
+- **Network Idle**: Use `waitForLoadState('networkidle')` for stability
+- **Parallel**: `fullyParallel: true` for fast execution
+- **Retries**: 2 retries in CI, 0 locally
+- **Accessibility**: 17 WCAG 2.1 AA compliance tests
+- **Trace**: Capture traces on first retry for debugging
 
 ---
 
-## Edge Cases à Tester
+## Edge Cases to Test
 
-### Workflow
-- Workflow running → User ferme app → Reload state
-- Multiple workflows simultanés (>5)
-- Workflow très long (>10min)
-- Workflow avec erreur réseau LLM
-
-### Validation
-- User ignore validation → Timeout auto-reject
-- Multiple validations pending simultanées
-- Validation rejected → Workflow continue (skip operation)
-
-### Memory
-- Vector search sans résultats (threshold non atteint)
-- Memory overflow (>10K entries)
-- Embeddings provider change (dimensions différentes)
-
-### MCP
-- MCP server crash pendant workflow
-- MCP server slow (>5s response)
-- MCP server retourne erreur (invalid params)
+| Area | Cases |
+|------|-------|
+| **Workflow** | Running -> app close -> reload state; Multiple simultaneous (>5); Very long (>10min); LLM network error |
+| **Validation** | Ignore -> timeout auto-reject; Multiple pending simultaneous; Rejected -> workflow continues (skip) |
+| **Memory** | Vector search with no results; Overflow (>10K entries); Embeddings provider change (dimensions) |
+| **MCP** | Server crash during workflow; Slow server (>5s); Server returns error (invalid params) |
 
 ---
 
 ## References
 
-**Vitest** : https://vitest.dev
-**Playwright** : https://playwright.dev
-**Cargo Test** : https://doc.rust-lang.org/book/ch11-00-testing.html
-**Tarpaulin** : https://github.com/xd009642/tarpaulin
-**Tempfile** : https://docs.rs/tempfile/latest/tempfile/
-**Tokio Test** : https://docs.rs/tokio/latest/tokio/attr.test.html
+- **Vitest**: https://vitest.dev
+- **Playwright**: https://playwright.dev
+- **Cargo Test**: https://doc.rust-lang.org/book/ch11-00-testing.html
+- **Tempfile**: https://docs.rs/tempfile/latest/tempfile/

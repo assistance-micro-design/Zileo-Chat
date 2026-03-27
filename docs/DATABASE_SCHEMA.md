@@ -1,665 +1,467 @@
-# Schéma Database SurrealDB
+# Database Schema - SurrealDB
 
-> **Version** : 1.2
-> **SurrealDB** : ~2.6
-> **Type** : Graph relationnel avec support vectoriel
+> **Version**: 1.3
+> **SurrealDB**: ~2.6 (SCHEMAFULL)
+> **Tables**: 18
 
-## Vue d'Ensemble
+## Design Notes
 
-**Total : 18 tables**
+- All tables are `SCHEMAFULL` (strict field typing, unknown fields rejected).
+- **JSON-string encoding pattern**: Dynamic objects (env vars, tool params, options) are stored as JSON strings (`TYPE string DEFAULT '{}'`) because SurrealDB SCHEMAFULL tables silently drop unknown nested keys on `TYPE object` fields (ERR_SURREAL_001).
+- All `id` fields are `TYPE string` (UUID format, managed by application).
+- `DEFINE FIELD OVERWRITE` is used everywhere for idempotent schema application.
+- See `src-tauri/src/db/` for query implementations.
+
+## Entity Relationship Overview
 
 ```
 workflow ─────────────┐
-                      ├─→ agent (user-created configs)
-                      ├─→ message
-                      ├─→ task
-                      ├─→ validation_request
-                      ├─→ user_question
-                      ├─→ memory (vectoriel)
-                      ├─→ tool_execution
-                      ├─→ thinking_step
-                      └─→ sub_agent_execution
+                      ├──> message
+                      ├──> task
+                      ├──> validation_request
+                      ├──> user_question
+                      ├──> memory (vector)
+                      ├──> tool_execution
+                      ├──> thinking_step
+                      └──> sub_agent_execution
 
-mcp_server ───────────→ mcp_call_log
-
-llm_model ────────────→ provider_settings
-custom_provider ──────→ (linked via provider name)
-
+mcp_server ──────────> mcp_call_log
+llm_model ───────────> provider_settings
+custom_provider ─────> (linked via provider name)
 skill (standalone)
-workflow_folder ──────→ workflow (grouping)
+workflow_folder ─────> workflow (grouping)
 migration_log (schema versioning)
 ```
 
-## Tables Principales
+---
+
+## Tables
 
 ### workflow
 
-Représente un workflow multi-agents avec son cycle de vie complet.
+Workflow lifecycle with cumulative token tracking.
 
-**Champs**
-- `id` : UUID
-- `name` : string (éditable utilisateur)
-- `status` : enum (idle, running, completed, error)
-- `agent_id` : string (agent principal)
-- `total_tokens_input` : int DEFAULT 0
-- `total_tokens_output` : int DEFAULT 0
-- `total_cost_usd` : float DEFAULT 0.0
-- `model_id` : string?
-- `current_context_tokens` : int DEFAULT 0
-- `sub_agent_tokens_input` : int DEFAULT 0
-- `sub_agent_tokens_output` : int DEFAULT 0
-- `folder_id` : string? (reference workflow_folder)
-- `pinned` : bool DEFAULT false
-- `created_at` : datetime
-- `updated_at` : datetime
-- `completed_at` : datetime?
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| name | string | | User-editable name |
+| agent_id | string | | Primary agent |
+| status | string ASSERT IN [idle, running, completed, error] | | Workflow state |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
+| completed_at | option\<datetime\> | | |
+| total_tokens_input | int | 0 | Cumulative input tokens |
+| total_tokens_output | int | 0 | Cumulative output tokens |
+| total_cost_usd | float | 0.0 | Cumulative cost (USD) |
+| model_id | option\<string\> | | Current model |
+| current_context_tokens | int | 0 | Last API call context size |
+| sub_agent_tokens_input | int | 0 | Sub-agent input tokens |
+| sub_agent_tokens_output | int | 0 | Sub-agent output tokens |
+| total_cached_tokens | option\<int\> | 0 | Prompt cache read tokens |
+| total_cache_write_tokens | option\<int\> | 0 | Prompt cache write tokens |
+| folder_id | option\<string\> | | Reference to workflow_folder |
+| pinned | bool | false | Pinned in sidebar |
 
-**Relations**
-- → `agent` (créateur)
-- → `workflow_folder` (optionnel)
-- → `message[]` (historique conversation)
-- → `task[]` (tâches décomposées)
-- → `validation_request[]` (demandes validation utilisateur)
-
-**Indexes**
-- `status` (queries filtrage actifs/complétés)
-- `created_at` (tri chronologique)
-- `agent_id` (workflows par agent)
-
-**Requête type** : Récupérer workflows actifs agent spécifique
-
----
-
-### memory
-
-Stockage vectoriel pour RAG et contexte agent. Supporte l'auto-scoping, l'importance et le TTL (Memory Tool v2).
-
-**Champs**
-- `id` : UUID
-- `type` : string ASSERT IN [user_pref, context, knowledge, decision]
-- `content` : string (texte indexe)
-- `embedding` : option<array<float>> (vecteur 768D-3072D selon provider)
-- `workflow_id` : option<string> (auto-set par scope)
-- `importance` : float DEFAULT 0.5 (0.0-1.0, poids dans le scoring composite)
-- `expires_at` : option<datetime> (TTL, auto-set a 7j pour context)
-- `metadata` : object
-  - `agent_source` : option<string>
-  - `priority` : option<float> (0.0-1.0)
-  - `tags` : option<array<string>>
-- `created_at` : datetime DEFAULT time::now()
-
-**Relations**
-- → `workflow` (optionnel, auto-set par scope type)
-
-**Indexes**
-- `memory_vec_idx` : embedding (HNSW vectoriel, KNN search)
-- `memory_workflow_idx` : workflow_id (scope workflow)
-
-**Index Composites**:
-- `memory_type_workflow_idx` ON (type, workflow_id) - Optimise search_memories() avec type + workflow
-- `memory_type_created_idx` ON (type, created_at) - Optimise requetes TTL/cleanup
-
-**Requête type** : Recherche sémantique similarité cosinus top_k=5
+**Indexes**: (none explicitly defined beyond field-level constraints; queries filter on status, created_at, agent_id)
 
 ---
 
 ### message
 
-Messages conversation workflow (user, assistant, system).
+Conversation messages (user, assistant, system) with per-message metrics.
 
-**Champs**
-- `id` : UUID
-- `workflow_id` : string
-- `role` : enum (user, assistant, system)
-- `content` : string
-- `tokens_input` : int?
-- `tokens_output` : int?
-- `model` : string?
-- `provider` : string?
-- `cost_usd` : float?
-- `duration_ms` : int?
-- `thinking_tokens` : int?
-- `timestamp` : datetime
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| role | string ASSERT IN [user, assistant, system] | | Message role |
+| content | string | | Message body |
+| tokens | int | | Total tokens (legacy) |
+| tokens_input | option\<int\> | | Input tokens |
+| tokens_output | option\<int\> | | Output tokens |
+| model | option\<string\> | | Model used |
+| provider | option\<string\> | | Provider used |
+| cost_usd | option\<float\> | | Cost (USD) |
+| duration_ms | option\<int\> | | Response time |
+| thinking_tokens | option\<int\> | NONE | Reasoning tokens |
+| timestamp | datetime | time::now() | |
 
-**Relations**
-- → `workflow` (appartenance)
+**Indexes**: `message_workflow_idx` (workflow_id), `message_timestamp_idx` (timestamp)
 
-**Indexes**
-- `message_workflow_idx` ON workflow_id
-- `message_timestamp_idx` ON timestamp
+---
 
-**Requête type** : Historique messages workflow ordonné
+### memory
+
+Vector storage for RAG and agent context. Supports auto-scoping, importance, and TTL.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| type | string ASSERT IN [user_pref, context, knowledge, decision] | | Memory category |
+| content | string | | Indexed text |
+| embedding | option\<array\<float\>\> | | Vector (768-3072D) |
+| workflow_id | option\<string\> | | Scope (auto-set) |
+| metadata | object | | Container for sub-fields |
+| metadata.tags | option\<array\<string\>\> | | |
+| metadata.priority | option\<float\> | | 0.0-1.0 |
+| metadata.agent_source | option\<string\> | | |
+| importance | float | 0.5 | Composite scoring weight |
+| expires_at | option\<datetime\> | | TTL (auto 7d for context) |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `memory_vec_idx` (embedding, HNSW 1024D COSINE), `memory_workflow_idx` (workflow_id), `memory_type_workflow_idx` (type, workflow_id), `memory_type_created_idx` (type, created_at)
 
 ---
 
 ### validation_request
 
-Demandes validation human-in-the-loop.
+Human-in-the-loop validation requests.
 
-**Champs**
-- `id` : UUID
-- `workflow_id` : UUID
-- `agent_id` : string
-- `type` : enum (tool, sub_agent, mcp, file_op, db_op)
-- `operation` : string (description)
-- `details` : object (params opération)
-- `risk_level` : enum (low, medium, high)
-- `status` : enum (pending, approved, rejected)
-- `user_id` : string? (si multi-user futur)
-- `timestamp` : datetime
-- `response_timestamp` : datetime?
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| type | string ASSERT IN [tool, sub_agent, mcp, file_op, db_op] | | Operation type |
+| operation | string | | Operation description |
+| details | string | '{}' | JSON string (dynamic params) |
+| risk_level | string ASSERT IN [low, medium, high, critical] | | Risk assessment |
+| status | string ASSERT IN [pending, approved, rejected] | 'pending' | |
+| created_at | datetime | time::now() | |
 
-**Relations**
-- → `workflow` (contexte)
-- → `agent_state` (demandeur)
-
-**Indexes**
-- `workflow_id` (validations workflow)
-- `status` (pending pour UI)
-- `timestamp` (ordre demandes)
-- `type` + `risk_level` (analytics)
-
-**Requête type** : Validations pending workflow actif
-
----
-
-### user_question
-
-Questions interactives agents vers utilisateurs (human-in-the-loop).
-
-**Champs**
-- `id` : UUID
-- `workflow_id` : string
-- `agent_id` : string
-- `question` : string (texte de la question)
-- `question_type` : enum (checkbox, text, mixed)
-- `options` : array<{id: string, label: string}>? (pour checkbox/mixed)
-- `text_placeholder` : string?
-- `text_required` : boolean (default: false)
-- `context` : string? (contexte additionnel)
-- `status` : enum (pending, answered, skipped)
-- `selected_options` : array<string>?
-- `text_response` : string?
-- `created_at` : datetime
-- `answered_at` : datetime?
-
-**Relations**
-- → `workflow` (contexte)
-- → `agent` (demandeur)
-
-**Indexes**
-- `workflow_id` (questions workflow)
-- `status` (pending pour UI)
-- `agent_id`
-
-**Requête type** : Questions pending workflow actif
+**Indexes**: (none explicitly defined)
 
 ---
 
 ### task
 
-Tâches décomposées workflow avec statut progression.
+Decomposed workflow tasks with Todo Tool support.
 
-**Champs**
-- `id` : UUID
-- `workflow_id` : UUID
-- `agent_assigned` : string? (agent responsable)
-- `name` : string
-- `description` : string
-- `status` : enum (pending, in_progress, completed, blocked)
-- `priority` : int (1-5, 1=critique)
-- `duration` : int? (ms, si completed)
-- `dependencies` : array<UUID> (autres tasks)
-- `created_at` : datetime
-- `completed_at` : datetime?
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| name | string (1-128 chars) | | Task name |
+| description | string (max 1000 chars) | | Task details |
+| agent_assigned | option\<string\> | | Responsible agent |
+| priority | int (1-5) | 3 | 1=critical |
+| status | string ASSERT IN [pending, in_progress, completed, blocked] | 'pending' | |
+| dependencies | array\<string\> | | Task IDs (string, not UUID) |
+| duration_ms | option\<int\> | | Elapsed time if completed |
+| created_at | datetime | time::now() | |
+| completed_at | option\<datetime\> | | |
 
-**Relations**
-- → `workflow` (appartenance)
-- → `agent_state` (assigné)
-- → `task[]` (dépendances)
-
-**Indexes**
-- `workflow_id` (tasks workflow)
-- `status` (filtrage actives/bloquées)
-- `agent_assigned` (workload agent)
-- `priority` (tri urgence)
-
-**Requête type** : Tasks pending non-bloquées workflow
-
----
-
-### mcp_server
-
-Configuration des serveurs MCP utilisateur.
-
-**Champs**
-- `id` : string (unique identifier)
-- `name` : string (unique, user-friendly name)
-- `enabled` : boolean
-- `command` : string (docker, npx, uvx, http)
-- `args` : array<string>
-- `env` : string (JSON-encoded HashMap for dynamic keys)
-- `description` : string?
-- `created_at` : datetime
-- `updated_at` : datetime
-
-**Indexes**
-- `id` (UNIQUE)
-- `name` (UNIQUE)
-
----
-
-### mcp_call_log
-
-Journal d'audit des appels MCP tools.
-
-**Champs**
-- `id` : UUID
-- `workflow_id` : string?
-- `server_name` : string
-- `tool_name` : string
-- `params` : object
-- `result` : object
-- `success` : boolean
-- `duration_ms` : int
-- `timestamp` : datetime
-
-**Indexes**
-- `workflow_id`
-- `server_name`
-- `timestamp`
-
----
-
-### llm_model
-
-Registre des modeles LLM (builtin + custom).
-
-**Champs**
-- `id` : string (UUID for custom, api_name for builtin)
-- `provider` : string (mistral, ollama)
-- `name` : string (human-readable)
-- `api_name` : string (model identifier for API)
-- `context_window` : int (1024-2000000)
-- `max_output_tokens` : int (256-128000)
-- `temperature_default` : float (0.0-2.0)
-- `is_builtin` : boolean
-- `is_reasoning` : boolean
-- `input_price_per_mtok` : float?
-- `output_price_per_mtok` : float?
-- `created_at` : datetime
-- `updated_at` : datetime
-
-**Indexes**
-- `id` (UNIQUE)
-- `provider`
-- `(provider, api_name)` (UNIQUE)
-
----
-
-### provider_settings
-
-Configuration des providers LLM.
-
-**Champs**
-- `provider` : string (UNIQUE, mistral/ollama)
-- `enabled` : boolean
-- `default_model_id` : string?
-- `base_url` : string?
-- `updated_at` : datetime
-
-**Indexes**
-- `provider` (UNIQUE)
-
----
-
-### custom_provider
-
-Metadata des providers OpenAI-compatible crees par l'utilisateur.
-
-**Champs**
-- `name` : string (UNIQUE, URL-safe: lowercase + hyphens)
-- `display_name` : string
-- `base_url` : string (API endpoint, trailing slash stripped)
-- `enabled` : boolean (DEFAULT true)
-- `created_at` : datetime (DEFAULT time::now())
-- `updated_at` : datetime?
-
-**Indexes**
-- `name` (UNIQUE)
-
-**Notes**
-- Les API keys sont stockees dans SecureKeyStore, pas dans la DB
-- Le champ `provider` dans `llm_model` et `provider_settings` accepte desormais les noms de custom providers en plus de "mistral" et "ollama"
-
----
-
-### tool_execution
-
-Persistance des executions d'outils.
-
-**Champs**
-- `id` : UUID
-- `workflow_id` : string
-- `message_id` : string
-- `agent_id` : string
-- `tool_type` : string (local, mcp)
-- `tool_name` : string
-- `server_name` : string? (for MCP tools)
-- `input_params` : object
-- `output_result` : object
-- `success` : boolean
-- `error_message` : string?
-- `duration_ms` : int
-- `iteration` : int
-- `created_at` : datetime
-
-**Indexes**
-- `workflow_id`
-- `message_id`
-- `agent_id`
-- `tool_type`
-
----
-
-### thinking_step
-
-Etapes de raisonnement agent (chain-of-thought).
-
-**Champs**
-- `id` : UUID
-- `workflow_id` : string
-- `message_id` : string
-- `agent_id` : string
-- `step_number` : int
-- `content` : string
-- `duration_ms` : int?
-- `tokens` : int?
-- `created_at` : datetime
-
-**Indexes**
-- `workflow_id`
-- `message_id`
-- `agent_id`
-
----
-
-### sub_agent_execution
-
-Historique des executions de sub-agents.
-
-**Champs**
-- `id` : UUID
-- `workflow_id` : string
-- `parent_agent_id` : string
-- `sub_agent_id` : string
-- `sub_agent_name` : string
-- `task_description` : string
-- `status` : enum (running, completed, error)
-- `duration_ms` : int?
-- `tokens_input` : int?
-- `tokens_output` : int?
-- `result_summary` : string?
-- `error_message` : string?
-- `created_at` : datetime
-- `completed_at` : datetime?
-
-**Indexes**
-- `workflow_id`
-- `parent_agent_id`
-- `status`
+**Indexes**: `task_workflow_idx` (workflow_id), `task_status_idx` (status), `task_priority_idx` (priority), `task_agent_idx` (agent_assigned)
 
 ---
 
 ### agent
 
-Configuration des agents crees par l'utilisateur.
+User-created agent configurations.
 
-**Champs**
-- `id` : UUID
-- `name` : string (1-64 chars)
-- `lifecycle` : enum (permanent, temporary)
-- `llm` : object
-  - `provider` : string
-  - `model` : string
-  - `temperature` : float (0.0-2.0)
-  - `max_tokens` : int (256-128000)
-- `tools` : array<string>
-- `skills` : array<string> (skill names assigned to agent)
-- `mcp_servers` : array<string>
-- `folders` : array<string> DEFAULT [] (authorized directory paths for FileManagerTool)
-- `require_file_confirmation` : boolean DEFAULT true (require user validation for destructive file ops)
-- `system_prompt` : string (1-10000 chars)
-- `max_tool_iterations` : int (1-200, default 50)
-- `reasoning_effort` : option<string> DEFAULT NONE (reasoning effort level: 'low', 'medium', 'high', or null)
-- `created_at` : datetime
-- `updated_at` : datetime
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| name | string (1-64 chars) | | Unique name |
+| lifecycle | string ASSERT IN [permanent, temporary] | | |
+| llm | object | | LLM configuration |
+| llm.provider | string (1-64 chars) | | Provider name |
+| llm.model | string (1-128 chars) | | Model identifier |
+| llm.temperature | float (0.0-2.0) | | |
+| llm.max_tokens | int (256-128000) | | |
+| tools | array\<string\> | | Enabled tool names |
+| mcp_servers | array\<string\> | | MCP server names |
+| skills | array\<string\> | [] | Skill names |
+| folders | array\<string\> | [] | FileManager authorized dirs |
+| require_file_confirmation | bool | true | Confirm destructive file ops |
+| system_prompt | string (1-10000 chars) | | |
+| max_tool_iterations | int (1-200) | 50 | Tool loop limit |
+| reasoning_effort | option\<string\> ASSERT IN [low, medium, high] | NONE | Thinking model effort |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
 
-**Indexes**
-- `id` (UNIQUE)
-- `name` (UNIQUE - case-insensitive uniqueness enforced at backend level)
-- `llm.provider`
+**Indexes**: `unique_agent_id` (id, UNIQUE), `agent_name_idx` (name, UNIQUE), `agent_provider_idx` (llm.provider)
 
 ---
 
 ### skill
 
-Documents de compétences (instructions markdown) assignables aux agents.
+Reusable markdown instruction documents assignable to agents.
 
-**Champs**
-- `id` : UUID
-- `name` : string (1-128 chars, regex `^[a-zA-Z0-9_-]+$`, UNIQUE)
-- `description` : string (1-500 chars)
-- `category` : enum (system, coding, workflow, analysis, custom)
-- `content` : string (1-50000 chars, markdown instructions)
-- `enabled` : boolean (DEFAULT true)
-- `created_at` : datetime (DEFAULT time::now())
-- `updated_at` : datetime (DEFAULT time::now())
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| name | string (1-128 chars, `^[a-zA-Z0-9_-]+$`) | | Unique slug |
+| description | string (1-500 chars) | | Short description |
+| category | string ASSERT IN [system, coding, workflow, analysis, custom] | | |
+| content | string (1-50000 chars) | | Markdown instructions |
+| enabled | bool | true | |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
 
-**Indexes**
-- `unique_skill_id` ON id (UNIQUE)
-- `unique_skill_name` ON name (UNIQUE)
-- `skill_category_idx` ON category
-- `skill_enabled_idx` ON enabled
+**Indexes**: `unique_skill_id` (id, UNIQUE), `unique_skill_name` (name, UNIQUE), `skill_category_idx` (category), `skill_enabled_idx` (enabled)
 
-**Usage** : Les skills sont assignes aux agents via le champ `agent.skills` (array de noms). Le ReadSkillTool permet aux agents de lire les instructions a l'execution.
+---
+
+### mcp_server
+
+MCP server configurations.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | Unique identifier |
+| name | string | | User-friendly name |
+| enabled | bool | true | |
+| command | string ASSERT IN [docker, npx, uvx, http] | | Transport type |
+| args | array\<string\> | | Command arguments |
+| env | string | '{}' | JSON-encoded env vars |
+| description | option\<string\> | | |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
+
+**Indexes**: `unique_mcp_id` (id, UNIQUE), `unique_mcp_name` (name, UNIQUE)
+
+---
+
+### mcp_call_log
+
+Audit log for MCP tool calls.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | option\<string\> | | Parent workflow |
+| server_name | string | | MCP server name |
+| tool_name | string | | Tool called |
+| params | string | '{}' | JSON string (call params) |
+| result | string | '[]' | JSON string (call result) |
+| success | bool | | |
+| duration_ms | int | | Response time |
+| timestamp | datetime | time::now() | |
+
+**Indexes**: `mcp_call_workflow` (workflow_id), `mcp_call_server` (server_name)
+
+---
+
+### llm_model
+
+LLM model registry (builtin + custom).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID (custom) or api_name (builtin) |
+| provider | string (1-64 chars) | | Provider name |
+| name | string (1-64 chars) | | Human-readable name |
+| api_name | string (1-128 chars) | | API model identifier |
+| context_window | int (1024-2000000) | | Context size |
+| max_output_tokens | int (256-128000) | | Max output |
+| temperature_default | float (0.0-2.0) | 0.7 | |
+| is_builtin | bool | false | |
+| is_reasoning | bool | false | Thinking model |
+| input_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million input tokens |
+| output_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million output tokens |
+| cache_read_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million cache-read tokens |
+| cache_write_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million cache-write tokens |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
+
+**Indexes**: `unique_model_id` (id, UNIQUE), `model_provider_idx` (provider), `model_api_name_idx` (provider + api_name, UNIQUE)
+
+---
+
+### provider_settings
+
+Per-provider LLM configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| provider | string (1-64 chars) | | Provider name (UNIQUE key) |
+| enabled | bool | true | |
+| default_model_id | option\<string\> | | Default model |
+| base_url | option\<string\> | | Custom API endpoint |
+| updated_at | datetime | time::now() | |
+
+**Indexes**: `unique_provider` (provider, UNIQUE)
+
+---
+
+### custom_provider
+
+User-created OpenAI-compatible provider metadata.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| name | string (1-64 chars) | | URL-safe slug (UNIQUE key) |
+| display_name | string (1-128 chars) | | Human-readable name |
+| base_url | string (1-512 chars) | | API endpoint |
+| enabled | bool | true | |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
+
+**Indexes**: `unique_custom_provider_name` (name, UNIQUE)
+
+API keys are stored in SecureKeyStore (OS keyring), never in the database.
+
+---
+
+### tool_execution
+
+Persisted tool execution log (local + MCP).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| message_id | string | | Parent message |
+| agent_id | string | | Executing agent |
+| tool_type | string ASSERT IN [local, mcp] | | Tool origin |
+| tool_name | string (1-128 chars) | | Tool name |
+| server_name | option\<string\> | | MCP server (if mcp) |
+| input_params | string | | JSON string (tool input) |
+| output_result | option\<string\> | | JSON string (tool output) |
+| success | bool | | |
+| error_message | option\<string\> | | Error details |
+| duration_ms | int | | Execution time |
+| iteration | int | | Tool loop iteration |
+| sequence | int | 0 | Order within iteration |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `tool_exec_workflow_idx` (workflow_id), `tool_exec_message_idx` (message_id), `tool_exec_agent_idx` (agent_id), `tool_exec_type_idx` (tool_type)
+
+---
+
+### thinking_step
+
+Agent reasoning/thinking steps (chain-of-thought).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| message_id | string | | Parent message |
+| agent_id | string | | Thinking agent |
+| step_number | int (>= 0) | | Step index |
+| content | string (1-50000 chars) | | Thinking content |
+| duration_ms | option\<int\> | | Step duration |
+| tokens | option\<int\> | | Token count |
+| sequence | int | 0 | Order within message |
+| source | string ASSERT IN [agent_flow, model_thinking] | 'agent_flow' | Origin of thinking |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `thinking_workflow_idx` (workflow_id), `thinking_message_idx` (message_id), `thinking_agent_idx` (agent_id)
+
+---
+
+### sub_agent_execution
+
+Sub-agent spawn/delegate execution history.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| parent_agent_id | string | | Delegating agent |
+| sub_agent_id | string | | Spawned agent |
+| sub_agent_name | string (1-128 chars) | | Agent display name |
+| task_description | string (1-10000 chars) | | Delegated task |
+| status | string ASSERT IN [pending, running, completed, error, cancelled] | | |
+| duration_ms | option\<int\> | | Execution time |
+| tokens_input | option\<int\> | | Input tokens used |
+| tokens_output | option\<int\> | | Output tokens used |
+| result_summary | option\<string\> | | Completion summary |
+| error_message | option\<string\> | | Error details |
+| parent_execution_id | option\<string\> | | Parent execution (nesting) |
+| created_at | datetime | time::now() | |
+| completed_at | option\<datetime\> | | |
+
+**Indexes**: `sub_agent_workflow_idx` (workflow_id), `sub_agent_parent_idx` (parent_agent_id), `sub_agent_status_idx` (status)
+
+---
+
+### user_question
+
+Agent-to-user interactive questions (human-in-the-loop).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| workflow_id | string | | Parent workflow |
+| agent_id | string | | Asking agent |
+| question | string (1-1000 chars) | | Question text |
+| question_type | string ASSERT IN [checkbox, text, mixed] | | Input mode |
+| options | string | '[]' | JSON string (checkbox options) |
+| text_placeholder | option\<string\> | | Placeholder for text input |
+| text_required | bool | false | |
+| context | option\<string\> | | Additional context |
+| status | string ASSERT IN [pending, answered, skipped] | 'pending' | |
+| selected_options | string | '[]' | JSON string (selected IDs) |
+| text_response | option\<string\> | | User text answer |
+| created_at | datetime | time::now() | |
+| answered_at | option\<datetime\> | | |
+
+**Indexes**: `user_question_workflow_idx` (workflow_id), `user_question_status_idx` (status), `user_question_workflow_status_idx` (workflow_id + status)
 
 ---
 
 ### workflow_folder
 
-Dossiers de regroupement des workflows dans la sidebar.
+Sidebar folder grouping for workflows.
 
-**Champs**
-- `id` : UUID
-- `name` : string
-- `color` : string (#RRGGBB)
-- `sort_order` : int
-- `created_at` : datetime
-- `updated_at` : datetime
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| name | string (1-128 chars) | | Folder name |
+| color | string (`^#[0-9a-fA-F]{6}$`) | | Hex color |
+| sort_order | int | 0 | Display order |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
 
-**Indexes**
-- `unique_folder_id` ON id (UNIQUE)
-
-**Usage** : Les workflows peuvent etre associes a un dossier via `workflow.folder_id`. Reordonnable via `sort_order`.
+**Indexes**: `unique_folder_id` (id, UNIQUE)
 
 ---
 
 ### migration_log
 
-Journal des migrations de schema executees (guard pattern).
+Schema migration guard (prevents re-execution of destructive migrations).
 
-**Champs**
-- `id` : string (migration identifier, e.g. "001_embedding_migration")
-- `executed_at` : datetime
-- `description` : string?
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| name | string | | Migration identifier (e.g. "001_embedding_migration") |
+| applied_at | datetime | time::now() | When migration was applied |
 
-**Indexes**
-- `id` (UNIQUE)
-
-**Usage** : Empeche les migrations destructrices d'etre executees plusieurs fois.
+**Indexes**: `unique_migration_name` (name, UNIQUE)
 
 ---
 
-## Schéma Vectoriel (HNSW)
+## Vector Search (HNSW)
 
-**Configuration Index**
-```
-Table: memory
-Field: embedding
-Algorithm: HNSW (Hierarchical Navigable Small World)
-Distance: Cosine similarity
-Dimensions: 768 | 1024 | 1536 | 3072
-M: 16 (connexions par noeud)
-ef_construction: 200 (qualité construction)
-ef_search: 50 (qualité recherche)
-```
+| Property | Value |
+|----------|-------|
+| Table | memory |
+| Field | embedding |
+| Algorithm | HNSW (Hierarchical Navigable Small World) |
+| Distance | Cosine similarity |
+| Dimensions | 1024 (configurable via migration) |
 
-**Recherche KNN** : Retour top_k résultats avec score similarité
+Supports KNN search returning top_k results with cosine similarity score.
+
+Embedding dimensions by provider: OpenAI 1536D/3072D, Mistral 1024D, Ollama 768D/1024D.
 
 ---
 
-## Query Patterns (Implementation - Phase 5)
+## Security
 
-### Parameterized Queries
-
-**Safe Pattern** - Use bind parameters for user input:
-```rust
-// src-tauri/src/db/client.rs
-
-// SELECT with parameters
-let results: Vec<Memory> = db.query_with_params(
-    "SELECT * FROM memory WHERE type = $type AND workflow_id = $wf_id",
-    vec![
-        ("type".to_string(), serde_json::json!("knowledge")),
-        ("wf_id".to_string(), serde_json::json!(workflow_id)),
-    ]
-).await?;
-
-// JSON results with parameters
-let results: Vec<serde_json::Value> = db.query_json_with_params(
-    "SELECT meta::id(id) AS id FROM memory WHERE type = $type",
-    vec![("type".to_string(), serde_json::json!(user_input))]
-).await?;
-
-// Mutations with parameters
-db.execute_with_params(
-    "UPDATE task:`uuid` SET status = $status",
-    vec![("status".to_string(), serde_json::json!("completed"))]
-).await?;
-```
-
-**Unsafe Pattern** - DO NOT use string concatenation:
-```rust
-// WRONG - SQL injection risk
-let query = format!("SELECT * FROM memory WHERE type = '{}'", user_input);
-
-// WRONG - Apostrophes cause parse errors
-format!("content = '{}'", text.replace('\'', "''"))  // l'eau -> parse error
-```
-
-### Transaction Support
-
-For multi-query operations that must succeed or fail together:
-```rust
-// Simple transaction
-db.transaction(vec![
-    "CREATE workflow:`123` CONTENT { name: 'Test' }".to_string(),
-    "CREATE message:`456` CONTENT { workflow_id: '123' }".to_string(),
-]).await?;  // Rolls back on any failure
-
-// Parameterized transaction
-db.transaction_with_params(vec![
-    (
-        "CREATE workflow:`123` CONTENT $data".to_string(),
-        vec![("data".to_string(), json!({"name": "Test"}))]
-    ),
-    (
-        "UPDATE agent:`456` SET status = $status".to_string(),
-        vec![("status".to_string(), json!("active"))]
-    ),
-]).await?;  // Rolls back on any failure
-```
-
-### Query Limits
-
-All list operations enforce LIMIT to prevent memory explosion:
-```rust
-use crate::constants::query_limits;
-
-let query = format!(
-    "SELECT * FROM memory ORDER BY created_at DESC LIMIT {}",
-    query_limits::DEFAULT_LIST_LIMIT  // 1000
-);
-```
-
-**Constants** (`src-tauri/src/constants.rs`):
-| Constant | Value | Usage |
-|----------|-------|-------|
-| `DEFAULT_LIST_LIMIT` | 1000 | agents, memories, tasks |
-| `DEFAULT_MODELS_LIMIT` | 100 | LLM models |
-| `DEFAULT_MCP_LOGS_LIMIT` | 500 | MCP call logs |
-| `DEFAULT_MESSAGES_LIMIT` | 500 | message history |
-| `MAX_LIST_LIMIT` | 10000 | absolute maximum |
-
-### MCP Latency Metrics Query
-
-The `mcp_call_log` table is used for latency percentile calculations:
-```sql
--- Command: get_mcp_latency_metrics
-SELECT
-    server_name,
-    math::percentile(duration_ms, 0.50) AS p50_ms,
-    math::percentile(duration_ms, 0.95) AS p95_ms,
-    math::percentile(duration_ms, 0.99) AS p99_ms,
-    count() AS total_calls
-FROM mcp_call_log
-WHERE timestamp > time::now() - 1h
-GROUP BY server_name
-```
+- **Agent scoping**: Queries scoped by `agent_id` / `workflow_id`
+- **API keys**: Never stored in DB (OS keyring via SecureKeyStore)
+- **Input validation**: All user input validated and parameterized (no `format!()` injection)
+- **External data**: Sanitized via `sanitize_for_surrealdb()` before insertion
+- **Audit trail**: `validation_request` + `mcp_call_log` + `tool_execution`
 
 ---
 
-## Sécurité
+## Source of Truth
 
-**Permissions**
-- Agents : Scope par `agent_id` (pas accès autres agents sauf orchestrateur)
-- Workflows : Isolation par `workflow_id`
-- Operations : SELECT/CREATE/UPDATE (DELETE nécessite validation)
-
-**Encryption**
-- At rest : SurrealDB embedded (délégué OS encryption)
-- In transit : TLS si remote mode
-- API keys : Jamais stockées DB (Tauri secure storage)
-
-**Audit**
-- Toutes operations sensibles loggées
-- Validation requests = audit trail built-in
-
----
-
-## Performance
-
-**Indexes Critiques**
-- `workflow.status` + `agent_id` : Queries fréquentes UI
-- `memory.embedding` : HNSW pour KNN rapide
-- `message.workflow_id` + `timestamp` : Historique ordonné
-
-**Optimisations**
-- Batch inserts messages/tasks (transactions)
-- Cache queries fréquentes (ex: agent_state metrics)
-- Pagination results (50-100 items par page)
-
----
-
-## Références
-
-**SurrealDB Docs**
-- Vector Database : https://surrealdb.com/docs/surrealdb/models/vector
-- Graph Relations : https://surrealdb.com/docs/surrealdb/models/graph
-- HNSW Index : https://surrealdb.com/docs/surrealdb/reference-guide/vector-search
-
-**Embeddings**
-- OpenAI : 1536D/3072D
-- Mistral : 1024D
-- Ollama : 768D/1024D
+- Schema definition: `src-tauri/src/db/schema.rs`
+- Query implementations: `src-tauri/src/db/queries.rs`
+- Persistence layer: `src-tauri/src/db/persistence.rs`
+- Migrations: `src-tauri/src/commands/migration.rs`
+- Security helpers: `src-tauri/src/security/validation.rs`

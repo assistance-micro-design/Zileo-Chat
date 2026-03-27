@@ -1,984 +1,314 @@
-# Documentation des Outils Agents par Défaut
+# Agent Tools Documentation
 
-Documentation technique des outils natifs disponibles pour les agents du système multi-agents.
+Technical documentation for the native tools available to agents in the multi-agent system.
 
 ---
 
-## Statut d'Implementation
+## Implementation Status
 
-| Outil | Statut | Fichier |
-|-------|--------|---------|
-| **TodoTool** | Implemented | `src-tauri/src/tools/todo/tool.rs` |
-| **MemoryTool** | Implemented | `src-tauri/src/tools/memory/tool.rs` |
-| **CalculatorTool** | Implemented | `src-tauri/src/tools/calculator/tool.rs` |
-| **UserQuestionTool** | Implemented | `src-tauri/src/tools/user_question/tool.rs` |
-| **SpawnAgentTool** | Implemented | `src-tauri/src/tools/spawn_agent.rs` |
-| **DelegateTaskTool** | Implemented | `src-tauri/src/tools/delegate_task.rs` |
-| **ParallelTasksTool** | Implemented | `src-tauri/src/tools/parallel_tasks.rs` |
-| **ReadSkillTool** | Implemented | `src-tauri/src/tools/read_skill.rs` |
-| **FileManagerTool** | Implemented | `src-tauri/src/tools/file_manager/tool.rs` |
-| **Tool Execution** | Implemented | `src-tauri/src/agents/llm_agent.rs` |
+| Tool | Source |
+|------|--------|
+| **TodoTool** | `src-tauri/src/tools/todo/tool.rs` |
+| **MemoryTool** | `src-tauri/src/tools/memory/tool.rs` |
+| **CalculatorTool** | `src-tauri/src/tools/calculator/tool.rs` |
+| **UserQuestionTool** | `src-tauri/src/tools/user_question/tool.rs` |
+| **SpawnAgentTool** | `src-tauri/src/tools/spawn_agent.rs` |
+| **DelegateTaskTool** | `src-tauri/src/tools/delegate_task.rs` |
+| **ParallelTasksTool** | `src-tauri/src/tools/parallel_tasks.rs` |
+| **ReadSkillTool** | `src-tauri/src/tools/read_skill.rs` |
+| **FileManagerTool** | `src-tauri/src/tools/file_manager/tool.rs` |
+| **Tool Execution** | `src-tauri/src/agents/llm_agent.rs` |
 
-**Note**: Les DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) ont été retirés - l'accès DB se fait via les commands Tauri IPC.
+**Note**: DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) were removed -- DB access goes through Tauri IPC commands.
 
-**Categories**:
-- **Basic Tools**: MemoryTool, TodoTool, CalculatorTool (no special context required)
-- **Interaction Tools**: UserQuestionTool (human-in-the-loop interactions)
-- **File Tools**: FileManagerTool (sandboxed filesystem operations within authorized folders)
-- **Sub-Agent Tools**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
-- **Hidden Tools**: ReadSkillTool (auto-injected when agent has skills assigned, not shown in UI)
+### Tool Categories
 
-**Sub-Agent Resilience Features (v1.0)**:
-- Inactivity Timeout with Heartbeat: 300s timeout, 30s check interval
-- Retry with Exponential Backoff: 3 attempts, 500ms-2000ms delay
-- Circuit Breaker: 3 failures → open, 60s cooldown
-- CancellationToken: Graceful shutdown support
-- Correlation ID: Hierarchical tracing for batch operations
+- **Basic**: MemoryTool, TodoTool, CalculatorTool (no special context required)
+- **Interaction**: UserQuestionTool (human-in-the-loop)
+- **File**: FileManagerTool (sandboxed filesystem operations)
+- **Sub-Agent**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
+- **Hidden**: ReadSkillTool (auto-injected when agent has skills, not shown in UI)
+
+### Sub-Agent Resilience
+
+- Inactivity timeout with heartbeat (300s timeout, 30s check interval)
+- Retry with exponential backoff (3 attempts, 500ms-2000ms)
+- Circuit breaker (3 failures to open, 60s cooldown)
+- CancellationToken for graceful shutdown
+- Hierarchical correlation IDs for batch tracing
 
 ### ToolFactory
 
-Les outils sont instancies dynamiquement via `ToolFactory`:
-
-```rust
-use crate::tools::ToolFactory;
-
-let factory = ToolFactory::new(db.clone(), embedding_ref);
-// embedding_ref: Arc<RwLock<Option<Arc<EmbeddingService>>>>
-let tool = factory.create_tool("MemoryTool", Some("wf_001".into()), "agent_id".into(), app_handle).await?;
-```
+Tools are instantiated dynamically via `ToolFactory`. See `src-tauri/src/tools/` for implementation.
 
 ---
 
-## 1. Todo Tool
+## 1. TodoTool
 
-**Objectif** : Gestion hierarchique du workflow et orchestration des taches agents
+**Purpose**: Hierarchical workflow management and agent task orchestration.
 
-**Implementation** : `src-tauri/src/tools/todo/tool.rs` (TodoTool)
+### Operations
 
-**Statut** : Implemented
+- `create` -- Create a task (`name` required)
+- `get` -- Read task by ID (`task_id`)
+- `update_status` -- Update status (`task_id`, `status`)
+- `list` -- List workflow tasks (optional `status_filter`)
+- `complete` -- Mark complete (`task_id`, optional `duration_ms`)
+- `delete` -- Delete task (`task_id`)
 
-### Operations Disponibles (via JSON)
+### Task Structure
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `create` | Creation tache | `name` |
-| `get` | Lecture par ID | `task_id` |
-| `update_status` | Mise a jour statut | `task_id`, `status` |
-| `list` | Liste taches workflow | (aucun) |
-| `complete` | Marquer complete | `task_id` |
-| `delete` | Suppression | `task_id` |
+Fields: `id` (uuid), `workflow_id`, `name` (max 128), `description` (max 1000), `agent_assigned?`, `priority` (1-5), `status` (pending/in_progress/completed/blocked), `dependencies` (uuid[]), `duration_ms?`, `created_at`, `completed_at?`.
 
-### Structure de Tache
+### Example
 
 ```json
-{
-  "id": "uuid",                    // Identifiant unique (genere)
-  "workflow_id": "uuid",           // Workflow associe
-  "name": "string",                // Nom court (max 128 chars)
-  "description": "string",         // Details (max 1000 chars)
-  "agent_assigned": "string?",     // Agent responsable (optionnel)
-  "priority": 1-5,                 // 1=Critique, 5=Faible
-  "status": "enum",                // pending | in_progress | completed | blocked
-  "dependencies": ["uuid"],        // Taches prerequises
-  "duration_ms": "number?",        // Duree execution (si complete)
-  "created_at": "datetime",        // Timestamp creation
-  "completed_at": "datetime?"      // Timestamp completion
-}
+{ "operation": "create", "name": "Analyze code structure", "priority": 1 }
 ```
 
-### Exemples d'Utilisation
+### Use Cases
 
-**Creation de tache**:
-```json
-{
-  "operation": "create",
-  "name": "Analyze code structure",
-  "description": "Deep analysis of src/ directory",
-  "priority": 1
-}
-```
-
-**Mise a jour statut**:
-```json
-{
-  "operation": "update_status",
-  "task_id": "abc-123",
-  "status": "in_progress"
-}
-```
-
-**Completion avec metriques**:
-```json
-{
-  "operation": "complete",
-  "task_id": "abc-123",
-  "duration_ms": 5000
-}
-```
-
-**Liste filtree**:
-```json
-{
-  "operation": "list",
-  "status_filter": "pending"
-}
-```
-
-### Commandes Tauri IPC (Frontend)
-
-| Commande | TypeScript | Rust |
-|----------|------------|------|
-| `create_task` | workflowId, name, description, priority?, agentAssigned?, dependencies? | workflow_id, name, description, priority, agent_assigned, dependencies |
-| `get_task` | taskId | task_id |
-| `list_workflow_tasks` | workflowId | workflow_id |
-| `list_tasks_by_status` | status, workflowId? | status, workflow_id |
-| `update_task` | taskId, updates | task_id, updates |
-| `update_task_status` | taskId, status | task_id, status |
-| `complete_task` | taskId, durationMs? | task_id, duration_ms |
-| `delete_task` | taskId | task_id |
-
-### Cas d'Usage
-- **Orchestration multi-agents** : Coordination de workflows complexes entre plusieurs agents
-- **Tracabilite** : Suivi de progression pour operations longues (>3 etapes)
-- **Gestion de dependances** : Organisation sequentielle ou parallele des taches
-- **Metriques** : Tracking duree execution pour optimisation
-
-### Configuration Agent
-
-Pour activer le TodoTool sur un agent:
-```toml
-[tools]
-enabled = ["TodoTool", "MemoryTool"]
-```
+- Multi-agent orchestration and complex workflow coordination
+- Progress tracking for long-running operations (>3 steps)
+- Dependency management (sequential or parallel tasks)
+- Execution duration metrics for optimization
 
 ---
 
-## 2. Memory Tool
+## 2. MemoryTool
 
-**Objectif** : Persistance vectorielle dans SurrealDB pour memoire contextuelle agents
-
-**Implementation** : `src-tauri/src/tools/memory/tool.rs` (MemoryTool)
-
-**Statut** : Implemented
+**Purpose**: Vector-backed persistent memory in SurrealDB for agent contextual recall.
 
 ### Architecture
 
-**Base de donnees** : SurrealDB avec support embeddings vectoriels ([Doc officielle](https://surrealdb.com/docs/surrealdb/models/vector))
+- **Database**: SurrealDB with HNSW vector indexing (1024D)
+- **Search**: Composite scoring -- `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`
+- **Embedding**: Multi-provider abstraction (`src-tauri/src/llm/embedding.rs`) -- Mistral (1024D), Ollama (768D/1024D)
 
-**Indexation** : HNSW (Hierarchical Navigable Small World) avec dimension 1024 (Mistral/Ollama compatible)
+### Operations
 
-**Recherche** : Similarite cosinus pour retrieval semantique
+- `describe` -- Discovery: memory stats by type/scope
+- `add` -- Add memory with embedding + auto-scoping (`type`, `content`)
+- `get` -- Read by ID (`memory_id`)
+- `list` -- List with filters (mode `compact` or `full`)
+- `search` -- Semantic search (`query`, optional `limit`, `threshold`)
+- `delete` -- Delete by ID (`memory_id`)
+- `clear_by_type` -- Bulk delete by type (`type`)
 
-**Embedding Service** : Abstraction multi-provider (`src-tauri/src/llm/embedding.rs`)
-- Mistral: `mistral-embed` (1024D)
-- Ollama: `nomic-embed-text` (768D), `mxbai-embed-large` (1024D)
+### Auto-Scoping
 
-### Operations Disponibles (via JSON)
+Scope is determined automatically by memory type:
+- `user_pref`, `knowledge` -- general scope (cross-workflow)
+- `context`, `decision` -- workflow scope (tied to current workflow)
+- Override possible via the `scope` parameter
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `describe` | Decouverte: stats des memoires par type/scope | (aucun) |
-| `add` | Ajout memoire avec embedding + auto-scoping | `type`, `content` |
-| `get` | Lecture par ID | `memory_id` |
-| `list` | Liste avec filtres (mode `compact` ou `full`) | (aucun) |
-| `search` | Recherche semantique composite (cosine + importance + recency) | `query` |
-| `delete` | Suppression | `memory_id` |
-| `clear_by_type` | Suppression en masse par type | `type` |
-
-**Auto-scoping (v2)**: Le scope est determine automatiquement par le type de memoire :
-- `user_pref`, `knowledge` → scope general (cross-workflow)
-- `context`, `decision` → scope workflow (lie au workflow courant)
-- Override possible via le parametre `scope`
-
-**Scoring composite (v2)**: `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`
-
-### Exemples d'Utilisation
-
-**Decouverte (describe) - a appeler en premier**:
-```json
-{
-  "operation": "describe"
-}
-```
-
-**Ajout memoire (auto-scoping)**:
-```json
-{
-  "operation": "add",
-  "type": "knowledge",
-  "content": "SurrealDB supports HNSW vector indexing for semantic search",
-  "importance": 0.8,
-  "tags": ["database", "vector-search"]
-}
-```
-
-**Recherche semantique (scoring composite)**:
-```json
-{
-  "operation": "search",
-  "query": "vector database indexing",
-  "limit": 5,
-  "threshold": 0.7
-}
-```
-
-**Liste compacte (mode compact pour economiser les tokens)**:
-```json
-{
-  "operation": "list",
-  "type_filter": "knowledge",
-  "mode": "compact",
-  "limit": 20
-}
-```
-
-### Structure de Memoire
+### Example
 
 ```json
-{
-  "id": "uuid",
-  "type": "user_pref | context | knowledge | decision",
-  "content": "string (max 50000 chars)",
-  "embedding": [0.1, 0.2, ...],
-  "workflow_id": "string?",
-  "importance": 0.5,
-  "expires_at": "datetime? (auto-set for context: 7 days)",
-  "metadata": {
-    "agent_source": "string",
-    "priority": 0.0-1.0,
-    "tags": ["string"]
-  },
-  "created_at": "datetime"
-}
+{ "operation": "search", "query": "vector database indexing", "limit": 5 }
 ```
 
-**Importance par defaut**: user_pref=0.8, decision=0.7, knowledge=0.6, context=0.3
-**TTL automatique**: Les memoires `context` expirent apres 7 jours par defaut
+### Key Details
 
-### Cas d'Usage
-- **Préférences utilisateur** : Stockage personnalisation interface, modèles préférés
-- **Contexte conversationnel** : Continuité dialogue entre sessions
-- **Base de connaissances** : Accumulation expertise projet-specific
-- **Décisions architecturales** : Historique choix techniques et justifications
-
-### Securite et Performance
-
-**Requetes Parametrees**:
-Toutes les requetes DB utilisent des bind parameters pour prevenir l'injection SQL:
-```rust
-let params = vec![
-    ("type".to_string(), serde_json::json!(memory_type)),
-    ("workflow_id".to_string(), serde_json::json!(wf_id)),
-];
-let results: Vec<Memory> = db.query_with_params(&query, params).await?;
-```
-
-**Validation Typee**:
-L'outil utilise `MemoryInput` struct pour parsing et validation typee:
-```rust
-struct MemoryInput {
-    operation: String,
-    memory_type: Option<String>,
-    content: Option<String>,
-    // ... valide tous les inputs avant execution
-}
-```
-
-**Logique Partagee**:
-La logique add_memory est consolidee dans `tools/memory/helpers.rs` pour eliminer la duplication entre tool et commands.
-
-**Index Composites**:
-- `memory_type_workflow_idx` - Optimise les recherches avec type + workflow_id
-- `memory_type_created_idx` - Optimise les requetes de nettoyage par type + created_at
-
-**Service d'Embedding Dynamique**:
-L'embedding service est optionnel (`Option<EmbeddingService>`). Si absent, les memoires sont stockees sans embeddings vectoriels (text search uniquement).
-
-### Bonnes Pratiques
-- **Dimensionnalite** : Utiliser embeddings selon provider
-  - 768D : Ollama (nomic-embed-text), BERT leger
-  - 1024D : Mistral (mistral-embed), Ollama (mxbai-embed-large)
-  - 1536D : OpenAI (text-embedding-3-small)
-  - 3072D : OpenAI (text-embedding-3-large)
-- **Indexation** : Creer index HNSW pour >1000 entrees (optimisation requetes)
-- **Scope** : Separer memoires workflow-specific et generales pour isolation
-- **Nettoyage** : Purger memoires temporaires post-workflow avec `delete_memory`
+- **Default importance**: user_pref=0.8, decision=0.7, knowledge=0.6, context=0.3
+- **Auto TTL**: `context` memories expire after 7 days
+- **Embedding optional**: If no embedding service, memories are stored without vectors (text search only)
+- **Security**: All DB queries use bind parameters. See `src-tauri/src/tools/memory/` for implementation.
 
 ---
 
-## 3. Calculator Tool
+## 3. CalculatorTool
 
-**Objectif** : Evaluation d'expressions mathematiques pour les agents
+**Purpose**: Mathematical expression evaluation for agents.
 
-**Implementation** : `src-tauri/src/tools/calculator/tool.rs` (CalculatorTool)
+### Operations
 
-**Statut** : Implemented
+| Operation | Description | Examples |
+|-----------|-------------|---------|
+| `unary` | Single-argument functions | sin, cos, tan, sqrt, exp, ln, abs, floor, ceil, round |
+| `binary` | Two-argument functions | pow, log, min, max, +, -, *, / |
+| `constant` | Mathematical constants | pi, e, tau |
 
-### Operations Disponibles (via JSON)
+Supports parentheses, decimals, and negative numbers.
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `eval` | Evaluation expression | `expression` |
+### Example
 
-### Exemples d'Utilisation
-
-**Evaluation simple**:
 ```json
-{
-  "operation": "eval",
-  "expression": "2 + 2 * 3"
-}
+{ "operation": "binary", "operator": "pow", "a": 2, "b": 10 }
 ```
-
-**Resultat**:
-```json
-{
-  "success": true,
-  "result": 8.0,
-  "expression": "2 + 2 * 3"
-}
-```
-
-### Operations Supportees
-- Arithmetique basique : `+`, `-`, `*`, `/`
-- Parentheses : `(2 + 3) * 4`
-- Nombres decimaux : `3.14 * 2`
-- Nombres negatifs : `-5 + 3`
-
-### Cas d'Usage
-- **Calculs de metriques** : Tokens, couts, durees
-- **Conversions** : Unites, pourcentages
-- **Validations numeriques** : Verification de calculs dans les rapports
 
 ---
 
-## 4. User Question Tool
+## 4. UserQuestionTool
 
-**Objectif** : Permettre aux agents de poser des questions interactives aux utilisateurs pendant l'execution du workflow
+**Purpose**: Allow agents to ask interactive questions to users during workflow execution.
 
-**Implementation** : `src-tauri/src/tools/user_question/tool.rs` (UserQuestionTool)
+### Operations
 
-**Statut** : Implemented
+- `ask` -- Ask a question (`question`, `questionType`)
 
-### Operations Disponibles (via JSON)
+### Parameters
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `ask` | Poser une question a l'utilisateur | `question`, `questionType` |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `question` | string | Yes | Max 2000 chars |
+| `questionType` | string | Yes | `checkbox`, `text`, or `mixed` |
+| `options` | array | For checkbox/mixed | Max 20 options, each with `id` and `label` |
+| `textPlaceholder` | string | No | Placeholder for text field |
+| `textRequired` | boolean | No | Whether text is required (for `mixed`) |
+| `context` | string | No | Additional context to display (max 5000 chars) |
 
-### Parametres de l'Operation "ask"
-
-| Parametre | Type | Requis | Contraintes | Description |
-|-----------|------|--------|-------------|-------------|
-| `operation` | string | Oui | "ask" | Operation a effectuer |
-| `question` | string | Oui | Max 2000 chars, non vide | La question a poser |
-| `questionType` | string | Oui | "checkbox" \| "text" \| "mixed" | Type de question |
-| `options` | array | Conditionnel | Requis pour "checkbox"/"mixed", max 20 options | Options de choix |
-| `textPlaceholder` | string | Non | - | Placeholder du champ texte |
-| `textRequired` | boolean | Non | Default: false | Texte requis (pour "mixed") |
-| `context` | string | Non | Max 5000 chars | Contexte additionnel a afficher |
-
-### Structure QuestionOption
+### Example
 
 ```json
-{
-  "id": "option_1",      // Identifiant unique (non vide)
-  "label": "Option 1"    // Texte affiche (max 256 chars)
-}
+{ "operation": "ask", "question": "Which approach?", "questionType": "text" }
 ```
 
-### Types de Questions
+### Polling and Timeout
 
-| Type | Description | Options requises | Texte disponible |
-|------|-------------|------------------|------------------|
-| `checkbox` | Choix multiple avec cases a cocher | Oui | Non |
-| `text` | Champ de texte libre | Non | Oui |
-| `mixed` | Combinaison checkbox + texte | Oui | Oui |
-
-### Exemples d'Utilisation
-
-**Question checkbox (choix multiple)**:
-```json
-{
-  "operation": "ask",
-  "question": "Quelles fonctionnalites voulez-vous implementer ?",
-  "questionType": "checkbox",
-  "options": [
-    {"id": "auth", "label": "Authentification"},
-    {"id": "api", "label": "API REST"},
-    {"id": "db", "label": "Base de donnees"}
-  ],
-  "context": "Selectionnez toutes les options applicables"
-}
-```
-
-**Question texte**:
-```json
-{
-  "operation": "ask",
-  "question": "Quel nom voulez-vous donner au projet ?",
-  "questionType": "text",
-  "textPlaceholder": "Entrez le nom du projet..."
-}
-```
-
-**Question mixte**:
-```json
-{
-  "operation": "ask",
-  "question": "Comment souhaitez-vous proceder ?",
-  "questionType": "mixed",
-  "options": [
-    {"id": "option_a", "label": "Approche A"},
-    {"id": "option_b", "label": "Approche B"}
-  ],
-  "textPlaceholder": "Ou decrivez votre propre approche...",
-  "textRequired": false
-}
-```
-
-### Structure de Reponse
-
-**Succes**:
-```json
-{
-  "success": true,
-  "selectedOptions": ["auth", "api"],
-  "textResponse": "Details additionnels...",
-  "message": "User response received"
-}
-```
-
-**Erreur (question ignoree)**:
-```json
-{
-  "success": false,
-  "error": "Question skipped by user"
-}
-```
-
-### Mecanisme de Polling
-
-Le tool utilise un pattern de polling progressif pour attendre la reponse utilisateur:
-
-| Etape | Intervalle |
-|-------|------------|
-| 1-2 | 500ms |
-| 3-4 | 1000ms |
-| 5-6 | 2000ms |
-| 7+ | 5000ms (jusqu'au timeout) |
-
-**Timeout** : Apres 5 minutes (300 secondes) sans reponse, le statut devient "timeout" et une erreur est retournee. Le circuit breaker enregistre ce timeout (voir section Circuit Breaker ci-dessous).
-
-### Events Emis
-
-| Event | Type | Description |
-|-------|------|-------------|
-| `workflow_stream` | `user_question_start` | Question envoyee, en attente de reponse |
-| `workflow_stream` | `user_question_complete` | Reponse recue, question ignoree, ou timeout |
-
-### Commandes Tauri IPC (Frontend)
-
-| Commande | Description | Parametres |
-|----------|-------------|------------|
-| `submit_user_response` | Soumettre une reponse | `questionId`, `selectedOptions`, `textResponse?` |
-| `get_pending_questions` | Lister questions en attente | `workflowId` |
-| `skip_question` | Ignorer une question | `questionId` |
-
-### Cas d'Usage
-
-- **Clarification** : Demander des precisions sur les requirements
-- **Choix d'implementation** : Proposer des options d'architecture
-- **Validation** : Confirmer avant operations critiques
-- **Collecte d'information** : Recueillir parametres manquants
-
-### Configuration Agent
-
-Pour activer le UserQuestionTool sur un agent:
-```json
-{
-  "tools": ["UserQuestionTool", "MemoryTool", "TodoTool"]
-}
-```
-
-### Constantes de Validation
-
-```rust
-pub const MAX_QUESTION_LENGTH: usize = 2000;
-pub const MAX_OPTION_ID_LENGTH: usize = 64;
-pub const MAX_OPTION_LABEL_LENGTH: usize = 256;
-pub const MAX_OPTIONS: usize = 20;
-pub const MAX_CONTEXT_LENGTH: usize = 5000;
-pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
-pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
-pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
-
-// Timeout
-pub const DEFAULT_TIMEOUT_SECS: u64 = 300; // 5 minutes
-
-// Circuit Breaker
-pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;  // Opens after 3 consecutive timeouts
-pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;     // 60s cooldown before recovery attempt
-```
+Uses progressive polling (500ms to 5s intervals). After 5 minutes without response, the question times out. The circuit breaker tracks consecutive timeouts.
 
 ### Circuit Breaker
 
-Le UserQuestionTool implemente un circuit breaker pour prevenir le spam de questions quand l'utilisateur ne repond pas.
+Prevents question spam when the user is unresponsive:
+- **Closed** -- Normal operation
+- **Open** -- After 3 consecutive timeouts, questions are rejected
+- **HalfOpen** -- After 60s cooldown, one test question is allowed
 
-**Etats du Circuit**:
+Transitions: `Closed -[3 timeouts]-> Open -[60s]-> HalfOpen -[success]-> Closed` or `HalfOpen -[timeout]-> Open`.
 
-| Etat | Description | Comportement |
-|------|-------------|--------------|
-| **Closed** | Fonctionnement normal | Questions autorisees |
-| **Open** | Trop de timeouts (3 consecutifs) | Questions rejetees immediatement |
-| **HalfOpen** | Test de recuperation (apres 60s) | Une question autorisee pour tester |
+See `src-tauri/src/tools/user_question/circuit_breaker.rs` for implementation.
 
-**Transitions**:
-```
-Closed → [3 timeouts] → Open → [60s cooldown] → HalfOpen
-                                                    ↓
-                                            [success] → Closed
-                                            [timeout] → Open
-```
+### Events
 
-**Reponse si circuit ouvert**:
-```json
-{
-  "success": false,
-  "error": "User appears unresponsive (3 consecutive timeouts). Question rejected. Retry in 45 seconds."
-}
-```
-
-**Reset Conditions**:
-- **Success** : Utilisateur repond → reset compteur, ferme circuit
-- **Skip** : Utilisateur ignore → traite comme success (reponse active)
-- **Autres erreurs** : Pas d'effet sur le circuit breaker
-
-**Implementation** : `src-tauri/src/tools/user_question/circuit_breaker.rs`
+- `user_question_start` -- Question sent, awaiting response
+- `user_question_complete` -- Response received, skipped, or timed out
 
 ---
 
-## 5. ReadSkill Tool
+## 5. ReadSkillTool
 
-**Objectif** : Permettre aux agents de lire des documents de competences (skills) contenant des instructions et du contexte
+**Purpose**: Allow agents to read skill documents containing instructions and context.
 
-**Implementation** : `src-tauri/src/tools/read_skill.rs` (ReadSkillTool)
+**Hidden**: Auto-injected when the agent has assigned skills; not visible in the frontend UI.
 
-**Statut** : Implemented
+### Operations
 
-**Hidden** : `true` - Auto-injecte quand l'agent a des skills assignes, pas visible dans l'UI frontend
+- `read` (default) -- Read full skill content (`name` required)
+- `list` -- List available skills for the agent
 
-### Operations Disponibles (via JSON)
+### Access Control
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `read` (default) | Lire le contenu complet d'un skill | `name` |
-| `list` | Lister les skills disponibles pour l'agent | (aucun) |
-
-### Parametres
-
-| Parametre | Type | Requis | Description |
-|-----------|------|--------|-------------|
-| `operation` | string | Non | "read" (default) ou "list" |
-| `name` | string | Conditionnel | Nom du skill (requis pour "read") |
-
-### Exemples d'Utilisation
-
-**Lister les skills disponibles**:
-```json
-{
-  "operation": "list"
-}
-```
-
-**Lire un skill**:
-```json
-{
-  "name": "coding-standards"
-}
-```
-
-**Lire avec operation explicite**:
-```json
-{
-  "operation": "read",
-  "name": "git-workflow"
-}
-```
-
-### Structure de Reponse
-
-**List**:
-```json
-{
-  "success": true,
-  "skills": [
-    {"name": "coding-standards", "description": "...", "category": "coding"}
-  ],
-  "message": "Found 1 available skill(s)"
-}
-```
-
-**Read**:
-```json
-{
-  "success": true,
-  "name": "coding-standards",
-  "description": "Standards de code",
-  "category": "coding",
-  "content": "# Coding Standards\n..."
-}
-```
-
-### Controle d'Acces
-
-- **list** : Retourne uniquement les skills dans `agent_skills` ET `enabled = true` en DB
-- **read** : Le `name` doit etre dans la liste des skills assignes a l'agent ET `enabled = true` en DB
-- `ToolError::PermissionDenied` si le skill n'est pas assigne a l'agent
-- `ToolError::NotFound` si le skill est assigne mais absent ou desactive en DB
-- `ToolError::InvalidInput` si `name` manquant pour "read" ou operation inconnue
+- `list` returns only skills in `agent_skills` AND `enabled = true` in DB
+- `read` validates the skill name is assigned to the agent AND enabled
+- Returns `PermissionDenied` if not assigned, `NotFound` if absent/disabled
 
 ### Auto-Injection
 
-Le ReadSkillTool est injecte automatiquement dans `agents/execution/tools.rs` quand :
-1. L'agent a `skills.len() > 0`
-2. `"ReadSkillTool"` n'est pas deja dans sa liste de tools
-
-De plus, quand un agent a des skills, une section "Available Skills" est ajoutee a son system prompt, listant chaque skill et instruisant le LLM d'utiliser ReadSkill avant d'effectuer les taches associees.
-
-Les sous-agents heritent des skills de leur agent parent (`spawn_agent.rs`).
+ReadSkillTool is injected automatically in `agents/execution/tools.rs` when the agent has `skills.len() > 0`. An "Available Skills" section is added to the agent's system prompt. Sub-agents inherit their parent's skills.
 
 ### Prompt Template Integration
 
-La syntaxe `{{skill:name}}` dans les prompt templates est resolue dans le pipeline de streaming (`commands/streaming/execution.rs`) :
-```
-{{skill:coding-standards}} → [Skill: coding-standards]
-Before proceeding, read the skill "coding-standards" using the ReadSkill tool and follow its instructions.
-```
+The `{{skill:name}}` syntax in prompt templates is resolved in the streaming pipeline (`commands/streaming/execution.rs`), instructing the LLM to read the skill before proceeding.
 
 ---
 
-## 6. FileManager Tool
+## 6. FileManagerTool
 
-**Objectif** : Operations filesystem sandboxees dans les dossiers autorises de l'agent
-
-**Implementation** : `src-tauri/src/tools/file_manager/tool.rs` (FileManagerTool)
-
-**Statut** : Implemented
+**Purpose**: Sandboxed filesystem operations within authorized agent folders.
 
 ### Architecture
 
-```
-FileManagerTool
-├── tool.rs          - Struct + Tool trait implementation (10 operations)
-├── security.rs      - Path validation, sandbox enforcement
-├── helpers.rs       - File info formatting, text detection, constants
-└── trash.rs         - Trash-based safety (backup, restore, cleanup)
-```
+- `tool.rs` -- Struct + Tool trait (10 operations)
+- `security.rs` -- Path validation, sandbox enforcement
+- `helpers.rs` -- File info formatting, text detection, constants
+- `trash.rs` -- Trash-based safety (backup, restore, cleanup)
 
-**Securite** : Toutes les operations sont sandboxees dans les dossiers autorises configures par agent. Les chemins sont valides et canonicalises avant chaque operation.
+See `src-tauri/src/tools/file_manager/` for implementation.
 
-**Trash Safety** : Les operations destructives (write overwrite, delete, move, rename) creent des backups dans `.zileo-trash/` avant modification. Le cleanup est lazy (premiere operation destructive).
+### Operations
 
-### Operations Disponibles (via JSON)
+- `list` -- List directory contents (`path`)
+- `read` -- Read text file (`path`)
+- `write` -- Write/create file with auto-backup (`path`, `content`)
+- `replace` -- Regex replacement in file (`path`, `pattern`, `replacement`)
+- `create` -- Create directory (`path`)
+- `delete` -- Delete to trash (`path`)
+- `move` -- Move file/directory (`source`, `destination`)
+- `rename` -- Rename file/directory (`path`, `new_name`)
+- `search_glob` -- Glob pattern search (`path`, `pattern`)
+- `search_content` -- Content search (`path`, `pattern`)
 
-| Operation | Description | Parametres requis |
-|-----------|-------------|-------------------|
-| `list` | Lister le contenu d'un repertoire | `path` |
-| `read` | Lire le contenu d'un fichier texte | `path` |
-| `write` | Ecrire/creer un fichier (backup si existant) | `path`, `content` |
-| `replace` | Remplacement par regex dans un fichier | `path`, `pattern`, `replacement` |
-| `create` | Creer un repertoire | `path` |
-| `delete` | Supprimer fichier/dossier (vers trash) | `path` |
-| `move` | Deplacer fichier/dossier (backup si destination existe) | `source`, `destination` |
-| `rename` | Renommer fichier/dossier (backup si destination existe) | `path`, `new_name` |
-| `search_glob` | Recherche par pattern glob | `path`, `pattern` |
-| `search_content` | Recherche dans le contenu des fichiers | `path`, `pattern` |
+### Security and Safety
 
-### Exemples d'Utilisation
+- All paths are validated and canonicalized against the agent's authorized folders
+- Destructive operations (write overwrite, delete, move, rename) create backups in `.zileo-trash/`
+- If `require_file_confirmation` is enabled, destructive operations go through the ValidationHelper system
+- Trash cleanup is lazy (triggered on first destructive operation)
 
-**Lister un repertoire**:
-```json
-{
-  "operation": "list",
-  "path": "/home/user/project/src",
-  "recursive": false,
-  "max_results": 100
-}
-```
+### Limits
 
-**Lire un fichier**:
-```json
-{
-  "operation": "read",
-  "path": "/home/user/project/src/main.rs"
-}
-```
-
-**Ecrire un fichier (avec backup automatique)**:
-```json
-{
-  "operation": "write",
-  "path": "/home/user/project/config.json",
-  "content": "{\"key\": \"value\"}"
-}
-```
-
-**Recherche par contenu**:
-```json
-{
-  "operation": "search_content",
-  "path": "/home/user/project/src",
-  "pattern": "TODO|FIXME",
-  "max_results": 50,
-  "context_lines": 2
-}
-```
-
-### Validation et Confirmation
-
-- **Toutes les operations** : Le chemin doit etre dans un dossier autorise de l'agent
-- **Operations destructives** (write overwrite, delete, move, rename) : Backup trash automatique
-- **Confirmation utilisateur** : Si `require_file_confirmation` est active sur l'agent, les operations destructives passent par le systeme de validation (ValidationHelper)
-  - En mode Auto + "always confirm high risk" : seul `delete` (RiskLevel::High) declenche le modal
-  - Autres operations destructives : RiskLevel::Medium (pas de modal en Auto)
-  - En mode Manual/Selective : toutes les operations destructives declenchent le modal
-
-### Constantes
-
-```rust
-pub const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;     // 10 MB max file read
-pub const DEFAULT_LIST_MAX: usize = 200;               // Max entries per list
-pub const DEFAULT_SEARCH_MAX: usize = 100;             // Max search results
-pub const DEFAULT_CONTEXT_LINES: usize = 2;            // Context lines for search
-pub const MAX_CONTEXT_LINES: usize = 10;               // Max context lines
-pub const DEFAULT_RETENTION_DAYS: u32 = 7;             // Trash retention
-pub const MAX_TRASH_SIZE: u64 = 500 * 1024 * 1024;    // 500 MB max trash size
-pub const TRASH_DIR_NAME: &str = ".zileo-trash";       // Trash directory name
-```
-
-### Commandes Tauri IPC (Frontend)
-
-| Commande | Description | Parametres |
-|----------|-------------|------------|
-| `validate_agent_folder` | Valider un chemin de dossier pour autorisation | `path` |
-| `list_trash` | Lister les entrees trash d'un dossier | `folderPath` |
-| `restore_from_trash_cmd` | Restaurer un fichier depuis la trash | `trashPath`, `folderPath` |
-
-### Configuration Agent
-
-Pour activer le FileManagerTool sur un agent:
-1. Ajouter `"FileManagerTool"` dans la liste des tools
-2. Configurer au moins un dossier autorise dans `folders`
-3. Optionnel: activer `require_file_confirmation` pour les operations destructives
-
-### Cas d'Usage
-- **Edition de code** : Lecture, modification, creation de fichiers source
-- **Gestion de projet** : Organisation de fichiers, renommage, deplacement
-- **Recherche** : Trouver des fichiers par pattern glob ou contenu
-- **Analyse** : Lister et lire des fichiers de configuration
+- Max file read size: 10 MB
+- Max list entries: 200
+- Max search results: 100
+- Trash retention: 7 days, max 500 MB
 
 ---
 
-## 7. Tool Execution Integration (LLMAgent)
+## 7. Tool Execution (LLMAgent)
 
-**Objectif** : Permettre aux agents d'exécuter des tools de manière autonome via une boucle d'exécution
+**Purpose**: Autonomous tool execution loop for agents.
 
-**Implementation** :
-- `src-tauri/src/agents/llm_agent.rs` (struct, constructeurs)
-- `src-tauri/src/agents/execution/tools.rs` (setup tools, auto-injection)
-- `src-tauri/src/agents/execution/tool_loop.rs` (boucle d'execution)
-- `src-tauri/src/agents/prompt.rs` (construction du prompt)
+### Architecture
 
-**Statut** : Implemented
+- `src-tauri/src/agents/llm_agent.rs` -- Struct, constructors
+- `src-tauri/src/agents/execution/tools.rs` -- Tool setup, auto-injection
+- `src-tauri/src/agents/execution/tool_loop.rs` -- Execution loop
+- `src-tauri/src/agents/prompt.rs` -- System prompt construction
 
-### Architecture d'Exécution
+### Execution Flow
 
-```
-LLM Provider (Mistral/Ollama)
-       ↓ Response with <tool_call>
-   LLMAgent
-       ↓ parse_tool_calls()
-   ┌───┴───┐
-   ↓       ↓
-Local    MCP
-Tools    Tools
-   ↓       ↓
-ToolFactory  MCPManager
-   ↓       ↓
-   └───┬───┘
-       ↓ <tool_result>
-   LLM Provider (continue)
-```
+1. Build system prompt with tool definitions
+2. Call LLM provider (Mistral/Ollama/OpenAI-compatible)
+3. Parse tool calls from response via `ToolAdapter`
+4. Execute tools (local via ToolFactory, MCP via MCPManager)
+5. Format results and feed back to LLM
+6. Repeat until no tool calls or max iterations reached (default: 50)
 
-### Format des Tool Calls (JSON Function Calling)
+### Constructors
 
-**Appel d'un tool** (dans la reponse LLM, format OpenAI/Mistral standard):
-```json
-{
-  "tool_calls": [{
-    "id": "call_abc123",
-    "type": "function",
-    "function": {
-      "name": "MemoryTool",
-      "arguments": "{\"operation\":\"add\",\"type\":\"knowledge\",\"content\":\"Important info\"}"
-    }
-  }]
-}
-```
+- `LLMAgent::with_factory(config, provider_manager, tool_factory)` -- Local tools only
+- `LLMAgent::with_context(config, provider_manager, tool_factory, agent_context)` -- With sub-agent tools
 
-**Resultat d'un tool** (retourne au LLM):
-```json
-{
-  "role": "tool",
-  "tool_call_id": "call_abc123",
-  "name": "MemoryTool",
-  "content": "{\"id\":\"mem_abc123\",\"message\":\"Memory added\"}"
-}
-```
+### Key Methods
 
-Le parsing est fait via `adapter.parse_tool_calls()` (trait `ToolAdapter` dans `llm/tool_adapter.rs`), avec des implementations par provider (Mistral, Ollama, OpenAI-compatible).
-
-### Boucle d'Exécution
-
-```rust
-// Pseudo-code de la boucle d'exécution
-loop {
-    // 1. Build system prompt with tool definitions
-    let prompt = build_system_prompt_with_tools(&config, &tools, &mcp_tools);
-
-    // 2. Call LLM provider
-    let response = provider.complete(&prompt).await?;
-
-    // 3. Parse tool calls from response
-    let tool_calls = parse_tool_calls(&response);
-
-    if tool_calls.is_empty() {
-        break; // No more tool calls, done
-    }
-
-    // 4. Execute tools
-    for call in tool_calls {
-        let result = if is_local_tool(&call.name) {
-            execute_local_tool(&factory, &call).await?
-        } else {
-            execute_mcp_tool(&mcp_manager, &call).await?
-        };
-        results.push(result);
-    }
-
-    // 5. Format results and feed back to LLM
-    let formatted = format_tool_results(&results);
-    append_to_context(&formatted);
-
-    iteration += 1;
-    if iteration >= MAX_ITERATIONS {
-        break; // Safety limit (configurable via max_tool_iterations, default: 50)
-    }
-}
-```
-
-### Constructeurs LLMAgent
-
-```rust
-// Avec factory (tools locaux)
-let agent = LLMAgent::with_factory(config, provider_manager, tool_factory);
-
-// Avec context (agent principal - acces aux sub-agent tools)
-let agent = LLMAgent::with_context(config, provider_manager, tool_factory, agent_context);
-```
-
-> **Note**: `LLMAgent::new()` et `with_tools()` ont ete supprimes (dead code). Seuls `with_factory` et `with_context` existent.
-
-### Methodes Cles
-
-| Methode | Fichier | Description |
-|---------|---------|-------------|
-| `build_tools_section()` | `agents/execution/tools.rs` | Cree les instances tools via ToolFactory + auto-injection ReadSkillTool |
-| `build_system_prompt()` | `agents/prompt.rs` | Injecte les definitions tools dans le system prompt |
-| `adapter.parse_tool_calls()` | `llm/tool_adapter.rs` | Parse les tool_calls JSON de la reponse LLM |
-| `adapter.format_tool_result()` | `llm/tool_adapter.rs` | Formate les resultats en JSON pour le LLM |
-| `adapter.has_tool_calls()` | `llm/tool_adapter.rs` | Detecte la presence de tool calls dans la reponse |
-| `strip_tool_calls()` | Supprime les balises tool de la réponse finale |
-
-### Tests
-
-```bash
-# Tests unitaires tool execution
-cargo test llm_agent::tests::test_parse_tool_calls
-cargo test llm_agent::tests::test_execute_local_tool
-cargo test llm_agent::tests::test_tool_execution_loop
-```
+| Method | File | Description |
+|--------|------|-------------|
+| `build_tools_section()` | `agents/execution/tools.rs` | Creates tool instances + auto-injects ReadSkillTool |
+| `build_system_prompt()` | `agents/prompt.rs` | Injects tool definitions into system prompt |
+| `adapter.parse_tool_calls()` | `llm/tool_adapter.rs` | Parses tool_calls JSON from LLM response |
+| `adapter.format_tool_result()` | `llm/tool_adapter.rs` | Formats results as JSON for LLM |
 
 ---
 
-## Intégration et Orchestration
+## Orchestration Workflow
 
-### Workflow Type
-1. **Initialisation** : Agent active workflow via `activate_workflow`
-2. **Planification** : Création tâches avec Todo Tool
-3. **Contexte** : Chargement mémoires pertinentes via `search_for_pattern`
-4. **Exécution** : Progression tâches + écriture mémoires intermédiaires
-5. **Communication** : Génération rapports pour handoff si multi-agents
-6. **Finalisation** : Validation `think_about_whether_you_are_done`, cleanup temporaires
+Typical agent workflow sequence:
 
-### Exemple Séquence
-```
-activate_workflow("code_review")
-→ search_for_pattern("preferences_code_style")
-→ TodoWrite([
-    {nom: "analyze_files", priorité: 1, status: "in_progress"},
-    {nom: "generate_report", priorité: 2, status: "pending"}
-  ])
-→ [Exécution analyse]
-→ write_memory(type: "decision", content: "patterns_found")
-→ write_report("analysis_results.md")
-→ think_about_whether_you_are_done()
-→ delete_memory(workflow_temps)
-```
+1. **Init**: Agent activates workflow
+2. **Plan**: Create tasks with TodoTool
+3. **Context**: Load relevant memories via MemoryTool search
+4. **Execute**: Progress tasks + write intermediate memories
+5. **Communicate**: Generate reports for handoff (multi-agent)
+6. **Finalize**: Validate completion, clean up temporary data
 
 ---
 
-## Références Techniques
+## References
 
-### SurrealDB
-- [Vector Database Introduction](https://surrealdb.com/docs/surrealdb/models/vector)
-- [Vector Search Reference](https://surrealdb.com/docs/surrealdb/reference-guide/vector-search)
-- [Embeddings Integration](https://surrealdb.com/docs/integrations/embeddings)
-
-### Tauri
-- [File System Plugin](https://v2.tauri.app/plugin/file-system/)
-- [Path API Reference](https://v2.tauri.app/reference/javascript/api/namespacepath/)
-- [App Data Discussion](https://github.com/tauri-apps/tauri/discussions/5557)
+- [SurrealDB Vector Search](https://surrealdb.com/docs/surrealdb/reference-guide/vector-search)
+- [Tauri File System Plugin](https://v2.tauri.app/plugin/file-system/)
 
 ---
 
-**Version** : 2.6
-**Derniere mise a jour** : 2026-03-08
-**Phase** : Functional Agent System v1.0 Complete + Security Audit Remediation + Tool Skills + FileManager
-
-**Features (v2.6)**:
-- 9 Tools: MemoryTool, TodoTool, CalculatorTool, UserQuestionTool, FileManagerTool, SpawnAgentTool, DelegateTaskTool, ParallelTasksTool, ReadSkillTool
-- Sub-Agent Resilience: Inactivity Timeout, CancellationToken, Circuit Breaker, Retry, Correlation ID
-- MemoryTool Optimizations: Parameterized queries, MemoryInput struct, helpers.rs consolidation, composite indexes
-- TodoTool Optimizations: Parameterized queries, N+1 reduction, db_error uniformization, TASK_SELECT_FIELDS, query limits
-- UserQuestionTool Optimizations: Text response validation, Option ID length, Strict error handling, Queue limit 50, Logger unified, SQL injection tests, Configurable timeout 5min, Unit tests, Integration tests, Refactor ask_question, Refactor submit_response, Circuit breaker
-- Tool Description Optimizations: Enriched descriptions with structured sections, dynamic constant injection, sub-agent template helper, CLAUDE.md guidelines
-
-### Test Coverage
-
-| Component | Tests | Coverage |
-|-----------|-------|----------|
-| **MemoryTool Unit** | 40+ tests | validate_input, operations |
-| **MemoryTool Integration** | 15+ tests | CRUD, workflow isolation, search |
-| **TodoTool Unit** | 6 tests | validate_input, definition |
-| **TodoTool Integration** | 11 tests | CRUD operations, status transitions |
-| **TodoTool SQL Injection** | 8 tests | SQL injection prevention |
-| **UserQuestionTool Unit** | 25 tests | validate_input, definition, constants |
-| **UserQuestionTool Integration** | 21 tests | commands, SQL injection, validation |
-| **UserQuestionTool Circuit Breaker** | 12 tests | state transitions, recovery |
-| **ReadSkillTool Unit** | 15+ tests | validate_input, access control, operations |
-| **LLMAgent Tool Execution** | 10+ tests | parse_tool_calls, execute, format_results |
-| **Embedding Types (TS)** | 20+ tests | Constants, types, validation |
-| **Memory Types (TS)** | 15+ tests | Type structure, compatibility |
-| **Agent Store (TS)** | 24 tests | CRUD, form management, error handling |
+**Version**: 2.6

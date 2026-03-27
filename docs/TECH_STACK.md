@@ -1,7 +1,7 @@
-# Stack Technique : Svelte + Rust + SurrealDB
+# Tech Stack: Svelte + Rust + SurrealDB
 
-> **Versions actuelles du projet : 26 Mars 2026**
-> Versions de production utilisees dans le projet (compatibilite testee).
+> **Current project versions: 27 March 2026**
+> Production versions used in the project (tested compatibility).
 
 ## Stack Overview
 
@@ -10,6 +10,7 @@ Frontend  : SvelteKit 2.53.4 | Svelte 5.53.6
 Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
+LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab, etc.)
 ```
 
 ## Technologies & Versions
@@ -39,7 +40,7 @@ Desktop   : Tauri (cross-platform)
 **Content Processing**:
 - **dompurify**: ^3.3.1 (HTML sanitization)
 - **marked**: ^17.0.4 (Markdown rendering)
-- **zod**: ^4.3.6 (Schema validation)
+- **zod**: ^4.3.6 (schema validation)
 
 **Testing**:
 - **vitest**: ^4.0.15 (unit tests)
@@ -60,14 +61,15 @@ Desktop   : Tauri (cross-platform)
 **Core Framework**:
 - **Rust**: 1.93.0 (stable, edition 2021)
 - **tauri**: 2 (framework)
-- **tauri-build**: 2.5.3 (build dependencies)
-- **tauri-plugin-opener**: 2.5.3
-- **tauri-plugin-dialog**: 2.6.0
+- **tauri-build**: 2 (build dependency, version range)
+- **tauri-plugin-opener**: 2 (version range)
+- **tauri-plugin-dialog**: 2 (version range)
 
 **LLM & Multi-Agent**:
-- **rig-core**: 0.32.0 - LLM abstraction framework
+- **rig-core**: 0.32.0 (LLM abstraction framework)
 - **async-trait**: 0.1 (agent trait definitions)
-- **futures-util**: 0.3.31 (stream utilities)
+- **futures-util**: 0.3.31 (stream utilities for SSE)
+- Providers: Mistral (native), Ollama (native), OpenAI-compatible (custom providers)
 
 **Database**:
 - **surrealdb**: ~2.6 (features: kv-rocksdb, default-features: false)
@@ -77,7 +79,7 @@ Desktop   : Tauri (cross-platform)
 - **serde_json**: 1.0.149
 
 **Async Runtime**:
-- **tokio**: 1.49.0 (features: rt-multi-thread, macros, sync, time)
+- **tokio**: 1.49.0 (features: rt, rt-multi-thread, macros, sync, time, fs, io-util, net, process)
 - **tokio-util**: 0.7 (features: rt)
 
 **Error Handling**:
@@ -89,180 +91,147 @@ Desktop   : Tauri (cross-platform)
 - **tracing-subscriber**: 0.3 (features: json, env-filter)
 
 **Utilities**:
-- **uuid**: 1.20.0 (features: v4, serde)
+- **uuid**: 1.20 (features: v4, serde)
 - **chrono**: 0.4.43 (features: serde)
 - **regex**: 1.10
 - **globset**: 0.4 (glob pattern matching for FileManagerTool)
+- **base64**: 0.22 (base64 encoding/decoding)
 
 **HTTP & Network**:
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
 
 **Security**:
-- **keyring**: 3.6 (OS keychain integration: apple-native, windows-native, sync-secret-service)
+- **keyring**: 3.6 (OS keychain: apple-native, windows-native, sync-secret-service)
 - **aes-gcm**: 0.10 (AES-256 encryption)
 
 **Dev Dependencies**:
 - **tempfile**: 3.24
 
 ### Database
-- **SurrealDB**: ~2.6 (embedded with kv-rocksdb feature, default-features disabled)
-- **surrealdb.rs**: ~2.6 (Rust client via Cargo)
+
+- **SurrealDB**: ~2.6 (embedded with kv-rocksdb, default-features disabled)
+- No protocol-http or protocol-ws features (embedded-only)
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│         SvelteKit (Frontend)        │
-│  - Components (.svelte)             │
-│  - Routes (file-based)              │
-│  - Stores (state management)        │
-└──────────────┬──────────────────────┘
-               │ Tauri IPC
-               ↓
-┌─────────────────────────────────────┐
-│       Rust Backend (Tauri)          │
-│  - Commands (API layer)             │
-│  - Business logic                   │
-│  - SurrealDB client                 │
-└──────────────┬──────────────────────┘
-               │ surrealdb.rs
-               ↓
-┌─────────────────────────────────────┐
-│           SurrealDB                 │
-│  - Multi-model database             │
-│  - Embedded or Server mode          │
-└─────────────────────────────────────┘
++-------------------------------------+
+|         SvelteKit (Frontend)        |
+|  - Components (.svelte)             |
+|  - Routes (file-based)              |
+|  - Stores (state management)        |
++-----------------+-------------------+
+                  | Tauri IPC
+                  v
++-------------------------------------+
+|       Rust Backend (Tauri)          |
+|  - Commands (API layer)             |
+|  - Multi-agent LLM orchestration    |
+|  - SurrealDB client                 |
++-----------------+-------------------+
+                  | surrealdb.rs
+                  v
++-------------------------------------+
+|           SurrealDB (embedded)      |
+|  - Multi-model database             |
+|  - RocksDB storage engine           |
++-------------------------------------+
 ```
-
-## Project Structure
-
 
 ## Key Integrations
 
-### Tauri ↔ Svelte
-- Communication via `invoke()` (frontend) → `#[tauri::command]` (backend)
-- Type-safe with TypeScript + Rust types
+### Tauri IPC (Frontend <-> Backend)
+- Communication via `invoke()` (frontend) to `#[tauri::command]` (backend)
+- Type-safe with TypeScript + Rust types (camelCase auto-converted to snake_case)
 - Async/await on both sides
 
-### Rust ↔ SurrealDB
-- Native Rust client (`surrealdb.rs`)
-- Embedded or remote connection
+### Rust <-> SurrealDB
+- Native embedded Rust client (surrealdb.rs)
 - Type-safe queries with serde
+- Parameterized queries for SQL injection prevention
 
-### SvelteKit ↔ Tauri
-- Adapter-static for SPA mode
-- Single `index.html` fallback
+### SvelteKit <-> Tauri
+- Adapter-static for SPA mode (single `index.html` fallback)
 - Asset protocol for local files
 
-## Performance Tips
+## LLM Providers
 
-1. **Use embedded SurrealDB** (RocksDB) for desktop apps
-2. **Enable Svelte compiler optimizations** (production build)
-3. **Use Tauri's asset protocol** for local resources
-4. **Implement lazy loading** for large datasets
-5. **Use Svelte stores** for reactive state management
+Three provider types with unified interface:
 
-## LLM Resilience (Phase 6 Optimization)
+| Provider | Type | Features |
+|----------|------|----------|
+| Mistral | Native API | Thinking/reasoning, vision, tool calling, streaming |
+| Ollama | Native API | Local models, thinking, vision, tool calling, streaming |
+| Custom | OpenAI-compatible | OpenRouter, RouterLab, etc. via `/v1/chat/completions` |
 
-Production-ready resilience patterns for LLM provider calls:
-
-**Rate Limiting**:
-- 1 request per second minimum delay between API calls
-- Compatible with Mistral Free Tier (1 req/s) and Ollama
-- Implementation: integrated into `src-tauri/src/llm/manager.rs`
-
-**Retry Strategy**:
-- Exponential backoff with 3 max retries
-- Initial delay: 1s, max delay: 30s, multiplier: 2x
-- Retryable errors: ConnectionError, RequestFailed, StreamingError
-- Implementation: `src-tauri/src/llm/retry.rs`
-
-**Circuit Breaker**:
-- 3 consecutive failures trigger open state (fail fast)
-- 60-second cooldown before half-open recovery test
-- Prevents cascade failures from unreliable providers
-- Implementation: `src-tauri/src/llm/circuit_breaker.rs`
-
-**HTTP Connection Pooling**:
-- Centralized `reqwest::Client` in ProviderManager
-- Pool: 5 idle connections per host, 300s timeout
-- Shared across Mistral and Ollama providers
-- Implementation: `src-tauri/src/llm/manager.rs`
-
----
-
-## Database Safety (Phase 5 Optimization)
-
-**Parameterized Queries**:
-- All user input uses bind parameters (SQL injection prevention)
-- Methods: `query_with_params()`, `execute_with_params()`
-- Implementation: `src-tauri/src/db/client.rs`
-
-**Transaction Support**:
-- Atomic multi-query operations with auto-rollback
-- Method: `transaction_with_params()`
-- Implementation: `src-tauri/src/db/client.rs`
-
-**Query Limits**:
-- All list queries enforce LIMIT (memory explosion prevention)
-- Constants in `src-tauri/src/constants.rs`:
-  - `DEFAULT_LIST_LIMIT`: 1000 (agents, memories, tasks)
-  - `DEFAULT_MODELS_LIMIT`: 100 (LLM models)
-  - `DEFAULT_MCP_LOGS_LIMIT`: 500 (MCP call logs)
-  - `DEFAULT_MESSAGES_LIMIT`: 500 (message history)
-  - `MAX_LIST_LIMIT`: 10000 (maximum allowed limit)
-
----
+**Resilience patterns**: rate limiting (1 req/s), exponential backoff retry (3 max, 1-30s), circuit breaker (3 failures, 60s cooldown), connection pooling (5 idle/host, 300s timeout).
 
 ## Security
 
-```json
-// Tauri v2 security (tauri.conf.json) - Phase 0 hardened
-{
-  "app": {
-    "security": {
-      "csp": "default-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
-    }
-  }
-}
-```
-
-**Security Features**:
+**Features**:
 - **CSP**: Strict Content Security Policy (frame-ancestors 'none', object-src 'none')
 - **API Key Storage**: OS keychain via `keyring` crate + AES-256 encryption
 - **API Key Validation**: Rejects newlines (HTTP header injection prevention)
 - **MCP Env Validation**: Shell injection prevention (alphanumeric names, no metacharacters)
 - **Tauri v2**: Capability-based permissions (no v1 allowlist)
-- **tauri-plugin-opener**: >= 2.2.1 (security patch)
-- **SQL Injection Prevention**: Parameterized queries enforced (Phase 5)
-- **Memory Protection**: Query LIMIT enforcement (Phase 5)
+- **SQL Injection Prevention**: Parameterized queries enforced
+- **Memory Protection**: Query LIMIT enforcement on all list queries
 
-## Build Outputs
+**Query limits** (defined in `src-tauri/src/constants.rs`):
 
+| Constant | Value | Scope |
+|----------|-------|-------|
+| DEFAULT_LIST_LIMIT | 1000 | agents, memories, tasks |
+| DEFAULT_MODELS_LIMIT | 100 | LLM models |
+| DEFAULT_MCP_LOGS_LIMIT | 500 | MCP call logs |
+| DEFAULT_MESSAGES_LIMIT | 500 | message history |
+| MAX_LIST_LIMIT | 10000 | maximum allowed |
+
+## Testing
+
+- **Backend**: 1000+ Rust tests (lib target)
+- **Frontend**: 280+ Vitest unit tests
+- **E2E**: Playwright (available, not counted in totals)
+- **Total**: ~1,368 automated tests
+
+## Build & Release
+
+**Build outputs**:
 ```
-src-tauri/target/release/
-├── bundle/
-│   ├── appimage/        # Linux
-│   ├── deb/             # Debian
-│   ├── dmg/             # macOS
-│   └── msi/             # Windows
-└── app                   # Binary
+src-tauri/target/release/bundle/
+  appimage/   (Linux)
+  deb/        (Debian)
+  dmg/        (macOS)
+  msi/        (Windows)
 ```
+
+**Release profile**: LTO enabled, symbols stripped, opt-level 3, panic=abort, codegen-units=1.
 
 ## Version Requirements
 
-### Minimum Requirements
-- **Node.js**: 20.19+ ou 22.12+ (Node.js 18 n'est plus supporté par Vite 7)
-- **Rust**: 1.93.0+ (requis par SurrealDB SDK)
-- **npm/pnpm/yarn**: Latest stable
+| Requirement | Minimum Version | Notes |
+|-------------|-----------------|-------|
+| Node.js | 20.19+ or 22.12+ | Node 18 not supported by Vite 7 |
+| Rust | 1.93.0+ | Required by SurrealDB SDK |
+| npm/pnpm/yarn | Latest stable | |
 
-### Recommended Setup
-```bash
-# Vérifier les versions installées
-node --version    # >= 20.19
-rustc --version   # >= 1.93.0
-cargo --version   # >= 1.93.0
-```
+## Key Migration Notes
+
+**Svelte 5** (from Svelte 4):
+- `{#snippet}` + `{@render}` replaces `<slot>`
+- `{@attach}` replaces `use:action`
+- `$props()` replaces `export let`
+- `onclick` replaces `on:click`
+
+**Zod 4** (from Zod 3):
+- `{ error: "..." }` replaces `{ message: "..." }`
+- `z.email()` / `z.uuid()` / `z.url()` replaces `z.string().email()` etc.
+- `z.record(keySchema, valueSchema)` requires 2 args
+- `z.treeifyError()` replaces `.format()` / `.flatten()`
+
+**Vitest 4** (from Vitest 2):
+- `maxWorkers` replaces `maxThreads` / `maxForks`
+- `projects` replaces `workspace`
 
 ## Resources
 
@@ -273,77 +242,3 @@ cargo --version   # >= 1.93.0
 - **surrealdb.rs**: https://docs.rs/surrealdb
 - **Vite**: https://vite.dev
 - **TypeScript**: https://www.typescriptlang.org
-
-## Version Update Notes
-
-**1 Mar 2026 - Security Audit Remediation**:
-- **once_cell** removed: replaced by `std::sync::LazyLock`
-- **futures** removed: replaced by `std::future` alternatives
-- **surrealdb** updated to ~2.6
-- **Rust** updated to 1.93.0 (required for `LazyLock` stabilization)
-- `.expect()` converted to `Result` in LLM providers
-- `ProviderType` consolidated into single canonical location
-- `commands/models.rs` renamed to `commands/llm_models.rs`
-- `safe_truncate()` moved to `utils.rs`
-- App-wide constants moved to top-level `constants.rs`
-- Block-by-block agent chat with real token streaming
-- Hybrid agent ID/name resolution with UNIQUE index
-- Report enforcement mechanism for agents
-- Code organization: barrel exports, kebab-case filenames, dead code removal
-- 24 security audits completed
-- Test count: 1076 backend (lib) + 260 frontend = 1336 total (at time of audit)
-
-**6 Feb 2026 - Background Workflow Execution**:
-- New stores: `backgroundWorkflowsStore`, `toastStore`
-- New components: `ToastContainer.svelte`, `ToastItem.svelte`
-- New types: `background-workflow.ts` (`WorkflowStreamState`, `Toast`)
-- Concurrent workflow execution (up to 3 in auto mode, 1 in manual/selective)
-- Backend safety net: hard limit of 3 concurrent workflows in `execute_workflow_streaming`
-- Toast notifications for background workflow events
-- Visual indicators in sidebar (running dot, question badge, section headers)
-
-**6 Feb 2026 - Batch Dependency Updates (PR #35)**:
-- **svelte**: 5.49.1 (bugfixes only)
-- **eslint-plugin-svelte**: 3.14.0 (major - migration with 52 lint fixes)
-- **globals**: 17.2.0 (major - no impact on config)
-- **@typescript-eslint/parser**: 8.54.0
-- **@tauri-apps/plugin-dialog**: 2.6.0 + **tauri-plugin-dialog**: 2.6.0
-- **uuid**: 1.20.0, **thiserror**: 2.0.18, **tauri-build**: 2.5.3, **tokio-util**: 0.7.18
-
-**11 Dec 2025 - Frontend/Agent Optimizations**:
-- **@lucide/svelte 0.560.0** (migrated from lucide-svelte)
-- **vitest 4.0.15** (upgraded from 2.1.9)
-- **@tauri-apps/plugin-dialog 2.4.2** (upgraded from 2.2.0)
-- Modal duplication fix (single ValidationModal)
-- Error handling with `{ messages, error? }` return type
-- Debounced search input (300ms)
-- Typed localStorage service with STORAGE_KEYS
-- Consolidated derived stores (28→14)
-- WorkflowExecutorService extracted (8-step orchestration)
-- PageState interface aggregation
-- Lazy-loaded modals via dynamic imports
-- Memoized activity filtering at store level
-
-**7 Dec 2025 - Phase 7 Quick Wins (Frontend Optimization)**:
-- **Vite 7.2.6** (upgraded from 5.4.21 - performance improvement)
-- **@sveltejs/vite-plugin-svelte 6.2.1** (required for Vite 7 compatibility)
-- New utilities: `createModalController` (modal.svelte.ts), `createAsyncHandler` (async.ts)
-- Modal controller pattern reduces ~30 lines per modal in Settings page
-- ComponentType fix for Svelte 5 compatibility with lucide icons
-
-**7 Dec 2025 - Phase 0-2 Optimization Updates**:
-- Svelte 5.45.6 (upgraded from 5.43.14, Phase 1 stability)
-- SvelteKit 2.49.1 (fixes state_referenced_locally warnings)
-- SurrealDB 2.4.0 with protocol-http feature enabled
-- Strict CSP policy with frame-ancestors 'none'
-- API key validation (newline rejection)
-- MCP env injection prevention
-- Release profile optimizations (lto, strip, codegen-units=1)
-
-**5 Dec 2025 - Initial Production Versions**:
-- Tauri 2.x with plugin-dialog and plugin-opener
-- SurrealDB 2.4.0 with kv-rocksdb for embedded desktop use
-- **rig-core 0.32.0** for multi-provider LLM abstraction (current version)
-- async-trait 0.1 and futures 0.3 for multi-agent async patterns
-- keyring 3.6 + aes-gcm 0.10 for secure API key storage
-- @lucide/svelte 0.563.1 for UI icons

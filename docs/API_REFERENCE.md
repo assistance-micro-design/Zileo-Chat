@@ -1,1864 +1,426 @@
 # API Reference - Tauri Commands
 
-> Référence technique IPC Frontend ↔ Backend
+> Technical reference for Frontend-Backend IPC communication. **134 commands** across 22 modules.
 
-## Architecture IPC
+## IPC Architecture
 
-```
-Frontend (TypeScript)
-    ↓ invoke()
-Tauri Commands (Rust)
-    ↓ Business Logic
-Backend Services
-```
+Frontend (`invoke()`) -> Tauri IPC (camelCase to snake_case auto-conversion) ->
+Rust commands (`#[tauri::command] async fn -> Result<T, String>`) -> Backend services.
 
-**Pattern** : Async/await both sides, Result<T, String> pour errors
+All commands are async on both sides. Frontend calls use `invoke()` from
+`@tauri-apps/api/core`.
 
----
-
-## Workflows
-
-### create_workflow
-
-Créer nouveau workflow.
-
-**Frontend**
-```typescript
-const id = await invoke<string>('create_workflow', {
-  name: string,
-  agentId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn create_workflow(
-    name: String,
-    agent_id: String
-) -> Result<String, String>
-```
-
-**Returns** : UUID workflow créé
-
-**Errors** : Agent invalide, validation name failed
+**IPC naming convention**: TypeScript uses camelCase parameter names, Tauri
+automatically converts to snake_case for Rust. Example: `defaultModelId` (TS)
+becomes `default_model_id` (Rust).
 
 ---
 
-### load_workflows
+## Command Modules
 
-Charge workflows (actifs, complétés, ou tous).
+For complete command signatures, see `src-tauri/src/commands/`.
 
-**Frontend**
-```typescript
-const workflows = await invoke<Workflow[]>('load_workflows', {
-  filter?: 'active' | 'completed' | 'all'
-});
-```
+### Workflow (`commands/workflow.rs`)
 
-**Backend Signature**
-```rust
-async fn load_workflows(
-    filter: Option<String>
-) -> Result<Vec<Workflow>, String>
-```
+Workflow lifecycle management (create, load, rename, delete, batch ops, pinning, folders).
 
-**Returns** : Array workflows avec metadata
+| Command | Description |
+|---------|-------------|
+| `create_workflow` | Create a new workflow with name and agent |
+| `load_workflows` | List workflows with optional status filter |
+| `rename_workflow` | Rename an existing workflow |
+| `delete_workflow` | Delete workflow and associated data |
+| `delete_workflows_batch` | Delete multiple workflows in a single operation |
+| `load_workflow_full_state` | Load complete workflow state for recovery |
+| `move_workflow_to_folder` | Move a single workflow to a folder |
+| `move_workflows_to_folder` | Move multiple workflows to a folder |
+| `toggle_workflow_pinned` | Toggle the pinned state of a workflow |
 
----
+### Agent (`commands/agent/`)
 
-### rename_workflow
+Agent CRUD and configuration management.
 
-Renomme un workflow existant.
+| Command | Description |
+|---------|-------------|
+| `list_agents` | List all agents with summary (no system_prompt) |
+| `get_agent_config` | Get full agent configuration |
+| `create_agent` | Create agent with LLM, tools, skills, MCP servers config |
+| `update_agent` | Partial update of agent configuration |
+| `delete_agent` | Delete agent from DB and registry |
 
-**Frontend**
-```typescript
-const workflow = await invoke<Workflow>('rename_workflow', {
-  workflowId: string,
-  name: string      // 1-128 chars, validated
-});
-```
+### Skill (`commands/skill.rs`)
 
-**Backend Signature**
-```rust
-async fn rename_workflow(
-    workflow_id: String,
-    name: String,
-    state: State<'_, AppState>
-) -> Result<Workflow, String>
-```
+Skill CRUD for reusable agent instructions.
 
-**Returns** : Workflow mis a jour
+| Command | Description |
+|---------|-------------|
+| `list_skills` | List all skills with summary |
+| `get_skill` | Get full skill with content |
+| `create_skill` | Create a new skill |
+| `update_skill` | Partial update of skill |
+| `delete_skill` | Delete a skill |
 
-**Errors** : Workflow not found, invalid name
+### LLM Models (`commands/llm_models/`)
 
----
+Model CRUD (builtin + custom) and provider settings.
 
-### delete_workflow
+| Command | Description |
+|---------|-------------|
+| `list_models` | List models with optional provider filter |
+| `get_model` | Get a single model by ID |
+| `get_model_by_api_name` | Get a model by API name and provider |
+| `create_model` | Create a custom model |
+| `update_model` | Update model (builtin: temperature only) |
+| `delete_model` | Delete a custom model (builtin protected) |
+| `get_provider_settings` | Get provider configuration |
+| `update_provider_settings` | Update provider configuration (upsert) |
+| `test_provider_connection` | Test provider connectivity (10s timeout) |
+| `seed_builtin_models` | Seed DB with builtin models (idempotent) |
 
-Supprime workflow + données associées.
+### Custom Providers (`commands/custom_provider.rs`)
 
-**Frontend**
-```typescript
-await invoke('delete_workflow', {
-  id: string,
-  force?: boolean
-});
-```
+OpenAI-compatible provider management (OpenRouter, RouterLab, etc.).
 
-**Backend Signature**
-```rust
-async fn delete_workflow(
-    id: String,
-    force: Option<bool>
-) -> Result<(), String>
-```
+| Command | Description |
+|---------|-------------|
+| `list_providers` | List all providers (builtin + custom) |
+| `create_custom_provider` | Create OpenAI-compatible provider |
+| `update_custom_provider` | Update custom provider settings |
+| `delete_custom_provider` | Delete custom provider and its API key |
 
-**force** : Si true, ignore running status
-**Errors** : Workflow running (sans force), not found
+### Validation (`commands/validation.rs`)
 
----
+Human-in-the-loop validation for agent operations.
 
-## Agents
+| Command | Description |
+|---------|-------------|
+| `create_validation_request` | Create a validation request |
+| `list_pending_validations` | List pending validation requests |
+| `list_workflow_validations` | List validations for a workflow |
+| `approve_validation` | Approve a validation request |
+| `reject_validation` | Reject a validation request |
+| `delete_validation` | Delete a validation request |
+| `get_validation_settings` | Get global validation settings |
+| `update_validation_settings` | Update validation mode and thresholds |
+| `reset_validation_settings` | Reset validation settings to defaults |
+| `list_available_tools` | List local + MCP tools for settings UI |
 
-### list_agents
+### Memory (`commands/memory.rs`)
 
-Liste tous les agents configurés avec résumé (permanent + temporary).
+Vector memory with semantic search.
 
-**Frontend**
-```typescript
-const agents = await invoke<AgentSummary[]>('list_agents');
-```
+| Command | Description |
+|---------|-------------|
+| `add_memory` | Add memory with auto-generated embedding |
+| `search_memories` | Semantic search with similarity scoring |
+| `list_memories` | List memories with pagination and filters |
+| `get_memory` | Get a single memory by ID |
+| `delete_memory` | Delete a memory entry |
+| `clear_memories_by_type` | Clear all memories of a given type |
 
-**Backend Signature**
-```rust
-async fn list_agents(
-    state: State<'_, AppState>
-) -> Result<Vec<AgentSummary>, String>
-```
+### Embedding (`commands/embedding/`)
 
-**AgentSummary Type**
-```typescript
-interface AgentSummary {
-  id: string;
-  name: string;
-  lifecycle: 'permanent' | 'temporary';
-  provider: string;              // LLM provider (Mistral, Ollama)
-  model: string;                 // Model name
-  tools_count: number;           // Number of enabled tools
-  mcp_servers_count: number;     // Number of MCP servers
-  skills_count: number;          // Number of assigned skills
-  folders_count: number;         // Number of authorized folders
-}
-```
+Embedding configuration, stats, and memory management tools.
 
-**Returns** : Array de résumés agents (léger, sans system_prompt)
+| Command | Description |
+|---------|-------------|
+| `get_embedding_config` | Get current embedding configuration |
+| `save_embedding_config` | Save embedding configuration |
+| `reinit_embedding_service` | Reinitialize the embedding service |
+| `test_embedding` | Test embedding generation with a sample |
+| `get_memory_stats` | Get memory statistics for dashboard |
+| `get_memory_token_stats` | Get token usage statistics for memories |
+| `update_memory` | Update an existing memory entry |
+| `export_memories` | Export memories to JSON/CSV |
+| `import_memories` | Import memories from JSON |
+| `regenerate_embeddings` | Regenerate embeddings for existing memories |
 
----
+### Streaming (`commands/streaming/`)
 
-### get_agent_config
+Real-time workflow execution with event streaming.
 
-Récupère configuration complète d'un agent.
+| Command | Description |
+|---------|-------------|
+| `execute_workflow_streaming` | Execute workflow with real-time events |
+| `cancel_workflow_streaming` | Cancel a running workflow |
 
-**Frontend**
-```typescript
-const config = await invoke<AgentConfig>('get_agent_config', {
-  agentId: string
-});
-```
+### Message (`commands/message.rs`)
 
-**Backend Signature**
-```rust
-async fn get_agent_config(
-    agent_id: String,
-    state: State<'_, AppState>
-) -> Result<AgentConfig, String>
-```
+Chat message persistence and retrieval.
 
-**AgentConfig Type**
-```typescript
-interface AgentConfig {
-  id: string;
-  name: string;
-  lifecycle: 'permanent' | 'temporary';
-  llm: {
-    provider: string;
-    model: string;
-    temperature: number;      // 0.0-2.0
-    max_tokens: number;       // 256-128000
-    is_reasoning: boolean;    // Whether model supports thinking mode
-  };
-  tools: string[];            // ["MemoryTool", "TodoTool", "FileManagerTool"]
-  skills: string[];           // Skill names assigned to agent
-  mcp_servers: string[];      // MCP server names
-  folders: string[];          // Authorized directory paths for FileManagerTool
-  require_file_confirmation: boolean; // Require user validation for destructive file ops (default: true)
-  system_prompt: string;
-  max_tool_iterations: number; // 1-200, default: 50
-  reasoning_effort: string | null; // Reasoning effort level: 'low', 'medium', 'high', or null
-}
-```
+| Command | Description |
+|---------|-------------|
+| `save_message` | Persist a message to the database |
+| `load_workflow_messages` | Load all messages for a workflow |
+| `load_workflow_messages_paginated` | Load messages with pagination |
+| `delete_message` | Delete a single message |
+| `clear_workflow_messages` | Delete all messages for a workflow |
+| `load_message_blocks` | Load structured display blocks for a message |
 
-**Errors** : Agent not found
+### Tool Execution (`commands/tool_execution.rs`)
 
----
+Tool execution logging and retrieval.
 
-### create_agent
+| Command | Description |
+|---------|-------------|
+| `save_tool_execution` | Persist a tool execution log |
+| `load_workflow_tool_executions` | Load all tool executions for a workflow |
+| `load_message_tool_executions` | Load tool executions for a message |
+| `get_tool_execution` | Get a single tool execution by ID |
+| `delete_tool_execution` | Delete a single tool execution |
+| `clear_workflow_tool_executions` | Delete all tool executions for a workflow |
 
-Crée un nouvel agent avec configuration complète.
+### Thinking (`commands/thinking.rs`)
 
-**Frontend**
-```typescript
-const agentId = await invoke<string>('create_agent', {
-  config: {
-    name: string,                    // 1-64 chars
-    lifecycle: 'permanent' | 'temporary',
-    llm: {
-      provider: 'Mistral' | 'Ollama',
-      model: string,
-      temperature: number,           // 0.0-2.0
-      max_tokens: number             // 256-128000
-    },
-    tools: string[],                 // ["MemoryTool", "TodoTool", "FileManagerTool"]
-    skills: string[],                // Skill names to assign
-    mcp_servers: string[],           // MCP server names
-    folders: string[],               // Authorized directory paths for FileManagerTool
-    require_file_confirmation: boolean, // Require validation for destructive file ops (default: true)
-    system_prompt: string,           // 1-10000 chars
-    max_tool_iterations: number,     // 1-200, default: 50
-    reasoning_effort: string | null  // Reasoning effort: 'low', 'medium', 'high', or null
-  }
-});
-```
+Thinking/reasoning step persistence.
 
-**Backend Signature**
-```rust
-async fn create_agent(
-    config: AgentConfigCreate,
-    state: State<'_, AppState>
-) -> Result<String, String>
-```
+| Command | Description |
+|---------|-------------|
+| `save_thinking_step` | Persist a thinking/reasoning step |
+| `load_workflow_thinking_steps` | Load all thinking steps for a workflow |
+| `load_message_thinking_steps` | Load thinking steps for a message |
+| `delete_thinking_step` | Delete a single thinking step |
+| `clear_workflow_thinking_steps` | Delete all thinking steps for a workflow |
 
-**Validation**
-- `name`: 1-64 caractères, non vide, **UNIQUE** (case-insensitive)
-- `temperature`: 0.0-2.0
-- `max_tokens`: 256-128000
-- `tools`: Doit être dans KNOWN_TOOLS ("MemoryTool", "TodoTool", "CalculatorTool", "UserQuestionTool", "FileManagerTool", "SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool")
-- `system_prompt`: Non vide
+### Task (`commands/task.rs`)
 
-**Returns** : UUID de l'agent créé
+Task management for workflow decomposition (TodoTool).
 
-**Errors** : Validation failed, database error
+| Command | Description |
+|---------|-------------|
+| `create_task` | Create task with priority (1-5) and dependencies |
+| `get_task` | Get a single task by ID |
+| `list_workflow_tasks` | List all tasks for a workflow |
+| `list_tasks_by_status` | Filter tasks by status |
+| `update_task` | Partial update of task fields |
+| `update_task_status` | Update task status (convenience) |
+| `complete_task` | Mark task completed with optional duration |
+| `delete_task` | Delete a task |
 
----
+### Sub-Agent Execution (`commands/sub_agent_execution.rs`)
 
-### update_agent
+Sub-agent execution tracking.
 
-Met à jour un agent existant (mise à jour partielle).
+| Command | Description |
+|---------|-------------|
+| `load_workflow_sub_agent_executions` | Load sub-agent executions for a workflow |
+| `clear_workflow_sub_agent_executions` | Delete all sub-agent executions for a workflow |
 
-**Frontend**
-```typescript
-const updated = await invoke<AgentConfig>('update_agent', {
-  agentId: string,
-  config: {
-    name?: string,
-    llm?: LLMConfig,
-    tools?: string[],
-    skills?: string[],
-    mcp_servers?: string[],
-    folders?: string[],
-    require_file_confirmation?: boolean,
-    system_prompt?: string,
-    max_tool_iterations?: number,
-    reasoning_effort?: string | null
-    // Note: lifecycle cannot be changed after creation
-  }
-});
-```
+### MCP (`commands/mcp/`)
 
-**Backend Signature**
-```rust
-async fn update_agent(
-    agent_id: String,
-    config: AgentConfigUpdate,
-    state: State<'_, AppState>
-) -> Result<AgentConfig, String>
-```
+MCP server management and tool execution.
 
-**Returns** : Agent mis à jour avec configuration complète
+| Command | Description |
+|---------|-------------|
+| `list_mcp_servers` | List all configured MCP servers |
+| `get_mcp_server` | Get a single MCP server by ID |
+| `create_mcp_server` | Create MCP server configuration |
+| `update_mcp_server` | Update MCP server configuration |
+| `delete_mcp_server` | Delete MCP server configuration |
+| `test_mcp_server` | Test MCP server connection |
+| `start_mcp_server` | Start an MCP server |
+| `stop_mcp_server` | Stop a running MCP server |
+| `list_mcp_tools` | List available tools from a server |
+| `call_mcp_tool` | Execute a tool on an MCP server |
+| `get_mcp_latency_metrics` | Get latency percentiles (p50/p95/p99) |
 
-**Errors** : Agent not found, validation failed
+### File Manager (`commands/file_manager.rs`)
 
----
+Sandboxed filesystem operations and trash management.
 
-### delete_agent
+| Command | Description |
+|---------|-------------|
+| `validate_agent_folder` | Validate and canonicalize a folder path |
+| `list_trash` | List trash entries for an authorized folder |
+| `restore_from_trash_cmd` | Restore a file from trash |
 
-Supprime un agent de la base de données et du registry.
+### User Question (`commands/user_question.rs`)
 
-**Frontend**
-```typescript
-await invoke('delete_agent', {
-  agentId: string
-});
-```
+Human-in-the-loop questions from agents during execution.
 
-**Backend Signature**
-```rust
-async fn delete_agent(
-    agent_id: String,
-    state: State<'_, AppState>
-) -> Result<(), String>
-```
+| Command | Description |
+|---------|-------------|
+| `submit_user_response` | Submit answer to a pending question |
+| `get_pending_questions` | Get pending questions for a workflow |
+| `skip_question` | Skip a question (choose not to answer) |
 
-**Effect** : Supprime de SurrealDB et désenregistre du AgentRegistry
+Questions timeout after 5 minutes. Circuit breaker rejects new questions after
+3 consecutive timeouts (60s cooldown).
 
-**Errors** : Agent not found, database error
+### Prompt (`commands/prompt.rs`)
 
----
+Prompt template CRUD.
 
-## Skills
+| Command | Description |
+|---------|-------------|
+| `list_prompts` | List all prompt templates |
+| `get_prompt` | Get a single prompt by ID |
+| `create_prompt` | Create a new prompt template |
+| `update_prompt` | Update an existing prompt |
+| `delete_prompt` | Delete a prompt template |
+| `search_prompts` | Search prompts by query and/or category |
 
-### list_skills
+### Security (`commands/security.rs`)
 
-Liste tous les skills disponibles (resume).
+Secure API key storage (AES-256-GCM via SecureKeyStore).
 
-**Frontend**
-```typescript
-const skills = await invoke<SkillSummary[]>('list_skills');
-```
+| Command | Description |
+|---------|-------------|
+| `save_api_key` | Securely store an API key |
+| `get_api_key` | Retrieve a stored API key |
+| `delete_api_key` | Remove a stored API key |
+| `has_api_key` | Check if an API key exists for a provider |
+| `list_api_key_providers` | List all providers with stored API keys |
 
-**Backend Signature**
-```rust
-async fn list_skills(
-    state: State<'_, AppState>
-) -> Result<Vec<SkillSummary>, String>
-```
+### Import/Export (`commands/import_export/`)
 
-**SkillSummary Type**
-```typescript
-interface SkillSummary {
-  id: string;
-  name: string;
-  description: string;
-  category: 'system' | 'coding' | 'workflow' | 'analysis' | 'custom';
-  enabled: boolean;
-  content_length: number;
-  updated_at: string;
-}
-```
+Configuration import/export (schema v1.0 and v1.1).
 
-**Returns** : Array de resumes skills (sans content complet)
+| Command | Description |
+|---------|-------------|
+| `validate_import` | Validate import data and return preview with warnings |
+| `execute_import` | Execute import with conflict resolutions |
+| `prepare_export_preview` | Prepare export preview with entity selection |
+| `generate_export_file` | Generate export JSON from selection |
+| `save_export_to_file` | Save export content to a file path |
+
+### Migration (`commands/migration.rs`)
+
+Database schema migrations (idempotent with migration guards).
+
+| Command | Description |
+|---------|-------------|
+| `migrate_memory_schema` | Migrate memory table for vector search |
+| `get_memory_schema_status` | Get memory schema migration status |
+| `migrate_mcp_http_schema` | Migrate MCP schema for HTTP support |
+| `migrate_memory_v2_schema` | Migrate memory table for v2 (importance + TTL) |
+| `migrate_reasoning_effort` | Migrate agent enable_thinking to reasoning_effort |
+| `migrate_sidebar_features` | Migrate sidebar features (folders, pinning) |
+
+### Workflow Folder (`commands/workflow_folder.rs`)
+
+Workflow organization into folders with color coding and custom ordering.
+
+| Command | Description |
+|---------|-------------|
+| `create_workflow_folder` | Create a new workflow folder |
+| `list_workflow_folders` | List all workflow folders |
+| `rename_workflow_folder` | Rename an existing folder |
+| `update_folder_color` | Update a folder's color |
+| `delete_workflow_folder` | Delete a folder (workflows moved to root) |
+| `reorder_workflow_folders` | Reorder folders by position |
 
 ---
 
-### get_skill
+## Key Types
 
-Recupere un skill complet par ID.
+All TypeScript types are in `src/types/` (aliased as `$types`).
+Rust models are in `src-tauri/src/models/`.
+Types are manually synchronized between frontend and backend.
 
-**Frontend**
-```typescript
-const skill = await invoke<Skill>('get_skill', {
-  skillId: string
-});
-```
+### Core Domain Types
 
-**Backend Signature**
-```rust
-async fn get_skill(
-    skill_id: String,
-    state: State<'_, AppState>
-) -> Result<Skill, String>
-```
+| Type | Location | Description |
+|------|----------|-------------|
+| `Workflow` | `$types/workflow` | Workflow with status, agent, timestamps |
+| `AgentConfig` | `$types/agent` | Full agent config (LLM, tools, skills, MCP, folders) |
+| `AgentSummary` | `$types/agent` | Lightweight agent summary (no system_prompt) |
+| `Skill` / `SkillSummary` | `$types/skill` | Skill with content / summary without |
+| `LLMModel` | `$types/llm` | Model definition (builtin or custom) |
+| `Memory` | `$types/memory` | Memory entry with type, tags, embedding |
+| `MemorySearchResult` | `$types/memory` | Search result with similarity score |
+| `Task` | `$types/workflow` | Task with priority, status, dependencies |
+| `Prompt` | `$types/prompt` | Prompt template with category |
 
-**Skill Type**
-```typescript
-interface Skill {
-  id: string;
-  name: string;
-  description: string;
-  category: 'system' | 'coding' | 'workflow' | 'analysis' | 'custom';
-  content: string;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
-}
-```
+### Provider Types
 
-**Errors** : Skill not found, invalid ID
+| Type | Location | Description |
+|------|----------|-------------|
+| `ProviderSettings` | `$types/llm` | Provider config (enabled, default model, base URL) |
+| `ProviderInfo` | `$types/custom-provider` | Unified provider info (builtin + custom) |
+| `ConnectionTestResult` | `$types/llm` | Provider connectivity test result |
 
----
+### Streaming and Events
 
-### create_skill
+| Type | Location | Description |
+|------|----------|-------------|
+| `StreamChunk` | `$types/streaming` | Real-time streaming event payload |
+| `ChatBlock` | `$types/chat-block` | Structured display block (tool, thinking, sub-agent, task) |
+| `UserQuestion` | `$types/user-question` | Agent question to user with options |
+| `ValidationRequest` | `$types/validation` | Human-in-the-loop validation request |
 
-Cree un nouveau skill.
+### MCP Types
 
-**Frontend**
-```typescript
-const skillId = await invoke<string>('create_skill', {
-  config: {
-    name: string,             // 1-128 chars, regex [a-zA-Z0-9_-]+
-    description: string,      // 1-500 chars
-    category: SkillCategory,
-    content: string           // 1-50000 chars (markdown)
-  }
-});
-```
+| Type | Location | Description |
+|------|----------|-------------|
+| `MCPServer` | `$types/mcp` | MCP server config and status |
+| `MCPLatencyMetrics` | `$types/mcp` | Latency percentiles (p50/p95/p99) |
+| `AvailableToolInfo` | `$types/tool` | Tool info (local or MCP source) |
 
-**Backend Signature**
-```rust
-async fn create_skill(
-    config: SkillCreate,
-    state: State<'_, AppState>
-) -> Result<String, String>
-```
+### Import/Export Types
 
-**Validation**
-- `name`: 1-128 chars, regex `^[a-zA-Z0-9_-]+$`, UNIQUE
-- `description`: 1-500 chars, non vide
-- `content`: 1-50000 chars, non vide
-
-**Returns** : UUID du skill cree
-
-**Errors** : Validation failed, duplicate name, database error
+| Type | Location | Description |
+|------|----------|-------------|
+| `ExportConfig` | `$types/import-export` | Exported configuration (schema v1.0/v1.1) |
+| `ImportResult` | `$types/import-export` | Import result with warnings and post-actions |
+| `ImportWarning` | `$types/import-export` | Structured warning (type, severity, entity, action) |
 
 ---
 
-### update_skill
+## Events (Backend to Frontend)
 
-Met a jour un skill existant (mise a jour partielle).
+Events are emitted via Tauri's event system. Listen with `listen()` from
+`@tauri-apps/api/event`.
 
-**Frontend**
-```typescript
-const updated = await invoke<Skill>('update_skill', {
-  skillId: string,
-  config: {
-    name?: string,
-    description?: string,
-    category?: SkillCategory,
-    content?: string,
-    enabled?: boolean
-  }
-});
-```
+### `workflow_stream`
 
-**Backend Signature**
-```rust
-async fn update_skill(
-    skill_id: String,
-    config: SkillUpdate,
-    state: State<'_, AppState>
-) -> Result<Skill, String>
-```
+Real-time streaming during workflow execution. Chunk types include:
+`token`, `real_token`, `tool_start`, `tool_end`, `thinking_start`,
+`thinking_content`, `thinking_end`, `sub_agent_start`, `sub_agent_progress`,
+`sub_agent_complete`, `sub_agent_error`, `task_create`, `task_update`,
+`task_complete`, `user_question_start`, `user_question_complete`, `error`.
 
-**Returns** : Skill mis a jour
+### `workflow_complete`
 
-**Errors** : Skill not found, validation failed
+Emitted when workflow execution finishes. Payload: `{ workflow_id, status }`.
 
----
+### `agent_status_update`
 
-### delete_skill
+Agent availability changes. Payload: `{ agent_id, status }` where status is
+`'available'` or `'busy'`.
 
-Supprime un skill.
+### `validation_required`
 
-**Frontend**
-```typescript
-await invoke('delete_skill', {
-  skillId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn delete_skill(
-    skill_id: String,
-    state: State<'_, AppState>
-) -> Result<(), String>
-```
-
-**Errors** : Skill not found, database error
-
----
-
-## Validation (Human-in-the-Loop)
-
-### request_validation
-
-Demande validation utilisateur pour opération.
-
-**Backend → Frontend (Event)**
-```typescript
-listen<ValidationRequest>('validation_request', (event) => {
-  const request = event.payload;
-  // Afficher modal validation UI
-});
-```
-
-**ValidationRequest Type**
-```typescript
-type ValidationRequest = {
-  id: string;
-  workflow_id: string;
-  type: 'tool' | 'sub_agent' | 'mcp' | 'file_op' | 'db_op';
-  operation: string;
-  details: Record<string, any>;
-  risk_level: 'low' | 'medium' | 'high';
-};
-```
-
----
-
-### get_validation_settings
-
-Récupère les paramètres de validation globaux.
-
-**Frontend**
-```typescript
-const settings = await invoke<ValidationSettings>('get_validation_settings');
-```
-
-**Backend Signature**
-```rust
-async fn get_validation_settings(
-    state: State<'_, AppState>
-) -> Result<ValidationSettings, String>
-```
-
-**Returns** : ValidationSettings avec mode, selective_config, risk_thresholds
-
----
-
-### update_validation_settings
-
-Met à jour les paramètres de validation.
-
-**Frontend**
-```typescript
-await invoke('update_validation_settings', {
-  mode: 'selective',
-  selectiveConfig: { tools: true, subAgents: true, mcp: false, fileOps: true, dbOps: true },
-  riskThresholds: { autoApproveLow: false, alwaysConfirmHigh: true }
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_validation_settings(
-    mode: ValidationMode,
-    selective_config: SelectiveValidationConfig,
-    risk_thresholds: RiskThresholds,
-    state: State<'_, AppState>
-) -> Result<(), String>
-```
-
-**Note** : IPC auto-converts camelCase (TS) → snake_case (Rust)
-
----
-
-### list_available_tools
-
-Liste les outils et serveurs MCP disponibles pour l'affichage dans les settings.
-
-**Frontend**
-```typescript
-const tools = await invoke<AvailableToolInfo[]>('list_available_tools');
-```
-
-**Backend Signature**
-```rust
-async fn list_available_tools(
-    state: State<'_, AppState>
-) -> Result<Vec<AvailableToolInfo>, String>
-```
-
-**AvailableToolInfo Type**
-```typescript
-type AvailableToolInfo = {
-  name: string;
-  description: string;
-  source: 'local' | 'mcp';
-  server_name?: string;  // For MCP tools only
-};
-```
-
-**Returns** : Liste combinée des outils locaux (MemoryTool, etc.) et outils MCP
-
----
-
-## Memory
-
-### add_memory
-
-Ajoute mémoire vectorielle.
-
-**Frontend**
-```typescript
-await invoke('add_memory', {
-  type: 'user_pref' | 'context' | 'knowledge' | 'decision',
-  content: string,
-  tags?: string[],
-  workflowId?: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn add_memory(
-    type_: MemoryType,
-    content: String,
-    tags: Option<Vec<String>>,
-    workflow_id: Option<String>
-) -> Result<String, String>
-```
-
-**Returns** : UUID mémoire créée
-**Process** : Generate embedding → Store avec vector index
-
----
-
-### search_memories
-
-Recherche sémantique mémoires.
-
-**Frontend**
-```typescript
-const results = await invoke<MemorySearchResult[]>('search_memories', {
-  query: string,
-  limit?: number,
-  typeFilter?: MemoryType,
-  workflowId?: string,
-  threshold?: number
-});
-```
-
-**Backend Signature**
-```rust
-async fn search_memories(
-    query: String,
-    limit: Option<usize>,
-    type_filter: Option<MemoryType>,
-    workflow_id: Option<String>,
-    threshold: Option<f64>
-) -> Result<Vec<MemorySearchResult>, String>
-```
-
-**Process** : Generate query embedding → KNN search → Return ranked results with similarity scores
-
----
-
-### list_memories
-
-Liste mémoires avec pagination.
-
-**Frontend**
-```typescript
-const memories = await invoke<Memory[]>('list_memories', {
-  page: number,
-  perPage: number,
-  filters?: MemoryFilters
-});
-```
-
-**Backend Signature**
-```rust
-async fn list_memories(
-    page: usize,
-    per_page: usize,
-    filters: Option<MemoryFilters>
-) -> Result<Vec<Memory>, String>
-```
-
----
-
-### delete_memory
-
-Supprime mémoire.
-
-**Frontend**
-```typescript
-await invoke('delete_memory', {
-  id: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn delete_memory(
-    id: String
-) -> Result<(), String>
-```
-
----
-
-## User Questions (Human-in-the-Loop)
-
-Interactive questions from agents to users during workflow execution.
-
-### submit_user_response
-
-Soumet une reponse a une question en attente.
-
-**Frontend**
-```typescript
-await invoke('submit_user_response', {
-  questionId: string,
-  selectedOptions: string[],      // Option IDs selected (can be empty)
-  textResponse: string | null     // Optional text response
-});
-```
-
-**Backend Signature**
-```rust
-async fn submit_user_response(
-    question_id: String,
-    selected_options: Vec<String>,
-    text_response: Option<String>,
-    state: State<'_, AppState>,
-    window: Window
-) -> Result<(), String>
-```
-
-**Side Effects**:
-- Updates question status to "answered"
-- Records selected_options, text_response, answered_at
-- Emits `workflow_stream` event with `user_question_complete`
-
-**Errors**: Question not found, question not pending
-
----
-
-### get_pending_questions
-
-Liste toutes les questions en attente pour un workflow.
-
-**Frontend**
-```typescript
-const questions = await invoke<UserQuestion[]>('get_pending_questions', {
-  workflowId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn get_pending_questions(
-    workflow_id: String,
-    state: State<'_, AppState>
-) -> Result<Vec<UserQuestion>, String>
-```
-
-**UserQuestion Type**
-```typescript
-interface UserQuestion {
-  id: string;
-  workflow_id: string;
-  agent_id: string;
-  question: string;
-  question_type: 'checkbox' | 'text' | 'mixed';
-  options?: QuestionOption[];
-  text_placeholder?: string;
-  text_required: boolean;
-  context?: string;
-  status: 'pending' | 'answered' | 'skipped' | 'timeout';  // timeout after 5 min
-  selected_options?: string[];
-  text_response?: string;
-  created_at: string;
-  answered_at?: string;
-}
-
-interface QuestionOption {
-  id: string;
-  label: string;
-}
-```
-
-**Timeout Behavior**:
-- Questions timeout after 5 minutes (300 seconds) without response
-- Status automatically updated to "timeout" in database
-- Circuit breaker tracks consecutive timeouts
-- After 3 consecutive timeouts, new questions are rejected for 60 seconds
-
-**Returns**: Array of pending questions sorted by created_at ASC
-
----
-
-### skip_question
-
-Ignore une question (l'utilisateur choisit de ne pas repondre).
-
-**Frontend**
-```typescript
-await invoke('skip_question', {
-  questionId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn skip_question(
-    question_id: String,
-    state: State<'_, AppState>,
-    window: Window
-) -> Result<(), String>
-```
-
-**Side Effects**:
-- Updates question status to "skipped"
-- Records answered_at timestamp
-- Emits `workflow_stream` event with `user_question_complete`
-
-**Errors**: Question not found, question not pending
-
----
-
-## Message Blocks (Block-by-Block Display)
-
-### load_message_blocks
-
-Charge les blocs d'affichage structures pour un message (tool executions, thinking steps, sub-agent executions).
-
-**Frontend**
-```typescript
-import type { ChatBlock } from '$types/chat-block';
-
-const blocks = await invoke<ChatBlock[]>('load_message_blocks', {
-  messageId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn load_message_blocks(
-    message_id: String,
-    state: State<'_, AppState>
-) -> Result<Vec<ChatBlock>, String>
-```
-
-**ChatBlock Types** : `tool_execution`, `thinking_step`, `sub_agent_execution`, `todo_task`
-
-**Returns** : Array de blocs ordonnés chronologiquement
-
-**Errors** : Invalid message_id
-
----
-
-## LLM Models CRUD
-
-### list_models
-
-Liste tous les modeles LLM (builtin + custom), avec filtre optionnel par provider.
-
-**Frontend**
-```typescript
-const models = await invoke<LLMModel[]>('list_models', {
-  provider: 'mistral' | 'ollama' | null  // Optional filter
-});
-```
-
-**Backend Signature**
-```rust
-async fn list_models(
-    provider: Option<String>
-) -> Result<Vec<LLMModel>, String>
-```
-
-**LLMModel Type**
-```typescript
-interface LLMModel {
-  id: string;                    // UUID for custom, api_name for builtin
-  provider: 'mistral' | 'ollama';
-  name: string;                  // Human-readable display name
-  api_name: string;              // Model identifier for API calls
-  context_window: number;        // Max context length (1024 - 2,000,000)
-  max_output_tokens: number;     // Max generation length (256 - 128,000)
-  temperature_default: number;   // Default temperature (0.0 - 2.0)
-  is_builtin: boolean;           // True = system model, cannot delete
-  created_at: string;            // ISO 8601 timestamp
-  updated_at: string;            // ISO 8601 timestamp
-}
-```
-
-**Returns** : Array de modeles correspondant au filtre
-
-**Errors** : Invalid provider, database error
-
----
-
-### get_model
-
-Recupere un modele par ID.
-
-**Frontend**
-```typescript
-const model = await invoke<LLMModel>('get_model', {
-  id: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn get_model(
-    id: String
-) -> Result<LLMModel, String>
-```
-
-**Returns** : LLMModel
-
-**Errors** : Model not found, invalid ID
-
----
-
-### create_model
-
-Cree un nouveau modele custom.
-
-**Frontend**
-```typescript
-const model = await invoke<LLMModel>('create_model', {
-  data: {
-    provider: 'mistral' | 'ollama',
-    name: string,                  // 1-64 chars
-    api_name: string,              // Unique per provider
-    context_window: number,        // 1024 - 2,000,000
-    max_output_tokens: number,     // 256 - 128,000
-    temperature_default?: number   // 0.0 - 2.0, default 0.7
-  }
-});
-```
-
-**Backend Signature**
-```rust
-async fn create_model(
-    data: CreateModelRequest
-) -> Result<LLMModel, String>
-```
-
-**Returns** : Created LLMModel with generated UUID
-
-**Errors** :
-- Validation failed (name, api_name, context_window, etc.)
-- Duplicate api_name for provider
-
----
-
-### update_model
-
-Met a jour un modele existant.
-
-**Frontend**
-```typescript
-const model = await invoke<LLMModel>('update_model', {
-  id: string,
-  data: {
-    name?: string,
-    api_name?: string,
-    context_window?: number,
-    max_output_tokens?: number,
-    temperature_default?: number
-  }
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_model(
-    id: String,
-    data: UpdateModelRequest
-) -> Result<LLMModel, String>
-```
-
-**Restrictions** :
-- Builtin models: only `temperature_default` can be modified
-- Custom models: all fields modifiable
-
-**Returns** : Updated LLMModel
-
-**Errors** : Model not found, validation failed, builtin restriction
-
----
-
-### delete_model
-
-Supprime un modele custom.
-
-**Frontend**
-```typescript
-const success = await invoke<boolean>('delete_model', {
-  id: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn delete_model(
-    id: String
-) -> Result<bool, String>
-```
-
-**Restrictions** : Builtin models cannot be deleted
-
-**Returns** : true if deleted
-
-**Errors** : Model not found, cannot delete builtin model
-
----
-
-## Provider Settings
-
-### get_provider_settings
-
-Recupere la configuration d'un provider.
-
-**Frontend**
-```typescript
-const settings = await invoke<ProviderSettings>('get_provider_settings', {
-  provider: 'mistral' | 'ollama'
-});
-```
-
-**Backend Signature**
-```rust
-async fn get_provider_settings(
-    provider: String
-) -> Result<ProviderSettings, String>
-```
-
-**ProviderSettings Type**
-```typescript
-interface ProviderSettings {
-  provider: 'mistral' | 'ollama';
-  enabled: boolean;
-  default_model_id: string | null;
-  api_key_configured: boolean;  // Never exposes actual key
-  base_url: string | null;      // Custom URL (primarily Ollama)
-  updated_at: string;           // ISO 8601 timestamp
-}
-```
-
-**Returns** : ProviderSettings (default values if not yet configured)
-
----
-
-### update_provider_settings
-
-Met a jour la configuration d'un provider.
-
-**Frontend**
-```typescript
-// IMPORTANT: Use camelCase for parameter names
-const settings = await invoke<ProviderSettings>('update_provider_settings', {
-  provider: 'mistral' | 'ollama',
-  enabled: boolean | null,
-  defaultModelId: string | null,  // camelCase, not default_model_id
-  baseUrl: string | null          // camelCase, not base_url
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_provider_settings(
-    provider: String,
-    enabled: Option<bool>,
-    default_model_id: Option<String>,
-    base_url: Option<String>
-) -> Result<ProviderSettings, String>
-```
-
-**Upsert Behavior** : Creates settings if not exists, updates otherwise
-
-**Returns** : Updated ProviderSettings
-
-**Errors** : Invalid provider, default_model_id doesn't exist
-
----
-
-### test_provider_connection
-
-Teste la connexion a un provider.
-
-**Frontend**
-```typescript
-const result = await invoke<ConnectionTestResult>('test_provider_connection', {
-  provider: 'mistral' | 'ollama'
-});
-```
-
-**Backend Signature**
-```rust
-async fn test_provider_connection(
-    provider: String
-) -> Result<ConnectionTestResult, String>
-```
-
-**ConnectionTestResult Type**
-```typescript
-interface ConnectionTestResult {
-  provider: 'mistral' | 'ollama';
-  success: boolean;
-  latency_ms: number | null;     // RTT in milliseconds if successful
-  error_message: string | null;  // Error details if failed
-  model_tested: string | null;   // Model used for test (if applicable)
-}
-```
-
-**Test Methods** :
-- Mistral: GET /v1/models with API key
-- Ollama: GET /api/version
-
-**Timeout** : 10 seconds
-
-**Returns** : ConnectionTestResult (success or failure with details)
-
----
-
-### seed_builtin_models
-
-Seed la database avec les modeles builtin.
-
-**Frontend**
-```typescript
-const insertedCount = await invoke<number>('seed_builtin_models');
-```
-
-**Backend Signature**
-```rust
-async fn seed_builtin_models() -> Result<usize, String>
-```
-
-**Behavior** :
-- Called automatically at app startup if table is empty
-- Safe to call multiple times (skips existing models)
-
-**Returns** : Number of models inserted
-
----
-
-## Custom Providers
-
-Management of user-created OpenAI-compatible providers (RouterLab, OpenRouter, Together AI, etc.).
-
-### list_providers
-
-Liste tous les providers (builtin + custom).
-
-**Frontend**
-```typescript
-import type { ProviderInfo } from '$types/customProvider';
-
-const providers = await invoke<ProviderInfo[]>('list_providers');
-```
-
-**Backend Signature**
-```rust
-async fn list_providers(
-    state: State<'_, AppState>
-) -> Result<Vec<ProviderInfo>, String>
-```
-
-**ProviderInfo Type**
-```typescript
-interface ProviderInfo {
-  id: string;            // e.g., "mistral", "ollama", "routerlab"
-  displayName: string;   // Human-readable name
-  isBuiltin: boolean;    // true for Mistral/Ollama
-  isCloud: boolean;      // true if requires internet
-  requiresApiKey: boolean;
-  hasBaseUrl: boolean;
-  baseUrl: string | null;
-  enabled: boolean;
-}
-```
-
-**Returns** : Unified list of all providers (builtin first, then custom sorted by name)
-
----
-
-### create_custom_provider
-
-Cree un nouveau provider OpenAI-compatible.
-
-**Frontend**
-```typescript
-const provider = await invoke<ProviderInfo>('create_custom_provider', {
-  name: 'routerlab',                          // URL-safe ID (lowercase + hyphens)
-  displayName: 'RouterLab',                   // Human-readable name
-  baseUrl: 'https://api.routerlab.ch/v1',     // API base URL
-  apiKey: 'sk-...'                            // API key
-});
-```
-
-**Backend Signature**
-```rust
-async fn create_custom_provider(
-    name: String,
-    display_name: String,
-    base_url: String,
-    api_key: String,
-    state: State<'_, AppState>,
-    keystore: State<'_, SecureKeyStore>
-) -> Result<ProviderInfo, String>
-```
-
-**Validation** :
-- name: lowercase alphanumeric + hyphens, 1-64 chars, not "mistral" or "ollama"
-- display_name: 1-128 chars
-- base_url: 1-512 chars, trailing slash stripped
-- api_key: non-empty
-
-**Side Effects** :
-- Stores provider metadata in `custom_provider` DB table
-- Stores API key in SecureKeyStore (AES-256-GCM)
-- Registers OpenAiCompatibleProvider in ProviderManager
-
-**Errors** : Validation failure, provider already exists, DB error
-
----
-
-### update_custom_provider
-
-Met a jour un provider custom existant.
-
-**Frontend**
-```typescript
-const provider = await invoke<ProviderInfo>('update_custom_provider', {
-  name: 'routerlab',               // Required: identifies the provider
-  displayName: 'RouterLab v2',     // Optional
-  baseUrl: 'https://new-api.url',  // Optional
-  apiKey: 'sk-new-key',            // Optional
-  enabled: false                   // Optional
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_custom_provider(
-    name: String,
-    display_name: Option<String>,
-    base_url: Option<String>,
-    api_key: Option<String>,
-    enabled: Option<bool>,
-    state: State<'_, AppState>,
-    keystore: State<'_, SecureKeyStore>
-) -> Result<ProviderInfo, String>
-```
-
-**Returns** : Updated ProviderInfo
-
----
-
-### delete_custom_provider
-
-Supprime un provider custom.
-
-**Frontend**
-```typescript
-await invoke('delete_custom_provider', { name: 'routerlab' });
-```
-
-**Backend Signature**
-```rust
-async fn delete_custom_provider(
-    name: String,
-    state: State<'_, AppState>,
-    keystore: State<'_, SecureKeyStore>
-) -> Result<(), String>
-```
-
-**Side Effects** :
-- Removes from DB
-- Deletes API key from SecureKeyStore
-- Unregisters from ProviderManager
-
-**Warning** : Models using this provider will stop working.
-
----
-
-## Task Commands (Todo Tool)
-
-Task management for workflow decomposition. Enables agents to track progress on complex multi-step operations.
-
-### create_task
-
-Creates a new task for a workflow.
-
-**Frontend**
-```typescript
-const taskId = await invoke<string>('create_task', {
-  workflowId: string,           // Associated workflow ID
-  name: string,                 // Task name (max 128 chars)
-  description: string,          // Task description (max 1000 chars)
-  priority?: 1 | 2 | 3 | 4 | 5, // Priority (default: 3)
-  agentAssigned?: string,       // Agent ID to assign
-  dependencies?: string[]       // Task IDs this depends on
-});
-```
-
-**Backend Signature**
-```rust
-async fn create_task(
-    workflow_id: String,
-    name: String,
-    description: String,
-    priority: Option<u8>,
-    agent_assigned: Option<String>,
-    dependencies: Option<Vec<String>>
-) -> Result<String, String>
-```
-
-**Priority Levels**
-- 1: Critical - must be done immediately
-- 2: High - should be done soon
-- 3: Medium - normal priority (default)
-- 4: Low - can wait
-- 5: Minimal - do when time permits
-
-**Returns** : UUID of created task
-
-**Errors** : Invalid workflow_id, name too long, invalid priority
-
----
-
-### get_task
-
-Gets a single task by ID.
-
-**Frontend**
-```typescript
-const task = await invoke<Task>('get_task', {
-  taskId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn get_task(
-    task_id: String
-) -> Result<Task, String>
-```
-
-**Task Type**
-```typescript
-interface Task {
-  id: string;
-  workflow_id: string;
-  name: string;
-  description: string;
-  agent_assigned?: string;
-  priority: 1 | 2 | 3 | 4 | 5;
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
-  dependencies: string[];
-  duration_ms?: number;
-  created_at: string;
-  completed_at?: string;
-}
-```
-
-**Errors** : Task not found, invalid ID
-
----
-
-### list_workflow_tasks
-
-Lists all tasks for a workflow.
-
-**Frontend**
-```typescript
-const tasks = await invoke<Task[]>('list_workflow_tasks', {
-  workflowId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn list_workflow_tasks(
-    workflow_id: String
-) -> Result<Vec<Task>, String>
-```
-
-**Returns** : Tasks sorted by priority (asc), then created_at (asc)
-
----
-
-### list_tasks_by_status
-
-Lists tasks filtered by status.
-
-**Frontend**
-```typescript
-const tasks = await invoke<Task[]>('list_tasks_by_status', {
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked',
-  workflowId?: string  // Optional filter
-});
-```
-
-**Backend Signature**
-```rust
-async fn list_tasks_by_status(
-    status: String,
-    workflow_id: Option<String>
-) -> Result<Vec<Task>, String>
-```
-
-**Returns** : Tasks matching status, sorted by priority and created_at
-
-**Errors** : Invalid status value
-
----
-
-### update_task
-
-Updates task fields (partial update).
-
-**Frontend**
-```typescript
-const updated = await invoke<Task>('update_task', {
-  taskId: string,
-  updates: {
-    name?: string,
-    description?: string,
-    agentAssigned?: string,
-    priority?: 1 | 2 | 3 | 4 | 5,
-    status?: 'pending' | 'in_progress' | 'completed' | 'blocked',
-    dependencies?: string[],
-    durationMs?: number
-  }
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_task(
-    task_id: String,
-    updates: TaskUpdate
-) -> Result<Task, String>
-```
-
-**Returns** : Updated task
-
-**Errors** : No fields to update, validation failed, task not found
-
----
-
-### update_task_status
-
-Updates task status specifically (convenience command).
-
-**Frontend**
-```typescript
-const updated = await invoke<Task>('update_task_status', {
-  taskId: string,
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked'
-});
-```
-
-**Backend Signature**
-```rust
-async fn update_task_status(
-    task_id: String,
-    status: String
-) -> Result<Task, String>
-```
-
-**Returns** : Updated task
-
-**Errors** : Invalid status, task not found
-
----
-
-### complete_task
-
-Marks task as completed with optional duration.
-
-**Frontend**
-```typescript
-const completed = await invoke<Task>('complete_task', {
-  taskId: string,
-  durationMs?: number  // Execution duration in milliseconds
-});
-```
-
-**Backend Signature**
-```rust
-async fn complete_task(
-    task_id: String,
-    duration_ms: Option<u64>
-) -> Result<Task, String>
-```
-
-**Effect** : Sets status to 'completed', records completed_at timestamp
-
-**Returns** : Completed task with metrics
-
----
-
-### delete_task
-
-Deletes a task.
-
-**Frontend**
-```typescript
-await invoke('delete_task', {
-  taskId: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn delete_task(
-    task_id: String
-) -> Result<(), String>
-```
-
-**Errors** : Task not found, database error
-
----
-
-## MCP Servers
-
-### list_mcp_servers
-
-Liste MCP servers configurés.
-
-**Frontend**
-```typescript
-const servers = await invoke<MCPServer[]>('list_mcp_servers');
-```
-
-**MCPServer Type**
-```typescript
-type MCPServer = {
-  name: string;
-  status: 'online' | 'offline' | 'error';
-  capabilities: string[];
-  latency_avg_ms?: number;
-  error_count: number;
-};
-```
-
----
-
-### test_mcp_server
-
-Test connexion MCP server.
-
-**Frontend**
-```typescript
-const result = await invoke<ConnectionTest>('test_mcp_server', {
-  serverName: string
-});
-```
-
-**Effect** : Execute simple discovery (list_tools) pour vérifier
-
----
-
-### get_mcp_latency_metrics
-
-Retourne les metriques de latence (percentiles) pour les appels MCP.
-
-**Frontend**
-```typescript
-// All servers
-const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {});
-
-// Specific server
-const metrics = await invoke<MCPLatencyMetrics[]>('get_mcp_latency_metrics', {
-  serverName: 'Serena'
-});
-```
-
-**Backend Signature**
-```rust
-async fn get_mcp_latency_metrics(
-    server_name: Option<String>
-) -> Result<Vec<MCPLatencyMetrics>, String>
-```
-
-**MCPLatencyMetrics Type**
-```typescript
-interface MCPLatencyMetrics {
-  server_name: string;
-  p50_ms: number;
-  p95_ms: number;
-  p99_ms: number;
-  total_calls: number;
-}
-```
-
-**Data Source** : Table `mcp_call_log`, derniere heure
-
----
-
-## FileManager
-
-### validate_agent_folder
-
-Valide un chemin de dossier et retourne sa forme canonique.
-
-**Frontend**
-```typescript
-const canonicalPath = await invoke<string>('validate_agent_folder', {
-  path: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn validate_agent_folder(
-    path: String
-) -> Result<String, String>
-```
-
-**Returns** : Chemin canonique valide
-
-**Errors** : Path does not exist, not a directory, not UTF-8
-
----
-
-### list_trash
-
-Liste les entrees trash d'un dossier autorise.
-
-**Frontend**
-```typescript
-import type { TrashEntry } from '$types/fileManager';
-
-const entries = await invoke<TrashEntry[]>('list_trash', {
-  folderPath: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn list_trash(
-    folder_path: String
-) -> Result<Vec<TrashEntry>, String>
-```
-
-**TrashEntry Type**
-```typescript
-interface TrashEntry {
-  trash_path: string;
-  original_relative_path: string;
-  deleted_at: string;
-  size_bytes: number;
-}
-```
-
-**Returns** : Array des fichiers dans la trash du dossier
-
----
-
-### restore_from_trash_cmd
-
-Restaure un fichier depuis la trash vers son emplacement original.
-
-**Frontend**
-```typescript
-const restoredPath = await invoke<string>('restore_from_trash_cmd', {
-  trashPath: string,
-  folderPath: string
-});
-```
-
-**Backend Signature**
-```rust
-async fn restore_from_trash_cmd(
-    trash_path: String,
-    folder_path: String
-) -> Result<String, String>
-```
-
-**Returns** : Chemin du fichier restaure
-
-**Errors** : Folder does not exist, trash file not found, restore failed
-
----
-
-## Sub-Agent Events
-
-### Validation Events
-
-Human-in-the-loop validation for sub-agent operations.
-
-**validation_required Event**
-```typescript
-listen<ValidationRequiredEvent>('validation_required', (event) => {
-  const {
-    validation_id,
-    workflow_id,
-    operation_type,  // 'spawn' | 'delegate' | 'parallel_batch'
-    operation,
-    risk_level,      // 'low' | 'medium' | 'high'
-    details
-  } = event.payload;
-});
-```
-
-**Approve/Reject Commands**
-```typescript
-await invoke('approve_validation', { validationId: string });
-await invoke('reject_validation', { validationId: string, reason?: string });
-```
-
----
-
-### Sub-Agent Streaming Events
-
-Real-time events for sub-agent execution monitoring.
-
-**Stream Chunk Types**
-```typescript
-type SubAgentChunkType =
-  | 'sub_agent_start'     // Sub-agent execution started
-  | 'sub_agent_progress'  // Progress update (0-100%)
-  | 'sub_agent_complete'  // Sub-agent finished successfully
-  | 'sub_agent_error';    // Sub-agent encountered error
-```
-
-**Listen for Sub-Agent Events**
-```typescript
-listen<StreamChunk>('workflow_stream', (event) => {
-  const chunk = event.payload;
-  if (chunk.chunk_type.startsWith('sub_agent_')) {
-    console.log('Sub-agent event:', {
-      subAgentId: chunk.sub_agent_id,
-      subAgentName: chunk.sub_agent_name,
-      parentAgentId: chunk.parent_agent_id,
-      content: chunk.content,
-      metrics: chunk.metrics
-    });
-  }
-});
-```
-
----
-
-## Events (Backend → Frontend)
-
-### workflow_stream
-
-Streaming tokens/status workflow.
-
-**Écoute**
-```typescript
-const unlisten = await listen<StreamChunk>('workflow_stream', (event) => {
-  const chunk = event.payload;
-  // chunk.type: 'token' | 'tool_start' | 'tool_end' | 'reasoning'
-});
-```
-
-**StreamChunk Type**
-```typescript
-type StreamChunk = {
-  workflow_id: string;
-  chunk_type: 'token' | 'real_token' | 'tool_start' | 'tool_end' | 'reasoning'
-      | 'thinking_start' | 'thinking_content' | 'thinking_end'
-      | 'error' | 'user_question_start' | 'user_question_complete'
-      | 'sub_agent_start' | 'sub_agent_progress' | 'sub_agent_complete' | 'sub_agent_error'
-      | 'task_create' | 'task_update' | 'task_complete';
-  content?: string;
-  tool?: string;
-  duration?: number;
-  // Sub-agent fields
-  sub_agent_id?: string;
-  sub_agent_name?: string;
-  parent_agent_id?: string;
-  metrics?: SubAgentStreamMetrics;
-  // Task fields
-  task_id?: string;
-  task_name?: string;
-  task_status?: string;
-  task_priority?: number;
-  // Token tracking
-  tokens_delta?: number;
-  tokens_total?: number;
-  // User question specific fields
-  user_question?: UserQuestionStreamPayload;
-  question_id?: string;
-  status?: 'answered' | 'skipped';
-};
-```
-
-**UserQuestionStreamPayload**
-```typescript
-interface UserQuestionStreamPayload {
-  question_id: string;
-  question: string;
-  question_type: 'checkbox' | 'text' | 'mixed';
-  options?: QuestionOption[];
-  text_placeholder?: string;
-  text_required: boolean;
-  context?: string;
-}
-```
-
----
-
-### validation_request
-
-Demande validation (cf section Validation)
-
----
-
-### workflow_complete
-
-Notification workflow terminé.
-
-**Écoute**
-```typescript
-await listen<WorkflowComplete>('workflow_complete', (event) => {
-  const { workflow_id, status } = event.payload;
-});
-```
-
----
-
-### agent_status_update
-
-Mise à jour status agent.
-
-**Écoute**
-```typescript
-await listen<AgentStatus>('agent_status_update', (event) => {
-  const { agent_id, status } = event.payload;
-  // status: 'available' | 'busy'
-});
-```
+Human-in-the-loop validation request for sub-agent operations. Payload includes
+`validation_id`, `operation_type`, `risk_level`, and `details`.
 
 ---
 
 ## Error Handling
 
-### Error Format Standard
+### Frontend Pattern
 
-```typescript
-try {
-  await invoke('command', { params });
-} catch (error) {
-  // error: string (user-friendly message)
-  console.error(error);
-}
-```
+See `$lib/utils/error.ts` for `getErrorMessage()`. All `invoke()` calls should
+be wrapped in try/catch, extracting user-friendly messages via `getErrorMessage(e)`.
 
-**Backend Pattern**
-```rust
-.map_err(|e| format!("Operation failed: {}", e))
-```
+### Backend Pattern
 
-**User Messages** : Pas stack traces, actions correctives suggérées
+All Tauri commands return `Result<T, String>`. Errors are formatted as
+user-friendly messages with `.map_err(|e| format!("Failed to ...: {}", e))?`.
+
+### Input Validation
+
+All commands validate inputs using `crate::security::Validator` before
+processing. UUID fields are validated with `validate_uuid_field()`, user text
+with `Validator::validate_workflow_name()` / `Validator::validate_message()`.
 
 ---
 
-## Types TypeScript (Frontend)
+## References
 
-Types générés depuis Rust avec `ts-rs` ou manuellement synchronisés.
-
-**Localisation** : `src/types/` (alias `$types`)
-
-**Synchronisation** : Valider types après changements backend
-
----
-
-## Références
-
-**Tauri IPC** : https://v2.tauri.app/develop/calling-rust/
-**Tauri Events** : https://v2.tauri.app/develop/inter-process-communication/
-**Error Handling** : Voir ARCHITECTURE_DECISIONS.md (anyhow + thiserror)
+- **Tauri IPC**: https://v2.tauri.app/develop/calling-rust/
+- **Tauri Events**: https://v2.tauri.app/develop/inter-process-communication/
+- **Command source**: `src-tauri/src/commands/`
+- **TypeScript types**: `src/types/` (alias `$types`)
+- **Rust models**: `src-tauri/src/models/`
+- **Error handling**: See `ARCHITECTURE_DECISIONS.md`
