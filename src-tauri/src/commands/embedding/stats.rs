@@ -145,15 +145,21 @@ pub async fn get_memory_token_stats(
             })
             .to_string();
 
-        let count = row.get("count").and_then(|c| c.as_u64()).unwrap_or_else(|| {
-            warn!(row = ?row, "Unexpected DB result: missing or invalid 'count' field");
-            0
-        }) as usize;
+        let count = row
+            .get("count")
+            .and_then(|c| c.as_u64())
+            .unwrap_or_else(|| {
+                warn!(row = ?row, "Unexpected DB result: missing or invalid 'count' field");
+                0
+            }) as usize;
 
-        let chars = row.get("total_chars").and_then(|c| c.as_u64()).unwrap_or_else(|| {
-            warn!(row = ?row, "Unexpected DB result: missing or invalid 'total_chars' field");
-            0
-        }) as usize;
+        let chars = row
+            .get("total_chars")
+            .and_then(|c| c.as_u64())
+            .unwrap_or_else(|| {
+                warn!(row = ?row, "Unexpected DB result: missing or invalid 'total_chars' field");
+                0
+            }) as usize;
 
         let with_embeddings = row
             .get("with_embeddings")

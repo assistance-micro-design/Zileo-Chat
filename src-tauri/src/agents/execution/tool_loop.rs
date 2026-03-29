@@ -156,9 +156,18 @@ fn format_llm_error(error: &LLMError) -> String {
 }
 
 /// Returns the effective reasoning effort based on model capability.
+///
+/// When `is_reasoning` is true but no explicit effort is set, defaults to Medium.
+/// This ensures reasoning models always use the thinking path (important for Ollama
+/// where the `think` parameter controls separate thinking extraction).
 fn effective_reasoning_effort(config: &AgentConfig) -> Option<ReasoningEffort> {
     if config.llm.is_reasoning {
-        config.reasoning_effort.clone()
+        Some(
+            config
+                .reasoning_effort
+                .clone()
+                .unwrap_or(ReasoningEffort::Medium),
+        )
     } else {
         None
     }

@@ -127,10 +127,13 @@ impl ProviderToolAdapter for OllamaToolAdapter {
     }
 
     fn format_tool_result(&self, result: &FunctionCallResult) -> Value {
-        // Ollama format for tool results
-        // Note: tool_call_id is included for consistency, though Ollama may ignore it
+        // Ollama format for tool results with call_id and name for proper correlation.
+        // Models like qwen2.5 and llama3.1 use tool_call_id to match results
+        // to their corresponding calls when multiple tools are invoked.
         json!({
             "role": "tool",
+            "tool_call_id": result.call_id,
+            "name": result.function_name,
             "content": helpers::result_to_string(result)
         })
     }
@@ -318,6 +321,8 @@ mod tests {
 
         let formatted = adapter.format_tool_result(&result);
         assert_eq!(formatted["role"], "tool");
+        assert_eq!(formatted["tool_call_id"], "ollama_123");
+        assert_eq!(formatted["name"], "TodoTool");
         assert!(formatted["content"].as_str().unwrap().contains("task_id"));
     }
 

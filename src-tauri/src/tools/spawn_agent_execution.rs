@@ -21,6 +21,7 @@ use super::spawn_agent::{
 };
 use crate::agents::core::agent::Task;
 use crate::agents::LLMAgent;
+use crate::db::DBClient;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
@@ -30,10 +31,42 @@ use crate::tools::sub_agent_executor::SubAgentExecutor;
 use crate::tools::utils::safe_truncate;
 use crate::tools::validation_helper::ValidationHelper;
 use crate::tools::{ToolError, ToolResult};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
+
+/// Lightweight model info for sub-agent config resolution.
+///
+/// When a sub-agent overrides provider/model, we query the DB to get
+/// the target model's actual capabilities instead of inheriting from parent.
+#[derive(Debug, Deserialize, Serialize)]
+struct ModelLookup {
+    is_reasoning: bool,
+    context_window: usize,
+    max_output_tokens: usize,
+    temperature_default: f64,
+}
+
+/// Queries the DB for model capabilities by api_name and provider.
+///
+/// Returns `None` if the model is not found (falls back to parent config).
+async fn lookup_model_config(db: &DBClient, api_name: &str, provider: &str) -> Option<ModelLookup> {
+    let query = "SELECT is_reasoning, context_window, max_output_tokens, temperature_default \
+                 FROM llm_model WHERE api_name = $api_name AND provider = $provider";
+    let result: Vec<ModelLookup> = db
+        .query_with_params(
+            query,
+            vec![
+                ("api_name".to_string(), serde_json::json!(api_name)),
+                ("provider".to_string(), serde_json::json!(provider)),
+            ],
+        )
+        .await
+        .ok()?;
+    result.into_iter().next()
+}
 
 impl SpawnAgentTool {
     pub(crate) async fn spawn(
@@ -42,14 +75,14 @@ impl SpawnAgentTool {
         prompt: &str,
         params: SpawnParams<'_>,
     ) -> ToolResult<Value> {
-        // 1. Check if this agent is the primary (workflow starter)
+        // Check if this agent is the primary (workflow starter)
         SubAgentExecutor::check_primary_permission(self.is_primary_agent, "spawn sub-agents")?;
 
-        // 2. Check sub-agent limit
+        // Check sub-agent limit
         let current_count = self.spawned_children.read().await.len();
         SubAgentExecutor::check_limit(current_count, "spawn")?;
 
-        // 3. Validate inputs
+        // Validate inputs
         if name.trim().is_empty() {
             return Err(ToolError::ValidationFailed(
                 "Sub-agent name cannot be empty".to_string(),
@@ -63,7 +96,7 @@ impl SpawnAgentTool {
             ));
         }
 
-        // 4. Validate tool names if provided
+        // Validate tool names if provided
         if let Some(ref tool_list) = params.tools {
             let invalid_tools: Vec<&String> = tool_list
                 .iter()
@@ -94,7 +127,7 @@ impl SpawnAgentTool {
             }
         }
 
-        // 4b. Validate MCP server names if provided
+        // Validate MCP server names if provided
         if let Some(ref mcp_servers_list) = params.mcp_servers {
             if !mcp_servers_list.is_empty() {
                 if let Some(ref mcp_mgr) = self.mcp_manager {
@@ -109,8 +142,7 @@ impl SpawnAgentTool {
             }
         }
 
-        // 5. Request human-in-the-loop validation
-        // Create executor with cancellation token for graceful shutdown
+        // Request human-in-the-loop validation
         let executor = SubAgentExecutor::with_cancellation(
             self.db.clone(),
             self.orchestrator.clone(),
@@ -136,7 +168,7 @@ impl SpawnAgentTool {
             )
             .await?;
 
-        // 6. Get parent agent config for defaults
+        // Get parent agent config for defaults
         let parent_config = self
             .registry
             .get(&self.parent_agent_id)
@@ -149,31 +181,73 @@ impl SpawnAgentTool {
                 ))
             })?;
 
-        // 7. Generate sub-agent ID
+        // Generate sub-agent ID
         let sub_agent_id = SubAgentExecutor::generate_sub_agent_id();
 
-        // 9. Build sub-agent configuration
-        // Filter out sub-agent tools from available tools (sub-agents cannot spawn others)
+        // Build sub-agent configuration
         let parent_tools = params.tools.unwrap_or_else(|| parent_config.tools.clone());
         let sub_agent_tools: Vec<String> = parent_tools
             .into_iter()
             .filter(|t| !ToolFactory::requires_context(t))
             .collect();
 
+        // When model or provider is overridden, look up the target model's actual
+        // capabilities from DB. This ensures is_reasoning, context_window, temperature,
+        // and max_tokens match the target model instead of inheriting from parent.
+        let has_model_override = params.provider.is_some() || params.model.is_some();
+
+        let sub_provider = params
+            .provider
+            .unwrap_or(&parent_config.llm.provider)
+            .to_string();
+        let sub_model = params.model.unwrap_or(&parent_config.llm.model).to_string();
+        let model_info = if has_model_override {
+            match lookup_model_config(&self.db, &sub_model, &sub_provider).await {
+                Some(info) => {
+                    debug!(
+                        model = %sub_model,
+                        provider = %sub_provider,
+                        is_reasoning = info.is_reasoning,
+                        "Resolved target model config from DB for sub-agent"
+                    );
+                    Some(info)
+                }
+                None => {
+                    warn!(
+                        model = %sub_model,
+                        provider = %sub_provider,
+                        "Target model not found in DB, inheriting parent config"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let sub_agent_config = AgentConfig {
             id: sub_agent_id.clone(),
             name: name.to_string(),
             lifecycle: Lifecycle::Temporary,
             llm: LLMConfig {
-                provider: params
-                    .provider
-                    .unwrap_or(&parent_config.llm.provider)
-                    .to_string(),
-                model: params.model.unwrap_or(&parent_config.llm.model).to_string(),
-                temperature: parent_config.llm.temperature,
-                max_tokens: parent_config.llm.max_tokens,
-                is_reasoning: parent_config.llm.is_reasoning,
-                context_window: parent_config.llm.context_window,
+                provider: sub_provider,
+                model: sub_model,
+                temperature: model_info
+                    .as_ref()
+                    .map(|m| m.temperature_default)
+                    .unwrap_or(parent_config.llm.temperature),
+                max_tokens: model_info
+                    .as_ref()
+                    .map(|m| m.max_output_tokens)
+                    .unwrap_or(parent_config.llm.max_tokens),
+                is_reasoning: model_info
+                    .as_ref()
+                    .map(|m| m.is_reasoning)
+                    .unwrap_or(parent_config.llm.is_reasoning),
+                context_window: model_info
+                    .as_ref()
+                    .map(|m| Some(m.context_window))
+                    .unwrap_or(parent_config.llm.context_window),
             },
             tools: sub_agent_tools,
             mcp_servers: params
@@ -193,8 +267,7 @@ impl SpawnAgentTool {
             reasoning_effort: parent_config.reasoning_effort.clone(),
         };
 
-        // 10. Create execution record in database (status: running)
-        // Note: SpawnAgentTool is a top-level execution, so parent_execution_id = None
+        // Create execution record in database (status: running)
         let execution_id = executor
             .create_execution_record(&sub_agent_id, name, prompt)
             .await?;
@@ -210,19 +283,19 @@ impl SpawnAgentTool {
             "Creating sub-agent with execution tracking"
         );
 
-        // 11. Create LLMAgent instance for sub-agent
+        // Create LLMAgent instance for sub-agent
         let sub_agent = LLMAgent::with_factory(
             sub_agent_config.clone(),
             self.llm_manager.clone(),
             self.tool_factory.clone(),
         );
 
-        // 12. Register in registry
+        // Register in registry
         self.registry
             .register(sub_agent_id.clone(), Arc::new(sub_agent))
             .await;
 
-        // 13. Track spawned child
+        // Track spawned child
         let spawned_child = SpawnedChild {
             id: sub_agent_id.clone(),
             name: name.to_string(),
@@ -232,10 +305,10 @@ impl SpawnAgentTool {
         };
         self.spawned_children.write().await.push(spawned_child);
 
-        // 13b. Emit sub_agent_start event
+        // Emit sub_agent_start event
         executor.emit_start_event(&sub_agent_id, name, prompt);
 
-        // 14. Create task for sub-agent
+        // Create task for sub-agent
         let task = Task {
             id: format!("task_{}", Uuid::new_v4()),
             description: prompt.to_string(),
@@ -246,23 +319,23 @@ impl SpawnAgentTool {
             }),
         };
 
-        // 15. Execute sub-agent with retry and heartbeat monitoring
+        // Execute sub-agent with retry and heartbeat monitoring
         let exec_result = executor.execute_with_retry(&sub_agent_id, task, None).await;
 
-        // 16. Emit completion or error event
+        // Emit completion or error event
         executor.emit_complete_event(&sub_agent_id, name, &exec_result);
 
-        // 17. Update execution record
+        // Update execution record
         executor
             .update_execution_record(&execution_id, &exec_result)
             .await;
 
-        // 17b. Persist sub-agent internal tool executions and reasoning steps
+        // Persist sub-agent internal tool executions and reasoning steps
         executor
             .persist_sub_agent_internals(&execution_id, &sub_agent_id, &exec_result)
             .await;
 
-        // 18. Update spawned children status
+        // Update spawned children status
         {
             let mut children = self.spawned_children.write().await;
             if let Some(child) = children.iter_mut().find(|c| c.id == sub_agent_id) {
@@ -274,7 +347,7 @@ impl SpawnAgentTool {
             }
         }
 
-        // 19. Cleanup: unregister sub-agent from registry
+        // Cleanup: unregister sub-agent from registry
         if let Err(e) = self.registry.unregister(&sub_agent_id).await {
             warn!(
                 sub_agent_id = %sub_agent_id,
@@ -293,7 +366,7 @@ impl SpawnAgentTool {
             "Sub-agent execution completed"
         );
 
-        // 20. Return result
+        // Return result
         let result = SubAgentSpawnResult {
             success: exec_result.success,
             child_id: sub_agent_id,
