@@ -366,6 +366,7 @@ DEFINE FIELD OVERWRITE tokens_output ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE result_summary ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE error_message ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE parent_execution_id ON sub_agent_execution TYPE option<string>;
+DEFINE FIELD OVERWRITE parent_message_id ON sub_agent_execution TYPE option<string>;
 DEFINE FIELD OVERWRITE created_at ON sub_agent_execution TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE completed_at ON sub_agent_execution TYPE option<datetime>;
 
@@ -373,6 +374,7 @@ DEFINE FIELD OVERWRITE completed_at ON sub_agent_execution TYPE option<datetime>
 DEFINE INDEX OVERWRITE sub_agent_workflow_idx ON sub_agent_execution FIELDS workflow_id;
 DEFINE INDEX OVERWRITE sub_agent_parent_idx ON sub_agent_execution FIELDS parent_agent_id;
 DEFINE INDEX OVERWRITE sub_agent_status_idx ON sub_agent_execution FIELDS status;
+DEFINE INDEX OVERWRITE sub_agent_message_idx ON sub_agent_execution FIELDS parent_message_id;
 
 -- =============================================
 -- Table: user_question

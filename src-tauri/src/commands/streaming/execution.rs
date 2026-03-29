@@ -152,6 +152,10 @@ pub async fn execute_workflow_streaming(
     // Counter for thinking steps
     let mut thinking_step_number: u32 = 0;
 
+    // Global sequence counter for block ordering (shared with report blocks)
+    // Initial reasoning = sequence 0, report blocks start at 1+
+    let initial_sequence: u32 = 0;
+
     // Emit and persist initial reasoning step
     let initial_reasoning = "Analyzing request and preparing response...".to_string();
     emit_chunk(
@@ -168,7 +172,7 @@ pub async fn execute_workflow_streaming(
         content: initial_reasoning,
         duration_ms: None,
         tokens: None,
-        sequence: 0,
+        sequence: initial_sequence,
         source: "agent_flow".to_string(),
     };
     let step_id = Uuid::new_v4().to_string();
@@ -259,20 +263,20 @@ pub async fn execute_workflow_streaming(
         "Streaming execution completed, processing report"
     );
 
-    // Emit thinking blocks from report
-    for step in &report.metrics.reasoning_steps {
-        emit_chunk(
-            &window,
-            StreamChunk::thinking_block(validated_workflow_id.clone(), step.content.clone()),
-        );
-        if step.content.len() > 100 {
-            info!(
-                step_source = %step.source,
-                content_len = step.content.len(),
-                "Emitted thinking block"
-            );
-        }
-    }
+    // Note: thinking blocks from report.metrics.reasoning_steps are NOT re-emitted here
+    // because they were already emitted in real-time by the tool_loop via emit_reasoning()
+    // and emit_progress(StreamChunk::thinking_block(...)). Re-emitting would cause duplicates.
+
+    // Compute completion sequence: after all report blocks (tool_executions + reasoning_steps)
+    let max_report_sequence = report
+        .metrics
+        .tool_executions
+        .iter()
+        .map(|te| te.sequence)
+        .chain(report.metrics.reasoning_steps.iter().map(|rs| rs.sequence))
+        .max()
+        .unwrap_or(initial_sequence);
+    let completion_sequence = max_report_sequence + 1;
 
     // Emit and persist reasoning step about execution completion
     let completion_reasoning = format!(
@@ -285,7 +289,7 @@ pub async fn execute_workflow_streaming(
         StreamChunk::reasoning(validated_workflow_id.clone(), completion_reasoning.clone()),
     );
 
-    // Persist the completion thinking step
+    // Persist the completion thinking step with correct sequence
     let completion_step = ThinkingStepCreate {
         workflow_id: validated_workflow_id.clone(),
         message_id: message_id.clone(),
@@ -294,7 +298,7 @@ pub async fn execute_workflow_streaming(
         content: completion_reasoning,
         duration_ms: Some(duration),
         tokens: None,
-        sequence: 0,
+        sequence: completion_sequence,
         source: "agent_flow".to_string(),
     };
     let completion_step_id = Uuid::new_v4().to_string();
@@ -388,6 +392,16 @@ pub async fn execute_workflow_streaming(
         thinking_step_number,
     )
     .await;
+
+    // Link sub-agent executions to this message for load_message_blocks correlation
+    let link_query = format!(
+        "UPDATE sub_agent_execution SET parent_message_id = '{}' \
+         WHERE workflow_id = '{}' AND parent_message_id IS NONE",
+        message_id, validated_workflow_id
+    );
+    if let Err(e) = state.db.execute(&link_query).await {
+        warn!(error = %e, "Failed to link sub-agent executions to message");
+    }
 
     info!(
         tool_executions_count = tool_executions.len(),

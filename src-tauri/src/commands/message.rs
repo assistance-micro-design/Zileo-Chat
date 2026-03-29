@@ -24,8 +24,8 @@ use crate::{
     constants::commands as cmd_const,
     db::extract_count,
     models::{
-        merge_into_chat_blocks, ChatBlock, Message, MessageCreate, PaginatedMessages, ThinkingStep,
-        ToolExecution,
+        merge_into_chat_blocks, sub_agent::SubAgentExecution, ChatBlock, Message, MessageCreate,
+        PaginatedMessages, ThinkingStep, ToolExecution,
     },
     security::validate_uuid_field,
     AppState,
@@ -439,6 +439,35 @@ pub async fn load_message_blocks(
         format!("Failed to load thinking steps: {}", e)
     })?;
 
+    // Query sub-agent executions linked to this message
+    let sub_agent_query = format!(
+        r#"SELECT
+            meta::id(id) AS id,
+            workflow_id,
+            parent_agent_id,
+            sub_agent_id,
+            sub_agent_name,
+            task_description,
+            status,
+            duration_ms,
+            tokens_input,
+            tokens_output,
+            result_summary,
+            error_message,
+            parent_message_id,
+            created_at,
+            completed_at
+        FROM sub_agent_execution
+        WHERE parent_message_id = '{}'
+        ORDER BY created_at ASC"#,
+        validated_message_id
+    );
+
+    let sub_agent_json = state.db.query_json(&sub_agent_query).await.map_err(|e| {
+        error!(error = %e, "Failed to load sub-agent executions for blocks");
+        format!("Failed to load sub-agent executions: {}", e)
+    })?;
+
     // Deserialize tool executions
     let tool_executions: Vec<ToolExecution> = tool_json
         .into_iter()
@@ -459,12 +488,24 @@ pub async fn load_message_blocks(
             format!("Failed to deserialize thinking steps: {}", e)
         })?;
 
+    // Deserialize sub-agent executions
+    let sub_agent_executions: Vec<SubAgentExecution> = sub_agent_json
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<SubAgentExecution>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize sub-agent executions");
+            format!("Failed to deserialize sub-agent executions: {}", e)
+        })?;
+
     // Merge into unified ChatBlocks sorted by sequence
-    let blocks = merge_into_chat_blocks(&tool_executions, &thinking_steps);
+    let blocks =
+        merge_into_chat_blocks(&tool_executions, &thinking_steps, &sub_agent_executions);
 
     info!(
         tool_count = tool_executions.len(),
         thinking_count = thinking_steps.len(),
+        sub_agent_count = sub_agent_executions.len(),
         total_blocks = blocks.len(),
         "Message blocks loaded"
     );

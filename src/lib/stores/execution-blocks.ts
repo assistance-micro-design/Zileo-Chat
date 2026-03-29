@@ -28,10 +28,6 @@ import { writable, derived } from 'svelte/store';
 import type { StreamChunk } from '$types/streaming';
 import type { ChatBlock, ChatBlockType, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
 
-// ============================================================================
-// Types
-// ============================================================================
-
 /**
  * State interface for the execution blocks store.
  */
@@ -60,10 +56,6 @@ export interface ExecutionBlocksState {
 	nextSequence: number;
 }
 
-// ============================================================================
-// Initial State
-// ============================================================================
-
 const initialState: ExecutionBlocksState = {
 	workflowId: null,
 	blocks: [],
@@ -75,10 +67,6 @@ const initialState: ExecutionBlocksState = {
 	cancelled: false,
 	nextSequence: 1
 };
-
-// ============================================================================
-// Store Implementation
-// ============================================================================
 
 const store = writable<ExecutionBlocksState>(initialState);
 
@@ -126,7 +114,8 @@ function handleToolStart(state: ExecutionBlocksState, chunk: StreamChunk): Execu
 function handleToolCallComplete(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
 	const data: ToolCallBlockData = {
 		tool_name: chunk.tool ?? 'unknown',
-		tool_type: 'local',
+		tool_type: chunk.tool_type ?? 'local',
+		server_name: chunk.server_name,
 		input_params: chunk.tool_input ?? '{}',
 		output_result: chunk.tool_output ?? '{}',
 		success: chunk.tool_success ?? false,
@@ -370,10 +359,6 @@ export const executionBlocksStore = {
 		store.set(initialState);
 	}
 };
-
-// ============================================================================
-// Derived Stores
-// ============================================================================
 
 /** Current execution blocks */
 export const executionBlocks = derived(store, (s) => s.blocks);

@@ -105,6 +105,11 @@ pub struct SubAgentExecution {
     /// None for top-level executions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_execution_id: Option<String>,
+    /// Parent message ID for message-level correlation.
+    /// Set post-execution to link sub-agent executions to the assistant message
+    /// that triggered them. Used by load_message_blocks for block display.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_message_id: Option<String>,
     /// When the execution was created
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
@@ -227,17 +232,16 @@ impl SubAgentExecutionComplete {
         result_summary: String,
     ) -> Self {
         // Truncate result summary if too long (max 5000 chars for DB storage)
-        // "... [truncated]" is 16 chars, so we take 5000 - 16 = 4984 chars
+        // Uses char-based truncation to avoid panics on multi-byte UTF-8 (ERR_RUST_002)
         const TRUNCATION_SUFFIX: &str = "... [truncated]";
         const MAX_LEN: usize = 5000;
-        let suffix_len = TRUNCATION_SUFFIX.len();
 
-        let summary = if result_summary.len() > MAX_LEN {
-            format!(
-                "{}{}",
-                &result_summary[..MAX_LEN - suffix_len],
-                TRUNCATION_SUFFIX
-            )
+        let summary = if result_summary.chars().count() > MAX_LEN {
+            let truncated: String = result_summary
+                .chars()
+                .take(MAX_LEN - TRUNCATION_SUFFIX.len())
+                .collect();
+            format!("{}{}", truncated, TRUNCATION_SUFFIX)
         } else {
             result_summary
         };

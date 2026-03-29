@@ -883,7 +883,7 @@ pub(crate) async fn execute_with_tools(
             tool_executions_data.push(ToolExecutionData {
                 tool_type: tool_type.to_string(),
                 tool_name: tool_name_for_data.clone(),
-                server_name,
+                server_name: server_name.clone(),
                 input_params: call.arguments.clone(),
                 output_result: result.result.clone(),
                 success: result.success,
@@ -902,6 +902,8 @@ pub(crate) async fn execute_with_tools(
                 StreamChunk::tool_call_complete(
                     event_workflow_id.clone(),
                     tool_name_for_data,
+                    tool_type,
+                    server_name,
                     exec_duration,
                     input_json,
                     output_json,

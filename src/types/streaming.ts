@@ -107,6 +107,10 @@ export interface StreamChunk {
   tokens_delta?: number;
   /** Cumulative token count (running total) */
   tokens_total?: number;
+  /** Tool type: "local" or "mcp" (for tool_call_complete) */
+  tool_type?: 'local' | 'mcp';
+  /** MCP server name (for tool_call_complete, only for MCP tools) */
+  server_name?: string;
   /** Tool input parameters as JSON string (for tool_call_complete) */
   tool_input?: string;
   /** Tool output result as JSON string (for tool_call_complete) */

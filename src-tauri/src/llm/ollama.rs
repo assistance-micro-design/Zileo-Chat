@@ -27,6 +27,21 @@ use tracing::{debug, info, instrument};
 /// Default Ollama server URL
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
+/// Builds the `options` JSON object for Ollama API requests.
+///
+/// Includes `num_ctx` only when `context_window` is provided, otherwise
+/// lets Ollama use its default context size.
+fn build_options(temperature: f64, max_tokens: usize, context_window: Option<usize>) -> serde_json::Value {
+    let mut options = serde_json::json!({
+        "temperature": temperature,
+        "num_predict": max_tokens
+    });
+    if let Some(ctx) = context_window {
+        options["num_ctx"] = serde_json::json!(ctx);
+    }
+    options
+}
+
 /// Ollama local provider implementation
 pub struct OllamaProvider {
     /// Server URL
@@ -141,14 +156,7 @@ impl OllamaProvider {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
 
-        // Build options with optional num_ctx
-        let mut options = serde_json::json!({
-            "temperature": params.temperature,
-            "num_predict": params.max_tokens
-        });
-        if let Some(ctx) = params.context_window {
-            options["num_ctx"] = serde_json::json!(ctx);
-        }
+        let options = build_options(params.temperature, params.max_tokens, params.context_window);
 
         // Build request body with tools
         let mut body = serde_json::json!({
@@ -229,13 +237,7 @@ impl OllamaProvider {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
 
-        let mut options = serde_json::json!({
-            "temperature": params.temperature,
-            "num_predict": params.max_tokens
-        });
-        if let Some(ctx) = params.context_window {
-            options["num_ctx"] = serde_json::json!(ctx);
-        }
+        let options = build_options(params.temperature, params.max_tokens, params.context_window);
 
         let body = serde_json::json!({
             "model": model,
@@ -361,13 +363,7 @@ impl LLMProvider for OllamaProvider {
         let server_url = self.server_url.read().await.clone();
         let url = format!("{}/api/chat", server_url);
 
-        let mut options = serde_json::json!({
-            "temperature": params.temperature,
-            "num_predict": params.max_tokens
-        });
-        if let Some(ctx) = params.context_window {
-            options["num_ctx"] = serde_json::json!(ctx);
-        }
+        let options = build_options(params.temperature, params.max_tokens, params.context_window);
 
         let body = serde_json::json!({
             "model": model_name,
@@ -582,30 +578,18 @@ mod tests {
     }
 
     #[test]
-    fn test_num_ctx_included_in_options_when_provided() {
-        let context_window: Option<usize> = Some(32768);
-        let mut options = serde_json::json!({
-            "temperature": 0.7,
-            "num_predict": 4096
-        });
-        if let Some(ctx) = context_window {
-            options["num_ctx"] = serde_json::json!(ctx);
-        }
+    fn test_build_options_includes_num_ctx_when_provided() {
+        let options = build_options(0.7, 4096, Some(32768));
         assert_eq!(options["num_ctx"], 32768);
         assert_eq!(options["temperature"], 0.7);
         assert_eq!(options["num_predict"], 4096);
     }
 
     #[test]
-    fn test_num_ctx_omitted_from_options_when_none() {
-        let context_window: Option<usize> = None;
-        let mut options = serde_json::json!({
-            "temperature": 0.7,
-            "num_predict": 4096
-        });
-        if let Some(ctx) = context_window {
-            options["num_ctx"] = serde_json::json!(ctx);
-        }
+    fn test_build_options_omits_num_ctx_when_none() {
+        let options = build_options(0.7, 4096, None);
         assert!(options.get("num_ctx").is_none());
+        assert_eq!(options["temperature"], 0.7);
+        assert_eq!(options["num_predict"], 4096);
     }
 }

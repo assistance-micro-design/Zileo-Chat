@@ -117,6 +117,12 @@ pub struct StreamChunk {
     /// Cumulative token count (running total)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_total: Option<usize>,
+    /// Tool type: "local" or "mcp" (for tool_call_complete)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_type: Option<String>,
+    /// MCP server name (for tool_call_complete, only for MCP tools)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
     /// Tool input parameters as JSON string (for tool_call_complete)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_input: Option<String>,
@@ -179,6 +185,8 @@ impl StreamChunk {
             question_id: None,
             tokens_delta: None,
             tokens_total: None,
+            tool_type: None,
+            server_name: None,
             tool_input: None,
             tool_output: None,
             tool_success: None,
@@ -366,9 +374,12 @@ impl StreamChunk {
     /// Creates a tool call complete chunk with full input/output details.
     ///
     /// Replaces tool_end with enriched data for inline display.
+    #[allow(clippy::too_many_arguments)]
     pub fn tool_call_complete(
         workflow_id: impl Into<String>,
         tool_name: impl Into<String>,
+        tool_type: impl Into<String>,
+        server_name: Option<String>,
         duration: u64,
         input: impl Into<String>,
         output: impl Into<String>,
@@ -376,6 +387,8 @@ impl StreamChunk {
     ) -> Self {
         Self {
             tool: Some(tool_name.into()),
+            tool_type: Some(tool_type.into()),
+            server_name,
             duration: Some(duration),
             tool_input: Some(input.into()),
             tool_output: Some(output.into()),
@@ -762,6 +775,8 @@ mod tests {
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(!json.contains("user_question"));
         assert!(!json.contains("question_id"));
+        assert!(!json.contains("tool_type"));
+        assert!(!json.contains("server_name"));
         assert!(!json.contains("tool_input"));
         assert!(!json.contains("tool_output"));
         assert!(!json.contains("tool_success"));
@@ -793,6 +808,8 @@ mod tests {
         let chunk = StreamChunk::tool_call_complete(
             "wf_001",
             "MemoryTool",
+            "local",
+            None,
             150,
             r#"{"query": "find docs"}"#,
             r#"{"results": ["doc1", "doc2"]}"#,
@@ -800,6 +817,8 @@ mod tests {
         );
         assert_eq!(chunk.chunk_type, ChunkType::ToolCallComplete);
         assert_eq!(chunk.tool, Some("MemoryTool".to_string()));
+        assert_eq!(chunk.tool_type, Some("local".to_string()));
+        assert!(chunk.server_name.is_none());
         assert_eq!(chunk.duration, Some(150));
         assert_eq!(
             chunk.tool_input,
@@ -814,9 +833,31 @@ mod tests {
 
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(json.contains("\"chunk_type\":\"tool_call_complete\""));
+        assert!(json.contains("\"tool_type\":\"local\""));
+        assert!(!json.contains("\"server_name\"")); // Skipped when None
         assert!(json.contains("\"tool_input\""));
         assert!(json.contains("\"tool_output\""));
         assert!(json.contains("\"tool_success\":true"));
+    }
+
+    #[test]
+    fn test_stream_chunk_tool_call_complete_mcp() {
+        let chunk = StreamChunk::tool_call_complete(
+            "wf_001",
+            "find_symbol",
+            "mcp",
+            Some("serena".to_string()),
+            200,
+            r#"{"name": "MyClass"}"#,
+            r#"{"found": true}"#,
+            true,
+        );
+        assert_eq!(chunk.tool_type, Some("mcp".to_string()));
+        assert_eq!(chunk.server_name, Some("serena".to_string()));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"tool_type\":\"mcp\""));
+        assert!(json.contains("\"server_name\":\"serena\""));
     }
 
     #[test]
@@ -824,6 +865,8 @@ mod tests {
         let chunk = StreamChunk::tool_call_complete(
             "wf_001",
             "BadTool",
+            "local",
+            None,
             50,
             "{}",
             r#"{"error": "Connection refused"}"#,
