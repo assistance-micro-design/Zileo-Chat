@@ -355,9 +355,6 @@ async fn main() -> anyhow::Result<()> {
             let mcp_manager = state.inner().mcp_manager.clone();
 
             tauri::async_runtime::spawn(async move {
-                // Suppress unused warning for orchestrator (used in context)
-                let _ = &orchestrator;
-
                 // Set app handle in ToolFactory for validation event emission
                 // This is needed for sub-agents that don't have agent_context
                 // Clone handle first to avoid holding guard across await
