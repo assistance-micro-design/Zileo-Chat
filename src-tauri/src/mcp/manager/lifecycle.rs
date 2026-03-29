@@ -78,12 +78,26 @@ impl MCPManager {
 
         // NOTE: Caller (spawn_server or load_from_db) must verify name uniqueness before calling
 
-        let name = config.name.clone();
-        let id = config.id.clone();
         let client = MCPClient::connect(config.clone()).await?;
 
+        Ok(self.register_client(config, client).await)
+    }
+
+    /// Registers a connected MCP client in the internal registries.
+    ///
+    /// Inserts the client into the name-keyed registry, the ID->name lookup
+    /// table, and creates a circuit breaker. Used by both `spawn_server_internal`
+    /// (single server) and `load_from_db` (parallel startup).
+    pub(crate) async fn register_client(
+        &self,
+        config: MCPServerConfig,
+        client: MCPClient,
+    ) -> MCPServer {
+        let name = config.name.clone();
+        let id = config.id.clone();
+
         let server = MCPServer {
-            config: config.clone(),
+            config,
             status: client.status(),
             tools: client.tools().to_vec(),
             resources: client.resources().to_vec(),
@@ -117,7 +131,7 @@ impl MCPManager {
             "MCP server spawned and registered by name"
         );
 
-        Ok(server)
+        server
     }
 
     /// Stops an MCP server

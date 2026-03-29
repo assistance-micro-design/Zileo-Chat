@@ -131,10 +131,14 @@ impl MCPManager {
 
     /// Loads server configurations from the database
     ///
-    /// Queries all enabled servers from the database and spawns them.
-    /// Servers that fail to start are logged but don't prevent other
+    /// Queries all enabled servers from the database and connects them
+    /// **in parallel** for faster startup. Registration in the internal
+    /// registries is done sequentially after all connections complete.
+    /// Servers that fail to connect are logged but don't prevent other
     /// servers from starting.
     pub async fn load_from_db(&self) -> MCPResult<()> {
+        use crate::mcp::client::MCPClient;
+
         info!("Loading MCP servers from database");
 
         let configs = self.get_saved_configs().await?;
@@ -145,14 +149,22 @@ impl MCPManager {
             "Found enabled MCP server configurations"
         );
 
-        for config in enabled_configs {
-            match self.spawn_server_internal(config.clone()).await {
-                Ok(_) => {
-                    info!(
-                        server_id = %config.id,
-                        server_name = %config.name,
-                        "MCP server started successfully"
-                    );
+        // Connect all MCP clients in parallel (the expensive part: process spawn + init)
+        let connect_futures: Vec<_> = enabled_configs
+            .into_iter()
+            .map(|config| async move {
+                let result = MCPClient::connect(config.clone()).await;
+                (config, result)
+            })
+            .collect();
+
+        let results = futures_util::future::join_all(connect_futures).await;
+
+        // Register successful connections sequentially (cheap: HashMap inserts)
+        for (config, result) in results {
+            match result {
+                Ok(client) => {
+                    self.register_client(config, client).await;
                 }
                 Err(e) => {
                     warn!(
@@ -304,9 +316,3 @@ impl MCPManager {
     }
 }
 
-impl Drop for MCPManager {
-    fn drop(&mut self) {
-        // Note: Async cleanup should be done via shutdown() before dropping
-        // This is just a safety net for the underlying handles
-    }
-}

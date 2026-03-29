@@ -41,18 +41,6 @@
 	let { title = 'Zileo Chat' }: Props = $props();
 
 	/**
-	 * Current theme value for reactive UI updates
-	 */
-	let currentTheme = $state<'light' | 'dark'>('light');
-
-	/**
-	 * Subscribe to theme changes
-	 */
-	theme.subscribe((value) => {
-		currentTheme = value;
-	});
-
-	/**
 	 * Toggle theme between light and dark
 	 */
 	function toggleTheme(): void {
@@ -87,9 +75,9 @@
 			type="button"
 			class="btn btn-ghost btn-icon"
 			onclick={toggleTheme}
-			aria-label={currentTheme === 'light' ? $i18n('layout_switch_to_dark_mode') : $i18n('layout_switch_to_light_mode')}
+			aria-label={$theme === 'light' ? $i18n('layout_switch_to_dark_mode') : $i18n('layout_switch_to_light_mode')}
 		>
-			{#if currentTheme === 'light'}
+			{#if $theme === 'light'}
 				<Moon size={18} />
 			{:else}
 				<Sun size={18} />

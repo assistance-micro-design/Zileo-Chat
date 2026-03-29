@@ -102,91 +102,28 @@ async fn main() -> anyhow::Result<()> {
     // Note: Agents are loaded in setup hook after app_handle is set
     // This ensures AgentToolContext has access to app_handle for validation events
 
-    // Load MCP servers from database
-    if let Err(e) = app_state.mcp_manager.load_from_db().await {
+    // Note: Builtin model seeding is handled by the seed_builtin_models Tauri command
+    // (invokable from frontend). get_all_builtin_models() returns an empty Vec.
+
+    // Initialize secure keystore (synchronous, instant)
+    let keystore = commands::SecureKeyStore::default();
+    tracing::info!("Secure keystore initialized");
+
+    // Run MCP loading, provider init, and embedding init in parallel.
+    // MCP is fully independent. Providers and embedding both need keystore
+    // (already initialized above) but are independent of each other.
+    let (mcp_result, _, _) = tokio::join!(
+        app_state.mcp_manager.load_from_db(),
+        app_state.initialize_providers_from_config(&keystore),
+        app_state.initialize_embedding_from_config(&keystore),
+    );
+
+    if let Err(e) = mcp_result {
         tracing::warn!(error = %e, "Failed to load MCP servers from database");
     } else {
         let count = app_state.mcp_manager.connected_count().await;
         tracing::info!(count = count, "MCP servers loaded from database");
     }
-
-    // Seed builtin LLM models if needed
-    {
-        use models::llm_models::get_all_builtin_models;
-
-        let builtin_models = get_all_builtin_models();
-        let mut inserted = 0;
-
-        for model in &builtin_models {
-            let check_query = format!(
-                "SELECT count() FROM llm_model WHERE id = '{}' GROUP ALL",
-                model.id
-            );
-            let count_result: Vec<serde_json::Value> = app_state
-                .db
-                .db
-                .query(&check_query)
-                .await
-                .map(|mut r| r.take(0).unwrap_or_default())
-                .unwrap_or_default();
-
-            let exists = count_result
-                .first()
-                .and_then(|v| v.get("count").and_then(|c| c.as_i64()))
-                .unwrap_or(0)
-                > 0;
-
-            if !exists {
-                let data = serde_json::json!({
-                    "id": model.id,
-                    "provider": model.provider,
-                    "name": model.name,
-                    "api_name": model.api_name,
-                    "context_window": model.context_window,
-                    "max_output_tokens": model.max_output_tokens,
-                    "temperature_default": model.temperature_default,
-                    "is_builtin": true,
-                });
-                let query = format!("CREATE llm_model:`{}` CONTENT $data", model.id);
-                if app_state
-                    .db
-                    .execute_with_params(&query, vec![("data".to_string(), data)])
-                    .await
-                    .is_ok()
-                {
-                    // Set timestamps via SurrealQL functions (can't be in CONTENT bind)
-                    let _ = app_state
-                        .db
-                        .execute(&format!(
-                            "UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
-                            model.id
-                        ))
-                        .await;
-                    inserted += 1;
-                }
-            }
-        }
-
-        if inserted > 0 {
-            tracing::info!(
-                total = builtin_models.len(),
-                inserted = inserted,
-                "Builtin LLM models seeded"
-            );
-        } else {
-            tracing::debug!("All builtin LLM models already exist");
-        }
-    }
-
-    // Initialize secure keystore
-    let keystore = commands::SecureKeyStore::default();
-    tracing::info!("Secure keystore initialized");
-
-    // Initialize LLM providers from saved configuration
-    app_state.initialize_providers_from_config(&keystore).await;
-
-    // Initialize embedding service from saved configuration (if any)
-    app_state.initialize_embedding_from_config(&keystore).await;
 
     // Run Tauri application
     tauri::Builder::default()
