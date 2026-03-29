@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Ollama local provider implementation using rig-core
+//! Ollama local provider implementation via direct HTTP
 
 use super::http;
 use super::provider::{
@@ -37,7 +37,6 @@ pub struct OllamaProvider {
     http_client: Arc<reqwest::Client>,
 }
 
-#[allow(dead_code)]
 impl OllamaProvider {
     /// Creates a new Ollama provider with default settings and a shared HTTP client.
     ///
@@ -57,6 +56,7 @@ impl OllamaProvider {
     ///
     /// # Errors
     /// Returns an error if the HTTP client fails to initialize.
+    #[allow(dead_code)] // Used in tests only (lib/binary split)
     pub fn with_url(url: &str) -> Result<Self, String> {
         let http_client = Arc::new(
             reqwest::Client::builder()
@@ -82,12 +82,14 @@ impl OllamaProvider {
     }
 
     /// Clears the provider configuration
+    #[allow(dead_code)] // Used in tests only (lib/binary split)
     pub async fn clear(&self) {
         *self.configured.write().await = false;
         info!("Ollama provider cleared");
     }
 
     /// Gets the current server URL
+    #[allow(dead_code)] // Used in tests only (lib/binary split)
     pub async fn get_server_url(&self) -> String {
         self.server_url.read().await.clone()
     }

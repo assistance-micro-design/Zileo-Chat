@@ -177,8 +177,7 @@ export const tokenStore = {
 				cached: cachedTokens ?? null,
 				cacheWrite: cacheWriteTokens ?? null,
 				speed: null
-			},
-			contextUsed: tokensIn
+			}
 		}));
 	},
 
@@ -215,10 +214,6 @@ export const tokenStore = {
 		store.set(initialState);
 	}
 };
-
-// ============================================================================
-// Derived Stores
-// ============================================================================
 
 /**
  * Derived store: complete token display data for TokenDisplay component.

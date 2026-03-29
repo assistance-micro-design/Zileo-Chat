@@ -45,6 +45,7 @@ use uuid::Uuid;
 /// * `model` - Model used for generation (optional)
 /// * `provider` - Provider used (optional)
 /// * `duration_ms` - Generation duration in milliseconds (optional)
+/// * `cost_usd` - Estimated cost in USD (optional)
 ///
 /// # Returns
 /// The ID of the created message
@@ -69,6 +70,7 @@ pub async fn save_message(
     provider: Option<String>,
     duration_ms: Option<u64>,
     thinking_tokens: Option<u64>,
+    cost_usd: Option<f64>,
     message_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -115,7 +117,7 @@ pub async fn save_message(
         tokens_output,
         model,
         provider,
-        cost_usd: None, // Cost calculation is provider-specific (future enhancement)
+        cost_usd,
         duration_ms,
         thinking_tokens,
     };

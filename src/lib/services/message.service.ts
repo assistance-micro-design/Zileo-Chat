@@ -152,6 +152,7 @@ export const MessageService = {
 			provider: params.metrics?.provider ?? null,
 			durationMs: params.metrics?.duration_ms ?? null,
 			thinkingTokens: params.metrics?.thinking_tokens ?? null,
+			costUsd: params.metrics?.cost_usd ?? null,
 			messageId: params.messageId ?? null
 		});
 	},

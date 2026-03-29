@@ -38,10 +38,6 @@ use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-// ---------------------------------------------------------------------------
-// Token tracking
-// ---------------------------------------------------------------------------
-
 /// Tracks cumulative and per-iteration token usage across the tool loop.
 struct TokenTracker {
     total_input: usize,
@@ -129,10 +125,6 @@ impl TokenTracker {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Small helpers
-// ---------------------------------------------------------------------------
 
 /// Formats an LLMError into a user-friendly error message.
 fn format_llm_error(error: &LLMError) -> String {
@@ -241,10 +233,6 @@ fn build_tools_section(tools_used: &[String], mcp_calls_made: &[String]) -> Stri
     format!("\n\n## Tool Usage{}{}", local_used, mcp_used)
 }
 
-// ---------------------------------------------------------------------------
-// Report enforcement
-// ---------------------------------------------------------------------------
-
 /// Mutable state passed to report enforcement to avoid too many arguments.
 struct EnforcementState<'a> {
     messages: &'a mut Vec<serde_json::Value>,
@@ -336,10 +324,6 @@ async fn enforce_report(
 
     enforced_content
 }
-
-// ---------------------------------------------------------------------------
-// Simple execution (no tools)
-// ---------------------------------------------------------------------------
 
 /// Executes a task without tools (simple LLM completion).
 pub(crate) async fn execute_simple(
@@ -480,10 +464,6 @@ pub(crate) async fn execute_simple(
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tool-augmented execution
-// ---------------------------------------------------------------------------
 
 /// Context for the tool execution loop, grouping all dependencies.
 pub(crate) struct ToolLoopContext<'a> {
