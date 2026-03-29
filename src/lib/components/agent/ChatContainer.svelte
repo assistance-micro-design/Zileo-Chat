@@ -24,8 +24,8 @@ Main chat area with message display, execution blocks inline, and input controls
 
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { StopCircle, Bot, ArrowDown } from '@lucide/svelte';
-	import { Button, HelpButton } from '$lib/components/ui';
+	import { Bot, ArrowDown } from '@lucide/svelte';
+	import { HelpButton } from '$lib/components/ui';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
@@ -270,17 +270,12 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	<!-- Chat Input with Cancel Button -->
 	<div class="input-area">
-		{#if isExecuting}
-			<div class="chat-input-wrapper">
-				<ChatInput disabled={true} loading={true} onsend={() => {}} />
-				<Button variant="danger" size="sm" onclick={oncancel} ariaLabel={$i18n('chat_cancel_arialabel')}>
-					<StopCircle size={16} />
-					{$i18n('chat_cancel')}
-				</Button>
-			</div>
-		{:else}
-			<ChatInput {disabled} loading={isExecuting} {onsend} />
-		{/if}
+		<ChatInput
+			disabled={isExecuting || disabled}
+			loading={isExecuting}
+			onsend={isExecuting ? undefined : onsend}
+			oncancel={isExecuting ? oncancel : undefined}
+		/>
 	</div>
 </div>
 
@@ -412,17 +407,6 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	.input-area {
 		padding: 0 var(--spacing-md) var(--spacing-md);
-	}
-
-	/* Chat Input Wrapper (with cancel button) */
-	.chat-input-wrapper {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.chat-input-wrapper :global(.chat-input-container) {
-		flex: 1;
 	}
 
 	/* Respect reduced motion preference */

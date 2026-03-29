@@ -149,13 +149,23 @@ function handleResponseBlock(state: ExecutionBlocksState, chunk: StreamChunk): E
  * Process a sub_agent_complete chunk into a SubAgentBlock.
  */
 function handleSubAgentComplete(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	// Dedup: skip if a sub_agent block with the same sub_agent_id already exists
+	const subAgentId = chunk.sub_agent_id;
+	if (subAgentId) {
+		const alreadyExists = state.blocks.some(
+			(b) => b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
+		);
+		if (alreadyExists) return { ...state, spinnerContext: null };
+	}
+
 	const data: SubAgentBlockData = {
 		agent_name: chunk.sub_agent_name ?? 'Unknown Agent',
 		status: 'completed',
 		duration_ms: chunk.duration ?? chunk.metrics?.duration_ms,
 		tokens_input: chunk.metrics?.tokens_input,
 		tokens_output: chunk.metrics?.tokens_output,
-		report_summary: chunk.content
+		report_summary: chunk.content,
+		_sub_agent_id: subAgentId
 	};
 	const block = createBlock('sub_agent', state.nextSequence, data);
 	return {
@@ -170,11 +180,21 @@ function handleSubAgentComplete(state: ExecutionBlocksState, chunk: StreamChunk)
  * Process a sub_agent_error chunk into a SubAgentBlock with error status.
  */
 function handleSubAgentError(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	// Dedup: skip if a sub_agent block with the same sub_agent_id already exists
+	const subAgentId = chunk.sub_agent_id;
+	if (subAgentId) {
+		const alreadyExists = state.blocks.some(
+			(b) => b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
+		);
+		if (alreadyExists) return { ...state, spinnerContext: null };
+	}
+
 	const data: SubAgentBlockData = {
 		agent_name: chunk.sub_agent_name ?? 'Unknown Agent',
 		status: 'error',
 		duration_ms: chunk.duration,
-		report_summary: chunk.content
+		report_summary: chunk.content,
+		_sub_agent_id: subAgentId
 	};
 	const block = createBlock('sub_agent', state.nextSequence, data);
 	return {

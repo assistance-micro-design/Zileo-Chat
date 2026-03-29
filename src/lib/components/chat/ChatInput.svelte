@@ -23,7 +23,7 @@
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
 <script lang="ts">
-	import { Send, BookOpen } from '@lucide/svelte';
+	import { Send, BookOpen, StopCircle } from '@lucide/svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
 	import { i18n } from '$lib/i18n';
@@ -42,6 +42,8 @@
 		loading?: boolean;
 		/** Send handler */
 		onsend?: (message: string) => void;
+		/** Cancel handler (shows stop button when provided) */
+		oncancel?: () => void;
 	}
 
 	let {
@@ -49,7 +51,8 @@
 		placeholder = '',
 		disabled = false,
 		loading = false,
-		onsend
+		onsend,
+		oncancel
 	}: Props = $props();
 
 	/**
@@ -136,19 +139,30 @@
 	>
 		<BookOpen size={18} />
 	</button>
-	<button
-		type="button"
-		class="send-button"
-		onclick={handleSend}
-		disabled={disabled || loading || !value.trim()}
-		aria-label={$i18n('chat_send_arialabel')}
-	>
-		{#if loading}
-			<Spinner size="sm" />
-		{:else}
-			<Send size={20} />
-		{/if}
-	</button>
+	{#if oncancel}
+		<button
+			type="button"
+			class="stop-button"
+			onclick={oncancel}
+			aria-label={$i18n('chat_cancel_arialabel')}
+		>
+			<StopCircle size={20} />
+		</button>
+	{:else}
+		<button
+			type="button"
+			class="send-button"
+			onclick={handleSend}
+			disabled={disabled || loading || !value.trim()}
+			aria-label={$i18n('chat_send_arialabel')}
+		>
+			{#if loading}
+				<Spinner size="sm" />
+			{:else}
+				<Send size={20} />
+			{/if}
+		</button>
+	{/if}
 	<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
 </div>
 
@@ -243,6 +257,25 @@
 	.send-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.stop-button {
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-danger, #dc3545);
+		color: var(--color-text-inverse);
+		border: none;
+		border-radius: var(--border-radius-md);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		flex-shrink: 0;
+	}
+
+	.stop-button:hover {
+		opacity: 0.85;
 	}
 
 	.keyboard-hint {

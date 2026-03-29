@@ -394,9 +394,11 @@ pub async fn execute_workflow_streaming(
     .await;
 
     // Link sub-agent executions to this message for load_message_blocks correlation
+    // Use both IS NONE and IS NULL: SurrealDB option<string> fields may be either
+    // NONE (field absent) or NULL (field present but null) depending on creation path
     let link_query = format!(
         "UPDATE sub_agent_execution SET parent_message_id = '{}' \
-         WHERE workflow_id = '{}' AND parent_message_id IS NONE",
+         WHERE workflow_id = '{}' AND (parent_message_id IS NONE OR parent_message_id IS NULL)",
         message_id, validated_workflow_id
     );
     if let Err(e) = state.db.execute(&link_query).await {

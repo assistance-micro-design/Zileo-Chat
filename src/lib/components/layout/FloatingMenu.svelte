@@ -68,14 +68,14 @@
 
 	<!-- Center: Main Navigation -->
 	<div class="menu-center">
-		<a href="/agent" class="btn btn-primary">
-			<Bot size={16} />
-			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
-		</a>
-
 		<a href="/settings" class="btn btn-secondary">
 			<Settings size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
+		</a>
+
+		<a href="/agent" class="btn btn-primary">
+			<Bot size={16} />
+			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
 		</a>
 	</div>
 
