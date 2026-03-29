@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use tauri::{Emitter, State, Window};
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 use crate::db::DBClient;
 use crate::models::streaming::{events, StreamChunk};
@@ -128,6 +128,7 @@ async fn verify_update_success(db: &DBClient, question_id: &str) -> Result<Strin
 
 /// Submit a response to a pending question
 #[tauri::command]
+#[instrument(name = "submit_user_response", skip(state, window))]
 pub async fn submit_user_response(
     question_id: String,
     selected_options: Vec<String>,
@@ -168,6 +169,7 @@ pub async fn submit_user_response(
 
 /// Get pending questions for a workflow
 #[tauri::command]
+#[instrument(name = "get_pending_questions", skip(state))]
 pub async fn get_pending_questions(
     workflow_id: String,
     state: State<'_, AppState>,
@@ -210,6 +212,7 @@ pub async fn get_pending_questions(
 
 /// Skip a question (user chooses not to answer)
 #[tauri::command]
+#[instrument(name = "skip_question", skip(state, window))]
 pub async fn skip_question(
     question_id: String,
     state: State<'_, AppState>,

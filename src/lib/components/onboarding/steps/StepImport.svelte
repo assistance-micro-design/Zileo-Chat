@@ -22,6 +22,7 @@
 	import { i18n } from '$lib/i18n';
 	import { Button } from '$lib/components/ui';
 	import { openUrl } from '@tauri-apps/plugin-opener';
+	import { isAllowedScheme } from '$lib/utils/url';
 
 	interface Props {
 		onNext: () => void;
@@ -32,7 +33,9 @@
 	const EXTERNAL_URL = 'https://assistancemicrodesign.net/';
 
 	async function openExternalLink(): Promise<void> {
-		await openUrl(EXTERNAL_URL);
+		if (isAllowedScheme(EXTERNAL_URL)) {
+			await openUrl(EXTERNAL_URL);
+		}
 	}
 
 	function handleSkip(): void {

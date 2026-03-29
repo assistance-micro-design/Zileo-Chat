@@ -21,7 +21,7 @@ use crate::{
 };
 use std::collections::HashMap;
 use tauri::State;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// Gets memory statistics for the settings dashboard.
 #[tauri::command]
@@ -139,17 +139,29 @@ pub async fn get_memory_token_stats(
         let memory_type = row
             .get("type")
             .and_then(|t| t.as_str())
-            .unwrap_or("unknown")
+            .unwrap_or_else(|| {
+                warn!(row = ?row, "Unexpected DB result: missing 'type' field");
+                "unknown"
+            })
             .to_string();
 
-        let count = row.get("count").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+        let count = row.get("count").and_then(|c| c.as_u64()).unwrap_or_else(|| {
+            warn!(row = ?row, "Unexpected DB result: missing or invalid 'count' field");
+            0
+        }) as usize;
 
-        let chars = row.get("total_chars").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+        let chars = row.get("total_chars").and_then(|c| c.as_u64()).unwrap_or_else(|| {
+            warn!(row = ?row, "Unexpected DB result: missing or invalid 'total_chars' field");
+            0
+        }) as usize;
 
         let with_embeddings = row
             .get("with_embeddings")
             .and_then(|c| c.as_u64())
-            .unwrap_or(0) as usize;
+            .unwrap_or_else(|| {
+                warn!(row = ?row, "Unexpected DB result: missing or invalid 'with_embeddings' field");
+                0
+            }) as usize;
 
         let avg_chars = if count > 0 { chars / count } else { 0 };
         let estimated_tokens = chars / 4; // Standard approximation
