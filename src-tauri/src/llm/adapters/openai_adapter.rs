@@ -151,7 +151,10 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
         response
             .pointer("/choices/0/message/content")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+            .map(|s| {
+                let (_, clean) = crate::llm::utils::parse_think_tags(s);
+                clean
+            })
     }
 
     fn has_tool_calls(&self, response: &Value) -> bool {
@@ -187,8 +190,6 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
             })
     }
 
-    // extract_usage: uses trait default from ProviderToolAdapter
-    // which extracts all fields including cache_write_tokens and thinking_tokens
 }
 
 #[cfg(test)]

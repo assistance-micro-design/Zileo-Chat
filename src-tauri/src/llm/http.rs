@@ -138,9 +138,10 @@ where
         where
             E: de::Error,
         {
+            let (thinking, clean) = crate::llm::utils::parse_think_tags(value);
             Ok(ParsedContent {
-                text: value.to_string(),
-                thinking: None,
+                text: clean,
+                thinking,
             })
         }
 
@@ -148,9 +149,10 @@ where
         where
             E: de::Error,
         {
+            let (thinking, clean) = crate::llm::utils::parse_think_tags(&value);
             Ok(ParsedContent {
-                text: value,
-                thinking: None,
+                text: clean,
+                thinking,
             })
         }
 
