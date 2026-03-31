@@ -545,6 +545,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0
+[0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
+[0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
+[0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
 [0.15.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.0
 [0.14.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.14.0
 [0.13.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.13.0
@@ -556,8 +561,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.9.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.2
 [0.9.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.1
 [0.9.0-beta]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.9.0-beta
-[0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
-[0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
-[0.15.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.15.1
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.18.0...HEAD
-[0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0

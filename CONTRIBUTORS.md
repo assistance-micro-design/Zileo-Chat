@@ -18,7 +18,7 @@ Thank you to all who contribute to Zileo-Chat-3!
 
 We welcome contributions! Please see:
 - [README.md](README.md) for project overview
-- [CLAUDE.md](CLAUDE.md) for development guidelines
+- [docs/](docs/) for development documentation
 
 ### Adding Yourself as a Contributor
 

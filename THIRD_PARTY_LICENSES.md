@@ -3,7 +3,7 @@
 This file lists all third-party dependencies used by Zileo Chat and their respective licenses,
 as required by the Apache License 2.0.
 
-Generated: 2025-12-11
+Generated: 2026-03-31
 
 ## Summary by License Type
 
@@ -36,33 +36,36 @@ Generated: 2025-12-11
 
 | Package | Version | License | Repository |
 |---------|---------|---------|------------|
-| @lucide/svelte | 0.560.0 | ISC | https://github.com/lucide-icons/lucide |
-| @tauri-apps/api | 2.9.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
-| @tauri-apps/plugin-dialog | 2.4.2 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
-| zod | 4.1.13 | MIT | https://github.com/colinhacks/zod |
+| @lucide/svelte | 0.563.1 | ISC | https://github.com/lucide-icons/lucide |
+| @tauri-apps/api | 2.10.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
+| @tauri-apps/plugin-dialog | 2.6.0 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
+| @tauri-apps/plugin-opener | 2.5.3 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
+| dompurify | 3.3.1 | Apache-2.0 OR MPL-2.0 | https://github.com/cure53/DOMPurify |
+| marked | 17.0.4 | MIT | https://github.com/markedjs/marked |
+| zod | 4.3.6 | MIT | https://github.com/colinhacks/zod |
 
 ### Dev Dependencies
 
 | Package | Version | License | Repository |
 |---------|---------|---------|------------|
 | @eslint/js | 9.39.1 | MIT | https://github.com/eslint/eslint |
-| @humanspeak/svelte-virtual-list | 0.3.6 | MIT | https://github.com/nickreese/svelte-virtual-list |
-| @playwright/test | 1.57.0 | Apache-2.0 | https://github.com/microsoft/playwright |
+| @playwright/test | 1.58.0 | Apache-2.0 | https://github.com/microsoft/playwright |
 | @sveltejs/adapter-static | 3.0.10 | MIT | https://github.com/sveltejs/kit |
-| @sveltejs/kit | 2.49.1 | MIT | https://github.com/sveltejs/kit |
-| @sveltejs/vite-plugin-svelte | 6.2.1 | MIT | https://github.com/sveltejs/vite-plugin-svelte |
-| @tauri-apps/cli | 2.9.5 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
-| @typescript-eslint/eslint-plugin | 8.48.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
-| @typescript-eslint/parser | 8.48.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
+| @sveltejs/kit | 2.53.4 | MIT | https://github.com/sveltejs/kit |
+| @sveltejs/vite-plugin-svelte | 6.2.4 | MIT | https://github.com/sveltejs/vite-plugin-svelte |
+| @tauri-apps/cli | 2.10.0 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
+| @types/dompurify | 3.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
+| @typescript-eslint/eslint-plugin | 8.53.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
+| @typescript-eslint/parser | 8.54.0 | MIT | https://github.com/typescript-eslint/typescript-eslint |
 | eslint | 9.39.1 | MIT | https://github.com/eslint/eslint |
-| eslint-plugin-svelte | 2.46.0 | MIT | https://github.com/sveltejs/eslint-plugin-svelte |
-| globals | 16.5.0 | MIT | https://github.com/sindresorhus/globals |
-| jsdom | 27.2.0 | MIT | https://github.com/jsdom/jsdom |
-| svelte | 5.45.6 | MIT | https://github.com/sveltejs/svelte |
-| svelte-check | 4.0.0 | MIT | https://github.com/sveltejs/language-tools |
+| eslint-plugin-svelte | 3.14.0 | MIT | https://github.com/sveltejs/eslint-plugin-svelte |
+| globals | 17.4.0 | MIT | https://github.com/sindresorhus/globals |
+| jsdom | 27.4.0 | MIT | https://github.com/jsdom/jsdom |
+| svelte | 5.53.6 | MIT | https://github.com/sveltejs/svelte |
+| svelte-check | 4.4.4 | MIT | https://github.com/sveltejs/language-tools |
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript |
-| typescript-eslint | 8.48.0 | MIT | https://github.com/typescript-eslint/typescript-eslint |
-| vite | 7.2.6 | MIT | https://github.com/vitejs/vite |
+| typescript-eslint | 8.53.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
+| vite | 7.3.1 | MIT | https://github.com/vitejs/vite |
 | vitest | 4.0.15 | MIT | https://github.com/vitest-dev/vitest |
 
 ### Transitive Dependencies (Notable)
@@ -87,41 +90,41 @@ Generated: 2025-12-11
 
 | Crate | Version | License | Repository |
 |-------|---------|---------|------------|
-| tauri | 2.9.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
-| tauri-plugin-opener | 2.5.2 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
-| tauri-plugin-dialog | 2.4.2 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
+| tauri | 2.10.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
+| tauri-plugin-opener | 2.5.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
+| tauri-plugin-dialog | 2.6.0 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
 | serde | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
-| serde_json | 1.0.145 | MIT OR Apache-2.0 | https://github.com/serde-rs/json |
-| tokio | 1.48.0 | MIT | https://github.com/tokio-rs/tokio |
-| surrealdb | 2.4.0 | BSL-1.1 | https://github.com/surrealdb/surrealdb |
-| anyhow | 1.0.100 | MIT OR Apache-2.0 | https://github.com/dtolnay/anyhow |
-| thiserror | 1.0.69 | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror |
-| tracing | 0.1.41 | MIT | https://github.com/tokio-rs/tracing |
-| tracing-subscriber | 0.3.20 | MIT | https://github.com/tokio-rs/tracing |
-| uuid | 1.18.1 | Apache-2.0 OR MIT | https://github.com/uuid-rs/uuid |
-| chrono | 0.4.42 | MIT OR Apache-2.0 | https://github.com/chronotope/chrono |
+| serde_json | 1.0.149 | MIT OR Apache-2.0 | https://github.com/serde-rs/json |
+| tokio | 1.50.0 | MIT | https://github.com/tokio-rs/tokio |
+| surrealdb | 2.6.4 | BSL-1.1 | https://github.com/surrealdb/surrealdb |
+| anyhow | 1.0.102 | MIT OR Apache-2.0 | https://github.com/dtolnay/anyhow |
+| thiserror | 2.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror |
+| tracing | 0.1.44 | MIT | https://github.com/tokio-rs/tracing |
+| tracing-subscriber | 0.3.23 | MIT | https://github.com/tokio-rs/tracing |
+| uuid | 1.22.0 | Apache-2.0 OR MIT | https://github.com/uuid-rs/uuid |
+| chrono | 0.4.44 | MIT OR Apache-2.0 | https://github.com/chronotope/chrono |
 | async-trait | 0.1.89 | MIT OR Apache-2.0 | https://github.com/dtolnay/async-trait |
-| futures | 0.3.31 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
-| regex | 1.12.2 | MIT OR Apache-2.0 | https://github.com/rust-lang/regex |
-| once_cell | 1.21.3 | MIT OR Apache-2.0 | https://github.com/matklad/once_cell |
-| tokio-util | 0.7.17 | MIT | https://github.com/tokio-rs/tokio |
-| rig-core | 0.30.0 | MIT | https://github.com/0xPlaygrounds/rig |
-| reqwest | 0.12.24 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest |
-| futures-util | 0.3.31 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
-| keyring | 2.3.3 | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs |
+| base64 | 0.22.1 | MIT OR Apache-2.0 | https://github.com/marshallpierce/rust-base64 |
+| regex | 1.12.3 | MIT OR Apache-2.0 | https://github.com/rust-lang/regex |
+| globset | 0.4.18 | Unlicense OR MIT | https://github.com/BurntSushi/ripgrep |
+| tokio-util | 0.7.18 | MIT | https://github.com/tokio-rs/tokio |
+| rig-core | 0.32.0 | MIT | https://github.com/0xPlaygrounds/rig |
+| reqwest | 0.12.28 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest |
+| futures-util | 0.3.32 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
+| keyring | 3.6.3 | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs |
 | aes-gcm | 0.10.3 | Apache-2.0 OR MIT | https://github.com/RustCrypto/AEADs |
 
 ### Build Dependencies
 
 | Crate | Version | License | Repository |
 |-------|---------|---------|------------|
-| tauri-build | 2.5.2 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
+| tauri-build | 2.5.6 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 
 ### Dev Dependencies
 
 | Crate | Version | License | Repository |
 |-------|---------|---------|------------|
-| tempfile | 3.23.0 | MIT OR Apache-2.0 | https://github.com/Stebalien/tempfile |
+| tempfile | 3.27.0 | MIT OR Apache-2.0 | https://github.com/Stebalien/tempfile |
 
 ### Transitive Dependencies by License
 
@@ -420,5 +423,5 @@ npm ls --all
 
 ---
 
-*Last updated: 2025-12-11*
-*Zileo Chat version: 0.9.0-beta*
+*Last updated: 2026-03-31*
+*Zileo Chat version: 0.18.0*

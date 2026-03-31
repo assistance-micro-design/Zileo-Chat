@@ -21,7 +21,7 @@ Before using Zileo Chat, please be aware of the following risks:
 | Risk | Description |
 |------|-------------|
 | **Data Loss** | Database schema may change between versions, potentially requiring data migration or reset |
-| **API Costs** | LLM API calls to Mistral AI incur costs based on token usage - monitor your usage |
+| **API Costs** | LLM API calls incur costs based on token usage - monitor your provider usage |
 | **Instability** | Features may be incomplete, contain bugs, or change without notice |
 | **Security** | While security measures are implemented, the software has not undergone formal security audit |
 | **Breaking Changes** | Updates may introduce breaking changes to configurations or workflows |
@@ -36,10 +36,13 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 
 ### Key Features
 
-- **Multi-Agent System** - Create and orchestrate multiple AI agents with specialized tools
-- **Real-time Streaming** - Token-by-token response display with usage metrics
-- **Tool Execution** - Memory, Todo, Calculator, and sub-agent delegation tools
-- **Human-in-the-Loop** - Approve critical operations before execution
+- **Multi-Agent System** - Create and orchestrate multiple AI agents with specialized tools and sub-agent delegation
+- **Real-time Streaming** - Token-by-token response display with usage metrics and prompt caching
+- **Tool Execution** - Memory, Todo, Calculator, FileManager, Skills, and sub-agent tools
+- **Human-in-the-Loop** - Approve critical operations before execution with risk-based validation
+- **Custom Providers** - Add any OpenAI-compatible LLM endpoint alongside built-in Mistral and Ollama
+- **Reasoning Effort** - Granular thinking control (low/medium/high) for supported models
+- **Background Workflows** - Run multiple workflows concurrently with progress tracking
 - **MCP Protocol** - Extend agents with Model Context Protocol servers
 - **Bilingual UI** - English and French interface
 
@@ -47,24 +50,31 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 
 ## Supported LLM Providers
 
-Zileo Chat currently supports two LLM providers:
+Zileo Chat supports built-in and custom LLM providers:
 
 | Provider | Type | Link |
 |----------|------|------|
-| **Mistral AI** | Cloud API | [https://mistral.ai](https://mistral.ai) |
-| **Ollama** | Local | [https://ollama.com](https://ollama.com) |
+| **Mistral AI** | Cloud API (built-in) | [https://mistral.ai](https://mistral.ai) |
+| **Ollama** | Local / Cloud (built-in) | [https://ollama.com](https://ollama.com) |
+| **Custom Providers** | OpenAI-compatible API | Any OpenAI-compatible endpoint |
 
 ### Mistral AI (Cloud)
 
 - Requires API key from [console.mistral.ai](https://console.mistral.ai)
-- Supports all Mistral models (Mistral Large, Codestral, etc.)
+- Supports all Mistral models (Mistral Large, Codestral, Magistral, etc.)
 - Pay-per-use pricing based on token consumption
 
-### Ollama (Local)
+### Ollama (Local / Cloud)
 
-- Free and runs locally on your machine or cloud locally
+- Free and runs locally on your machine or via cloud endpoints
 - Requires [Ollama](https://ollama.com/download) installed and running
-- Supports open-source models (Llama, Mistral, CodeLlama, etc.)
+- Supports open-source models (Llama, Mistral, Qwen, Kimi, etc.)
+
+### Custom Providers (OpenAI-compatible)
+
+- Add any OpenAI-compatible API endpoint (OpenRouter, Together AI, vLLM, LM Studio, etc.)
+- Full streaming, tool calling, and reasoning support
+- Configure via Settings > Providers
 
 ---
 
@@ -75,7 +85,7 @@ Zileo Chat currently supports two LLM providers:
 | Dependency | Purpose | Installation |
 |------------|---------|--------------|
 | **Docker Desktop** | MCP servers execution | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
-| **Mistral API Key** | Cloud LLM provider | [console.mistral.ai](https://console.mistral.ai) |
+| **At least one LLM provider** | AI model access | See [Supported LLM Providers](#supported-llm-providers) |
 
 > **Mistral API vs Le Chat Pro**: The [Le Chat subscription](https://mistral.ai/pricing) ($14.99/month) is for the web chat interface only. Zileo Chat requires a **separate API key** from [La Plateforme](https://docs.mistral.ai/deployment/laplateforme/pricing/) with pay-per-token billing.
 
@@ -138,10 +148,10 @@ npm run tauri:build
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | SvelteKit 2.49 + Svelte 5 |
-| Backend | Rust + Tauri 2.9 |
-| Database | SurrealDB 2.4 (embedded) |
-| LLM | Rig.rs 0.30 |
+| Frontend | SvelteKit 2.53 + Svelte 5.53 |
+| Backend | Rust + Tauri 2.10 |
+| Database | SurrealDB 2.6 (embedded) |
+| LLM | Rig.rs 0.32 + direct HTTP |
 
 ---
 
@@ -152,8 +162,8 @@ Full documentation is available in the [`docs/`](docs/) directory:
 - [Getting Started](docs/GETTING_STARTED.md)
 - [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md)
 - [Database Schema](docs/DATABASE_SCHEMA.md)
-- [MCP Configuration](docs/MCP_CONFIGURATION_GUIDE.md)
-- [Tools Reference](docs/TOOLS_REFERENCE.md)
+- [Agent Tools Documentation](docs/AGENT_TOOLS_DOCUMENTATION.md)
+- [API Reference](docs/API_REFERENCE.md)
 
 ---
 
@@ -180,7 +190,7 @@ This project is licensed under the **Apache License 2.0**. See [LICENSE](LICENSE
 Third-party licenses are documented in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ```
-Copyright 2025 Assistance Micro Design
+Copyright 2025-2026 Assistance Micro Design
 Licensed under the Apache License, Version 2.0
 ```
 
@@ -190,7 +200,7 @@ Licensed under the Apache License, Version 2.0
 
 - Built with [Claude Code](https://claude.ai/code) by [Anthropic](https://anthropic.com)
 - Powered by [Tauri](https://tauri.app), [SvelteKit](https://kit.svelte.dev), [SurrealDB](https://surrealdb.com)
-- LLM integration via [Rig.rs](https://github.com/0xPlaygrounds/rig)
+- LLM integration via [Rig.rs](https://github.com/0xPlaygrounds/rig) + direct HTTP
 
 ---
 

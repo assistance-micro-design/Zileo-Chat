@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.9.x   | ✅ |
-| < 0.9   | ❌ |
+| 0.15.x - 0.18.x | ✅ |
+| < 0.15  | ❌ |
 
 ## Reporting a Vulnerability
 
@@ -39,7 +39,8 @@ Security issues in Zileo Chat code:
 | **Human-in-the-Loop Bypass** | Validation system bypasses, unauthorized tool execution |
 | **Import/Export** | Malicious JSON payloads, path traversal, data injection |
 | **Database Queries** | SQL injection in SurrealDB queries |
-| **Tool Execution** | Memory, Todo, SubAgent tools - unauthorized actions |
+| **Tool Execution** | Memory, Todo, SubAgent, FileManager tools - unauthorized actions |
+| **FileManager Sandbox** | Sandbox escape, path traversal, symlink attacks |
 | **IPC Commands** | Tauri command parameter manipulation |
 
 ### Out of Scope
@@ -48,7 +49,7 @@ Report these to the respective maintainers:
 
 | Area | Report To |
 |------|-----------|
-| LLM Provider APIs (Mistral, Ollama) | Provider's security team |
+| LLM Provider APIs (Mistral, Ollama, Custom) | Provider's security team |
 | MCP Server code (third-party) | Server maintainer |
 | Tauri framework | [Tauri Security](https://github.com/tauri-apps/tauri/security) |
 | SurrealDB engine | [SurrealDB Security](https://github.com/surrealdb/surrealdb/security) |
