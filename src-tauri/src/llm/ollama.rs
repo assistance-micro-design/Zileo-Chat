@@ -31,7 +31,11 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 ///
 /// Includes `num_ctx` only when `context_window` is provided, otherwise
 /// lets Ollama use its default context size.
-fn build_options(temperature: f64, max_tokens: usize, context_window: Option<usize>) -> serde_json::Value {
+fn build_options(
+    temperature: f64,
+    max_tokens: usize,
+    context_window: Option<usize>,
+) -> serde_json::Value {
     let mut options = serde_json::json!({
         "temperature": temperature,
         "num_predict": max_tokens

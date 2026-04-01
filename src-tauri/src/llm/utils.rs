@@ -60,13 +60,9 @@ pub fn parse_think_tags(content: &str) -> (Option<String>, String) {
             let end = start + 7 + rel_end;
             let thinking_raw = &content[start + 7..end];
             let thinking = thinking_raw.trim().to_string();
-            let clean = format!(
-                "{}{}",
-                &content[..start],
-                &content[end + 8..]
-            )
-            .trim()
-            .to_string();
+            let clean = format!("{}{}", &content[..start], &content[end + 8..])
+                .trim()
+                .to_string();
             if thinking.is_empty() {
                 return (None, clean);
             }

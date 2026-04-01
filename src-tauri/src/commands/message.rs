@@ -562,8 +562,11 @@ pub async fn load_message_blocks(
     }
 
     // Merge into unified ChatBlocks sorted by sequence
-    let blocks =
-        merge_into_chat_blocks(&all_tool_executions, &all_thinking_steps, &sub_agent_executions);
+    let blocks = merge_into_chat_blocks(
+        &all_tool_executions,
+        &all_thinking_steps,
+        &sub_agent_executions,
+    );
 
     info!(
         tool_count = all_tool_executions.len(),

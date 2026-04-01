@@ -131,4 +131,3 @@ pub async fn clear_workflow_sub_agent_executions(
     info!(count = count, "Workflow sub-agent executions cleared");
     Ok(count)
 }
-

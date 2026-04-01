@@ -189,7 +189,6 @@ impl ProviderToolAdapter for OpenAiToolAdapter {
                 })
             })
     }
-
 }
 
 #[cfg(test)]
