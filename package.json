@@ -59,7 +59,7 @@
     "vitest": "^4.0.15"
   },
   "dependencies": {
-    "@lucide/svelte": "^0.563.1",
+    "@lucide/svelte": "^1.7.0",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
