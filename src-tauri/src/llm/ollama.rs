@@ -393,15 +393,10 @@ impl LLMProvider for OllamaProvider {
             .send()
             .await
             .map_err(|e| {
-                let err_str = e.to_string();
-                if err_str.contains("connection") || err_str.contains("refused") {
-                    LLMError::ConnectionError(format!(
-                        "Cannot connect to Ollama server. Make sure Ollama is running: {}",
-                        err_str
-                    ))
-                } else {
-                    LLMError::RequestFailed(err_str)
-                }
+                LLMError::ConnectionError(format!(
+                    "Cannot connect to Ollama server at {}: {}",
+                    server_url, e
+                ))
             })?;
 
         let status = response.status();
