@@ -84,3 +84,17 @@ jobs:
       - name: Test
         working-directory: src-tauri
         run: cargo test
+
+  backend:
+    needs: [backend-fmt, backend-clippy, backend-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check backend results
+        run: |
+          if [ "${{ needs.backend-fmt.result }}" != "success" ] || \
+             [ "${{ needs.backend-clippy.result }}" != "success" ] || \
+             [ "${{ needs.backend-test.result }}" != "success" ]; then
+            echo "One or more backend jobs failed"
+            exit 1
+          fi
