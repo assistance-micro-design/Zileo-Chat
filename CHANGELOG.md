@@ -5,6 +5,36 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-03-31
+
+### Changed
+
+- **Massive code quality refactoring**: 332 files, +32k/-45k lines across 38 commits
+  - Split monolithic Rust modules into modular architecture: `llm_agent.rs`, `file_manager/tool.rs`, `sub_agent_executor.rs`, `memory/tool.rs`, `commands/agent.rs`, LLM providers, MCP, Tools, Commands scopes
+  - Dead code removal: models (-702 lines), security/state (-316 lines), test-only methods moved to `#[cfg(test)]`
+  - Senior review fixes across all layers: components, stores, services, utils, routes, types, CSS
+- **ToolDefinition summary/description split**: `summary` for system prompt (1-line), `description` for API tools parameter (structured). Reduces system prompt token usage (-191 lines)
+- **Parallel startup**: `tokio::join!` for MCP + providers + embedding init, `join_all` for MCP server connections
+- **ChatInput**: `oncancel` prop + integrated stop button (removed ChatContainer wrapper)
+- **FloatingMenu**: Direct `$theme` store access, removed `$state`+`subscribe` pattern
+
+### Added
+
+- **Import/Export v1.1**: Skills + custom providers + agent fields + cross-dependency validation + i18n warnings
+- **Task Bridge**: TodoTool primary/sub-agent scoping + `task_ids` in DelegateTask/ParallelTasks
+- **Sub-agent message correlation**: `parent_message_id`, `load_message_blocks` backend integration
+- **StreamChunk enrichment**: `tool_type`/`server_name` for MCP tool identification in blocks
+- **Custom provider thinking extraction**: 6 formats (reasoning, reasoning_content, reasoning_details[], message.thinking, `<think>` tags, content blocks array)
+
+### Fixed
+
+- **Ollama provider**: Removed rig dependency, direct HTTP, real token counts, `tool_call_id` correlation
+- **Sub-agent model config**: Resolution from DB on provider/model override
+- **Thinking step sequence**: Fixed duplicate emission in tool loop
+- **SubAgentBlock dedup**: Via `_sub_agent_id` in execution-blocks.ts
+
+---
+
 ## [0.18.0] - 2026-03-22
 
 ### Added
@@ -545,7 +575,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.0
 [0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0
 [0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
 [0.16.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.16.0
