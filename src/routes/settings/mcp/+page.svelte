@@ -20,26 +20,16 @@ Manages MCP server configuration.
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import MCPSection from '$lib/components/settings/MCPSection.svelte';
-
-	/** Component reference for reload capability */
-	let mcpSectionRef: MCPSection;
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
 	/**
-	 * Handle cross-page refresh events (from import/export)
+	 * Component reference for the reload fallback (MCPSection owns local
+	 * state that is not exposed via a store, so we call ref.reload() here).
 	 */
-	function handleSettingsRefresh(): void {
-		mcpSectionRef?.reload();
-	}
+	let mcpSectionRef: MCPSection;
 
-	onMount(() => {
-		// Only add event listeners in browser context (onMount only runs client-side)
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
-	});
+	onSettingsRefresh(() => mcpSectionRef?.reload());
 </script>
 
 <MCPSection bind:this={mcpSectionRef} />

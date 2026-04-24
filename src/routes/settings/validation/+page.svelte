@@ -20,31 +20,21 @@ Manages validation settings configuration.
 -->
 
 <script lang="ts">
-	import { HelpButton } from '$lib/components/ui';
 	import { ValidationSettings } from '$lib/components/settings/validation';
-	import { i18n } from '$lib/i18n';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
+	import { validationSettingsStore } from '$lib/stores/validation-settings';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
+
+	onSettingsRefresh(() => validationSettingsStore.loadSettings());
 </script>
 
 <section class="settings-section">
-	<div class="section-title-row">
-		<h2 class="section-title">{$i18n('settings_validation')}</h2>
-		<HelpButton
-			titleKey="help_validation_title"
-			descriptionKey="help_validation_description"
-			tutorialKey="help_validation_tutorial"
-		/>
-	</div>
-	<p class="section-description">
-		{$i18n('validation_description')}
-	</p>
+	<SettingsSectionHeader
+		titleKey="settings_validation"
+		descriptionKey="validation_description"
+		helpTitleKey="help_validation_title"
+		helpDescriptionKey="help_validation_description"
+		helpTutorialKey="help_validation_tutorial"
+	/>
 	<ValidationSettings />
 </section>
-
-<style>
-	.section-description {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-		margin-bottom: var(--spacing-lg);
-		line-height: var(--line-height-relaxed);
-	}
-</style>

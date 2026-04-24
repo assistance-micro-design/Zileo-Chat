@@ -19,10 +19,11 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 SettingsSectionHeader - Reusable header for settings sections.
-Extracted from AgentSettings and PromptSettings.
+Three action variants: default create button, custom `actions` snippet, or no action.
 -->
 
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { Button, HelpButton } from '$lib/components/ui';
 	import { Plus } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -30,18 +31,20 @@ Extracted from AgentSettings and PromptSettings.
 	interface Props {
 		/** i18n key for the section title */
 		titleKey: string;
-		/** i18n key for the section description */
-		descriptionKey: string;
+		/** i18n key for the section description (optional, hidden when omitted) */
+		descriptionKey?: string;
 		/** i18n key for help button title */
 		helpTitleKey: string;
 		/** i18n key for help button description */
 		helpDescriptionKey: string;
 		/** i18n key for help button tutorial */
 		helpTutorialKey: string;
-		/** i18n key for create button label */
-		createLabelKey: string;
-		/** Callback when create button is clicked */
-		onCreate: () => void;
+		/** i18n key for create button label (used with onCreate) */
+		createLabelKey?: string;
+		/** Callback when create button is clicked (renders the default create button) */
+		onCreate?: () => void;
+		/** Custom action snippet rendered in place of the default create button */
+		actions?: Snippet;
 	}
 
 	let {
@@ -51,7 +54,8 @@ Extracted from AgentSettings and PromptSettings.
 		helpDescriptionKey,
 		helpTutorialKey,
 		createLabelKey,
-		onCreate
+		onCreate,
+		actions
 	}: Props = $props();
 </script>
 
@@ -65,14 +69,22 @@ Extracted from AgentSettings and PromptSettings.
 				tutorialKey={helpTutorialKey}
 			/>
 		</div>
-		<p class="header-description">
-			{$i18n(descriptionKey)}
-		</p>
+		{#if descriptionKey}
+			<p class="header-description">
+				{$i18n(descriptionKey)}
+			</p>
+		{/if}
 	</div>
-	<Button variant="primary" size="sm" onclick={onCreate}>
-		<Plus size={16} />
-		<span>{$i18n(createLabelKey)}</span>
-	</Button>
+	{#if actions}
+		<div class="header-actions">
+			{@render actions()}
+		</div>
+	{:else if onCreate && createLabelKey}
+		<Button variant="primary" size="sm" onclick={onCreate}>
+			<Plus size={16} />
+			<span>{$i18n(createLabelKey)}</span>
+		</Button>
+	{/if}
 </header>
 
 <style>
@@ -103,6 +115,12 @@ Extracted from AgentSettings and PromptSettings.
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		margin: 0;
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
 	}
 
 	.settings-header :global(button) {

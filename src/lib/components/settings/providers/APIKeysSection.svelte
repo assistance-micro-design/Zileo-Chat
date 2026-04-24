@@ -25,6 +25,12 @@ Manages API key configuration modal for LLM providers.
 	import { Button, Input, Modal, StatusIndicator, DeleteConfirmModal } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { toastStore } from '$lib/stores/toast';
+	import type { ToastType } from '$types/background-workflow';
+
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+	}
 
 	/** Props */
 	interface Props {
@@ -54,7 +60,6 @@ Manages API key configuration modal for LLM providers.
 	/** Form state */
 	let apiKey = $state('');
 	let saving = $state(false);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
 	/** Save confirmation state */
 	let showSaveConfirm = $state(false);
@@ -70,7 +75,6 @@ Manages API key configuration modal for LLM providers.
 	$effect(() => {
 		if (open) {
 			apiKey = '';
-			message = null;
 		}
 	});
 
@@ -79,7 +83,7 @@ Manages API key configuration modal for LLM providers.
 	 */
 	function handleSaveApiKeyRequest(): void {
 		if (!apiKey.trim()) {
-			message = { type: 'error', text: $i18n('settings_api_key_empty') };
+			notify('error', $i18n('settings_api_key_empty'));
 			return;
 		}
 		showSaveConfirm = true;
@@ -90,7 +94,6 @@ Manages API key configuration modal for LLM providers.
 	 */
 	async function confirmSaveApiKey(): Promise<void> {
 		saveConfirming = true;
-		message = null;
 
 		try {
 			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -100,11 +103,11 @@ Manages API key configuration modal for LLM providers.
 			});
 			apiKey = '';
 			onReload();
-			message = { type: 'success', text: $i18n('settings_api_key_saved') };
+			notify('success', $i18n('settings_api_key_saved'));
 			showSaveConfirm = false;
 			onclose();
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_api_key_save_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_api_key_save_failed', { error: getErrorMessage(err) }));
 		} finally {
 			saveConfirming = false;
 		}
@@ -129,16 +132,15 @@ Manages API key configuration modal for LLM providers.
 	 */
 	async function confirmDeleteApiKey(): Promise<void> {
 		deleteConfirming = true;
-		message = null;
 
 		try {
 			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 			await invoke('delete_api_key', { provider: providerName });
 			onReload();
-			message = { type: 'success', text: $i18n('settings_api_key_deleted') };
+			notify('success', $i18n('settings_api_key_deleted'));
 			showDeleteConfirm = false;
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_api_key_delete_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_api_key_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
 			deleteConfirming = false;
 		}
@@ -196,12 +198,6 @@ Manages API key configuration modal for LLM providers.
 						<span class="status-text">{$i18n('api_key_configured')}</span>
 					</div>
 				{/if}
-			{/if}
-
-			{#if message}
-				<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-					{message.text}
-				</div>
 			{/if}
 		</div>
 	{/snippet}
@@ -292,21 +288,5 @@ Manages API key configuration modal for LLM providers.
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
-	}
-
-	.message-toast {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-	}
-
-	.message-toast.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message-toast.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
 	}
 </style>

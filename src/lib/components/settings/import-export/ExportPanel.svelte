@@ -82,7 +82,6 @@ Multi-step process: entity selection, options, preview, and export.
 	let loading = $state(false);
 	let exporting = $state(false);
 	let error = $state<string | null>(null);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
 	/** Computed selection */
 	const selection = $derived<ExportSelection>({
@@ -194,8 +193,6 @@ Multi-step process: entity selection, options, preview, and export.
 				sanitization: sanitizeMcp ? filteredSanitization : {}
 			});
 
-			// Parse result to get metadata
-			const exportPackage = JSON.parse(exportData);
 			const defaultFilename = `zileo-export-${new Date().toISOString().slice(0, 10)}.json`;
 
 			// Show native save dialog
@@ -222,28 +219,10 @@ Multi-step process: entity selection, options, preview, and export.
 				content: exportData
 			});
 
-			const totalCount =
-				exportPackage.manifest.counts.agents +
-				exportPackage.manifest.counts.mcpServers +
-				exportPackage.manifest.counts.models +
-				exportPackage.manifest.counts.prompts +
-				(exportPackage.manifest.counts.skills || 0) +
-				(exportPackage.manifest.counts.customProviders || 0);
-
-			// Extract filename from path for display
-			const savedFilename = filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
-
-			message = {
-				type: 'success',
-				text: $i18n('ie_exported_items').replace('{count}', String(totalCount)).replace('{filename}', savedFilename)
-			};
 			onexport?.(true);
-
-			// Reset state
 			resetWizard();
 		} catch (err) {
 			error = `${$i18n('ie_export_failed')}: ${getErrorMessage(err)}`;
-			message = { type: 'error', text: `${$i18n('ie_export_failed')}: ${getErrorMessage(err)}` };
 			onexport?.(false);
 		} finally {
 			exporting = false;
@@ -324,12 +303,6 @@ Multi-step process: entity selection, options, preview, and export.
 			</Badge>
 		</div>
 	</div>
-
-	{#if message}
-		<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-			{message.text}
-		</div>
-	{/if}
 
 	{#if error}
 		<div class="error-message">
@@ -521,22 +494,6 @@ Multi-step process: entity selection, options, preview, and export.
 	.step-arrow {
 		color: var(--color-text-tertiary);
 		font-size: var(--font-size-sm);
-	}
-
-	.message {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-	}
-
-	.message.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
 	}
 
 	.error-message {

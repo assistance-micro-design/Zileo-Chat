@@ -34,6 +34,7 @@
 	import { i18n } from '$lib/i18n';
 	import { X } from '@lucide/svelte';
 	import type { Snippet } from 'svelte';
+	import { focusTrap } from '$lib/actions/focusTrap';
 
 	/**
 	 * Modal props
@@ -76,7 +77,7 @@
 
 {#if open}
 	<div class="modal-backdrop" role="presentation" onclick={handleBackdropClick} onkeydown={handleKeydown}>
-		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1" {@attach focusTrap}>
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{title}</h3>
 				<button type="button" class="btn btn-ghost btn-icon" onclick={onclose} aria-label={$i18n('ui_modal_close')}>

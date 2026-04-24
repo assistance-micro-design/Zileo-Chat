@@ -76,15 +76,16 @@
 	}
 
 	/**
-	 * Handle keyboard events
+	 * Handle keyboard events.
+	 * Ctrl/Cmd+K opens the prompt library without colliding with the browser's
+	 * Ctrl+P (print) shortcut that the previous binding shadowed.
 	 */
 	function handleKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
 			event.preventDefault();
 			handleSend();
 		}
-		// Open prompt selector with Ctrl+P
-		if (event.key === 'p' && (event.ctrlKey || event.metaKey)) {
+		if (event.key === 'k' && (event.ctrlKey || event.metaKey)) {
 			event.preventDefault();
 			showPromptSelector = true;
 		}
@@ -163,7 +164,9 @@
 			{/if}
 		</button>
 	{/if}
-	<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
+	{#if value.trim()}
+		<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
+	{/if}
 </div>
 
 <PromptSelectorModal

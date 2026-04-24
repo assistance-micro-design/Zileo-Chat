@@ -21,9 +21,11 @@ Manages memory configuration and memory list with lazy loading.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Card, StatusIndicator, HelpButton } from '$lib/components/ui';
+	import { Card, StatusIndicator } from '$lib/components/ui';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
 	/** Lazy loaded components */
 	type LazyMemorySettings = typeof import('$lib/components/settings/memory/MemorySettings.svelte').default;
@@ -33,15 +35,10 @@ Manages memory configuration and memory list with lazy loading.
 	let MemoryListComponent = $state<LazyMemoryList | null>(null);
 	let loadError = $state<string | null>(null);
 
-	/** Reference for MemorySettings to refresh stats */
-	let memorySettingsRef = $state<{ refreshStats: () => Promise<void> } | undefined>(undefined);
+	/** Reference for MemorySettings to reload stats after mutations. */
+	let memorySettingsRef = $state<{ reload: () => Promise<void> } | undefined>(undefined);
 
-	/**
-	 * Handle cross-page refresh events (from import/export)
-	 */
-	function handleSettingsRefresh(): void {
-		memorySettingsRef?.refreshStats();
-	}
+	onSettingsRefresh(() => memorySettingsRef?.reload());
 
 	onMount(() => {
 		Promise.all([
@@ -55,23 +52,16 @@ Manages memory configuration and memory list with lazy loading.
 			.catch((err: unknown) => {
 				loadError = getErrorMessage(err);
 			});
-
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
 	});
 </script>
 
 <section class="settings-section">
-	<div class="section-title-row">
-		<h2 class="section-title">{$i18n('settings_memory')}</h2>
-		<HelpButton
-			titleKey="help_memory_title"
-			descriptionKey="help_memory_description"
-			tutorialKey="help_memory_tutorial"
-		/>
-	</div>
+	<SettingsSectionHeader
+		titleKey="settings_memory"
+		helpTitleKey="help_memory_title"
+		helpDescriptionKey="help_memory_description"
+		helpTutorialKey="help_memory_tutorial"
+	/>
 
 	{#if MemorySettingsComponent && MemoryListComponent}
 		<div class="memory-subsections">
@@ -84,7 +74,7 @@ Manages memory configuration and memory list with lazy loading.
 			<!-- Memory Management -->
 			<div class="memory-subsection">
 				<h3 class="subsection-title">{$i18n('memory_management')}</h3>
-				<MemoryListComponent onchange={() => memorySettingsRef?.refreshStats()} />
+				<MemoryListComponent onchange={() => memorySettingsRef?.reload()} />
 			</div>
 		</div>
 	{:else if loadError}

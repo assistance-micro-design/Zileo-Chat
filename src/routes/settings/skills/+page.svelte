@@ -20,23 +20,11 @@ Manages skill library configuration.
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { SkillSettings } from '$lib/components/settings/skills';
 	import { skillStore } from '$lib/stores/skills';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
-	/**
-	 * Handle cross-page refresh events (from import/export)
-	 */
-	function handleSettingsRefresh(): void {
-		skillStore.loadSkills();
-	}
-
-	onMount(() => {
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
-	});
+	onSettingsRefresh(() => skillStore.loadSkills());
 </script>
 
 <section class="settings-section">

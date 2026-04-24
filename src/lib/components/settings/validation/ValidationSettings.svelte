@@ -36,6 +36,8 @@
     isSaving
   } from '$lib/stores/validation-settings';
   import { loadServers } from '$lib/stores/mcp';
+  import { toastStore } from '$lib/stores/toast';
+  import type { ToastType } from '$types/background-workflow';
   import ValidationInfoCard from './ValidationInfoCard.svelte';
   import type {
     ValidationMode,
@@ -43,6 +45,10 @@
     AvailableToolInfo
   } from '$types/validation';
   import type { MCPServer } from '$types/mcp';
+
+  function notify(type: ToastType, text: string): void {
+    toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+  }
 
   // Local form state (copied from store on load)
   let localMode = $state<ValidationMode>('selective');
@@ -61,7 +67,6 @@
 
   // UI state
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
   let hasChanges = $state(false);
 
   // Mode options for card selector (using translation keys)
@@ -134,7 +139,6 @@
   // Track changes
   function markChanged(): void {
     hasChanges = true;
-    successMessage = null;
   }
 
   // Handle mode selection
@@ -146,7 +150,6 @@
   // Handle save
   async function handleSave(): Promise<void> {
     errorMessage = null;
-    successMessage = null;
     try {
       const updateRequest: UpdateValidationSettingsRequest = {
         mode: localMode,
@@ -160,11 +163,8 @@
         riskThresholds: localRiskThresholds
       };
       await validationSettingsStore.updateSettings(updateRequest);
-      successMessage = $i18n('validation_saved');
+      notify('success', $i18n('validation_saved'));
       hasChanges = false;
-      setTimeout(() => {
-        successMessage = null;
-      }, 3000);
     } catch (err) {
       errorMessage = $i18n('validation_save_failed').replace('{error}', getErrorMessage(err));
     }
@@ -173,14 +173,10 @@
   // Handle reset to defaults
   async function handleReset(): Promise<void> {
     errorMessage = null;
-    successMessage = null;
     try {
       await validationSettingsStore.resetToDefaults();
-      successMessage = $i18n('validation_reset_success');
+      notify('success', $i18n('validation_reset_success'));
       hasChanges = false;
-      setTimeout(() => {
-        successMessage = null;
-      }, 3000);
     } catch (err) {
       errorMessage = $i18n('validation_reset_failed').replace('{error}', getErrorMessage(err));
     }
@@ -375,13 +371,6 @@
         </label>
       </div>
     </div>
-
-    <!-- Success Message -->
-    {#if successMessage}
-      <div class="message success">
-        {successMessage}
-      </div>
-    {/if}
 
     <!-- Actions -->
     <div class="settings-actions">
@@ -670,16 +659,6 @@
     font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
     font-style: italic;
-  }
-
-  /* Success Message */
-  .message.success {
-    padding: var(--spacing-md);
-    border-radius: var(--border-radius-md);
-    font-size: var(--font-size-sm);
-    background: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
-    border: 1px solid var(--color-success);
   }
 
   /* Actions */

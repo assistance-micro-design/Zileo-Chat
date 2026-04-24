@@ -24,12 +24,13 @@
 	import { Input, Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import { createCustomProvider } from '$lib/stores/llm';
+	import type { ProviderInfo } from '$types/custom-provider';
 	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
-		/** Called when provider is created successfully, with optional warning */
-		oncreated: (warning?: string) => void;
+		/** Called when provider is created, receives the new provider entity and optional warning */
+		oncreated: (provider: ProviderInfo, warning?: string) => void;
 		/** Called when form is cancelled */
 		oncancel: () => void;
 	}
@@ -68,7 +69,7 @@
 
 		try {
 			const response = await createCustomProvider(name, displayName.trim(), baseUrl.trim(), apiKey.trim());
-			oncreated(response.warning);
+			oncreated(response.provider, response.warning);
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {

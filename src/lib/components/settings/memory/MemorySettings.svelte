@@ -127,7 +127,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	/**
 	 * Refreshes only the memory statistics (called when memories change)
 	 */
-	export async function refreshStats(): Promise<void> {
+	export async function reload(): Promise<void> {
 		try {
 			const [loadedStats, loadedTokenStats] = await Promise.all([
 				invoke<MemoryStats>('get_memory_stats'),

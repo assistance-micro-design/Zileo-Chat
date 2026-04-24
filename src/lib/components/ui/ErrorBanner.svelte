@@ -18,26 +18,30 @@
 Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
-ErrorBanner - Reusable error display banner with dismiss button.
-Extracted from AgentSettings and PromptSettings.
+ErrorBanner - Reusable persistent banner for blocking feedback that must stay
+in view until acknowledged. Two variants are supported: `error` (default) for
+blocking failures and `warning` for recoverable issues that require attention.
+For transient action feedback (success/error after CRUD), use the toast store.
 -->
 
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
 
 	interface Props {
-		/** Error message to display */
+		/** Message to display */
 		message: string;
 		/** Callback when dismiss button is clicked */
 		onDismiss: () => void;
+		/** Visual variant: error (default) for blocking issues, warning for advisories */
+		variant?: 'error' | 'warning';
 		/** Optional dismiss button label (defaults to common_close) */
 		dismissLabel?: string;
 	}
 
-	let { message, onDismiss, dismissLabel }: Props = $props();
+	let { message, onDismiss, variant = 'error', dismissLabel }: Props = $props();
 </script>
 
-<div class="error-banner" role="alert">
+<div class="error-banner {variant}" role="alert">
 	<span class="error-text">{message}</span>
 	<button type="button" class="dismiss-btn" onclick={onDismiss}>
 		{dismissLabel ?? $i18n('common_close')}
@@ -50,9 +54,17 @@ Extracted from AgentSettings and PromptSettings.
 		justify-content: space-between;
 		align-items: center;
 		padding: var(--spacing-md);
+		border-radius: var(--border-radius-md);
+	}
+
+	.error-banner.error {
 		background: var(--color-error-light);
 		color: var(--color-error);
-		border-radius: var(--border-radius-md);
+	}
+
+	.error-banner.warning {
+		background: var(--color-warning-light);
+		color: var(--color-warning);
 	}
 
 	.error-text {
@@ -62,12 +74,12 @@ Extracted from AgentSettings and PromptSettings.
 	.dismiss-btn {
 		background: transparent;
 		border: none;
-		color: var(--color-error);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--border-radius-sm);
+		color: inherit;
 	}
 
 	.dismiss-btn:hover {

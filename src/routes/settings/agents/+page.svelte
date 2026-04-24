@@ -24,21 +24,24 @@ Manages agent configuration with lazy loading.
 	import { Card, StatusIndicator } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
 	/** Lazy loaded AgentSettings component */
 	type LazyAgentSettings = typeof import('$lib/components/settings/agents/AgentSettings.svelte').default;
 	let AgentSettingsComponent = $state<LazyAgentSettings | null>(null);
 	let loadError = $state<string | null>(null);
 
-	/** Refresh trigger for AgentSettings */
+	/**
+	 * Refresh trigger for AgentSettings.
+	 * The agent subtree loads its data through the reactive store exposed by
+	 * AgentSettings itself; bumping this counter re-runs its internal $effect
+	 * to reload without needing a component ref exposed to this route.
+	 */
 	let agentRefreshKey = $state(0);
 
-	/**
-	 * Handle cross-page refresh events (from import/export)
-	 */
-	function handleSettingsRefresh(): void {
+	onSettingsRefresh(() => {
 		agentRefreshKey++;
-	}
+	});
 
 	onMount(() => {
 		import('$lib/components/settings/agents/AgentSettings.svelte')
@@ -48,11 +51,6 @@ Manages agent configuration with lazy loading.
 			.catch((err: unknown) => {
 				loadError = getErrorMessage(err);
 			});
-
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
 	});
 </script>
 

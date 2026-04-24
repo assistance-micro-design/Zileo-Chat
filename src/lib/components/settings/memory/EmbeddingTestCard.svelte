@@ -28,6 +28,8 @@ Extracted from MemorySettings.svelte.
 	import type { EmbeddingTestResult } from '$types/embedding';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { toastStore } from '$lib/stores/toast';
+	import type { ToastType } from '$types/background-workflow';
 
 	interface Props {
 		/** Whether a config exists (required to test) */
@@ -40,30 +42,32 @@ Extracted from MemorySettings.svelte.
 	let testText = $state('');
 	let testingEmbedding = $state(false);
 	let testResult = $state<EmbeddingTestResult | null>(null);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
+
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+	}
 
 	/**
 	 * Tests embedding generation with sample text
 	 */
 	async function handleTestEmbedding(): Promise<void> {
 		if (!testText.trim()) {
-			message = { type: 'error', text: t('memory_enter_test_text') };
+			notify('error', t('memory_enter_test_text'));
 			return;
 		}
 
 		testingEmbedding = true;
 		testResult = null;
-		message = null;
 
 		try {
 			testResult = await invoke<EmbeddingTestResult>('test_embedding', { text: testText });
 			if (testResult.success) {
-				message = { type: 'success', text: t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms)) };
+				notify('success', t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms)));
 			} else {
-				message = { type: 'error', text: testResult.error || t('common_error') };
+				notify('error', testResult.error || t('common_error'));
 			}
 		} catch (err) {
-			message = { type: 'error', text: t('memory_test_failed').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_test_failed').replace('{error}', getErrorMessage(err)));
 		} finally {
 			testingEmbedding = false;
 		}
@@ -131,12 +135,6 @@ Extracted from MemorySettings.svelte.
 					{:else}
 						<p class="error-text">{testResult.error}</p>
 					{/if}
-				</div>
-			{/if}
-
-			{#if message}
-				<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-					{message.text}
 				</div>
 			{/if}
 		</div>
@@ -208,22 +206,5 @@ Extracted from MemorySettings.svelte.
 	.error-text {
 		color: var(--color-error);
 		margin: 0;
-	}
-
-	.message {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-		text-align: center;
-	}
-
-	.message.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
 	}
 </style>

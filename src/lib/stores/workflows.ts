@@ -88,6 +88,77 @@ export const workflowStore = {
 	},
 
 	/**
+	 * Create a new workflow and append it to local state without triggering a
+	 * full reload. Avoids the `loading: true` flicker that users see after a
+	 * fast CRUD action when the list re-fetches.
+	 *
+	 * @param name - Workflow name
+	 * @param agentId - Agent ID to associate with the workflow
+	 * @returns ID of the created workflow
+	 */
+	async createWorkflow(name: string, agentId: string): Promise<string> {
+		const id = await WorkflowService.create(name, agentId);
+		try {
+			const created = await WorkflowService.getFullState(id);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: [...s.workflows, created.workflow]
+			}));
+		} catch {
+			// If we cannot fetch the fresh entity, fall back to a full reload so
+			// the list stays consistent with the backend.
+			await workflowStore.loadWorkflows();
+		}
+		return id;
+	},
+
+	/**
+	 * Rename a workflow in-place without triggering a full reload.
+	 *
+	 * @param workflowId - Workflow ID to rename
+	 * @param name - New workflow name
+	 * @returns Updated workflow entity
+	 */
+	async renameWorkflow(workflowId: string, name: string): Promise<Workflow> {
+		const updated = await WorkflowService.rename(workflowId, name);
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+		}));
+		return updated;
+	},
+
+	/**
+	 * Delete a workflow and remove it from local state without triggering a
+	 * full reload.
+	 *
+	 * @param workflowId - Workflow ID to delete
+	 */
+	async deleteWorkflow(workflowId: string): Promise<void> {
+		await WorkflowService.delete(workflowId);
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.filter((w) => w.id !== workflowId),
+			selectedId: s.selectedId === workflowId ? null : s.selectedId
+		}));
+	},
+
+	/**
+	 * Clear `folder_id` locally for every workflow that belonged to a deleted
+	 * folder, matching the backend's cascade behaviour without a full reload.
+	 *
+	 * @param folderId - Folder ID that was deleted
+	 */
+	detachFromFolder(folderId: string): void {
+		workflowWritable.update((s) => ({
+			...s,
+			workflows: s.workflows.map((w) =>
+				w.folder_id === folderId ? { ...w, folder_id: undefined } : w
+			)
+		}));
+	},
+
+	/**
 	 * Select a workflow by ID.
 	 *
 	 * @param workflowId - ID to select (or null to deselect)

@@ -212,12 +212,11 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Create a new workflow.
 	 */
 	async function handleCreateWorkflow(name: string, agentId: string): Promise<void> {
-		const id = await WorkflowService.create(name, agentId);
+		const id = await workflowStore.createWorkflow(name, agentId);
 
 		pageState.selectedWorkflowId = id;
 		messages = [];
 
-		await workflowStore.loadWorkflows();
 		await selectWorkflow(id);
 
 		modalState = { type: 'none' };
@@ -274,8 +273,7 @@ Uses extracted components, services, and stores for clean architecture.
 	async function handleDeleteWorkflow(workflowId: string): Promise<void> {
 		deletingWorkflow = true;
 		try {
-			await WorkflowService.delete(workflowId);
-			await workflowStore.loadWorkflows();
+			await workflowStore.deleteWorkflow(workflowId);
 
 			if (pageState.selectedWorkflowId === workflowId) {
 				pageState.selectedWorkflowId = null;
@@ -329,8 +327,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Rename a workflow.
 	 */
 	const handleRename = withToastError(async (workflowId: string, newName: string) => {
-		await WorkflowService.rename(workflowId, newName);
-		await workflowStore.loadWorkflows();
+		await workflowStore.renameWorkflow(workflowId, newName);
 	});
 
 	/**
@@ -354,7 +351,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	const handleDeleteFolder = withToastError(async (folder: WorkflowFolder) => {
 		await folderStore.deleteFolder(folder.id);
-		await workflowStore.loadWorkflows();
+		workflowStore.detachFromFolder(folder.id);
 	});
 
 	/**

@@ -22,8 +22,9 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
-	import { Card, Button, StatusIndicator, Modal, HelpButton, DeleteConfirmModal } from '$lib/components/ui';
+	import { Card, Button, StatusIndicator, Modal, DeleteConfirmModal, ErrorBanner } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
+	import SettingsSectionHeader from './SettingsSectionHeader.svelte';
 	import {
 		createInitialMCPState,
 		setServers,
@@ -237,32 +238,21 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 </script>
 
 <section id="mcp" class="settings-section">
-	<div class="section-header-row">
-		<div class="section-title-row">
-			<h2 class="section-title">{$i18n('settings_mcp_servers')}</h2>
-			<HelpButton
-				titleKey="help_mcp_title"
-				descriptionKey="help_mcp_description"
-				tutorialKey="help_mcp_tutorial"
-			/>
-		</div>
-		<Button variant="primary" size="sm" onclick={() => mcpModal.openCreate()}>
-			<Plus size={16} />
-			<span>{$i18n('mcp_add_server')}</span>
-		</Button>
-	</div>
+	<SettingsSectionHeader
+		titleKey="settings_mcp_servers"
+		helpTitleKey="help_mcp_title"
+		helpDescriptionKey="help_mcp_description"
+		helpTutorialKey="help_mcp_tutorial"
+		createLabelKey="mcp_add_server"
+		onCreate={() => mcpModal.openCreate()}
+	/>
 
 	{#if mcpWarning}
-		<div class="mcp-warning" role="alert">
-			{mcpWarning}
-			<button class="dismiss-warning" onclick={() => (mcpWarning = null)} aria-label={$i18n('common_dismiss')}>x</button>
-		</div>
+		<ErrorBanner variant="warning" message={mcpWarning} onDismiss={() => (mcpWarning = null)} />
 	{/if}
 
 	{#if mcpState.error}
-		<div class="mcp-error">
-			{mcpState.error}
-		</div>
+		<ErrorBanner message={mcpState.error} onDismiss={() => (mcpState = setMCPError(mcpState, null))} />
 	{/if}
 
 	{#if mcpState.loading}
@@ -356,23 +346,6 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 />
 
 <style>
-	.section-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-header-row .section-title {
-		margin-bottom: 0;
-	}
-
-	.section-header-row :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
 	/* MCP Servers */
 	.mcp-server-grid {
 		display: grid;
@@ -418,35 +391,6 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-	}
-
-	.mcp-error {
-		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
-		border-radius: var(--border-radius-md);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.mcp-warning {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: var(--spacing-md);
-		background: var(--color-warning-light);
-		color: var(--color-warning);
-		border-radius: var(--border-radius-md);
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.dismiss-warning {
-		background: none;
-		border: none;
-		color: var(--color-warning);
-		cursor: pointer;
-		padding: var(--spacing-xs);
-		font-size: var(--font-size-lg);
-		line-height: 1;
 	}
 
 	/* Responsive */

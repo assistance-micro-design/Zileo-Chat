@@ -20,24 +20,11 @@ Manages prompt library configuration.
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { PromptSettings } from '$lib/components/settings/prompts';
 	import { promptStore } from '$lib/stores/prompts';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
-	/**
-	 * Handle cross-page refresh events (from import/export)
-	 */
-	function handleSettingsRefresh(): void {
-		promptStore.loadPrompts();
-	}
-
-	onMount(() => {
-		// Only add event listeners in browser context (onMount only runs client-side)
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
-	});
+	onSettingsRefresh(() => promptStore.loadPrompts());
 </script>
 
 <section class="settings-section">

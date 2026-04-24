@@ -20,12 +20,15 @@ Manages LLM providers and models configuration.
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { ProviderType, ProviderSettings } from '$types/llm';
 	import LLMSection from '$lib/components/settings/providers/LLMSection.svelte';
 	import APIKeysSection from '$lib/components/settings/providers/APIKeysSection.svelte';
+	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
-	/** Component reference for reload capability */
+	/**
+	 * Component reference for the reload fallback (LLMSection owns local
+	 * state; we call ref.reload() instead of routing through a store).
+	 */
 	let llmSectionRef: LLMSection;
 
 	/** API Key Modal state */
@@ -55,20 +58,7 @@ Manages LLM providers and models configuration.
 		llmSectionRef?.reload();
 	}
 
-	/**
-	 * Handle cross-page refresh events (from import/export)
-	 */
-	function handleSettingsRefresh(): void {
-		llmSectionRef?.reload();
-	}
-
-	onMount(() => {
-		// Only add event listeners in browser context (onMount only runs client-side)
-		window.addEventListener('settings:refresh', handleSettingsRefresh);
-		return () => {
-			window.removeEventListener('settings:refresh', handleSettingsRefresh);
-		};
-	});
+	onSettingsRefresh(() => llmSectionRef?.reload());
 </script>
 
 <LLMSection

@@ -31,9 +31,10 @@ Combines Providers and Models sections.
 		LLMState
 	} from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import { Card, Button, StatusIndicator, Modal, HelpButton, Select, DeleteConfirmModal } from '$lib/components/ui';
+	import { Card, Button, StatusIndicator, Modal, Select, DeleteConfirmModal, ErrorBanner } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
+	import SettingsSectionHeader from '../SettingsSectionHeader.svelte';
 	import CustomProviderForm from './CustomProviderForm.svelte';
 	import {
 		createInitialLLMState,
@@ -59,6 +60,16 @@ Combines Providers and Models sections.
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { toastStore } from '$lib/stores/toast';
+	import type { ToastType } from '$types/background-workflow';
+
+	/**
+	 * Emits a transient toast for a completed CRUD action. Centralised so every
+	 * call site uses the same duration and shape.
+	 */
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+	}
 
 	/** Props */
 	interface Props {
@@ -74,7 +85,6 @@ Combines Providers and Models sections.
 	const modelModal: ModalController<LLMModel> = createModalController<LLMModel>();
 	let modelSaving = $state(false);
 	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
-	let message = $state<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 	let showCustomProviderForm = $state(false);
 
 	/** Provider delete confirmation state */
@@ -125,13 +135,26 @@ Combines Providers and Models sections.
 		if (!providerToDelete) return;
 		providerDeleting = true;
 		try {
-			await deleteCustomProvider(providerToDelete.id);
-			message = { type: 'success', text: $i18n('settings_provider_deleted', { name: providerToDelete.displayName }) };
+			const deletedName = providerToDelete.displayName;
+			const deletedId = providerToDelete.id;
+			await deleteCustomProvider(deletedId);
+			// Mutate the local provider list + models list in-place so the UI does not
+			// re-enter the loading state. The backend has already removed the rows,
+			// so dropping them from memory keeps the two in sync.
+			providerList = providerList.filter((p) => p.id !== deletedId);
+			llmState = {
+				...llmState,
+				providers: Object.fromEntries(
+					Object.entries(llmState.providers).filter(([id]) => id !== deletedId)
+				),
+				models: llmState.models.filter((m) => m.provider !== deletedId),
+				error: null
+			};
+			notify('success', $i18n('settings_provider_deleted', { name: deletedName }));
 			showProviderDeleteConfirm = false;
 			providerToDelete = null;
-			await loadLLMData();
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
 			providerDeleting = false;
 		}
@@ -149,14 +172,19 @@ Combines Providers and Models sections.
 	 * Handles custom provider creation success.
 	 * @param warning - Optional security warning from the backend
 	 */
-	async function handleCustomProviderCreated(warning?: string): Promise<void> {
+	async function handleCustomProviderCreated(newProvider: ProviderInfo, warning?: string): Promise<void> {
 		showCustomProviderForm = false;
-		if (warning) {
-			message = { type: 'warning', text: warning };
-		} else {
-			message = { type: 'success', text: $i18n('llm_custom_provider_created') };
+		// Append the provider locally to avoid a reload flicker. Provider settings
+		// for a freshly created entity are not yet in state; loadProviderSettings
+		// would return defaults that the backend will generate on first use.
+		if (!providerList.some((p) => p.id === newProvider.id)) {
+			providerList = [...providerList, newProvider];
 		}
-		await loadLLMData();
+		if (warning) {
+			notify('warning', warning);
+		} else {
+			notify('success', $i18n('llm_custom_provider_created'));
+		}
 	}
 
 	/**
@@ -168,15 +196,15 @@ Combines Providers and Models sections.
 			if (modelModal.mode === 'create') {
 				const model = await createModel(data as CreateModelRequest);
 				llmState = addModelToState(llmState, model);
-				message = { type: 'success', text: $i18n('settings_model_created', { name: model.name }) };
+				notify('success', $i18n('settings_model_created', { name: model.name }));
 			} else if (modelModal.editing) {
 				const model = await updateModel(modelModal.editing.id, data as UpdateModelRequest);
 				llmState = updateModelInState(llmState, modelModal.editing.id, model);
-				message = { type: 'success', text: $i18n('settings_model_updated', { name: model.name }) };
+				notify('success', $i18n('settings_model_updated', { name: model.name }));
 			}
 			modelModal.close();
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_model_save_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_model_save_failed', { error: getErrorMessage(err) }));
 		} finally {
 			modelSaving = false;
 		}
@@ -197,13 +225,14 @@ Combines Providers and Models sections.
 		if (!modelToDelete) return;
 		modelDeleting = true;
 		try {
+			const deletedName = modelToDelete.name;
 			await deleteModel(modelToDelete.id);
 			llmState = removeModel(llmState, modelToDelete.id);
-			message = { type: 'success', text: $i18n('settings_model_deleted', { name: modelToDelete.name }) };
+			notify('success', $i18n('settings_model_deleted', { name: deletedName }));
 			showModelDeleteConfirm = false;
 			modelToDelete = null;
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
 			modelDeleting = false;
 		}
@@ -229,9 +258,9 @@ Combines Providers and Models sections.
 				undefined
 			);
 			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
-			message = { type: 'success', text: $i18n('settings_model_set_default', { name: model.name }) };
+			notify('success', $i18n('settings_model_set_default', { name: model.name }));
 		} catch (err) {
-			message = { type: 'error', text: $i18n('settings_model_set_default_failed', { error: getErrorMessage(err) }) };
+			notify('error', $i18n('settings_model_set_default_failed', { error: getErrorMessage(err) }));
 		}
 	}
 
@@ -271,13 +300,6 @@ Combines Providers and Models sections.
 		loadLLMData();
 	}
 
-	/**
-	 * Clears current message
-	 */
-	export function clearMessage(): void {
-		message = null;
-	}
-
 	onMount(() => {
 		loadLLMData();
 	});
@@ -285,19 +307,15 @@ Combines Providers and Models sections.
 
 <!-- Providers Section -->
 <section id="providers" class="settings-section">
-	<div class="section-title-row">
-		<h2 class="section-title">{$i18n('settings_providers')}</h2>
-		<HelpButton
-			titleKey="help_providers_title"
-			descriptionKey="help_providers_description"
-			tutorialKey="help_providers_tutorial"
-		/>
-	</div>
+	<SettingsSectionHeader
+		titleKey="settings_providers"
+		helpTitleKey="help_providers_title"
+		helpDescriptionKey="help_providers_description"
+		helpTutorialKey="help_providers_tutorial"
+	/>
 
 	{#if llmState.error}
-		<div class="llm-error">
-			{llmState.error}
-		</div>
+		<ErrorBanner message={llmState.error} onDismiss={() => (llmState = setLLMError(llmState, null))} />
 	{/if}
 
 	{#if llmState.loading}
@@ -357,26 +375,17 @@ Combines Providers and Models sections.
 			</Button>
 		</div>
 	{/if}
-
-	{#if message}
-		<div class="message-toast" class:success={message.type === 'success'} class:error={message.type === 'error'} class:warning={message.type === 'warning'}>
-			{message.text}
-		</div>
-	{/if}
 </section>
 
 <!-- Models Section -->
 <section id="models" class="settings-section">
-	<div class="section-header-row">
-		<div class="section-title-row">
-			<h2 class="section-title">{$i18n('settings_models')}</h2>
-			<HelpButton
-				titleKey="help_models_title"
-				descriptionKey="help_models_description"
-				tutorialKey="help_models_tutorial"
-			/>
-		</div>
-		<div class="models-header-actions">
+	<SettingsSectionHeader
+		titleKey="settings_models"
+		helpTitleKey="help_models_title"
+		helpDescriptionKey="help_models_description"
+		helpTutorialKey="help_models_tutorial"
+	>
+		{#snippet actions()}
 			<Select
 				options={modelsProviderOptions}
 				value={selectedModelsProvider}
@@ -386,8 +395,8 @@ Combines Providers and Models sections.
 				<Plus size={16} />
 				<span>{$i18n('models_add')}</span>
 			</Button>
-		</div>
-	</div>
+		{/snippet}
+	</SettingsSectionHeader>
 
 	{#if llmState.loading}
 		<Card>
@@ -491,23 +500,6 @@ Combines Providers and Models sections.
 />
 
 <style>
-	.section-header-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: var(--spacing-lg);
-	}
-
-	.section-header-row .section-title {
-		margin-bottom: 0;
-	}
-
-	.section-header-row :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
 	/* Provider Cards */
 	.provider-grid {
 		display: grid;
@@ -529,37 +521,7 @@ Combines Providers and Models sections.
 		gap: var(--spacing-xs);
 	}
 
-	.message-toast {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-		margin-top: var(--spacing-md);
-	}
-
-	.message-toast.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message-toast.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
-	}
-
-	.message-toast.warning {
-		background: var(--color-warning-light);
-		color: var(--color-warning);
-	}
-
 	/* LLM Section */
-	.llm-error {
-		padding: var(--spacing-md);
-		background: var(--color-error-light);
-		color: var(--color-error);
-		border-radius: var(--border-radius-md);
-		margin-bottom: var(--spacing-lg);
-	}
-
 	.llm-loading {
 		display: flex;
 		align-items: center;
@@ -569,26 +531,14 @@ Combines Providers and Models sections.
 	}
 
 	/* Models Section */
-	.models-header-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.models-header-actions :global(.form-group) {
+	:global(.settings-header .form-group) {
 		margin-bottom: 0;
 	}
 
-	.models-header-actions :global(.form-select) {
+	:global(.settings-header .form-select) {
 		width: auto;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-xs);
-	}
-
-	.models-header-actions :global(button) {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
 	}
 
 	.models-grid {
@@ -634,11 +584,6 @@ Combines Providers and Models sections.
 		.provider-grid,
 		.models-grid {
 			grid-template-columns: 1fr;
-		}
-
-		.models-header-actions {
-			flex-direction: column;
-			align-items: stretch;
 		}
 	}
 </style>

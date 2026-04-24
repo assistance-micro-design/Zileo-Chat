@@ -23,7 +23,7 @@ Displays memories with filtering, search, and action buttons.
 -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { save } from '@tauri-apps/plugin-dialog';
 	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal, DeleteConfirmModal } from '$lib/components/ui';
@@ -34,6 +34,12 @@ Displays memories with filtering, search, and action buttons.
 	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { toastStore } from '$lib/stores/toast';
+	import type { ToastType } from '$types/background-workflow';
+
+	function notify(type: ToastType, text: string): void {
+		toastStore.add({ type, title: text, message: '', persistent: false, duration: 5000 });
+	}
 
 	/** Props */
 	interface Props {
@@ -61,7 +67,6 @@ Displays memories with filtering, search, and action buttons.
 
 	/** Action state */
 	let actionLoading = $state(false);
-	let message = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 
 	/** Delete confirmation state */
 	let showDeleteConfirm = $state(false);
@@ -135,7 +140,7 @@ Displays memories with filtering, search, and action buttons.
 			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
 			memories = await invoke<Memory[]>('list_memories', { typeFilter: filter, workflowId: null });
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_load').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_failed_load').replace('{error}', getErrorMessage(err)));
 		} finally {
 			loading = false;
 		}
@@ -163,7 +168,7 @@ Displays memories with filtering, search, and action buttons.
 			});
 			memories = results.map((r) => r.memory);
 		} catch (err) {
-			message = { type: 'error', text: t('memory_search_failed').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_search_failed').replace('{error}', getErrorMessage(err)));
 		} finally {
 			searching = false;
 		}
@@ -237,12 +242,12 @@ Displays memories with filtering, search, and action buttons.
 		try {
 			await invoke('delete_memory', { memoryId: memoryToDelete.id });
 			memories = memories.filter((m) => m.id !== memoryToDelete!.id);
-			message = { type: 'success', text: t('memory_deleted') };
+			notify('success', t('memory_deleted'));
 			showDeleteConfirm = false;
 			memoryToDelete = null;
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_failed_delete_memory').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_failed_delete_memory').replace('{error}', getErrorMessage(err)));
 		} finally {
 			deleting = false;
 		}
@@ -284,9 +289,9 @@ Displays memories with filtering, search, and action buttons.
 
 			await invoke('save_export_to_file', { path: filePath, content: data });
 
-			message = { type: 'success', text: t('memory_exported').replace('{count}', String(memories.length)) };
+			notify('success', t('memory_exported').replace('{count}', String(memories.length)));
 		} catch (err) {
-			message = { type: 'error', text: t('memory_export_failed').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_export_failed').replace('{error}', getErrorMessage(err)));
 		} finally {
 			actionLoading = false;
 		}
@@ -310,19 +315,19 @@ Displays memories with filtering, search, and action buttons.
 				const result = await invoke<ImportResult>('import_memories', { data: text });
 
 				if (result.imported > 0) {
-					message = { type: 'success', text: t('memory_imported').replace('{count}', String(result.imported)) };
+					notify('success', t('memory_imported').replace('{count}', String(result.imported)));
 					await loadMemories();
 					onchange?.();
 				}
 
 				if (result.failed > 0) {
-					message = {
-						type: 'error',
-						text: t('memory_import_failed').replace('{count}', String(result.failed)).replace('{errors}', result.errors.slice(0, 3).join(', '))
-					};
+					notify(
+						'error',
+						t('memory_import_failed').replace('{count}', String(result.failed)).replace('{errors}', result.errors.slice(0, 3).join(', '))
+					);
 				}
 			} catch (err) {
-				message = { type: 'error', text: t('memory_import_failed_generic').replace('{error}', getErrorMessage(err)) };
+				notify('error', t('memory_import_failed_generic').replace('{error}', getErrorMessage(err)));
 			} finally {
 				actionLoading = false;
 			}
@@ -347,17 +352,17 @@ Displays memories with filtering, search, and action buttons.
 			const result = await invoke<RegenerateResult>('regenerate_embeddings', {
 				typeFilter: typeFilter || undefined
 			});
-			message = {
-				type: 'success',
-				text: t('memory_regenerate_result')
+			notify(
+				'success',
+				t('memory_regenerate_result')
 					.replace('{processed}', String(result.processed))
 					.replace('{success}', String(result.success))
 					.replace('{failed}', String(result.failed))
-			};
+			);
 			showRegenerateConfirm = false;
 			onchange?.();
 		} catch (err) {
-			message = { type: 'error', text: t('memory_regenerate_failed').replace('{error}', getErrorMessage(err)) };
+			notify('error', t('memory_regenerate_failed').replace('{error}', getErrorMessage(err)));
 		} finally {
 			regenerating = false;
 		}
@@ -381,7 +386,7 @@ Displays memories with filtering, search, and action buttons.
 	/**
 	 * Handle search with debounce
 	 */
-	let searchTimeout: ReturnType<typeof setTimeout>;
+	let searchTimeout: ReturnType<typeof setTimeout> | undefined;
 	function handleSearchInput(event: Event & { currentTarget: HTMLInputElement }): void {
 		searchQuery = event.currentTarget.value;
 		clearTimeout(searchTimeout);
@@ -393,6 +398,11 @@ Displays memories with filtering, search, and action buttons.
 	// Load memories on mount
 	onMount(() => {
 		loadMemories();
+	});
+
+	// Cancel any pending debounced search so we do not fire after the component is gone.
+	onDestroy(() => {
+		clearTimeout(searchTimeout);
 	});
 </script>
 
@@ -436,12 +446,6 @@ Displays memories with filtering, search, and action buttons.
 			</Button>
 		</div>
 	</div>
-
-	{#if message}
-		<div class="message" class:success={message.type === 'success'} class:error={message.type === 'error'}>
-			{message.text}
-		</div>
-	{/if}
 
 	<!-- Memory Table -->
 	{#if loading || searching}
@@ -644,22 +648,6 @@ Displays memories with filtering, search, and action buttons.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-	}
-
-	.message {
-		padding: var(--spacing-md);
-		border-radius: var(--border-radius-md);
-		font-size: var(--font-size-sm);
-	}
-
-	.message.success {
-		background: var(--color-success-light);
-		color: var(--color-success);
-	}
-
-	.message.error {
-		background: var(--color-error-light);
-		color: var(--color-error);
 	}
 
 	.loading-state,

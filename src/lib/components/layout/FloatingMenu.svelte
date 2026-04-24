@@ -26,6 +26,7 @@
 -->
 <script lang="ts">
 	import { Sun, Moon, Settings, Bot } from '@lucide/svelte';
+	import { page } from '$app/state';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
@@ -39,6 +40,11 @@
 	}
 
 	let { title = 'Zileo Chat' }: Props = $props();
+
+	/** Whether the current route is inside the settings area. */
+	const isSettings = $derived(page.url.pathname.startsWith('/settings'));
+	/** Whether the current route is the agent workspace. */
+	const isAgent = $derived(page.url.pathname.startsWith('/agent'));
 
 	/**
 	 * Toggle theme between light and dark
@@ -56,12 +62,22 @@
 
 	<!-- Center: Main Navigation -->
 	<div class="menu-center">
-		<a href="/settings" class="btn btn-secondary">
+		<a
+			href="/settings"
+			class="btn btn-secondary"
+			class:active={isSettings}
+			aria-current={isSettings ? 'page' : undefined}
+		>
 			<Settings size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
 		</a>
 
-		<a href="/agent" class="btn btn-primary">
+		<a
+			href="/agent"
+			class="btn btn-primary"
+			class:active={isAgent}
+			aria-current={isAgent ? 'page' : undefined}
+		>
 			<Bot size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_agent')}</span>
 		</a>
@@ -119,6 +135,10 @@
 
 	.floating-menu-link-text {
 		display: inline;
+	}
+
+	.menu-center .btn.active {
+		box-shadow: 0 0 0 2px var(--color-accent);
 	}
 
 	@media (max-width: 640px) {
