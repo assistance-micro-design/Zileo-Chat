@@ -169,7 +169,7 @@ pub async fn get_memory_token_stats(
                 0
             }) as usize;
 
-        let avg_chars = if count > 0 { chars / count } else { 0 };
+        let avg_chars = chars.checked_div(count).unwrap_or(0);
         let estimated_tokens = chars / 4; // Standard approximation
 
         categories.push(CategoryTokenStats {
