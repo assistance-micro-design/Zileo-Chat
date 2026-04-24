@@ -613,7 +613,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_migration_not_applied() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
         let applied = check_migration_applied(&state.db, "nonexistent_migration")
             .await
             .unwrap();
@@ -622,7 +622,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_record_and_check_migration() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         // Record migration
         record_migration_applied(&state.db, "test_migration_v1")
@@ -638,7 +638,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_migration_does_not_cross_contaminate() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         record_migration_applied(&state.db, "migration_a")
             .await
@@ -657,7 +657,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_migration_first_run_clears_embeddings() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         // Seed a memory with an embedding
         seed_test_memory_with_embedding(&state.db).await;
@@ -693,7 +693,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_migration_second_run_preserves_embeddings() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         // First migration: seed, run, record
         seed_test_memory(&state.db).await;
@@ -736,7 +736,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_v2_migration_guard() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         // First run: should not be applied yet
         let applied = check_migration_applied(&state.db, MIGRATION_MEMORY_V2_SCHEMA)
@@ -759,7 +759,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mcp_http_migration_guard() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         // First run: should not be applied yet
         let applied = check_migration_applied(&state.db, MIGRATION_MCP_HTTP_SCHEMA)

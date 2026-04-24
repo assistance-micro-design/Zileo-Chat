@@ -287,11 +287,11 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use crate::test_utils::test_tempdir;
 
     #[tokio::test]
     async fn test_appstate_new_success() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -306,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_appstate_components_connected() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db2");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -364,7 +364,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_appstate_db_connection() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db3");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -387,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_appstate_arc_cloning() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db4");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -421,7 +421,7 @@ mod tests {
     async fn test_embedding_service_configuration() {
         use crate::llm::embedding::{EmbeddingProvider, EmbeddingService};
 
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db7");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -455,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_factory_available() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db8");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -481,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_streaming_cancellation() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db5");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_cancellations() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db6");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -548,7 +548,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cancellation_token_works_with_select() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db9");
         let db_path_str = db_path.to_str().unwrap();
 

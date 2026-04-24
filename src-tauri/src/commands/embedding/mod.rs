@@ -56,7 +56,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_import_memory_injection_safe() {
-        let state = crate::test_utils::setup_test_state().await;
+        let (state, _db_guard) = crate::test_utils::setup_test_state().await;
         // First seed a legitimate memory
         crate::test_utils::seed_test_memory(&state.db).await;
 
@@ -95,7 +95,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_regenerate_type_filter_injection_safe() {
-        let state = crate::test_utils::setup_test_state().await;
+        let (state, _db_guard) = crate::test_utils::setup_test_state().await;
         crate::test_utils::seed_test_memory(&state.db).await;
 
         // Attempt injection via type_filter parameter

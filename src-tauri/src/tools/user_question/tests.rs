@@ -24,48 +24,45 @@ use crate::tools::constants::user_question as uq_const;
 use crate::tools::Tool;
 use serde_json::json;
 use std::sync::Arc;
-use uuid::Uuid;
+use tempfile::TempDir;
 
-/// Helper to run async DB creation for sync tests
-fn create_test_tool_sync() -> UserQuestionTool {
-    // Use tokio runtime to create DB in test context
+/// Creates a minimal UserQuestionTool for testing synchronous methods.
+///
+/// Returns `(tool, TempDir)`. Bind the `TempDir` (e.g. `let (tool, _db_guard) = create_test_tool();`)
+/// so the DB directory is cleaned up when the test ends.
+fn create_test_tool() -> (UserQuestionTool, TempDir) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
-        // Create a temporary in-memory database for tests
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join(format!("test_user_question_{}.db", Uuid::new_v4()));
+        let temp_dir = crate::test_utils::test_tempdir();
+        let db_path = temp_dir.path().join("test_db");
         let db = Arc::new(DBClient::new(db_path.to_str().unwrap()).await.unwrap());
-        UserQuestionTool::new(
+        let tool = UserQuestionTool::new(
             db,
             "test_workflow".to_string(),
             "test_agent".to_string(),
             None,
-        )
+        );
+        (tool, temp_dir)
     })
-}
-
-/// Creates a minimal UserQuestionTool for testing synchronous methods.
-fn create_test_tool() -> UserQuestionTool {
-    create_test_tool_sync()
 }
 
 #[test]
 fn test_definition_has_correct_id() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
     assert_eq!(def.id, "UserQuestionTool");
 }
 
 #[test]
 fn test_definition_has_correct_name() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
     assert_eq!(def.name, "User Question Tool");
 }
 
 #[test]
 fn test_definition_has_correct_schema() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
 
     // Verify input schema structure
@@ -103,7 +100,7 @@ fn test_definition_has_correct_schema() {
 
 #[test]
 fn test_definition_has_correct_output_schema() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
 
     let output = &def.output_schema;
@@ -118,14 +115,14 @@ fn test_definition_has_correct_output_schema() {
 
 #[test]
 fn test_definition_requires_confirmation_is_false() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
     assert!(!def.requires_confirmation);
 }
 
 #[test]
 fn test_validate_input_missing_operation() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "question": "Test question?",
         "questionType": "text"
@@ -139,7 +136,7 @@ fn test_validate_input_missing_operation() {
 
 #[test]
 fn test_validate_input_missing_question() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "questionType": "text"
@@ -153,7 +150,7 @@ fn test_validate_input_missing_question() {
 
 #[test]
 fn test_validate_input_missing_question_type() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "question": "Test question?"
@@ -167,7 +164,7 @@ fn test_validate_input_missing_question_type() {
 
 #[test]
 fn test_validate_input_valid() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "question": "Test question?",
@@ -180,7 +177,7 @@ fn test_validate_input_valid() {
 
 #[test]
 fn test_validate_input_valid_with_all_fields() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "question": "Test question?",
@@ -200,7 +197,7 @@ fn test_validate_input_valid_with_all_fields() {
 
 #[test]
 fn test_validate_input_not_object() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!("not an object");
 
     let result = tool.validate_input(&input);
@@ -270,7 +267,7 @@ fn test_question_option_deserialization() {
 
 #[test]
 fn test_validate_input_empty_strings() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "",
         "question": "",
@@ -285,7 +282,7 @@ fn test_validate_input_empty_strings() {
 
 #[test]
 fn test_validate_input_null_values() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "question": "Test?",
@@ -302,7 +299,7 @@ fn test_validate_input_null_values() {
 
 #[test]
 fn test_validate_input_extra_fields() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let input = json!({
         "operation": "ask",
         "question": "Test?",
@@ -339,7 +336,7 @@ fn test_timeout_is_reasonable() {
 
 #[test]
 fn test_definition_description_mentions_question_types() {
-    let tool = create_test_tool();
+    let (tool, _db_guard) = create_test_tool();
     let def = tool.definition();
     assert!(def.description.contains("checkbox"));
     assert!(def.description.contains("text"));

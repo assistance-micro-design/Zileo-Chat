@@ -224,7 +224,7 @@ fn test_validate_mcp_server_config_invalid_id() {
 
 #[tokio::test]
 async fn test_mcp_call_log_write_read_cycle() {
-    let state = crate::test_utils::setup_test_state().await;
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
 
     // Write a call log with dynamic params using the MCPCallLogCreate struct
     let log = crate::models::mcp::MCPCallLogCreate {

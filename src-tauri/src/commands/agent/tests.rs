@@ -17,7 +17,7 @@ use crate::db::DBClient;
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use std::sync::Arc;
 
-async fn setup_test_state() -> crate::state::AppState {
+async fn setup_test_state() -> (crate::state::AppState, tempfile::TempDir) {
     crate::test_utils::setup_test_state().await
 }
 
@@ -48,14 +48,14 @@ fn test_agent_config(id: &str, name: &str) -> AgentConfig {
 
 #[tokio::test]
 async fn test_list_agents_empty() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     let agents = state.registry.list().await;
     assert!(agents.is_empty(), "New registry should be empty");
 }
 
 #[tokio::test]
 async fn test_list_agents_with_registered() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
 
     let config = test_agent_config("test_agent", "Test Agent");
     let agent = SimpleAgent::new(config);
@@ -71,7 +71,7 @@ async fn test_list_agents_with_registered() {
 
 #[tokio::test]
 async fn test_get_agent_config_success() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
 
     let config = AgentConfig {
         id: "config_test".to_string(),
@@ -113,7 +113,7 @@ async fn test_get_agent_config_success() {
 
 #[tokio::test]
 async fn test_get_agent_config_not_found() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
 
     let result = state.registry.get("nonexistent").await;
     assert!(result.is_none(), "Should not find nonexistent agent");
@@ -145,7 +145,7 @@ async fn test_lifecycle_serialization() {
 
 #[tokio::test]
 async fn test_multiple_agents_listing() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
 
     for i in 0..5 {
         let config = AgentConfig {
@@ -196,7 +196,7 @@ async fn seed_agent_in_db(db: &DBClient, name: &str) -> String {
 
 #[tokio::test]
 async fn test_create_agent_rejects_duplicate_name() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     seed_agent_in_db(&state.db, "Database Agent").await;
 
     let result = super::check_agent_name_unique(&state.db, "database agent", None).await;
@@ -214,7 +214,7 @@ async fn test_create_agent_rejects_duplicate_name() {
 
 #[tokio::test]
 async fn test_update_agent_allows_keeping_own_name() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     let agent_id = seed_agent_in_db(&state.db, "My Agent").await;
 
     let result = super::check_agent_name_unique(&state.db, "My Agent", Some(&agent_id)).await;
@@ -227,7 +227,7 @@ async fn test_update_agent_allows_keeping_own_name() {
 
 #[tokio::test]
 async fn test_update_agent_rejects_collision_with_other() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     let _agent_a = seed_agent_in_db(&state.db, "Agent Alpha").await;
     let agent_b = seed_agent_in_db(&state.db, "Agent Beta").await;
 

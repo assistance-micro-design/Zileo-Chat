@@ -2,7 +2,7 @@ use crate::test_utils::{seed_test_prompt, seed_test_prompt_with_category, setup_
 
 #[tokio::test]
 async fn test_search_prompts_with_valid_query() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     seed_test_prompt(&state.db).await;
     let results: Vec<serde_json::Value> = state
         .db
@@ -18,7 +18,7 @@ async fn test_search_prompts_with_valid_query() {
 
 #[tokio::test]
 async fn test_search_prompts_injection_safe() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     seed_test_prompt(&state.db).await;
     // Attempt SQL injection via search parameter
     let results: Vec<serde_json::Value> = state
@@ -38,7 +38,7 @@ async fn test_search_prompts_injection_safe() {
 
 #[tokio::test]
 async fn test_search_prompts_injection_preserves_data() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     seed_test_prompt(&state.db).await;
     // Attempt injection
     let _ = state
@@ -63,7 +63,7 @@ async fn test_search_prompts_injection_preserves_data() {
 
 #[tokio::test]
 async fn test_search_prompts_with_category() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     seed_test_prompt_with_category(&state.db, "coding").await;
     let results: Vec<serde_json::Value> = state
         .db
@@ -81,7 +81,7 @@ async fn test_search_prompts_with_category() {
 
 #[tokio::test]
 async fn test_create_prompt_with_bind_params() {
-    let state = setup_test_state().await;
+    let (state, _db_guard) = setup_test_state().await;
     let id = uuid::Uuid::new_v4().to_string();
     let query = format!(
         r#"CREATE prompt:`{}` CONTENT {{

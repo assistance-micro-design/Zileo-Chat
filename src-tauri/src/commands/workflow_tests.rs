@@ -3,12 +3,16 @@ use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::agents::SimpleAgent;
 use crate::db::DBClient;
 use crate::models::{AgentConfig, LLMConfig, Lifecycle, WorkflowMetrics, WorkflowResult};
+use crate::test_utils::test_tempdir;
 use std::sync::Arc;
-use tempfile::tempdir;
+use tempfile::TempDir;
 
-/// Helper to create test AppState with temporary database (schemaless for tests)
-async fn setup_test_state_for_orchestrator() -> AppState {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
+/// Helper to create test AppState with temporary database (schemaless for tests).
+///
+/// Returns `(AppState, TempDir)`. The caller must bind the `TempDir` so the
+/// directory outlives the test; dropping it early breaks RocksDB.
+async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
+    let temp_dir = test_tempdir();
     let db_path = temp_dir.path().join("test_db");
     let db_path_str = db_path.to_str().unwrap();
 
@@ -56,13 +60,10 @@ async fn setup_test_state_for_orchestrator() -> AppState {
             .expect("Failed to create MCP manager"),
     );
 
-    // Leak temp_dir to keep it alive during test
-    std::mem::forget(temp_dir);
-
     // Create shared embedding service reference
     let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
 
-    AppState {
+    let state = AppState {
         db: db.clone(),
         registry,
         orchestrator,
@@ -77,7 +78,9 @@ async fn setup_test_state_for_orchestrator() -> AppState {
             tokio::sync::Mutex::new(std::collections::HashMap::new()),
         ),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
-    }
+    };
+
+    (state, temp_dir)
 }
 
 #[tokio::test]
@@ -137,7 +140,7 @@ async fn test_workflow_result_structure() {
 
 #[tokio::test]
 async fn test_orchestrator_execute_task() {
-    let state = setup_test_state_for_orchestrator().await;
+    let (state, _db_guard) = setup_test_state_for_orchestrator().await;
 
     use crate::agents::core::agent::Task;
 
@@ -159,7 +162,7 @@ async fn test_orchestrator_execute_task() {
 
 #[tokio::test]
 async fn test_orchestrator_execute_nonexistent_agent() {
-    let state = setup_test_state_for_orchestrator().await;
+    let (state, _db_guard) = setup_test_state_for_orchestrator().await;
 
     use crate::agents::core::agent::Task;
 
@@ -193,7 +196,7 @@ async fn test_batch_delete_result_serialization() {
 
 #[tokio::test]
 async fn test_toggle_workflow_pinned() {
-    let state = crate::test_utils::setup_test_state().await;
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
 
     // Seed a workflow
     let workflow_id = uuid::Uuid::new_v4().to_string();

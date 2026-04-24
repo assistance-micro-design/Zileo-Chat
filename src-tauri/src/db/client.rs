@@ -359,11 +359,11 @@ impl DBClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use crate::test_utils::test_tempdir;
 
     #[tokio::test]
     async fn test_db_client_new() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -379,7 +379,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_db_initialize_schema() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("schema_test_db");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -392,7 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_db_query_empty_result() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("query_test_db");
         let db_path_str = db_path.to_str().unwrap();
 
@@ -411,7 +411,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_db_info_query() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("info_test_db");
         let db_path_str = db_path.to_str().unwrap();
 

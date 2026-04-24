@@ -89,7 +89,7 @@ mod injection_tests {
 
     #[tokio::test]
     async fn test_model_name_with_apostrophe() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
         let model_id = uuid::Uuid::new_v4().to_string();
 
         let insert_query = format!("CREATE llm_model:`{}` CONTENT $data", model_id);
@@ -140,7 +140,7 @@ mod injection_tests {
 
     #[tokio::test]
     async fn test_model_search_injection_safe() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
 
         let legit_id = uuid::Uuid::new_v4().to_string();
         let seed_data = serde_json::json!({

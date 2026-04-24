@@ -232,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_skill_with_bind_params() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
         let id = uuid::Uuid::new_v4().to_string();
         let query = format!(
             r#"CREATE skill:`{}` CONTENT {{
@@ -281,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_skills_returns_content_length() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
         let id = uuid::Uuid::new_v4().to_string();
         let content = "Hello, world!"; // 13 chars
         let query = format!(
@@ -327,7 +327,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_skill_enabled_default() {
-        let state = setup_test_state().await;
+        let (state, _db_guard) = setup_test_state().await;
         let id = uuid::Uuid::new_v4().to_string();
         let query = format!(
             r#"CREATE skill:`{}` CONTENT {{

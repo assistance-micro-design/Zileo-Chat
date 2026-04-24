@@ -1,13 +1,13 @@
 use super::*;
 use crate::db::DBClient;
 use crate::state::AppState;
+use crate::test_utils::test_tempdir;
 use crate::tools::ToolFactory;
 use std::sync::Arc;
-use tempfile::tempdir;
 use tokio_util::sync::CancellationToken;
 
 async fn create_test_state() -> AppState {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let temp_dir = test_tempdir();
     let db_path = temp_dir.path().join("test_context_db");
     AppState::new(db_path.to_str().unwrap())
         .await
@@ -53,7 +53,7 @@ async fn test_context_without_mcp() {
 
 #[tokio::test]
 async fn test_context_new() {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let temp_dir = test_tempdir();
     let db_path = temp_dir.path().join("test_context_new_db");
     let db = Arc::new(
         DBClient::new(db_path.to_str().unwrap())

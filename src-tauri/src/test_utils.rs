@@ -21,15 +21,37 @@ use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::state::AppState;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tempfile::tempdir;
+use std::path::PathBuf;
+use std::sync::{Arc, Once};
+use tempfile::TempDir;
+
+static TEST_TMP_INIT: Once = Once::new();
+
+/// Creates a `TempDir` rooted in `target/test-tmp/` (on the real disk) instead
+/// of `/tmp` (tmpfs). Tests that initialize SurrealDB can each use ~145 MB, and
+/// running them in parallel would otherwise hit the tmpfs `usrquota` limit.
+pub fn test_tempdir() -> TempDir {
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("test-tmp");
+    TEST_TMP_INIT.call_once(|| {
+        std::fs::create_dir_all(&base).expect("Failed to create target/test-tmp");
+    });
+    tempfile::Builder::new()
+        .prefix("zileo-test-")
+        .tempdir_in(&base)
+        .expect("Failed to create test tempdir")
+}
 
 /// Creates a fully initialized AppState with an ephemeral SurrealDB instance.
 ///
-/// The temp directory is intentionally leaked (`std::mem::forget`) to keep
-/// the database alive for the duration of the test.
-pub async fn setup_test_state() -> AppState {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
+/// Returns `(AppState, TempDir)`. The caller MUST bind the `TempDir` (e.g.
+/// `let (state, _db_guard) = setup_test_state().await;`) so the directory
+/// lives for the duration of the test and is cleaned up when the test ends.
+/// Dropping the `TempDir` before the test finishes will break any further DB
+/// access (RocksDB needs the directory for WAL rotation and compaction).
+pub async fn setup_test_state() -> (AppState, TempDir) {
+    let temp_dir = test_tempdir();
     let db_path = temp_dir.path().join("test_db");
     let db_path_str = db_path.to_str().unwrap();
 
@@ -53,12 +75,9 @@ pub async fn setup_test_state() -> AppState {
             .expect("Failed to create MCP manager"),
     );
 
-    // Leak temp_dir to keep it alive during test
-    std::mem::forget(temp_dir);
-
     let embedding_service = Arc::new(tokio::sync::RwLock::new(None));
 
-    AppState {
+    let state = AppState {
         db: db.clone(),
         registry,
         orchestrator,
@@ -71,7 +90,9 @@ pub async fn setup_test_state() -> AppState {
         embedding_service,
         streaming_cancellations: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
-    }
+    };
+
+    (state, temp_dir)
 }
 
 /// Seeds a test prompt in the database and returns its ID.

@@ -5,10 +5,10 @@ use std::sync::Arc;
 
 mod integration {
     use super::*;
-    use tempfile::tempdir;
+    use crate::test_utils::test_tempdir;
 
     async fn create_test_tool() -> (TodoTool, tempfile::TempDir) {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_todo_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
 
@@ -396,7 +396,7 @@ mod integration {
     }
     #[tokio::test]
     async fn test_list_agent_tasks_requires_primary() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_agent_tasks_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
@@ -450,7 +450,7 @@ mod integration {
 
     #[tokio::test]
     async fn test_list_agent_tasks_primary_succeeds() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_list_agent_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
@@ -515,7 +515,7 @@ mod integration {
 
     #[tokio::test]
     async fn test_reassign_tasks_requires_primary() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_reassign_perm_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
@@ -567,7 +567,7 @@ mod integration {
 
     #[tokio::test]
     async fn test_reassign_tasks_succeeds() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_reassign_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
@@ -614,7 +614,7 @@ mod integration {
 
     #[tokio::test]
     async fn test_subagent_only_sees_own_tasks() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_scoping_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
         let db = Arc::new(DBClient::new(&db_path_str).await.expect("DB init failed"));
@@ -676,10 +676,10 @@ mod integration {
 
 mod sql_injection {
     use super::*;
-    use tempfile::tempdir;
+    use crate::test_utils::test_tempdir;
 
     async fn create_test_tool() -> (TodoTool, tempfile::TempDir) {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_injection_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
 
@@ -881,7 +881,7 @@ mod sql_injection {
 
     #[tokio::test]
     async fn test_sql_injection_prevention_workflow_id() {
-        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_wf_injection_db");
         let db_path_str = db_path.to_str().unwrap().to_string();
 

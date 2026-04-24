@@ -37,7 +37,7 @@ async fn test_task_create_serialization() {
 async fn test_update_task_name_with_special_chars() {
     use crate::models::task::TaskCreate;
 
-    let state = crate::test_utils::setup_test_state().await;
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
 
     // Create a workflow to satisfy the foreign key relationship
     let workflow_id = uuid::Uuid::new_v4().to_string();

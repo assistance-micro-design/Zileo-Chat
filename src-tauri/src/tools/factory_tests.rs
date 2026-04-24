@@ -1,8 +1,8 @@
 use super::*;
-use tempfile::tempdir;
+use crate::test_utils::test_tempdir;
 
 async fn create_test_factory() -> ToolFactory {
-    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let temp_dir = test_tempdir();
     let db_path = temp_dir.path().join("test_db");
     let db = Arc::new(
         DBClient::new(db_path.to_str().unwrap())
