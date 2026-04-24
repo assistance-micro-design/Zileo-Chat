@@ -41,6 +41,19 @@
 	import { i18n, t } from '$lib/i18n';
 	import type { CreateModelRequest, UpdateModelRequest, LLMModel, ProviderType } from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
+	import { openUrl } from '@tauri-apps/plugin-opener';
+	import { isAllowedScheme } from '$lib/utils/url';
+
+	/**
+	 * Opens an external URL through the Tauri opener plugin.
+	 * Prevents the link from opening inside the webview.
+	 */
+	async function openExternal(event: MouseEvent, url: string): Promise<void> {
+		event.preventDefault();
+		if (isAllowedScheme(url)) {
+			await openUrl(url);
+		}
+	}
 
 	/**
 	 * ModelForm props
@@ -383,7 +396,7 @@
 			<h4 class="pricing-title">{$i18n('llm_form_pricing_title')}</h4>
 			<p class="pricing-help">
 				{$i18n('llm_form_pricing_help')}
-				<a href="https://mistral.ai/technology/#pricing" target="_blank" rel="noopener noreferrer">
+				<a href="https://mistral.ai/technology/#pricing" onclick={(e) => openExternal(e, 'https://mistral.ai/technology/#pricing')}>
 					{$i18n('llm_form_pricing_link')}
 				</a>
 			</p>

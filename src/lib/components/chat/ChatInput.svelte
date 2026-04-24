@@ -265,7 +265,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-danger, #dc3545);
+		background: var(--color-danger);
 		color: var(--color-text-inverse);
 		border: none;
 		border-radius: var(--border-radius-md);

@@ -255,7 +255,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	{#if mcpWarning}
 		<div class="mcp-warning" role="alert">
 			{mcpWarning}
-			<button class="dismiss-warning" onclick={() => (mcpWarning = null)} aria-label="Dismiss warning">x</button>
+			<button class="dismiss-warning" onclick={() => (mcpWarning = null)} aria-label={$i18n('common_dismiss')}>x</button>
 		</div>
 	{/if}
 

@@ -222,32 +222,4 @@
 	.tab-content {
 		min-height: 400px;
 	}
-
-	/* Dark mode */
-	:global(.dark) .header h2 {
-		color: var(--color-text-primary-dark, #f9fafb);
-	}
-
-	:global(.dark) .header .description {
-		color: var(--color-text-secondary-dark, #9ca3af);
-	}
-
-	:global(.dark) .tabs {
-		border-color: var(--color-border-dark, #374151);
-	}
-
-	:global(.dark) .tab {
-		color: var(--color-text-secondary-dark, #9ca3af);
-	}
-
-	:global(.dark) .tab:hover {
-		background: var(--color-bg-hover-dark, #374151);
-		color: var(--color-text-primary-dark, #f9fafb);
-	}
-
-	:global(.dark) .tab.active {
-		background: var(--color-bg-primary-dark, #1f2937);
-		color: var(--color-primary, #818cf8);
-		border-bottom-color: var(--color-primary, #818cf8);
-	}
 </style>

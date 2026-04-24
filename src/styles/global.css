@@ -76,10 +76,25 @@
 
   --color-success: #10b981;
   --color-success-light: #d1fae5;
+  --color-success-bg: #d1fae5;
+  --color-success-border: #86efac;
   --color-warning: #b45309;
   --color-warning-light: #78350f;
+  --color-warning-bg: rgba(234, 179, 8, 0.1);
   --color-error: #ef4444;
   --color-error-light: #fee2e2;
+  --color-error-bg: #fee2e2;
+  --color-error-border: #fca5a5;
+
+  /* Semantic aliases for consistency across components */
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-primary-light: var(--color-accent-light);
+  --color-primary-dark: #5ec7c6;
+  --color-danger: var(--color-error);
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --color-info: var(--color-status-running);
+  --color-text-on-accent: var(--color-accent-text);
 
   --color-status-idle: #6c757d;
   --color-status-running: #3b82f6;
@@ -172,6 +187,15 @@
   --color-accent: #94EFEE;
   --color-accent-hover: #7de6e5;
   --color-accent-light: rgba(148, 239, 238, 0.15);
+
+  /* Semantic aliases (dark) */
+  --color-primary-light: rgba(148, 239, 238, 0.15);
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-success-border: rgba(16, 185, 129, 0.35);
+  --color-error-bg: rgba(239, 68, 68, 0.15);
+  --color-error-border: rgba(239, 68, 68, 0.4);
+  --color-warning-bg: rgba(234, 179, 8, 0.15);
+  --color-danger-bg: rgba(239, 68, 68, 0.15);
 }
 
 body {
