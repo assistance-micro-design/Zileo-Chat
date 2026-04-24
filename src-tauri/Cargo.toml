@@ -21,7 +21,7 @@ tauri-plugin-dialog = "2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 # OPT-9: Use specific tokio features instead of "full" for faster compilation
-tokio = { version = "1.49.0", features = [
+tokio = { version = "1.51.1", features = [
     "rt",           # Runtime core
     "rt-multi-thread", # Multi-threaded runtime
     "macros",       # #[tokio::main], #[tokio::test]
@@ -49,7 +49,7 @@ globset = "0.4"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # LLM Integration (Rig.rs)
-rig-core = "0.32.0"
+rig-core = "0.34.0"
 
 # HTTP client for provider connectivity tests and MCP HTTP transport
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
