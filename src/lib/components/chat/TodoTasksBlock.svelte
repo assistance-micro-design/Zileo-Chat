@@ -137,7 +137,7 @@ Visible during and after execution.
 	.todo-tasks-block {
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		overflow: hidden;
 		animation: fadeIn 0.2s ease-in;
 	}
@@ -250,7 +250,7 @@ Visible during and after execution.
 		font-size: var(--font-size-xs);
 		font-weight: var(--font-weight-medium);
 		padding: 0 4px;
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 	}
 
 	.priority-high {

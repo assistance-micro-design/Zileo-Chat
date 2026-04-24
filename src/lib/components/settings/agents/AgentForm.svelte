@@ -655,7 +655,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		font-size: var(--font-size-sm);
 		color: var(--color-warning);
 		background: var(--color-warning-bg, rgba(234, 179, 8, 0.1));
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 	}
 
 	.form-grid {

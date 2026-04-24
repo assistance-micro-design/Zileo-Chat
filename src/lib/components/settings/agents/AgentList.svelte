@@ -254,7 +254,7 @@ Shows agent summary with actions for edit and delete.
 	}
 
 	.model-value {
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 	}
 

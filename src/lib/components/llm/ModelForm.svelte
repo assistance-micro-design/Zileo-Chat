@@ -515,7 +515,7 @@
 	.builtin-notice {
 		padding: var(--spacing-sm) var(--spacing-md);
 		background-color: var(--color-warning-bg);
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		border-left: 3px solid var(--color-warning);
 	}
 

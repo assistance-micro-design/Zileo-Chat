@@ -306,7 +306,7 @@ Displays MCP server connection test results including tools, resources, and late
 
 	.tool-name,
 	.resource-name {
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);
 	}
@@ -318,7 +318,7 @@ Displays MCP server connection test results including tools, resources, and late
 	}
 
 	.resource-uri {
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 	}
 
 	.result-actions {

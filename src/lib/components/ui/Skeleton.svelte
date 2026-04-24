@@ -93,16 +93,16 @@
 
 	.skeleton-text {
 		height: 1em;
-		border-radius: var(--radius-sm, 4px);
+		border-radius: var(--border-radius-sm, 4px);
 		width: 100%;
 	}
 
 	.skeleton-circular {
-		border-radius: var(--radius-full, 9999px);
+		border-radius: var(--border-radius-full, 9999px);
 	}
 
 	.skeleton-rectangular {
-		border-radius: var(--radius-md, 8px);
+		border-radius: var(--border-radius-md, 8px);
 		min-height: 1rem;
 	}
 

@@ -86,7 +86,7 @@
   }
 
   .info-card-icon {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-base);
   }
 
   .info-card.approved .info-card-icon {

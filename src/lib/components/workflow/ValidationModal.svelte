@@ -244,7 +244,7 @@
 		align-items: flex-start;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
-		background: var(--color-warning-light);
+		background: var(--color-warning-bg);
 		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
 		color: var(--color-warning);

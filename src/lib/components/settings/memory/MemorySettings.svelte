@@ -423,7 +423,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	}
 
 	.modal-section-title {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 		padding-bottom: var(--spacing-sm);

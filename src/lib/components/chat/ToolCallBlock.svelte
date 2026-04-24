@@ -127,7 +127,7 @@
 
 <style>
 	.tool-call-block {
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		margin: var(--spacing-xs) 0;
 		background: var(--color-bg-secondary);
 		overflow: hidden;
@@ -176,7 +176,7 @@
 		gap: 2px;
 		padding: 1px var(--spacing-xs);
 		background: var(--color-bg-tertiary);
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}
@@ -240,7 +240,7 @@
 		line-height: 1.5;
 		color: var(--color-text-primary);
 		background: var(--color-bg-tertiary);
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		white-space: pre-wrap;
 		word-break: break-word;
@@ -258,6 +258,6 @@
 		color: var(--color-danger);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		background: var(--color-danger-bg, rgba(239, 68, 68, 0.1));
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 	}
 </style>

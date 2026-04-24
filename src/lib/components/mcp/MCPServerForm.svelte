@@ -446,18 +446,18 @@ Includes validation and environment variable editor.
 	.env-key {
 		flex: 1;
 		max-width: 150px;
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		text-transform: uppercase;
 	}
 
 	.env-equals {
 		color: var(--color-text-secondary);
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 	}
 
 	.env-value {
 		flex: 2;
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 	}
 
 	.env-row :global(button:last-child) {

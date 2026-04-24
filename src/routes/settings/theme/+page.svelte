@@ -20,7 +20,8 @@ Manages theme selection (light/dark).
 -->
 
 <script lang="ts">
-	import { Card, HelpButton } from '$lib/components/ui';
+	import { Card } from '$lib/components/ui';
+	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
 	import { theme, type Theme } from '$lib/stores/theme';
 	import { Sun, Moon, ShieldCheck } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
@@ -34,14 +35,12 @@ Manages theme selection (light/dark).
 </script>
 
 <section class="settings-section">
-	<div class="section-title-row">
-		<h2 class="section-title">{$i18n('settings_theme')}</h2>
-		<HelpButton
-			titleKey="help_theme_title"
-			descriptionKey="help_theme_description"
-			tutorialKey="help_theme_tutorial"
-		/>
-	</div>
+	<SettingsSectionHeader
+		titleKey="settings_theme"
+		helpTitleKey="help_theme_title"
+		helpDescriptionKey="help_theme_description"
+		helpTutorialKey="help_theme_tutorial"
+	/>
 
 	<div class="theme-grid">
 		<!-- Light Theme Card -->

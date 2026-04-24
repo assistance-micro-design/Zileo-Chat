@@ -154,7 +154,7 @@
 	}
 
 	.step-description {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-secondary);
 		margin: 0;
 		max-width: 400px;
@@ -190,7 +190,7 @@
 
 	.status {
 		padding: var(--spacing-sm) var(--spacing-md);
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);
 		text-align: center;
 	}
@@ -222,6 +222,6 @@
 	.skip-step:focus-visible {
 		outline: 2px solid var(--color-primary);
 		outline-offset: 2px;
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 	}
 </style>

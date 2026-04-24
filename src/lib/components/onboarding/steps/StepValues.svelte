@@ -107,7 +107,7 @@
 		padding: var(--spacing-md);
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--border-radius-lg);
 		text-align: center;
 	}
 

@@ -103,7 +103,7 @@
 		gap: var(--spacing-xs);
 		padding: var(--spacing-md);
 		background: var(--color-bg-secondary);
-		border-radius: var(--radius-lg, 12px);
+		border-radius: var(--border-radius-lg, 12px);
 	}
 
 	.skeleton-message.user .skeleton-body {

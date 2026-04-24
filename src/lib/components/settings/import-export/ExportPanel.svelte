@@ -23,6 +23,7 @@ Multi-step process: entity selection, options, preview, and export.
 -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { save } from '@tauri-apps/plugin-dialog';
 	import { Button, Card, Badge, StatusIndicator } from '$lib/components/ui';
@@ -280,7 +281,7 @@ Multi-step process: entity selection, options, preview, and export.
 	}
 
 	// Load entities on mount
-	$effect(() => {
+	onMount(() => {
 		loadEntities();
 	});
 </script>

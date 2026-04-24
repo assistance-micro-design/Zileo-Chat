@@ -65,11 +65,8 @@ Manages memory configuration and memory list with lazy loading.
 
 	{#if MemorySettingsComponent && MemoryListComponent}
 		<div class="memory-subsections">
-			<!-- Embedding Configuration -->
-			<div class="memory-subsection">
-				<h3 class="subsection-title">{$i18n('memory_embedding_config')}</h3>
-				<MemorySettingsComponent bind:this={memorySettingsRef} />
-			</div>
+			<!-- Embedding Configuration (card provides its own title) -->
+			<MemorySettingsComponent bind:this={memorySettingsRef} />
 
 			<!-- Memory Management -->
 			<div class="memory-subsection">

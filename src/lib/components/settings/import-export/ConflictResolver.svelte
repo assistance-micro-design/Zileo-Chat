@@ -383,7 +383,7 @@ Supports bulk resolution with "Apply to all" option.
 	}
 
 	.detail-id {
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}

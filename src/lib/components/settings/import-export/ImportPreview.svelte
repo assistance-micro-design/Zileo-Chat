@@ -242,7 +242,7 @@ Uses data-driven loops for summary cards and entity lists.
 
 	.summary-header h4 {
 		margin: 0;
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 	}
 

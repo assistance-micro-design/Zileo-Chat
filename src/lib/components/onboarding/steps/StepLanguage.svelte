@@ -75,7 +75,7 @@
 	}
 
 	.step-description {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-secondary);
 		margin: 0;
 		max-width: 400px;
@@ -95,7 +95,7 @@
 		padding: var(--spacing-xl);
 		background: var(--color-bg-secondary);
 		border: 2px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--border-radius-lg);
 		cursor: pointer;
 		transition: all 0.2s ease;
 		min-width: 120px;
@@ -118,7 +118,7 @@
 	}
 
 	.label {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-primary);
 	}
 </style>

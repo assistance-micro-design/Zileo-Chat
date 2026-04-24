@@ -68,14 +68,14 @@
 		max-width: 300px;
 		height: 4px;
 		background: var(--color-border);
-		border-radius: var(--radius-full);
+		border-radius: var(--border-radius-full);
 		overflow: hidden;
 	}
 
 	.progress-fill {
 		height: 100%;
 		background: var(--color-primary);
-		border-radius: var(--radius-full);
+		border-radius: var(--border-radius-full);
 		transition: width 0.3s ease;
 	}
 

@@ -172,7 +172,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 	}
 
 	.server-name {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 		color: var(--color-text-primary);
@@ -281,7 +281,7 @@ Allows clearing sensitive env vars and excluding servers from export.
 
 	.key-name {
 		font-size: var(--font-size-sm);
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		color: var(--color-text-primary);
 	}
 

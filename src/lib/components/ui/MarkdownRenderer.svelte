@@ -147,7 +147,7 @@
 	}
 
 	.markdown-content :global(h2) {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		margin: var(--spacing-md) 0 var(--spacing-sm);
 	}
@@ -246,7 +246,7 @@
 
 	/* Compact mode */
 	.markdown-content.compact :global(h1) {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		margin: var(--spacing-sm) 0 var(--spacing-xs);
 	}
 

@@ -148,7 +148,7 @@
 		padding: var(--spacing-xs);
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		box-shadow: var(--shadow-lg);
 		min-width: 140px;
 		z-index: var(--z-dropdown);
@@ -163,7 +163,7 @@
 		padding: var(--spacing-sm) var(--spacing-md);
 		background: transparent;
 		border: none;
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-primary);

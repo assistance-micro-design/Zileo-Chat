@@ -218,7 +218,7 @@
 		justify-content: center;
 		width: 40px;
 		height: 40px;
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		background-color: var(--color-bg-secondary);
 	}
 
@@ -229,7 +229,7 @@
 
 	.provider-name {
 		margin: 0;
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
 	}

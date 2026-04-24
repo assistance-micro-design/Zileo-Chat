@@ -184,7 +184,7 @@ Marks sensitive keys as required.
 
 	.server-info h4 {
 		margin: 0;
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 	}
 
@@ -244,7 +244,7 @@ Marks sensitive keys as required.
 		display: flex;
 		gap: var(--spacing-md);
 		padding: var(--spacing-md);
-		background: var(--color-warning-light);
+		background: var(--color-warning-bg);
 		border: 1px solid var(--color-warning);
 		border-radius: var(--border-radius-md);
 	}
@@ -252,7 +252,7 @@ Marks sensitive keys as required.
 	.warning-text {
 		margin: 0;
 		font-size: var(--font-size-sm);
-		color: var(--color-warning-dark);
+		color: var(--color-warning);
 	}
 
 	@media (max-width: 768px) {

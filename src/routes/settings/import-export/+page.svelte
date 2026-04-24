@@ -21,13 +21,14 @@ Manages settings import and export functionality.
 
 <script lang="ts">
 	import { ImportExportSettings } from '$lib/components/settings/import-export';
+	import { SETTINGS_REFRESH_EVENT } from '$lib/utils/settings-refresh';
 
 	/**
 	 * Dispatches custom event to notify other settings pages to refresh.
 	 * Used after import operation completes.
 	 */
 	function handleImportRefresh(): void {
-		window.dispatchEvent(new CustomEvent('settings:refresh'));
+		window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
 	}
 </script>
 

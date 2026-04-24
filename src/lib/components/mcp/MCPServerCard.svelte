@@ -274,7 +274,7 @@ Displays an MCP server with status, command info, and action buttons.
 	}
 
 	.command-text {
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		white-space: nowrap;

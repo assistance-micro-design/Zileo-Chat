@@ -735,7 +735,7 @@ Displays memories with filtering, search, and action buttons.
 		border-radius: var(--border-radius-md);
 		white-space: pre-wrap;
 		word-break: break-word;
-		font-family: var(--font-family-mono);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		max-height: 300px;
 		overflow-y: auto;

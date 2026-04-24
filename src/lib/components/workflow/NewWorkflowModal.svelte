@@ -371,7 +371,7 @@
 
 	.no-agents-warning {
 		padding: var(--spacing-md);
-		background: var(--color-warning-light);
+		background: var(--color-warning-bg);
 		color: var(--color-warning);
 		border-radius: var(--border-radius-md);
 		font-size: var(--font-size-sm);

@@ -155,7 +155,7 @@
 
 	.model-name {
 		margin: 0;
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-text-primary);
 		white-space: nowrap;
@@ -169,7 +169,7 @@
 		color: var(--color-text-tertiary);
 		background-color: var(--color-bg-secondary);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;

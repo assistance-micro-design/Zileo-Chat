@@ -120,7 +120,7 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 		font-size: var(--font-size-sm);
 	}
 

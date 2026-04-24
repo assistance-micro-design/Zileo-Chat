@@ -63,7 +63,7 @@ For transient action feedback (success/error after CRUD), use the toast store.
 	}
 
 	.error-banner.warning {
-		background: var(--color-warning-light);
+		background: var(--color-warning-bg);
 		color: var(--color-warning);
 	}
 

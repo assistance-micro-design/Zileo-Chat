@@ -533,9 +533,14 @@ Uses extracted components, services, and stores for clean architecture.
 			workflowStore.setStatusFilter(savedFilter);
 		}
 
-		// Restore last selected workflow from localStorage
+		// Restore last selected workflow from localStorage.
+		// If the active status filter would hide it, clear the filter so the
+		// restored workflow remains visible in the sidebar.
 		const lastWorkflowId = LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
 		if (lastWorkflowId && $workflows.find(w => w.id === lastWorkflowId)) {
+			if (!$filteredWorkflows.find(w => w.id === lastWorkflowId)) {
+				workflowStore.setStatusFilter('all');
+			}
 			await selectWorkflow(lastWorkflowId);
 		}
 

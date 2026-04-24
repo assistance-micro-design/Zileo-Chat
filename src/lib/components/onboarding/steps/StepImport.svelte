@@ -85,7 +85,7 @@
 	}
 
 	.step-description {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-secondary);
 		margin: 0;
 		max-width: 400px;

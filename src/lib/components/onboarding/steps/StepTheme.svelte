@@ -88,7 +88,7 @@
 	}
 
 	.step-description {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-secondary);
 		margin: 0;
 		max-width: 400px;
@@ -108,7 +108,7 @@
 		padding: var(--spacing-md);
 		background: var(--color-bg-secondary);
 		border: 2px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--border-radius-lg);
 		cursor: pointer;
 		transition: all 0.2s ease;
 	}
@@ -125,7 +125,7 @@
 	.theme-preview {
 		width: 140px;
 		height: 100px;
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
@@ -190,7 +190,7 @@
 	}
 
 	.label {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		color: var(--color-text-primary);
 	}
 </style>

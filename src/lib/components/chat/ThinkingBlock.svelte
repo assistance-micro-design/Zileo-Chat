@@ -72,7 +72,7 @@
 
 <style>
 	.thinking-block {
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		margin: var(--spacing-xs) 0;
 		overflow: hidden;
 	}

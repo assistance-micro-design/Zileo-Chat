@@ -342,7 +342,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	.response-bubble {
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--border-radius-lg);
 		padding: var(--spacing-md);
 		max-width: 80%;
 		animation: fadeIn 0.3s ease-in;
@@ -363,7 +363,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	}
 
 	.response-content {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		line-height: 1.6;
 		color: var(--color-text-primary);
 		word-break: break-word;

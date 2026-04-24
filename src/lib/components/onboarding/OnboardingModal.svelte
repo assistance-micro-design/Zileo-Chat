@@ -189,6 +189,6 @@
 	.skip-link:focus-visible {
 		outline: 2px solid var(--color-primary);
 		outline-offset: 2px;
-		border-radius: var(--radius-sm);
+		border-radius: var(--border-radius-sm);
 	}
 </style>

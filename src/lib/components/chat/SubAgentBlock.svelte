@@ -124,7 +124,7 @@
 
 <style>
 	.sub-agent-block {
-		border-radius: var(--radius-md);
+		border-radius: var(--border-radius-md);
 		margin: var(--spacing-xs) 0;
 		background: var(--color-bg-secondary);
 		overflow: hidden;

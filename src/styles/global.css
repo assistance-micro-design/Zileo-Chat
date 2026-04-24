@@ -102,6 +102,7 @@
   --color-status-error: #ef4444;
 
   /* Spacing */
+  --spacing-2xs: 0.125rem;
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;
@@ -194,6 +195,7 @@
   --color-success-border: rgba(16, 185, 129, 0.35);
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-border: rgba(239, 68, 68, 0.4);
+  --color-warning: #fbbf24;
   --color-warning-bg: rgba(234, 179, 8, 0.15);
   --color-danger-bg: rgba(239, 68, 68, 0.15);
 }

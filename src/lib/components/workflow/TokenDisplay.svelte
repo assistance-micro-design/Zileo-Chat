@@ -307,7 +307,7 @@
 	/* Warning States */
 	.token-display.warning {
 		border-left: 3px solid var(--color-warning);
-		background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning-light) 20%, transparent), transparent 30%);
+		background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning-bg) 20%, transparent), transparent 30%);
 	}
 
 	.token-display.critical {

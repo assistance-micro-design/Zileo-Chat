@@ -154,7 +154,7 @@ Displays a list of checkboxes with select all/deselect all functionality.
 	}
 
 	.title {
-		font-size: var(--font-size-md);
+		font-size: var(--font-size-base);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 		color: var(--color-text-primary);
