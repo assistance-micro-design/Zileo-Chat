@@ -125,7 +125,6 @@ pub mod sub_agent {
     pub const INITIAL_RETRY_DELAY_MS: u64 = 500;
 }
 
-#[allow(dead_code)]
 pub mod calculator {
     /// Valid unary operations
     pub const UNARY_OPS: &[&str] = &[
