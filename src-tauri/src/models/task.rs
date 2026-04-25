@@ -254,56 +254,6 @@ pub struct TaskUpdate {
     pub duration_ms: Option<u64>,
 }
 
-#[allow(dead_code)]
-impl TaskUpdate {
-    /// Creates a new empty TaskUpdate.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets the name field.
-    pub fn name(mut self, name: String) -> Self {
-        self.name = Some(name);
-        self
-    }
-
-    /// Sets the description field.
-    pub fn description(mut self, description: String) -> Self {
-        self.description = Some(description);
-        self
-    }
-
-    /// Sets the agent_assigned field.
-    pub fn agent_assigned(mut self, agent_id: String) -> Self {
-        self.agent_assigned = Some(agent_id);
-        self
-    }
-
-    /// Sets the priority field.
-    pub fn priority(mut self, priority: TaskPriority) -> Self {
-        self.priority = Some(priority);
-        self
-    }
-
-    /// Sets the status field.
-    pub fn status(mut self, status: TaskStatus) -> Self {
-        self.status = Some(status.to_string());
-        self
-    }
-
-    /// Sets the dependencies field.
-    pub fn dependencies(mut self, deps: Vec<String>) -> Self {
-        self.dependencies = Some(deps);
-        self
-    }
-
-    /// Sets the duration_ms field.
-    pub fn duration_ms(mut self, duration: u64) -> Self {
-        self.duration_ms = Some(duration);
-        self
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,33 +337,6 @@ mod tests {
         assert!(json.contains("\"priority\":3"));
         assert!(json.contains("\"status\":\"pending\""));
         // agent_assigned should be skipped when None
-        assert!(!json.contains("agent_assigned"));
-    }
-
-    #[test]
-    fn test_task_update_builder() {
-        let update = TaskUpdate::new()
-            .priority(2)
-            .status(TaskStatus::InProgress)
-            .agent_assigned("api_agent".to_string());
-
-        assert_eq!(update.priority, Some(2));
-        assert_eq!(update.status, Some("in_progress".to_string()));
-        assert_eq!(update.agent_assigned, Some("api_agent".to_string()));
-        assert!(update.name.is_none());
-        assert!(update.description.is_none());
-    }
-
-    #[test]
-    fn test_task_update_serialization() {
-        let update = TaskUpdate::new().priority(1).status(TaskStatus::Completed);
-
-        let json = serde_json::to_string(&update).unwrap();
-        assert!(json.contains("\"priority\":1"));
-        assert!(json.contains("\"status\":\"completed\""));
-        // None fields should be skipped
-        assert!(!json.contains("name"));
-        assert!(!json.contains("description"));
         assert!(!json.contains("agent_assigned"));
     }
 

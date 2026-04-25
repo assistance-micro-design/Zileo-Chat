@@ -121,73 +121,6 @@ pub struct ToolExecutionCreate {
     pub sequence: u32,
 }
 
-impl ToolExecutionCreate {
-    /// Creates a new local tool execution record.
-    #[allow(dead_code)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn local(
-        workflow_id: String,
-        message_id: String,
-        agent_id: String,
-        tool_name: String,
-        input_params: serde_json::Value,
-        output_result: serde_json::Value,
-        success: bool,
-        error_message: Option<String>,
-        duration_ms: u64,
-        iteration: u32,
-    ) -> Self {
-        Self {
-            workflow_id,
-            message_id,
-            agent_id,
-            tool_type: "local".to_string(),
-            tool_name,
-            server_name: None,
-            input_params,
-            output_result,
-            success,
-            error_message,
-            duration_ms,
-            iteration,
-            sequence: 0,
-        }
-    }
-
-    /// Creates a new MCP tool execution record.
-    #[allow(dead_code)]
-    #[allow(clippy::too_many_arguments)]
-    pub fn mcp(
-        workflow_id: String,
-        message_id: String,
-        agent_id: String,
-        tool_name: String,
-        server_name: String,
-        input_params: serde_json::Value,
-        output_result: serde_json::Value,
-        success: bool,
-        error_message: Option<String>,
-        duration_ms: u64,
-        iteration: u32,
-    ) -> Self {
-        Self {
-            workflow_id,
-            message_id,
-            agent_id,
-            tool_type: "mcp".to_string(),
-            tool_name,
-            server_name: Some(server_name),
-            input_params,
-            output_result,
-            success,
-            error_message,
-            duration_ms,
-            iteration,
-            sequence: 0,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,42 +228,4 @@ mod tests {
         assert!(json.contains("\"error_message\":\"Task not found\""));
     }
 
-    #[test]
-    fn test_tool_execution_create_local() {
-        let create = ToolExecutionCreate::local(
-            "wf_001".to_string(),
-            "msg_001".to_string(),
-            "agent_001".to_string(),
-            "MemoryTool".to_string(),
-            serde_json::json!({"operation": "add"}),
-            serde_json::json!({"success": true}),
-            true,
-            None,
-            100,
-            0,
-        );
-
-        assert_eq!(create.tool_type, "local");
-        assert!(create.server_name.is_none());
-    }
-
-    #[test]
-    fn test_tool_execution_create_mcp() {
-        let create = ToolExecutionCreate::mcp(
-            "wf_001".to_string(),
-            "msg_001".to_string(),
-            "agent_001".to_string(),
-            "find_symbol".to_string(),
-            "serena".to_string(),
-            serde_json::json!({"name": "MyClass"}),
-            serde_json::json!({"found": true}),
-            true,
-            None,
-            200,
-            1,
-        );
-
-        assert_eq!(create.tool_type, "mcp");
-        assert_eq!(create.server_name, Some("serena".to_string()));
-    }
 }

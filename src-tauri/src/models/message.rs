@@ -137,70 +137,6 @@ pub struct PaginatedMessages {
     pub has_more: bool,
 }
 
-impl MessageCreate {
-    /// Creates a new user message (no metrics).
-    #[allow(dead_code)]
-    pub fn user(workflow_id: String, content: String) -> Self {
-        Self {
-            workflow_id,
-            role: "user".to_string(),
-            content,
-            tokens: 0,
-            tokens_input: None,
-            tokens_output: None,
-            model: None,
-            provider: None,
-            cost_usd: None,
-            duration_ms: None,
-            thinking_tokens: None,
-        }
-    }
-
-    /// Creates a new assistant message with metrics.
-    #[allow(dead_code)]
-    pub fn assistant(
-        workflow_id: String,
-        content: String,
-        tokens_input: Option<u64>,
-        tokens_output: Option<u64>,
-        model: Option<String>,
-        provider: Option<String>,
-        duration_ms: Option<u64>,
-    ) -> Self {
-        Self {
-            workflow_id,
-            role: "assistant".to_string(),
-            content,
-            tokens: tokens_output.unwrap_or(0) as usize,
-            tokens_input,
-            tokens_output,
-            model,
-            provider,
-            cost_usd: None, // Cost calculation is provider-specific
-            duration_ms,
-            thinking_tokens: None,
-        }
-    }
-
-    /// Creates a new system message (errors, notifications).
-    #[allow(dead_code)]
-    pub fn system(workflow_id: String, content: String) -> Self {
-        Self {
-            workflow_id,
-            role: "system".to_string(),
-            content,
-            tokens: 0,
-            tokens_input: None,
-            tokens_output: None,
-            model: None,
-            provider: None,
-            cost_usd: None,
-            duration_ms: None,
-            thinking_tokens: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,47 +220,10 @@ mod tests {
     }
 
     #[test]
-    fn test_message_create_user() {
-        let create = MessageCreate::user("wf_001".to_string(), "Hello".to_string());
-        assert_eq!(create.role, "user");
-        assert!(create.tokens_input.is_none());
-        assert!(create.model.is_none());
-    }
-
-    #[test]
-    fn test_message_create_assistant() {
-        let create = MessageCreate::assistant(
-            "wf_001".to_string(),
-            "Response".to_string(),
-            Some(100),
-            Some(50),
-            Some("mistral-large".to_string()),
-            Some("Mistral".to_string()),
-            Some(2000),
-        );
-        assert_eq!(create.role, "assistant");
-        assert_eq!(create.tokens_input, Some(100));
-        assert_eq!(create.tokens_output, Some(50));
-        assert_eq!(create.tokens, 50); // tokens = tokens_output
-    }
-
-    #[test]
     fn test_message_role_display() {
         assert_eq!(MessageRole::User.to_string(), "user");
         assert_eq!(MessageRole::Assistant.to_string(), "assistant");
         assert_eq!(MessageRole::System.to_string(), "system");
-    }
-
-    /// Verify MessageCreate always serializes the `tokens` field.
-    /// Rust `tokens: usize` is required, so it must always appear in JSON output.
-    #[test]
-    fn test_message_create_always_serializes_tokens() {
-        let create = MessageCreate::user("wf-1".to_string(), "Hello".to_string());
-        let json = serde_json::to_string(&create).unwrap();
-        assert!(
-            json.contains("\"tokens\""),
-            "tokens field must always be present in serialized output"
-        );
     }
 
     /// Defense-in-depth - MessageCreate should deserialize even without
@@ -347,24 +246,5 @@ mod tests {
             0,
             "Missing tokens should default to 0"
         );
-    }
-
-    /// Verify tokens value is preserved through serialization roundtrip.
-    #[test]
-    fn test_message_create_tokens_roundtrip() {
-        let create = MessageCreate::assistant(
-            "wf-1".to_string(),
-            "Response".to_string(),
-            Some(100),
-            Some(75),
-            Some("gpt-4".to_string()),
-            None,
-            Some(1500),
-        );
-        assert_eq!(create.tokens, 75);
-
-        let json = serde_json::to_string(&create).unwrap();
-        let deserialized: MessageCreate = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.tokens, 75, "tokens must survive roundtrip");
     }
 }

@@ -81,6 +81,10 @@ fn default_importance() -> f64 {
 /// ID is passed separately to db.create() using table:id format
 /// Datetime field is handled by database default
 /// Enum fields are converted to strings for SurrealDB compatibility
+///
+/// Note: `expires_at` is intentionally absent here. SurrealDB SCHEMAFULL rejects
+/// ISO 8601 strings for `option<datetime>` via JSON CONTENT — callers set it
+/// separately with a `<datetime>` cast (see `set_expires_at_if_present`).
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryCreate {
     /// Type of memory content (as string for SurrealDB)
@@ -95,55 +99,16 @@ pub struct MemoryCreate {
     pub metadata: serde_json::Value,
     /// Importance score (0.0-1.0)
     pub importance: f64,
-    /// Optional expiration timestamp for TTL.
-    /// Not serialized into CONTENT - set via separate UPDATE with datetime cast
-    /// because SurrealDB SCHEMAFULL rejects ISO 8601 strings for option<datetime>.
-    /// The value is passed through AddMemoryParams -> set_expires_at_if_present().
-    #[serde(skip_serializing)]
-    #[allow(dead_code)]
-    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl MemoryCreate {
-    /// Creates a new MemoryCreate with the given parameters (general scope)
-    #[allow(dead_code)] // Convenience method for simple cases
-    pub fn new(memory_type: MemoryType, content: String, metadata: serde_json::Value) -> Self {
-        Self {
-            memory_type: memory_type.to_string(),
-            content,
-            workflow_id: None,
-            metadata,
-            importance: 0.5,
-            expires_at: None,
-        }
-    }
-
-    /// Creates a new MemoryCreate with workflow scope
-    #[allow(dead_code)]
-    pub fn with_workflow(
-        memory_type: MemoryType,
-        content: String,
-        metadata: serde_json::Value,
-        workflow_id: String,
-    ) -> Self {
-        Self {
-            memory_type: memory_type.to_string(),
-            content,
-            workflow_id: Some(workflow_id),
-            metadata,
-            importance: 0.5,
-            expires_at: None,
-        }
-    }
-
-    /// Unified builder accepting optional workflow_id, importance, and expires_at
+    /// Unified builder accepting optional workflow_id and importance.
     pub fn build(
         memory_type: MemoryType,
         content: String,
         metadata: serde_json::Value,
         workflow_id: Option<String>,
         importance: f64,
-        expires_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             memory_type: memory_type.to_string(),
@@ -151,14 +116,14 @@ impl MemoryCreate {
             workflow_id,
             metadata,
             importance,
-            expires_at,
         }
     }
 }
 
 /// Memory creation payload with embedding vector
-/// Used by MemoryTool for creating memories with vector embeddings
-#[allow(dead_code)]
+/// Used by MemoryTool for creating memories with vector embeddings.
+///
+/// Same `expires_at` caveat as `MemoryCreate`.
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryCreateWithEmbedding {
     /// Type of memory content (as string for SurrealDB)
@@ -175,53 +140,10 @@ pub struct MemoryCreateWithEmbedding {
     pub metadata: serde_json::Value,
     /// Importance score (0.0-1.0)
     pub importance: f64,
-    /// Optional expiration timestamp for TTL.
-    /// Not serialized into CONTENT - set via separate UPDATE with datetime cast.
-    #[serde(skip_serializing)]
-    #[allow(dead_code)]
-    pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[allow(dead_code)]
 impl MemoryCreateWithEmbedding {
-    /// Creates a new MemoryCreateWithEmbedding with the given parameters
-    pub fn new(
-        memory_type: MemoryType,
-        content: String,
-        embedding: Vec<f32>,
-        metadata: serde_json::Value,
-    ) -> Self {
-        Self {
-            memory_type: memory_type.to_string(),
-            content,
-            embedding,
-            workflow_id: None,
-            metadata,
-            importance: 0.5,
-            expires_at: None,
-        }
-    }
-
-    /// Creates a new MemoryCreateWithEmbedding with workflow scope
-    pub fn with_workflow(
-        memory_type: MemoryType,
-        content: String,
-        embedding: Vec<f32>,
-        metadata: serde_json::Value,
-        workflow_id: String,
-    ) -> Self {
-        Self {
-            memory_type: memory_type.to_string(),
-            content,
-            embedding,
-            workflow_id: Some(workflow_id),
-            metadata,
-            importance: 0.5,
-            expires_at: None,
-        }
-    }
-
-    /// Unified builder accepting optional workflow_id, importance, and expires_at
+    /// Unified builder accepting optional workflow_id and importance.
     pub fn build(
         memory_type: MemoryType,
         content: String,
@@ -229,7 +151,6 @@ impl MemoryCreateWithEmbedding {
         metadata: serde_json::Value,
         workflow_id: Option<String>,
         importance: f64,
-        expires_at: Option<DateTime<Utc>>,
     ) -> Self {
         Self {
             memory_type: memory_type.to_string(),
@@ -238,7 +159,6 @@ impl MemoryCreateWithEmbedding {
             workflow_id,
             metadata,
             importance,
-            expires_at,
         }
     }
 }
@@ -350,35 +270,6 @@ mod tests {
 
         let json = serde_json::to_string(&memory).unwrap();
         assert!(json.contains("\"workflow_id\":\"wf_123\""));
-    }
-
-    #[test]
-    fn test_memory_create_with_embedding() {
-        let memory = MemoryCreateWithEmbedding::new(
-            MemoryType::Knowledge,
-            "Test content".to_string(),
-            vec![0.1, 0.2, 0.3],
-            serde_json::json!({"tags": ["test"]}),
-        );
-
-        let json = serde_json::to_string(&memory).unwrap();
-        assert!(json.contains("\"type\":\"knowledge\""));
-        assert!(json.contains("\"embedding\":[0.1,0.2,0.3]"));
-        assert!(!json.contains("workflow_id"));
-    }
-
-    #[test]
-    fn test_memory_create_with_workflow() {
-        let memory = MemoryCreateWithEmbedding::with_workflow(
-            MemoryType::Context,
-            "Workflow memory".to_string(),
-            vec![0.5, 0.6],
-            serde_json::json!({}),
-            "wf_abc".to_string(),
-        );
-
-        let json = serde_json::to_string(&memory).unwrap();
-        assert!(json.contains("\"workflow_id\":\"wf_abc\""));
     }
 
     #[test]

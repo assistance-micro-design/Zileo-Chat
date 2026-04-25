@@ -132,8 +132,7 @@ mod tool_factory_sub_agent_tests {
 mod sub_agent_execution_tests {
     use zileo_chat::models::sub_agent::{
         constants::MAX_SUB_AGENTS, DelegateResult, ParallelBatchResult, ParallelTaskResult,
-        SubAgentExecutionComplete, SubAgentExecutionCreate, SubAgentMetrics, SubAgentSpawnResult,
-        SubAgentStatus,
+        SubAgentExecutionCreate, SubAgentMetrics, SubAgentSpawnResult, SubAgentStatus,
     };
 
     #[test]
@@ -263,35 +262,6 @@ mod sub_agent_execution_tests {
         assert_eq!(create.status, "pending");
     }
 
-    #[test]
-    fn test_sub_agent_execution_complete_success() {
-        let complete = SubAgentExecutionComplete::success(
-            2500,
-            Some(100),
-            Some(200),
-            "# Success Report".to_string(),
-        );
-
-        assert_eq!(complete.status, "completed");
-        assert_eq!(complete.duration_ms, 2500);
-        assert_eq!(complete.tokens_input, Some(100));
-        assert_eq!(complete.tokens_output, Some(200));
-        assert!(complete.result_summary.is_some());
-        assert!(complete.error_message.is_none());
-    }
-
-    #[test]
-    fn test_sub_agent_execution_complete_error() {
-        let complete = SubAgentExecutionComplete::error(500, "Agent execution failed".to_string());
-
-        assert_eq!(complete.status, "error");
-        assert_eq!(complete.duration_ms, 500);
-        assert!(complete.error_message.is_some());
-        assert_eq!(
-            complete.error_message.unwrap(),
-            "Agent execution failed".to_string()
-        );
-    }
 }
 
 // ============================================================================

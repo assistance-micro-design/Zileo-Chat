@@ -386,41 +386,39 @@ mod tests {
     struct TestRecord {
         #[serde(deserialize_with = "deserialize_thing_id")]
         id: String,
-        #[allow(dead_code)]
-        name: String,
     }
 
     #[test]
     fn test_deserialize_plain_string() {
-        let json = r#"{"id": "abc-123", "name": "test"}"#;
+        let json = r#"{"id": "abc-123"}"#;
         let record: TestRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.id, "abc-123");
     }
 
     #[test]
     fn test_deserialize_table_colon_id() {
-        let json = r#"{"id": "workflow:abc-123", "name": "test"}"#;
+        let json = r#"{"id": "workflow:abc-123"}"#;
         let record: TestRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.id, "abc-123");
     }
 
     #[test]
     fn test_deserialize_thing_object_string() {
-        let json = r#"{"id": {"id": "abc-123"}, "name": "test"}"#;
+        let json = r#"{"id": {"id": "abc-123"}}"#;
         let record: TestRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.id, "abc-123");
     }
 
     #[test]
     fn test_deserialize_thing_object_nested() {
-        let json = r#"{"id": {"id": {"String": "abc-123"}}, "name": "test"}"#;
+        let json = r#"{"id": {"id": {"String": "abc-123"}}}"#;
         let record: TestRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.id, "abc-123");
     }
 
     #[test]
     fn test_deserialize_thing_with_tb() {
-        let json = r#"{"id": {"tb": "workflow", "id": "abc-123"}, "name": "test"}"#;
+        let json = r#"{"id": {"tb": "workflow", "id": "abc-123"}}"#;
         let record: TestRecord = serde_json::from_str(json).unwrap();
         assert_eq!(record.id, "abc-123");
     }

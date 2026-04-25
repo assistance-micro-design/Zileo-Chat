@@ -202,85 +202,6 @@ impl SubAgentExecutionCreate {
     }
 }
 
-/// Update payload for completing a sub-agent execution.
-///
-/// Used to update the execution record when it completes.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize)]
-pub struct SubAgentExecutionComplete {
-    /// Final status
-    pub status: String,
-    /// Execution duration in milliseconds
-    pub duration_ms: u64,
-    /// Input tokens consumed
-    pub tokens_input: Option<u64>,
-    /// Output tokens generated
-    pub tokens_output: Option<u64>,
-    /// Summary of the result (truncated if needed)
-    pub result_summary: Option<String>,
-    /// Error message if failed
-    pub error_message: Option<String>,
-}
-
-#[allow(dead_code)]
-impl SubAgentExecutionComplete {
-    /// Creates a success completion payload.
-    pub fn success(
-        duration_ms: u64,
-        tokens_input: Option<u64>,
-        tokens_output: Option<u64>,
-        result_summary: String,
-    ) -> Self {
-        // Truncate result summary if too long (max 5000 chars for DB storage)
-        // Uses char-based truncation to avoid panics on multi-byte UTF-8 (ERR_RUST_002)
-        const TRUNCATION_SUFFIX: &str = "... [truncated]";
-        const MAX_LEN: usize = 5000;
-
-        let summary = if result_summary.chars().count() > MAX_LEN {
-            let truncated: String = result_summary
-                .chars()
-                .take(MAX_LEN - TRUNCATION_SUFFIX.len())
-                .collect();
-            format!("{}{}", truncated, TRUNCATION_SUFFIX)
-        } else {
-            result_summary
-        };
-
-        Self {
-            status: SubAgentStatus::Completed.to_string(),
-            duration_ms,
-            tokens_input,
-            tokens_output,
-            result_summary: Some(summary),
-            error_message: None,
-        }
-    }
-
-    /// Creates an error completion payload.
-    pub fn error(duration_ms: u64, error_message: String) -> Self {
-        Self {
-            status: SubAgentStatus::Error.to_string(),
-            duration_ms,
-            tokens_input: None,
-            tokens_output: None,
-            result_summary: None,
-            error_message: Some(error_message),
-        }
-    }
-
-    /// Creates a cancelled completion payload.
-    pub fn cancelled(duration_ms: u64) -> Self {
-        Self {
-            status: SubAgentStatus::Cancelled.to_string(),
-            duration_ms,
-            tokens_input: None,
-            tokens_output: None,
-            result_summary: None,
-            error_message: Some("Execution cancelled".to_string()),
-        }
-    }
-}
-
 /// Metrics from a sub-agent execution.
 ///
 /// Returned as part of the tool result to the primary agent.
@@ -399,44 +320,6 @@ mod tests {
         assert_eq!(create.parent_agent_id, "parent_agent");
         assert_eq!(create.sub_agent_id, "sub_agent_001");
         assert_eq!(create.status, "pending");
-    }
-
-    #[test]
-    fn test_sub_agent_execution_complete_success() {
-        let complete = SubAgentExecutionComplete::success(
-            1500,
-            Some(100),
-            Some(500),
-            "Analysis complete. Found 5 tables.".to_string(),
-        );
-
-        assert_eq!(complete.status, "completed");
-        assert_eq!(complete.duration_ms, 1500);
-        assert!(complete.result_summary.is_some());
-        assert!(complete.error_message.is_none());
-    }
-
-    #[test]
-    fn test_sub_agent_execution_complete_error() {
-        let complete = SubAgentExecutionComplete::error(500, "Connection timeout".to_string());
-
-        assert_eq!(complete.status, "error");
-        assert_eq!(complete.duration_ms, 500);
-        assert!(complete.result_summary.is_none());
-        assert_eq!(
-            complete.error_message,
-            Some("Connection timeout".to_string())
-        );
-    }
-
-    #[test]
-    fn test_sub_agent_execution_complete_truncates_long_summary() {
-        let long_summary = "x".repeat(6000);
-        let complete = SubAgentExecutionComplete::success(1000, Some(100), Some(200), long_summary);
-
-        let summary = complete.result_summary.unwrap();
-        assert!(summary.len() <= 5000);
-        assert!(summary.ends_with("... [truncated]"));
     }
 
     #[test]

@@ -113,7 +113,6 @@ pub async fn add_memory_core(
                     params.metadata.clone(),
                     params.workflow_id.clone(),
                     params.importance,
-                    params.expires_at,
                 );
 
                 db.create("memory", &memory_id, memory)
@@ -165,7 +164,6 @@ async fn create_memory_without_embedding(
         params.metadata.clone(),
         params.workflow_id.clone(),
         params.importance,
-        params.expires_at,
     );
 
     db.create("memory", memory_id, memory)
