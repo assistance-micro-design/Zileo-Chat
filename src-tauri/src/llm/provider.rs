@@ -86,7 +86,7 @@ impl std::str::FromStr for ProviderType {
             "ollama" => Ok(ProviderType::Ollama),
             other => {
                 if other.is_empty() {
-                    Err(LLMError::InvalidProvider(s.to_string()))
+                    Err(LLMError::Internal(format!("Invalid provider: {}", s)))
                 } else {
                     Ok(ProviderType::Custom(other.to_string()))
                 }
@@ -128,10 +128,6 @@ pub enum LLMError {
     #[error("Provider not configured: {0}")]
     NotConfigured(String),
 
-    /// Invalid provider name
-    #[error("Invalid provider: {0}")]
-    InvalidProvider(String),
-
     /// API key missing
     #[error("API key missing for provider: {0}")]
     MissingApiKey(String),
@@ -147,10 +143,6 @@ pub enum LLMError {
     /// Connection error (for Ollama)
     #[error("Connection error: {0}")]
     ConnectionError(String),
-
-    /// Streaming error
-    #[error("Streaming error: {0}")]
-    StreamingError(String),
 
     /// Circuit breaker is open (provider temporarily unavailable)
     #[error("Circuit breaker open for provider: {0}")]
