@@ -264,7 +264,7 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
 };
 
 // =====================================================
-// Phase 1.2 — Validation Audit Log
+// Validation Audit Log
 // =====================================================
 
 /** Final decision recorded in the audit log. */

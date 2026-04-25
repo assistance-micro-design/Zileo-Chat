@@ -101,8 +101,8 @@ pub async fn persist_initial_reasoning(
 /// 4. Resolve pricing, surface a warning when cost == 0 but tokens > 0.
 /// 5. Update the workflow row with cumulative metrics.
 /// 6. Aggregate sub-agent tokens.
-/// 7. Persist tool executions and reasoning steps (with DB flush — Phase 2.6).
-/// 8. Link orphan sub-agent executions to this message (parameterized — Phase 2.5).
+/// 7. Persist tool executions and reasoning steps (with DB flush).
+/// 8. Link orphan sub-agent executions to this message (parameterized).
 /// 9. Emit `workflow_complete`.
 /// 10. Clear the cancellation token from app state.
 pub async fn finalize_completion(
@@ -122,6 +122,13 @@ pub async fn finalize_completion(
     } = ctx;
 
     // 1. Compute completion sequence — must land after every block from the agent.
+    //
+    // Two sources of sequence numbers race here:
+    //   - blocks already attached to the report (tool executions, reasoning steps),
+    //   - blocks allocated concurrently via `sequence_tracker` (e.g. orchestrator
+    //     bridge events). `allocate()` advances the tracker so its current peek
+    //     reflects the latest reservation; we then take the max of both sources
+    //     and add 1 to land strictly after every emitted block.
     let max_report_sequence = report
         .metrics
         .tool_executions
@@ -130,8 +137,8 @@ pub async fn finalize_completion(
         .chain(report.metrics.reasoning_steps.iter().map(|rs| rs.sequence))
         .max()
         .unwrap_or(initial_sequence);
-    let _ = sequence_tracker.allocate();
-    let completion_sequence = max_report_sequence.max(sequence_tracker.peek()) + 1;
+    let allocated = sequence_tracker.allocate();
+    let completion_sequence = max_report_sequence.max(allocated) + 1;
 
     // 2. Emit + persist completion reasoning.
     let completion_reasoning = format!(
@@ -179,7 +186,7 @@ pub async fn finalize_completion(
         ),
     );
 
-    // 4. Pricing + Phase 2.4 warning.
+    // 4. Pricing +warning.
     let pricing = load_model_pricing_info(
         state,
         agent_id,
@@ -256,7 +263,7 @@ pub async fn finalize_completion(
     )
     .await;
 
-    // 8. Link orphan sub-agent executions (Phase 2.5: parameterized).
+    // 8. Link orphan sub-agent executions.
     if let Err(e) = state
         .db
         .execute_with_params(

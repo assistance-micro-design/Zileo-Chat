@@ -26,6 +26,7 @@ use crate::agents::prompt::REPORT_ENFORCEMENT_PROMPT;
 use crate::llm::tool_adapter::ProviderToolAdapter;
 use crate::llm::{ProviderType, ToolCompletionParams};
 use crate::models::workflow::IterationMetrics;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Mutable state passed to report enforcement to avoid too many arguments.
@@ -108,8 +109,13 @@ pub(crate) fn build_report_content(inputs: &ReportContentInputs<'_>) -> String {
 /// Makes a follow-up LLM call to get a proper report when the agent finished
 /// with a generic completion message.
 ///
+/// `cancellation_token` (when present) races the report enforcement call so
+/// a cancellation request mid-enforcement tears down the in-flight HTTP
+/// request — the call can be slow on big contexts.
+///
 /// Returns `Some(content)` when a meaningful response was obtained, `None`
 /// otherwise (kept generic message, error, empty response).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn enforce_report(
     ctx: &ToolLoopContext<'_>,
     provider_type: &ProviderType,
@@ -118,6 +124,7 @@ pub(crate) async fn enforce_report(
     state: &mut EnforcementState<'_>,
     elapsed_ms: u64,
     iteration: usize,
+    cancellation_token: Option<CancellationToken>,
 ) -> Option<String> {
     *state.global_sequence += 1;
     emit_reasoning(
@@ -140,7 +147,7 @@ pub(crate) async fn enforce_report(
 
     let result = ctx
         .provider_manager
-        .complete_with_tools(
+        .complete_with_tools_cancellable(
             provider_type.clone(),
             ToolCompletionParams {
                 messages: state.messages.clone(),
@@ -152,6 +159,7 @@ pub(crate) async fn enforce_report(
                 context_window: ctx.config.llm.context_window,
                 reasoning_effort: effective_reasoning_effort(ctx.config),
             },
+            cancellation_token,
         )
         .await;
 

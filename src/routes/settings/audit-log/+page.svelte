@@ -16,7 +16,7 @@
 
 <!--
 Settings > Audit Log Page
-Browse, filter, export and purge the validation audit log (Phase 1.2 backend).
+Browse, filter, export and purge the validation audit log (see commands/validation_audit.rs).
 -->
 
 <script lang="ts">

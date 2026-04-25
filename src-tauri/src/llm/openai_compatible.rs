@@ -361,32 +361,29 @@ impl OpenAiCompatibleProvider {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_provider_new() {
-        let http_client = Arc::new(
+    /// Builds a `reqwest::Client` wired with the project's default LLM HTTP
+    /// timeout. Centralized so tests stay aligned with `crate::constants::llm_http`.
+    fn test_http_client() -> Arc<reqwest::Client> {
+        Arc::new(
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(
                     crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
                 ))
                 .build()
-                .expect("Failed to create HTTP client"),
-        );
-        let provider = OpenAiCompatibleProvider::new("routerlab", http_client);
+                .expect("test HTTP client"),
+        )
+    }
+
+    #[test]
+    fn test_provider_new() {
+        let provider = OpenAiCompatibleProvider::new("routerlab", test_http_client());
         assert_eq!(provider.provider_name(), "routerlab");
         assert!(!provider.is_configured());
     }
 
     #[tokio::test]
     async fn test_provider_configure() {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
-                ))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        let provider = OpenAiCompatibleProvider::new("test", http_client);
+        let provider = OpenAiCompatibleProvider::new("test", test_http_client());
 
         let result = provider
             .configure("test-key", "https://api.example.com/v1")
@@ -403,15 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_configure_trailing_slash() {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
-                ))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        let provider = OpenAiCompatibleProvider::new("test", http_client);
+        let provider = OpenAiCompatibleProvider::new("test", test_http_client());
 
         provider
             .configure("key", "https://api.example.com/v1/")
@@ -426,15 +415,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_clear() {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
-                ))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        let provider = OpenAiCompatibleProvider::new("test", http_client);
+        let provider = OpenAiCompatibleProvider::new("test", test_http_client());
 
         provider
             .configure("key", "https://api.example.com/v1")
@@ -448,15 +429,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_empty_api_key() {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
-                ))
-                .build()
-                .expect("Failed to create HTTP client"),
-        );
-        let provider = OpenAiCompatibleProvider::new("test", http_client);
+        let provider = OpenAiCompatibleProvider::new("test", test_http_client());
 
         let result = provider.configure("", "https://api.example.com/v1").await;
         assert!(result.is_err());

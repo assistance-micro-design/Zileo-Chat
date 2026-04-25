@@ -89,12 +89,14 @@ impl WaitOutcome {
 
 /// Clamps a user-configured timeout (in seconds) into the allowed range.
 ///
-/// Defaults to [`VALIDATION_TIMEOUT_SECS`] (60s) if the value is unparseable
-/// or out of range. The bounds are `[VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS]`
-/// = `[5, 600]` seconds.
+/// `raw <= 0` falls back to [`VALIDATION_TIMEOUT_SECS`] (60s — the documented
+/// default for validation responses). Otherwise the value is clamped into
+/// `[VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS]` = `[5, 600]` seconds.
 pub(crate) fn clamp_timeout_seconds(raw: i32) -> u64 {
-    let raw = raw.max(0) as u64;
-    raw.clamp(VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS)
+    if raw <= 0 {
+        return VALIDATION_TIMEOUT_SECS;
+    }
+    (raw as u64).clamp(VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS)
 }
 
 /// Validates a trimmed name with configurable field name and max length.
@@ -134,6 +136,26 @@ pub fn validate_trimmed_name(
     Ok(trimmed.to_string())
 }
 
+/// Returns `true` when `auto_approve_low` is enabled and the risk level is low.
+fn is_auto_approved_low(settings: &ValidationSettings, risk_level: &RiskLevel) -> bool {
+    settings.risk_thresholds.auto_approve_low && *risk_level == RiskLevel::Low
+}
+
+/// Returns `true` when the operation type is selected for validation in
+/// `Selective` mode.
+fn type_requires_validation(
+    settings: &ValidationSettings,
+    validation_type: &ValidationType,
+) -> bool {
+    match validation_type {
+        ValidationType::SubAgent => settings.selective_config.sub_agents,
+        ValidationType::Tool => settings.selective_config.tools,
+        ValidationType::Mcp => settings.selective_config.mcp,
+        ValidationType::FileOp => settings.selective_config.file_ops,
+        ValidationType::DbOp => settings.selective_config.db_ops,
+    }
+}
+
 /// Checks if validation is required based on settings for any operation type.
 ///
 /// Pure logic function (no I/O) that evaluates the validation mode, operation type,
@@ -151,10 +173,9 @@ pub(crate) fn should_require_validation(
     validation_type: &ValidationType,
     risk_level: &RiskLevel,
 ) -> bool {
-    // Check mode first
     match settings.mode {
         ValidationMode::Auto => {
-            // In auto mode, only validate if always_confirm_high is set AND risk is high
+            // Auto mode: only validate when always_confirm_high covers the operation.
             if settings.risk_thresholds.always_confirm_high
                 && (*risk_level == RiskLevel::High || *risk_level == RiskLevel::Critical)
             {
@@ -162,45 +183,31 @@ pub(crate) fn should_require_validation(
                 return true;
             }
             info!("Auto mode: skipping validation");
-            return false;
+            false
         }
         ValidationMode::Manual => {
-            // Manual mode: always validate unless auto_approve_low is set AND risk is low
-            if settings.risk_thresholds.auto_approve_low && *risk_level == RiskLevel::Low {
+            // Manual mode: always validate unless auto_approve_low covers the operation.
+            if is_auto_approved_low(settings, risk_level) {
                 info!("Manual mode but auto-approving low risk operation");
                 return false;
             }
-            return true;
+            true
         }
         ValidationMode::Selective => {
-            // Selective mode: check operation type below
+            if !type_requires_validation(settings, validation_type) {
+                info!(
+                    validation_type = %validation_type,
+                    "Selective mode: operation type does not require validation"
+                );
+                return false;
+            }
+            if is_auto_approved_low(settings, risk_level) {
+                info!("Auto-approving low risk operation");
+                return false;
+            }
+            true
         }
     }
-
-    // Selective mode: check if operation type requires validation
-    let type_requires_validation = match validation_type {
-        ValidationType::SubAgent => settings.selective_config.sub_agents,
-        ValidationType::Tool => settings.selective_config.tools,
-        ValidationType::Mcp => settings.selective_config.mcp,
-        ValidationType::FileOp => settings.selective_config.file_ops,
-        ValidationType::DbOp => settings.selective_config.db_ops,
-    };
-
-    if !type_requires_validation {
-        info!(
-            validation_type = %validation_type,
-            "Selective mode: operation type does not require validation"
-        );
-        return false;
-    }
-
-    // Check risk thresholds
-    if settings.risk_thresholds.auto_approve_low && *risk_level == RiskLevel::Low {
-        info!("Auto-approving low risk operation");
-        return false;
-    }
-
-    true
 }
 
 /// Checks if a FileManagerTool operation is destructive and requires confirmation.
@@ -503,7 +510,7 @@ impl ValidationHelper {
             )
             .await?;
 
-        // Phase 1.2: append a timeout-driven audit entry.
+        // append a timeout-driven audit entry.
         // User-driven approve/reject is audited from the Tauri command path
         // (commands/validation.rs) so we don't double-write here.
         if outcome.via_timeout {
@@ -579,12 +586,6 @@ impl ValidationHelper {
         write_audit_entry(&self.db, settings, draft).await;
     }
 }
-
-/// Compile-time visibility check: `VALIDATION_TIMEOUT_SECS` is still imported
-/// as the documented fallback, even when not directly referenced in this file
-/// after the timeout-behavior refactor.
-#[allow(dead_code)]
-const _FALLBACK_TIMEOUT_REFERENCE: u64 = VALIDATION_TIMEOUT_SECS;
 
 #[cfg(test)]
 #[path = "validation_helper_tests.rs"]

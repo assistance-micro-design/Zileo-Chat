@@ -14,10 +14,10 @@
 
 //! Domain errors for the Tauri command layer.
 //!
-//! Phase 3.4: typed errors that newly written commands can return as
-//! `Result<T, CommandError>`. The `From<CommandError> for String`
-//! impl preserves the existing `Result<T, String>` Tauri command shape,
-//! so adoption is incremental — a handler can switch to `CommandError`
+//! Typed errors that newly written commands can return as
+//! `Result<T, CommandError>`. The `From<CommandError> for String` impl
+//! preserves the existing `Result<T, String>` Tauri command shape, so
+//! adoption is incremental — a handler can switch to `CommandError`
 //! internally and `?`-bubble through `.into()` at the boundary.
 //!
 //! Migration is progressive — existing handlers keep returning

@@ -222,6 +222,125 @@ fn csv_escape_quotes_and_commas() {
     assert_eq!(csv_escape("line\nbreak"), "\"line\nbreak\"");
 }
 
+#[tokio::test]
+async fn list_filter_by_decided_by_only_returns_matching() {
+    let (db, _t) = make_db().await;
+    let s = settings(true, 30);
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-user", AuditDecision::Approved, DecidedBy::User),
+    )
+    .await;
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-timeout", AuditDecision::Approved, DecidedBy::Timeout),
+    )
+    .await;
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-user-2", AuditDecision::Rejected, DecidedBy::User),
+    )
+    .await;
+
+    let params = ListAuditParams {
+        filter: AuditFilter {
+            decided_by: Some(DecidedBy::User),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let entries = list_audit_entries(&db, &params).await.expect("list");
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().all(|e| e.decided_by == DecidedBy::User));
+}
+
+#[tokio::test]
+async fn list_filter_by_since_until_window_excludes_outside_rows() {
+    let (db, _t) = make_db().await;
+    let s = settings(true, 90);
+
+    // Insert one row whose decided_at falls inside the window, one in the past
+    // (before `since`) and one in the future (after `until`).
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-now", AuditDecision::Approved, DecidedBy::User),
+    )
+    .await;
+
+    let backdate = |id: &str, when: chrono::DateTime<chrono::Utc>| {
+        let id = id.to_string();
+        let iso = when.to_rfc3339();
+        let db = db.clone();
+        async move {
+            let row_id = uuid::Uuid::new_v4().to_string();
+            let content = serde_json::json!({
+                "validation_id": id,
+                "tool_name": "tt",
+                "decision": "approved",
+                "decided_by": "user",
+                "risk_level": "low",
+                "metadata": "{}",
+            });
+            db.execute_with_params(
+                &format!(
+                    "CREATE validation_audit:`{}` CONTENT $data RETURN NONE",
+                    row_id
+                ),
+                vec![("data".to_string(), content)],
+            )
+            .await
+            .expect("seed row");
+            db.execute_with_params(
+                &format!(
+                    "UPDATE validation_audit:`{}` SET decided_at = <datetime> $iso",
+                    row_id
+                ),
+                vec![("iso".to_string(), serde_json::json!(iso))],
+            )
+            .await
+            .expect("backdate row");
+        }
+    };
+
+    let now = chrono::Utc::now();
+    backdate("v-old", now - chrono::Duration::days(30)).await;
+    backdate("v-future", now + chrono::Duration::days(30)).await;
+
+    let params = ListAuditParams {
+        filter: AuditFilter {
+            since: Some((now - chrono::Duration::hours(1)).to_rfc3339()),
+            until: Some((now + chrono::Duration::hours(1)).to_rfc3339()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let entries = list_audit_entries(&db, &params).await.expect("list");
+    assert_eq!(
+        entries.len(),
+        1,
+        "since/until window must exclude rows outside it"
+    );
+    assert_eq!(entries[0].validation_id, "v-now");
+}
+
+#[tokio::test]
+async fn list_filter_invalid_since_returns_descriptive_error() {
+    let (db, _t) = make_db().await;
+    let params = ListAuditParams {
+        filter: AuditFilter {
+            since: Some("not-a-date".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let err = list_audit_entries(&db, &params).await.unwrap_err();
+    assert!(err.contains("since"), "error must name the offending field");
+}
+
 /// Regression: ERR_SERDE_001 — `ValidationAuditEntry` carries
 /// `#[serde(rename_all = "camelCase")]` because it is sent to the frontend in
 /// camelCase, but rows from the DB come back in snake_case (column names).

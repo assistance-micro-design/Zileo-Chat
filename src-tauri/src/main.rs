@@ -188,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
             commands::validation::reset_validation_settings,
             // Tool discovery for validation settings
             commands::validation::list_available_tools,
-            // Validation audit log (Phase 1.2)
+            // Validation audit log
             commands::validation_audit::list_validation_audit,
             commands::validation_audit::get_validation_audit_stats,
             commands::validation_audit::purge_validation_audit_now,
@@ -348,10 +348,16 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("App handle set in AppState for event emission");
             }
 
-            // Spawn the validation_audit cleanup task (Phase 1.2).
+            // Spawn the validation_audit cleanup task.
             // Honors `audit.retention_days` and runs every 24h.
-            let _audit_cleanup_handle =
+            // The handle is parked in AppState so the runtime owns it (and a
+            // future shutdown hook can `abort()` it deterministically).
+            let cleanup_handle =
                 commands::validation_audit::spawn_audit_cleanup_task(state.inner().db.clone());
+            let cleanup_slot = state.inner().audit_cleanup_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                *cleanup_slot.lock().await = Some(cleanup_handle);
+            });
             tracing::info!("Validation audit cleanup task spawned");
 
             // Load agents from database AFTER app_handle is set

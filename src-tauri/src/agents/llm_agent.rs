@@ -109,11 +109,15 @@ impl Agent for LLMAgent {
         )
     )]
     async fn execute(&self, task: Task) -> anyhow::Result<Report> {
+        // Trait `Agent::execute` does not surface a CancellationToken.
+        // Cancellable execution flows through `execute_with_mcp`, which
+        // threads the token down into `execute_simple` when no tools apply.
         tool_loop::execute_simple(
             &self.config,
             &self.provider_manager,
             self.agent_context.as_ref(),
             task,
+            None,
         )
         .await
     }

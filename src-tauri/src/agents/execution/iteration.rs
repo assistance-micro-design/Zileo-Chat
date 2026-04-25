@@ -81,7 +81,7 @@ pub(crate) async fn run_single_iteration(
         "Executing LLM call with JSON function calling"
     );
 
-    // Phase 2.1: cancellable LLM call — drops the future on cancel, which
+    // cancellable LLM call — drops the future on cancel, which
     // tears down the in-flight HTTP request at the TCP level.
     let response = match ctx
         .provider_manager

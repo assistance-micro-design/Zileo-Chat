@@ -167,5 +167,41 @@ describe('auditLogStore', () => {
 			expect(get(auditStats)).toEqual(stats);
 			expect(invoke).toHaveBeenCalledWith('get_validation_audit_stats');
 		});
+
+		it('surfaces stats load errors via the store error state', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('db offline'));
+
+			await expect(auditLogStore.loadStats()).rejects.toThrow('db offline');
+			expect(auditLogStore.getState().error).toBe('db offline');
+			expect(get(auditStats)).toBeNull();
+		});
+	});
+
+	describe('audit_log_purge_now_refreshes_entries', () => {
+		it('returns the deleted count and reloads the current page', async () => {
+			vi.mocked(invoke)
+				.mockResolvedValueOnce(pageOfEntries(AUDIT_LOG_PAGE_SIZE, 'a')) // initial reload
+				.mockResolvedValueOnce(7) // purge_validation_audit_now
+				.mockResolvedValueOnce([makeEntry('after', 'approved')]); // post-purge reload
+
+			await auditLogStore.reload();
+			const purged = await auditLogStore.purgeNow();
+
+			expect(purged).toBe(7);
+			expect(invoke).toHaveBeenNthCalledWith(2, 'purge_validation_audit_now');
+			// After purge, the store reloads the page with the active filter.
+			expect(invoke).toHaveBeenLastCalledWith('list_validation_audit', {
+				params: { filter: {}, limit: AUDIT_LOG_PAGE_SIZE, offset: 0 }
+			});
+			expect(get(auditEntries)).toEqual([makeEntry('after', 'approved')]);
+		});
+
+		it('surfaces purge errors via the store error state', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('db locked'));
+
+			await expect(auditLogStore.purgeNow()).rejects.toThrow('db locked');
+			expect(auditLogStore.getState().error).toBe('db locked');
+			expect(auditLogStore.getState().purging).toBe(false);
+		});
 	});
 });

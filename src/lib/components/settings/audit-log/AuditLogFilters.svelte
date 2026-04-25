@@ -33,6 +33,19 @@
 	}
 	let { filter, busy = false, onapply, onexport, onpurge }: Props = $props();
 
+	/**
+	 * Converts an ISO 8601 timestamp into the `YYYY-MM-DDTHH:mm` local-time
+	 * format expected by `<input type="datetime-local">`. Returns `''` for
+	 * empty/invalid input so the picker stays cleared.
+	 */
+	function isoToDatetimeLocal(iso: string): string {
+		if (!iso) return '';
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return '';
+		const pad = (n: number) => String(n).padStart(2, '0');
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+	}
+
 	// svelte-ignore state_referenced_locally
 	let toolName = $state(filter.toolName ?? '');
 	// svelte-ignore state_referenced_locally
@@ -40,9 +53,9 @@
 	// svelte-ignore state_referenced_locally
 	let decidedBy = $state<DecidedBy | ''>(filter.decidedBy ?? '');
 	// svelte-ignore state_referenced_locally
-	let since = $state(filter.since ?? '');
+	let since = $state(isoToDatetimeLocal(filter.since ?? ''));
 	// svelte-ignore state_referenced_locally
-	let until = $state(filter.until ?? '');
+	let until = $state(isoToDatetimeLocal(filter.until ?? ''));
 
 	const decisionOptions: SelectOption[] = [
 		{ value: '', label: $i18n('audit_filter_decision_any') },
@@ -59,14 +72,24 @@
 		{ value: 'timeout', label: $i18n('audit_decided_by_timeout') }
 	];
 
+	/** Parses a `datetime-local` value into an ISO string, or `undefined` if blank/invalid. */
+	function datetimeLocalToIso(value: string): string | undefined {
+		if (!value) return undefined;
+		const ts = new Date(value).getTime();
+		if (Number.isNaN(ts)) return undefined;
+		return new Date(ts).toISOString();
+	}
+
 	function buildFilter(): AuditFilter {
 		const next: AuditFilter = {};
 		const trimmedTool = toolName.trim();
 		if (trimmedTool) next.toolName = trimmedTool;
 		if (decision) next.decision = decision;
 		if (decidedBy) next.decidedBy = decidedBy;
-		if (since) next.since = new Date(since).toISOString();
-		if (until) next.until = new Date(until).toISOString();
+		const sinceIso = datetimeLocalToIso(since);
+		if (sinceIso) next.since = sinceIso;
+		const untilIso = datetimeLocalToIso(until);
+		if (untilIso) next.until = untilIso;
 		return next;
 	}
 
@@ -114,16 +137,14 @@
 
 		<Input
 			label={$i18n('audit_filter_since')}
-			type="text"
+			type="datetime-local"
 			bind:value={since}
-			placeholder="YYYY-MM-DDTHH:mm"
 		/>
 
 		<Input
 			label={$i18n('audit_filter_until')}
-			type="text"
+			type="datetime-local"
 			bind:value={until}
-			placeholder="YYYY-MM-DDTHH:mm"
 		/>
 	</div>
 

@@ -243,7 +243,6 @@ fn test_validation_timeout_default() {
 }
 
 // =====================================================
-// Phase 1.1 - Timeout settings & behavior
 // =====================================================
 
 /// Helper: create ValidationSettings with explicit timeout / behavior overrides.
@@ -298,9 +297,10 @@ async fn read_validation_status(db: &crate::db::DBClient, validation_id: &str) -
 
 #[test]
 fn test_clamp_timeout_seconds_clamps_into_range() {
-    // Below floor -> floor
-    assert_eq!(clamp_timeout_seconds(0), VALIDATION_TIMEOUT_MIN_SECS);
-    assert_eq!(clamp_timeout_seconds(-100), VALIDATION_TIMEOUT_MIN_SECS);
+    // <= 0 means "value not set / unparseable" -> documented fallback (60s).
+    assert_eq!(clamp_timeout_seconds(0), VALIDATION_TIMEOUT_SECS);
+    assert_eq!(clamp_timeout_seconds(-100), VALIDATION_TIMEOUT_SECS);
+    // Above 0 but below floor -> floor.
     assert_eq!(clamp_timeout_seconds(4), VALIDATION_TIMEOUT_MIN_SECS);
     // Inside range -> identity
     assert_eq!(clamp_timeout_seconds(60), 60);

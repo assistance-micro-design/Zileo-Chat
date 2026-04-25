@@ -45,7 +45,7 @@ pub mod workflow {
     pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
 }
 
-/// Validation flow constants (Phase 3.5 — centralized).
+/// Validation flow constants.
 #[allow(dead_code)]
 pub mod validation {
     /// Default timeout (seconds) for validation responses, used as fallback
@@ -62,7 +62,17 @@ pub mod validation {
     pub const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
 }
 
-/// LLM provider HTTP defaults (Phase 3.5 — centralized).
+/// Audit log constants.
+#[allow(dead_code)]
+pub mod audit {
+    /// Lower bound (days) for the audit log retention setting.
+    pub const RETENTION_MIN_DAYS: i32 = 7;
+
+    /// Upper bound (days) for the audit log retention setting.
+    pub const RETENTION_MAX_DAYS: i32 = 90;
+}
+
+/// LLM provider HTTP defaults.
 #[allow(dead_code)]
 pub mod llm_http {
     /// Default HTTP read timeout (seconds) for non-streaming LLM responses.

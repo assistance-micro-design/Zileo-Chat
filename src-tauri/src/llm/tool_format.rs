@@ -14,8 +14,8 @@
 
 //! Shared request shape and POST helper for OpenAI-style tool chat completions.
 //!
-//! Phase 3.2: factor the request body and the auth + send + parse pipeline
-//! shared by `MistralProvider::complete_with_tools` and
+//! Factors the request body and the auth + send + parse pipeline shared by
+//! `MistralProvider::complete_with_tools` and
 //! `OpenAiCompatibleProvider::complete_with_tools`. Ollama uses a different
 //! payload shape (no `tool_choice`, no `tools` array under that name) and
 //! still owns its dedicated path.
@@ -92,7 +92,7 @@ impl ToolChatRequest {
 ///
 /// Cancellation is handled at the upper layer (the future returned by the
 /// HTTP client is dropped on cancel, which tears down the in-flight TCP
-/// stream — Phase 2.1).
+/// stream).
 pub(crate) async fn send_tool_completion(
     http_client: &Arc<reqwest::Client>,
     provider_name: &str,

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Validation audit log — Phase 1.2.
+//! Validation audit log.
 //!
-//! Backs the new "Settings > Audit Log" page (Phase 1.4) with append-only
+//! Backs the new "Settings > Audit Log" page with append-only
 //! decision tracking. Honors the user's `AuditConfig` (enable_logging,
 //! retention_days) and is resilient to logging failures: a write failure
 //! never blocks the underlying validation flow.
@@ -38,8 +38,9 @@ const TOP_TOOLS_LIMIT: usize = 10;
 /// Hard upper bound on `list_validation_audit` page size (defense in depth).
 const MAX_LIST_LIMIT: u32 = 500;
 
-/// Default page size if the caller passes 0.
-const DEFAULT_LIST_LIMIT: u32 = 100;
+/// Default page size when the caller omits `limit`.
+/// Mirrors the frontend `AUDIT_LOG_PAGE_SIZE` constant in `stores/audit-log.ts`.
+const DEFAULT_LIST_LIMIT: u32 = 50;
 
 /// Length cap for `prompt_preview` (UTF-8 char-boundary safe via safe_truncate).
 const PROMPT_PREVIEW_MAX_CHARS: usize = 200;
@@ -143,6 +144,56 @@ pub async fn list_validation_audit(
     list_audit_entries(&state.db, &params).await
 }
 
+/// Build the SQL `WHERE` clause + bind parameters for an [`AuditFilter`].
+///
+/// Shared between `list_audit_entries` and `export_validation_audit_csv` so
+/// the two paths cannot drift in what they consider a valid filter.
+fn build_audit_where_clause(
+    filter: &AuditFilter,
+) -> Result<(String, Vec<(String, serde_json::Value)>), String> {
+    let mut clauses: Vec<&'static str> = Vec::new();
+    let mut binds: Vec<(String, serde_json::Value)> = Vec::new();
+
+    if let Some(tool) = filter.tool_name.as_ref() {
+        if !tool.trim().is_empty() {
+            clauses.push("tool_name = $tool_name");
+            binds.push(("tool_name".to_string(), serde_json::json!(tool)));
+        }
+    }
+    if let Some(decision) = filter.decision {
+        clauses.push("decision = $decision");
+        binds.push((
+            "decision".to_string(),
+            serde_json::json!(decision.to_string()),
+        ));
+    }
+    if let Some(decided_by) = filter.decided_by {
+        clauses.push("decided_by = $decided_by");
+        binds.push((
+            "decided_by".to_string(),
+            serde_json::json!(decided_by.to_string()),
+        ));
+    }
+    if let Some(since) = filter.since.as_ref() {
+        let parsed = parse_rfc3339(since, "since")?;
+        // ERR_SURREAL_007: cast bound ISO string to datetime for comparison.
+        clauses.push("decided_at >= <datetime> $since");
+        binds.push(("since".to_string(), serde_json::json!(parsed.to_rfc3339())));
+    }
+    if let Some(until) = filter.until.as_ref() {
+        let parsed = parse_rfc3339(until, "until")?;
+        clauses.push("decided_at <= <datetime> $until");
+        binds.push(("until".to_string(), serde_json::json!(parsed.to_rfc3339())));
+    }
+
+    let where_clause = if clauses.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", clauses.join(" AND "))
+    };
+    Ok((where_clause, binds))
+}
+
 /// Backend-only helper for `list_validation_audit`. Extracted so unit tests
 /// can exercise the full query → deserialize path without a Tauri `State`.
 pub(crate) async fn list_audit_entries(
@@ -155,46 +206,7 @@ pub(crate) async fn list_audit_entries(
         .unwrap_or(DEFAULT_LIST_LIMIT);
     let offset = params.offset.unwrap_or(0);
 
-    let mut clauses: Vec<&'static str> = Vec::new();
-    let mut binds: Vec<(String, serde_json::Value)> = Vec::new();
-
-    if let Some(tool) = params.filter.tool_name.as_ref() {
-        if !tool.trim().is_empty() {
-            clauses.push("tool_name = $tool_name");
-            binds.push(("tool_name".to_string(), serde_json::json!(tool)));
-        }
-    }
-    if let Some(decision) = params.filter.decision {
-        clauses.push("decision = $decision");
-        binds.push((
-            "decision".to_string(),
-            serde_json::json!(decision.to_string()),
-        ));
-    }
-    if let Some(decided_by) = params.filter.decided_by {
-        clauses.push("decided_by = $decided_by");
-        binds.push((
-            "decided_by".to_string(),
-            serde_json::json!(decided_by.to_string()),
-        ));
-    }
-    if let Some(since) = params.filter.since.as_ref() {
-        let parsed = parse_rfc3339(since, "since")?;
-        // ERR_SURREAL_007: cast bound ISO string to datetime for comparison.
-        clauses.push("decided_at >= <datetime> $since");
-        binds.push(("since".to_string(), serde_json::json!(parsed.to_rfc3339())));
-    }
-    if let Some(until) = params.filter.until.as_ref() {
-        let parsed = parse_rfc3339(until, "until")?;
-        clauses.push("decided_at <= <datetime> $until");
-        binds.push(("until".to_string(), serde_json::json!(parsed.to_rfc3339())));
-    }
-
-    let where_clause = if clauses.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", clauses.join(" AND "))
-    };
+    let (where_clause, binds) = build_audit_where_clause(&params.filter)?;
 
     // limit/offset are always clamped numerics → safe to inline.
     let query = format!(
@@ -285,19 +297,29 @@ pub async fn purge_validation_audit_now(state: State<'_, AppState>) -> Result<u6
     purge_with_retention(&state.db, settings.audit.retention_days).await
 }
 
-/// Exports the entire audit log as CSV (RFC 4180 quoting).
+/// Exports the audit log as CSV (RFC 4180 quoting), honoring the active
+/// `AuditFilter` from the frontend.
 ///
 /// Caller should pipe the resulting string to a file save dialog on the frontend.
 #[tauri::command]
 #[instrument(name = "export_validation_audit_csv", skip(state))]
-pub async fn export_validation_audit_csv(state: State<'_, AppState>) -> Result<String, String> {
+pub async fn export_validation_audit_csv(
+    filter: Option<AuditFilter>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let filter = filter.unwrap_or_default();
+    let (where_clause, binds) = build_audit_where_clause(&filter)?;
+
+    let query = format!(
+        "SELECT meta::id(id) AS id, validation_id, tool_name, decision, decided_at, \
+         decided_by, risk_level, workflow_id, agent_id, prompt_preview, metadata \
+         FROM validation_audit{} ORDER BY decided_at DESC",
+        where_clause
+    );
+
     let rows: Vec<serde_json::Value> = state
         .db
-        .query_json(
-            "SELECT meta::id(id) AS id, validation_id, tool_name, decision, decided_at, \
-             decided_by, risk_level, workflow_id, agent_id, prompt_preview, metadata \
-             FROM validation_audit ORDER BY decided_at DESC",
-        )
+        .query_json_with_params(&query, binds)
         .await
         .map_err(|e| format!("Failed to load audit log for export: {}", e))?;
 

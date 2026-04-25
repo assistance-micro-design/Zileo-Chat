@@ -14,10 +14,10 @@
 
 //! Domain errors for the agent execution layer.
 //!
-//! Phase 3.4: provides a typed error vocabulary so callers (orchestrator,
-//! tool loop, sub-agents) can match on failure modes instead of relying on
-//! `String` payloads. Migration is progressive — newly written code should
-//! use `AgentError` directly; existing call sites can adopt it as they are
+//! Provides a typed error vocabulary so callers (orchestrator, tool loop,
+//! sub-agents) can match on failure modes instead of relying on `String`
+//! payloads. Migration is progressive — newly written code should use
+//! `AgentError` directly; existing call sites can adopt it as they are
 //! refactored, without any one PR having to convert the entire surface.
 
 use crate::llm::LLMError;

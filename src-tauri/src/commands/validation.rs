@@ -19,6 +19,10 @@
 
 use crate::{
     commands::validation_audit::{write_audit_entry, AuditEntryDraft},
+    constants::{
+        audit::{RETENTION_MAX_DAYS, RETENTION_MIN_DAYS},
+        validation::{VALIDATION_TIMEOUT_MAX_SECS, VALIDATION_TIMEOUT_MIN_SECS},
+    },
     models::{
         AuditConfig, AuditDecision, DecidedBy, PartialAuditConfig, PartialRiskThresholds,
         PartialSelectiveConfig, RiskLevel, RiskThresholdConfig, SelectiveValidationConfig,
@@ -208,7 +212,7 @@ pub async fn approve_validation(
             format!("Failed to approve validation: {}", e)
         })?;
 
-    // Phase 1.2: append to audit log (best-effort, never blocks user flow).
+    // append to audit log (best-effort, never blocks user flow).
     if let Some(draft) = build_audit_draft(
         &state,
         &validated_id,
@@ -269,7 +273,7 @@ pub async fn reject_validation(
             format!("Failed to reject validation: {}", e)
         })?;
 
-    // Phase 1.2: append to audit log (best-effort).
+    // append to audit log (best-effort).
     if let Some(draft) = build_audit_draft(
         &state,
         &validated_id,
@@ -441,10 +445,14 @@ pub async fn update_validation_settings(
     }
 
     if let Some(timeout) = config.timeout_seconds {
-        // Validate range 5-600 (matches validation_helper clamp)
-        if !(5..=600).contains(&timeout) {
+        let min = VALIDATION_TIMEOUT_MIN_SECS as i32;
+        let max = VALIDATION_TIMEOUT_MAX_SECS as i32;
+        if !(min..=max).contains(&timeout) {
             warn!(timeout, "Invalid timeout value");
-            return Err("Timeout must be between 5 and 600 seconds".to_string());
+            return Err(format!(
+                "Timeout must be between {} and {} seconds",
+                min, max
+            ));
         }
         current.timeout_seconds = timeout;
     }
@@ -573,9 +581,11 @@ fn apply_audit_config(
         current.enable_logging = v;
     }
     if let Some(v) = partial.retention_days {
-        // Validate range 7-90
-        if !(7..=90).contains(&v) {
-            return Err("Retention must be between 7 and 90 days".to_string());
+        if !(RETENTION_MIN_DAYS..=RETENTION_MAX_DAYS).contains(&v) {
+            return Err(format!(
+                "Retention must be between {} and {} days",
+                RETENTION_MIN_DAYS, RETENTION_MAX_DAYS
+            ));
         }
         current.retention_days = v;
     }

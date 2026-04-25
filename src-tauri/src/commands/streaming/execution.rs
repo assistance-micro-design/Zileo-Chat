@@ -14,8 +14,8 @@
 
 //! Streaming workflow execution commands.
 //!
-//! Tauri commands for executing and cancelling workflows with real-time events.
-//! Phase 3.6: orchestrates the validator → orchestrator_bridge → persistence
+//! Tauri commands for executing and cancelling workflows with real-time
+//! events. Orchestrates the validator → orchestrator_bridge → persistence
 //! pipeline. Each step lives in its own sibling module.
 
 use crate::{
@@ -83,7 +83,7 @@ pub async fn execute_workflow_streaming(
     let message_id = Uuid::new_v4().to_string();
     let mut thinking_step_number: u32 = 0;
 
-    // Phase 2.3: AtomicU32-backed sequence tracker shared with completion.
+    // AtomicU32-backed sequence tracker shared with completion.
     let sequence_tracker = Arc::new(SequenceTracker::new(0));
     let initial_sequence = sequence_tracker.allocate();
 

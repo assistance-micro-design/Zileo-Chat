@@ -37,6 +37,8 @@
   } from '$lib/stores/validation-settings';
   import { loadServers } from '$lib/stores/mcp';
   import { toastStore } from '$lib/stores/toast';
+  import { auditLogStore } from '$lib/stores/audit-log';
+  import { SETTINGS_REFRESH_EVENT } from '$lib/utils/settings-refresh';
   import type { ToastType } from '$types/background-workflow';
   import ValidationInfoCard from './ValidationInfoCard.svelte';
   import type {
@@ -61,8 +63,9 @@
     alwaysConfirmHigh: false
   });
 
-  // Phase 1.3: timeout + audit local state.
-  // Bounds match validation_helper backend clamp (5-600s) and audit settings (7-365d).
+  // Timeout + audit local state.
+  // Bounds mirror the backend constants (validation::VALIDATION_TIMEOUT_MIN/MAX_SECS,
+  // audit::RETENTION_MIN/MAX_DAYS).
   const TIMEOUT_MIN = 5;
   const TIMEOUT_MAX = 600;
   const RETENTION_MIN = 7;
@@ -93,7 +96,11 @@
     purging = true;
     errorMessage = null;
     try {
-      const deleted = await invoke<number>('purge_validation_audit_now');
+      // Route through the audit-log store so its in-memory state stays in sync
+      // (refreshes the entries list). We then fire the global settings:refresh
+      // event so an open audit-log page reloads its stats too.
+      const deleted = await auditLogStore.purgeNow();
+      window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
       notify('success', $i18n('validation_audit_purge_success').replace('{count}', String(deleted)));
     } catch (err) {
       errorMessage = $i18n('validation_audit_purge_failed').replace('{error}', getErrorMessage(err));
@@ -424,7 +431,7 @@
       </div>
     </div>
 
-    <!-- Timeout Settings (Phase 1.3) -->
+    <!-- Timeout Settings -->
     <div class="settings-section">
       <h3 class="section-title">{$i18n('validation_timeout_title')}</h3>
       <p class="section-help">{$i18n('validation_timeout_help')}</p>
@@ -470,7 +477,7 @@
       </fieldset>
     </div>
 
-    <!-- Audit Logging (Phase 1.3) -->
+    <!-- Audit Logging -->
     <div class="settings-section">
       <h3 class="section-title">{$i18n('validation_audit_title')}</h3>
       <p class="section-help">{$i18n('validation_audit_help')}</p>
@@ -546,7 +553,7 @@
 </div>
 
 <style>
-  /* Phase 1.3: timeout slider + audit section styling */
+  /* Timeout slider + audit section styling */
   .slider-row {
     display: grid;
     grid-template-columns: 1fr;

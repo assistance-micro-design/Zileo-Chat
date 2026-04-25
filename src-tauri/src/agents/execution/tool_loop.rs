@@ -14,8 +14,8 @@
 
 //! Tool execution loop for LLM agents.
 //!
-//! Phase 3.1: this module is now the orchestrator only. The hot logic lives
-//! in sibling modules:
+//! This module is the orchestrator only. The hot logic lives in sibling
+//! modules:
 //! - [`super::reasoning`]: emit_progress / emit_reasoning + small format helpers
 //! - [`super::completion`]: report enforcement + report content building
 //! - [`super::iteration`]: a single pass of the LLM-call → tool-execute loop
@@ -144,11 +144,15 @@ pub(crate) struct ToolLoopContext<'a> {
 }
 
 /// Executes a task without tools (simple LLM completion).
+///
+/// `cancellation_token` (when present) races the LLM call so a workflow
+/// cancellation tears down the in-flight HTTP request.
 pub(crate) async fn execute_simple(
     config: &AgentConfig,
     provider_manager: &ProviderManager,
     agent_context: Option<&AgentToolContext>,
     task: Task,
+    cancellation_token: Option<CancellationToken>,
 ) -> anyhow::Result<Report> {
     let start = std::time::Instant::now();
 
@@ -190,7 +194,7 @@ pub(crate) async fn execute_simple(
     }
 
     let llm_result = provider_manager
-        .complete_with_provider(
+        .complete_with_provider_cancellable(
             provider_type.clone(),
             CompletionParams {
                 prompt: user_prompt.clone(),
@@ -201,6 +205,7 @@ pub(crate) async fn execute_simple(
                 reasoning_effort: effective_reasoning_effort(config),
                 context_window: config.llm.context_window,
             },
+            cancellation_token,
         )
         .await;
 
@@ -409,7 +414,14 @@ pub(crate) async fn execute_with_tools(
 
     if local_tools.is_empty() && mcp_tools.is_empty() {
         debug!("No tools available, using basic execute");
-        return execute_simple(ctx.config, ctx.provider_manager, ctx.agent_context, task).await;
+        return execute_simple(
+            ctx.config,
+            ctx.provider_manager,
+            ctx.agent_context,
+            task,
+            cancellation_token,
+        )
+        .await;
     }
 
     debug!(
@@ -583,6 +595,7 @@ pub(crate) async fn execute_with_tools(
                 &mut enforcement_state,
                 start.elapsed().as_millis() as u64,
                 iteration,
+                cancellation_token.clone(),
             )
             .await
             {

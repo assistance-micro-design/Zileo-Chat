@@ -97,7 +97,7 @@ pub async fn persist_tool_executions(
         })
         .collect();
     join_all(tool_futures).await;
-    // Phase 2.6: barrier so subsequent reads see the rows we just wrote.
+    // barrier so subsequent reads see the rows we just wrote.
     flush_writes(db).await;
 }
 
@@ -155,7 +155,7 @@ pub async fn persist_reasoning_steps(
         })
         .collect();
     join_all(step_futures).await;
-    // Phase 2.6: barrier so subsequent reads see the rows we just wrote.
+    // barrier so subsequent reads see the rows we just wrote.
     flush_writes(db).await;
     start_step_number + reasoning_steps.len() as u32
 }

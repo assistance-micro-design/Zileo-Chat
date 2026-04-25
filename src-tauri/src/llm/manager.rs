@@ -451,10 +451,92 @@ impl ProviderManager {
         result
     }
 
+    /// Like [`Self::complete_with_provider`] but races each attempt and each
+    /// retry-sleep against `cancellation_token`.
+    ///
+    /// Used by the simple (no-tools) execution path to honor a workflow
+    /// cancellation request even when no tool calls are in flight. Dropping
+    /// the in-flight request future drops the underlying `reqwest` connection,
+    /// so the HTTP request itself is cancelled.
+    ///
+    /// `cancellation_token = None` is equivalent to calling `complete_with_provider`.
+    pub async fn complete_with_provider_cancellable(
+        &self,
+        provider: ProviderType,
+        params: CompletionParams,
+        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> Result<LLMResponse, LLMError> {
+        if cancellation_token.is_none() {
+            return self.complete_with_provider(provider, params).await;
+        }
+
+        let token = cancellation_token.as_ref();
+
+        self.check_circuit_breaker(provider.clone()).await?;
+
+        let result = match &provider {
+            ProviderType::Mistral => {
+                let mistral = self.mistral.clone();
+                with_retry_cancellable(
+                    || {
+                        let p = params.clone();
+                        let prov = mistral.clone();
+                        async move { prov.complete(p).await }
+                    },
+                    &self.retry_config,
+                    token,
+                )
+                .await
+            }
+            ProviderType::Ollama => {
+                let ollama = self.ollama.clone();
+                with_retry_cancellable(
+                    || {
+                        let p = params.clone();
+                        let prov = ollama.clone();
+                        async move { prov.complete(p).await }
+                    },
+                    &self.retry_config,
+                    token,
+                )
+                .await
+            }
+            ProviderType::Custom(ref name) => {
+                let custom = self
+                    .custom_providers
+                    .read()
+                    .await
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| LLMError::NotConfigured(name.clone()))?;
+                with_retry_cancellable(
+                    || {
+                        let p = params.clone();
+                        let prov = custom.clone();
+                        async move { prov.complete(p).await }
+                    },
+                    &self.retry_config,
+                    token,
+                )
+                .await
+            }
+        };
+
+        // Cancellation is intentional, not a provider failure: don't trip the
+        // circuit breaker. Treat any other Err as a real failure.
+        match &result {
+            Ok(_) => self.record_circuit_success(provider).await,
+            Err(LLMError::Cancelled) => debug!("Skipping circuit breaker for cancellation"),
+            Err(_) => self.record_circuit_failure(provider).await,
+        }
+
+        result
+    }
+
     /// Like [`Self::complete_with_tools`] but races each provider call (and
     /// each retry-sleep) against `cancellation_token`.
     ///
-    /// Phase 2.1: when the token fires, returns [`LLMError::Cancelled`] within
+    /// When the token fires, returns [`LLMError::Cancelled`] within
     /// roughly the next polling cycle (sub-second in practice). Dropping the
     /// in-flight request future also drops the underlying `reqwest` connection,
     /// so the HTTP request itself is cancelled — no polling of a stuck call.

@@ -360,7 +360,7 @@ pub struct PartialAuditConfig {
 }
 
 // =====================================================
-// Phase 1.2 — Validation Audit Log
+// Validation Audit Log
 // =====================================================
 
 /// Final decision recorded in `validation_audit`.

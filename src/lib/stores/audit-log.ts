@@ -17,7 +17,7 @@
 
 /**
  * Store for the validation audit log page.
- * Backed by Phase 1.2 commands (list_validation_audit, get_validation_audit_stats,
+ * Backed by the commands (list_validation_audit, get_validation_audit_stats,
  * purge_validation_audit_now, export_validation_audit_csv).
  */
 

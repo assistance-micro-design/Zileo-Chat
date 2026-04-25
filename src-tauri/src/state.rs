@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock as StdRwLock};
 use tauri::AppHandle;
 use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 /// Application state shared across Tauri commands
@@ -49,6 +50,10 @@ pub struct AppState {
     /// Tauri app handle for event emission (set after app initialization)
     /// Uses std::sync::RwLock for synchronous access in setup hook
     pub app_handle: Arc<StdRwLock<Option<AppHandle>>>,
+    /// Background task that purges expired audit_validation rows.
+    /// Stored so the runtime owns the handle (instead of detaching it) and so
+    /// future shutdown hooks can `abort()` it deterministically.
+    pub audit_cleanup_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl AppState {
@@ -86,6 +91,9 @@ impl AppState {
         // Initialize app handle as None (set later in setup hook)
         let app_handle = Arc::new(StdRwLock::new(None));
 
+        // Audit cleanup task handle is registered later in the setup hook.
+        let audit_cleanup_handle = Arc::new(Mutex::new(None));
+
         Ok(Self {
             db,
             registry,
@@ -96,6 +104,7 @@ impl AppState {
             embedding_service,
             streaming_cancellations,
             app_handle,
+            audit_cleanup_handle,
         })
     }
 

@@ -14,11 +14,11 @@
 
 //! Atomic monotonic counter for ordering blocks within a workflow.
 //!
-//! Phase 2.3: replaces the previous "compute max + 1" approach which is
-//! fragile if blocks are emitted from concurrent paths or if execution is
-//! interrupted mid-stream. The tracker hands out contiguous, strictly
-//! increasing sequence numbers and is safe to share across threads / async
-//! tasks via `Arc<SequenceTracker>`.
+//! Replaces a previous "compute max + 1" approach that was fragile when
+//! blocks were emitted from concurrent paths or when execution was interrupted
+//! mid-stream. The tracker hands out contiguous, strictly increasing sequence
+//! numbers and is safe to share across threads / async tasks via
+//! `Arc<SequenceTracker>`.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -52,6 +52,7 @@ impl SequenceTracker {
 
     /// Returns the next sequence that would be allocated, without consuming it.
     /// Mostly useful for diagnostics or assertions in tests.
+    #[cfg(test)]
     pub fn peek(&self) -> u32 {
         self.next.load(Ordering::SeqCst)
     }

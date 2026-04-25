@@ -160,7 +160,7 @@ pub enum LLMError {
     #[error("Internal error: {0}")]
     Internal(String),
 
-    /// Operation was cancelled via a `CancellationToken` (Phase 2.1).
+    /// Operation was cancelled via a `CancellationToken`.
     /// Non-retryable: cancellation is intentional, not a transient failure.
     #[error("Operation cancelled")]
     Cancelled,

@@ -34,7 +34,7 @@
 	 */
 	interface Props {
 		/** Input type */
-		type?: 'text' | 'password' | 'email' | 'number' | 'search' | 'url';
+		type?: 'text' | 'password' | 'email' | 'number' | 'search' | 'url' | 'datetime-local';
 		/** Current value */
 		value?: string;
 		/** Placeholder text */

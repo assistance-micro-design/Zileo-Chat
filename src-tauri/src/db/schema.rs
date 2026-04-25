@@ -107,10 +107,10 @@ DEFINE FIELD OVERWRITE status ON validation_request TYPE string DEFAULT 'pending
 DEFINE FIELD OVERWRITE created_at ON validation_request TYPE datetime DEFAULT time::now();
 
 -- =============================================
--- Table: validation_audit (Phase 1.2)
+-- Table: validation_audit
 -- Append-only log of validation decisions for traceability/audit.
 -- One row per terminal decision (approve / reject / skip / timeout).
--- Lazy cleanup honors audit.retention_days (Phase 1.2 cleanup task).
+-- Lazy cleanup honors audit.retention_days.
 -- =============================================
 DEFINE TABLE OVERWRITE validation_audit SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON validation_audit TYPE string;
