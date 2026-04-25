@@ -145,9 +145,13 @@ export interface ValidationRequest {
 // =====================================================
 
 /**
- * Timeout behavior when validation request expires
+ * Timeout behavior when validation request expires.
+ *
+ * - `reject`: timeout marks the validation as rejected (default).
+ * - `approve`: timeout marks the validation as approved (auto-confirmed).
+ * - `skip`: timeout returns without a decision; the agent proceeds.
  */
-export type TimeoutBehavior = 'reject' | 'approve' | 'ask_again';
+export type TimeoutBehavior = 'reject' | 'approve' | 'skip';
 
 /**
  * Selective validation config - which operations require validation

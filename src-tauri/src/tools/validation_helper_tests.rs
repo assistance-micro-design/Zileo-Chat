@@ -1,6 +1,6 @@
 use super::*;
 use crate::models::streaming::SubAgentOperationType;
-use crate::models::{RiskThresholdConfig, SelectiveValidationConfig};
+use crate::models::{RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior};
 
 /// Helper to create ValidationSettings with custom mode, thresholds, and selective config.
 fn make_settings(
@@ -240,6 +240,190 @@ fn test_parallel_details() {
 fn test_validation_timeout_default() {
     use crate::tools::constants::sub_agent::VALIDATION_TIMEOUT_SECS;
     assert_eq!(VALIDATION_TIMEOUT_SECS, 60);
+}
+
+// =====================================================
+// Phase 1.1 - Timeout settings & behavior
+// =====================================================
+
+/// Helper: create ValidationSettings with explicit timeout / behavior overrides.
+fn make_timeout_settings(
+    timeout_seconds: i32,
+    timeout_behavior: TimeoutBehavior,
+) -> ValidationSettings {
+    ValidationSettings {
+        timeout_seconds,
+        timeout_behavior,
+        ..Default::default()
+    }
+}
+
+/// Helper: build a ValidationHelper backed by an isolated in-memory DB.
+async fn make_test_helper() -> (ValidationHelper, tempfile::TempDir) {
+    let temp = crate::test_utils::test_tempdir();
+    let path = temp.path().join("validation_helper_test_db");
+    let db = std::sync::Arc::new(
+        crate::db::DBClient::new(path.to_str().unwrap())
+            .await
+            .expect("create test db"),
+    );
+    db.initialize_schema().await.expect("init schema");
+    (ValidationHelper::new(db, None), temp)
+}
+
+/// Insert a pending validation_request row directly so we can let it time out.
+async fn insert_pending_validation(db: &crate::db::DBClient, validation_id: &str) {
+    let create = ValidationRequestCreate::new(
+        format!("wf-{}", validation_id),
+        ValidationType::Tool,
+        "test op".to_string(),
+        serde_json::json!({}),
+        RiskLevel::Low,
+        ValidationStatus::Pending,
+    );
+    db.create("validation_request", validation_id, create)
+        .await
+        .expect("seed validation_request");
+}
+
+/// Read the current `status` of a validation_request row.
+async fn read_validation_status(db: &crate::db::DBClient, validation_id: &str) -> Option<String> {
+    let q = format!("SELECT status FROM validation_request:`{}`", validation_id);
+    let rows: Vec<serde_json::Value> = db.query_json(&q).await.ok()?;
+    rows.first()
+        .and_then(|r| r.get("status"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+#[test]
+fn test_clamp_timeout_seconds_clamps_into_range() {
+    // Below floor -> floor
+    assert_eq!(clamp_timeout_seconds(0), VALIDATION_TIMEOUT_MIN_SECS);
+    assert_eq!(clamp_timeout_seconds(-100), VALIDATION_TIMEOUT_MIN_SECS);
+    assert_eq!(clamp_timeout_seconds(4), VALIDATION_TIMEOUT_MIN_SECS);
+    // Inside range -> identity
+    assert_eq!(clamp_timeout_seconds(60), 60);
+    assert_eq!(clamp_timeout_seconds(120), 120);
+    // Above ceiling -> ceiling
+    assert_eq!(clamp_timeout_seconds(601), VALIDATION_TIMEOUT_MAX_SECS);
+    assert_eq!(clamp_timeout_seconds(i32::MAX), VALIDATION_TIMEOUT_MAX_SECS);
+}
+
+#[tokio::test]
+async fn test_timeout_behavior_reject_marks_rejected() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-reject";
+    insert_pending_validation(&helper.db, id).await;
+
+    let outcome = helper
+        .wait_for_validation(id, Duration::from_millis(50), TimeoutBehavior::Reject)
+        .await
+        .expect("reject path returns Ok(Rejected)");
+
+    assert_eq!(outcome, WaitOutcome::Rejected);
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("rejected")
+    );
+}
+
+#[tokio::test]
+async fn test_timeout_behavior_approve_marks_approved() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-approve";
+    insert_pending_validation(&helper.db, id).await;
+
+    let outcome = helper
+        .wait_for_validation(id, Duration::from_millis(50), TimeoutBehavior::Approve)
+        .await
+        .expect("approve path returns Ok(Approved)");
+
+    assert_eq!(outcome, WaitOutcome::Approved);
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("approved")
+    );
+}
+
+#[tokio::test]
+async fn test_timeout_behavior_skip_returns_skipped_without_decision() {
+    let (helper, _tmp) = make_test_helper().await;
+    let id = "vh-skip";
+    insert_pending_validation(&helper.db, id).await;
+
+    let outcome = helper
+        .wait_for_validation(id, Duration::from_millis(50), TimeoutBehavior::Skip)
+        .await
+        .expect("skip path returns Ok(Skipped)");
+
+    assert_eq!(outcome, WaitOutcome::Skipped);
+    // Skip must NOT mutate the row -> still pending
+    assert_eq!(
+        read_validation_status(&helper.db, id).await.as_deref(),
+        Some("pending")
+    );
+}
+
+#[tokio::test]
+async fn test_create_and_wait_applies_user_timeout_seconds() {
+    // Persist user settings with a tiny timeout (5s clamp floor) and Skip behavior,
+    // then verify that create_and_wait_validation honors them rather than the
+    // hardcoded 60s default. We use Skip so the call returns quickly without
+    // requiring an external approver.
+    let (helper, _tmp) = make_test_helper().await;
+
+    // Persist a ValidationSettings with timeout=5s + Skip via the same UPSERT
+    // path used by update_validation_settings (CONTENT JSON).
+    let settings = make_timeout_settings(5, TimeoutBehavior::Skip);
+    let json = serde_json::to_string(&settings).expect("serialize settings");
+    let upsert = format!(
+        "UPSERT settings:`settings:validation` CONTENT {{ id: 'settings:validation', config: {} }}",
+        json
+    );
+    helper.db.execute(&upsert).await.expect("seed settings");
+
+    // Verify load_validation_settings actually returns our overrides.
+    let loaded = helper.load_validation_settings().await;
+    assert_eq!(loaded.timeout_seconds, 5);
+    assert_eq!(loaded.timeout_behavior, TimeoutBehavior::Skip);
+
+    // create_and_wait_validation should clamp 5 -> 5 (floor) and return Ok(())
+    // via the Skip path *without* waiting the full 60s default.
+    let id = "vh-cw-skip";
+    let started = std::time::Instant::now();
+    let res = helper
+        .create_and_wait_validation(
+            id,
+            "wf-cw",
+            ValidationType::Tool,
+            "user-timeout test",
+            serde_json::json!({}),
+            RiskLevel::Low,
+        )
+        .await;
+    let elapsed = started.elapsed();
+
+    assert!(res.is_ok(), "Skip behavior must surface as Ok(())");
+    // Must complete within ~user timeout (5s) + small slack, NOT the 60s default.
+    assert!(
+        elapsed < Duration::from_secs(15),
+        "Should respect user timeout of 5s, took {:?}",
+        elapsed
+    );
+}
+
+#[tokio::test]
+async fn test_falls_back_to_default_when_settings_unavailable() {
+    // No settings row in DB -> load_validation_settings() returns ValidationSettings::default(),
+    // which has timeout_seconds = 60 and timeout_behavior = Reject.
+    let (helper, _tmp) = make_test_helper().await;
+
+    let loaded = helper.load_validation_settings().await;
+    assert_eq!(loaded.timeout_seconds, 60);
+    assert_eq!(loaded.timeout_behavior, TimeoutBehavior::Reject);
+    // Sanity: clamp(60) is identity.
+    assert_eq!(clamp_timeout_seconds(loaded.timeout_seconds), 60);
 }
 
 #[test]

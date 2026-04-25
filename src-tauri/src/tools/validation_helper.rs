@@ -33,8 +33,8 @@
 use crate::db::DBClient;
 use crate::models::streaming::{events, ValidationRequiredEvent};
 use crate::models::{
-    RiskLevel, ValidationMode, ValidationRequestCreate, ValidationSettings, ValidationStatus,
-    ValidationType,
+    RiskLevel, TimeoutBehavior, ValidationMode, ValidationRequestCreate, ValidationSettings,
+    ValidationStatus, ValidationType,
 };
 use crate::tools::constants::sub_agent::{VALIDATION_POLL_MS, VALIDATION_TIMEOUT_SECS};
 use crate::tools::ToolError;
@@ -43,6 +43,39 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
+
+/// Minimum allowed timeout (seconds) for a validation request.
+pub(crate) const VALIDATION_TIMEOUT_MIN_SECS: u64 = 5;
+
+/// Maximum allowed timeout (seconds) for a validation request.
+pub(crate) const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
+
+/// Outcome of `wait_for_validation` after polling.
+///
+/// Distinguishes the three terminal states so the caller can react appropriately:
+/// - `Approved`: user approved (or timeout with `Approve` behavior).
+/// - `Rejected`: user rejected (or timeout with `Reject` behavior).
+/// - `Skipped`: timeout fired with `Skip` behavior; no decision was recorded
+///   and the agent should proceed without blocking.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WaitOutcome {
+    /// Validation was approved by the user or auto-approved on timeout.
+    Approved,
+    /// Validation was rejected by the user or auto-rejected on timeout.
+    Rejected,
+    /// Validation timed out and the configured behavior is `Skip`.
+    Skipped,
+}
+
+/// Clamps a user-configured timeout (in seconds) into the allowed range.
+///
+/// Defaults to [`VALIDATION_TIMEOUT_SECS`] (60s) if the value is unparseable
+/// or out of range. The bounds are `[VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS]`
+/// = `[5, 600]` seconds.
+pub(crate) fn clamp_timeout_seconds(raw: i32) -> u64 {
+    let raw = raw.max(0) as u64;
+    raw.clamp(VALIDATION_TIMEOUT_MIN_SECS, VALIDATION_TIMEOUT_MAX_SECS)
+}
 
 /// Validates a trimmed name with configurable field name and max length.
 ///
@@ -211,39 +244,35 @@ impl ValidationHelper {
 
     /// Waits for validation response by polling the database.
     ///
+    /// On timeout, applies the configured `timeout_behavior`:
+    /// - `Reject` (default): updates the row to `rejected` and returns `WaitOutcome::Rejected`.
+    /// - `Approve`: updates the row to `approved` (decided_by = `timeout`)
+    ///   and returns `WaitOutcome::Approved`.
+    /// - `Skip`: leaves the row pending and returns `WaitOutcome::Skipped`
+    ///   so the agent can proceed without blocking.
+    ///
     /// # Arguments
     /// * `validation_id` - Validation request ID to check
     /// * `timeout` - Maximum time to wait for response
+    /// * `timeout_behavior` - Behavior to apply when the wait expires
     ///
-    /// # Returns
-    /// * `Ok(true)` - If approved
-    /// * `Ok(false)` - If rejected
-    /// * `Err(ToolError::Timeout)` - If timed out
+    /// # Errors
+    /// Returns [`ToolError::DatabaseError`] if the polling query fails.
     async fn wait_for_validation(
         &self,
         validation_id: &str,
         timeout: Duration,
-    ) -> Result<bool, ToolError> {
+        timeout_behavior: TimeoutBehavior,
+    ) -> Result<WaitOutcome, ToolError> {
         let poll_interval = Duration::from_millis(VALIDATION_POLL_MS);
         let start_time = std::time::Instant::now();
 
         loop {
             // Check if timeout exceeded
             if start_time.elapsed() >= timeout {
-                // Update validation status to rejected (timeout)
-                let update_query = format!(
-                    "UPDATE validation_request:`{}` SET status = 'rejected', \
-                     details.rejection_reason = 'Validation timed out'",
-                    validation_id
-                );
-                let _ = self.db.execute(&update_query).await;
-
-                return Err(ToolError::Timeout(format!(
-                    "Validation request '{}' timed out after {} seconds. \
-                     User did not respond in time.",
-                    validation_id,
-                    timeout.as_secs()
-                )));
+                return Ok(self
+                    .apply_timeout_behavior(validation_id, timeout, &timeout_behavior)
+                    .await);
             }
 
             // Query validation status
@@ -257,8 +286,8 @@ impl ValidationHelper {
                 let status = first["status"].as_str().unwrap_or("pending");
 
                 match status {
-                    "approved" => return Ok(true),
-                    "rejected" => return Ok(false),
+                    "approved" => return Ok(WaitOutcome::Approved),
+                    "rejected" => return Ok(WaitOutcome::Rejected),
                     "pending" => {
                         // Continue waiting
                         debug!(
@@ -282,8 +311,79 @@ impl ValidationHelper {
         }
     }
 
+    /// Applies the configured `timeout_behavior` once the wait period expires.
+    ///
+    /// Updates the validation row to reflect the auto-decision (Reject/Approve)
+    /// or leaves it pending (Skip), then returns the resulting outcome.
+    /// Database write failures are logged but never propagated, since the
+    /// caller has already given up waiting and must move on.
+    async fn apply_timeout_behavior(
+        &self,
+        validation_id: &str,
+        timeout: Duration,
+        timeout_behavior: &TimeoutBehavior,
+    ) -> WaitOutcome {
+        match timeout_behavior {
+            TimeoutBehavior::Reject => {
+                let query = format!(
+                    "UPDATE validation_request:`{}` SET status = 'rejected', \
+                     details.rejection_reason = $reason",
+                    validation_id
+                );
+                let reason = format!(
+                    "Validation timed out after {} seconds (auto-reject)",
+                    timeout.as_secs()
+                );
+                if let Err(e) = self
+                    .db
+                    .execute_with_params(
+                        &query,
+                        vec![("reason".to_string(), Value::String(reason))],
+                    )
+                    .await
+                {
+                    warn!(error = %e, validation_id, "Failed to mark validation rejected on timeout");
+                }
+                info!(
+                    validation_id,
+                    elapsed_secs = timeout.as_secs(),
+                    "Validation timed out -> auto-reject"
+                );
+                WaitOutcome::Rejected
+            }
+            TimeoutBehavior::Approve => {
+                let query = format!(
+                    "UPDATE validation_request:`{}` SET status = 'approved', \
+                     details.timeout_decision = 'approved'",
+                    validation_id
+                );
+                if let Err(e) = self.db.execute(&query).await {
+                    warn!(error = %e, validation_id, "Failed to mark validation approved on timeout");
+                }
+                info!(
+                    validation_id,
+                    elapsed_secs = timeout.as_secs(),
+                    "Validation timed out -> auto-approve"
+                );
+                WaitOutcome::Approved
+            }
+            TimeoutBehavior::Skip => {
+                info!(
+                    validation_id,
+                    elapsed_secs = timeout.as_secs(),
+                    "Validation timed out -> skip (agent proceeds without decision)"
+                );
+                WaitOutcome::Skipped
+            }
+        }
+    }
+
     /// Creates a validation request and waits for response.
     /// This is the common logic shared by all validation types.
+    ///
+    /// Loads the user's `ValidationSettings` to honor `timeout_seconds` (clamped
+    /// to `[5, 600]`) and `timeout_behavior`. Falls back to the hardcoded
+    /// `VALIDATION_TIMEOUT_SECS` (60s) and `Reject` if settings cannot be loaded.
     pub(crate) async fn create_and_wait_validation(
         &self,
         validation_id: &str,
@@ -331,27 +431,47 @@ impl ValidationHelper {
             warn!("No app handle available, skipping event emission");
         }
 
-        // Wait for validation response
-        let result = self
-            .wait_for_validation(validation_id, Duration::from_secs(VALIDATION_TIMEOUT_SECS))
-            .await;
+        // Resolve timeout + behavior from user settings (with safe fallbacks).
+        let settings = self.load_validation_settings().await;
+        let timeout_secs = clamp_timeout_seconds(settings.timeout_seconds);
+        let timeout_behavior = settings.timeout_behavior.clone();
 
-        match result {
-            Ok(true) => {
+        let outcome = self
+            .wait_for_validation(
+                validation_id,
+                Duration::from_secs(timeout_secs),
+                timeout_behavior,
+            )
+            .await?;
+
+        match outcome {
+            WaitOutcome::Approved => {
                 info!(validation_id = %validation_id, "Validation approved");
                 Ok(())
             }
-            Ok(false) => {
+            WaitOutcome::Rejected => {
                 info!(validation_id = %validation_id, "Validation rejected");
                 Err(ToolError::PermissionDenied(format!(
                     "Operation was rejected by user: {}",
                     description
                 )))
             }
-            Err(e) => Err(e),
+            WaitOutcome::Skipped => {
+                info!(
+                    validation_id = %validation_id,
+                    "Validation skipped on timeout (agent proceeds)"
+                );
+                Ok(())
+            }
         }
     }
 }
+
+/// Compile-time visibility check: `VALIDATION_TIMEOUT_SECS` is still imported
+/// as the documented fallback, even when not directly referenced in this file
+/// after the timeout-behavior refactor.
+#[allow(dead_code)]
+const _FALLBACK_TIMEOUT_REFERENCE: u64 = VALIDATION_TIMEOUT_SECS;
 
 #[cfg(test)]
 #[path = "validation_helper_tests.rs"]

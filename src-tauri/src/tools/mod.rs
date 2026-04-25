@@ -139,8 +139,6 @@ pub enum ToolError {
     NotFound(String),
     /// Permission denied - operation requires elevated permissions or confirmation
     PermissionDenied(String),
-    /// Operation timed out - consider breaking into smaller operations
-    Timeout(String),
     /// Database error - persistence layer issue, may be transient
     DatabaseError(String),
     /// Validation failed - input does not meet business rules
@@ -170,11 +168,6 @@ impl fmt::Display for ToolError {
             Self::PermissionDenied(msg) => write!(
                 f,
                 "[PERMISSION_DENIED] {}. This operation requires confirmation or elevated permissions.",
-                msg
-            ),
-            Self::Timeout(msg) => write!(
-                f,
-                "[TIMEOUT] {}. Operation took too long. Consider breaking into smaller tasks or increasing timeout.",
                 msg
             ),
             Self::DatabaseError(msg) => write!(
@@ -308,11 +301,6 @@ mod tests {
         let msg = error.to_string();
         assert!(msg.contains("[DATABASE_ERROR]"));
         assert!(msg.contains("transient"));
-
-        let error = ToolError::Timeout("operation exceeded 30s".to_string());
-        let msg = error.to_string();
-        assert!(msg.contains("[TIMEOUT]"));
-        assert!(msg.contains("smaller tasks"));
     }
 
     #[test]

@@ -357,10 +357,10 @@ pub async fn update_validation_settings(
     }
 
     if let Some(timeout) = config.timeout_seconds {
-        // Validate range 30-300
-        if !(30..=300).contains(&timeout) {
+        // Validate range 5-600 (matches validation_helper clamp)
+        if !(5..=600).contains(&timeout) {
             warn!(timeout, "Invalid timeout value");
-            return Err("Timeout must be between 30 and 300 seconds".to_string());
+            return Err("Timeout must be between 5 and 600 seconds".to_string());
         }
         current.timeout_seconds = timeout;
     }

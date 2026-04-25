@@ -43,9 +43,10 @@ impl ValidationHelper {
     /// * `risk_level` - Risk assessment for the operation
     ///
     /// # Returns
-    /// * `Ok(())` - If operation was approved (or validation was skipped)
-    /// * `Err(ToolError::PermissionDenied)` - If operation was rejected
-    /// * `Err(ToolError::Timeout)` - If validation timed out
+    /// * `Ok(())` - If operation was approved (or validation was skipped, including
+    ///   timeout under `TimeoutBehavior::Skip` / `TimeoutBehavior::Approve`)
+    /// * `Err(ToolError::PermissionDenied)` - If operation was rejected (including
+    ///   timeout under `TimeoutBehavior::Reject`)
     #[allow(clippy::too_many_arguments)]
     pub async fn request_validation(
         &self,

@@ -158,14 +158,18 @@ impl std::fmt::Display for ValidationStatus {
     }
 }
 
-/// Timeout behavior when validation request expires
+/// Timeout behavior when validation request expires.
+///
+/// - `Reject`: timeout marks the validation as rejected (default).
+/// - `Approve`: timeout marks the validation as approved (auto-confirmed).
+/// - `Skip`: timeout returns without a decision; the agent proceeds without blocking.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TimeoutBehavior {
     #[default]
     Reject,
     Approve,
-    AskAgain,
+    Skip,
 }
 
 impl std::fmt::Display for TimeoutBehavior {
@@ -173,7 +177,7 @@ impl std::fmt::Display for TimeoutBehavior {
         match self {
             TimeoutBehavior::Reject => write!(f, "reject"),
             TimeoutBehavior::Approve => write!(f, "approve"),
-            TimeoutBehavior::AskAgain => write!(f, "ask_again"),
+            TimeoutBehavior::Skip => write!(f, "skip"),
         }
     }
 }

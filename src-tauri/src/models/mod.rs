@@ -64,9 +64,9 @@ pub use user_question::{
 };
 pub use validation::{
     AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
-    RiskThresholdConfig, SelectiveValidationConfig, UpdateValidationSettingsRequest,
-    ValidationMode, ValidationRequest, ValidationRequestCreate, ValidationSettings,
-    ValidationStatus, ValidationType,
+    RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior,
+    UpdateValidationSettingsRequest, ValidationMode, ValidationRequest, ValidationRequestCreate,
+    ValidationSettings, ValidationStatus, ValidationType,
 };
 pub use workflow::{
     Workflow, WorkflowCreate, WorkflowFullState, WorkflowMetrics, WorkflowResult, WorkflowStatus,
