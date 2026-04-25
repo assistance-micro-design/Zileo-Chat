@@ -300,7 +300,14 @@ impl MistralProvider {
             .ok_or_else(|| LLMError::NotConfigured("Mistral".to_string()))?;
 
         let body = ToolChatRequest::from_params(params, params.messages.clone());
-        send_tool_completion(&self.http_client, "Mistral", MISTRAL_API_URL, &api_key, &body).await
+        send_tool_completion(
+            &self.http_client,
+            "Mistral",
+            MISTRAL_API_URL,
+            &api_key,
+            &body,
+        )
+        .await
     }
 }
 

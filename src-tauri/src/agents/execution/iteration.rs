@@ -133,10 +133,7 @@ pub(crate) async fn run_single_iteration(
             *mstate.global_sequence += 1;
             emit_progress(
                 ctx.agent_context,
-                StreamChunk::thinking_block(
-                    inputs.event_workflow_id.to_string(),
-                    thinking.clone(),
-                ),
+                StreamChunk::thinking_block(inputs.event_workflow_id.to_string(), thinking.clone()),
             );
             mstate.reasoning_steps_data.push(ReasoningStepData {
                 content: thinking,
@@ -274,7 +271,9 @@ pub(crate) async fn run_single_iteration(
             ),
         );
 
-        mstate.messages.push(inputs.adapter.format_tool_result(&result));
+        mstate
+            .messages
+            .push(inputs.adapter.format_tool_result(&result));
     }
 
     IterationOutcome::Continue

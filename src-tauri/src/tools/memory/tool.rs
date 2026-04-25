@@ -131,14 +131,16 @@ impl Tool for MemoryTool {
                 .await
             }
 
-            "get" => operations::get_memory(
-                params
-                    .memory_id
-                    .as_deref()
-                    .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
-                &ctx,
-            )
-            .await,
+            "get" => {
+                operations::get_memory(
+                    params
+                        .memory_id
+                        .as_deref()
+                        .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                    &ctx,
+                )
+                .await
+            }
 
             "describe" => {
                 let scope = params.scope.as_deref().unwrap_or("both");
@@ -179,14 +181,16 @@ impl Tool for MemoryTool {
                 .await
             }
 
-            "delete" => operations_query::delete_memory(
-                params
-                    .memory_id
-                    .as_deref()
-                    .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
-                &ctx,
-            )
-            .await,
+            "delete" => {
+                operations_query::delete_memory(
+                    params
+                        .memory_id
+                        .as_deref()
+                        .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                    &ctx,
+                )
+                .await
+            }
 
             "clear_by_type" => {
                 operations_query::clear_by_type(

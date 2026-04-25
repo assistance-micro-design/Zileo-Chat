@@ -17,8 +17,8 @@
 //! Centralizes the validation rules applied before any workflow side effect:
 //! UUID/name/message constraints and the concurrent workflow limit.
 
-use crate::{security::Validator, AppState};
 use crate::security::validate_uuid_field;
+use crate::{security::Validator, AppState};
 use tauri::State;
 use tracing::warn;
 

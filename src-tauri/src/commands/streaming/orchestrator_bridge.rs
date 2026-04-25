@@ -18,8 +18,8 @@
 //! and races the orchestrator execution against the cancellation token.
 
 use crate::{
-    agents::core::agent::Task,
     agents::core::agent::Report,
+    agents::core::agent::Task,
     db::queries::workflow as wf_queries,
     models::{Prompt, StreamChunk, Workflow, WorkflowComplete},
     AppState,
@@ -67,7 +67,11 @@ pub async fn load_workflow(
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to load workflow");
-            emit_error(window, workflow_id, &format!("Failed to load workflow: {}", e));
+            emit_error(
+                window,
+                workflow_id,
+                &format!("Failed to load workflow: {}", e),
+            );
             format!("Failed to load workflow: {}", e)
         })?;
 

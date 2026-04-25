@@ -58,7 +58,10 @@ pub(crate) struct ToolChatRequest {
 impl ToolChatRequest {
     /// Build a request body from completion params, optionally rewriting the
     /// `messages` array (used by OpenAI-compat to apply prompt caching).
-    pub(crate) fn from_params(params: &ToolCompletionParams, messages: Vec<serde_json::Value>) -> Self {
+    pub(crate) fn from_params(
+        params: &ToolCompletionParams,
+        messages: Vec<serde_json::Value>,
+    ) -> Self {
         Self {
             model: params.model.clone(),
             messages,

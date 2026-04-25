@@ -19,10 +19,8 @@
 //! pipeline. Each step lives in its own sibling module.
 
 use crate::{
-    agents::execution::sequence_tracker::SequenceTracker,
-    models::WorkflowResult,
-    security::validate_uuid_field,
-    AppState,
+    agents::execution::sequence_tracker::SequenceTracker, models::WorkflowResult,
+    security::validate_uuid_field, AppState,
 };
 use std::sync::Arc;
 use tauri::{State, Window};
@@ -112,7 +110,10 @@ pub async fn execute_workflow_streaming(
     )
     .await
     {
-        BridgeOutcome::Completed { report, duration_ms } => (*report, duration_ms),
+        BridgeOutcome::Completed {
+            report,
+            duration_ms,
+        } => (*report, duration_ms),
         BridgeOutcome::Failed(msg) => return Err(msg),
         BridgeOutcome::Cancelled => return Err("Workflow cancelled by user".to_string()),
     };

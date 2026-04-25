@@ -310,7 +310,14 @@ impl OpenAiCompatibleProvider {
 
         let body = ToolChatRequest::from_params(params, cached_messages);
         let url = format!("{}/chat/completions", base_url);
-        send_tool_completion(&self.http_client, &self.provider_name, &url, &api_key, &body).await
+        send_tool_completion(
+            &self.http_client,
+            &self.provider_name,
+            &url,
+            &api_key,
+            &body,
+        )
+        .await
     }
 
     /// Best-effort extraction of thinking content from raw JSON response body.
