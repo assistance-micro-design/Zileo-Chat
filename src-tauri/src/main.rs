@@ -437,8 +437,33 @@ async fn main() -> anyhow::Result<()> {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app_handle, event| {
+            // Disconnect all MCP clients deterministically when the user closes
+            // the app. ExitRequested fires before the runtime tears down, so
+            // .await is safe here. A 5s timeout protects the UI from hangs in
+            // misbehaving servers.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let state = app_handle.state::<AppState>();
+                let mcp_manager = state.mcp_manager.clone();
+                tauri::async_runtime::block_on(async move {
+                    let result = tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        mcp_manager.shutdown(),
+                    )
+                    .await;
+
+                    match result {
+                        Ok(Ok(())) => tracing::info!("MCP manager shutdown complete on exit"),
+                        Ok(Err(e)) => {
+                            tracing::warn!(error = %e, "MCP manager shutdown returned error");
+                        }
+                        Err(_) => tracing::warn!("MCP manager shutdown timed out after 5s"),
+                    }
+                });
+            }
+        });
 
     Ok(())
 }

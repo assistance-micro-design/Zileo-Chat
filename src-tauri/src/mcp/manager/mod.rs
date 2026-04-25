@@ -294,7 +294,7 @@ impl MCPManager {
     /// Stops all running servers
     ///
     /// Called during application shutdown to cleanly terminate all processes.
-    #[allow(dead_code)] // Infrastructure API, not yet wired in binary shutdown path
+    /// Wired into Tauri's `RunEvent::ExitRequested` in `main.rs`.
     pub async fn shutdown(&self) -> MCPResult<()> {
         info!("Shutting down MCP manager");
 
