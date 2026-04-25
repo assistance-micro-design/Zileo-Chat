@@ -62,7 +62,6 @@ pub mod llm_http {
 }
 
 /// Default limits for database queries to prevent memory explosion.
-#[allow(dead_code)]
 pub mod query_limits {
     /// Default limit for list queries (e.g., list_memories, list_tasks)
     pub const DEFAULT_LIST_LIMIT: usize = 1000;
