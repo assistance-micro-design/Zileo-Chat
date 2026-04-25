@@ -1,6 +1,6 @@
 # API Reference - Tauri Commands
 
-> Technical reference for Frontend-Backend IPC communication. **134 commands** across 22 modules.
+> Technical reference for Frontend-Backend IPC communication. **138 commands** across 23 modules.
 
 ## IPC Architecture
 
@@ -104,6 +104,17 @@ Human-in-the-loop validation for agent operations.
 | `update_validation_settings` | Update validation mode and thresholds |
 | `reset_validation_settings` | Reset validation settings to defaults |
 | `list_available_tools` | List local + MCP tools for settings UI |
+
+### Validation Audit (`commands/validation_audit.rs`)
+
+Append-only audit log for validation decisions (decided_by user / auto / timeout).
+
+| Command | Description |
+|---------|-------------|
+| `list_validation_audit` | List audit entries (paginated, filtered by tool, decision, risk, date range) |
+| `get_validation_audit_stats` | Summary stats (decision breakdown, top tools, risk distribution) |
+| `purge_validation_audit_now` | Manual cleanup honoring `retention_days` setting |
+| `export_validation_audit_csv` | Export audit log to a CSV file |
 
 ### Memory (`commands/memory.rs`)
 

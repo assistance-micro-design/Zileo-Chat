@@ -255,7 +255,7 @@ See `src-tauri/src/tools/validation_helper.rs` and `src-tauri/src/commands/valid
 | Hidden tools | `src-tauri/src/tools/read_skill.rs` |
 | Sub-agent tools | `src-tauri/src/tools/` (spawn_agent, delegate_task, parallel_tasks, sub_agent_executor, sub_agent_circuit_breaker) |
 | Validation | `src-tauri/src/tools/validation_helper.rs` |
-| Commands | `src-tauri/src/commands/` (22 modules, 134 commands) |
+| Commands | `src-tauri/src/commands/` (23 modules, 138 commands) |
 | Models | `src-tauri/src/models/` |
 | LLM providers | `src-tauri/src/llm/` |
 | Frontend store | `src/lib/stores/agents.ts` |

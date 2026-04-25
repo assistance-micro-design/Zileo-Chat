@@ -1,8 +1,8 @@
 # Database Schema - SurrealDB
 
-> **Version**: 1.3
+> **Version**: 1.4
 > **SurrealDB**: ~2.6 (SCHEMAFULL)
-> **Tables**: 18
+> **Tables**: 19
 
 ## Design Notes
 
@@ -18,7 +18,7 @@
 workflow ─────────────┐
                       ├──> message
                       ├──> task
-                      ├──> validation_request
+                      ├──> validation_request ──> validation_audit (append-only)
                       ├──> user_question
                       ├──> memory (vector)
                       ├──> tool_execution
@@ -129,6 +129,28 @@ Human-in-the-loop validation requests.
 | created_at | datetime | time::now() | |
 
 **Indexes**: (none explicitly defined)
+
+---
+
+### validation_audit
+
+Append-only audit log of validation decisions (user / auto / timeout). Resilient: write failures never block the validation flow. Retention is user-configurable (7-90 days, see `RETENTION_MIN_DAYS` / `RETENTION_MAX_DAYS` in `constants.rs`).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| validation_id | string | | Source `validation_request` id |
+| tool_name | string | | Tool / operation name |
+| decision | string ASSERT IN [approved, rejected, timeout] | | Final decision |
+| decided_by | string ASSERT IN [user, auto, timeout] | | Decision source |
+| decided_at | datetime | time::now() | Decision timestamp |
+| risk_level | string ASSERT IN [low, medium, high, critical] | | Risk at decision time |
+| workflow_id | option\<string\> | | Parent workflow |
+| agent_id | option\<string\> | | Requesting agent |
+| prompt_preview | option\<string\> | | Truncated request preview |
+| metadata | string | '{}' | JSON string (extra context) |
+
+**Indexes**: `audit_decided_at_idx` (decided_at), `audit_validation_id_idx` (validation_id), `audit_tool_name_idx` (tool_name), `audit_decision_idx` (decision)
 
 ---
 
@@ -432,6 +454,12 @@ Schema migration guard (prevents re-execution of destructive migrations).
 
 ---
 
+## SCHEMALESS Tables
+
+The `prompt` table (prompt library) is created on demand via `CREATE prompt:...` and is intentionally SCHEMALESS. Persisted fields are described by the `Prompt` model (`src-tauri/src/models/prompt.rs`): `id`, `name`, `description`, `category` (system/user/analysis/generation/coding/custom), `content`, `variables[]`, `created_at`, `updated_at`. Validation lives in `commands/prompt.rs`.
+
+---
+
 ## Vector Search (HNSW)
 
 | Property | Value |
@@ -454,7 +482,7 @@ Embedding dimensions by provider: OpenAI 1536D/3072D, Mistral 1024D, Ollama 768D
 - **API keys**: Never stored in DB (OS keyring via SecureKeyStore)
 - **Input validation**: All user input validated and parameterized (no `format!()` injection)
 - **External data**: Sanitized via `sanitize_for_surrealdb()` before insertion
-- **Audit trail**: `validation_request` + `mcp_call_log` + `tool_execution`
+- **Audit trail**: `validation_request` + `validation_audit` + `mcp_call_log` + `tool_execution`
 
 ---
 

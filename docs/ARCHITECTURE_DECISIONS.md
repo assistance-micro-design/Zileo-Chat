@@ -1,6 +1,6 @@
 # Architecture Decisions
 
-> Last updated: 2026-03-27 | Phase 8 complete + Security Audit Remediation + Code Quality Refactoring
+> Last updated: 2026-04-25 | Phase 8 complete + Security Audit Remediation + Code Quality Refactoring + Validation Audit Backend
 > Validated and implemented. 1000+ tests passing across backend and frontend.
 
 ---
@@ -37,7 +37,7 @@
 - SurrealDB graph capabilities exploited natively
 - Relational queries essential for cross-entity lookups
 
-**Core entities**: `agent`, `workflow`, `memory`, `message`, `validation_request`, `task`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `custom_provider`, `user_question`, `workflow_folder`, `skill`.
+**Core entities**: `agent`, `workflow`, `memory`, `message`, `validation_request`, `validation_audit`, `task`, `tool_execution`, `thinking_step`, `sub_agent_execution`, `mcp_server`, `mcp_call_log`, `llm_model`, `provider_settings`, `custom_provider`, `user_question`, `workflow_folder`, `skill`.
 
 **Memory types**: `user_pref`, `context`, `knowledge`, `decision`. Vectorial embeddings for semantic search.
 
@@ -322,7 +322,7 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 - 798-line monolithic page was unmaintainable
 - Route-based enables code splitting, browser history, shareable URLs
 
-**Routes**: `/settings/providers`, `/settings/agents`, `/settings/mcp`, `/settings/memory`, `/settings/validation`, `/settings/prompts`, `/settings/skills`, `/settings/import-export`, `/settings/theme`.
+**Routes**: `/settings/providers`, `/settings/agents`, `/settings/mcp`, `/settings/memory`, `/settings/validation`, `/settings/audit-log`, `/settings/prompts`, `/settings/skills`, `/settings/import-export`, `/settings/theme`.
 
 ---
 

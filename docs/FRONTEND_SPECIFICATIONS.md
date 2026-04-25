@@ -36,7 +36,8 @@ Route-based architecture with code splitting per section. The settings layout pr
 | `/settings/agents` | Agents | Agent CRUD (permanent + temporary), filtering by name/type/usage, search bar |
 | `/settings/mcp` | MCP Servers | MCP server list, connection settings (stdio/docker/HTTP/SSE), status monitoring, capability/tool listing, logs |
 | `/settings/memory` | Memory | Embedding model selection (per provider), chunking settings, memory CRUD table with semantic search, manual memory creation, bulk export/import/purge, statistics |
-| `/settings/validation` | Validation | Validation mode (Auto/Manual/Selective), granular toggles per operation type (tools, sub-agents, MCP, file ops, DB ops), risk threshold overrides |
+| `/settings/validation` | Validation | Validation mode (Auto/Manual/Selective), granular toggles per operation type (tools, sub-agents, MCP, file ops, DB ops), risk threshold overrides, audit settings (timeout, retention) |
+| `/settings/audit-log` | Audit Log | Validation audit log: list with filters (tool, decision, risk, date), summary stats, manual purge, CSV export |
 | `/settings/prompts` | Prompts | Prompt library with name/description/category/content/variables, duplicate/export/versioning |
 | `/settings/skills` | Skills | Skill document CRUD |
 | `/settings/import-export` | Import/Export | Data portability (schema v1.1, 6 entity types) |
@@ -54,7 +55,8 @@ Settings-specific components live under `src/lib/components/settings/`:
 | `memory/` | MemorySettings, MemoryList, MemoryForm | Memory management with embedding config and CRUD |
 | `prompts/` | PromptSettings, PromptList, PromptForm | Prompt library management |
 | `skills/` | SkillSettings, SkillList, SkillForm | Skill document management |
-| `validation/` | ValidationSettings | Validation mode configuration with dynamic tool/server badges |
+| `validation/` | ValidationSettings, ValidationInfoCard | Validation mode configuration with dynamic tool/server badges, timeout + audit retention controls |
+| `audit-log/` | AuditLogFilters, AuditLogList, AuditLogRow, AuditLogStats | Validation audit log explorer with filters, paginated list, summary stats |
 | `import-export/` | ImportExportSettings, ExportPanel, ImportPanel, EntitySelector, ExportPreview, ImportPreview, ConflictResolver, MCPFieldEditor, MCPEnvEditor | Full import/export workflow with conflict resolution |
 
 ## 3. Agent Page
@@ -140,7 +142,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 5. Component Library
 
-98 total components organized under `src/lib/components/`:
+101 total components organized under `src/lib/components/`:
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
@@ -153,14 +155,15 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `legal/` | 1 | LegalModal |
 | `mcp/` | 3 | MCPServerCard, MCPServerForm, MCPServerTester |
 | `llm/` | 4 | ConnectionTester, ModelCard, ModelForm, ProviderCard |
-| `settings/` | 33 | See Settings Components table above |
-| `onboarding/` | 9 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
+| `settings/` | 37 | See Settings Components table above (incl. `audit-log/` and enriched `validation/`) |
+| `onboarding/` | 8 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
 
 ## 6. Stores
 
 | Store | Purpose | File |
 |-------|---------|------|
 | `agents` | Agent CRUD with reactive state (agents, selectedAgent, isLoading, hasAgents) | `src/lib/stores/agents.ts` |
+| `audit-log` | Validation audit log entries, filters, stats, pagination | `src/lib/stores/audit-log.ts` |
 | `background-workflows` | Concurrent background workflow dispatch (canStartNew, runningWorkflowIds, questionPendingIds) | `src/lib/stores/background-workflows.ts` |
 | `execution-blocks` | Execution block state for chat display | `src/lib/stores/execution-blocks.ts` |
 | `folders` | Workflow folder management | `src/lib/stores/folders.ts` |
@@ -309,9 +312,9 @@ See `src/app.css` and `src/lib/styles/`
 
 ## 13. Testing Strategy
 
-- **Unit tests**: Vitest + `@testing-library/svelte` for component and store tests (285 tests)
+- **Unit tests**: Vitest + `@testing-library/svelte` for component and store tests (280+ tests; run `npm run test` for the current count)
 - **E2E tests**: Playwright for workflow persistence, keyboard navigation, streaming indicators, responsive layout
-- **Backend tests**: Rust unit tests for all Tauri commands (1083 tests)
+- **Backend tests**: Rust unit tests for all Tauri commands (1000+ tests; run `cargo test --lib` for the current count)
 
 ## References
 
