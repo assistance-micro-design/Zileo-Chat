@@ -54,6 +54,7 @@ pub mod audit {
 }
 
 /// LLM provider HTTP defaults.
+// Used by lib LLM providers; not reachable from binary target.
 #[allow(dead_code)]
 pub mod llm_http {
     /// Default HTTP read timeout (seconds) for non-streaming LLM responses.
