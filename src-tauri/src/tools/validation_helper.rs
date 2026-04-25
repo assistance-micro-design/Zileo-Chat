@@ -45,10 +45,14 @@ use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
 
 /// Minimum allowed timeout (seconds) for a validation request.
-pub(crate) const VALIDATION_TIMEOUT_MIN_SECS: u64 = 5;
+/// Re-export of [`crate::constants::validation::VALIDATION_TIMEOUT_MIN_SECS`].
+pub(crate) const VALIDATION_TIMEOUT_MIN_SECS: u64 =
+    crate::constants::validation::VALIDATION_TIMEOUT_MIN_SECS;
 
 /// Maximum allowed timeout (seconds) for a validation request.
-pub(crate) const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
+/// Re-export of [`crate::constants::validation::VALIDATION_TIMEOUT_MAX_SECS`].
+pub(crate) const VALIDATION_TIMEOUT_MAX_SECS: u64 =
+    crate::constants::validation::VALIDATION_TIMEOUT_MAX_SECS;
 
 /// Outcome of `wait_for_validation` after polling.
 ///

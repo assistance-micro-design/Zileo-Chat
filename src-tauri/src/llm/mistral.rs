@@ -492,7 +492,9 @@ mod tests {
     fn test_mistral_provider() -> MistralProvider {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("test HTTP client"),
         );

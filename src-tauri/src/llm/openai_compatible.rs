@@ -436,7 +436,9 @@ mod tests {
     fn test_provider_new() {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("Failed to create HTTP client"),
         );
@@ -449,7 +451,9 @@ mod tests {
     async fn test_provider_configure() {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("Failed to create HTTP client"),
         );
@@ -472,7 +476,9 @@ mod tests {
     async fn test_provider_configure_trailing_slash() {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("Failed to create HTTP client"),
         );
@@ -493,7 +499,9 @@ mod tests {
     async fn test_provider_clear() {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("Failed to create HTTP client"),
         );
@@ -513,7 +521,9 @@ mod tests {
     async fn test_provider_empty_api_key() {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                ))
                 .build()
                 .expect("Failed to create HTTP client"),
         );

@@ -45,6 +45,30 @@ pub mod workflow {
     pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
 }
 
+/// Validation flow constants (Phase 3.5 — centralized).
+#[allow(dead_code)]
+pub mod validation {
+    /// Default timeout (seconds) for validation responses, used as fallback
+    /// when user `ValidationSettings.timeout_seconds` cannot be loaded.
+    pub const VALIDATION_TIMEOUT_SECS: u64 = 60;
+
+    /// Polling interval (milliseconds) for checking validation status.
+    pub const VALIDATION_POLL_MS: u64 = 500;
+
+    /// Lower bound for user-configurable validation timeout.
+    pub const VALIDATION_TIMEOUT_MIN_SECS: u64 = 5;
+
+    /// Upper bound for user-configurable validation timeout.
+    pub const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
+}
+
+/// LLM provider HTTP defaults (Phase 3.5 — centralized).
+#[allow(dead_code)]
+pub mod llm_http {
+    /// Default HTTP read timeout (seconds) for non-streaming LLM responses.
+    pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
+}
+
 /// Default limits for database queries to prevent memory explosion.
 #[allow(dead_code)] // Some constants prepared for future use
 pub mod query_limits {
