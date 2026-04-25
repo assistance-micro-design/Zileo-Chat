@@ -43,6 +43,7 @@
 //! - [`LLMAgent`] - Agent that uses real LLM calls via ProviderManager
 
 pub mod core;
+pub mod error;
 pub(crate) mod execution;
 pub mod llm_agent;
 pub(crate) mod prompt;
