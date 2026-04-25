@@ -59,7 +59,6 @@ pub mod todo {
     pub const TASK_SELECT_FIELDS: &str = "meta::id(id) AS id, workflow_id, name, description, agent_assigned, priority, status, dependencies, duration_ms, created_at, completed_at";
 }
 
-#[allow(dead_code)]
 pub mod user_question {
     pub const MAX_QUESTION_LENGTH: usize = 2000;
     pub const MAX_OPTION_ID_LENGTH: usize = 64;
@@ -69,7 +68,6 @@ pub mod user_question {
     pub const MAX_TEXT_RESPONSE_LENGTH: usize = 10000;
     pub const POLL_INTERVALS_MS: &[u64] = &[500, 500, 1000, 1000, 2000, 2000, 5000];
     pub const VALID_TYPES: &[&str] = &["checkbox", "text", "mixed"];
-    pub const VALID_STATUSES: &[&str] = &["pending", "answered", "skipped", "timeout"];
 
     // Configurable timeout for wait_for_response
     /// Default timeout (seconds) for waiting for user response.

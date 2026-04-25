@@ -234,14 +234,6 @@ fn test_poll_intervals_constant() {
 }
 
 #[test]
-fn test_valid_statuses_constant() {
-    assert_eq!(
-        uq_const::VALID_STATUSES,
-        &["pending", "answered", "skipped", "timeout"]
-    );
-}
-
-#[test]
 fn test_question_option_serialization() {
     let option = QuestionOption {
         id: "opt1".to_string(),
