@@ -112,9 +112,14 @@ impl Tool for MemoryTool {
         // Fields are guaranteed to be present after validation
         match params.operation.as_str() {
             "add" => {
-                // SAFETY: validate_add() ensures memory_type and content are Some
-                let memory_type = params.memory_type.as_deref().unwrap();
-                let content = params.content.as_deref().unwrap();
+                let memory_type = params
+                    .memory_type
+                    .as_deref()
+                    .expect("BUG: validate_add() must ensure memory_type is Some");
+                let content = params
+                    .content
+                    .as_deref()
+                    .expect("BUG: validate_add() must ensure content is Some");
                 operations::add_memory(
                     &params,
                     memory_type,
@@ -126,10 +131,14 @@ impl Tool for MemoryTool {
                 .await
             }
 
-            "get" => {
-                // SAFETY: validate_get_or_delete() ensures memory_id is Some
-                operations::get_memory(params.memory_id.as_deref().unwrap(), &ctx).await
-            }
+            "get" => operations::get_memory(
+                params
+                    .memory_id
+                    .as_deref()
+                    .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                &ctx,
+            )
+            .await,
 
             "describe" => {
                 let scope = params.scope.as_deref().unwrap_or("both");
@@ -152,13 +161,15 @@ impl Tool for MemoryTool {
             }
 
             "search" => {
-                // SAFETY: validate_search() ensures query is Some
                 let limit = params.limit.unwrap_or(DEFAULT_LIMIT);
                 let threshold = params.threshold.unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
                 let scope = params.scope.as_deref().unwrap_or("both");
                 operations_query::search_memories(
                     &params,
-                    params.query.as_deref().unwrap(),
+                    params
+                        .query
+                        .as_deref()
+                        .expect("BUG: validate_search() must ensure query is Some"),
                     limit,
                     params.type_filter.as_deref(),
                     threshold,
@@ -168,16 +179,22 @@ impl Tool for MemoryTool {
                 .await
             }
 
-            "delete" => {
-                // SAFETY: validate_get_or_delete() ensures memory_id is Some
-                operations_query::delete_memory(params.memory_id.as_deref().unwrap(), &ctx).await
-            }
+            "delete" => operations_query::delete_memory(
+                params
+                    .memory_id
+                    .as_deref()
+                    .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                &ctx,
+            )
+            .await,
 
             "clear_by_type" => {
-                // SAFETY: validate_clear_by_type() ensures memory_type is Some
                 operations_query::clear_by_type(
                     &params,
-                    params.memory_type.as_deref().unwrap(),
+                    params
+                        .memory_type
+                        .as_deref()
+                        .expect("BUG: validate_clear_by_type() must ensure memory_type is Some"),
                     &ctx,
                 )
                 .await
