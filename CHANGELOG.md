@@ -5,6 +5,46 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-04-24
+
+### Added
+
+- **`$lib/utils/uuid.ts`**: Canonical 8-4-4-4-12 hex UUID validator (`isUuid()`) shared across stores and components
+- **`$lib/utils/constants.ts`**: `ITERATIONS_LIMITS` frontend constants synchronized with backend clamping (max iterations / max parallel)
+- **`$lib/utils/settings-refresh.ts`**: `onSettingsRefresh()` / `attachSettingsRefreshListener()` / `SETTINGS_REFRESH_EVENT` helpers to subscribe to the global settings refresh event after import/export
+- **`$lib/actions/focusTrap.ts`**: Svelte 5 `{@attach}` action for WCAG 2.1 modal keyboard focus trap with Tab cycling and focus restoration on teardown
+
+### Changed
+
+- **Toast vs ErrorBanner unification**: Single toast layer for transient errors, ErrorBanner reserved for persistent UI errors
+- **SvelteKit redirects**: Migrated route guards to `+page.ts` redirects (instead of imperative `goto()` in components)
+- **Modal accessibility**: `Modal.svelte` now uses `focusTrap` action (replaces ad-hoc keydown handlers)
+- **Chat block ordering**: Chronological merge by `created_at` across primary/sub-agent blocks (round 3, MEDIUM-4)
+- **Block keys**: Stable `block.sequence` keys for `{#each}` lists (round 3, MEDIUM-1 + LOW-5)
+- **Agent name resolution**: New `resolveAgentName()` helper backed by `isUuid()` (round 3, MEDIUM-3)
+- **Duration formatting**: Single `formatDuration()` utility now handles ms / s / m,s formats (round 3, LOW-3)
+- **Iteration limits**: Both frontend and backend reference the shared `ITERATIONS_LIMITS` constant (round 3, LOW-6)
+- **Modal accent**: `UserQuestionModal` aligned with `accent-color` design token (round 3, LOW-1)
+- **Dependencies aligned**: `@tauri-apps/plugin-dialog` JS package upgraded to `^2.7.0` to match the Rust crate
+
+### Fixed
+
+- **HIGH `--color-warning-light` illegibility**: Replaced low-contrast token usages with WCAG-compliant variants (round 2)
+- **Design tokens sweep**: Removed remaining hardcoded colors in favor of CSS custom properties (round 2)
+- **Agent restore guard**: Prevents restoring a deleted/missing agent into the active selection (round 2)
+- **Legacy `executionResponse` bubble**: Dropped duplicate response rendering path (round 3, MEDIUM-2)
+- **`task_id` guard**: Skip block emission when no `task_id` is associated (round 3, MEDIUM-5)
+- **Chat `--color-danger` scope**: Scoped to chat surface to avoid bleeding into other components (round 3, LOW-2)
+- **Thinking content slicing**: New `truncateThinkingContent()` for safe slicing (round 3, LOW-4)
+- **Orphan root `+page.svelte`**: Removed unused root page component
+
+### Documentation
+
+- **`docs/FRONTEND_SPECIFICATIONS.md`**: Added new `utils/uuid`, `utils/constants`, `utils/settings-refresh` modules and the `actions/focusTrap` section
+- **`docs/TECH_STACK.md`**: Refreshed dependency versions (Svelte 5.55, SvelteKit 2.55, rig-core 0.34, tokio 1.51, plugins)
+
+---
+
 ## [0.19.0] - 2026-03-31
 
 ### Changed
@@ -575,7 +615,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.1
 [0.19.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.0
 [0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0
 [0.17.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.17.0
