@@ -19,7 +19,6 @@
 //! in [`crate::tools::constants`].
 
 /// Constants for workflow execution and streaming.
-#[allow(dead_code)]
 pub mod workflow {
     /// Maximum number of messages to include in LLM context.
     /// Prevents context overflow while maintaining conversation coherence.
