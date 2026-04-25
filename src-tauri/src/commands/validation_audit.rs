@@ -140,6 +140,15 @@ pub async fn list_validation_audit(
     params: ListAuditParams,
     state: State<'_, AppState>,
 ) -> Result<Vec<ValidationAuditEntry>, String> {
+    list_audit_entries(&state.db, &params).await
+}
+
+/// Backend-only helper for `list_validation_audit`. Extracted so unit tests
+/// can exercise the full query → deserialize path without a Tauri `State`.
+pub(crate) async fn list_audit_entries(
+    db: &DBClient,
+    params: &ListAuditParams,
+) -> Result<Vec<ValidationAuditEntry>, String> {
     let limit = params
         .limit
         .map(|l| l.clamp(1, MAX_LIST_LIMIT))
@@ -195,16 +204,15 @@ pub async fn list_validation_audit(
         where_clause, limit, offset
     );
 
-    let rows: Vec<serde_json::Value> = state
-        .db
+    let rows: Vec<serde_json::Value> = db
         .query_json_with_params(&query, binds)
         .await
         .map_err(|e| format!("Failed to list audit entries: {}", e))?;
 
     let entries = rows
         .into_iter()
-        .filter_map(|row| row_to_entry(row).ok())
-        .collect();
+        .map(row_to_entry)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(entries)
 }
 
@@ -431,25 +439,46 @@ fn csv_escape(cell: &str) -> String {
 
 /// Convert a JSON row from `validation_audit` into a typed entry.
 ///
-/// `metadata` is stored as a JSON string in DB (per ERR_SURREAL_001) — parse it
-/// back into a real `Value` so the frontend gets structured data.
+/// Two adjustments are applied to make the snake_case DB row match
+/// `ValidationAuditEntry`'s camelCase serde contract (ERR_SERDE_001):
+/// 1. snake_case column keys are renamed to their camelCase counterparts;
+/// 2. `metadata` is stored as a JSON string in DB (per ERR_SURREAL_001) — it
+///    is parsed back into a real `Value` so the frontend gets structured data.
 fn row_to_entry(row: serde_json::Value) -> Result<ValidationAuditEntry, String> {
-    let metadata = row
+    let mut row_owned = row;
+    let obj = row_owned
+        .as_object_mut()
+        .ok_or_else(|| "Audit row is not a JSON object".to_string())?;
+
+    // ERR_SERDE_001: ValidationAuditEntry uses #[serde(rename_all = "camelCase")]
+    // for the frontend wire format, but SurrealDB returns columns in snake_case.
+    // Without this remap, `serde_json::from_value` fails on every row.
+    const KEY_RENAMES: &[(&str, &str)] = &[
+        ("validation_id", "validationId"),
+        ("tool_name", "toolName"),
+        ("decided_at", "decidedAt"),
+        ("decided_by", "decidedBy"),
+        ("risk_level", "riskLevel"),
+        ("workflow_id", "workflowId"),
+        ("agent_id", "agentId"),
+        ("prompt_preview", "promptPreview"),
+    ];
+    for (snake, camel) in KEY_RENAMES {
+        if let Some(value) = obj.remove(*snake) {
+            obj.insert((*camel).to_string(), value);
+        }
+    }
+
+    // Parse the JSON-string metadata back into a real Value.
+    let metadata = obj
         .get("metadata")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty() && *s != "{}")
         .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
-
-    let mut row_owned = row;
-    // Replace stored string metadata with the parsed value so default deserialization works.
-    match metadata.clone() {
-        Some(v) => {
-            row_owned["metadata"] = v;
-        }
-        None => {
-            row_owned["metadata"] = serde_json::Value::Null;
-        }
-    }
+    obj.insert(
+        "metadata".to_string(),
+        metadata.unwrap_or(serde_json::Value::Null),
+    );
 
     serde_json::from_value::<ValidationAuditEntry>(row_owned)
         .map_err(|e| format!("Invalid audit row: {}", e))

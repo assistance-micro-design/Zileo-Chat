@@ -221,3 +221,46 @@ fn csv_escape_quotes_and_commas() {
     assert_eq!(csv_escape("she said \"hi\""), "\"she said \"\"hi\"\"\"");
     assert_eq!(csv_escape("line\nbreak"), "\"line\nbreak\"");
 }
+
+/// Regression: ERR_SERDE_001 — `ValidationAuditEntry` carries
+/// `#[serde(rename_all = "camelCase")]` because it is sent to the frontend in
+/// camelCase, but rows from the DB come back in snake_case (column names).
+/// Without explicit remapping, `serde_json::from_value` fails on every row and
+/// the previous `filter_map(.ok())` silently swallowed the error → list page
+/// stayed empty even when stats showed entries existed.
+#[tokio::test]
+async fn list_audit_entries_returns_inserted_row_end_to_end() {
+    let (db, _t) = make_db().await;
+    let s = settings(true, 30);
+    write_audit_entry(
+        &db,
+        &s,
+        draft("v-end2end", AuditDecision::Approved, DecidedBy::User),
+    )
+    .await;
+    assert_eq!(count_audit(&db).await, 1);
+
+    let params = ListAuditParams::default();
+    let entries = list_audit_entries(&db, &params)
+        .await
+        .expect("list_audit_entries must succeed");
+
+    assert_eq!(
+        entries.len(),
+        1,
+        "stats and list must agree: 1 row in DB → 1 entry returned"
+    );
+    let entry = &entries[0];
+    assert_eq!(entry.validation_id, "v-end2end");
+    assert_eq!(entry.tool_name, "test_tool");
+    assert_eq!(entry.decision, AuditDecision::Approved);
+    assert_eq!(entry.decided_by, DecidedBy::User);
+    assert_eq!(entry.risk_level, RiskLevel::Medium);
+    assert_eq!(entry.workflow_id.as_deref(), Some("wf-test"));
+    assert_eq!(entry.agent_id.as_deref(), Some("agent-test"));
+    assert_eq!(entry.prompt_preview.as_deref(), Some("hello world"));
+    assert_eq!(
+        entry.metadata.as_ref().and_then(|m| m.get("reason")),
+        Some(&serde_json::json!("ok"))
+    );
+}
