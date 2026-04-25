@@ -26,6 +26,7 @@ use super::http::{self, ParsedContent};
 use super::provider::{
     CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
+use super::tool_format::{send_tool_completion, ToolChatRequest};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -77,23 +78,6 @@ struct ChatResponseMessage {
 struct ChatUsage {
     prompt_tokens: usize,
     completion_tokens: usize,
-}
-
-/// API request body for chat completions with tools
-#[derive(Debug, Serialize)]
-struct ToolChatRequest {
-    model: String,
-    messages: Vec<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<String>,
 }
 
 /// Generic provider for any OpenAI-compatible API.
@@ -321,74 +305,12 @@ impl OpenAiCompatibleProvider {
         })?;
 
         // Apply prompt cache control to system message for providers that support it
-        // (required for Anthropic Claude, harmlessly ignored by others)
+        // (required for Anthropic Claude, harmlessly ignored by others).
         let cached_messages = apply_prompt_cache_control(&params.messages);
 
-        let request_body = ToolChatRequest {
-            model: params.model.clone(),
-            messages: cached_messages,
-            temperature: Some(params.temperature),
-            max_tokens: Some(params.max_tokens),
-            tools: if params.tools.is_empty() {
-                None
-            } else {
-                Some(params.tools.clone())
-            },
-            tool_choice: params.tool_choice.clone(),
-            reasoning_effort: params
-                .reasoning_effort
-                .as_ref()
-                .map(|e| e.as_str().to_string()),
-        };
-
+        let body = ToolChatRequest::from_params(params, cached_messages);
         let url = format!("{}/chat/completions", base_url);
-
-        debug!(
-            model = %params.model,
-            temperature = params.temperature,
-            max_tokens = params.max_tokens,
-            context_window = ?params.context_window,
-            reasoning_effort = ?params.reasoning_effort,
-            tools_count = request_body.tools.as_ref().map(|t| t.len()).unwrap_or(0),
-            "Making request with tools to OpenAI-compatible API"
-        );
-
-        let (status, body) = http::send_and_read_body(
-            self.http_client
-                .post(&url)
-                .header("Authorization", format!("Bearer {}", api_key))
-                .header("Content-Type", "application/json")
-                .json(&request_body)
-                .send()
-                .await,
-        )
-        .await?;
-
-        if !status.is_success() {
-            return Err(http::parse_api_error(&self.provider_name, status, &body));
-        }
-
-        let json_response: serde_json::Value =
-            http::parse_json_response(&self.provider_name, &body)?;
-
-        if let Some(usage) = json_response.get("usage") {
-            let prompt_tokens = usage
-                .get("prompt_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let completion_tokens = usage
-                .get("completion_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            info!(
-                provider = %self.provider_name,
-                tokens_input = prompt_tokens,
-                tokens_output = completion_tokens,
-                "Custom provider tool completion successful"
-            );
-        }
-
-        Ok(json_response)
+        send_tool_completion(&self.http_client, &self.provider_name, &url, &api_key, &body).await
     }
 
     /// Best-effort extraction of thinking content from raw JSON response body.

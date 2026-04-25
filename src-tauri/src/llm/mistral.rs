@@ -22,6 +22,7 @@ use super::http::{self, ParsedContent};
 use super::provider::{
     CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
 };
+use super::tool_format::{send_tool_completion, ToolChatRequest};
 use crate::models::agent::ReasoningEffort;
 use async_trait::async_trait;
 use rig::completion::Prompt;
@@ -80,23 +81,6 @@ struct MistralResponseMessage {
 struct MistralUsage {
     prompt_tokens: usize,
     completion_tokens: usize,
-}
-
-/// API request body for Mistral chat completions with tools
-#[derive(Debug, Serialize)]
-struct MistralToolChatRequest {
-    model: String,
-    messages: Vec<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<serde_json::Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<String>,
 }
 
 /// Mistral AI provider implementation
@@ -315,68 +299,8 @@ impl MistralProvider {
             .clone()
             .ok_or_else(|| LLMError::NotConfigured("Mistral".to_string()))?;
 
-        let request_body = MistralToolChatRequest {
-            model: params.model.clone(),
-            messages: params.messages.clone(),
-            temperature: Some(params.temperature),
-            max_tokens: Some(params.max_tokens),
-            tools: if params.tools.is_empty() {
-                None
-            } else {
-                Some(params.tools.clone())
-            },
-            tool_choice: params.tool_choice.clone(),
-            reasoning_effort: params
-                .reasoning_effort
-                .as_ref()
-                .map(|e| e.as_str().to_string()),
-        };
-
-        debug!(
-            model = %params.model,
-            temperature = params.temperature,
-            max_tokens = params.max_tokens,
-            context_window = ?params.context_window,
-            reasoning_effort = ?params.reasoning_effort,
-            tools_count = request_body.tools.as_ref().map(|t| t.len()).unwrap_or(0),
-            "Making Mistral API request with tools"
-        );
-
-        let (status, body) = http::send_and_read_body(
-            self.http_client
-                .post(MISTRAL_API_URL)
-                .header("Authorization", format!("Bearer {}", api_key))
-                .header("Content-Type", "application/json")
-                .json(&request_body)
-                .send()
-                .await,
-        )
-        .await?;
-
-        if !status.is_success() {
-            return Err(http::parse_api_error("Mistral", status, &body));
-        }
-
-        let json_response: serde_json::Value = http::parse_json_response("Mistral", &body)?;
-
-        // Log usage if available
-        if let Some(usage) = json_response.get("usage") {
-            let prompt_tokens = usage
-                .get("prompt_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let completion_tokens = usage
-                .get("completion_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            info!(
-                tokens_input = prompt_tokens,
-                tokens_output = completion_tokens,
-                "Mistral tool completion successful"
-            );
-        }
-
-        Ok(json_response)
+        let body = ToolChatRequest::from_params(params, params.messages.clone());
+        send_tool_completion(&self.http_client, "Mistral", MISTRAL_API_URL, &api_key, &body).await
     }
 }
 

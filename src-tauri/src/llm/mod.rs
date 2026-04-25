@@ -47,6 +47,7 @@ pub mod pricing;
 mod provider;
 pub mod retry;
 pub mod tool_adapter;
+pub(crate) mod tool_format;
 pub mod utils;
 
 pub use manager::ProviderManager;
