@@ -89,7 +89,7 @@ pub async fn execute_workflow_streaming(
     // Safety net: enforce concurrent workflow limit
     // Frontend enforces this too, but backend provides race condition protection
     let running_count = state.streaming_cancellations.lock().await.len();
-    let max_concurrent: usize = 3; // Maximum concurrent workflows (frontend also enforces per-mode limits)
+    let max_concurrent = crate::constants::workflow::DEFAULT_MAX_CONCURRENT_WORKFLOWS;
     if running_count >= max_concurrent {
         return Err(format!(
             "Maximum concurrent workflows ({}) reached. Please wait for a workflow to complete.",
@@ -152,9 +152,13 @@ pub async fn execute_workflow_streaming(
     // Counter for thinking steps
     let mut thinking_step_number: u32 = 0;
 
-    // Global sequence counter for block ordering (shared with report blocks)
-    // Initial reasoning = sequence 0, report blocks start at 1+
-    let initial_sequence: u32 = 0;
+    // Global sequence counter for block ordering (shared with report blocks).
+    // Phase 2.3: AtomicU32-backed tracker, contiguous + thread-safe — replaces
+    // the previous "compute max+1 at the end" approach which was fragile under
+    // interruption / concurrent emissions.
+    let sequence_tracker =
+        std::sync::Arc::new(crate::agents::execution::sequence_tracker::SequenceTracker::new(0));
+    let initial_sequence: u32 = sequence_tracker.allocate();
 
     // Emit and persist initial reasoning step
     let initial_reasoning = "Analyzing request and preparing response...".to_string();
@@ -267,7 +271,11 @@ pub async fn execute_workflow_streaming(
     // because they were already emitted in real-time by the tool_loop via emit_reasoning()
     // and emit_progress(StreamChunk::thinking_block(...)). Re-emitting would cause duplicates.
 
-    // Compute completion sequence: after all report blocks (tool_executions + reasoning_steps)
+    // Compute completion sequence so it's strictly after every block emitted
+    // by the agent during execution. Phase 2.3: we still respect
+    // sequences set by `report.metrics` (set inside the agent's tool loop —
+    // those will migrate to the same tracker in Phase 3.1) AND the local
+    // tracker, taking the max so the completion block always lands last.
     let max_report_sequence = report
         .metrics
         .tool_executions
@@ -276,7 +284,8 @@ pub async fn execute_workflow_streaming(
         .chain(report.metrics.reasoning_steps.iter().map(|rs| rs.sequence))
         .max()
         .unwrap_or(initial_sequence);
-    let completion_sequence = max_report_sequence + 1;
+    let _ = sequence_tracker.allocate(); // reserve slot for completion via tracker
+    let completion_sequence = max_report_sequence.max(sequence_tracker.peek()) + 1;
 
     // Emit and persist reasoning step about execution completion
     let completion_reasoning = format!(
@@ -334,6 +343,18 @@ pub async fn execute_workflow_streaming(
         report.metrics.cache_write_tokens,
     )
     .await;
+
+    // Phase 2.4: surface a warning when token usage > 0 but cost was 0,
+    // which usually means the model has no pricing configured (silent fallback).
+    let total_tokens = report.metrics.tokens_input + report.metrics.tokens_output;
+    if pricing.cost_usd == 0.0 && total_tokens > 0 {
+        warn!(
+            workflow_id = %validated_workflow_id,
+            model_id = %pricing.model_id,
+            tokens = total_tokens,
+            "Cost is $0.00 with non-zero token usage — model pricing likely missing"
+        );
+    }
 
     // Update workflow with cumulative tokens, cost, model_id, and current context size
     update_workflow_cumulative_metrics(
@@ -393,15 +414,27 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    // Link sub-agent executions to this message for load_message_blocks correlation
+    // Link sub-agent executions to this message for load_message_blocks correlation.
     // Use both IS NONE and IS NULL: SurrealDB option<string> fields may be either
-    // NONE (field absent) or NULL (field present but null) depending on creation path
-    let link_query = format!(
-        "UPDATE sub_agent_execution SET parent_message_id = '{}' \
-         WHERE workflow_id = '{}' AND (parent_message_id IS NONE OR parent_message_id IS NULL)",
-        message_id, validated_workflow_id
-    );
-    if let Err(e) = state.db.execute(&link_query).await {
+    // NONE (field absent) or NULL (field present but null) depending on creation path.
+    //
+    // Phase 2.5: parameterize the UPDATE (was format!() — ERR_SEC_001 risk).
+    if let Err(e) = state
+        .db
+        .execute_with_params(
+            "UPDATE sub_agent_execution SET parent_message_id = $msg_id \
+             WHERE workflow_id = $wf_id \
+               AND (parent_message_id IS NONE OR parent_message_id IS NULL)",
+            vec![
+                ("msg_id".to_string(), serde_json::json!(message_id)),
+                (
+                    "wf_id".to_string(),
+                    serde_json::json!(validated_workflow_id),
+                ),
+            ],
+        )
+        .await
+    {
         warn!(error = %e, "Failed to link sub-agent executions to message");
     }
 

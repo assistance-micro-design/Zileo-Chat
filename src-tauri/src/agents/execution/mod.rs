@@ -16,6 +16,8 @@
 //!
 //! - [`tool_loop`] - Main execution loops (simple and tool-augmented)
 //! - [`tools`] - Tool creation, collection, and execution
+//! - [`sequence_tracker`] - Atomic monotonic counter for ordering blocks
 
+pub(crate) mod sequence_tracker;
 pub(crate) mod tool_loop;
 pub(crate) mod tools;

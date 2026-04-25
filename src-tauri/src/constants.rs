@@ -25,6 +25,12 @@ pub mod workflow {
     /// Prevents context overflow while maintaining conversation coherence.
     pub const MESSAGE_HISTORY_LIMIT: usize = 50;
 
+    /// Maximum number of streaming workflows that can run concurrently.
+    ///
+    /// Backend safety net (frontend also enforces per-mode limits). Prevents
+    /// runaway resource use when many workflows are launched in parallel.
+    pub const DEFAULT_MAX_CONCURRENT_WORKFLOWS: usize = 3;
+
     // Tokio Timeout Constants
     /// Timeout (seconds) for LLM execution operations.
     /// Default: 5 minutes - generous for complex reasoning tasks.

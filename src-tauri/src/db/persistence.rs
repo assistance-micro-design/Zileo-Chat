@@ -25,8 +25,20 @@ use crate::agents::core::agent::{ReasoningStepData, ToolExecutionData};
 use crate::db::DBClient;
 use crate::models::{ThinkingStepCreate, ToolExecutionCreate};
 use futures_util::future::join_all;
-use tracing::warn;
+use tracing::{debug, warn};
 use uuid::Uuid;
+
+/// Lightweight read-barrier: forces the DB session to finish processing any
+/// in-flight writes before returning. Used after `join_all` of fire-and-forget
+/// writes so callers can rely on subsequent SELECTs seeing those rows.
+///
+/// Uses a trivial `RETURN 1` query — the SurrealDB driver guarantees ordering
+/// per session, so this acts as a barrier without measuring an actual side effect.
+async fn flush_writes(db: &DBClient) {
+    if let Err(e) = db.execute("RETURN 1").await {
+        debug!(error = %e, "Persistence flush barrier failed (non-fatal)");
+    }
+}
 
 /// Persists tool execution records from agent-level `ToolExecutionData` in parallel.
 ///
@@ -85,6 +97,8 @@ pub async fn persist_tool_executions(
         })
         .collect();
     join_all(tool_futures).await;
+    // Phase 2.6: barrier so subsequent reads see the rows we just wrote.
+    flush_writes(db).await;
 }
 
 /// Persists reasoning step records from agent-level `ReasoningStepData` in parallel.
@@ -141,6 +155,8 @@ pub async fn persist_reasoning_steps(
         })
         .collect();
     join_all(step_futures).await;
+    // Phase 2.6: barrier so subsequent reads see the rows we just wrote.
+    flush_writes(db).await;
     start_step_number + reasoning_steps.len() as u32
 }
 
