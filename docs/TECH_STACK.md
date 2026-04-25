@@ -1,12 +1,12 @@
 # Tech Stack: Svelte + Rust + SurrealDB
 
-> **Current project versions: 27 March 2026**
+> **Current project versions: 24 April 2026**
 > Production versions used in the project (tested compatibility).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.53.4 | Svelte 5.53.6
+Frontend  : SvelteKit 2.55.0 | Svelte 5.55.1
 Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
@@ -18,8 +18,8 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 ### Frontend (package.json)
 
 **Core Framework**:
-- **svelte**: 5.53.6
-- **@sveltejs/kit**: ^2.53.4
+- **svelte**: 5.55.1
+- **@sveltejs/kit**: ^2.55.0
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
 - **vite**: ^7.3.1
@@ -30,8 +30,8 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.9.0
-- **@tauri-apps/cli**: ^2.9.6
-- **@tauri-apps/plugin-dialog**: ^2.6.0
+- **@tauri-apps/cli**: ^2.10.1
+- **@tauri-apps/plugin-dialog**: ^2.7.0
 - **@tauri-apps/plugin-opener**: ^2.5.3
 
 **UI Components**:
@@ -39,7 +39,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **Content Processing**:
 - **dompurify**: ^3.3.1 (HTML sanitization)
-- **marked**: ^17.0.4 (Markdown rendering)
+- **marked**: ^17.0.5 (Markdown rendering)
 - **zod**: ^4.3.6 (schema validation)
 
 **Testing**:
@@ -66,7 +66,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **tauri-plugin-dialog**: 2 (version range)
 
 **LLM & Multi-Agent**:
-- **rig-core**: 0.32.0 (LLM abstraction framework)
+- **rig-core**: 0.34.0 (LLM abstraction framework)
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures-util**: 0.3.31 (stream utilities for SSE)
 - Providers: Mistral (native), Ollama (native), OpenAI-compatible (custom providers)
@@ -79,7 +79,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **serde_json**: 1.0.149
 
 **Async Runtime**:
-- **tokio**: 1.49.0 (features: rt, rt-multi-thread, macros, sync, time, fs, io-util, net, process)
+- **tokio**: 1.51.1 (features: rt, rt-multi-thread, macros, sync, time, fs, io-util, net, process)
 - **tokio-util**: 0.7 (features: rt)
 
 **Error Handling**:

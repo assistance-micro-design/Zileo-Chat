@@ -211,7 +211,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 11 modules)
+### Utilities (`src/lib/utils/`, 14 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -223,9 +223,18 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `dateGrouping.ts` | Date grouping helpers | Group items by date (today, yesterday, older) |
 | `dragDrop.ts` | Drag and drop helpers | Drag and drop event handling |
 | `url.ts` | `isAllowedScheme()` | URL scheme validation for safe external links |
-| `duration.ts` | `formatDuration()` | Duration formatting |
+| `duration.ts` | `formatDuration()` | Duration formatting (ms / s / m,s) |
 | `debounce.ts` | `debounce()` | Debounce wrapper |
+| `uuid.ts` | `isUuid()` | Canonical 8-4-4-4-12 hex UUID validation |
+| `constants.ts` | `ITERATIONS_LIMITS` | Shared frontend constants (synchronized with backend clamping) |
+| `settings-refresh.ts` | `onSettingsRefresh()`, `attachSettingsRefreshListener()`, `SETTINGS_REFRESH_EVENT` | Subscribe to the global `settings:refresh` event after import/export |
 | `index.ts` | Re-exports | Barrel file |
+
+### Actions (`src/lib/actions/`, 1 module)
+
+| Module | Key Exports | Description |
+|--------|-------------|-------------|
+| `focusTrap.ts` | `focusTrap` (Svelte 5 attachment) | WCAG 2.1 modal keyboard focus trap with Tab cycling and focus restoration on teardown |
 
 ### Services (`src/lib/services/`, 7 modules including index)
 
