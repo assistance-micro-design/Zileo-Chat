@@ -24,7 +24,6 @@
 //! `Result<T, String>`; only new code (or refactored modules) needs to
 //! adopt `CommandError`.
 
-use crate::agents::error::AgentError;
 use crate::llm::LLMError;
 use thiserror::Error;
 
@@ -43,10 +42,6 @@ pub enum CommandError {
     /// The requested resource was not found.
     #[error("{kind} not found: {id}")]
     NotFound { kind: String, id: String },
-
-    /// Forwarded from the agents layer (LLM, tool, sub-agent failure).
-    #[error("Agent error: {0}")]
-    Agent(#[from] AgentError),
 
     /// Forwarded directly from the LLM layer when the command bypasses
     /// the agents layer (e.g. provider configuration commands).
@@ -106,13 +101,6 @@ mod tests {
     fn command_error_converts_to_string_for_tauri() {
         let err: String = CommandError::Validation("uuid malformed".into()).into();
         assert_eq!(err, "Invalid input: uuid malformed");
-    }
-
-    #[test]
-    fn command_error_wraps_agent_error_via_from() {
-        let agent_err = AgentError::Cancelled;
-        let cmd_err: CommandError = agent_err.into();
-        assert!(cmd_err.to_string().contains("Agent execution cancelled"));
     }
 
     #[test]
