@@ -5,6 +5,49 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-04-25
+
+### Added
+
+- **Validation timeout & timeout behavior**: New `validation.timeoutSeconds` and `validation.timeoutBehavior` settings (`auto-approve` / `auto-reject`) on validation rules — backend enforces server-side, frontend exposes the configuration in Settings > Validation
+- **Validation audit log (backend)**: `validation_audit` SurrealDB table + write helper + 4 Tauri commands (`list_validation_audit`, `get_validation_audit_stats`, `purge_validation_audit`, `export_validation_audit_csv`)
+- **Settings > Audit Log page**: New `/settings/audit-log` route with list view, filters (date range, status, tool name, agent), stats panel, CSV export, and purge action — backed by `audit-log.ts` store
+- **Cancellation propagation**: `oncancel` now propagates from UI down through the agent loop into LLM HTTP calls (cancellable retries)
+- **Domain error enums via thiserror**: `AgentError` and `CommandError` enums replace ad-hoc `String` errors in agent and command layers, structured `Display` impls preserved for UI
+- **Shared tool chat request body + POST helper**: Factored common LLM POST request building (auth headers, body shape) across providers (`llm/tool_format.rs`)
+- **Centralized timeout constants**: `validation::DEFAULT_TIMEOUT_SECONDS`, LLM HTTP timeout constants (`llm::http::*`) — single source of truth across modules
+
+### Changed
+
+- **`tool_loop.rs` modular split**: Extracted into `reasoning/`, `completion/`, `iteration/` submodules (matches the existing modular architecture refactor pattern from v0.19.0)
+- **`streaming/execution.rs` modular split**: Split into 4 focused modules for clarity and testability
+- **Pipeline robustness (phase 2.2-2.6)**: Concurrency hardening, sequencing guarantees, security checks (sanitize_for_surrealdb on audit writes), explicit flush on shutdown
+- **Production `.unwrap()` removal**: Last 6 production-path `.unwrap()` replaced with documented `.expect("invariant: ...")` carrying the upheld invariant
+- **`ValidationAuditEntry` snake_case → camelCase remapping**: DB rows now correctly remap on read (was leaking snake_case fields into the frontend)
+- **Documentation sync**: docs harmonized with `validation_audit` backend (FRONTEND/BACKEND_SPECIFICATIONS, TECH_STACK), stale references cleaned
+
+### Fixed
+
+- **Approval modal stuck on backend timeout**: Modal now closes when the backend times out a pending validation (was leaving the user blocked)
+- **Audit log row mapping**: snake_case DB columns no longer leak into `ValidationAuditEntry` (HIGH from senior review)
+- **Senior review fixes (HIGH/MEDIUM/LOW)**: Multiple fixes across audit log frontend (filter handling, store derivations, accessibility, loading states)
+
+### Security
+
+- **dompurify** bumped to `^3.4.1` (was `^3.3.1`) — fixes 8 advisories including mutation-XSS via re-contextualization, prototype pollution, ADD_TAGS/ADD_ATTR bypasses, SAFE_FOR_TEMPLATES bypass (used at runtime in `MarkdownRenderer.svelte` and `url.ts`)
+- **vite** bumped to `^7.3.2` (was `^7.3.1`) — fixes 3 path-traversal / dev-server file-read advisories (build/dev only, not shipped in the Tauri binary)
+- **rollup** transitive bumped to `4.60.2` — fixes arbitrary file write via path traversal (build only)
+- **picomatch** transitive bumped to `4.0.4` — fixes ReDoS + method injection in POSIX character classes (build only)
+- **postcss** transitive bumped to `8.5.10` — fixes XSS via unescaped `</style>` (build only)
+- Remaining advisories (ajv, brace-expansion, cookie, flatted, minimatch, yaml) are transitive deps of ESLint / @sveltejs/kit (adapter-static, no SSR) / postcss-load-config — no runtime surface on Tauri desktop, will be picked up by future major upgrades
+
+### Documentation
+
+- **Specifications updated**: `docs/BACKEND_SPECIFICATIONS.md` and `docs/FRONTEND_SPECIFICATIONS.md` synchronized with `validation_audit` table, audit log commands, audit log store + page, validation timeout settings
+- **Stale references harmonized**: Cleaned references to renamed/split modules across the docs tree
+
+---
+
 ## [0.19.1] - 2026-04-24
 
 ### Added
@@ -615,7 +658,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.0
 [0.19.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.1
 [0.19.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.0
 [0.18.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.18.0
