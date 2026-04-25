@@ -179,6 +179,94 @@ where
     }
 }
 
+/// Like [`with_retry`] but races each attempt and each retry-sleep against
+/// the supplied [`CancellationToken`].
+///
+/// Returns `LLMError::Cancelled` as soon as the token fires, even mid-attempt.
+/// Per-attempt cancellation works because dropping the in-flight `reqwest`
+/// future closes the underlying connection — callers don't need to thread
+/// the token deeper than this layer for HTTP-level cancellation.
+///
+/// If `token` is `None`, behavior is identical to [`with_retry`].
+pub async fn with_retry_cancellable<F, T, Fut>(
+    operation: F,
+    config: &RetryConfig,
+    token: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<T, LLMError>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<T, LLMError>>,
+{
+    let Some(token) = token else {
+        return with_retry(operation, config).await;
+    };
+
+    let mut attempt = 0;
+
+    loop {
+        // Cheap pre-flight check before spawning the next attempt.
+        if token.is_cancelled() {
+            debug!("Cancellation requested before attempt {}", attempt);
+            return Err(LLMError::Cancelled);
+        }
+
+        let result = tokio::select! {
+            biased; // prefer cancellation signal over completion when both ready
+            _ = token.cancelled() => {
+                debug!("Cancellation fired during attempt {}", attempt);
+                return Err(LLMError::Cancelled);
+            }
+            r = operation() => r,
+        };
+
+        match result {
+            Ok(value) => {
+                if attempt > 0 {
+                    debug!(
+                        attempt = attempt,
+                        "Operation succeeded after {} retries", attempt
+                    );
+                }
+                return Ok(value);
+            }
+            Err(error) => {
+                if !is_retryable(&error) {
+                    debug!(error = %error, "Non-retryable error, failing immediately");
+                    return Err(error);
+                }
+                if attempt >= config.max_retries {
+                    warn!(
+                        attempt = attempt,
+                        max_retries = config.max_retries,
+                        error = %error,
+                        "Max retries exceeded"
+                    );
+                    return Err(error);
+                }
+
+                let delay = config.delay_for_attempt(attempt);
+                warn!(
+                    attempt = attempt + 1,
+                    max_retries = config.max_retries,
+                    delay_ms = delay.as_millis() as u64,
+                    error = %error,
+                    "Retrying after transient error (cancellable)"
+                );
+
+                tokio::select! {
+                    biased;
+                    _ = token.cancelled() => {
+                        debug!("Cancellation fired during retry backoff");
+                        return Err(LLMError::Cancelled);
+                    }
+                    _ = sleep(delay) => {}
+                }
+                attempt += 1;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,5 +430,139 @@ mod tests {
         assert!(result.is_err());
         // Should fail immediately without retrying
         assert_eq!(call_count.load(Ordering::SeqCst), 1);
+    }
+
+    // =====================================================
+    // Phase 2.1 - Cancellation
+    // =====================================================
+
+    #[tokio::test]
+    async fn cancellation_interrupts_mock_provider_within_one_second() {
+        // Mock provider that "hangs" for 30s. We cancel after 50ms; the
+        // call must return Cancelled in < 1s.
+        let config = RetryConfig::new(0, 10, 100);
+        let token = tokio_util::sync::CancellationToken::new();
+        let token_clone = token.clone();
+
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            token_clone.cancel();
+        });
+
+        let started = std::time::Instant::now();
+        let result: Result<String, LLMError> = with_retry_cancellable(
+            || async {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                Ok::<_, LLMError>("never".to_string())
+            },
+            &config,
+            Some(&token),
+        )
+        .await;
+        let elapsed = started.elapsed();
+
+        assert!(matches!(result, Err(LLMError::Cancelled)));
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "Cancellation must surface in <1s, took {:?}",
+            elapsed
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_skips_remaining_retries_during_backoff() {
+        // Mock provider that always errors retryably, with a long backoff.
+        // Cancel during the first backoff so retries 2..N never run.
+        let config = RetryConfig::new(5, 1000, 5000);
+        let call_count = Arc::new(AtomicU32::new(0));
+        let cc = call_count.clone();
+        let token = tokio_util::sync::CancellationToken::new();
+        let token_clone = token.clone();
+
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            token_clone.cancel();
+        });
+
+        let result: Result<String, LLMError> = with_retry_cancellable(
+            || {
+                let cc = cc.clone();
+                async move {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                    Err::<String, _>(LLMError::ConnectionError("transient".to_string()))
+                }
+            },
+            &config,
+            Some(&token),
+        )
+        .await;
+
+        assert!(matches!(result, Err(LLMError::Cancelled)));
+        // Exactly 1 attempt should have run before cancellation hit during backoff.
+        assert_eq!(call_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn cancellation_with_none_token_behaves_like_with_retry() {
+        // Sanity: None token must not change anything.
+        let config = RetryConfig::new(2, 10, 50);
+        let call_count = Arc::new(AtomicU32::new(0));
+        let cc = call_count.clone();
+
+        let result: Result<String, LLMError> = with_retry_cancellable(
+            || {
+                let cc = cc.clone();
+                async move {
+                    let n = cc.fetch_add(1, Ordering::SeqCst);
+                    if n < 2 {
+                        Err(LLMError::ConnectionError("transient".to_string()))
+                    } else {
+                        Ok("ok".to_string())
+                    }
+                }
+            },
+            &config,
+            None,
+        )
+        .await;
+
+        assert!(matches!(result, Ok(ref v) if v == "ok"));
+        assert_eq!(call_count.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn cancellation_pre_flight_short_circuits_when_already_cancelled() {
+        // If the token is already cancelled, the operation must never run.
+        let config = RetryConfig::default();
+        let call_count = Arc::new(AtomicU32::new(0));
+        let cc = call_count.clone();
+        let token = tokio_util::sync::CancellationToken::new();
+        token.cancel();
+
+        let result: Result<String, LLMError> = with_retry_cancellable(
+            || {
+                let cc = cc.clone();
+                async move {
+                    cc.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, LLMError>("never".to_string())
+                }
+            },
+            &config,
+            Some(&token),
+        )
+        .await;
+
+        assert!(matches!(result, Err(LLMError::Cancelled)));
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            0,
+            "operation must not execute when token already cancelled"
+        );
+    }
+
+    #[test]
+    fn cancelled_error_is_not_retryable() {
+        // Cancellation is intentional, never a transient failure.
+        assert!(!is_retryable(&LLMError::Cancelled));
     }
 }

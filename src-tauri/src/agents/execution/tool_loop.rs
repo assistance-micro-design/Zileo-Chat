@@ -706,10 +706,12 @@ pub(crate) async fn execute_with_tools(
             "Executing LLM call with JSON function calling"
         );
 
-        // Execute LLM call with tools
+        // Execute LLM call with tools.
+        // Phase 2.1: route through the cancellable variant so a user-issued
+        // cancellation reaches the LLM call within sub-second, even mid-response.
         let response = match ctx
             .provider_manager
-            .complete_with_tools(
+            .complete_with_tools_cancellable(
                 provider_type.clone(),
                 ToolCompletionParams {
                     messages: messages.clone(),
@@ -721,6 +723,7 @@ pub(crate) async fn execute_with_tools(
                     context_window: ctx.config.llm.context_window,
                     reasoning_effort: effective_reasoning_effort(ctx.config),
                 },
+                cancellation_token.clone(),
             )
             .await
         {
