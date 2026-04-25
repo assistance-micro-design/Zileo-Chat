@@ -194,7 +194,7 @@
 
 	.copy-button.copy-error {
 		opacity: 1;
-		color: var(--color-error);
+		color: var(--color-danger);
 	}
 
 	@keyframes fadeIn {

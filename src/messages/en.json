@@ -27,6 +27,7 @@
   "agent_loading": "Loading agents...",
   "agent_loading_description": "Please wait while we load your configured agents.",
   "agent_no_agents": "No agents configured",
+  "agent_unknown": "Unknown agent",
   "agent_no_agents_description": "You need to create at least one agent before starting a workflow. Configure your first agent in the Settings page.",
   "agent_go_to_settings": "Go to Settings",
   "agent_select_or_create": "Select or create a workflow",

@@ -15,11 +15,13 @@
 		content: string;
 		source: 'model_thinking' | 'agent_flow';
 		collapsed?: boolean;
+		/** Stable block sequence used to derive a deterministic DOM id */
+		sequence?: number;
 	}
 
-	let { content, source, collapsed = true }: Props = $props();
+	let { content, source, collapsed = true, sequence }: Props = $props();
 
-	const blockId = `thinking-${crypto.randomUUID().slice(0, 8)}`;
+	const blockId = $derived(`thinking-${sequence ?? 'tmp'}`);
 
 	const preview = $derived(truncateThinkingContent(content, 80));
 

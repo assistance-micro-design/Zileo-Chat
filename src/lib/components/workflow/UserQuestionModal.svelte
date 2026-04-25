@@ -296,7 +296,7 @@
 	.option-item input[type='checkbox'] {
 		width: 18px;
 		height: 18px;
-		accent-color: var(--color-primary);
+		accent-color: var(--color-accent);
 		cursor: pointer;
 	}
 

@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { Wrench, ChevronDown, CheckCircle, XCircle, Server } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
-	import { formatToolDuration } from '$types/tool';
+	import { formatDuration } from '$lib/utils/duration';
 
 	interface Props {
 		toolName: string;
@@ -21,6 +21,8 @@
 		errorMessage?: string;
 		durationMs: number;
 		collapsed?: boolean;
+		/** Stable block sequence used to derive a deterministic DOM id */
+		sequence?: number;
 	}
 
 	let {
@@ -32,12 +34,13 @@
 		success,
 		errorMessage,
 		durationMs,
-		collapsed = true
+		collapsed = true,
+		sequence
 	}: Props = $props();
 
-	const blockId = `tool-${crypto.randomUUID().slice(0, 8)}`;
+	const blockId = $derived(`tool-${sequence ?? 'tmp'}`);
 
-	const formattedDuration = $derived(formatToolDuration(durationMs));
+	const formattedDuration = $derived(formatDuration(durationMs));
 
 	const formattedInput = $derived(formatJson(inputParams));
 	const formattedOutput = $derived(formatJson(outputResult));

@@ -27,6 +27,7 @@ Displays workflow title, agent selector, iteration controls, and context informa
 	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
 	import { HelpButton } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { ITERATIONS_LIMITS } from '$lib/utils/constants';
 	import type { AgentSummary } from '$types/agent';
 	import type { Workflow } from '$types/workflow';
 
@@ -54,7 +55,10 @@ Displays workflow title, agent selector, iteration controls, and context informa
 
 	function handleIterationsInput(e: Event) {
 		const target = e.target as HTMLInputElement;
-		const value = Math.max(1, Math.min(200, parseInt(target.value) || 50));
+		const value = Math.max(
+			ITERATIONS_LIMITS.MIN,
+			Math.min(ITERATIONS_LIMITS.MAX, parseInt(target.value) || ITERATIONS_LIMITS.DEFAULT)
+		);
 		oniterationschange(value);
 	}
 </script>
@@ -90,8 +94,8 @@ Displays workflow title, agent selector, iteration controls, and context informa
 						type="number"
 						id="max-iterations"
 						class="iterations-input"
-						min="1"
-						max="200"
+						min={ITERATIONS_LIMITS.MIN}
+						max={ITERATIONS_LIMITS.MAX}
 						value={maxIterations}
 						oninput={handleIterationsInput}
 						title={$i18n('agent_header_iterations_tooltip')}

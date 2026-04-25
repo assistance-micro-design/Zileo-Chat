@@ -133,16 +133,3 @@ export interface WorkflowToolExecution {
 	iteration: number;
 }
 
-/**
- * Formats tool execution duration for display
- *
- * @param durationMs - Duration in milliseconds
- * @returns Formatted duration string (e.g., "150ms", "1.5s")
- */
-export function formatToolDuration(durationMs: number): string {
-	if (durationMs < 1000) {
-		return `${durationMs}ms`;
-	}
-	return `${(durationMs / 1000).toFixed(1)}s`;
-}
-

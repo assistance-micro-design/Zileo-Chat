@@ -347,6 +347,32 @@ describe('executionBlocksStore', () => {
 			});
 		});
 
+		it('drops task_create silently when task_id is missing', () => {
+			// Defensive: tasks without a stable id would collide on update/complete
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_name: 'Untracked task',
+				task_priority: 3
+			});
+
+			expect(get(executionTasks)).toEqual([]);
+		});
+
+		it('drops task_create when task_id is empty string', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'task_create',
+				task_id: '',
+				task_name: 'Untracked task',
+				task_priority: 3
+			});
+
+			expect(get(executionTasks)).toEqual([]);
+		});
+
 		it('adds task with agent name', () => {
 			executionBlocksStore.start('wf-123');
 			executionBlocksStore.processChunk({

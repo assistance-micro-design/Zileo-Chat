@@ -24,9 +24,8 @@ Main chat area with message display, execution blocks inline, and input controls
 
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { Bot, ArrowDown } from '@lucide/svelte';
+	import { ArrowDown } from '@lucide/svelte';
 	import { HelpButton } from '$lib/components/ui';
-	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import MessageList from '$lib/components/chat/MessageList.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
@@ -52,12 +51,6 @@ Main chat area with message display, execution blocks inline, and input controls
 		spinnerContext?: string | null;
 		/** Active tasks from TodoTool (displayed after spinner) */
 		executionTasks?: TodoTaskDisplay[];
-		/** Final response from the current execution */
-		executionResponse?: {
-			content: string;
-			tokensInput: number;
-			tokensOutput: number;
-		} | null;
 		disabled: boolean;
 		onsend: (message: string) => void;
 		oncancel?: () => void;
@@ -71,7 +64,6 @@ Main chat area with message display, execution blocks inline, and input controls
 		isExecuting = false,
 		spinnerContext = null,
 		executionTasks = [],
-		executionResponse = null,
 		disabled,
 		onsend,
 		oncancel
@@ -88,7 +80,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	// Content signal: uses addition to force Svelte 5 to track ALL dependencies
 	// (avoids short-circuit with || where only the first truthy stops evaluation)
 	let contentSignal = $derived(
-		messages.length + executionBlocks.length + executionTasks.length + (executionResponse ? 1 : 0)
+		messages.length + executionBlocks.length + executionTasks.length
 	);
 
 	function isNearBottom(container: HTMLElement): boolean {
@@ -167,12 +159,13 @@ Main chat area with message display, execution blocks inline, and input controls
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
-			{#snippet renderBlock(block: ChatBlock, _index: number)}
+			{#snippet renderBlock(block: ChatBlock)}
 				{#if block.block_type === 'thinking'}
 					{@const data = block.data as ThinkingBlockData}
 					<ThinkingBlock
 						content={data.content}
 						source={data.source}
+						sequence={block.sequence}
 					/>
 				{:else if block.block_type === 'tool_call'}
 					{@const data = block.data as ToolCallBlockData}
@@ -185,6 +178,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						success={data.success}
 						errorMessage={data.error_message}
 						durationMs={data.duration_ms}
+						sequence={block.sequence}
 					/>
 				{:else if block.block_type === 'sub_agent'}
 					{@const data = block.data as SubAgentBlockData}
@@ -195,6 +189,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						tokensInput={data.tokens_input}
 						tokensOutput={data.tokens_output}
 						reportSummary={data.report_summary}
+						sequence={block.sequence}
 					/>
 				{/if}
 			{/snippet}
@@ -210,8 +205,8 @@ Main chat area with message display, execution blocks inline, and input controls
 						<!-- Persisted blocks for assistant messages (reactive - no {@const}) -->
 						{#if message.role === 'assistant' && getBlocksForMessage(message.id).length > 0}
 							<div class="persisted-blocks">
-								{#each getBlocksForMessage(message.id) as block, i (`${block.block_type}-${i}`)}
-									{@render renderBlock(block, i)}
+								{#each getBlocksForMessage(message.id) as block (`${block.block_type}-${block.sequence}`)}
+									{@render renderBlock(block)}
 								{/each}
 							</div>
 						{/if}
@@ -222,8 +217,8 @@ Main chat area with message display, execution blocks inline, and input controls
 			<!-- Real-time execution blocks (current execution) -->
 			{#if isExecuting || executionBlocks.length > 0}
 				<div class="execution-blocks">
-					{#each executionBlocks as block, i (`${block.block_type}-${i}`)}
-						{@render renderBlock(block, i)}
+					{#each executionBlocks as block (`${block.block_type}-${block.sequence}`)}
+						{@render renderBlock(block)}
 					{/each}
 
 					{#if isExecuting}
@@ -236,21 +231,6 @@ Main chat area with message display, execution blocks inline, and input controls
 			{#if executionTasks.length > 0}
 				<div class="tasks-section">
 					<TodoTasksBlock tasks={executionTasks} />
-				</div>
-			{/if}
-
-			<!-- Final response (pending persistence) -->
-			{#if executionResponse}
-				<div class="execution-response">
-					<div class="response-bubble">
-						<div class="response-header">
-							<Bot size={16} class="bot-icon" />
-							<span>{$i18n('chat_assistant')}</span>
-						</div>
-						<div class="response-content">
-							<MarkdownRenderer content={executionResponse.content} />
-						</div>
-					</div>
 				</div>
 			{/if}
 		{/if}
@@ -334,41 +314,6 @@ Main chat area with message display, execution blocks inline, and input controls
 		padding: var(--spacing-sm) var(--spacing-lg);
 	}
 
-	/* Execution Response (pending persistence) */
-	.execution-response {
-		padding: var(--spacing-md) var(--spacing-lg);
-	}
-
-	.response-bubble {
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-lg);
-		padding: var(--spacing-md);
-		max-width: 80%;
-		animation: fadeIn 0.3s ease-in;
-	}
-
-	.response-header {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-sm);
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-secondary);
-	}
-
-	.response-header :global(.bot-icon) {
-		color: var(--color-accent);
-	}
-
-	.response-content {
-		font-size: var(--font-size-base);
-		line-height: 1.6;
-		color: var(--color-text-primary);
-		word-break: break-word;
-	}
-
 	@keyframes fadeIn {
 		from {
 			opacity: 0;
@@ -412,7 +357,6 @@ Main chat area with message display, execution blocks inline, and input controls
 	/* Respect reduced motion preference */
 	@media (prefers-reduced-motion: reduce) {
 		.message-wrapper,
-		.response-bubble,
 		.scroll-to-bottom {
 			animation: none;
 		}

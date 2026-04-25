@@ -237,10 +237,17 @@ function handleError(state: ExecutionBlocksState, chunk: StreamChunk): Execution
 /**
  * Process a task_create chunk - add new task to the tasks array.
  * Tasks are tracked separately from blocks and displayed after the spinner.
+ *
+ * Drops the chunk if `task_id` is missing or empty: tasks without a stable id
+ * cannot be matched by subsequent task_update / task_complete chunks, so
+ * tracking them would create phantom rows that never resolve.
  */
 function handleTaskCreate(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+	if (!chunk.task_id) {
+		return state;
+	}
 	const task: TodoTaskDisplay = {
-		id: chunk.task_id ?? '',
+		id: chunk.task_id,
 		name: chunk.task_name ?? '',
 		status: (chunk.task_status as TodoTaskDisplay['status']) ?? 'pending',
 		priority: chunk.task_priority ?? 3,

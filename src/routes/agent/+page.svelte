@@ -68,7 +68,6 @@ Uses extracted components, services, and stores for clean architecture.
 		executionBlocks as executionBlocks$,
 		isExecuting as isExecuting$,
 		spinnerContext as spinnerContext$,
-		executionResponse as executionResponse$,
 		executionTasks as executionTasks$,
 		executionWorkflowId as executionWorkflowId$
 	} from '$lib/stores/execution-blocks';
@@ -91,6 +90,8 @@ Uses extracted components, services, and stores for clean architecture.
 	} from '$lib/stores/folders';
 	import { withToastError } from '$lib/utils/async';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { isUuid } from '$lib/utils/uuid';
+	import { ITERATIONS_LIMITS } from '$lib/utils/constants';
 	import type { Workflow, WorkflowFolder, PersistedTask } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
@@ -127,7 +128,7 @@ Uses extracted components, services, and stores for clean architecture.
 		leftSidebarCollapsed: LocalStorage.get(STORAGE_KEYS.LEFT_SIDEBAR_COLLAPSED, false),
 		selectedWorkflowId: null,
 		selectedAgentId: null,
-		currentMaxIterations: 50,
+		currentMaxIterations: ITERATIONS_LIMITS.DEFAULT,
 		currentContextWindow: 128000,
 		messagesLoading: false
 	};
@@ -150,17 +151,30 @@ Uses extracted components, services, and stores for clean architecture.
 	/** Persisted tasks for the current workflow (read-only, only reassigned) */
 	let persistedTasks = $state.raw<TodoTaskDisplay[]>([]);
 
+	/**
+	 * Resolves a raw agent identifier (UUID or live name) to a display name.
+	 *
+	 * - Non-UUID strings are returned as-is (live stream already sends names).
+	 * - UUIDs are looked up in the `$agents` store.
+	 * - Orphan UUIDs (deleted agents) fall back to a localized "Unknown agent" label.
+	 */
+	function resolveAgentName(rawName: string | undefined): string | undefined {
+		if (!rawName) return undefined;
+		if (!isUuid(rawName)) return rawName;
+		const found = $agents.find((a) => a.id === rawName);
+		if (found) return found.name;
+		return $i18n('agent_unknown');
+	}
+
 	/** Resolved tasks: real-time store during execution of THIS workflow, persisted otherwise.
-	 *  Resolves agent UUIDs to display names via $agents store. */
+	 *  Resolves agent UUIDs to display names with orphan-safe fallback. */
 	let resolvedTasks = $derived(
 		($isExecuting$ && $executionWorkflowId$ === pageState.selectedWorkflowId
 			? $executionTasks$
 			: persistedTasks
 		).map((t) => ({
 			...t,
-			agent_name: t.agent_name
-				? ($agents.find((a) => a.id === t.agent_name)?.name ?? t.agent_name)
-				: undefined
+			agent_name: resolveAgentName(t.agent_name)
 		}))
 	);
 
@@ -394,7 +408,7 @@ Uses extracted components, services, and stores for clean architecture.
 	async function loadAgentConfig(agentId: string): Promise<void> {
 		try {
 			const config = await agentStore.getAgentConfig(agentId);
-			pageState.currentMaxIterations = config.max_tool_iterations ?? 50;
+			pageState.currentMaxIterations = config.max_tool_iterations ?? ITERATIONS_LIMITS.DEFAULT;
 
 			// Load full model data to get context_window and pricing
 			if (config.llm?.model && config.llm?.provider) {
@@ -412,7 +426,7 @@ Uses extracted components, services, and stores for clean architecture.
 				pageState.currentContextWindow = 128000;
 			}
 		} catch {
-			pageState.currentMaxIterations = 50;
+			pageState.currentMaxIterations = ITERATIONS_LIMITS.DEFAULT;
 			pageState.currentContextWindow = 128000;
 		}
 	}
@@ -655,7 +669,6 @@ Uses extracted components, services, and stores for clean architecture.
 				isExecuting={$isExecuting$}
 				spinnerContext={$spinnerContext$}
 				executionTasks={resolvedTasks}
-				executionResponse={$executionResponse$}
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
 				oncancel={handleCancel}

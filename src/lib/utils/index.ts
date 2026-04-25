@@ -26,3 +26,4 @@ export { createModalController, type ModalController, type ModalMode } from './m
 export { formatDuration } from './duration';
 export { groupByDate, type DateGroupLabel, type DateGroup } from './dateGrouping';
 export { isAllowedScheme } from './url';
+export { isUuid } from './uuid';

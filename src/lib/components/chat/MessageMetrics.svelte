@@ -147,8 +147,8 @@
 	}
 
 	.sub-agent-chip.error {
-		background: var(--color-error-bg, rgba(239, 68, 68, 0.1));
-		color: var(--color-error, #ef4444);
+		background: var(--color-danger-bg);
+		color: var(--color-danger);
 	}
 
 	.agent-name {
@@ -157,7 +157,7 @@
 	}
 
 	.sub-agent-chip.error .agent-name {
-		color: var(--color-error, #ef4444);
+		color: var(--color-danger);
 	}
 
 	.agent-tokens,

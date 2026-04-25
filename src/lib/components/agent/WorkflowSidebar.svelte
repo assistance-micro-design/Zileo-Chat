@@ -469,7 +469,7 @@ Left sidebar for workflow management with search and CRUD operations.
 		width: 100%;
 		margin: 0;
 		font-size: var(--font-size-xs);
-		color: var(--color-error);
+		color: var(--color-danger);
 		text-align: center;
 	}
 

@@ -27,6 +27,7 @@
   "agent_loading": "Chargement des agents...",
   "agent_loading_description": "Veuillez patienter pendant le chargement de vos agents.",
   "agent_no_agents": "Aucun agent configure",
+  "agent_unknown": "Agent inconnu",
   "agent_no_agents_description": "Vous devez creer au moins un agent avant de demarrer un flux de travail. Configurez votre premier agent dans les Parametres.",
   "agent_go_to_settings": "Aller aux Parametres",
   "agent_select_or_create": "Selectionnez ou creez un flux de travail",

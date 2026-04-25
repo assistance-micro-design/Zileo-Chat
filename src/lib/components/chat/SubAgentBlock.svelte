@@ -9,6 +9,8 @@
 <script lang="ts">
 	import { Users, ChevronDown, CheckCircle, XCircle } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
+	import { formatDuration } from '$lib/utils/duration';
+	import { truncateThinkingContent } from '$types/thinking';
 
 	interface Props {
 		agentName: string;
@@ -18,6 +20,8 @@
 		tokensOutput?: number;
 		reportSummary?: string;
 		collapsed?: boolean;
+		/** Stable block sequence used to derive a deterministic DOM id */
+		sequence?: number;
 	}
 
 	let {
@@ -27,25 +31,16 @@
 		tokensInput,
 		tokensOutput,
 		reportSummary,
-		collapsed = true
+		collapsed = true,
+		sequence
 	}: Props = $props();
 
-	const blockId = `subagent-${crypto.randomUUID().slice(0, 8)}`;
+	const blockId = $derived(`subagent-${sequence ?? 'tmp'}`);
 
-	const formattedDuration = $derived(
-		durationMs
-			? durationMs >= 1000
-				? `${(durationMs / 1000).toFixed(1)}s`
-				: `${durationMs}ms`
-			: null
-	);
+	const formattedDuration = $derived(durationMs ? formatDuration(durationMs) : null);
 
 	const preview = $derived(
-		reportSummary
-			? reportSummary.length > 100
-				? reportSummary.slice(0, 100) + '...'
-				: reportSummary
-			: null
+		reportSummary ? truncateThinkingContent(reportSummary, 100) : null
 	);
 
 	function toggle(): void {

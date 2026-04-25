@@ -61,10 +61,14 @@ pub struct ChatBlock {
 }
 
 /// Merges tool executions, thinking steps, and sub-agent executions into a unified,
-/// ordered list of ChatBlocks.
+/// chronologically ordered list of ChatBlocks.
 ///
-/// All inputs should already be sorted by sequence/time, but the merge re-sorts
-/// the combined result to ensure correct interleaving.
+/// Sorting is primarily by `created_at`, with `sequence` as a stable tie-breaker
+/// for tool/thinking records that share the same timestamp. Sub-agent records use
+/// `created_at` only (they have no shared sequence numbering with tool/thinking).
+///
+/// After sorting, the final `sequence` field on each ChatBlock is re-assigned as a
+/// dense 0..n index so the frontend can use it as a stable rendering key.
 ///
 /// # Arguments
 /// * `tool_executions` - Tool execution records for a message
@@ -72,96 +76,123 @@ pub struct ChatBlock {
 /// * `sub_agent_executions` - Sub-agent execution records for a message
 ///
 /// # Returns
-/// A vector of ChatBlocks sorted by sequence number
+/// A vector of ChatBlocks ordered chronologically with re-indexed sequence numbers
 pub fn merge_into_chat_blocks(
     tool_executions: &[ToolExecution],
     thinking_steps: &[ThinkingStep],
     sub_agent_executions: &[SubAgentExecution],
 ) -> Vec<ChatBlock> {
-    let mut blocks: Vec<ChatBlock> = Vec::with_capacity(
+    enum SourceItem<'a> {
+        Tool(&'a ToolExecution),
+        Thinking(&'a ThinkingStep),
+        SubAgent(&'a SubAgentExecution),
+    }
+
+    let mut items: Vec<(chrono::DateTime<chrono::Utc>, u32, SourceItem)> = Vec::with_capacity(
         tool_executions.len() + thinking_steps.len() + sub_agent_executions.len(),
     );
 
-    // Convert tool executions to ChatBlocks
     for te in tool_executions {
-        // Serialize Value fields back to JSON strings (frontend expects strings, not objects)
-        let input_str = serde_json::to_string(&te.input_params).unwrap_or_default();
-        let output_str = serde_json::to_string(&te.output_result).unwrap_or_default();
-
-        let data = serde_json::json!({
-            "tool_name": te.tool_name,
-            "tool_type": te.tool_type,
-            "server_name": te.server_name,
-            "input_params": input_str,
-            "output_result": output_str,
-            "success": te.success,
-            "error_message": te.error_message,
-            "duration_ms": te.duration_ms,
-        });
-
-        blocks.push(ChatBlock {
-            block_type: ChatBlockType::ToolCall,
-            sequence: te.sequence,
-            data,
-        });
+        items.push((te.created_at, te.sequence, SourceItem::Tool(te)));
     }
-
-    // Convert thinking steps to ChatBlocks
     for ts in thinking_steps {
-        let data = serde_json::json!({
-            "content": ts.content,
-            "source": ts.source,
-            "duration_ms": ts.duration_ms,
-        });
-
-        blocks.push(ChatBlock {
-            block_type: ChatBlockType::Thinking,
-            sequence: ts.sequence,
-            data,
-        });
+        items.push((ts.created_at, ts.sequence, SourceItem::Thinking(ts)));
+    }
+    for sa in sub_agent_executions {
+        // Sub-agents share no sequence space with tool/thinking; tie-break by 0
+        items.push((sa.created_at, 0, SourceItem::SubAgent(sa)));
     }
 
-    // Convert sub-agent executions to ChatBlocks
-    // Sub-agent blocks use sequence u32::MAX - index to sort after tool/thinking blocks
-    // (they don't have a global_sequence from the tool loop, they run in parallel)
-    let max_sequence = blocks.iter().map(|b| b.sequence).max().unwrap_or(0);
-    for (idx, sa) in sub_agent_executions.iter().enumerate() {
-        let status = match sa.status.to_string().as_str() {
-            "completed" => "completed",
-            "error" => "error",
-            _ => "completed",
-        };
+    items.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
 
-        let data = serde_json::json!({
-            "agent_name": sa.sub_agent_name,
-            "status": status,
-            "duration_ms": sa.duration_ms,
-            "tokens_input": sa.tokens_input,
-            "tokens_output": sa.tokens_output,
-            "report_summary": sa.result_summary,
-        });
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (_, _, source))| {
+            let sequence = idx as u32;
+            match source {
+                SourceItem::Tool(te) => {
+                    // Frontend expects JSON strings for input/output, not nested objects
+                    let input_str = serde_json::to_string(&te.input_params).unwrap_or_default();
+                    let output_str = serde_json::to_string(&te.output_result).unwrap_or_default();
 
-        blocks.push(ChatBlock {
-            block_type: ChatBlockType::SubAgent,
-            sequence: max_sequence + 1 + idx as u32,
-            data,
-        });
-    }
+                    let data = serde_json::json!({
+                        "tool_name": te.tool_name,
+                        "tool_type": te.tool_type,
+                        "server_name": te.server_name,
+                        "input_params": input_str,
+                        "output_result": output_str,
+                        "success": te.success,
+                        "error_message": te.error_message,
+                        "duration_ms": te.duration_ms,
+                    });
 
-    // Sort by sequence for correct chronological ordering
-    blocks.sort_by_key(|b| b.sequence);
+                    ChatBlock {
+                        block_type: ChatBlockType::ToolCall,
+                        sequence,
+                        data,
+                    }
+                }
+                SourceItem::Thinking(ts) => {
+                    let data = serde_json::json!({
+                        "content": ts.content,
+                        "source": ts.source,
+                        "duration_ms": ts.duration_ms,
+                    });
 
-    blocks
+                    ChatBlock {
+                        block_type: ChatBlockType::Thinking,
+                        sequence,
+                        data,
+                    }
+                }
+                SourceItem::SubAgent(sa) => {
+                    let status = match sa.status.to_string().as_str() {
+                        "completed" => "completed",
+                        "error" => "error",
+                        _ => "completed",
+                    };
+
+                    let data = serde_json::json!({
+                        "agent_name": sa.sub_agent_name,
+                        "status": status,
+                        "duration_ms": sa.duration_ms,
+                        "tokens_input": sa.tokens_input,
+                        "tokens_output": sa.tokens_output,
+                        "report_summary": sa.result_summary,
+                    });
+
+                    ChatBlock {
+                        block_type: ChatBlockType::SubAgent,
+                        sequence,
+                        data,
+                    }
+                }
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::sub_agent::{SubAgentExecution, SubAgentStatus};
     use crate::models::tool_execution::ToolType;
     use crate::models::{ThinkingStep, ToolExecution};
-    use chrono::Utc;
+    use chrono::{DateTime, TimeZone, Utc};
 
-    fn make_tool_execution(tool_name: &str, sequence: u32, success: bool) -> ToolExecution {
+    /// Returns a deterministic UTC base time. Tests offset from this value to
+    /// produce explicit `created_at` ordering, since the merge sorts by timestamp.
+    fn base_time() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+    }
+
+    fn make_tool_execution(
+        tool_name: &str,
+        sequence: u32,
+        success: bool,
+        created_at: DateTime<Utc>,
+    ) -> ToolExecution {
         ToolExecution {
             id: format!("te_{}", sequence),
             workflow_id: "wf_001".to_string(),
@@ -177,11 +208,16 @@ mod tests {
             duration_ms: 100,
             iteration: 0,
             sequence,
-            created_at: Utc::now(),
+            created_at,
         }
     }
 
-    fn make_thinking_step(content: &str, sequence: u32, source: &str) -> ThinkingStep {
+    fn make_thinking_step(
+        content: &str,
+        sequence: u32,
+        source: &str,
+        created_at: DateTime<Utc>,
+    ) -> ThinkingStep {
         ThinkingStep {
             id: format!("ts_{}", sequence),
             workflow_id: "wf_001".to_string(),
@@ -193,7 +229,32 @@ mod tests {
             tokens: None,
             sequence,
             source: source.to_string(),
-            created_at: Utc::now(),
+            created_at,
+        }
+    }
+
+    fn make_sub_agent_execution(
+        sub_agent_name: &str,
+        status: SubAgentStatus,
+        created_at: DateTime<Utc>,
+    ) -> SubAgentExecution {
+        SubAgentExecution {
+            id: format!("sa_{}", sub_agent_name),
+            workflow_id: "wf_001".to_string(),
+            parent_agent_id: "agent_001".to_string(),
+            sub_agent_id: format!("agent_{}", sub_agent_name),
+            sub_agent_name: sub_agent_name.to_string(),
+            task_description: "test task".to_string(),
+            status,
+            duration_ms: Some(500),
+            tokens_input: Some(100),
+            tokens_output: Some(50),
+            result_summary: Some("done".to_string()),
+            error_message: None,
+            parent_execution_id: None,
+            parent_message_id: None,
+            created_at,
+            completed_at: None,
         }
     }
 
@@ -227,24 +288,34 @@ mod tests {
 
     #[test]
     fn test_merge_only_tool_executions() {
+        let t = base_time();
         let tools = vec![
-            make_tool_execution("MemoryTool", 1, true),
-            make_tool_execution("TodoTool", 3, true),
+            make_tool_execution("MemoryTool", 1, true, t),
+            make_tool_execution("TodoTool", 3, true, t + chrono::Duration::milliseconds(10)),
         ];
 
         let blocks = merge_into_chat_blocks(&tools, &[], &[]);
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].block_type, ChatBlockType::ToolCall);
-        assert_eq!(blocks[0].sequence, 1);
-        assert_eq!(blocks[1].sequence, 3);
+        assert_eq!(blocks[0].sequence, 0);
+        assert_eq!(blocks[1].sequence, 1);
+        // Original ordering preserved (MemoryTool before TodoTool)
+        assert_eq!(blocks[0].data["tool_name"], "MemoryTool");
+        assert_eq!(blocks[1].data["tool_name"], "TodoTool");
     }
 
     #[test]
     fn test_merge_only_thinking_steps() {
+        let t = base_time();
         let steps = vec![
-            make_thinking_step("Analyzing task...", 0, "agent_flow"),
-            make_thinking_step("Deep reasoning...", 2, "model_thinking"),
+            make_thinking_step("Analyzing task...", 0, "agent_flow", t),
+            make_thinking_step(
+                "Deep reasoning...",
+                2,
+                "model_thinking",
+                t + chrono::Duration::milliseconds(10),
+            ),
         ];
 
         let blocks = merge_into_chat_blocks(&[], &steps, &[]);
@@ -252,55 +323,97 @@ mod tests {
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
         assert_eq!(blocks[0].sequence, 0);
-        assert_eq!(blocks[1].sequence, 2);
+        assert_eq!(blocks[1].sequence, 1);
+        assert_eq!(blocks[0].data["content"], "Analyzing task...");
+        assert_eq!(blocks[1].data["content"], "Deep reasoning...");
     }
 
     #[test]
     fn test_merge_interleaved_blocks() {
+        // Stagger created_at so that the chronological order matches the original
+        // sequence intent: thinking(1), tool(2), thinking(3), tool(4), thinking(5)
+        let t = base_time();
+        let ms = |n: i64| t + chrono::Duration::milliseconds(n);
         let tools = vec![
-            make_tool_execution("MemoryTool", 2, true),
-            make_tool_execution("TodoTool", 4, false),
+            make_tool_execution("MemoryTool", 2, true, ms(20)),
+            make_tool_execution("TodoTool", 4, false, ms(40)),
         ];
         let steps = vec![
-            make_thinking_step("Analyzing task...", 1, "agent_flow"),
-            make_thinking_step("Deep reasoning...", 3, "model_thinking"),
-            make_thinking_step("Summarizing...", 5, "agent_flow"),
+            make_thinking_step("Analyzing task...", 1, "agent_flow", ms(10)),
+            make_thinking_step("Deep reasoning...", 3, "model_thinking", ms(30)),
+            make_thinking_step("Summarizing...", 5, "agent_flow", ms(50)),
         ];
 
         let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
 
         assert_eq!(blocks.len(), 5);
-        // Verify correct interleaving order
-        assert_eq!(blocks[0].sequence, 1);
+        // Sequences are now dense 0..n indices
+        assert_eq!(blocks[0].sequence, 0);
         assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
-        assert_eq!(blocks[1].sequence, 2);
+        assert_eq!(blocks[1].sequence, 1);
         assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
-        assert_eq!(blocks[2].sequence, 3);
+        assert_eq!(blocks[2].sequence, 2);
         assert_eq!(blocks[2].block_type, ChatBlockType::Thinking);
-        assert_eq!(blocks[3].sequence, 4);
+        assert_eq!(blocks[3].sequence, 3);
         assert_eq!(blocks[3].block_type, ChatBlockType::ToolCall);
-        assert_eq!(blocks[4].sequence, 5);
+        assert_eq!(blocks[4].sequence, 4);
         assert_eq!(blocks[4].block_type, ChatBlockType::Thinking);
     }
 
     #[test]
-    fn test_merge_same_sequence_stable_order() {
-        // When sequence is the same (legacy data with sequence=0),
-        // both blocks should still be present
-        let tools = vec![make_tool_execution("MemoryTool", 0, true)];
-        let steps = vec![make_thinking_step("Legacy step", 0, "agent_flow")];
+    fn test_merge_subagent_interleaved_by_created_at() {
+        // Sub-agent inserted between two tool executions chronologically must
+        // appear in the middle, not appended at the end.
+        let t = base_time();
+        let ms = |n: i64| t + chrono::Duration::milliseconds(n);
+        let tools = vec![
+            make_tool_execution("FirstTool", 1, true, ms(10)),
+            make_tool_execution("LastTool", 2, true, ms(30)),
+        ];
+        let sub_agents = vec![make_sub_agent_execution(
+            "Researcher",
+            SubAgentStatus::Completed,
+            ms(20),
+        )];
+
+        let blocks = merge_into_chat_blocks(&tools, &[], &sub_agents);
+
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0].block_type, ChatBlockType::ToolCall);
+        assert_eq!(blocks[0].sequence, 0);
+        assert_eq!(blocks[0].data["tool_name"], "FirstTool");
+
+        assert_eq!(blocks[1].block_type, ChatBlockType::SubAgent);
+        assert_eq!(blocks[1].sequence, 1);
+        assert_eq!(blocks[1].data["agent_name"], "Researcher");
+
+        assert_eq!(blocks[2].block_type, ChatBlockType::ToolCall);
+        assert_eq!(blocks[2].sequence, 2);
+        assert_eq!(blocks[2].data["tool_name"], "LastTool");
+    }
+
+    #[test]
+    fn test_merge_same_timestamp_uses_sequence_tiebreaker() {
+        // When two records share an exact timestamp, the original `sequence`
+        // value breaks the tie deterministically.
+        let t = base_time();
+        let tools = vec![make_tool_execution("MemoryTool", 5, true, t)];
+        let steps = vec![make_thinking_step("Same time step", 2, "agent_flow", t)];
 
         let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
 
         assert_eq!(blocks.len(), 2);
-        // Both should have sequence 0
+        // Lower original sequence (thinking=2) sorts before higher (tool=5)
+        assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
+        assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
+        // Re-indexed densely
         assert_eq!(blocks[0].sequence, 0);
-        assert_eq!(blocks[1].sequence, 0);
+        assert_eq!(blocks[1].sequence, 1);
     }
 
     #[test]
     fn test_tool_call_block_data_contains_expected_fields() {
-        let tools = vec![make_tool_execution("MemoryTool", 1, true)];
+        let tools = vec![make_tool_execution("MemoryTool", 1, true, base_time())];
         let blocks = merge_into_chat_blocks(&tools, &[], &[]);
 
         assert_eq!(blocks.len(), 1);
@@ -316,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_tool_call_block_data_with_mcp() {
-        let mut te = make_tool_execution("find_symbol", 1, true);
+        let mut te = make_tool_execution("find_symbol", 1, true, base_time());
         te.tool_type = ToolType::Mcp;
         te.server_name = Some("serena".to_string());
 
@@ -329,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_tool_call_block_data_with_error() {
-        let mut te = make_tool_execution("TodoTool", 1, false);
+        let mut te = make_tool_execution("TodoTool", 1, false, base_time());
         te.error_message = Some("Task not found".to_string());
 
         let blocks = merge_into_chat_blocks(&[te], &[], &[]);
@@ -341,7 +454,12 @@ mod tests {
 
     #[test]
     fn test_thinking_block_data_contains_expected_fields() {
-        let steps = vec![make_thinking_step("Deep reasoning...", 1, "model_thinking")];
+        let steps = vec![make_thinking_step(
+            "Deep reasoning...",
+            1,
+            "model_thinking",
+            base_time(),
+        )];
         let blocks = merge_into_chat_blocks(&[], &steps, &[]);
 
         assert_eq!(blocks.len(), 1);
@@ -354,7 +472,12 @@ mod tests {
 
     #[test]
     fn test_thinking_block_agent_flow_source() {
-        let steps = vec![make_thinking_step("Analyzing...", 0, "agent_flow")];
+        let steps = vec![make_thinking_step(
+            "Analyzing...",
+            0,
+            "agent_flow",
+            base_time(),
+        )];
         let blocks = merge_into_chat_blocks(&[], &steps, &[]);
 
         assert_eq!(blocks[0].data["source"], "agent_flow");
@@ -378,13 +501,24 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_large_sequence_numbers() {
-        let tools = vec![make_tool_execution("Tool", 100, true)];
-        let steps = vec![make_thinking_step("Step", 50, "agent_flow")];
+    fn test_merge_reindexes_sequences_densely() {
+        // Original sequences (50, 100) are replaced by dense 0..n indices
+        // after sorting by created_at.
+        let t = base_time();
+        let tools = vec![make_tool_execution(
+            "Tool",
+            100,
+            true,
+            t + chrono::Duration::milliseconds(20),
+        )];
+        let steps = vec![make_thinking_step("Step", 50, "agent_flow", t)];
 
         let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
 
-        assert_eq!(blocks[0].sequence, 50);
-        assert_eq!(blocks[1].sequence, 100);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
+        assert_eq!(blocks[0].sequence, 0);
+        assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
+        assert_eq!(blocks[1].sequence, 1);
     }
 }
