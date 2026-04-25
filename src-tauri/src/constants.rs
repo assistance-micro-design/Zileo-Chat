@@ -36,7 +36,6 @@ pub mod workflow {
 }
 
 /// Validation flow constants.
-#[allow(dead_code)]
 pub mod validation {
     /// Lower bound for user-configurable validation timeout.
     pub const VALIDATION_TIMEOUT_MIN_SECS: u64 = 5;
