@@ -28,10 +28,6 @@ fn test_embedding_error_display() {
 
     let err = EmbeddingError::NotConfigured("test".to_string());
     assert!(err.to_string().contains("not configured"));
-
-    let err = EmbeddingError::BatchTooLarge(100, 96);
-    assert!(err.to_string().contains("100"));
-    assert!(err.to_string().contains("96"));
 }
 
 // ---- EmbeddingProvider Tests ----
@@ -102,48 +98,6 @@ fn test_embedding_config_serialization() {
     assert_eq!(deserialized.dimension, config.dimension);
 }
 
-// ---- EmbeddingService Tests ----
-
-#[test]
-fn test_embedding_service_new() {
-    let service = EmbeddingService::new().expect("test embedding service");
-    assert!(!service.is_configured());
-}
-
-#[test]
-fn test_embedding_service_with_provider() {
-    let provider = EmbeddingProvider::mistral("test-key");
-    let service = EmbeddingService::with_provider(provider).expect("test embedding service");
-    assert!(service.is_configured());
-}
-
-#[tokio::test]
-async fn test_embedding_service_configure() {
-    let service = EmbeddingService::new().expect("test embedding service");
-    assert!(!service.is_configured());
-
-    let provider = EmbeddingProvider::mistral("test-key");
-    service.configure(provider).await;
-    assert!(service.is_configured());
-
-    service.clear().await;
-    assert!(!service.is_configured());
-}
-
-#[tokio::test]
-async fn test_embedding_service_dimension() {
-    let provider = EmbeddingProvider::mistral("test-key");
-    let service = EmbeddingService::with_provider(provider).expect("test embedding service");
-    assert_eq!(service.dimension().await, MISTRAL_EMBED_DIMENSION);
-}
-
-#[tokio::test]
-async fn test_embedding_service_dimension_ollama() {
-    let provider = EmbeddingProvider::ollama();
-    let service = EmbeddingService::with_provider(provider).expect("test embedding service");
-    assert_eq!(service.dimension().await, OLLAMA_NOMIC_DIMENSION);
-}
-
 // ---- Validation Tests ----
 
 #[test]
@@ -189,43 +143,6 @@ async fn test_embed_not_configured() {
     match result.unwrap_err() {
         EmbeddingError::NotConfigured(_) => {}
         _ => panic!("Expected NotConfigured error"),
-    }
-}
-
-#[tokio::test]
-async fn test_embed_batch_not_configured() {
-    let service = EmbeddingService::new().expect("test embedding service");
-    let result = service.embed_batch(&["test1", "test2"]).await;
-    assert!(result.is_err());
-    match result.unwrap_err() {
-        EmbeddingError::NotConfigured(_) => {}
-        _ => panic!("Expected NotConfigured error"),
-    }
-}
-
-#[tokio::test]
-async fn test_embed_batch_empty() {
-    let service = EmbeddingService::new().expect("test embedding service");
-    let result = service.embed_batch(&[]).await;
-    assert!(result.is_ok());
-    assert!(result.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn test_embed_batch_too_large() {
-    let provider = EmbeddingProvider::mistral("test-key");
-    let service = EmbeddingService::with_provider(provider).expect("test embedding service");
-
-    let texts: Vec<&str> = (0..MAX_BATCH_SIZE + 1).map(|_| "test").collect();
-    let result = service.embed_batch(&texts).await;
-
-    assert!(result.is_err());
-    match result.unwrap_err() {
-        EmbeddingError::BatchTooLarge(size, max) => {
-            assert_eq!(size, MAX_BATCH_SIZE + 1);
-            assert_eq!(max, MAX_BATCH_SIZE);
-        }
-        _ => panic!("Expected BatchTooLarge error"),
     }
 }
 

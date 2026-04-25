@@ -128,14 +128,6 @@ impl OpenAiCompatibleProvider {
         Ok(())
     }
 
-    /// Clears the provider configuration.
-    #[allow(dead_code)] // API completeness - provider lifecycle
-    pub async fn clear(&self) {
-        *self.api_key.write().await = None;
-        *self.base_url.write().await = None;
-        info!(provider = %self.provider_name, "Custom provider cleared");
-    }
-
     /// Checks if the provider is properly configured.
     pub fn is_configured(&self) -> bool {
         self.api_key
@@ -149,21 +141,9 @@ impl OpenAiCompatibleProvider {
                 .unwrap_or(false)
     }
 
-    /// Gets the API key if configured.
-    #[allow(dead_code)] // API completeness - provider inspection
-    pub async fn get_api_key(&self) -> Option<String> {
-        self.api_key.read().await.clone()
-    }
-
     /// Gets the base URL if configured.
     pub async fn get_base_url(&self) -> Option<String> {
         self.base_url.read().await.clone()
-    }
-
-    /// Gets the provider name.
-    #[allow(dead_code)] // API completeness - provider inspection
-    pub fn provider_name(&self) -> &str {
-        &self.provider_name
     }
 
     /// Makes a completion request to the API.
@@ -377,7 +357,6 @@ mod tests {
     #[test]
     fn test_provider_new() {
         let provider = OpenAiCompatibleProvider::new("routerlab", test_http_client());
-        assert_eq!(provider.provider_name(), "routerlab");
         assert!(!provider.is_configured());
     }
 
@@ -391,7 +370,6 @@ mod tests {
         assert!(result.is_ok());
         assert!(provider.is_configured());
 
-        assert_eq!(provider.get_api_key().await, Some("test-key".to_string()));
         assert_eq!(
             provider.get_base_url().await,
             Some("https://api.example.com/v1".to_string())
@@ -411,20 +389,6 @@ mod tests {
             provider.get_base_url().await,
             Some("https://api.example.com/v1".to_string())
         );
-    }
-
-    #[tokio::test]
-    async fn test_provider_clear() {
-        let provider = OpenAiCompatibleProvider::new("test", test_http_client());
-
-        provider
-            .configure("key", "https://api.example.com/v1")
-            .await
-            .expect("configure should succeed");
-        assert!(provider.is_configured());
-
-        provider.clear().await;
-        assert!(!provider.is_configured());
     }
 
     #[tokio::test]

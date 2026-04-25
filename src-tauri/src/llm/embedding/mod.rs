@@ -63,9 +63,6 @@ pub(crate) const DEFAULT_OLLAMA_EMBED_MODEL: &str = "nomic-embed-text";
 /// Maximum text length for embedding (characters)
 pub const MAX_EMBEDDING_TEXT_LENGTH: usize = 50_000;
 
-/// Maximum batch size for embedding requests
-pub const MAX_BATCH_SIZE: usize = 96;
-
 /// Default timeout for embedding requests (milliseconds)
 pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
@@ -87,10 +84,6 @@ pub enum EmbeddingError {
     /// Text too long for embedding
     #[error("Text too long: {0} chars, max {1}")]
     TextTooLong(usize, usize),
-
-    /// Batch size exceeded
-    #[error("Batch size exceeded: {0} items, max {1}")]
-    BatchTooLarge(usize, usize),
 
     /// Model not available for embedding
     #[error("Embedding model not available: {0}")]

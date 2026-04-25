@@ -96,7 +96,6 @@ pub struct MistralProvider {
 /// Mistral API base URL
 const MISTRAL_API_URL: &str = "https://api.mistral.ai/v1/chat/completions";
 
-#[allow(dead_code)]
 impl MistralProvider {
     /// Creates a new unconfigured Mistral provider with a shared HTTP client.
     ///
@@ -110,29 +109,6 @@ impl MistralProvider {
         }
     }
 
-    /// Creates a new Mistral provider with the given API key and a default HTTP client.
-    ///
-    /// Note: For production use, prefer using `new()` with a shared HTTP client
-    /// from ProviderManager to benefit from connection pooling.
-    pub fn with_api_key(api_key: &str) -> Result<Self, LLMError> {
-        let client = mistral::Client::new(api_key).map_err(|e| {
-            LLMError::RequestFailed(format!("Failed to create Mistral client: {}", e))
-        })?;
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .map_err(|e| {
-                    LLMError::RequestFailed(format!("Failed to create HTTP client: {}", e))
-                })?,
-        );
-        Ok(Self {
-            client: Arc::new(RwLock::new(Some(client))),
-            api_key: Arc::new(RwLock::new(Some(api_key.to_string()))),
-            http_client,
-        })
-    }
-
     /// Configures the provider with an API key
     pub async fn configure(&self, api_key: &str) -> Result<(), LLMError> {
         let client = mistral::Client::new(api_key).map_err(|e| {
@@ -142,18 +118,6 @@ impl MistralProvider {
         *self.api_key.write().await = Some(api_key.to_string());
         info!("Mistral provider configured");
         Ok(())
-    }
-
-    /// Clears the provider configuration
-    pub async fn clear(&self) {
-        *self.client.write().await = None;
-        *self.api_key.write().await = None;
-        info!("Mistral provider cleared");
-    }
-
-    /// Gets the API key if configured
-    pub async fn get_api_key(&self) -> Option<String> {
-        self.api_key.read().await.clone()
     }
 
     /// Makes a direct HTTP call to Mistral API.
@@ -466,25 +430,6 @@ mod tests {
 
         // Now should be configured
         assert!(provider.is_configured());
-
-        // Clear
-        provider.clear().await;
-        assert!(!provider.is_configured());
-    }
-
-    #[tokio::test]
-    async fn test_mistral_provider_get_api_key() {
-        let provider = test_mistral_provider();
-
-        // Initially no key
-        assert!(provider.get_api_key().await.is_none());
-
-        // After configure
-        provider.configure("my-secret-key").await.unwrap();
-        assert_eq!(
-            provider.get_api_key().await,
-            Some("my-secret-key".to_string())
-        );
     }
 
     #[tokio::test]

@@ -17,15 +17,12 @@
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, instrument};
+use tracing::instrument;
 
 use super::providers;
 #[cfg(test)]
 use super::MISTRAL_EMBED_DIMENSION;
-use super::{
-    EmbeddingError, EmbeddingProvider, DEFAULT_TIMEOUT_MS, MAX_BATCH_SIZE,
-    MAX_EMBEDDING_TEXT_LENGTH,
-};
+use super::{EmbeddingError, EmbeddingProvider, DEFAULT_TIMEOUT_MS, MAX_EMBEDDING_TEXT_LENGTH};
 
 /// Service for generating vector embeddings
 ///
@@ -71,37 +68,6 @@ impl EmbeddingService {
         })
     }
 
-    /// Configures the service with a new provider.
-    #[allow(dead_code)]
-    pub async fn configure(&self, provider: EmbeddingProvider) {
-        let dimension = provider.dimension();
-        *self.provider.write().await = Some(provider);
-        *self.dimension.write().await = dimension;
-        info!("Embedding service configured");
-    }
-
-    /// Clears the provider configuration.
-    #[allow(dead_code)]
-    pub async fn clear(&self) {
-        *self.provider.write().await = None;
-        info!("Embedding service cleared");
-    }
-
-    /// Checks if the service is configured.
-    #[allow(dead_code)]
-    pub fn is_configured(&self) -> bool {
-        self.provider
-            .try_read()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false)
-    }
-
-    /// Returns the expected embedding dimension.
-    #[allow(dead_code)]
-    pub async fn dimension(&self) -> usize {
-        *self.dimension.read().await
-    }
-
     /// Validates input text before embedding.
     pub(super) fn validate_text(&self, text: &str) -> Result<(), EmbeddingError> {
         if text.is_empty() {
@@ -142,50 +108,4 @@ impl EmbeddingService {
         }
     }
 
-    /// Generates embeddings for multiple texts in batch.
-    #[allow(dead_code)]
-    #[instrument(
-        name = "embed_batch",
-        skip(self, texts),
-        fields(batch_size = texts.len())
-    )]
-    pub async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
-        if texts.is_empty() {
-            return Ok(vec![]);
-        }
-
-        if texts.len() > MAX_BATCH_SIZE {
-            return Err(EmbeddingError::BatchTooLarge(texts.len(), MAX_BATCH_SIZE));
-        }
-
-        for text in texts {
-            self.validate_text(text)?;
-        }
-
-        let provider_guard = self.provider.read().await;
-        let provider = provider_guard.as_ref().ok_or_else(|| {
-            EmbeddingError::NotConfigured("No embedding provider configured".to_string())
-        })?;
-
-        match provider {
-            EmbeddingProvider::Mistral { api_key, model } => {
-                providers::embed_batch_mistral(&self.client, texts, api_key, model).await
-            }
-            EmbeddingProvider::Ollama { base_url, model } => {
-                providers::embed_batch_ollama(&self.client, texts, base_url, model).await
-            }
-        }
-    }
-
-    /// Tests the embedding service connection.
-    #[allow(dead_code)]
-    pub async fn test_connection(&self) -> Result<usize, EmbeddingError> {
-        let test_text = "test";
-        let embedding = self.embed(test_text).await?;
-        info!(
-            dimension = embedding.len(),
-            "Embedding service test successful"
-        );
-        Ok(embedding.len())
-    }
 }
