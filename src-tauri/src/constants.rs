@@ -73,7 +73,6 @@ pub mod query_limits {
 
 /// Centralized validation constants for Tauri commands.
 /// These constants define limits and valid values across the application.
-#[allow(dead_code)]
 pub mod commands {
     // ----- Agent -----
     /// Maximum length for agent names
