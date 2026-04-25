@@ -14,49 +14,58 @@
 
 //! Tool execution loop for LLM agents.
 //!
-//! Contains the main execution logic for both simple (no tools) and
-//! tool-augmented (local + MCP) agent execution paths.
+//! Phase 3.1: this module is now the orchestrator only. The hot logic lives
+//! in sibling modules:
+//! - [`super::reasoning`]: emit_progress / emit_reasoning + small format helpers
+//! - [`super::completion`]: report enforcement + report content building
+//! - [`super::iteration`]: a single pass of the LLM-call → tool-execute loop
 
 use crate::agents::core::agent::{
     ReasoningSource, ReasoningStepData, Report, ReportMetrics, ReportStatus, Task,
     ToolExecutionData,
 };
+use crate::agents::execution::completion::{
+    build_report_content, enforce_report, EnforcementState, ReportContentInputs,
+};
+use crate::agents::execution::iteration::{
+    run_single_iteration, IterationInputs, IterationMutState, IterationOutcome,
+};
+use crate::agents::execution::reasoning::{
+    effective_reasoning_effort, emit_progress, emit_reasoning, format_llm_error,
+};
 use crate::agents::execution::tools;
-use crate::agents::prompt::{self, REPORT_ENFORCEMENT_PROMPT};
+use crate::agents::prompt;
 use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
 use crate::llm::tool_adapter::{ProviderToolAdapter, TokenUsage};
-use crate::llm::{CompletionParams, LLMError, ProviderManager, ProviderType, ToolCompletionParams};
+use crate::llm::{CompletionParams, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
-use crate::models::agent::ReasoningEffort;
-use crate::models::function_calling::ToolChoiceMode;
-use crate::models::streaming::{events, StreamChunk};
+use crate::models::streaming::StreamChunk;
 use crate::models::workflow::IterationMetrics;
 use crate::models::AgentConfig;
 use crate::tools::{context::AgentToolContext, validation_helper::ValidationHelper, ToolFactory};
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// Tracks cumulative and per-iteration token usage across the tool loop.
-struct TokenTracker {
-    total_input: usize,
-    total_output: usize,
+pub(crate) struct TokenTracker {
+    pub total_input: usize,
+    pub total_output: usize,
     /// Last call's input tokens (context window size)
-    context: usize,
-    total_cached: Option<usize>,
-    total_cache_write: Option<usize>,
-    total_thinking: Option<usize>,
+    pub context: usize,
+    pub total_cached: Option<usize>,
+    pub total_cache_write: Option<usize>,
+    pub total_thinking: Option<usize>,
     // Per-iteration values (overwritten each iteration, read for IterationMetrics)
-    iter_input: usize,
-    iter_output: usize,
-    iter_cached: Option<usize>,
-    iter_cache_write: Option<usize>,
-    iter_thinking: Option<usize>,
+    pub iter_input: usize,
+    pub iter_output: usize,
+    pub iter_cached: Option<usize>,
+    pub iter_cache_write: Option<usize>,
+    pub iter_thinking: Option<usize>,
 }
 
 impl TokenTracker {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_input: 0,
             total_output: 0,
@@ -73,7 +82,7 @@ impl TokenTracker {
     }
 
     /// Records token usage from an LLM response, updating both per-iteration and cumulative values.
-    fn record(&mut self, usage: &TokenUsage) {
+    pub(crate) fn record(&mut self, usage: &TokenUsage) {
         self.iter_input = usage.input_tokens;
         self.iter_output = usage.output_tokens;
         self.iter_cached = usage.cached_tokens;
@@ -90,7 +99,7 @@ impl TokenTracker {
     }
 
     /// Adds estimated thinking tokens (fallback when provider doesn't report them).
-    fn add_estimated_thinking(&mut self, estimated: usize) {
+    pub(crate) fn add_estimated_thinking(&mut self, estimated: usize) {
         self.iter_thinking = Some(estimated);
         Self::accumulate(&mut self.total_thinking, Some(estimated));
     }
@@ -126,203 +135,12 @@ impl TokenTracker {
     }
 }
 
-/// Formats an LLMError into a user-friendly error message.
-fn format_llm_error(error: &LLMError) -> String {
-    match error {
-        LLMError::ConnectionError(msg) => {
-            format!(
-                "Connection error: {}\n\nMake sure the LLM service is running and accessible.",
-                msg
-            )
-        }
-        LLMError::ModelNotFound(msg) => format!("Model not found: {}", msg),
-        LLMError::MissingApiKey(provider) => {
-            format!(
-                "API key missing for {}. Please configure it in Settings.",
-                provider
-            )
-        }
-        LLMError::RequestFailed(msg) => format!("Request failed: {}", msg),
-        _ => error.to_string(),
-    }
-}
-
-/// Returns the effective reasoning effort based on model capability.
-///
-/// When `is_reasoning` is true but no explicit effort is set, defaults to Medium.
-/// This ensures reasoning models always use the thinking path (important for Ollama
-/// where the `think` parameter controls separate thinking extraction).
-fn effective_reasoning_effort(config: &AgentConfig) -> Option<ReasoningEffort> {
-    if config.llm.is_reasoning {
-        Some(
-            config
-                .reasoning_effort
-                .clone()
-                .unwrap_or(ReasoningEffort::Medium),
-        )
-    } else {
-        None
-    }
-}
-
-/// Emits a streaming event to the frontend via Tauri.
-fn emit_progress(agent_context: Option<&AgentToolContext>, chunk: StreamChunk) {
-    if let Some(context) = agent_context {
-        if let Some(ref handle) = context.app_handle {
-            if let Err(e) = handle.emit(events::WORKFLOW_STREAM, &chunk) {
-                warn!(error = %e, "Failed to emit LLM agent progress event");
-            }
-        }
-    }
-}
-
-/// Emits a reasoning step and records it.
-fn emit_reasoning(
-    agent_context: Option<&AgentToolContext>,
-    event_workflow_id: &str,
-    content: String,
-    elapsed_ms: u64,
-    sequence: u32,
-    source: ReasoningSource,
-    steps: &mut Vec<ReasoningStepData>,
-) {
-    emit_progress(
-        agent_context,
-        StreamChunk::reasoning(event_workflow_id.to_string(), content.clone()),
-    );
-    steps.push(ReasoningStepData {
-        content,
-        duration_ms: elapsed_ms,
-        sequence,
-        source,
-    });
-}
-
-/// Builds the tools section for the final markdown report.
-fn build_tools_section(tools_used: &[String], mcp_calls_made: &[String]) -> String {
-    if tools_used.is_empty() && mcp_calls_made.is_empty() {
-        return String::new();
-    }
-
-    let local_used = if !tools_used.is_empty() {
-        format!(
-            "\n### Local Tools Used\n{}",
-            tools_used
-                .iter()
-                .map(|t| format!("- {}", t))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
-    } else {
-        String::new()
-    };
-
-    let mcp_used = if !mcp_calls_made.is_empty() {
-        format!(
-            "\n### MCP Tools Called\n{}",
-            mcp_calls_made
-                .iter()
-                .map(|t| format!("- {}", t))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
-    } else {
-        String::new()
-    };
-
-    format!("\n\n## Tool Usage{}{}", local_used, mcp_used)
-}
-
-/// Mutable state passed to report enforcement to avoid too many arguments.
-struct EnforcementState<'a> {
-    messages: &'a mut Vec<serde_json::Value>,
-    tokens: &'a mut TokenTracker,
-    reasoning_steps: &'a mut Vec<ReasoningStepData>,
-    iteration_metrics: &'a mut Vec<IterationMetrics>,
-    global_sequence: &'a mut u32,
-}
-
-/// Makes a follow-up LLM call to get a proper report when the agent finished
-/// with a generic completion message.
-async fn enforce_report(
-    ctx: &ToolLoopContext<'_>,
-    provider_type: &ProviderType,
-    adapter: &dyn ProviderToolAdapter,
-    event_workflow_id: &str,
-    state: &mut EnforcementState<'_>,
-    elapsed_ms: u64,
-    iteration: usize,
-) -> Option<String> {
-    *state.global_sequence += 1;
-    emit_reasoning(
-        ctx.agent_context,
-        event_workflow_id,
-        "Agent completed tools without a report. Requesting summary...".to_string(),
-        elapsed_ms,
-        *state.global_sequence,
-        ReasoningSource::AgentFlow,
-        state.reasoning_steps,
-    );
-
-    state.messages.push(serde_json::json!({
-        "role": "user",
-        "content": REPORT_ENFORCEMENT_PROMPT
-    }));
-
-    let empty_tools: Vec<serde_json::Value> = vec![];
-    let report_iter_start = std::time::Instant::now();
-
-    let result = ctx
-        .provider_manager
-        .complete_with_tools(
-            provider_type.clone(),
-            ToolCompletionParams {
-                messages: state.messages.clone(),
-                tools: empty_tools,
-                tool_choice: None,
-                model: ctx.config.llm.model.clone(),
-                temperature: ctx.config.llm.temperature,
-                max_tokens: ctx.config.llm.max_tokens,
-                context_window: ctx.config.llm.context_window,
-                reasoning_effort: effective_reasoning_effort(ctx.config),
-            },
-        )
-        .await;
-
-    let mut enforced_content = None;
-
-    match result {
-        Ok(response) => {
-            let usage = adapter.extract_usage(&response);
-            state.tokens.record(&usage);
-
-            if let Some(content) = adapter.extract_content(&response) {
-                if !content.trim().is_empty() {
-                    info!("Report enforcement successful, received meaningful response");
-                    enforced_content = Some(content);
-                } else {
-                    warn!("Report enforcement returned empty content, keeping generic message");
-                }
-            }
-        }
-        Err(e) => {
-            warn!(error = %e, "Report enforcement LLM call failed, keeping generic message");
-        }
-    }
-
-    state.iteration_metrics.push(IterationMetrics {
-        iteration: (iteration + 1) as u32,
-        tokens_input: state.tokens.iter_input,
-        tokens_output: state.tokens.iter_output,
-        cached_tokens: state.tokens.iter_cached,
-        cache_write_tokens: state.tokens.iter_cache_write,
-        thinking_tokens: state.tokens.iter_thinking,
-        messages_count: state.messages.len(),
-        tool_calls_count: 0,
-        duration_ms: report_iter_start.elapsed().as_millis() as u64,
-    });
-
-    enforced_content
+/// Context for the tool execution loop, grouping all dependencies.
+pub(crate) struct ToolLoopContext<'a> {
+    pub config: &'a AgentConfig,
+    pub provider_manager: &'a ProviderManager,
+    pub tool_factory: Option<&'a Arc<ToolFactory>>,
+    pub agent_context: Option<&'a AgentToolContext>,
 }
 
 /// Executes a task without tools (simple LLM completion).
@@ -463,14 +281,6 @@ pub(crate) async fn execute_simple(
             ))
         }
     }
-}
-
-/// Context for the tool execution loop, grouping all dependencies.
-pub(crate) struct ToolLoopContext<'a> {
-    pub config: &'a AgentConfig,
-    pub provider_manager: &'a ProviderManager,
-    pub tool_factory: Option<&'a Arc<ToolFactory>>,
-    pub agent_context: Option<&'a AgentToolContext>,
 }
 
 /// Executes a task with full tool support (local + MCP) using JSON function calling.
@@ -651,7 +461,7 @@ pub(crate) async fn execute_with_tools(
 
     // Tool execution loop
     let mut final_response_content = String::new();
-    let mut iteration = 0;
+    let mut iteration: usize = 0;
     let mut global_sequence: u32 = 0;
     let max_iterations = ctx.config.max_tool_iterations.clamp(1, 200);
 
@@ -665,7 +475,6 @@ pub(crate) async fn execute_with_tools(
 
     loop {
         iteration += 1;
-        let iter_start = std::time::Instant::now();
         if iteration > max_iterations {
             warn!(
                 iterations = max_iterations,
@@ -700,51 +509,35 @@ pub(crate) async fn execute_with_tools(
             );
         }
 
-        debug!(
-            iteration = iteration,
-            messages_count = messages.len(),
-            "Executing LLM call with JSON function calling"
-        );
+        let inputs = IterationInputs {
+            provider_type: &provider_type,
+            adapter: adapter.as_ref(),
+            tools_json: tools_json.as_slice(),
+            event_workflow_id: &event_workflow_id,
+            call_ctx: &call_ctx,
+            start_instant: start,
+            iteration,
+            cancellation_token: cancellation_token.clone(),
+        };
 
-        // Execute LLM call with tools.
-        // Phase 2.1: route through the cancellable variant so a user-issued
-        // cancellation reaches the LLM call within sub-second, even mid-response.
-        let response = match ctx
-            .provider_manager
-            .complete_with_tools_cancellable(
-                provider_type.clone(),
-                ToolCompletionParams {
-                    messages: messages.clone(),
-                    tools: tools_json.clone(),
-                    tool_choice: Some(adapter.get_tool_choice(ToolChoiceMode::Auto)),
-                    model: ctx.config.llm.model.clone(),
-                    temperature: ctx.config.llm.temperature,
-                    max_tokens: ctx.config.llm.max_tokens,
-                    context_window: ctx.config.llm.context_window,
-                    reasoning_effort: effective_reasoning_effort(ctx.config),
-                },
-                cancellation_token.clone(),
-            )
-            .await
-        {
-            Ok(r) => {
-                let usage = adapter.extract_usage(&r);
-                tokens.record(&usage);
+        let mut mstate = IterationMutState {
+            messages: &mut messages,
+            tokens: &mut tokens,
+            tools_used: &mut tools_used,
+            mcp_calls_made: &mut mcp_calls_made,
+            iteration_metrics_data: &mut iteration_metrics_data,
+            tool_executions_data: &mut tool_executions_data,
+            reasoning_steps_data: &mut reasoning_steps_data,
+            global_sequence: &mut global_sequence,
+        };
 
-                debug!(
-                    iteration = iteration,
-                    input_tokens = usage.input_tokens,
-                    output_tokens = usage.output_tokens,
-                    cached_tokens = ?usage.cached_tokens,
-                    total_input = tokens.total_input,
-                    total_output = tokens.total_output,
-                    "Token usage - input_tokens is this call, total_input is cumulative"
-                );
-
-                r
+        match run_single_iteration(&ctx, &inputs, &mut mstate).await {
+            IterationOutcome::Continue => {}
+            IterationOutcome::Finished(content) => {
+                final_response_content = content;
+                break;
             }
-            Err(e) => {
-                error!(error = %e, iteration = iteration, "LLM call with tools failed");
+            IterationOutcome::Failed(message) => {
                 let mut metrics = tokens.to_report_metrics(
                     tools_used,
                     mcp_calls_made,
@@ -756,169 +549,14 @@ pub(crate) async fn execute_with_tools(
                 return Ok(Report::failed_with_metrics(
                     &ctx.config.id,
                     &task.description,
-                    format_llm_error(&e),
+                    message,
                     metrics,
                 ));
             }
-        };
-
-        // Handle thinking content
-        if let Some(thinking) = adapter.extract_thinking(&response) {
-            if !thinking.trim().is_empty() {
-                if tokens.iter_thinking.is_none() {
-                    let estimated = crate::llm::utils::estimate_tokens(&thinking);
-                    tokens.add_estimated_thinking(estimated);
-                }
-                global_sequence += 1;
-                emit_progress(
-                    ctx.agent_context,
-                    StreamChunk::thinking_block(event_workflow_id.clone(), thinking.clone()),
-                );
-                reasoning_steps_data.push(ReasoningStepData {
-                    content: thinking,
-                    duration_ms: start.elapsed().as_millis() as u64,
-                    sequence: global_sequence,
-                    source: ReasoningSource::ModelThinking,
-                });
-            }
-        }
-
-        // Parse tool calls from response
-        let function_calls = if adapter.has_tool_calls(&response) {
-            adapter.parse_tool_calls(&response)
-        } else {
-            Vec::new()
-        };
-
-        // Record per-iteration metrics
-        iteration_metrics_data.push(IterationMetrics {
-            iteration: iteration as u32,
-            tokens_input: tokens.iter_input,
-            tokens_output: tokens.iter_output,
-            cached_tokens: tokens.iter_cached,
-            cache_write_tokens: tokens.iter_cache_write,
-            thinking_tokens: tokens.iter_thinking,
-            messages_count: messages.len(),
-            tool_calls_count: function_calls.len(),
-            duration_ms: iter_start.elapsed().as_millis() as u64,
-        });
-
-        // No tool calls = finished
-        if function_calls.is_empty() {
-            if let Some(content) = adapter.extract_content(&response) {
-                if !content.trim().is_empty() {
-                    final_response_content = content;
-                } else {
-                    warn!(
-                        iteration = iteration,
-                        "LLM returned empty content, treating as task completion"
-                    );
-                    final_response_content = format!(
-                        "Task completed after {} iteration(s). Tool executions completed successfully.",
-                        iteration
-                    );
-                }
-            } else {
-                final_response_content = format!(
-                    "Task completed after {} iteration(s). Tool executions completed successfully.",
-                    iteration
-                );
-            }
-            debug!(
-                iteration = iteration,
-                provider = adapter.provider_name(),
-                finished = adapter.is_finished(&response),
-                "No tool calls found, finishing"
-            );
-            break;
-        }
-
-        info!(
-            iteration = iteration,
-            tool_calls_count = function_calls.len(),
-            "Found tool calls, executing"
-        );
-
-        // Emit progress about found tool calls
-        let tool_names: Vec<String> = function_calls.iter().map(|c| c.name.clone()).collect();
-        global_sequence += 1;
-        emit_reasoning(
-            ctx.agent_context,
-            &event_workflow_id,
-            format!(
-                "Executing {} tool(s): {}",
-                function_calls.len(),
-                tool_names.join(", ")
-            ),
-            start.elapsed().as_millis() as u64,
-            global_sequence,
-            ReasoningSource::AgentFlow,
-            &mut reasoning_steps_data,
-        );
-
-        // Add assistant message with tool calls
-        messages.push(adapter.build_assistant_message(&response));
-
-        // Execute each function call
-        for call in &function_calls {
-            let exec_start = std::time::Instant::now();
-
-            emit_progress(
-                ctx.agent_context,
-                StreamChunk::tool_start(event_workflow_id.clone(), call.name.clone()),
-            );
-
-            let result =
-                tools::execute_function_call(call, &call_ctx, &mut tools_used, &mut mcp_calls_made)
-                    .await;
-
-            // Capture detailed execution data
-            let exec_duration = exec_start.elapsed().as_millis() as u64;
-            let tool_type = if call.is_mcp_tool() { "mcp" } else { "local" };
-            let (server_name, tool_name_for_data) =
-                if let Some((server, tool)) = call.parse_mcp_name() {
-                    (Some(server.to_string()), tool.to_string())
-                } else {
-                    (None, call.name.clone())
-                };
-
-            global_sequence += 1;
-            tool_executions_data.push(ToolExecutionData {
-                tool_type: tool_type.to_string(),
-                tool_name: tool_name_for_data.clone(),
-                server_name: server_name.clone(),
-                input_params: call.arguments.clone(),
-                output_result: result.result.clone(),
-                success: result.success,
-                error_message: result.error.clone(),
-                duration_ms: exec_duration,
-                iteration: iteration as u32,
-                sequence: global_sequence,
-            });
-
-            let input_json =
-                serde_json::to_string(&call.arguments).unwrap_or_else(|_| "{}".to_string());
-            let output_json =
-                serde_json::to_string(&result.result).unwrap_or_else(|_| "{}".to_string());
-            emit_progress(
-                ctx.agent_context,
-                StreamChunk::tool_call_complete(
-                    event_workflow_id.clone(),
-                    tool_name_for_data,
-                    tool_type,
-                    server_name,
-                    exec_duration,
-                    input_json,
-                    output_json,
-                    result.success,
-                ),
-            );
-
-            messages.push(adapter.format_tool_result(&result));
         }
     }
 
-    // Report enforcement
+    // Report enforcement.
     if prompt::is_generic_completion_message(&final_response_content) && iteration > 1 {
         info!(
             original_response = %final_response_content,
@@ -969,21 +607,19 @@ pub(crate) async fn execute_with_tools(
         "LLM Agent task execution with tools completed"
     );
 
-    let tools_section = build_tools_section(&tools_used, &mcp_calls_made);
-
-    let content = format!(
-        "# Agent Report: {}\n\n**Task**: {}\n\n**Status**: Success\n\n## Response\n\n{}\n\n## Metrics\n- Provider: {}\n- Model: {}\n- Tokens (input/output): {}/{}\n- Duration: {}ms\n- Tool iterations: {}{}",
-        ctx.config.id,
-        task.description,
-        final_response_content,
-        provider_type,
-        ctx.config.llm.model,
-        tokens.total_input,
-        tokens.total_output,
+    let content = build_report_content(&ReportContentInputs {
+        agent_id: &ctx.config.id,
+        task_description: &task.description,
+        final_response_content: &final_response_content,
+        provider_type: &provider_type,
+        model: &ctx.config.llm.model,
+        total_tokens_input: tokens.total_input,
+        total_tokens_output: tokens.total_output,
         duration_ms,
         iteration,
-        tools_section
-    );
+        tools_used: &tools_used,
+        mcp_calls_made: &mcp_calls_made,
+    });
 
     let mut metrics = tokens.to_report_metrics(
         tools_used,

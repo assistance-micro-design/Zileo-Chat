@@ -14,10 +14,16 @@
 
 //! Execution engine for LLM agents.
 //!
-//! - [`tool_loop`] - Main execution loops (simple and tool-augmented)
+//! - [`tool_loop`] - Orchestrators (simple and tool-augmented)
+//! - [`iteration`] - Single iteration of the tool loop
+//! - [`reasoning`] - Reasoning emission helpers
+//! - [`completion`] - Report enforcement + report content building
 //! - [`tools`] - Tool creation, collection, and execution
 //! - [`sequence_tracker`] - Atomic monotonic counter for ordering blocks
 
+pub(crate) mod completion;
+pub(crate) mod iteration;
+pub(crate) mod reasoning;
 pub(crate) mod sequence_tracker;
 pub(crate) mod tool_loop;
 pub(crate) mod tools;
