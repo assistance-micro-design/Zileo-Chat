@@ -41,6 +41,7 @@
   import ValidationInfoCard from './ValidationInfoCard.svelte';
   import type {
     ValidationMode,
+    TimeoutBehavior,
     UpdateValidationSettingsRequest,
     AvailableToolInfo
   } from '$types/validation';
@@ -59,6 +60,47 @@
     autoApproveLow: true,
     alwaysConfirmHigh: false
   });
+
+  // Phase 1.3: timeout + audit local state.
+  // Bounds match validation_helper backend clamp (5-600s) and audit settings (7-365d).
+  const TIMEOUT_MIN = 5;
+  const TIMEOUT_MAX = 600;
+  const RETENTION_MIN = 7;
+  const RETENTION_MAX = 90;
+  let localTimeoutSeconds = $state(60);
+  let localTimeoutBehavior = $state<TimeoutBehavior>('reject');
+  let localEnableLogging = $state(true);
+  let localRetentionDays = $state(30);
+  let purging = $state(false);
+
+  const timeoutBehaviorOptions: Array<{ value: TimeoutBehavior; labelKey: string }> = [
+    { value: 'reject', labelKey: 'validation_timeout_behavior_reject' },
+    { value: 'approve', labelKey: 'validation_timeout_behavior_approve' },
+    { value: 'skip', labelKey: 'validation_timeout_behavior_skip' }
+  ];
+
+  function clampTimeout(v: number): number {
+    if (Number.isNaN(v)) return TIMEOUT_MIN;
+    return Math.min(TIMEOUT_MAX, Math.max(TIMEOUT_MIN, Math.round(v)));
+  }
+
+  function clampRetention(v: number): number {
+    if (Number.isNaN(v)) return RETENTION_MIN;
+    return Math.min(RETENTION_MAX, Math.max(RETENTION_MIN, Math.round(v)));
+  }
+
+  async function handlePurgeNow(): Promise<void> {
+    purging = true;
+    errorMessage = null;
+    try {
+      const deleted = await invoke<number>('purge_validation_audit_now');
+      notify('success', $i18n('validation_audit_purge_success').replace('{count}', String(deleted)));
+    } catch (err) {
+      errorMessage = $i18n('validation_audit_purge_failed').replace('{error}', getErrorMessage(err));
+    } finally {
+      purging = false;
+    }
+  }
 
   // Available tools and MCP servers
   let availableTools = $state<AvailableToolInfo[]>([]);
@@ -132,6 +174,10 @@
       localToolsValidation = s.selectiveConfig.tools;
       localMcpValidation = s.selectiveConfig.mcp;
       localRiskThresholds = { ...s.riskThresholds };
+      localTimeoutSeconds = clampTimeout(s.timeoutSeconds);
+      localTimeoutBehavior = s.timeoutBehavior;
+      localEnableLogging = s.audit.enableLogging;
+      localRetentionDays = clampRetention(s.audit.retentionDays);
       hasChanges = false;
     }
   });
@@ -160,7 +206,13 @@
           fileOps: false,
           dbOps: false
         },
-        riskThresholds: localRiskThresholds
+        riskThresholds: localRiskThresholds,
+        timeoutSeconds: clampTimeout(localTimeoutSeconds),
+        timeoutBehavior: localTimeoutBehavior,
+        audit: {
+          enableLogging: localEnableLogging,
+          retentionDays: clampRetention(localRetentionDays)
+        }
       };
       await validationSettingsStore.updateSettings(updateRequest);
       notify('success', $i18n('validation_saved'));
@@ -372,6 +424,107 @@
       </div>
     </div>
 
+    <!-- Timeout Settings (Phase 1.3) -->
+    <div class="settings-section">
+      <h3 class="section-title">{$i18n('validation_timeout_title')}</h3>
+      <p class="section-help">{$i18n('validation_timeout_help')}</p>
+
+      <label class="slider-row">
+        <span class="slider-label">
+          {$i18n('validation_timeout_seconds_label')}
+          <span class="slider-value">{localTimeoutSeconds}s</span>
+        </span>
+        <input
+          type="range"
+          min={TIMEOUT_MIN}
+          max={TIMEOUT_MAX}
+          step="5"
+          bind:value={localTimeoutSeconds}
+          oninput={() => {
+            localTimeoutSeconds = clampTimeout(localTimeoutSeconds);
+            markChanged();
+          }}
+        />
+        <span class="slider-bounds">
+          <span>{TIMEOUT_MIN}s</span><span>{TIMEOUT_MAX}s</span>
+        </span>
+      </label>
+
+      <fieldset class="radio-group">
+        <legend class="radio-group-legend">{$i18n('validation_timeout_behavior_label')}</legend>
+        {#each timeoutBehaviorOptions as opt (opt.value)}
+          <label class="radio-item">
+            <input
+              type="radio"
+              name="timeout-behavior"
+              value={opt.value}
+              checked={localTimeoutBehavior === opt.value}
+              onchange={() => {
+                localTimeoutBehavior = opt.value;
+                markChanged();
+              }}
+            />
+            <span class="radio-label">{$i18n(opt.labelKey)}</span>
+          </label>
+        {/each}
+      </fieldset>
+    </div>
+
+    <!-- Audit Logging (Phase 1.3) -->
+    <div class="settings-section">
+      <h3 class="section-title">{$i18n('validation_audit_title')}</h3>
+      <p class="section-help">{$i18n('validation_audit_help')}</p>
+
+      <label class="checkbox-item">
+        <input
+          type="checkbox"
+          bind:checked={localEnableLogging}
+          onchange={markChanged}
+        />
+        <div class="checkbox-content">
+          <span class="checkbox-label">{$i18n('validation_audit_enable_label')}</span>
+          <span class="checkbox-description">{$i18n('validation_audit_enable_desc')}</span>
+        </div>
+      </label>
+
+      <label class="slider-row" class:disabled={!localEnableLogging}>
+        <span class="slider-label">
+          {$i18n('validation_audit_retention_label')}
+          <span class="slider-value">
+            {localRetentionDays} {$i18n('validation_audit_retention_days_unit')}
+          </span>
+        </span>
+        <input
+          type="range"
+          min={RETENTION_MIN}
+          max={RETENTION_MAX}
+          step="1"
+          bind:value={localRetentionDays}
+          disabled={!localEnableLogging}
+          oninput={() => {
+            localRetentionDays = clampRetention(localRetentionDays);
+            markChanged();
+          }}
+        />
+        <span class="slider-bounds">
+          <span>{RETENTION_MIN}</span><span>{RETENTION_MAX}</span>
+        </span>
+      </label>
+
+      <div class="audit-actions">
+        <Button
+          variant="secondary"
+          onclick={handlePurgeNow}
+          disabled={purging || !localEnableLogging}
+        >
+          {purging ? $i18n('validation_audit_purging') : $i18n('validation_audit_purge_button')}
+        </Button>
+        <a class="audit-link" href="/settings/audit-log">
+          {$i18n('validation_audit_view_log_link')}
+        </a>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="settings-actions">
       <Button
@@ -393,6 +546,69 @@
 </div>
 
 <style>
+  /* Phase 1.3: timeout slider + audit section styling */
+  .slider-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-xs);
+  }
+  .slider-row.disabled {
+    opacity: 0.55;
+  }
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-weight: 500;
+  }
+  .slider-value {
+    font-variant-numeric: tabular-nums;
+    color: var(--color-primary);
+  }
+  .slider-bounds {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+  .radio-group {
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  .radio-group-legend {
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+  }
+  .radio-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .radio-item:hover {
+    background: var(--color-bg-hover);
+  }
+  .audit-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+  }
+  .audit-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+  }
+  .audit-link:hover {
+    text-decoration: underline;
+  }
+
   .validation-settings {
     display: flex;
     flex-direction: column;
