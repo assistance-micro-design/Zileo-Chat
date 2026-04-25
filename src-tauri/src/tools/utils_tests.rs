@@ -79,17 +79,6 @@ fn test_param_query_builder_with_params() {
     assert_eq!(params[0].1, serde_json::json!("knowledge"));
 }
 
-#[test]
-fn test_param_query_builder_multiple_conditions() {
-    let (query, params) = ParamQueryBuilder::new("memory")
-        .select(&["content"])
-        .where_clause("workflow_id IS NONE")
-        .where_eq_param("type", "mem_type", serde_json::json!("context"))
-        .build();
-    assert!(query.contains("workflow_id IS NONE AND type = $mem_type"));
-    assert_eq!(params.len(), 1);
-}
-
 // --- resolve_agent_ref tests ---
 
 /// Minimal test agent for resolve_agent_ref tests

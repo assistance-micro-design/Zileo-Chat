@@ -276,8 +276,6 @@ mod tests {
     /// Helper struct to test deserialize_content via serde.
     #[derive(Debug, Deserialize)]
     struct TestMessage {
-        #[allow(dead_code)]
-        role: String,
         #[serde(deserialize_with = "deserialize_content")]
         content: ParsedContent,
     }

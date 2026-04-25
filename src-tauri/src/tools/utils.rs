@@ -130,7 +130,6 @@ pub fn validate_enum_value(value: &str, valid_values: &[&str], field_name: &str)
 
 /// Parameterized query builder for SQL-injection safe queries.
 /// Returns both the query string and the bind parameters.
-#[allow(dead_code)]
 pub struct ParamQueryBuilder {
     table: String,
     fields: Vec<String>,
@@ -140,7 +139,6 @@ pub struct ParamQueryBuilder {
     limit: Option<usize>,
 }
 
-#[allow(dead_code)]
 impl ParamQueryBuilder {
     /// Create a new parameterized query builder for the given table.
     /// Automatically includes `meta::id(id) AS id` in SELECT.
@@ -171,31 +169,6 @@ impl ParamQueryBuilder {
     ) -> Self {
         self.conditions.push(format!("{} = ${}", field, param_name));
         self.params.push((param_name.to_string(), value));
-        self
-    }
-
-    /// Add a raw WHERE condition (for complex expressions like IS NONE).
-    pub fn where_clause(mut self, condition: &str) -> Self {
-        self.conditions.push(condition.to_string());
-        self
-    }
-
-    /// Add a pre-built condition with its associated parameter.
-    /// Useful when condition is built externally (e.g., scope conditions).
-    pub fn where_with_param(mut self, condition: &str, param: (String, serde_json::Value)) -> Self {
-        self.conditions.push(condition.to_string());
-        self.params.push(param);
-        self
-    }
-
-    /// Add multiple conditions and params at once.
-    pub fn where_conditions(
-        mut self,
-        conditions: Vec<String>,
-        params: Vec<(String, serde_json::Value)>,
-    ) -> Self {
-        self.conditions.extend(conditions);
-        self.params.extend(params);
         self
     }
 

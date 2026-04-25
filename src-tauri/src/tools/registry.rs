@@ -141,12 +141,6 @@ impl ToolRegistry {
         self.tools.contains_key(name)
     }
 
-    /// Returns metadata for a tool.
-    #[allow(dead_code)]
-    pub fn get(&self, name: &str) -> Option<&ToolMetadata> {
-        self.tools.get(name)
-    }
-
     /// Checks if a tool requires AgentToolContext.
     pub fn requires_context(&self, name: &str) -> bool {
         self.tools
@@ -158,19 +152,6 @@ impl ToolRegistry {
     /// Returns all tool names (including hidden tools).
     pub fn available_tools(&self) -> Vec<&'static str> {
         self.tools.keys().copied().collect()
-    }
-
-    /// Returns visible tool names (excludes hidden tools like ReadSkillTool).
-    ///
-    /// Use this for frontend-facing tool lists where auto-injected tools
-    /// should not appear as user-selectable options.
-    #[allow(dead_code)]
-    pub fn visible_tools(&self) -> Vec<&'static str> {
-        self.tools
-            .iter()
-            .filter(|(_, m)| !m.hidden)
-            .map(|(name, _)| *name)
-            .collect()
     }
 
     /// Returns basic tools (no context needed, excludes hidden).
@@ -240,7 +221,6 @@ mod tests {
     fn test_registry_validate_valid() {
         let result = TOOL_REGISTRY.validate("MemoryTool");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().name, "MemoryTool");
     }
 
     #[test]
@@ -285,24 +265,9 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_visible_tools_excludes_hidden() {
-        let visible = TOOL_REGISTRY.visible_tools();
-        assert_eq!(visible.len(), 8); // 5 basic + 3 sub-agent (hidden excluded)
-        assert!(!visible.contains(&"ReadSkillTool"));
-        assert!(visible.contains(&"MemoryTool"));
-        assert!(visible.contains(&"SpawnAgentTool"));
-    }
-
-    #[test]
     fn test_registry_hidden_tool_still_valid() {
         // Hidden tools are registered and valid for validation
         assert!(TOOL_REGISTRY.has_tool("ReadSkillTool"));
-        let metadata = TOOL_REGISTRY.get("ReadSkillTool").unwrap();
-        assert_eq!(metadata.name, "ReadSkillTool");
-        assert_eq!(metadata.category, ToolCategory::Basic);
-        assert!(!metadata.requires_context);
-        assert!(metadata.hidden);
-
         // Validation accepts hidden tools
         assert!(TOOL_REGISTRY.validate("ReadSkillTool").is_ok());
     }
@@ -310,10 +275,6 @@ mod tests {
     #[test]
     fn test_registry_calculator_tool() {
         assert!(TOOL_REGISTRY.has_tool("CalculatorTool"));
-        let metadata = TOOL_REGISTRY.get("CalculatorTool").unwrap();
-        assert_eq!(metadata.name, "CalculatorTool");
-        assert_eq!(metadata.category, ToolCategory::Basic);
-        assert!(!metadata.requires_context);
-        assert!(!metadata.hidden);
+        assert!(!TOOL_REGISTRY.requires_context("CalculatorTool"));
     }
 }

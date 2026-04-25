@@ -51,20 +51,6 @@ impl ResponseBuilder {
         self
     }
 
-    /// Adds metrics.
-    #[allow(dead_code)]
-    pub fn metrics(mut self, duration_ms: u64, tokens_in: u64, tokens_out: u64) -> Self {
-        self.data.insert(
-            "metrics".to_string(),
-            json!({
-                "duration_ms": duration_ms,
-                "tokens_input": tokens_in,
-                "tokens_output": tokens_out
-            }),
-        );
-        self
-    }
-
     /// Adds a count.
     pub fn count(mut self, n: usize) -> Self {
         self.data.insert("count".to_string(), json!(n));
@@ -102,21 +88,6 @@ impl ResponseBuilder {
             .build()
     }
 
-    /// Standard list response.
-    #[allow(dead_code)]
-    pub fn list<T: Serialize>(items: T, count: usize) -> Value {
-        Self::new()
-            .success(true)
-            .count(count)
-            .data("items", items)
-            .build()
-    }
-
-    /// Standard error response (for tool internal use).
-    #[allow(dead_code)]
-    pub fn error(msg: impl Into<String>) -> Value {
-        Self::new().success(false).message(msg).build()
-    }
 }
 
 #[cfg(test)]
@@ -143,28 +114,6 @@ mod tests {
         assert_eq!(response["success"], true);
         assert_eq!(response["task_id"], "task-1");
         assert_eq!(response["message"], "Task created");
-    }
-
-    #[test]
-    fn test_response_builder_list_helper() {
-        let items = vec!["a", "b", "c"];
-        let response = ResponseBuilder::list(&items, 3);
-
-        assert_eq!(response["success"], true);
-        assert_eq!(response["count"], 3);
-        assert!(response["items"].is_array());
-    }
-
-    #[test]
-    fn test_response_builder_with_metrics() {
-        let response = ResponseBuilder::new()
-            .success(true)
-            .metrics(100, 500, 200)
-            .build();
-
-        assert_eq!(response["metrics"]["duration_ms"], 100);
-        assert_eq!(response["metrics"]["tokens_input"], 500);
-        assert_eq!(response["metrics"]["tokens_output"], 200);
     }
 
     #[test]
