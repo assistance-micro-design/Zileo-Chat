@@ -63,10 +63,11 @@ pub use user_question::{
     QuestionOption, UserQuestion, UserQuestionCreate, UserQuestionStreamPayload,
 };
 pub use validation::{
-    AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
+    AuditBucket, AuditConfig, AuditDecision, AuditFilter, AuditStats, DecidedBy,
+    PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
     RiskThresholdConfig, SelectiveValidationConfig, TimeoutBehavior,
-    UpdateValidationSettingsRequest, ValidationMode, ValidationRequest, ValidationRequestCreate,
-    ValidationSettings, ValidationStatus, ValidationType,
+    UpdateValidationSettingsRequest, ValidationAuditEntry, ValidationMode, ValidationRequest,
+    ValidationRequestCreate, ValidationSettings, ValidationStatus, ValidationType,
 };
 pub use workflow::{
     Workflow, WorkflowCreate, WorkflowFullState, WorkflowMetrics, WorkflowResult, WorkflowStatus,

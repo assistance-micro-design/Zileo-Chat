@@ -188,6 +188,11 @@ async fn main() -> anyhow::Result<()> {
             commands::validation::reset_validation_settings,
             // Tool discovery for validation settings
             commands::validation::list_available_tools,
+            // Validation audit log (Phase 1.2)
+            commands::validation_audit::list_validation_audit,
+            commands::validation_audit::get_validation_audit_stats,
+            commands::validation_audit::purge_validation_audit_now,
+            commands::validation_audit::export_validation_audit_csv,
             commands::memory::add_memory,
             commands::memory::list_memories,
             commands::memory::get_memory,
@@ -342,6 +347,12 @@ async fn main() -> anyhow::Result<()> {
                 *guard = Some(handle);
                 tracing::info!("App handle set in AppState for event emission");
             }
+
+            // Spawn the validation_audit cleanup task (Phase 1.2).
+            // Honors `audit.retention_days` and runs every 24h.
+            let _audit_cleanup_handle =
+                commands::validation_audit::spawn_audit_cleanup_task(state.inner().db.clone());
+            tracing::info!("Validation audit cleanup task spawned");
 
             // Load agents from database AFTER app_handle is set
             // This ensures AgentToolContext has access to app_handle for validation events

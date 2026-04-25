@@ -359,6 +359,126 @@ pub struct PartialAuditConfig {
     pub retention_days: Option<i32>,
 }
 
+// =====================================================
+// Phase 1.2 — Validation Audit Log
+// =====================================================
+
+/// Final decision recorded in `validation_audit`.
+///
+/// `Skipped` is used when `TimeoutBehavior::Skip` is configured and the
+/// validation timed out without an explicit user decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditDecision {
+    Approved,
+    Rejected,
+    Skipped,
+    Timeout,
+}
+
+impl std::fmt::Display for AuditDecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Approved => write!(f, "approved"),
+            Self::Rejected => write!(f, "rejected"),
+            Self::Skipped => write!(f, "skipped"),
+            Self::Timeout => write!(f, "timeout"),
+        }
+    }
+}
+
+/// Source of the validation decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecidedBy {
+    /// User clicked Approve / Reject in the UI.
+    User,
+    /// Auto-approved / auto-rejected by settings (e.g. auto_approve_low).
+    Auto,
+    /// Decision came from a timeout (per timeout_behavior).
+    Timeout,
+}
+
+impl std::fmt::Display for DecidedBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::User => write!(f, "user"),
+            Self::Auto => write!(f, "auto"),
+            Self::Timeout => write!(f, "timeout"),
+        }
+    }
+}
+
+/// One audit log entry. Persisted in the `validation_audit` table when
+/// `audit.enable_logging` is true. Append-only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationAuditEntry {
+    /// Audit row identifier (uuid).
+    pub id: String,
+    /// Foreign key to the originating validation_request row.
+    pub validation_id: String,
+    /// Tool / operation that triggered the validation (e.g. `delete_file`).
+    pub tool_name: String,
+    /// Final decision.
+    pub decision: AuditDecision,
+    /// When the decision was recorded.
+    pub decided_at: DateTime<Utc>,
+    /// Who/what made the decision.
+    pub decided_by: DecidedBy,
+    /// Risk level evaluated at decision time.
+    pub risk_level: RiskLevel,
+    /// Workflow context, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// Agent context, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    /// First ~200 chars of the operation prompt, for traceability.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_preview: Option<String>,
+    /// Free-form structured metadata (e.g. rejection reason).
+    /// Defaults to `null` so the frontend can detect "no metadata".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Filter for listing audit entries. All fields optional.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditFilter {
+    /// Restrict to a specific tool/operation name.
+    pub tool_name: Option<String>,
+    /// Restrict to a specific decision.
+    pub decision: Option<AuditDecision>,
+    /// Restrict to a specific decision source.
+    pub decided_by: Option<DecidedBy>,
+    /// Lower bound (inclusive) on `decided_at`, RFC3339.
+    pub since: Option<String>,
+    /// Upper bound (inclusive) on `decided_at`, RFC3339.
+    pub until: Option<String>,
+}
+
+/// One bucket in audit statistics (count by decision or by tool).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditBucket {
+    pub label: String,
+    pub count: u64,
+}
+
+/// Aggregate statistics for the audit log.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditStats {
+    /// Total entries currently stored.
+    pub total: u64,
+    /// Counts by `decision` value.
+    pub by_decision: Vec<AuditBucket>,
+    /// Top tools by entry count (capped to 10 in the API).
+    pub by_tool: Vec<AuditBucket>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

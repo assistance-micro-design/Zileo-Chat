@@ -106,6 +106,34 @@ DEFINE FIELD OVERWRITE risk_level ON validation_request TYPE string ASSERT $valu
 DEFINE FIELD OVERWRITE status ON validation_request TYPE string DEFAULT 'pending' ASSERT $value IN ['pending', 'approved', 'rejected'];
 DEFINE FIELD OVERWRITE created_at ON validation_request TYPE datetime DEFAULT time::now();
 
+-- =============================================
+-- Table: validation_audit (Phase 1.2)
+-- Append-only log of validation decisions for traceability/audit.
+-- One row per terminal decision (approve / reject / skip / timeout).
+-- Lazy cleanup honors audit.retention_days (Phase 1.2 cleanup task).
+-- =============================================
+DEFINE TABLE OVERWRITE validation_audit SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON validation_audit TYPE string;
+DEFINE FIELD OVERWRITE validation_id ON validation_audit TYPE string;
+DEFINE FIELD OVERWRITE tool_name ON validation_audit TYPE string;
+DEFINE FIELD OVERWRITE decision ON validation_audit TYPE string
+    ASSERT $value IN ['approved', 'rejected', 'skipped', 'timeout'];
+DEFINE FIELD OVERWRITE decided_at ON validation_audit TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE decided_by ON validation_audit TYPE string
+    ASSERT $value IN ['user', 'auto', 'timeout'];
+DEFINE FIELD OVERWRITE risk_level ON validation_audit TYPE string
+    ASSERT $value IN ['low', 'medium', 'high', 'critical'];
+DEFINE FIELD OVERWRITE workflow_id ON validation_audit TYPE option<string>;
+DEFINE FIELD OVERWRITE agent_id ON validation_audit TYPE option<string>;
+DEFINE FIELD OVERWRITE prompt_preview ON validation_audit TYPE option<string>;
+-- Free-form metadata (rejection reason, etc.) stored as JSON string per ERR_SURREAL_001.
+DEFINE FIELD OVERWRITE metadata ON validation_audit TYPE string DEFAULT '{}';
+
+DEFINE INDEX OVERWRITE audit_decided_at_idx ON validation_audit FIELDS decided_at;
+DEFINE INDEX OVERWRITE audit_validation_id_idx ON validation_audit FIELDS validation_id UNIQUE;
+DEFINE INDEX OVERWRITE audit_tool_name_idx ON validation_audit FIELDS tool_name;
+DEFINE INDEX OVERWRITE audit_decision_idx ON validation_audit FIELDS decision;
+
 -- Table: task (decomposition workflows with Todo Tool support)
 DEFINE TABLE OVERWRITE task SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON task TYPE string;

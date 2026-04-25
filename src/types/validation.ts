@@ -262,3 +262,72 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
     retentionDays: 30,
   },
 };
+
+// =====================================================
+// Phase 1.2 — Validation Audit Log
+// =====================================================
+
+/** Final decision recorded in the audit log. */
+export type AuditDecision = 'approved' | 'rejected' | 'skipped' | 'timeout';
+
+/** Source of the decision. */
+export type DecidedBy = 'user' | 'auto' | 'timeout';
+
+/**
+ * One row of the audit log, returned by `list_validation_audit`.
+ */
+export interface ValidationAuditEntry {
+  /** Audit row identifier. */
+  id: string;
+  /** Foreign key to the originating validation_request row. */
+  validationId: string;
+  /** Tool / operation that triggered the validation. */
+  toolName: string;
+  /** Final decision. */
+  decision: AuditDecision;
+  /** When the decision was recorded (ISO 8601). */
+  decidedAt: string;
+  /** Who/what made the decision. */
+  decidedBy: DecidedBy;
+  /** Risk level evaluated at decision time. */
+  riskLevel: RiskLevel;
+  /** Workflow context, when known. */
+  workflowId?: string;
+  /** Agent context, when known. */
+  agentId?: string;
+  /** First ~200 chars of the operation prompt. */
+  promptPreview?: string;
+  /** Free-form metadata (rejection reason, timeout context, etc.). */
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Filter for `list_validation_audit`. */
+export interface AuditFilter {
+  toolName?: string;
+  decision?: AuditDecision;
+  decidedBy?: DecidedBy;
+  /** Lower bound (inclusive) on `decidedAt`, RFC3339. */
+  since?: string;
+  /** Upper bound (inclusive) on `decidedAt`, RFC3339. */
+  until?: string;
+}
+
+/** One bucket in audit statistics. */
+export interface AuditBucket {
+  label: string;
+  count: number;
+}
+
+/** Aggregate audit log statistics. */
+export interface AuditStats {
+  total: number;
+  byDecision: AuditBucket[];
+  byTool: AuditBucket[];
+}
+
+/** Request envelope for `list_validation_audit`. */
+export interface ListAuditParams {
+  filter?: AuditFilter;
+  limit?: number;
+  offset?: number;
+}

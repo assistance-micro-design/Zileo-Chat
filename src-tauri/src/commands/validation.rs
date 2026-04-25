@@ -18,11 +18,12 @@
 //! human approval before execution (tools, sub-agents, MCP calls, etc.).
 
 use crate::{
+    commands::validation_audit::{write_audit_entry, AuditEntryDraft},
     models::{
-        AuditConfig, PartialAuditConfig, PartialRiskThresholds, PartialSelectiveConfig, RiskLevel,
-        RiskThresholdConfig, SelectiveValidationConfig, UpdateValidationSettingsRequest,
-        ValidationRequest, ValidationRequestCreate, ValidationSettings, ValidationStatus,
-        ValidationType,
+        AuditConfig, AuditDecision, DecidedBy, PartialAuditConfig, PartialRiskThresholds,
+        PartialSelectiveConfig, RiskLevel, RiskThresholdConfig, SelectiveValidationConfig,
+        UpdateValidationSettingsRequest, ValidationRequest, ValidationRequestCreate,
+        ValidationSettings, ValidationStatus, ValidationType,
     },
     security::{serialize_for_query, validate_uuid_field, Validator},
     tools::registry::TOOL_REGISTRY,
@@ -207,6 +208,22 @@ pub async fn approve_validation(
             format!("Failed to approve validation: {}", e)
         })?;
 
+    // Phase 1.2: append to audit log (best-effort, never blocks user flow).
+    if let Some(draft) = build_audit_draft(
+        &state,
+        &validated_id,
+        AuditDecision::Approved,
+        DecidedBy::User,
+        None,
+    )
+    .await
+    {
+        let settings = get_validation_settings_internal(&state)
+            .await
+            .unwrap_or_default();
+        write_audit_entry(&state.db, &settings, draft).await;
+    }
+
     info!("Validation request approved successfully");
     Ok(())
 }
@@ -252,8 +269,75 @@ pub async fn reject_validation(
             format!("Failed to reject validation: {}", e)
         })?;
 
+    // Phase 1.2: append to audit log (best-effort).
+    if let Some(draft) = build_audit_draft(
+        &state,
+        &validated_id,
+        AuditDecision::Rejected,
+        DecidedBy::User,
+        Some(serde_json::json!({"rejection_reason": validated_reason})),
+    )
+    .await
+    {
+        let settings = get_validation_settings_internal(&state)
+            .await
+            .unwrap_or_default();
+        write_audit_entry(&state.db, &settings, draft).await;
+    }
+
     info!("Validation request rejected successfully");
     Ok(())
+}
+
+/// Builds an `AuditEntryDraft` from a stored `validation_request` row.
+///
+/// Returns `None` if the row cannot be located — audit must be best-effort.
+async fn build_audit_draft(
+    state: &State<'_, AppState>,
+    validated_id: &str,
+    decision: AuditDecision,
+    decided_by: DecidedBy,
+    extra_metadata: Option<serde_json::Value>,
+) -> Option<AuditEntryDraft> {
+    let q = format!(
+        "SELECT meta::id(id) AS id, workflow_id, type, operation, details, risk_level \
+         FROM validation_request:`{}`",
+        validated_id
+    );
+    let rows: Vec<serde_json::Value> = state.db.query_json(&q).await.ok()?;
+    let row = rows.first()?;
+    let tool_name = row
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let workflow_id = row
+        .get("workflow_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let operation = row.get("operation").and_then(|v| v.as_str()).unwrap_or("");
+    let prompt_preview = if operation.is_empty() {
+        None
+    } else {
+        Some(operation.to_string())
+    };
+    let risk_level: RiskLevel = row
+        .get("risk_level")
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_value(serde_json::json!(s)).ok())
+        .unwrap_or(RiskLevel::Medium);
+
+    Some(AuditEntryDraft {
+        validation_id: validated_id.to_string(),
+        tool_name,
+        decision,
+        decided_by,
+        risk_level,
+        workflow_id,
+        agent_id: None,
+        prompt_preview,
+        metadata: extra_metadata,
+    })
 }
 
 /// Deletes a validation request.

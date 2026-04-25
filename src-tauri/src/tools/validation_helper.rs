@@ -52,19 +52,35 @@ pub(crate) const VALIDATION_TIMEOUT_MAX_SECS: u64 = 600;
 
 /// Outcome of `wait_for_validation` after polling.
 ///
-/// Distinguishes the three terminal states so the caller can react appropriately:
-/// - `Approved`: user approved (or timeout with `Approve` behavior).
-/// - `Rejected`: user rejected (or timeout with `Reject` behavior).
-/// - `Skipped`: timeout fired with `Skip` behavior; no decision was recorded
-///   and the agent should proceed without blocking.
+/// Carries both the resulting decision and whether it came from a timeout
+/// (so callers can route audit logging through the right `DecidedBy` source).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum WaitOutcome {
-    /// Validation was approved by the user or auto-approved on timeout.
+pub(crate) struct WaitOutcome {
+    pub decision: WaitDecision,
+    pub via_timeout: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WaitDecision {
     Approved,
-    /// Validation was rejected by the user or auto-rejected on timeout.
     Rejected,
-    /// Validation timed out and the configured behavior is `Skip`.
+    /// Skip is only reachable via timeout + `TimeoutBehavior::Skip`.
     Skipped,
+}
+
+impl WaitOutcome {
+    fn user_decision(d: WaitDecision) -> Self {
+        Self {
+            decision: d,
+            via_timeout: false,
+        }
+    }
+    fn from_timeout(d: WaitDecision) -> Self {
+        Self {
+            decision: d,
+            via_timeout: true,
+        }
+    }
 }
 
 /// Clamps a user-configured timeout (in seconds) into the allowed range.
@@ -286,8 +302,12 @@ impl ValidationHelper {
                 let status = first["status"].as_str().unwrap_or("pending");
 
                 match status {
-                    "approved" => return Ok(WaitOutcome::Approved),
-                    "rejected" => return Ok(WaitOutcome::Rejected),
+                    "approved" => {
+                        return Ok(WaitOutcome::user_decision(WaitDecision::Approved));
+                    }
+                    "rejected" => {
+                        return Ok(WaitOutcome::user_decision(WaitDecision::Rejected));
+                    }
                     "pending" => {
                         // Continue waiting
                         debug!(
@@ -349,7 +369,7 @@ impl ValidationHelper {
                     elapsed_secs = timeout.as_secs(),
                     "Validation timed out -> auto-reject"
                 );
-                WaitOutcome::Rejected
+                WaitOutcome::from_timeout(WaitDecision::Rejected)
             }
             TimeoutBehavior::Approve => {
                 let query = format!(
@@ -365,7 +385,7 @@ impl ValidationHelper {
                     elapsed_secs = timeout.as_secs(),
                     "Validation timed out -> auto-approve"
                 );
-                WaitOutcome::Approved
+                WaitOutcome::from_timeout(WaitDecision::Approved)
             }
             TimeoutBehavior::Skip => {
                 info!(
@@ -373,7 +393,7 @@ impl ValidationHelper {
                     elapsed_secs = timeout.as_secs(),
                     "Validation timed out -> skip (agent proceeds without decision)"
                 );
-                WaitOutcome::Skipped
+                WaitOutcome::from_timeout(WaitDecision::Skipped)
             }
         }
     }
@@ -444,19 +464,35 @@ impl ValidationHelper {
             )
             .await?;
 
-        match outcome {
-            WaitOutcome::Approved => {
+        // Phase 1.2: append a timeout-driven audit entry.
+        // User-driven approve/reject is audited from the Tauri command path
+        // (commands/validation.rs) so we don't double-write here.
+        if outcome.via_timeout {
+            self.write_timeout_audit(
+                &settings,
+                validation_id,
+                workflow_id,
+                &validation_type,
+                description,
+                &risk_level,
+                outcome.decision,
+            )
+            .await;
+        }
+
+        match outcome.decision {
+            WaitDecision::Approved => {
                 info!(validation_id = %validation_id, "Validation approved");
                 Ok(())
             }
-            WaitOutcome::Rejected => {
+            WaitDecision::Rejected => {
                 info!(validation_id = %validation_id, "Validation rejected");
                 Err(ToolError::PermissionDenied(format!(
                     "Operation was rejected by user: {}",
                     description
                 )))
             }
-            WaitOutcome::Skipped => {
+            WaitDecision::Skipped => {
                 info!(
                     validation_id = %validation_id,
                     "Validation skipped on timeout (agent proceeds)"
@@ -464,6 +500,44 @@ impl ValidationHelper {
                 Ok(())
             }
         }
+    }
+
+    /// Best-effort audit write for a timeout-driven decision. Never propagates errors.
+    #[allow(clippy::too_many_arguments)]
+    async fn write_timeout_audit(
+        &self,
+        settings: &ValidationSettings,
+        validation_id: &str,
+        workflow_id: &str,
+        validation_type: &ValidationType,
+        description: &str,
+        risk_level: &RiskLevel,
+        decision: WaitDecision,
+    ) {
+        use crate::commands::validation_audit::{write_audit_entry, AuditEntryDraft};
+        use crate::models::{AuditDecision, DecidedBy};
+
+        let audit_decision = match decision {
+            WaitDecision::Approved => AuditDecision::Approved,
+            WaitDecision::Rejected => AuditDecision::Rejected,
+            WaitDecision::Skipped => AuditDecision::Skipped,
+        };
+        let draft = AuditEntryDraft {
+            validation_id: validation_id.to_string(),
+            tool_name: validation_type.to_string(),
+            decision: audit_decision,
+            decided_by: DecidedBy::Timeout,
+            risk_level: risk_level.clone(),
+            workflow_id: Some(workflow_id.to_string()),
+            agent_id: None,
+            prompt_preview: Some(description.to_string()),
+            metadata: Some(serde_json::json!({
+                "source": "timeout",
+                "behavior": settings.timeout_behavior.to_string(),
+                "timeout_seconds": settings.timeout_seconds,
+            })),
+        };
+        write_audit_entry(&self.db, settings, draft).await;
     }
 }
 

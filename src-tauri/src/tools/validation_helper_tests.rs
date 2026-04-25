@@ -321,7 +321,8 @@ async fn test_timeout_behavior_reject_marks_rejected() {
         .await
         .expect("reject path returns Ok(Rejected)");
 
-    assert_eq!(outcome, WaitOutcome::Rejected);
+    assert_eq!(outcome.decision, WaitDecision::Rejected);
+    assert!(outcome.via_timeout);
     assert_eq!(
         read_validation_status(&helper.db, id).await.as_deref(),
         Some("rejected")
@@ -339,7 +340,8 @@ async fn test_timeout_behavior_approve_marks_approved() {
         .await
         .expect("approve path returns Ok(Approved)");
 
-    assert_eq!(outcome, WaitOutcome::Approved);
+    assert_eq!(outcome.decision, WaitDecision::Approved);
+    assert!(outcome.via_timeout);
     assert_eq!(
         read_validation_status(&helper.db, id).await.as_deref(),
         Some("approved")
@@ -357,7 +359,8 @@ async fn test_timeout_behavior_skip_returns_skipped_without_decision() {
         .await
         .expect("skip path returns Ok(Skipped)");
 
-    assert_eq!(outcome, WaitOutcome::Skipped);
+    assert_eq!(outcome.decision, WaitDecision::Skipped);
+    assert!(outcome.via_timeout);
     // Skip must NOT mutate the row -> still pending
     assert_eq!(
         read_validation_status(&helper.db, id).await.as_deref(),
