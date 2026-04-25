@@ -47,7 +47,6 @@ pub mod validation {
 }
 
 /// Audit log constants.
-#[allow(dead_code)]
 pub mod audit {
     /// Lower bound (days) for the audit log retention setting.
     pub const RETENTION_MIN_DAYS: i32 = 7;
