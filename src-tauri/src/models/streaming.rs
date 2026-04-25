@@ -493,6 +493,22 @@ pub struct ValidationRequiredEvent {
     pub details: serde_json::Value,
 }
 
+/// Resolution emitted when a validation request is resolved server-side.
+///
+/// Sent specifically when the backend resolves a validation without a user
+/// decision (timeout). The frontend uses this to close the validation modal
+/// once the configured `timeout_seconds` is reached so it stops being the
+/// authoritative source of truth for the timer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResolvedEvent {
+    /// Validation request ID that was resolved
+    pub validation_id: String,
+    /// Resolution outcome ("approved", "rejected", "skipped")
+    pub resolution: String,
+    /// Source of the resolution ("timeout")
+    pub source: String,
+}
+
 /// Type of sub-agent operation requiring validation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -523,6 +539,8 @@ pub mod events {
     pub const WORKFLOW_COMPLETE: &str = "workflow_complete";
     /// Validation required event name (sub-agent operations)
     pub const VALIDATION_REQUIRED: &str = "validation_required";
+    /// Validation resolved event name (server-side resolution, e.g. timeout)
+    pub const VALIDATION_RESOLVED: &str = "validation_resolved";
 }
 
 #[cfg(test)]

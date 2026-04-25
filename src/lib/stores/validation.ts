@@ -30,15 +30,28 @@ import { getErrorMessage } from '$lib/utils/error';
 import type { ValidationRequiredEvent } from '$types/sub-agent';
 
 /**
- * Validation event names (inlined to avoid runtime resolution issues)
+ * Validation event names (inlined to avoid runtime resolution issues).
+ *
+ * The backend is the single source of truth for the timeout: when the
+ * configured `timeout_seconds` elapses, it applies the configured
+ * `timeout_behavior` (reject/approve/skip) and emits VALIDATION_RESOLVED
+ * so the frontend can close the modal.
  */
 const EVENTS = {
 	VALIDATION_REQUIRED: 'validation_required',
-	VALIDATION_RESPONSE: 'validation_response'
+	VALIDATION_RESOLVED: 'validation_resolved'
 } as const;
 
-/** Auto-reject timeout for pending validations (5 minutes) */
-const VALIDATION_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * Payload of the `validation_resolved` event emitted by the backend when it
+ * resolves a validation request itself (timeout). User-driven approve/reject
+ * does not emit this event because it is already handled via the IPC response.
+ */
+interface ValidationResolvedEvent {
+	validation_id: string;
+	resolution: 'approved' | 'rejected' | 'skipped';
+	source: 'timeout';
+}
 
 // ============================================================================
 // Types
@@ -91,39 +104,15 @@ const initialState: ValidationState = {
 const store = writable<ValidationState>(initialState);
 
 /**
- * Event listener cleanup function
+ * Cleanup functions for the two Tauri event listeners (required + resolved).
  */
-let unlistener: UnlistenFn | null = null;
+let requiredUnlistener: UnlistenFn | null = null;
+let resolvedUnlistener: UnlistenFn | null = null;
 
 /**
  * Tracks whether the store has been initialized with event listeners
  */
 let isInitialized = false;
-
-/**
- * Timer for auto-rejecting pending validations after VALIDATION_TIMEOUT_MS.
- */
-let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
-
-/**
- * Clear any active validation timeout timer.
- */
-function clearValidationTimeout(): void {
-	if (timeoutTimer) {
-		clearTimeout(timeoutTimer);
-		timeoutTimer = null;
-	}
-}
-
-/**
- * Start a timeout timer that auto-rejects the pending validation.
- */
-function startValidationTimeout(): void {
-	clearValidationTimeout();
-	timeoutTimer = setTimeout(() => {
-		validationStore.reject('Auto-rejected: validation timeout');
-	}, VALIDATION_TIMEOUT_MS);
-}
 
 /**
  * Converts a ValidationRequiredEvent to a ValidationRequest for the modal.
@@ -161,7 +150,7 @@ export const validationStore = {
 		}
 
 		// Listen for validation_required events
-		unlistener = await listen<ValidationRequiredEvent>(
+		requiredUnlistener = await listen<ValidationRequiredEvent>(
 			EVENTS.VALIDATION_REQUIRED,
 			(event) => {
 				const validationEvent = event.payload;
@@ -176,9 +165,27 @@ export const validationStore = {
 					},
 					lastError: null
 				}));
+			}
+		);
 
-				// Start timeout timer for auto-rejection
-				startValidationTimeout();
+		// Listen for validation_resolved events: backend resolved the request
+		// itself (e.g. timeout). Drop the matching pending entry so the modal
+		// closes; ignore stale events for other validations.
+		resolvedUnlistener = await listen<ValidationResolvedEvent>(
+			EVENTS.VALIDATION_RESOLVED,
+			(event) => {
+				const { validation_id } = event.payload;
+				const state = get(store);
+				if (state.pending?.event.validation_id !== validation_id) {
+					return;
+				}
+
+				store.update((s) => ({
+					...s,
+					pending: null,
+					isProcessing: false,
+					totalProcessed: s.totalProcessed + 1
+				}));
 			}
 		);
 
@@ -194,7 +201,6 @@ export const validationStore = {
 			return;
 		}
 
-		clearValidationTimeout();
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
@@ -229,7 +235,6 @@ export const validationStore = {
 			return;
 		}
 
-		clearValidationTimeout();
 		store.update((s) => ({ ...s, isProcessing: true }));
 
 		try {
@@ -258,7 +263,6 @@ export const validationStore = {
 	 * Dismiss the pending validation without action (treats as timeout).
 	 */
 	dismiss(): void {
-		clearValidationTimeout();
 		store.update((s) => ({
 			...s,
 			pending: null,
@@ -277,10 +281,13 @@ export const validationStore = {
 	 * Cleanup event listeners.
 	 */
 	async cleanup(): Promise<void> {
-		clearValidationTimeout();
-		if (unlistener) {
-			unlistener();
-			unlistener = null;
+		if (requiredUnlistener) {
+			requiredUnlistener();
+			requiredUnlistener = null;
+		}
+		if (resolvedUnlistener) {
+			resolvedUnlistener();
+			resolvedUnlistener = null;
 		}
 		isInitialized = false;
 	},

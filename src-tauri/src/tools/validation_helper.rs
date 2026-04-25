@@ -31,7 +31,7 @@
 //! All validation types share a single flow via `create_and_wait_validation()`.
 
 use crate::db::DBClient;
-use crate::models::streaming::{events, ValidationRequiredEvent};
+use crate::models::streaming::{events, ValidationRequiredEvent, ValidationResolvedEvent};
 use crate::models::{
     RiskLevel, TimeoutBehavior, ValidationMode, ValidationRequestCreate, ValidationSettings,
     ValidationStatus, ValidationType,
@@ -347,7 +347,7 @@ impl ValidationHelper {
         timeout: Duration,
         timeout_behavior: &TimeoutBehavior,
     ) -> WaitOutcome {
-        match timeout_behavior {
+        let outcome = match timeout_behavior {
             TimeoutBehavior::Reject => {
                 let query = format!(
                     "UPDATE validation_request:`{}` SET status = 'rejected', \
@@ -399,6 +399,41 @@ impl ValidationHelper {
                 );
                 WaitOutcome::from_timeout(WaitDecision::Skipped)
             }
+        };
+
+        self.emit_resolved_event(validation_id, outcome.decision, "timeout");
+
+        outcome
+    }
+
+    /// Emits a `validation_resolved` Tauri event so the frontend can close the
+    /// validation modal once the backend resolves the request itself (timeout).
+    /// User-driven approve/reject already updates the frontend store via the
+    /// Tauri command response, so we only emit here for server-side resolutions.
+    fn emit_resolved_event(&self, validation_id: &str, decision: WaitDecision, source: &str) {
+        let Some(ref app_handle) = self.app_handle else {
+            return;
+        };
+
+        let resolution = match decision {
+            WaitDecision::Approved => "approved",
+            WaitDecision::Rejected => "rejected",
+            WaitDecision::Skipped => "skipped",
+        };
+
+        let event = ValidationResolvedEvent {
+            validation_id: validation_id.to_string(),
+            resolution: resolution.to_string(),
+            source: source.to_string(),
+        };
+
+        if let Err(e) = app_handle.emit(events::VALIDATION_RESOLVED, &event) {
+            warn!(error = %e, validation_id, "Failed to emit validation_resolved event");
+        } else {
+            debug!(
+                validation_id,
+                resolution, source, "Emitted validation_resolved event"
+            );
         }
     }
 

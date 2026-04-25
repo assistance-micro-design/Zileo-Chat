@@ -590,12 +590,16 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/**
 	 * React to pending validation requests.
-	 * Opens the validation modal when a new validation request arrives.
+	 * Opens the validation modal when a new request arrives, and closes it
+	 * when the backend resolves the request server-side (e.g. timeout) so the
+	 * pending entry transitions back to null.
 	 */
 	$effect(() => {
 		const request = $pendingValidation;
 		if (request) {
 			modalState = { type: 'validation', request };
+		} else if (modalState.type === 'validation') {
+			modalState = { type: 'none' };
 		}
 	});
 
