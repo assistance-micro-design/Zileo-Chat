@@ -276,6 +276,7 @@ impl CircuitBreaker {
     }
 }
 
+// Test helpers (#[cfg(test)] block); not all are called from every test target.
 #[cfg(test)]
 #[allow(dead_code)]
 impl CircuitBreaker {

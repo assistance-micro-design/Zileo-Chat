@@ -62,6 +62,7 @@ impl Default for RetryConfig {
     }
 }
 
+// RetryConfig methods used by lib LLM providers; not all reachable from binary target.
 #[allow(dead_code)]
 impl RetryConfig {
     /// Creates a new RetryConfig with custom values

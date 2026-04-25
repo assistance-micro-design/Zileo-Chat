@@ -30,7 +30,11 @@ pub(super) struct MistralEmbeddingRequest<'a> {
     pub(super) encoding_format: &'a str,
 }
 
-/// Mistral embedding API response
+/// Mistral embedding API response.
+///
+/// Fields below are deserialized from the API but not all are read after parsing
+/// (only `data` is consumed). The remaining fields exist to validate the response
+/// shape and surface useful info in debug logs.
 #[derive(Debug, Deserialize)]
 pub(super) struct MistralEmbeddingResponse {
     #[allow(dead_code)]
@@ -44,7 +48,10 @@ pub(super) struct MistralEmbeddingResponse {
     pub usage: MistralUsage,
 }
 
-/// Mistral embedding data item
+/// Mistral embedding data item.
+///
+/// Only `embedding` is consumed downstream; `object` and `index` are kept for
+/// response-shape validation during deserialization.
 #[derive(Debug, Deserialize)]
 pub(super) struct MistralEmbeddingData {
     #[allow(dead_code)]
@@ -54,7 +61,9 @@ pub(super) struct MistralEmbeddingData {
     pub embedding: Vec<f32>,
 }
 
-/// Mistral API usage statistics
+/// Mistral API usage statistics.
+///
+/// Deserialized for completeness/debug visibility; not currently surfaced to callers.
 #[derive(Debug, Deserialize)]
 pub(super) struct MistralUsage {
     #[allow(dead_code)]

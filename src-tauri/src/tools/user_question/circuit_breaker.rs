@@ -49,6 +49,10 @@
 //! }
 //! ```
 
+// All public items in this module are wired through tools/user_question/* in
+// the lib crate. They are not directly reachable from the binary target, hence
+// the per-item #[allow(dead_code)] attributes below.
+
 use std::time::{Duration, Instant};
 use tracing::debug;
 

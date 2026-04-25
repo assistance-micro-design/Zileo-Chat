@@ -122,6 +122,8 @@ pub struct LLMResponse {
 
 /// LLM error types
 #[derive(Debug, Error)]
+// Variants emitted from various lib code paths; not all are constructed in
+// every test target, hence the module-level allow.
 #[allow(dead_code)]
 pub enum LLMError {
     /// Provider not configured
@@ -209,6 +211,7 @@ pub struct ToolCompletionParams {
 
 /// Common trait for all LLM providers
 #[async_trait]
+// Trait used via dyn dispatch by the LLM layer; reachable from lib code only.
 #[allow(dead_code)]
 pub trait LLMProvider: Send + Sync {
     /// Returns the provider type

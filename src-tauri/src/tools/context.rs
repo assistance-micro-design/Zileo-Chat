@@ -68,6 +68,8 @@ use tokio_util::sync::CancellationToken;
 /// - Maximum 3 sub-agents per workflow
 /// - Single level only (sub-agents cannot spawn other sub-agents)
 /// - Only the primary workflow agent has access to sub-agent tools
+// Consumed by sub-agent tools wired through the lib; not all fields are read
+// from the binary path.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct AgentToolContext {
@@ -99,6 +101,7 @@ pub struct AgentToolContext {
     pub circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
 }
 
+// Constructor used by sub-agent tool factories in the lib; lib/bin split.
 #[allow(dead_code)]
 impl AgentToolContext {
     /// Creates a new AgentToolContext with the provided dependencies.

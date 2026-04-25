@@ -217,6 +217,7 @@ impl Report {
 
 /// Agent trait - unified interface for all agents
 #[async_trait]
+// Trait used via dyn dispatch in agent registry; methods called from lib code only.
 #[allow(dead_code)]
 pub trait Agent: Send + Sync {
     /// Executes a task and returns a report

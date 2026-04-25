@@ -21,11 +21,13 @@ use tracing::{debug, info, instrument};
 ///
 /// Note: This agent is primarily used for testing purposes.
 /// In production, agents are created via Settings UI and stored in SurrealDB.
+// Test double for commands/agent/tests.rs; not constructed in the binary path.
 #[allow(dead_code)]
 pub struct SimpleAgent {
     config: AgentConfig,
 }
 
+// Constructor for the SimpleAgent test double; lib/bin split.
 #[allow(dead_code)]
 impl SimpleAgent {
     /// Creates a new simple agent

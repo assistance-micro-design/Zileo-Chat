@@ -25,6 +25,7 @@ pub enum ToolCategory {
 
 /// Metadata for a registered tool.
 #[derive(Debug, Clone)]
+// Some fields (e.g. `name`) are read only by lib tests; lib/bin split.
 #[allow(dead_code)]
 pub struct ToolMetadata {
     pub name: &'static str,

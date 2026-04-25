@@ -139,6 +139,7 @@ pub struct Task {
 /// Timestamps are handled by database defaults.
 /// Enum fields are converted to strings for SurrealDB compatibility.
 #[derive(Debug, Clone, Serialize)]
+// Used by commands/task; not constructed in the binary path (lib/bin split).
 #[allow(dead_code)]
 pub struct TaskCreate {
     /// Associated workflow ID
@@ -165,6 +166,7 @@ pub struct TaskCreate {
     pub dependencies: Vec<String>,
 }
 
+// Constructor used by commands/task; lib/bin split.
 #[allow(dead_code)]
 impl TaskCreate {
     /// Creates a new TaskCreate with the given parameters.
