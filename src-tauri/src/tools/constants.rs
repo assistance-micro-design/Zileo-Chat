@@ -99,11 +99,6 @@ pub mod sub_agent {
     pub const ACTIVITY_CHECK_INTERVAL_SECS: u64 = 30;
 
     // Centralized Magic Numbers
-    /// Maximum characters for result summaries in sub-agent reports.
-    /// (Used when event emission is unified)
-    #[allow(dead_code)]
-    pub const RESULT_SUMMARY_MAX_CHARS: usize = 200;
-
     /// Maximum characters for task description truncation.
     pub const TASK_DESC_TRUNCATE_CHARS: usize = 100;
 
@@ -134,12 +129,6 @@ pub mod sub_agent {
 
 #[allow(dead_code)]
 pub mod calculator {
-    /// Maximum supported value (to prevent overflow)
-    pub const MAX_VALUE: f64 = 1e308;
-
-    /// Minimum positive value (for precision)
-    pub const MIN_POSITIVE: f64 = 1e-308;
-
     /// Valid unary operations
     pub const UNARY_OPS: &[&str] = &[
         "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "sqrt", "cbrt", "exp",

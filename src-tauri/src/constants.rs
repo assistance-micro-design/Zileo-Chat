@@ -31,15 +31,6 @@ pub mod workflow {
     /// runaway resource use when many workflows are launched in parallel.
     pub const DEFAULT_MAX_CONCURRENT_WORKFLOWS: usize = 3;
 
-    // Tokio Timeout Constants
-    /// Timeout (seconds) for LLM execution operations.
-    /// Default: 5 minutes - generous for complex reasoning tasks.
-    pub const LLM_EXECUTION_TIMEOUT_SECS: u64 = 300;
-
-    /// Timeout (seconds) for database operations (queries, updates).
-    /// Default: 30 seconds - should be sufficient for most queries.
-    pub const DB_OPERATION_TIMEOUT_SECS: u64 = 30;
-
     /// Timeout (seconds) for loading workflow full state (multiple parallel queries).
     /// Default: 60 seconds - accounts for multiple parallel queries.
     pub const FULL_STATE_LOAD_TIMEOUT_SECS: u64 = 60;
@@ -48,13 +39,6 @@ pub mod workflow {
 /// Validation flow constants.
 #[allow(dead_code)]
 pub mod validation {
-    /// Default timeout (seconds) for validation responses, used as fallback
-    /// when user `ValidationSettings.timeout_seconds` cannot be loaded.
-    pub const VALIDATION_TIMEOUT_SECS: u64 = 60;
-
-    /// Polling interval (milliseconds) for checking validation status.
-    pub const VALIDATION_POLL_MS: u64 = 500;
-
     /// Lower bound for user-configurable validation timeout.
     pub const VALIDATION_TIMEOUT_MIN_SECS: u64 = 5;
 
@@ -80,16 +64,10 @@ pub mod llm_http {
 }
 
 /// Default limits for database queries to prevent memory explosion.
-#[allow(dead_code)] // Some constants prepared for future use
+#[allow(dead_code)]
 pub mod query_limits {
     /// Default limit for list queries (e.g., list_memories, list_tasks)
     pub const DEFAULT_LIST_LIMIT: usize = 1000;
-    /// Maximum allowed limit for list queries
-    pub const MAX_LIST_LIMIT: usize = 10_000;
-    /// Default limit for MCP call logs
-    pub const DEFAULT_MCP_LOGS_LIMIT: usize = 500;
-    /// Default limit for message history
-    pub const DEFAULT_MESSAGES_LIMIT: usize = 500;
     /// Default limit for model list
     pub const DEFAULT_MODELS_LIMIT: usize = 100;
 }
@@ -111,8 +89,6 @@ pub mod commands {
     pub const MIN_MAX_TOKENS: usize = 256;
     /// Maximum max_tokens value
     pub const MAX_MAX_TOKENS: usize = 128000;
-    /// Valid lifecycle values
-    pub const VALID_LIFECYCLES: &[&str] = &["permanent", "temporary"];
 
     // ----- MCP Server -----
     /// Maximum length for MCP server names/IDs
