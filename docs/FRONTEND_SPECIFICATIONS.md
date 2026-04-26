@@ -142,7 +142,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 5. Component Library
 
-101 total components organized under `src/lib/components/`:
+102 total components organized under `src/lib/components/`:
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
@@ -156,7 +156,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `mcp/` | 3 | MCPServerCard, MCPServerForm, MCPServerTester |
 | `llm/` | 4 | ConnectionTester, ModelCard, ModelForm, ProviderCard |
 | `settings/` | 37 | See Settings Components table above (incl. `audit-log/` and enriched `validation/`) |
-| `onboarding/` | 8 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
+| `onboarding/` | 9 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
 
 ## 6. Stores
 

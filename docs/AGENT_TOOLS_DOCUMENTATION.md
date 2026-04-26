@@ -83,7 +83,7 @@ Fields: `id` (uuid), `workflow_id`, `name` (max 128), `description` (max 1000), 
 
 - **Database**: SurrealDB with HNSW vector indexing (1024D)
 - **Search**: Composite scoring -- `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`
-- **Embedding**: Multi-provider abstraction (`src-tauri/src/llm/embedding.rs`) -- Mistral (1024D), Ollama (768D/1024D)
+- **Embedding**: Multi-provider abstraction (`src-tauri/src/llm/embedding/`) -- Mistral (1024D), Ollama (768D/1024D)
 
 ### Operations
 

@@ -102,9 +102,9 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 **Decision**: `anyhow` + `thiserror` combined.
 
 **Rationale**:
-- `anyhow` for application code (commands, propagation with `.context()`)
-- `thiserror` for library code (agents, mcp, tools) with typed public errors
-- IPC boundary: errors converted to user-friendly strings, never stack traces in UI
+- `anyhow` for application code (agents, tools, commands; propagation with `.context()`)
+- `thiserror` for typed public errors in `llm` (LLMError, embedding error). `mcp` exposes a typed `MCPError` enum with manual Display impl
+- IPC boundary: errors converted to user-friendly strings, never stack traces in UI (commands return `Result<T, String>`)
 - Recovery strategy: graceful degradation, no `panic!` in production, workflow pause on critical error
 
 ---

@@ -76,7 +76,7 @@ See `src/lib/stores/agents.ts` for frontend store implementation.
 | `Report` | Output | task_id, status (Success/Failed), content (markdown), metrics |
 | `ReportMetrics` | Metrics | duration_ms, tokens, tools_used, mcp_calls, tool_executions |
 
-**LLMAgent constructors**: `with_tools` (basic tools), `with_factory` (custom factory), `with_context` (primary agent with sub-agent tools).
+**LLMAgent constructors**: `with_factory` (custom factory, used by sub-agents), `with_context` (primary agent with sub-agent tools).
 
 See `src-tauri/src/agents/` for implementation.
 

@@ -192,7 +192,7 @@ Three provider types with unified interface:
 - **Backend**: 1000+ Rust tests (lib target)
 - **Frontend**: 280+ Vitest unit tests
 - **E2E**: Playwright (available, not counted in totals)
-- **Total**: ~1,368 automated tests
+- **Total**: 1,400+ automated tests (run `cargo test --lib && npm run test` for the current count)
 
 ## Build & Release
 
