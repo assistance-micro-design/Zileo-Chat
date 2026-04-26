@@ -18,11 +18,70 @@
 //! Access is restricted to skills assigned to the agent.
 
 use crate::db::DBClient;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tracing::{debug, info, warn};
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+    id: "ReadSkillTool".to_string(),
+    name: "ReadSkill".to_string(),
+    summary: "Read skill documents containing instructions and context".to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Reads skill documents containing instructions and context.",
+    )
+    .use_when(&[
+        "You need to follow specific instructions or conventions for a task",
+        "A skill is listed in your available skills and is relevant to your current task",
+    ])
+    .do_not_use(&[
+        "The task does not match any assigned skill",
+        "You already have the needed context (avoid re-reading the same skill)",
+    ])
+    .operations(&[
+        ("list", "List available skills (name + description)"),
+        (
+            "read",
+            "Read the full content of a skill by name (default operation)",
+        ),
+    ])
+    .examples(&[
+        json!({"operation": "list"}),
+        json!({"operation": "read", "name": "coding-standards"}),
+    ])
+    .build(),
+    input_schema: json!({
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "enum": ["read", "list"],
+                "default": "read",
+                "description": "Operation: 'read' to get skill content, 'list' to see available skills"
+            },
+            "name": {
+                "type": "string",
+                "description": "Name of the skill to read (required for 'read' operation)"
+            }
+        }
+    }),
+    output_schema: json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "category": {"type": "string"},
+            "content": {"type": "string"},
+            "skills": {"type": "array"},
+            "message": {"type": "string"}
+        }
+    }),
+    requires_confirmation: false,
+});
 
 /// Tool that allows agents to read their assigned skill documents.
 ///
@@ -139,57 +198,12 @@ impl ReadSkillTool {
 
 #[async_trait]
 impl Tool for ReadSkillTool {
+    fn id(&self) -> &str {
+        "ReadSkillTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "ReadSkillTool".to_string(),
-            name: "ReadSkill".to_string(),
-            summary: "Read skill documents containing instructions and context".to_string(),
-            description: r#"Reads skill documents containing instructions and context.
-
-USE THIS TOOL WHEN:
-- You need to follow specific instructions or conventions for a task
-- A skill is listed in your available skills and is relevant to your current task
-
-OPERATIONS:
-- "list": List all available skills (name + description)
-- "read" (default): Read the full content of a skill by name
-
-EXAMPLES:
-1. List: {"operation": "list"}
-2. Read: {"name": "coding-standards"}"#
-                .to_string(),
-
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["read", "list"],
-                        "default": "read",
-                        "description": "Operation: 'read' to get skill content, 'list' to see available skills"
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Name of the skill to read (required for 'read' operation)"
-                    }
-                }
-            }),
-
-            output_schema: json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "name": {"type": "string"},
-                    "description": {"type": "string"},
-                    "category": {"type": "string"},
-                    "content": {"type": "string"},
-                    "skills": {"type": "array"},
-                    "message": {"type": "string"}
-                }
-            }),
-
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {

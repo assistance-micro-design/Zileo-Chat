@@ -243,10 +243,7 @@ pub(crate) async fn execute_function_call(
         }
     } else {
         // Execute local tool
-        let matching_tool = ctx
-            .local_tools
-            .iter()
-            .find(|t| t.definition().id == call.name);
+        let matching_tool = ctx.local_tools.iter().find(|t| t.id() == call.name);
 
         if let Some(tool) = matching_tool {
             tools_used.push(call.name.clone());
@@ -327,11 +324,8 @@ pub(crate) async fn execute_function_call(
                 }
             }
         } else {
-            let available_tools: Vec<String> = ctx
-                .local_tools
-                .iter()
-                .map(|t| t.definition().id.clone())
-                .collect();
+            let available_tools: Vec<String> =
+                ctx.local_tools.iter().map(|t| t.id().to_string()).collect();
 
             FunctionCallResult::failure(
                 &call.id,

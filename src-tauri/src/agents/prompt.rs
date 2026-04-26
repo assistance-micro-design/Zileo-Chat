@@ -184,15 +184,23 @@ pub(crate) fn build_system_prompt_with_tools(
         }
     }
 
-    // MCP tools: full description (short descriptions, no duplication issue)
+    // MCP tools: summary (first sentence) only — the full description is
+    // already sent through the API `tools` parameter. Sending it twice in
+    // the system prompt was wasteful and broke prompt cache stability.
     if !mcp_tools.is_empty() {
         tools_context.push_str("\n### MCP Tools (Direct Access)\n");
         tools_context
             .push_str("MCP tools use the naming format `mcp__server__tool`. Use them directly.\n");
         for (server_name, tool) in mcp_tools {
+            let summary = tool
+                .description
+                .split_once('.')
+                .map(|(first, _)| first.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| tool.description.clone());
             tools_context.push_str(&format!(
                 "- **mcp__{}__{}**: {}\n",
-                server_name, tool.name, tool.description
+                server_name, tool.name, summary
             ));
         }
     }
@@ -339,5 +347,93 @@ mod tests {
         assert!(!REPORT_ENFORCEMENT_PROMPT.is_empty());
         assert!(REPORT_ENFORCEMENT_PROMPT.contains("markdown"));
         assert!(REPORT_ENFORCEMENT_PROMPT.contains("report"));
+    }
+
+    #[test]
+    fn test_mcp_tools_use_summary_in_system_prompt() {
+        use crate::models::mcp::MCPTool;
+        use crate::models::{AgentConfig, LLMConfig};
+
+        let config = AgentConfig {
+            id: "agent-1".to_string(),
+            name: "Test".to_string(),
+            lifecycle: crate::models::Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Test".to_string(),
+                model: "test-model".to_string(),
+                temperature: 0.7,
+                max_tokens: 100,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: false,
+            system_prompt: "Base prompt.".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+        };
+
+        let mcp_tool = MCPTool {
+            name: "search".to_string(),
+            description: "Searches the web for relevant pages. \
+                          Returns up to 10 results ranked by relevance, \
+                          with titles, URLs, and snippets."
+                .to_string(),
+            input_schema: serde_json::json!({}),
+        };
+        let mcp_tools = vec![("brave".to_string(), mcp_tool)];
+
+        let prompt = build_system_prompt_with_tools(&config, &[], &mcp_tools, &[], None, false);
+
+        // Should contain the summary (first sentence)
+        assert!(prompt.contains("Searches the web for relevant pages"));
+        // Should NOT contain the rest of the description (verbose payload)
+        assert!(!prompt.contains("Returns up to 10 results"));
+        assert!(!prompt.contains("titles, URLs, and snippets"));
+        // Format check
+        assert!(prompt.contains("- **mcp__brave__search**:"));
+    }
+
+    #[test]
+    fn test_mcp_tool_without_period_falls_back_to_full_description() {
+        use crate::models::mcp::MCPTool;
+        use crate::models::{AgentConfig, LLMConfig};
+
+        let config = AgentConfig {
+            id: "agent-1".to_string(),
+            name: "Test".to_string(),
+            lifecycle: crate::models::Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Test".to_string(),
+                model: "test-model".to_string(),
+                temperature: 0.7,
+                max_tokens: 100,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: false,
+            system_prompt: "Base prompt.".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+        };
+
+        let mcp_tool = MCPTool {
+            name: "ping".to_string(),
+            description: "Sends a ping".to_string(),
+            input_schema: serde_json::json!({}),
+        };
+        let mcp_tools = vec![("net".to_string(), mcp_tool)];
+
+        let prompt = build_system_prompt_with_tools(&config, &[], &mcp_tools, &[], None, false);
+
+        // No period: should fall back to the full description.
+        assert!(prompt.contains("- **mcp__net__ping**: Sends a ping"));
     }
 }

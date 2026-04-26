@@ -14,47 +14,46 @@
 
 //! Tool definition (schema + LLM description) for the MemoryTool.
 
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::ToolDefinition;
+use std::sync::LazyLock;
 
-/// Builds the ToolDefinition for MemoryTool.
-///
-/// This is extracted from the `Tool::definition()` trait method to keep
-/// the main tool.rs file focused on struct + dispatch logic.
-pub fn build_definition() -> ToolDefinition {
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     ToolDefinition {
-        id: "MemoryTool".to_string(),
-        name: "Memory Manager".to_string(),
-        summary: "Store, search, and retrieve persistent memories by semantic similarity"
-            .to_string(),
-        description: r#"Manages persistent memory for contextual awareness and knowledge retrieval.
-
-USE THIS TOOL WHEN:
-- You need to store important information for future reference
-- You want to search past memories by semantic similarity
-- You need to maintain context across conversations
-- You want to organize knowledge by type (user_pref, context, knowledge, decision)
-
-DO NOT USE THIS TOOL WHEN:
-- Information is only relevant to the current message (use conversation context)
-- Storing duplicate content already in memory (search first)
-- For temporary calculations or intermediate values
-
-OPERATIONS:
-- describe: Overview of available memories (counts, types, tags)
-- add: Store new memory (type required: user_pref, context, knowledge, decision)
-- get: Retrieve specific memory by ID
-- list: View memories with optional type filter and scope
-- search: Find semantically similar memories via vector search
-- delete: Remove a memory
-- clear_by_type: Bulk delete all memories of a specific type
-
-EXAMPLES:
-1. Describe: {"operation": "describe"}
-2. Search: {"operation": "search", "query": "vector database indexing", "limit": 5}
-3. Add: {"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}"#
-            .to_string(),
-
-        input_schema: serde_json::json!({
+    id: "MemoryTool".to_string(),
+    name: "Memory Manager".to_string(),
+    summary: "Store, search, and retrieve persistent memories by semantic similarity"
+        .to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Manages persistent memory for contextual awareness and knowledge retrieval.",
+    )
+    .use_when(&[
+        "You need to store important information for future reference",
+        "You want to search past memories by semantic similarity",
+        "You need to maintain context across conversations",
+        "You want to organize knowledge by type (user_pref, context, knowledge, decision)",
+    ])
+    .do_not_use(&[
+        "Information is only relevant to the current message (use conversation context)",
+        "Storing duplicate content already in memory (search first)",
+        "For temporary calculations or intermediate values",
+    ])
+    .operations(&[
+        ("describe", "Overview of available memories (counts, types, tags)"),
+        ("add", "Store new memory (type required: user_pref, context, knowledge, decision)"),
+        ("get", "Retrieve specific memory by ID"),
+        ("list", "View memories with optional type filter and scope"),
+        ("search", "Find semantically similar memories via vector search"),
+        ("delete", "Remove a memory"),
+        ("clear_by_type", "Bulk delete all memories of a specific type"),
+    ])
+    .examples(&[
+        serde_json::json!({"operation": "search", "query": "vector database indexing", "limit": 5}),
+        serde_json::json!({"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}),
+    ])
+    .build(),
+    input_schema: serde_json::json!({
             "type": "object",
             "properties": {
                 "operation": {
@@ -144,6 +143,11 @@ EXAMPLES:
             }
         }),
 
-        requires_confirmation: false,
-    }
+    requires_confirmation: false,
+}
+});
+
+/// Returns a clone of the cached `MemoryTool` definition.
+pub fn build_definition() -> ToolDefinition {
+    DEFINITION.clone()
 }

@@ -45,17 +45,91 @@ use crate::db::DBClient;
 use crate::mcp::MCPManager;
 use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
 use crate::tools::context::AgentToolContext;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
 use crate::tools::task_bridge::extract_task_ids;
-use crate::tools::utils::{resolve_agent_ref, sub_agent_description_template};
+use crate::tools::utils::resolve_agent_ref;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tauri::AppHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument};
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
+    id: "ParallelTasksTool".to_string(),
+    name: "Parallel Tasks".to_string(),
+    summary: "Execute multiple independent tasks in parallel across agents".to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Executes multiple tasks in parallel across different agents.",
+    )
+    .use_when(&[
+        "You need to run multiple independent analyses simultaneously",
+        "Tasks don't depend on each other and can run concurrently",
+    ])
+    .do_not_use(&[
+        "Tasks depend on each other's results (use sequential delegation instead)",
+        "You have only one task (use DelegateTaskTool instead)",
+    ])
+    .operations(&[(
+        "execute_batch",
+        "Run multiple tasks in parallel (max 3 per batch). Required: tasks (array of {agent_name or agent_id, prompt, optional task_ids})",
+    )])
+    .note(
+        "Note: Each agent receives its prompt + any assigned tasks in context. \
+         Use TodoTool to create tasks first, then pass their IDs via task_ids per task.",
+    )
+    .examples(&[
+        serde_json::json!({
+            "operation": "execute_batch",
+            "tasks": [
+                {"agent_name": "DB Agent", "prompt": "Analyze performance..."},
+                {"agent_name": "Security Agent", "prompt": "Review API security..."}
+            ]
+        }),
+    ])
+    .primary_agent_constraint(MAX_SUB_AGENTS)
+    .build(),
+
+    input_schema: parallel_tasks_input_schema(),
+
+    output_schema: serde_json::json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "completed": {"type": "integer"},
+            "failed": {"type": "integer"},
+            "results": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "agent_id": {"type": "string"},
+                        "success": {"type": "boolean"},
+                        "report": {"type": "string"},
+                        "error": {"type": "string"},
+                        "metrics": {
+                            "type": "object",
+                            "properties": {
+                                "duration_ms": {"type": "integer"},
+                                "tokens_input": {"type": "integer"},
+                                "tokens_output": {"type": "integer"}
+                            }
+                        }
+                    }
+                }
+            },
+            "aggregated_report": {"type": "string"}
+        }
+    }),
+
+    requires_confirmation: false,
+}
+});
 
 /// Task specification for parallel execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,67 +330,12 @@ impl ParallelTasksTool {
 
 #[async_trait]
 impl Tool for ParallelTasksTool {
+    fn id(&self) -> &str {
+        "ParallelTasksTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        let tool_specific_desc = r#"Executes multiple tasks in parallel across different agents.
-
-USE THIS TOOL WHEN:
-- You need to run multiple independent analyses simultaneously
-- Tasks don't depend on each other and can run concurrently
-
-DO NOT USE WHEN:
-- Tasks depend on each other's results (use sequential delegation instead)
-- You have only one task (use DelegateTaskTool instead)
-
-OPERATIONS:
-- execute_batch: Run multiple tasks in parallel (max 3 per batch)
-  Required: tasks (array of {agent_name or agent_id, prompt, optional task_ids})
-
-Note: Each agent receives its prompt + any assigned tasks in context. Use TodoTool to create tasks first, then pass their IDs via task_ids per task.
-
-EXAMPLES:
-1. Batch: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Analyze performance..."}, {"agent_name": "Security Agent", "prompt": "Review API security..."}]}
-2. With tasks: {"operation": "execute_batch", "tasks": [{"agent_name": "DB Agent", "prompt": "Complete assigned tasks", "task_ids": ["t1", "t2"]}]}"#;
-
-        ToolDefinition {
-            id: "ParallelTasksTool".to_string(),
-            name: "Parallel Tasks".to_string(),
-            summary: "Execute multiple independent tasks in parallel across agents".to_string(),
-            description: sub_agent_description_template(tool_specific_desc),
-
-            input_schema: parallel_tasks_input_schema(),
-
-            output_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "completed": {"type": "integer"},
-                    "failed": {"type": "integer"},
-                    "results": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "agent_id": {"type": "string"},
-                                "success": {"type": "boolean"},
-                                "report": {"type": "string"},
-                                "error": {"type": "string"},
-                                "metrics": {
-                                    "type": "object",
-                                    "properties": {
-                                        "duration_ms": {"type": "integer"},
-                                        "tokens_input": {"type": "integer"},
-                                        "tokens_output": {"type": "integer"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "aggregated_report": {"type": "string"}
-                }
-            }),
-
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     #[instrument(skip(self, input), fields(workflow_id = %self.workflow_id))]

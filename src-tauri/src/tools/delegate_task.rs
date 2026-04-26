@@ -44,19 +44,97 @@
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
+use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
 use crate::models::sub_agent::SubAgentStatus;
 use crate::tools::context::AgentToolContext;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::task_bridge::extract_task_ids;
-use crate::tools::utils::{resolve_agent_ref, sub_agent_description_template};
+use crate::tools::utils::resolve_agent_ref;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument};
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
+    id: "DelegateTaskTool".to_string(),
+    name: "Delegate Task".to_string(),
+    summary: "Delegate a task to an existing permanent LLM agent".to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Delegates tasks to existing permanent LLM agents.",
+    )
+    .use_when(&[
+        "You need a specialized permanent agent to handle a task",
+        "The task benefits from an agent's pre-configured expertise and tools",
+    ])
+    .do_not_use(&[
+        "You need custom tools or configuration (use SpawnAgentTool instead)",
+        "Simple single-step tasks that don't need agent expertise",
+    ])
+    .operations(&[
+        (
+            "delegate",
+            "Execute task via permanent agent (requires agent_name or agent_id + prompt, optional task_ids)",
+        ),
+        ("list_agents", "Show available agents for delegation"),
+    ])
+    .note(
+        "WARNING: LLM AGENTS ONLY - NOT MCP SERVERS:\n\
+         - Use agent_name (preferred) or agent_id (UUID) to identify the target agent\n\
+         - DO NOT use MCP server IDs here (e.g., \"mcp-xxx-7tj9p\")\n\
+         - For MCP tools, call them DIRECTLY: server_id:tool_name",
+    )
+    .note(
+        "Note: Delegated agents receive the prompt + any assigned tasks in context. \
+         Use TodoTool to create tasks first, then pass their IDs via task_ids.",
+    )
+    .examples(&[
+        serde_json::json!({
+            "operation": "delegate",
+            "agent_name": "Database Agent",
+            "prompt": "Analyze the users table..."
+        }),
+        serde_json::json!({
+            "operation": "delegate",
+            "agent_name": "DB Agent",
+            "prompt": "Complete these tasks",
+            "task_ids": ["task_1", "task_2"]
+        }),
+    ])
+    .primary_agent_constraint(MAX_SUB_AGENTS)
+    .build(),
+
+    input_schema: delegate_task_input_schema(),
+
+    output_schema: serde_json::json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "agent_id": {"type": "string"},
+            "report": {"type": "string"},
+            "metrics": {
+                "type": "object",
+                "properties": {
+                    "duration_ms": {"type": "integer"},
+                    "tokens_input": {"type": "integer"},
+                    "tokens_output": {"type": "integer"}
+                }
+            },
+            "count": {"type": "integer"},
+            "agents": {"type": "array"},
+            "remaining_slots": {"type": "integer"}
+        }
+    }),
+
+    requires_confirmation: false,
+}
+});
 
 /// Tracked delegation for this workflow
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,63 +316,12 @@ impl DelegateTaskTool {
 
 #[async_trait]
 impl Tool for DelegateTaskTool {
+    fn id(&self) -> &str {
+        "DelegateTaskTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        let tool_specific_desc = r#"Delegates tasks to existing permanent LLM agents.
-
-WARNING: LLM AGENTS ONLY - NOT MCP SERVERS:
-- Use agent_name (preferred) or agent_id (UUID) to identify the target agent
-- DO NOT use MCP server IDs here (e.g., "mcp-xxx-7tj9p")
-- For MCP tools, call them DIRECTLY: server_id:tool_name
-
-USE THIS TOOL WHEN:
-- You need a specialized permanent agent to handle a task
-- The task benefits from an agent's pre-configured expertise and tools
-
-DO NOT USE WHEN:
-- You need custom tools or configuration (use SpawnAgentTool instead)
-- Simple single-step tasks that don't need agent expertise
-
-OPERATIONS:
-- delegate: Execute task via permanent agent (requires agent_name or agent_id + prompt, optional task_ids)
-- list_agents: Show available agents for delegation
-
-Note: Delegated agents receive the prompt + any assigned tasks in context. Use TodoTool to create tasks first, then pass their IDs via task_ids.
-
-EXAMPLES:
-1. Delegate: {"operation": "delegate", "agent_name": "Database Agent", "prompt": "Analyze the users table..."}
-2. With tasks: {"operation": "delegate", "agent_name": "DB Agent", "prompt": "Complete these tasks", "task_ids": ["task_1", "task_2"]}
-3. List: {"operation": "list_agents"}"#;
-
-        ToolDefinition {
-            id: "DelegateTaskTool".to_string(),
-            name: "Delegate Task".to_string(),
-            summary: "Delegate a task to an existing permanent LLM agent".to_string(),
-            description: sub_agent_description_template(tool_specific_desc),
-
-            input_schema: delegate_task_input_schema(),
-
-            output_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "agent_id": {"type": "string"},
-                    "report": {"type": "string"},
-                    "metrics": {
-                        "type": "object",
-                        "properties": {
-                            "duration_ms": {"type": "integer"},
-                            "tokens_input": {"type": "integer"},
-                            "tokens_output": {"type": "integer"}
-                        }
-                    },
-                    "count": {"type": "integer"},
-                    "agents": {"type": "array"},
-                    "remaining_slots": {"type": "integer"}
-                }
-            }),
-
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     #[instrument(skip(self, input), fields(workflow_id = %self.workflow_id))]

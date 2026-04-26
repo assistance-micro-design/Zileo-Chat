@@ -275,35 +275,6 @@ pub fn safe_truncate(s: &str, max_chars: usize, ellipsis: bool) -> String {
     }
 }
 
-/// Generates common sub-agent tool description sections.
-///
-/// Returns a formatted string containing:
-/// - PRIMARY_AGENT_ONLY restriction notice
-/// - Sub-agent limit from constants
-/// - Response format specification
-///
-/// # Arguments
-/// * `tool_specific_text` - The tool-specific description to wrap
-///
-/// # Usage
-/// ```rust,ignore
-/// let description = sub_agent_description_template(
-///     "Spawns temporary sub-agents to execute tasks in parallel or sequence."
-/// );
-/// ```
-pub fn sub_agent_description_template(tool_specific_text: &str) -> String {
-    use crate::tools::constants::sub_agent::MAX_SUB_AGENTS;
-
-    format!(
-        r#"{}
-
-PRIMARY AGENT ONLY:
-- Only the primary/root agent can use this tool (max depth: 1)
-- Maximum {} sub-agent operations per workflow"#,
-        tool_specific_text, MAX_SUB_AGENTS
-    )
-}
-
 #[cfg(test)]
 #[path = "utils_tests.rs"]
 mod tests;

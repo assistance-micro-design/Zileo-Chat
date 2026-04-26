@@ -22,6 +22,7 @@ fn create_tool_with_dir(tmp: &TempDir) -> FileManagerTool {
     FileManagerTool {
         authorized_folders: authorized,
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     }
 }
 
@@ -30,6 +31,7 @@ fn test_validate_input_missing_operation() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
     let input = json!({});
     let result = tool.validate_input(&input);
@@ -42,6 +44,7 @@ fn test_validate_input_invalid_operation() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
     let input = json!({"operation": "invalid"});
     let result = tool.validate_input(&input);
@@ -97,6 +100,7 @@ fn test_validate_input_missing_required_params() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
 
     // Write without content
@@ -126,6 +130,7 @@ fn test_definition_empty_folders() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
     let def = tool.definition();
 
@@ -142,6 +147,7 @@ fn test_definition_with_folders() {
     let tool = FileManagerTool {
         authorized_folders: vec![PathBuf::from("/home/user/docs")],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
     let def = tool.definition();
 
@@ -767,6 +773,7 @@ async fn test_operation_outside_authorized() {
     let tool = FileManagerTool {
         authorized_folders: vec![canonical(&authorized_dir)],
         cleanup_done: AtomicBool::new(false),
+        cached_definition: std::sync::OnceLock::new(),
     };
 
     let result = tool

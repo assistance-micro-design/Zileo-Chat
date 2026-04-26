@@ -18,12 +18,130 @@
 //! Operation methods are in `operations.rs`.
 
 use crate::db::DBClient;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tauri::AppHandle;
 use tracing::debug;
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
+    id: "TodoTool".to_string(),
+    name: "Task Manager".to_string(),
+    summary: "Manage workflow tasks for decomposition and progress tracking".to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Manages workflow tasks for structured decomposition and progress tracking.",
+    )
+    .use_when(&[
+        "Breaking down a complex task into smaller, trackable steps",
+        "Tracking the status of a multi-step workflow",
+        "You need to report progress to the user",
+        "Reviewing tasks assigned to a sub-agent (primary agent only)",
+        "Reassigning tasks between agents (primary agent only)",
+    ])
+    .do_not_use(&[
+        "Simple, single-step task (just do it directly)",
+        "Tracking conversation state (use MemoryTool instead)",
+    ])
+    .operations(&[
+        ("create", "Create new task (name, optional description, priority 1-5)"),
+        ("get", "Get task details by ID"),
+        ("update_status", "Change status (pending/in_progress/completed/blocked)"),
+        ("list", "List tasks (optional status_filter). Sub-agents only see their own tasks."),
+        ("complete", "Mark task as completed with optional duration_ms"),
+        ("delete", "Remove a task"),
+        ("list_agent_tasks", "List tasks assigned to a specific agent with completion stats (primary only)"),
+        ("reassign_tasks", "Reassign tasks to a different agent (primary only)"),
+    ])
+    .examples(&[
+        serde_json::json!({"operation": "create", "name": "Analyze DB schema", "priority": 1}),
+        serde_json::json!({"operation": "complete", "task_id": "uuid", "duration_ms": 5000}),
+        serde_json::json!({"operation": "reassign_tasks", "task_ids": ["id1"], "agent_name": "Security Agent"}),
+    ])
+    .build(),
+    input_schema: serde_json::json!({
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "enum": ["create", "get", "update_status", "list", "complete", "delete", "list_agent_tasks", "reassign_tasks"],
+                "description": "Operation to perform"
+            },
+            "name": {
+                "type": "string",
+                "description": "Task name (for create)"
+            },
+            "description": {
+                "type": "string",
+                "description": "Task description (for create)"
+            },
+            "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "default": 3,
+                "description": "Priority 1-5 (1=critical)"
+            },
+            "dependencies": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IDs of tasks this depends on"
+            },
+            "task_id": {
+                "type": "string",
+                "description": "Task ID (for get/update/complete/delete)"
+            },
+            "status": {
+                "type": "string",
+                "enum": ["pending", "in_progress", "completed", "blocked"],
+                "description": "New status (for update_status)"
+            },
+            "status_filter": {
+                "type": "string",
+                "enum": ["pending", "in_progress", "completed", "blocked"],
+                "description": "Filter tasks by status (for list)"
+            },
+            "duration_ms": {
+                "type": "integer",
+                "description": "Execution duration in milliseconds (for complete)"
+            },
+            "agent_id": {
+                "type": "string",
+                "description": "Target agent ID or name (for list_agent_tasks). Either agent_id or agent_name required."
+            },
+            "agent_name": {
+                "type": "string",
+                "description": "Target agent name (for list_agent_tasks/reassign_tasks). Alternative to agent_id/new_agent_id."
+            },
+            "task_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Task IDs to reassign (for reassign_tasks)"
+            },
+            "new_agent_id": {
+                "type": "string",
+                "description": "New agent ID or name for reassignment (for reassign_tasks). Either new_agent_id or agent_name required."
+            }
+        },
+        "required": ["operation"]
+    }),
+    output_schema: serde_json::json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "task_id": {"type": "string"},
+            "task": {"type": "object"},
+            "tasks": {"type": "array"},
+            "count": {"type": "integer"},
+            "message": {"type": "string"}
+        }
+    }),
+    requires_confirmation: false,
+}
+});
 
 /// Tool for managing workflow tasks.
 ///
@@ -85,122 +203,13 @@ impl TodoTool {
 
 #[async_trait]
 impl Tool for TodoTool {
+    fn id(&self) -> &str {
+        "TodoTool"
+    }
+
     /// Returns the tool definition with LLM-friendly description.
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "TodoTool".to_string(),
-            name: "Task Manager".to_string(),
-            summary: "Manage workflow tasks for decomposition and progress tracking".to_string(),
-            description:
-                r#"Manages workflow tasks for structured decomposition and progress tracking.
-
-USE THIS TOOL WHEN:
-- Breaking down a complex task into smaller, trackable steps
-- Tracking the status of a multi-step workflow
-- You need to report progress to the user
-- Reviewing tasks assigned to a sub-agent (primary agent only)
-- Reassigning tasks between agents (primary agent only)
-
-DO NOT USE THIS TOOL WHEN:
-- Simple, single-step task (just do it directly)
-- Tracking conversation state (use MemoryTool instead)
-
-OPERATIONS:
-- create: Create new task (name, optional description, priority 1-5)
-- get: Get task details by ID
-- update_status: Change status (pending/in_progress/completed/blocked)
-- list: List tasks (optional status_filter). Sub-agents only see their own tasks.
-- complete: Mark task as completed with optional duration_ms
-- delete: Remove a task
-- list_agent_tasks: List tasks assigned to a specific agent with completion stats (primary only)
-- reassign_tasks: Reassign tasks to a different agent (primary only)
-
-EXAMPLES:
-1. Create: {"operation": "create", "name": "Analyze DB schema", "priority": 1}
-2. Start: {"operation": "update_status", "task_id": "uuid", "status": "in_progress"}
-3. Complete: {"operation": "complete", "task_id": "uuid", "duration_ms": 5000}
-4. Review: {"operation": "list_agent_tasks", "agent_name": "Database Agent"}
-5. Reassign: {"operation": "reassign_tasks", "task_ids": ["id1", "id2"], "agent_name": "Security Agent"}"#
-                    .to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["create", "get", "update_status", "list", "complete", "delete", "list_agent_tasks", "reassign_tasks"],
-                        "description": "Operation to perform"
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Task name (for create)"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Task description (for create)"
-                    },
-                    "priority": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 5,
-                        "default": 3,
-                        "description": "Priority 1-5 (1=critical)"
-                    },
-                    "dependencies": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "IDs of tasks this depends on"
-                    },
-                    "task_id": {
-                        "type": "string",
-                        "description": "Task ID (for get/update/complete/delete)"
-                    },
-                    "status": {
-                        "type": "string",
-                        "enum": ["pending", "in_progress", "completed", "blocked"],
-                        "description": "New status (for update_status)"
-                    },
-                    "status_filter": {
-                        "type": "string",
-                        "enum": ["pending", "in_progress", "completed", "blocked"],
-                        "description": "Filter tasks by status (for list)"
-                    },
-                    "duration_ms": {
-                        "type": "integer",
-                        "description": "Execution duration in milliseconds (for complete)"
-                    },
-                    "agent_id": {
-                        "type": "string",
-                        "description": "Target agent ID or name (for list_agent_tasks). Either agent_id or agent_name required."
-                    },
-                    "agent_name": {
-                        "type": "string",
-                        "description": "Target agent name (for list_agent_tasks/reassign_tasks). Alternative to agent_id/new_agent_id."
-                    },
-                    "task_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Task IDs to reassign (for reassign_tasks)"
-                    },
-                    "new_agent_id": {
-                        "type": "string",
-                        "description": "New agent ID or name for reassignment (for reassign_tasks). Either new_agent_id or agent_name required."
-                    }
-                },
-                "required": ["operation"]
-            }),
-            output_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "task_id": {"type": "string"},
-                    "task": {"type": "object"},
-                    "tasks": {"type": "array"},
-                    "count": {"type": "integer"},
-                    "message": {"type": "string"}
-                }
-            }),
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {

@@ -87,6 +87,10 @@ impl MemoryTool {
 
 #[async_trait]
 impl Tool for MemoryTool {
+    fn id(&self) -> &str {
+        "MemoryTool"
+    }
+
     /// Returns the tool definition with LLM-friendly description.
     fn definition(&self) -> ToolDefinition {
         build_definition()

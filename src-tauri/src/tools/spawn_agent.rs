@@ -36,19 +36,138 @@ use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
+use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
 use crate::models::sub_agent::SubAgentStatus;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{
-    context::AgentToolContext, utils::sub_agent_description_template, Tool, ToolDefinition,
-    ToolError, ToolFactory, ToolResult,
+    context::AgentToolContext, Tool, ToolDefinition, ToolError, ToolFactory, ToolResult,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tauri::AppHandle;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, instrument};
+
+/// Cached tool definition (built once, cloned per call).
+///
+/// `ToolFactory::basic_tools()` is read once at first access. The list is
+/// `Vec<&'static str>` so the formatted string is stable across the app's
+/// lifetime — providing a stable cache prefix for LLM providers.
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    let available_tools_str = ToolFactory::basic_tools().join(", ");
+
+    ToolDefinition {
+        id: "SpawnAgentTool".to_string(),
+        name: "Spawn Sub-Agent".to_string(),
+        summary: "Spawn a temporary sub-agent to execute a specialized task".to_string(),
+        description: ToolDescriptionBuilder::new(
+            "Spawns temporary sub-agents to execute specialized tasks.",
+        )
+        .use_when(&[
+            "You need to parallelize work across multiple specialized tasks",
+            "A task requires different tools or context than your current configuration",
+        ])
+        .do_not_use(&[
+            "Simple single-step tasks that don't benefit from delegation",
+            "You need shared state or conversation context between agents",
+        ])
+        .operations(&[
+            (
+                "spawn",
+                "Create and execute a temporary sub-agent (required: name, prompt; optional: system_prompt, tools, mcp_servers, provider, model)",
+            ),
+            ("list_children", "See spawned sub-agents and remaining slots"),
+            ("terminate", "Cancel a running sub-agent"),
+        ])
+        .note(format!(
+            "Available tools for sub-agents: {}\n\
+             Note: Sub-agents receive ONLY the prompt string. Include all necessary context.",
+            available_tools_str
+        ))
+        .examples(&[
+            serde_json::json!({
+                "operation": "spawn",
+                "name": "Analyst",
+                "prompt": "Analyze the users table schema...",
+                "tools": ["MemoryTool"]
+            }),
+            serde_json::json!({"operation": "list_children"}),
+        ])
+        .primary_agent_constraint(MAX_SUB_AGENTS)
+        .build(),
+
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["spawn", "list_children", "terminate"],
+                    "description": "Operation: 'spawn' creates temporary sub-agent, 'list_children' shows spawned agents and slots, 'terminate' cancels running sub-agent"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Sub-agent name (for spawn)"
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "COMPLETE prompt for sub-agent. Must include task, any data needed, and expected report format. This is the ONLY input the sub-agent receives."
+                },
+                "system_prompt": {
+                    "type": "string",
+                    "description": "Custom system prompt (optional, overrides default)"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tools for sub-agent (default: parent's tools without sub-agent tools)"
+                },
+                "mcp_servers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "MCP servers (default: parent's)"
+                },
+                "provider": {
+                    "type": "string",
+                    "description": "LLM provider (default: parent's)"
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Model ID (default: parent's)"
+                },
+                "child_id": {
+                    "type": "string",
+                    "description": "Child agent ID (for terminate)"
+                }
+            },
+            "required": ["operation"]
+        }),
+
+        output_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "child_id": {"type": "string"},
+                "report": {"type": "string"},
+                "metrics": {
+                    "type": "object",
+                    "properties": {
+                        "duration_ms": {"type": "integer"},
+                        "tokens_input": {"type": "integer"},
+                        "tokens_output": {"type": "integer"}
+                    }
+                },
+                "count": {"type": "integer"},
+                "children": {"type": "array"},
+                "message": {"type": "string"}
+            }
+        }),
+
+        requires_confirmation: false,
+    }
+});
 
 /// Optional configuration overrides for spawning a sub-agent.
 ///
@@ -190,110 +309,12 @@ impl SpawnAgentTool {
 
 #[async_trait]
 impl Tool for SpawnAgentTool {
+    fn id(&self) -> &str {
+        "SpawnAgentTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        // Get the list of available tools for documentation
-        let available_tools: Vec<&str> = ToolFactory::basic_tools();
-        let available_tools_str = available_tools.join(", ");
-
-        let tool_specific_desc = format!(
-            r#"Spawns temporary sub-agents to execute specialized tasks.
-
-USE THIS TOOL WHEN:
-- You need to parallelize work across multiple specialized tasks
-- A task requires different tools or context than your current configuration
-
-DO NOT USE WHEN:
-- Simple single-step tasks that don't benefit from delegation
-- You need shared state or conversation context between agents
-
-OPERATIONS:
-- spawn: Create and execute a temporary sub-agent (required: name, prompt; optional: system_prompt, tools, mcp_servers, provider, model)
-- list_children: See spawned sub-agents and remaining slots
-- terminate: Cancel a running sub-agent
-
-Available tools for sub-agents: {available_tools_str}
-Note: Sub-agents receive ONLY the prompt string. Include all necessary context.
-
-EXAMPLES:
-1. Spawn: {{"operation": "spawn", "name": "Analyst", "prompt": "Analyze the users table schema...", "tools": ["MemoryTool"]}}
-2. List: {{"operation": "list_children"}}"#,
-            available_tools_str = available_tools_str
-        );
-
-        ToolDefinition {
-            id: "SpawnAgentTool".to_string(),
-            name: "Spawn Sub-Agent".to_string(),
-            summary: "Spawn a temporary sub-agent to execute a specialized task".to_string(),
-            description: sub_agent_description_template(&tool_specific_desc),
-
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["spawn", "list_children", "terminate"],
-                        "description": "Operation: 'spawn' creates temporary sub-agent, 'list_children' shows spawned agents and slots, 'terminate' cancels running sub-agent"
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Sub-agent name (for spawn)"
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "COMPLETE prompt for sub-agent. Must include task, any data needed, and expected report format. This is the ONLY input the sub-agent receives."
-                    },
-                    "system_prompt": {
-                        "type": "string",
-                        "description": "Custom system prompt (optional, overrides default)"
-                    },
-                    "tools": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tools for sub-agent (default: parent's tools without sub-agent tools)"
-                    },
-                    "mcp_servers": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "MCP servers (default: parent's)"
-                    },
-                    "provider": {
-                        "type": "string",
-                        "description": "LLM provider (default: parent's)"
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Model ID (default: parent's)"
-                    },
-                    "child_id": {
-                        "type": "string",
-                        "description": "Child agent ID (for terminate)"
-                    }
-                },
-                "required": ["operation"]
-            }),
-
-            output_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "child_id": {"type": "string"},
-                    "report": {"type": "string"},
-                    "metrics": {
-                        "type": "object",
-                        "properties": {
-                            "duration_ms": {"type": "integer"},
-                            "tokens_input": {"type": "integer"},
-                            "tokens_output": {"type": "integer"}
-                        }
-                    },
-                    "count": {"type": "integer"},
-                    "children": {"type": "array"},
-                    "message": {"type": "string"}
-                }
-            }),
-
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     #[instrument(skip(self, input), fields(workflow_id = %self.workflow_id))]

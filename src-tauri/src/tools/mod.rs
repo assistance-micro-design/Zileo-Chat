@@ -56,6 +56,7 @@ pub mod constants;
 pub mod context;
 pub mod delegate_task;
 mod delegate_task_execution;
+pub mod description_builder;
 pub mod factory;
 mod factory_creation;
 pub mod file_manager;
@@ -204,10 +205,25 @@ impl From<String> for ToolError {
 ///
 /// # Implementation Guide
 ///
-/// 1. **definition()**: Return comprehensive metadata including JSON schemas
-/// 2. **execute()**: Handle all operations via operation dispatch
-/// 3. **validate_input()**: Validate against JSON schema before execution
-/// 4. Set `requires_confirmation: true` in ToolDefinition for destructive operations
+/// 1. **definition()**: Return comprehensive metadata including JSON schemas.
+///    Implementations should cache the `ToolDefinition` via
+///    `std::sync::LazyLock` (or `OnceLock` for instance-dependent
+///    definitions) and clone from the cache. A stable string returned by
+///    `definition()` is essential for prompt-cache hit rate on LLM
+///    providers that hash the `tools` parameter.
+/// 2. **id()**: Return the stable tool identifier — kept in sync with
+///    `definition().id`. Implemented as a constant slice for zero-cost
+///    lookup at call sites that only need the name.
+/// 3. **execute()**: Handle all operations via operation dispatch
+/// 4. **validate_input()**: Validate against JSON schema before execution
+/// 5. Set `requires_confirmation: true` in ToolDefinition for destructive operations
+///
+/// # Description Convention
+///
+/// Use [`description_builder::ToolDescriptionBuilder`] to assemble the
+/// `description` field. The builder enforces the documented convention
+/// (summary, USE/DON'T USE, OPERATIONS, optional notes, EXAMPLES, optional
+/// PRIMARY AGENT ONLY block).
 ///
 /// # Example Implementation
 ///
@@ -239,6 +255,13 @@ impl From<String> for ToolError {
 /// ```
 #[async_trait]
 pub trait Tool: Send + Sync {
+    /// Returns the tool's stable identifier.
+    ///
+    /// Must match `definition().id` for the same tool. Implemented as a
+    /// `&'static str` lookup so call sites that only need the identifier
+    /// (e.g. dispatch by name) avoid cloning the full `ToolDefinition`.
+    fn id(&self) -> &str;
+
     /// Returns tool definition with description for LLM.
     ///
     /// The description should clearly explain:

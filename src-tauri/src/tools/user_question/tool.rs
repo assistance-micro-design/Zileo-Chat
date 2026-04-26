@@ -19,15 +19,115 @@
 use crate::db::DBClient;
 use crate::models::QuestionOption;
 use crate::tools::constants::user_question as uq_const;
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::user_question::circuit_breaker::UserQuestionCircuitBreaker;
 use crate::tools::utils::{validate_length, validate_not_empty};
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 use tauri::AppHandle;
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
+    id: "UserQuestionTool".to_string(),
+    name: "User Question Tool".to_string(),
+    summary: "Ask the user a question and wait for their response".to_string(),
+    description: ToolDescriptionBuilder::new(
+        "Asks the user a question and waits for their response with configurable input types.",
+    )
+    .use_when(&[
+        "You need user input to proceed (clarification, choice, confirmation)",
+        "A decision cannot be made autonomously",
+        "Confirming potentially destructive or irreversible actions",
+    ])
+    .do_not_use(&[
+        "The answer is already in the conversation context",
+        "You can make a reasonable default choice",
+    ])
+    .operations(&[(
+        "ask",
+        "Present question to user and wait for response. Question types: checkbox (multiple choice), text (free-form), mixed (options + text)",
+    )])
+    .examples(&[
+        json!({
+            "operation": "ask",
+            "question": "Which database?",
+            "questionType": "checkbox",
+            "options": [{"id": "pg", "label": "PostgreSQL"}, {"id": "mysql", "label": "MySQL"}]
+        }),
+        json!({
+            "operation": "ask",
+            "question": "Select or describe:",
+            "questionType": "mixed",
+            "options": [{"id": "basic", "label": "Basic"}],
+            "textPlaceholder": "Custom..."
+        }),
+    ])
+    .build(),
+    input_schema: json!({
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "enum": ["ask"],
+                "description": "Operation: 'ask' presents question to user and waits for response"
+            },
+            "question": {
+                "type": "string",
+                "description": "The question to ask the user"
+            },
+            "questionType": {
+                "type": "string",
+                "enum": ["checkbox", "text", "mixed"],
+                "description": "Type of question: checkbox (multiple choice), text (free text), or mixed (both)"
+            },
+            "options": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "label": { "type": "string" }
+                    },
+                    "required": ["id", "label"]
+                },
+                "description": "Options for checkbox/mixed type questions"
+            },
+            "textPlaceholder": {
+                "type": "string",
+                "description": "Placeholder text for the text input"
+            },
+            "textRequired": {
+                "type": "boolean",
+                "default": false,
+                "description": "Whether text response is required (for mixed type)"
+            },
+            "context": {
+                "type": "string",
+                "description": "Additional context to display to the user"
+            }
+        },
+        "required": ["operation", "question", "questionType"]
+    }),
+    output_schema: json!({
+        "type": "object",
+        "properties": {
+            "success": { "type": "boolean" },
+            "selectedOptions": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "textResponse": { "type": "string" },
+            "message": { "type": "string" }
+        }
+    }),
+    requires_confirmation: false,
+}
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AskInput {
@@ -181,90 +281,12 @@ impl UserQuestionTool {
 
 #[async_trait]
 impl Tool for UserQuestionTool {
+    fn id(&self) -> &str {
+        "UserQuestionTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "UserQuestionTool".to_string(),
-            name: "User Question Tool".to_string(),
-            summary: "Ask the user a question and wait for their response".to_string(),
-            description: r#"Asks the user a question and waits for their response with configurable input types.
-
-USE THIS TOOL WHEN:
-- You need user input to proceed (clarification, choice, confirmation)
-- A decision cannot be made autonomously
-- Confirming potentially destructive or irreversible actions
-
-DO NOT USE THIS TOOL WHEN:
-- The answer is already in the conversation context
-- You can make a reasonable default choice
-
-OPERATIONS:
-- ask: Present question to user and wait for response
-  Question types: checkbox (multiple choice), text (free-form), mixed (options + text)
-
-EXAMPLES:
-1. Checkbox: {"operation": "ask", "question": "Which database?", "questionType": "checkbox", "options": [{"id": "pg", "label": "PostgreSQL"}, {"id": "mysql", "label": "MySQL"}]}
-2. Text: {"operation": "ask", "question": "API endpoint name?", "questionType": "text", "textPlaceholder": "e.g., /api/v1/users"}
-3. Mixed: {"operation": "ask", "question": "Select or describe:", "questionType": "mixed", "options": [{"id": "basic", "label": "Basic"}], "textPlaceholder": "Custom..."}"#
-                .to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["ask"],
-                        "description": "Operation: 'ask' presents question to user and waits for response"
-                    },
-                    "question": {
-                        "type": "string",
-                        "description": "The question to ask the user"
-                    },
-                    "questionType": {
-                        "type": "string",
-                        "enum": ["checkbox", "text", "mixed"],
-                        "description": "Type of question: checkbox (multiple choice), text (free text), or mixed (both)"
-                    },
-                    "options": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": { "type": "string" },
-                                "label": { "type": "string" }
-                            },
-                            "required": ["id", "label"]
-                        },
-                        "description": "Options for checkbox/mixed type questions"
-                    },
-                    "textPlaceholder": {
-                        "type": "string",
-                        "description": "Placeholder text for the text input"
-                    },
-                    "textRequired": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Whether text response is required (for mixed type)"
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Additional context to display to the user"
-                    }
-                },
-                "required": ["operation", "question", "questionType"]
-            }),
-            output_schema: json!({
-                "type": "object",
-                "properties": {
-                    "success": { "type": "boolean" },
-                    "selectedOptions": {
-                        "type": "array",
-                        "items": { "type": "string" }
-                    },
-                    "textResponse": { "type": "string" },
-                    "message": { "type": "string" }
-                }
-            }),
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {

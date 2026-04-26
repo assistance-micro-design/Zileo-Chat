@@ -17,10 +17,84 @@
 //! Operation methods (unary, binary, constant) are in `operations.rs`.
 
 use crate::tools::constants::calculator::{BINARY_OPS, UNARY_OPS};
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 use tracing::debug;
+
+/// Cached tool definition (built once, cloned per call).
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+    id: "CalculatorTool".to_string(),
+    name: "Scientific Calculator".to_string(),
+    summary: "Perform mathematical calculations (arithmetic, trigonometry, logarithms)".to_string(),
+    description: ToolDescriptionBuilder::new("Performs mathematical calculations for agents.")
+        .use_when(&[
+            "You need arithmetic, trigonometry, logarithms, or exponentials",
+            "You need mathematical constants (PI, E, TAU)",
+            "You need angle conversion (degrees/radians)",
+        ])
+        .do_not_use(&[
+            "The calculation is trivial mental math (2+2)",
+            "Working with complex/imaginary numbers (not supported)",
+        ])
+        .operations_raw(
+            "- Unary (require \"value\"): sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, \
+             sqrt, cbrt, exp, exp2, ln, log10, abs, sign, floor, ceil, round, trunc, degrees, \
+             radians\n\
+             - Binary (require \"a\" and \"b\"): add, subtract, multiply, divide, modulo, pow, \
+             log, min, max, atan2, nroot\n\
+             - Constants (require \"name\"): pi, e, tau, sqrt2, ln2, ln10",
+        )
+        .examples(&[
+            json!({"operation": "sin", "value": 0.5}),
+            json!({"operation": "add", "a": 10, "b": 5}),
+            json!({"operation": "constant", "name": "pi"}),
+        ])
+        .build(),
+    input_schema: json!({
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "description": "Operation: unary (sin/cos/tan/sqrt/exp/ln/abs/floor/ceil/round/degrees/radians), binary (add/subtract/multiply/divide/pow/log/min/max), or 'constant' (pi/e/tau)"
+            },
+            "value": {
+                "type": "number",
+                "description": "Input value for unary operations"
+            },
+            "a": {
+                "type": "number",
+                "description": "First operand for binary operations"
+            },
+            "b": {
+                "type": "number",
+                "description": "Second operand for binary operations"
+            },
+            "name": {
+                "type": "string",
+                "enum": ["pi", "e", "tau", "sqrt2", "ln2", "ln10"],
+                "description": "Constant name (for 'constant' operation)"
+            }
+        },
+        "required": ["operation"]
+    }),
+    output_schema: json!({
+        "type": "object",
+        "properties": {
+            "success": {"type": "boolean"},
+            "operation": {"type": "string"},
+            "result": {"type": "number"},
+            "message": {"type": "string"},
+            "a": {"type": "number"},
+            "b": {"type": "number"},
+            "value": {"type": "number"},
+            "name": {"type": "string"}
+        }
+    }),
+    requires_confirmation: false,
+});
 
 /// Scientific calculator tool for agents.
 ///
@@ -53,78 +127,12 @@ impl Default for CalculatorTool {
 
 #[async_trait]
 impl Tool for CalculatorTool {
+    fn id(&self) -> &str {
+        "CalculatorTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            id: "CalculatorTool".to_string(),
-            name: "Scientific Calculator".to_string(),
-            summary: "Perform mathematical calculations (arithmetic, trigonometry, logarithms)"
-                .to_string(),
-            description: r#"Performs mathematical calculations for agents.
-
-USE THIS TOOL WHEN:
-- You need arithmetic, trigonometry, logarithms, or exponentials
-- You need mathematical constants (PI, E, TAU)
-- You need angle conversion (degrees/radians)
-
-DO NOT USE THIS TOOL WHEN:
-- The calculation is trivial mental math (2+2)
-- Working with complex/imaginary numbers (not supported)
-
-OPERATIONS:
-- Unary (require "value"): sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, cbrt, exp, exp2, ln, log10, abs, sign, floor, ceil, round, trunc, degrees, radians
-- Binary (require "a" and "b"): add, subtract, multiply, divide, modulo, pow, log, min, max, atan2, nroot
-- Constants (require "name"): pi, e, tau, sqrt2, ln2, ln10
-
-EXAMPLES:
-1. Sine: {"operation": "sin", "value": 1.5708}
-2. Add: {"operation": "add", "a": 10, "b": 5}
-3. Constant: {"operation": "constant", "name": "pi"}"#
-                .to_string(),
-
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "description": "Operation: unary (sin/cos/tan/sqrt/exp/ln/abs/floor/ceil/round/degrees/radians), binary (add/subtract/multiply/divide/pow/log/min/max), or 'constant' (pi/e/tau)"
-                    },
-                    "value": {
-                        "type": "number",
-                        "description": "Input value for unary operations"
-                    },
-                    "a": {
-                        "type": "number",
-                        "description": "First operand for binary operations"
-                    },
-                    "b": {
-                        "type": "number",
-                        "description": "Second operand for binary operations"
-                    },
-                    "name": {
-                        "type": "string",
-                        "enum": ["pi", "e", "tau", "sqrt2", "ln2", "ln10"],
-                        "description": "Constant name (for 'constant' operation)"
-                    }
-                },
-                "required": ["operation"]
-            }),
-
-            output_schema: json!({
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean"},
-                    "operation": {"type": "string"},
-                    "result": {"type": "number"},
-                    "message": {"type": "string"},
-                    "a": {"type": "number"},
-                    "b": {"type": "number"},
-                    "value": {"type": "number"},
-                    "name": {"type": "string"}
-                }
-            }),
-
-            requires_confirmation: false,
-        }
+        DEFINITION.clone()
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {

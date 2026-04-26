@@ -18,12 +18,14 @@
 //! This file contains only the struct, constructor, trash cleanup,
 //! the `Tool` trait implementation (definition, execute, validate_input).
 
+use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::file_manager::trash_management::cleanup_trash;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use tracing::warn;
 
 /// FileManager tool for sandboxed filesystem operations.
@@ -33,6 +35,9 @@ use tracing::warn;
 pub struct FileManagerTool {
     pub(crate) authorized_folders: Vec<PathBuf>,
     pub(crate) cleanup_done: AtomicBool,
+    /// Per-instance cache for the tool definition: the description embeds
+    /// `authorized_folders` so it cannot be stored in a static `LazyLock`.
+    pub(crate) cached_definition: OnceLock<ToolDefinition>,
 }
 
 impl FileManagerTool {
@@ -47,6 +52,7 @@ impl FileManagerTool {
         Self {
             authorized_folders,
             cleanup_done: AtomicBool::new(false),
+            cached_definition: OnceLock::new(),
         }
     }
 
@@ -74,80 +80,14 @@ impl FileManagerTool {
 
 #[async_trait]
 impl Tool for FileManagerTool {
+    fn id(&self) -> &str {
+        "FileManagerTool"
+    }
+
     fn definition(&self) -> ToolDefinition {
-        let folders_list: Vec<String> = self
-            .authorized_folders
-            .iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect();
-        let folders_desc = if folders_list.is_empty() {
-            "No authorized directories configured.".to_string()
-        } else {
-            format!("Authorized directories: {}", folders_list.join(", "))
-        };
-
-        ToolDefinition {
-            id: "FileManagerTool".to_string(),
-            name: "File Manager".to_string(),
-            summary: "Read, write, search, and organize files within authorized directories"
-                .to_string(),
-            description: format!(
-                r#"Manages files within authorized directories with sandboxed access.
-
-USE THIS TOOL WHEN:
-- You need to read, write, or modify files for the user
-- You need to search for files by name pattern or content
-- You need to organize files (move, rename, delete)
-
-DO NOT USE THIS TOOL WHEN:
-- The path is outside authorized directories (will be rejected)
-- You need to execute files (use appropriate tool instead)
-
-OPERATIONS:
-- list: List directory contents
-- read: Read file content (with optional offset/limit)
-- write: Create or overwrite a file
-- replace: Replace text in a file (old_text -> new_text)
-- create: Create a new empty file or directory
-- delete: Move to trash (.zileo-trash/)
-- move: Move file to another authorized directory
-- rename: Rename file in place
-- search_glob: Find files matching a glob pattern
-- search_content: Search text content across files
-
-EXAMPLES:
-1. List: {{"operation": "list", "path": "/project/src"}}
-2. Read: {{"operation": "read", "path": "/project/main.rs"}}
-3. Search: {{"operation": "search_content", "path": "/project", "pattern": "TODO"}}
-
-{}"#,
-                folders_desc
-            ),
-            input_schema: json!({
-                "type": "object",
-                "required": ["operation"],
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "enum": ["list", "read", "write", "replace", "create", "delete",
-                                 "move", "rename", "search_glob", "search_content"]
-                    },
-                    "path": { "type": "string", "description": "File or directory path" },
-                    "content": { "type": "string", "description": "File content for write/create" },
-                    "destination": { "type": "string", "description": "Destination path for move" },
-                    "new_name": { "type": "string", "description": "New name for rename" },
-                    "pattern": { "type": "string", "description": "Search pattern (glob or text/regex)" },
-                    "replacement": { "type": "string", "description": "Replacement text for replace" },
-                    "is_regex": { "type": "boolean", "description": "Whether pattern is regex (for replace/search_content)" },
-                    "recursive": { "type": "boolean", "description": "Recursive listing/search" },
-                    "max_results": { "type": "integer", "description": "Max results (default: 500 for list, 100 for search)" },
-                    "context_lines": { "type": "integer", "description": "Context lines for search_content (default: 3, max: 10)" },
-                    "create_type": { "type": "string", "enum": ["file", "directory"], "description": "Type to create" }
-                }
-            }),
-            output_schema: json!({"type": "object"}),
-            requires_confirmation: false,
-        }
+        self.cached_definition
+            .get_or_init(|| build_definition(&self.authorized_folders))
+            .clone()
     }
 
     async fn execute(&self, input: Value) -> ToolResult<Value> {
@@ -209,6 +149,80 @@ EXAMPLES:
         }
 
         validate_required_params(operation, input)
+    }
+}
+
+/// Builds the tool definition with the per-instance authorized folders.
+fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
+    let folders_list: Vec<String> = authorized_folders
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    let folders_desc = if folders_list.is_empty() {
+        "No authorized directories configured.".to_string()
+    } else {
+        format!("Authorized directories: {}", folders_list.join(", "))
+    };
+
+    ToolDefinition {
+        id: "FileManagerTool".to_string(),
+        name: "File Manager".to_string(),
+        summary: "Read, write, search, and organize files within authorized directories"
+            .to_string(),
+        description: ToolDescriptionBuilder::new(
+            "Manages files within authorized directories with sandboxed access.",
+        )
+        .use_when(&[
+            "You need to read, write, or modify files for the user",
+            "You need to search for files by name pattern or content",
+            "You need to organize files (move, rename, delete)",
+        ])
+        .do_not_use(&[
+            "The path is outside authorized directories (will be rejected)",
+            "You need to execute files (use appropriate tool instead)",
+        ])
+        .operations(&[
+            ("list", "List directory contents"),
+            ("read", "Read file content (with optional offset/limit)"),
+            ("write", "Create or overwrite a file"),
+            ("replace", "Replace text in a file (old_text -> new_text)"),
+            ("create", "Create a new empty file or directory"),
+            ("delete", "Move to trash (.zileo-trash/)"),
+            ("move", "Move file to another authorized directory"),
+            ("rename", "Rename file in place"),
+            ("search_glob", "Find files matching a glob pattern"),
+            ("search_content", "Search text content across files"),
+        ])
+        .note(&folders_desc)
+        .examples(&[
+            json!({"operation": "list", "path": "/project/src"}),
+            json!({"operation": "search_content", "path": "/project", "pattern": "TODO"}),
+        ])
+        .build(),
+        input_schema: json!({
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": ["list", "read", "write", "replace", "create", "delete",
+                             "move", "rename", "search_glob", "search_content"]
+                },
+                "path": { "type": "string", "description": "File or directory path" },
+                "content": { "type": "string", "description": "File content for write/create" },
+                "destination": { "type": "string", "description": "Destination path for move" },
+                "new_name": { "type": "string", "description": "New name for rename" },
+                "pattern": { "type": "string", "description": "Search pattern (glob or text/regex)" },
+                "replacement": { "type": "string", "description": "Replacement text for replace" },
+                "is_regex": { "type": "boolean", "description": "Whether pattern is regex (for replace/search_content)" },
+                "recursive": { "type": "boolean", "description": "Recursive listing/search" },
+                "max_results": { "type": "integer", "description": "Max results (default: 500 for list, 100 for search)" },
+                "context_lines": { "type": "integer", "description": "Context lines for search_content (default: 3, max: 10)" },
+                "create_type": { "type": "string", "enum": ["file", "directory"], "description": "Type to create" }
+            }
+        }),
+        output_schema: json!({"type": "object"}),
+        requires_confirmation: false,
     }
 }
 
