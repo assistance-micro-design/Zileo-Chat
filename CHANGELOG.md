@@ -5,6 +5,25 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-04-26
+
+### Fixed
+
+- **Multi-turn conversation continuation**: Two compounding bugs broke conversation history end-to-end. (1) `load_conversation_history` only injected `conversation_messages` when a `system` row existed in the DB, but `system` rows are persisted by the frontend `catch{}` branch as error notifications -- never as real system prompts -- so regular continuations had no memory. (2) `execute_with_tools` then re-appended `task.description` on top of an already-complete history (the frontend persists the user turn before streaming), duplicating the last user message, while reusing a stale system prompt from the first turn. Fix: trigger continuation on any non-empty history, filter `system` rows at the SQL level, extract `build_initial_messages`, regenerate the system prompt every turn against live agent config (tools, MCP servers, locale, current date), and replay persisted history as-is without re-appending the description
+- **Tokio runtime-in-runtime panic on app exit (#110)**: `RunEvent::ExitRequested` ran `tauri::async_runtime::block_on` from inside the `#[tokio::main]` runtime, panicking on shutdown. Replaced with `api.prevent_exit()` + `tauri::async_runtime::spawn` + `AtomicBool` re-entry guard so MCP shutdown completes asynchronously before `app_handle.exit(0)`
+
+### Changed
+
+- **Typed `ToolDescriptionBuilder`**: Replaces the previous string-concatenation pattern across all local tools with a typed builder (`Tool::id()` + structured sections), making tool descriptions consistent and reducing boilerplate
+- **MCP server summaries**: First-sentence extraction normalized so MCP tools surface a single-line `summary` field in the system prompt (no description duplication)
+- **Dropped ~1.4k LOC of dead code (#109)**: Removed unused functions, structs, and enum variants flagged during the senior review; wired MCP shutdown on app exit (the change that introduced the tokio panic later fixed in #110)
+
+### Documentation
+
+- Synced `AGENT_TOOLS_DOCUMENTATION`, `API_REFERENCE`, `MULTI_AGENT_ARCHITECTURE`, `WORKFLOW_ORCHESTRATION`, `README`, and `TECH_STACK` with the new conversation flow (`build_initial_messages`, system rows filtering), expanded TodoTool/MemoryTool operation lists, and current dependency versions (vite 7.3.2, dompurify 3.4.1)
+
+---
+
 ## [0.20.0] - 2026-04-25
 
 ### Added
@@ -658,7 +677,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.1
 [0.20.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.0
 [0.19.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.1
 [0.19.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.0

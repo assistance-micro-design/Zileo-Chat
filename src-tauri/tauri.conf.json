@@ -1,6 +1,6 @@
 {
   "productName": "Zileo-Chat",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "identifier": "com.zileo.chat",
   "build": {
     "frontendDist": "../build",
