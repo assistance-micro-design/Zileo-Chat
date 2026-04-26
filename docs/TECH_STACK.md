@@ -22,7 +22,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **@sveltejs/kit**: ^2.55.0
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
-- **vite**: ^7.3.1
+- **vite**: ^7.3.2
 
 **TypeScript**:
 - **typescript**: ^5.9.3
@@ -38,7 +38,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **@lucide/svelte**: ^0.563.1 (official Lucide icon library)
 
 **Content Processing**:
-- **dompurify**: ^3.3.1 (HTML sanitization)
+- **dompurify**: ^3.4.1 (HTML sanitization)
 - **marked**: ^17.0.5 (Markdown rendering)
 - **zod**: ^4.3.6 (schema validation)
 

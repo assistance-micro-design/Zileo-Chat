@@ -143,6 +143,53 @@ pub(crate) struct ToolLoopContext<'a> {
     pub agent_context: Option<&'a AgentToolContext>,
 }
 
+/// Builds the initial message vector sent to the LLM at the start of a tool loop.
+///
+/// Two branches:
+/// - **Continuation**: `task.context["conversation_messages"]` contains a non-empty
+///   array of `{role, content}` entries persisted in the DB. The current user
+///   message has already been saved by the frontend before the streaming call,
+///   so the array already ends with the latest user turn — we replay it as-is
+///   under a freshly regenerated system prompt and do NOT re-append
+///   `task.description` (that would duplicate the last user turn).
+/// - **First call** (or empty history fallback): build a `[system, user]` pair
+///   from the regenerated system prompt and the formatted user prompt
+///   (`prompt::build_prompt` may wrap the description with extra context).
+///
+/// The system prompt is rebuilt every turn because it depends on live agent
+/// configuration (tools, MCP servers, locale, current date) that can change
+/// between turns. It is therefore never persisted in the DB.
+fn build_initial_messages(task: &Task, system_prompt: String) -> Vec<serde_json::Value> {
+    let existing = task
+        .context
+        .get("conversation_messages")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if !existing.is_empty() {
+        let history_count = existing.len();
+        let mut msgs = Vec::with_capacity(history_count + 1);
+        msgs.push(serde_json::json!({
+            "role": "system",
+            "content": system_prompt,
+        }));
+        msgs.extend(existing);
+        debug!(
+            history_count = history_count,
+            "Continuing conversation: regenerated system prompt + replayed history"
+        );
+        msgs
+    } else {
+        let base_prompt = prompt::build_prompt(task);
+        debug!("First message: building new system prompt with tools");
+        vec![
+            serde_json::json!({"role": "system", "content": system_prompt}),
+            serde_json::json!({"role": "user", "content": base_prompt}),
+        ]
+    }
+}
+
 /// Executes a task without tools (simple LLM completion).
 ///
 /// `cancellation_token` (when present) races the LLM call so a workflow
@@ -436,40 +483,19 @@ pub(crate) async fn execute_with_tools(
     let tool_definitions = tools::collect_tool_definitions(&local_tools, &mcp_tools);
     let tools_json = adapter.format_tools(&tool_definitions);
 
-    let existing_messages = task
-        .context
-        .get("conversation_messages")
-        .and_then(|v| v.as_array())
-        .cloned();
+    let system_prompt = prompt::build_system_prompt_with_tools(
+        ctx.config,
+        &local_tools,
+        &mcp_tools,
+        &mcp_server_summaries,
+        locale.as_deref(),
+        has_delegation_tools,
+    );
 
-    let mut messages: Vec<serde_json::Value> = if let Some(existing) = existing_messages {
-        let mut msgs: Vec<serde_json::Value> = existing;
-        msgs.push(serde_json::json!({
-            "role": "user",
-            "content": task.description
-        }));
-        debug!(
-            existing_messages_count = msgs.len() - 1,
-            "Continuing conversation with existing context"
-        );
-        msgs
-    } else {
-        let system_prompt = prompt::build_system_prompt_with_tools(
-            ctx.config,
-            &local_tools,
-            &mcp_tools,
-            &mcp_server_summaries,
-            locale.as_deref(),
-            has_delegation_tools,
-        );
-        let base_prompt = prompt::build_prompt(&task);
-        let msgs = vec![
-            serde_json::json!({"role": "system", "content": system_prompt}),
-            serde_json::json!({"role": "user", "content": base_prompt}),
-        ];
-        debug!("First message: building new system prompt with tools");
-        msgs
-    };
+    // In continuation mode, `task.description` mirrors the last user turn —
+    // already persisted by the frontend and replayed via `conversation_messages`.
+    // `build_initial_messages` deliberately does not re-append it (see its docstring).
+    let mut messages = build_initial_messages(&task, system_prompt);
 
     // Tool execution loop
     let mut final_response_content = String::new();
@@ -649,4 +675,143 @@ pub(crate) async fn execute_with_tools(
         response: final_response_content,
         metrics,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_task(description: &str, context: serde_json::Value) -> Task {
+        Task {
+            id: "test-task".to_string(),
+            description: description.to_string(),
+            context,
+        }
+    }
+
+    #[test]
+    fn test_build_initial_messages_first_call() {
+        let task = make_task(
+            "Mon nom est Bob",
+            serde_json::json!({
+                "is_primary_agent": true,
+                "workflow_id": "wf-1",
+                "locale": "fr",
+            }),
+        );
+
+        let msgs = build_initial_messages(&task, "SYSTEM PROMPT".to_string());
+
+        assert_eq!(msgs.len(), 2, "First call must produce [system, user]");
+        assert_eq!(msgs[0]["role"], "system");
+        assert_eq!(msgs[0]["content"], "SYSTEM PROMPT");
+        assert_eq!(msgs[1]["role"], "user");
+        // build_prompt wraps task.description with optional context, but our
+        // context contains no `conversation_history` and only is_primary_agent/
+        // workflow_id/locale -> they appear as "Context: ```json{...}```".
+        // We just assert the user content contains the original description.
+        let user_content = msgs[1]["content"].as_str().unwrap();
+        assert!(
+            user_content.contains("Mon nom est Bob"),
+            "User content must contain task.description, got: {}",
+            user_content
+        );
+    }
+
+    #[test]
+    fn test_build_initial_messages_continuation_no_duplication() {
+        let history = serde_json::json!([
+            {"role": "user", "content": "Mon nom est Bob"},
+            {"role": "assistant", "content": "Enchante Bob"},
+            {"role": "user", "content": "Comment je m'appelle?"},
+        ]);
+        let task = make_task(
+            "Comment je m'appelle?",
+            serde_json::json!({
+                "conversation_messages": history,
+                "is_primary_agent": true,
+                "workflow_id": "wf-1",
+            }),
+        );
+
+        let msgs = build_initial_messages(&task, "REGEN SYSTEM".to_string());
+
+        assert_eq!(
+            msgs.len(),
+            4,
+            "Continuation must produce [system, ...history] (no extra user append)"
+        );
+        assert_eq!(msgs[0]["role"], "system");
+        assert_eq!(msgs[0]["content"], "REGEN SYSTEM");
+        assert_eq!(msgs[1]["role"], "user");
+        assert_eq!(msgs[1]["content"], "Mon nom est Bob");
+        assert_eq!(msgs[2]["role"], "assistant");
+        assert_eq!(msgs[2]["content"], "Enchante Bob");
+        assert_eq!(msgs[3]["role"], "user");
+        assert_eq!(msgs[3]["content"], "Comment je m'appelle?");
+
+        // Defense-in-depth: the last user content must appear exactly once.
+        let occurrences = msgs
+            .iter()
+            .filter(|m| m["content"].as_str() == Some("Comment je m'appelle?"))
+            .count();
+        assert_eq!(
+            occurrences, 1,
+            "Current user message must NOT be duplicated"
+        );
+    }
+
+    #[test]
+    fn test_build_initial_messages_empty_history_fallback() {
+        // Empty array -> fall back to first-call behavior.
+        let task = make_task(
+            "Premier tour",
+            serde_json::json!({
+                "conversation_messages": [],
+                "workflow_id": "wf-1",
+            }),
+        );
+
+        let msgs = build_initial_messages(&task, "SYSTEM PROMPT".to_string());
+
+        assert_eq!(
+            msgs.len(),
+            2,
+            "Empty conversation_messages must trigger first-call fallback"
+        );
+        assert_eq!(msgs[0]["role"], "system");
+        assert_eq!(msgs[1]["role"], "user");
+        let user_content = msgs[1]["content"].as_str().unwrap();
+        assert!(user_content.contains("Premier tour"));
+    }
+
+    #[test]
+    fn test_build_initial_messages_missing_context_key() {
+        // No conversation_messages key at all -> first-call.
+        let task = make_task("Hello", serde_json::json!({"workflow_id": "wf-1"}));
+
+        let msgs = build_initial_messages(&task, "SP".to_string());
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["content"], "SP");
+    }
+
+    #[test]
+    fn test_build_initial_messages_continuation_preserves_order() {
+        let history = serde_json::json!([
+            {"role": "user", "content": "1"},
+            {"role": "assistant", "content": "2"},
+            {"role": "user", "content": "3"},
+            {"role": "assistant", "content": "4"},
+            {"role": "user", "content": "5"},
+        ]);
+        let task = make_task("5", serde_json::json!({"conversation_messages": history}));
+
+        let msgs = build_initial_messages(&task, "S".to_string());
+
+        let contents: Vec<&str> = msgs[1..]
+            .iter()
+            .map(|m| m["content"].as_str().unwrap())
+            .collect();
+        assert_eq!(contents, vec!["1", "2", "3", "4", "5"]);
+    }
 }

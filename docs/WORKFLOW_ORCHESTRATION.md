@@ -93,7 +93,6 @@ See `src-tauri/src/models/workflow.rs` and `src-tauri/src/models/streaming.rs` f
 | `streamingStore` | Real-time streaming state | isStreaming, streamContent, activeTools, reasoningSteps, activeSubAgents, activeTasks |
 | `backgroundWorkflowsStore` | Concurrent background execution (central dispatch) | runningWorkflows, recentlyCompletedWorkflows, canStartNew, questionPendingIds |
 | `toastStore` | Toast notifications | toasts, visibleToasts, navigationTarget |
-| `activityStore` | Activity events (historical + streaming) | allActivities, filteredActivities |
 
 See `src/lib/stores/` for store implementations.
 
@@ -102,9 +101,8 @@ See `src/lib/stores/` for store implementations.
 | File | Key Types |
 |------|-----------|
 | `workflow.ts` | WorkflowStatus, Workflow, WorkflowResult, WorkflowMetrics, WorkflowFullState, TokenDisplayData |
-| `streaming.ts` | ChunkType (12 variants), StreamChunk, WorkflowComplete, SubAgentStreamMetrics |
+| `streaming.ts` | ChunkType (16 variants), StreamChunk, WorkflowComplete, SubAgentStreamMetrics |
 | `background-workflow.ts` | WorkflowStreamState, Toast, BackgroundWorkflowStatus |
-| `activity.ts` | ActivityType (12 variants), ActivityStatus, ActivityFilter, WorkflowActivityEvent |
 
 See `src/types/` for type definitions.
 
@@ -112,7 +110,7 @@ See `src/types/` for type definitions.
 
 | Area | Components |
 |------|------------|
-| **Workflow** | WorkflowItem, WorkflowList, WorkflowItemCompact, NewWorkflowModal, ConfirmDeleteModal, ActivityFeed, ActivityItem, ValidationModal, TokenDisplay, MetricsBar, ReasoningPanel, ToolExecutionPanel, SubAgentActivity |
+| **Workflow** | WorkflowItem, WorkflowList, WorkflowItemCompact, NewWorkflowModal, ValidationModal, TokenDisplay, MetricsBar, AgentSelector, FolderItem, StatusFilters, UserQuestionModal |
 | **Layout** | WorkflowSidebar, ChatContainer, AgentHeader |
 | **UI** | ToastContainer (global overlay), ToastItem |
 
@@ -131,9 +129,11 @@ Layout: 2 columns (WorkflowSidebar + Chat/Agent Interface). Activity info displa
 
 ### Streaming Execution
 
-The streaming execution flow proceeds through these steps: validate inputs (workflow_id, message, agent_id), check concurrent limit (max 3), create cancellation token, load workflow from SurrealDB, generate message ID, emit initial events, persist initial thinking step, load conversation history (last 50 messages), create Task with history context. Then execute with cancellation: race `execute_with_mcp()` vs cancellation token. On cancel: emit cancelled event, cleanup, return. On success: save system prompt (if first message), emit completion reasoning, stream response content (50-char chunks, 10ms delay), load model for pricing, calculate cost, update workflow cumulative metrics, persist tool executions, emit `WorkflowComplete::success()`, cleanup cancellation token.
+The streaming execution flow proceeds through these steps: validate inputs (workflow_id, message, agent_id), check concurrent limit (max 3), create cancellation token, load workflow from SurrealDB, generate message ID, emit initial events, persist initial thinking step, load conversation history (last 50 messages, filtered to `user`/`assistant` roles only — `system` rows are frontend error notifications and must never be replayed to the LLM), create Task with history context. Then execute with cancellation: race `execute_with_mcp()` vs cancellation token. On cancel: emit cancelled event, cleanup, return. On success: emit completion reasoning, stream response content (50-char chunks, 10ms delay), load model for pricing, calculate cost, update workflow cumulative metrics, persist tool executions, emit `WorkflowComplete::success()`, cleanup cancellation token.
 
-See `src-tauri/src/commands/streaming/execution.rs` for the full implementation.
+The system prompt is **rebuilt every turn** by `build_system_prompt_with_tools` (it depends on live agent config — tools, MCP servers, locale, current date) and is therefore never persisted. In continuation mode, `build_initial_messages` replays the persisted history as-is under the regenerated system prompt, without re-appending `task.description` (the frontend already saved the current user turn before streaming).
+
+See `src-tauri/src/commands/streaming/execution.rs`, `src-tauri/src/commands/streaming/helpers.rs::load_conversation_history`, and `src-tauri/src/agents/execution/tool_loop.rs::build_initial_messages` for the full implementation.
 
 ### Parallel Execution
 
@@ -287,8 +287,8 @@ Completed executions auto-removed after 10 minutes (`CLEANUP_INTERVAL_MS = 60000
 | Orchestrator | `src-tauri/src/agents/core/orchestrator.rs` |
 | Constants | `src-tauri/src/constants.rs` (workflow module) |
 | Models | `src-tauri/src/models/workflow.rs`, `models/streaming.rs` |
-| Frontend Stores | `src/lib/stores/workflows.ts`, `streaming.ts`, `activity.ts`, `backgroundWorkflows.ts`, `toast.ts` |
-| Frontend Types | `src/types/workflow.ts`, `streaming.ts`, `activity.ts`, `background-workflow.ts` |
+| Frontend Stores | `src/lib/stores/workflows.ts`, `streaming.ts`, `background-workflows.ts`, `toast.ts` |
+| Frontend Types | `src/types/workflow.ts`, `streaming.ts`, `background-workflow.ts` |
 | Frontend Services | `src/lib/services/workflow.service.ts`, `workflowExecutor.service.ts` |
 | Components | `src/lib/components/workflow/`, `components/agent/`, `components/ui/` |
 

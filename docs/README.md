@@ -4,7 +4,7 @@ Multi-agent desktop application with conversational interface.
 
 ## Tech Stack
 
-**Frontend**: SvelteKit 2.55.0 + Svelte 5.55.1 + Vite 7.3.1
+**Frontend**: SvelteKit 2.55.0 + Svelte 5.55.1 + Vite 7.3.2
 **Backend**: Rust 1.93.0 + Tauri 2
 **Database**: SurrealDB ~2.6
 **LLM Framework**: rig-core 0.34.0 (multi-provider)
@@ -40,7 +40,7 @@ SurrealDB + External MCP Servers
 |----------|-------------|
 | [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md) | Hierarchical agent system, sub-agent delegation, communication |
 | [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md) | Parallel vs sequential orchestration, execution flows |
-| [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) | All 9 agent tools: Todo, Memory, UserQuestion, Sub-Agent, File, Report, Skill |
+| [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) | All 9 agent tools: Todo, Memory, Calculator, UserQuestion, FileManager, Spawn/Delegate/Parallel sub-agents, ReadSkill |
 
 ### Frontend & UX
 

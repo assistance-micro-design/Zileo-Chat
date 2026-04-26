@@ -144,8 +144,8 @@ The complete prompt is assembled from: the agent's system prompt, a tools sectio
 
 | Tool | Description | Operations |
 |------|-------------|------------|
-| **MemoryTool** | Vector persistence | add, get, describe, list, search, delete |
-| **TodoTool** | Workflow task management | create, get, update_status, list, complete, delete |
+| **MemoryTool** | Vector persistence | describe, add, get, list, search, delete, clear_by_type |
+| **TodoTool** | Workflow task management | create, get, update_status, list, complete, delete, list_agent_tasks, reassign_tasks |
 | **CalculatorTool** | Mathematical calculations | unary (sin, cos, tan, sqrt, exp, ln, abs, floor, ceil, round), binary (pow, log, min, max), constant (pi, e, tau) |
 | **UserQuestionTool** | Human-in-the-loop questions | ask (checkbox, text, mixed) |
 | **FileManagerTool** | Sandboxed file operations | list, read, write, replace, create, delete, move, rename, search_glob, search_content |

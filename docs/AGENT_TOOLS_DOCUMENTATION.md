@@ -52,9 +52,11 @@ Tools are instantiated dynamically via `ToolFactory`. See `src-tauri/src/tools/`
 - `create` -- Create a task (`name` required)
 - `get` -- Read task by ID (`task_id`)
 - `update_status` -- Update status (`task_id`, `status`)
-- `list` -- List workflow tasks (optional `status_filter`)
+- `list` -- List workflow tasks (optional `status_filter`). Sub-agents only see their own tasks.
 - `complete` -- Mark complete (`task_id`, optional `duration_ms`)
 - `delete` -- Delete task (`task_id`)
+- `list_agent_tasks` -- List tasks assigned to a specific agent with completion stats (primary agent only)
+- `reassign_tasks` -- Reassign tasks to a different agent (primary agent only)
 
 ### Task Structure
 
@@ -284,8 +286,10 @@ See `src-tauri/src/tools/file_manager/` for implementation.
 
 | Method | File | Description |
 |--------|------|-------------|
-| `build_tools_section()` | `agents/execution/tools.rs` | Creates tool instances + auto-injects ReadSkillTool |
-| `build_system_prompt()` | `agents/prompt.rs` | Injects tool definitions into system prompt |
+| `create_local_tools()` | `agents/execution/tools.rs` | Creates tool instances + auto-injects ReadSkillTool |
+| `collect_tool_definitions()` | `agents/execution/tools.rs` | Collects local + MCP tool definitions for the system prompt |
+| `build_system_prompt_with_tools()` | `agents/prompt.rs` | Injects tool definitions into system prompt (rebuilt per turn) |
+| `build_initial_messages()` | `agents/execution/tool_loop.rs` | Builds the first message vector: [system, user] (first call) or [system, ...history] (continuation) |
 | `adapter.parse_tool_calls()` | `llm/tool_adapter.rs` | Parses tool_calls JSON from LLM response |
 | `adapter.format_tool_result()` | `llm/tool_adapter.rs` | Formats results as JSON for LLM |
 

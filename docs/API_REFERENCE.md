@@ -385,11 +385,13 @@ Events are emitted via Tauri's event system. Listen with `listen()` from
 
 ### `workflow_stream`
 
-Real-time streaming during workflow execution. Chunk types include:
-`token`, `real_token`, `tool_start`, `tool_end`, `thinking_start`,
-`thinking_content`, `thinking_end`, `sub_agent_start`, `sub_agent_progress`,
-`sub_agent_complete`, `sub_agent_error`, `task_create`, `task_update`,
-`task_complete`, `user_question_start`, `user_question_complete`, `error`.
+Real-time streaming during workflow execution. Chunk types (see
+`ChunkType` enum in `src-tauri/src/models/streaming.rs`):
+`tool_start`, `tool_end`, `tool_call_complete`, `reasoning`,
+`thinking_block`, `response_block`, `sub_agent_start`,
+`sub_agent_progress`, `sub_agent_complete`, `sub_agent_error`,
+`task_create`, `task_update`, `task_complete`, `user_question_start`,
+`user_question_complete`, `error`.
 
 ### `workflow_complete`
 
