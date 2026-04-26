@@ -208,4 +208,3 @@ pub async fn embed_ollama(
 
     Ok(result.embedding)
 }
-

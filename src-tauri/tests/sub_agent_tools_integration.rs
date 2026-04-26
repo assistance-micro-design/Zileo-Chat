@@ -261,7 +261,6 @@ mod sub_agent_execution_tests {
         assert_eq!(create.sub_agent_name, "Test Sub-Agent");
         assert_eq!(create.status, "pending");
     }
-
 }
 
 // ============================================================================

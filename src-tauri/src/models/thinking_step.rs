@@ -156,5 +156,4 @@ mod tests {
         assert!(step.duration_ms.is_none());
         assert!(step.tokens.is_none());
     }
-
 }

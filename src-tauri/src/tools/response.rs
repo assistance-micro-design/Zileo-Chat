@@ -87,7 +87,6 @@ impl ResponseBuilder {
             .message(msg)
             .build()
     }
-
 }
 
 #[cfg(test)]
