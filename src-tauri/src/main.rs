@@ -126,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Run Tauri application
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(app_state)
         .manage(keystore)
         .plugin(tauri_plugin_opener::init())
@@ -438,32 +438,47 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while running tauri application")
-        .run(|app_handle, event| {
-            // Disconnect all MCP clients deterministically when the user closes
-            // the app. ExitRequested fires before the runtime tears down, so
-            // .await is safe here. A 5s timeout protects the UI from hangs in
-            // misbehaving servers.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                let state = app_handle.state::<AppState>();
-                let mcp_manager = state.mcp_manager.clone();
-                tauri::async_runtime::block_on(async move {
-                    let result = tokio::time::timeout(
-                        std::time::Duration::from_secs(5),
-                        mcp_manager.shutdown(),
-                    )
-                    .await;
+        .expect("error while running tauri application");
 
-                    match result {
-                        Ok(Ok(())) => tracing::info!("MCP manager shutdown complete on exit"),
-                        Ok(Err(e)) => {
-                            tracing::warn!(error = %e, "MCP manager shutdown returned error");
-                        }
-                        Err(_) => tracing::warn!("MCP manager shutdown timed out after 5s"),
-                    }
-                });
+    // Flag preventing infinite recursion: app_handle.exit(0) re-fires
+    // ExitRequested, so the second pass must let Tauri terminate normally.
+    let shutdown_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    app.run(move |app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            if shutdown_done.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
             }
-        });
+
+            // main() is #[tokio::main], so this callback runs inside an
+            // active tokio runtime. block_on() would panic with "Cannot
+            // start a runtime from within a runtime". Defer the shutdown
+            // to a spawned task and call exit(0) once it finishes; a 5s
+            // timeout protects the UI from misbehaving MCP servers.
+            api.prevent_exit();
+
+            let mcp_manager = app_handle.state::<AppState>().mcp_manager.clone();
+            let app_handle = app_handle.clone();
+            let shutdown_done = shutdown_done.clone();
+
+            tauri::async_runtime::spawn(async move {
+                let result =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), mcp_manager.shutdown())
+                        .await;
+
+                match result {
+                    Ok(Ok(())) => tracing::info!("MCP manager shutdown complete on exit"),
+                    Ok(Err(e)) => {
+                        tracing::warn!(error = %e, "MCP manager shutdown returned error");
+                    }
+                    Err(_) => tracing::warn!("MCP manager shutdown timed out after 5s"),
+                }
+
+                shutdown_done.store(true, std::sync::atomic::Ordering::SeqCst);
+                app_handle.exit(0);
+            });
+        }
+    });
 
     Ok(())
 }
