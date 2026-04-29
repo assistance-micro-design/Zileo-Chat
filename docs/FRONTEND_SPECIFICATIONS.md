@@ -40,7 +40,7 @@ Route-based architecture with code splitting per section. The settings layout pr
 | `/settings/audit-log` | Audit Log | Validation audit log: list with filters (tool, decision, risk, date), summary stats, manual purge, CSV export |
 | `/settings/prompts` | Prompts | Prompt library with name/description/category/content/variables, duplicate/export/versioning |
 | `/settings/skills` | Skills | Skill document CRUD |
-| `/settings/import-export` | Import/Export | Data portability (schema v1.1, 6 entity types) |
+| `/settings/import-export` | Import/Export | Data portability (schema v1.2, 6 entity types) |
 | `/settings/theme` | Theme | Light/Dark/Auto theme, color scheme, font settings, live preview |
 
 See `src/routes/settings/` for all section pages.
@@ -142,7 +142,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 5. Component Library
 
-102 total components organized under `src/lib/components/`:
+103 total components organized under `src/lib/components/`:
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
@@ -214,7 +214,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 14 modules)
+### Utilities (`src/lib/utils/`, 16 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -231,6 +231,8 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `uuid.ts` | `isUuid()` | Canonical 8-4-4-4-12 hex UUID validation |
 | `constants.ts` | `ITERATIONS_LIMITS` | Shared frontend constants (synchronized with backend clamping) |
 | `settings-refresh.ts` | `onSettingsRefresh()`, `attachSettingsRefreshListener()`, `SETTINGS_REFRESH_EVENT` | Subscribe to the global `settings:refresh` event after import/export |
+| `mcp-auth-validation.ts` | MCP HTTP auth validators | Validates `MCPAuthMetadata`/`MCPAuthSecret` symmetrically with the Rust backend |
+| `agent-reasoning.ts` | `getReasoningOptions()`, `getReasoningHelp()`, `normalizeReasoningEffortForProvider()` | Provider-aware reasoning_effort selector helpers (Mistral exposes Off/High only; other providers expose Off/Low/Medium/High) |
 | `index.ts` | Re-exports | Barrel file |
 
 ### Actions (`src/lib/actions/`, 1 module)

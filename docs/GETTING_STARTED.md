@@ -164,7 +164,7 @@ On first launch, a guided assistant helps with initial configuration:
 | **Memory** | Configure embeddings + manage memories |
 | **Validation** | Human-in-the-loop parameters |
 | **Prompts** | Prompt library |
-| **Import/Export** | Backup and restore configuration (schema v1.1) |
+| **Import/Export** | Backup and restore configuration (schema v1.2) |
 | **Theme** | Light/Dark theme selection |
 
 All API keys are configured via the UI and stored securely (Tauri secure storage + OS keyring).

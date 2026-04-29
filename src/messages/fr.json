@@ -650,6 +650,7 @@
   "agents_reasoning_medium": "Moyen - Equilibre",
   "agents_reasoning_high": "Eleve - Reflexion approfondie",
   "agents_reasoning_tooltip": "Controle la profondeur de reflexion. Un effort plus eleve utilise plus de tokens mais peut produire de meilleurs resultats.",
+  "agents_reasoning_mistral_help": "Les modeles Mistral n'exposent pas de niveau d'intensite : tout niveau actif est envoye comme 'high'. Utilisez 'Desactive' pour desactiver la reflexion.",
   "agents_max_iterations_label": "Iterations maximales des outils",
   "agents_max_iterations_help": "Nombre maximal de boucles d'execution des outils (1-200)",
   "agents_max_iterations_error": "Les iterations maximales doivent etre comprises entre 1 et 200",

@@ -124,7 +124,42 @@ pub(crate) async fn run_single_iteration(
     };
 
     // Thinking content extraction.
-    if let Some(thinking) = inputs.adapter.extract_thinking(&response) {
+    // Diagnostic: when the model is flagged is_reasoning but no thinking surfaces,
+    // log enough context to tell apart the two failure modes:
+    //   (a) reasoning_effort never sent (model card not flagged is_reasoning in DB)
+    //   (b) reasoning_effort sent but provider returned no thinking field.
+    let extracted_thinking = inputs.adapter.extract_thinking(&response);
+    if extracted_thinking.is_none() && ctx.config.llm.is_reasoning {
+        // Surface the message-level keys + content shape so the missing variant
+        // can be identified without a full JSON dump (which may include user data).
+        let message_keys: Vec<String> = response
+            .pointer("/choices/0/message")
+            .and_then(|m| m.as_object())
+            .map(|obj| obj.keys().cloned().collect())
+            .unwrap_or_default();
+        let content_shape = match response.pointer("/choices/0/message/content") {
+            Some(serde_json::Value::String(_)) => "string".to_string(),
+            Some(serde_json::Value::Array(arr)) => format!(
+                "array(types={:?})",
+                arr.iter()
+                    .filter_map(|b| b.get("type").and_then(|t| t.as_str()))
+                    .collect::<Vec<_>>()
+            ),
+            Some(serde_json::Value::Null) => "null".to_string(),
+            Some(_) => "other".to_string(),
+            None => "missing".to_string(),
+        };
+        debug!(
+            iteration = inputs.iteration,
+            provider = inputs.adapter.provider_name(),
+            model = %ctx.config.llm.model,
+            reasoning_effort_sent = ?effective_reasoning_effort(ctx.config),
+            message_keys = ?message_keys,
+            content_shape = %content_shape,
+            "Model is flagged is_reasoning but extract_thinking returned None"
+        );
+    }
+    if let Some(thinking) = extracted_thinking {
         if !thinking.trim().is_empty() {
             if mstate.tokens.iter_thinking.is_none() {
                 let estimated = crate::llm::utils::estimate_tokens(&thinking);

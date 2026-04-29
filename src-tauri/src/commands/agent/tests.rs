@@ -237,3 +237,118 @@ async fn test_update_agent_rejects_collision_with_other() {
         "Should reject renaming to existing agent's name"
     );
 }
+
+/// Seeds an `llm_model` row with the given provider/api_name and reasoning/context flags.
+async fn seed_llm_model(
+    db: &DBClient,
+    provider: &str,
+    api_name: &str,
+    is_reasoning: bool,
+    context_window: u64,
+) {
+    let model_id = uuid::Uuid::new_v4().to_string();
+    let data = serde_json::json!({
+        "id": model_id,
+        "provider": provider,
+        "name": api_name,
+        "api_name": api_name,
+        "context_window": context_window,
+        "max_output_tokens": 4096,
+        "temperature_default": 0.7,
+        "is_builtin": false,
+        "is_reasoning": is_reasoning,
+        "input_price_per_mtok": 0.0,
+        "output_price_per_mtok": 0.0,
+        "cache_read_price_per_mtok": 0.0,
+        "cache_write_price_per_mtok": 0.0,
+    });
+    db.execute_with_params(
+        &format!(
+            "CREATE llm_model:`{}` CONTENT $data ; \
+             UPDATE llm_model:`{}` SET created_at = time::now(), updated_at = time::now()",
+            model_id, model_id
+        ),
+        vec![("data".to_string(), data)],
+    )
+    .await
+    .expect("Failed to seed llm_model");
+}
+
+fn stale_llm_config(provider: &str, model: &str) -> LLMConfig {
+    LLMConfig {
+        provider: provider.to_string(),
+        model: model.to_string(),
+        temperature: 0.7,
+        max_tokens: 1000,
+        is_reasoning: false,
+        context_window: None,
+    }
+}
+
+#[tokio::test]
+async fn test_hydrate_llm_from_model_overrides_stale_snapshot() {
+    let (state, _db_guard) = setup_test_state().await;
+    seed_llm_model(&state.db, "mistral", "magistral-medium", true, 128_000).await;
+
+    let mut llm = stale_llm_config("Mistral", "magistral-medium");
+    super::hydrate_llm_from_model(&state.db, &mut llm)
+        .await
+        .expect("hydrate should succeed");
+
+    assert!(
+        llm.is_reasoning,
+        "is_reasoning should be overridden to true"
+    );
+    assert_eq!(
+        llm.context_window,
+        Some(128_000),
+        "context_window should be overridden from DB"
+    );
+    assert_eq!(llm.temperature, 0.7, "user-editable fields untouched");
+    assert_eq!(llm.max_tokens, 1000, "user-editable fields untouched");
+}
+
+#[tokio::test]
+async fn test_hydrate_llm_from_model_no_match_keeps_snapshot() {
+    let (state, _db_guard) = setup_test_state().await;
+    seed_llm_model(&state.db, "mistral", "some-other-model", true, 64_000).await;
+
+    let mut llm = stale_llm_config("mistral", "unknown-ad-hoc-model");
+    let snapshot_before = llm.clone();
+    super::hydrate_llm_from_model(&state.db, &mut llm)
+        .await
+        .expect("hydrate should succeed even without a match");
+
+    assert_eq!(llm.is_reasoning, snapshot_before.is_reasoning);
+    assert_eq!(llm.context_window, snapshot_before.context_window);
+}
+
+#[tokio::test]
+async fn test_hydrate_llm_from_model_empty_api_name_is_noop() {
+    let (state, _db_guard) = setup_test_state().await;
+
+    let mut llm = stale_llm_config("mistral", "   ");
+    super::hydrate_llm_from_model(&state.db, &mut llm)
+        .await
+        .expect("empty api_name must not error");
+
+    assert!(!llm.is_reasoning);
+    assert!(llm.context_window.is_none());
+}
+
+#[tokio::test]
+async fn test_hydrate_llm_from_model_provider_match_is_case_insensitive() {
+    let (state, _db_guard) = setup_test_state().await;
+    seed_llm_model(&state.db, "ollama", "qwen3-thinking", true, 32_768).await;
+
+    let mut llm = stale_llm_config("OLLAMA", "qwen3-thinking");
+    super::hydrate_llm_from_model(&state.db, &mut llm)
+        .await
+        .expect("hydrate should succeed");
+
+    assert!(
+        llm.is_reasoning,
+        "provider lookup must lowercase before matching"
+    );
+    assert_eq!(llm.context_window, Some(32_768));
+}

@@ -649,6 +649,7 @@
   "agents_reasoning_medium": "Medium - Balanced",
   "agents_reasoning_high": "High - Deep thinking",
   "agents_reasoning_tooltip": "Controls the depth of reasoning. Higher effort uses more tokens but may produce better results.",
+  "agents_reasoning_mistral_help": "Mistral models do not expose intensity levels: any reasoning level is sent as 'high'. Use 'Off' to disable thinking entirely.",
   "agents_max_iterations_label": "Max Tool Iterations",
   "agents_max_iterations_help": "Maximum tool execution loops (1-200)",
   "agents_max_iterations_error": "Max iterations must be between 1 and 200",

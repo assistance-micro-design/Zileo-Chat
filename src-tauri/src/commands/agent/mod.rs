@@ -144,6 +144,81 @@ async fn check_agent_name_unique(
     Ok(())
 }
 
+/// Refreshes the LLMConfig snapshot fields that are owned by the model card
+/// (`is_reasoning`, `context_window`) from the current `llm_model` row.
+///
+/// The frontend snapshots these fields at agent save time, but the snapshot
+/// can become stale: editing the model card (e.g. toggling "reasoning") does
+/// not propagate to existing agents until they are re-saved, and the
+/// `loadAllLLMData()` cache inside `AgentForm.svelte` is only refreshed at
+/// `onMount`. By re-reading from the DB just before persisting the agent we
+/// make the model card the single source of truth for these fields and
+/// eliminate the entire class of "snapshot stale" bugs (see ERR_LLM_010).
+///
+/// Fields that may legitimately diverge from the model defaults
+/// (`temperature`, `max_tokens`) are NOT overridden — those stay user-editable.
+///
+/// If no matching `llm_model` row exists (e.g. ad-hoc model name not yet
+/// registered), the snapshot is kept as-is so creation does not fail.
+async fn hydrate_llm_from_model(
+    db: &crate::db::DBClient,
+    llm: &mut crate::models::LLMConfig,
+) -> Result<(), String> {
+    use serde_json::json;
+
+    // `llm_model.provider` is always stored lowercase (see seed.rs normalization),
+    // and `ProviderType::as_id()` also returns lowercase. Skip the parse round-trip
+    // — `to_lowercase()` matches both builtin and Custom providers.
+    let provider_id = llm.provider.to_lowercase();
+    let api_name = llm.model.trim();
+    if api_name.is_empty() {
+        return Ok(());
+    }
+
+    let query = "SELECT is_reasoning, context_window FROM llm_model \
+                 WHERE provider = $provider AND api_name = $api_name LIMIT 1";
+    let rows: Vec<serde_json::Value> = db
+        .query_with_params(
+            query,
+            vec![
+                ("provider".to_string(), json!(provider_id)),
+                ("api_name".to_string(), json!(api_name)),
+            ],
+        )
+        .await
+        .map_err(|e| format!("Failed to look up model card: {}", e))?;
+
+    if let Some(row) = rows.first() {
+        match row.get("is_reasoning").and_then(|v| v.as_bool()) {
+            Some(is_reasoning) => llm.is_reasoning = is_reasoning,
+            None => {
+                if row.get("is_reasoning").is_some() {
+                    warn!(
+                        provider = %provider_id,
+                        api_name = %api_name,
+                        "llm_model.is_reasoning is not a bool — keeping snapshot value (schema drift?)"
+                    );
+                }
+            }
+        }
+        match row.get("context_window").and_then(|v| v.as_u64()) {
+            Some(ctx) => llm.context_window = Some(ctx as usize),
+            None => {
+                if row.get("context_window").is_some() {
+                    warn!(
+                        provider = %provider_id,
+                        api_name = %api_name,
+                        "llm_model.context_window is not an unsigned int — keeping snapshot value (schema drift?)"
+                    );
+                }
+                // Field absent from row: leave snapshot as-is.
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Creates a new agent
 ///
 /// Validates the configuration, persists to database, and registers in memory.
@@ -155,7 +230,7 @@ pub async fn create_agent(
 ) -> Result<String, String> {
     info!("Creating new agent");
 
-    let validated = validate_agent_create(&config).map_err(|e| {
+    let mut validated = validate_agent_create(&config).map_err(|e| {
         warn!(error = %e, "Agent validation failed");
         e
     })?;
@@ -164,6 +239,16 @@ pub async fn create_agent(
         .await
         .map_err(|e| {
             warn!(error = %e, "Agent name uniqueness check failed");
+            e
+        })?;
+
+    // Override the snapshot fields owned by the model card with the current
+    // DB values, so a stale snapshot from the frontend cannot persist a wrong
+    // is_reasoning / context_window. See ERR_LLM_010.
+    hydrate_llm_from_model(&state.db, &mut validated.llm)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to hydrate LLM config from model card");
             e
         })?;
 
@@ -295,6 +380,17 @@ pub async fn update_agent(
         .await
         .map_err(|e| {
             warn!(error = %e, "Agent name uniqueness check failed on update");
+            e
+        })?;
+
+    // Override the snapshot fields owned by the model card with the current
+    // DB values, so editing the model and re-saving the agent is sufficient
+    // to refresh is_reasoning / context_window even if the frontend cache is
+    // stale. See ERR_LLM_010.
+    hydrate_llm_from_model(&state.db, &mut updated_config.llm)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to hydrate LLM config from model card");
             e
         })?;
 

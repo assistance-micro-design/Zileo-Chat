@@ -147,42 +147,47 @@ impl ProviderToolAdapter for MistralToolAdapter {
     }
 
     fn extract_thinking(&self, response: &Value) -> Option<String> {
-        // Mistral reasoning models: content is an array with thinking blocks.
-        // Supports two formats:
-        // - Magistral: thinking is an array of text blocks
-        // - mistral-small with reasoning_effort: thinking is a plain string
-        let content = response.pointer("/choices/0/message/content")?;
-        let blocks = content.as_array()?;
-
-        let mut thinking_parts = String::new();
-        for block in blocks {
-            if block.get("type").and_then(|t| t.as_str()) == Some("thinking") {
-                // Magistral format: thinking is an array of {type: "text", text: "..."}
-                if let Some(items) = block.get("thinking").and_then(|t| t.as_array()) {
-                    for item in items {
-                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                            if !thinking_parts.is_empty() {
-                                thinking_parts.push('\n');
-                            }
-                            thinking_parts.push_str(text);
-                        }
-                    }
-                }
-                // mistral-small format: thinking is a plain string
-                else if let Some(text) = block.get("thinking").and_then(|t| t.as_str()) {
-                    if !thinking_parts.is_empty() {
-                        thinking_parts.push('\n');
-                    }
-                    thinking_parts.push_str(text);
-                }
+        // Delegate to the shared extractor which handles all known formats:
+        //   - message.reasoning (OpenRouter)
+        //   - message.reasoning_content (vLLM/LM Studio)
+        //   - message.reasoning_details[]
+        //   - message.thinking (Ollama/proxy + Mistral top-level variant)
+        //   - <think>...</think> tags in content string
+        //   - content blocks array with {type:"thinking", thinking:string|array}
+        //     covering Magistral (array) AND mistral-small reasoning_effort (string)
+        // Mistral's response shape varies by model and reasoning_effort, so we
+        // must accept any of these shapes - the previous content-blocks-only
+        // extractor missed reasoning_content / thinking-top-level variants on
+        // mistral-medium-3.5 and mistral-small (no thinking visible in UI).
+        let message = response.pointer("/choices/0/message")?;
+        let extracted = crate::llm::utils::extract_thinking_from_message(message);
+        if extracted.is_none() {
+            // Diagnostic: when reasoning_effort was sent but no thinking was
+            // surfaced, log the message shape so we can extend the extractor
+            // for new model variants without flying blind.
+            if let Some(content) = message.get("content") {
+                let shape = match content {
+                    Value::String(_) => "string".to_string(),
+                    Value::Array(arr) => format!(
+                        "array(types={:?})",
+                        arr.iter()
+                            .filter_map(|b| b.get("type").and_then(|t| t.as_str()))
+                            .collect::<Vec<_>>()
+                    ),
+                    Value::Null => "null".to_string(),
+                    _ => "other".to_string(),
+                };
+                debug!(
+                    provider = "mistral",
+                    content_shape = %shape,
+                    has_reasoning_field = message.get("reasoning").is_some(),
+                    has_reasoning_content_field = message.get("reasoning_content").is_some(),
+                    has_thinking_field = message.get("thinking").is_some(),
+                    "No thinking extracted from Mistral response"
+                );
             }
         }
-
-        if thinking_parts.is_empty() {
-            None
-        } else {
-            Some(thinking_parts)
-        }
+        extracted
     }
 
     fn extract_content(&self, response: &Value) -> Option<String> {
@@ -237,16 +242,48 @@ impl ProviderToolAdapter for MistralToolAdapter {
     }
 
     fn build_assistant_message(&self, response: &Value) -> Value {
-        // Mistral: extract choices[0].message which contains role, content, and tool_calls
-        response
-            .pointer("/choices/0/message")
-            .cloned()
-            .unwrap_or_else(|| {
-                json!({
-                    "role": "assistant",
-                    "content": ""
-                })
-            })
+        // Mistral reasoning models return `content` as an array containing
+        // ThinkChunk-shaped blocks plus text blocks, with extra fields
+        // `signature` and `closed`. The Mistral API REJECTS that exact shape
+        // when it appears in the input messages of a follow-up request:
+        //   - `signature` is `extra_forbidden` on input ThinkChunk
+        //   - `content` is expected to be a string OR a sanitized chunk list
+        // We therefore rebuild a clean assistant message: keep `role` and
+        // `tool_calls`, flatten `content` to the visible text portion using
+        // `extract_content` (drops thinking blocks entirely). When the model
+        // only emitted thinking + tool_calls, content becomes "" so the
+        // tool_calls-only message stays valid for replay.
+        let message = match response.pointer("/choices/0/message") {
+            Some(m) => m,
+            None => {
+                return json!({"role": "assistant", "content": ""});
+            }
+        };
+
+        let role = message
+            .get("role")
+            .and_then(|v| v.as_str())
+            .unwrap_or("assistant")
+            .to_string();
+
+        let content = match message.get("content") {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Array(_)) => self.extract_content(response).unwrap_or_default(),
+            _ => String::new(),
+        };
+
+        let mut out = json!({
+            "role": role,
+            "content": content,
+        });
+
+        if let Some(tool_calls) = message.get("tool_calls") {
+            if let Some(obj) = out.as_object_mut() {
+                obj.insert("tool_calls".to_string(), tool_calls.clone());
+            }
+        }
+
+        out
     }
 
     // extract_usage: uses trait default from ProviderToolAdapter
@@ -488,6 +525,277 @@ mod tests {
         assert_eq!(usage.output_tokens, 200);
         assert_eq!(usage.cached_tokens, Some(800));
         assert_eq!(usage.cache_write_tokens, None);
+    }
+
+    /// Reproduces the exact `content` shape returned by mistral-medium-3.5
+    /// (and Magistral) when reasoning is active. extract_thinking MUST find
+    /// the thinking text so iteration.rs:127 can emit StreamChunk::thinking_block
+    /// to the frontend (renders as "Reflexion" bloc).
+    #[test]
+    fn test_extract_thinking_magistral_array_format_with_signature() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": [
+                                {"type": "text", "text": "L'utilisateur demande de lister les memoires."}
+                            ],
+                            "signature": null,
+                            "closed": true
+                        },
+                        {"type": "text", "text": "Je vais lister."}
+                    ],
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "MemoryTool", "arguments": "{}"}
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        let thinking = adapter.extract_thinking(&response);
+        assert_eq!(
+            thinking.as_deref(),
+            Some("L'utilisateur demande de lister les memoires."),
+            "extract_thinking must surface the visible thinking text from Magistral-shape blocks (signature/closed extras must not block extraction)"
+        );
+    }
+
+    /// Some Mistral variants (and OpenRouter-relayed Mistral) surface the
+    /// reasoning trace at `choices[0].message.reasoning` (string) instead of
+    /// inside the content array. The Mistral adapter must accept this shape
+    /// or the "Reflexion" bloc never reaches the frontend.
+    #[test]
+    fn test_extract_thinking_reasoning_field_string() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "Final answer.",
+                    "reasoning": "Step 1: I parse the request. Step 2: I call MemoryTool."
+                }
+            }]
+        });
+        assert_eq!(
+            adapter.extract_thinking(&response).as_deref(),
+            Some("Step 1: I parse the request. Step 2: I call MemoryTool.")
+        );
+    }
+
+    /// vLLM-style reasoning_content surfaced by some Mistral deployments.
+    #[test]
+    fn test_extract_thinking_reasoning_content_field() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "OK",
+                    "reasoning_content": "Internal trace here."
+                }
+            }]
+        });
+        assert_eq!(
+            adapter.extract_thinking(&response).as_deref(),
+            Some("Internal trace here.")
+        );
+    }
+
+    /// Multi-text-chunk Magistral thinking: ensure all chunks are concatenated
+    /// (not just the first). Real reasoning often spans multiple text chunks.
+    #[test]
+    fn test_extract_thinking_magistral_multiple_text_chunks_concatenated() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": [
+                                {"type": "text", "text": "First step."},
+                                {"type": "text", "text": "Second step."}
+                            ],
+                            "signature": null,
+                            "closed": true
+                        }
+                    ]
+                }
+            }]
+        });
+
+        let thinking = adapter.extract_thinking(&response);
+        assert_eq!(thinking.as_deref(), Some("First step.\nSecond step."));
+    }
+
+    /// Reproduces ERR_LLM_008: Mistral API rejects an assistant message
+    /// echoed back with thinking blocks. The Magistral response shape is
+    /// `content = [{type:"thinking", thinking:[{type:"text",text:"..."}], signature:null, closed:true}, {type:"text", text:"..."}]`
+    /// and the next request must send a string `content` (or a sanitized
+    /// list without ThinkChunk fields like `signature`/`closed`).
+    #[test]
+    fn test_build_assistant_message_strips_magistral_thinking_blocks() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": [{"type": "text", "text": "internal trace"}],
+                            "signature": null,
+                            "closed": true
+                        },
+                        {"type": "text", "text": "Final answer."}
+                    ],
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "MemoryTool", "arguments": "{}"}
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        let msg = adapter.build_assistant_message(&response);
+
+        assert_eq!(msg["role"], "assistant", "role must be preserved");
+        assert!(
+            msg["content"].is_string(),
+            "content must be a string when echoing back to Mistral, got: {}",
+            msg["content"]
+        );
+        assert_eq!(
+            msg["content"].as_str().unwrap(),
+            "Final answer.",
+            "content must contain only the text portion, thinking stripped"
+        );
+        assert!(
+            msg.get("tool_calls").is_some(),
+            "tool_calls must be preserved"
+        );
+        assert_eq!(msg["tool_calls"][0]["id"], "call_1");
+    }
+
+    /// mistral-small with reasoning_effort returns thinking as a string
+    /// (not an array). Same problem: signature/closed fields are rejected.
+    #[test]
+    fn test_build_assistant_message_strips_small_string_thinking_blocks() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": "internal reasoning",
+                            "signature": null,
+                            "closed": true
+                        },
+                        {"type": "text", "text": "Visible answer"}
+                    ]
+                },
+                "finish_reason": "stop"
+            }]
+        });
+
+        let msg = adapter.build_assistant_message(&response);
+
+        assert!(msg["content"].is_string());
+        assert_eq!(msg["content"].as_str().unwrap(), "Visible answer");
+        // Thinking field must NOT bubble up (Mistral input schema rejects it).
+        let serialized = serde_json::to_string(&msg).unwrap();
+        assert!(
+            !serialized.contains("\"signature\""),
+            "signature must not appear in echoed assistant message"
+        );
+        assert!(
+            !serialized.contains("\"thinking\""),
+            "thinking blocks must be stripped"
+        );
+    }
+
+    /// When the model only emits thinking + tool_calls (no visible text),
+    /// the echoed `content` must be an empty string (Mistral input rejects
+    /// arrays where ThinkChunk has signature/closed).
+    #[test]
+    fn test_build_assistant_message_only_thinking_yields_empty_content() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thinking",
+                            "thinking": [{"type": "text", "text": "trace only"}],
+                            "signature": null,
+                            "closed": true
+                        }
+                    ],
+                    "tool_calls": [{
+                        "id": "call_x",
+                        "type": "function",
+                        "function": {"name": "MemoryTool", "arguments": "{}"}
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        let msg = adapter.build_assistant_message(&response);
+
+        assert!(msg["content"].is_string());
+        assert_eq!(msg["content"].as_str().unwrap(), "");
+        assert!(msg.get("tool_calls").is_some());
+    }
+
+    /// Standard string content (non-reasoning models) must pass through
+    /// unchanged.
+    #[test]
+    fn test_build_assistant_message_passes_string_content_through() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "Plain text answer",
+                    "tool_calls": [{
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "MemoryTool", "arguments": "{}"}
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        let msg = adapter.build_assistant_message(&response);
+
+        assert_eq!(msg["role"], "assistant");
+        assert_eq!(msg["content"], "Plain text answer");
+        assert_eq!(msg["tool_calls"][0]["id"], "call_2");
+    }
+
+    /// Missing `choices[0].message` must still produce a valid empty
+    /// assistant message (regression guard for the existing fallback).
+    #[test]
+    fn test_build_assistant_message_missing_message_fallback() {
+        let adapter = MistralToolAdapter::new();
+        let response = json!({"choices": []});
+        let msg = adapter.build_assistant_message(&response);
+        assert_eq!(msg["role"], "assistant");
+        assert_eq!(msg["content"], "");
     }
 
     #[test]

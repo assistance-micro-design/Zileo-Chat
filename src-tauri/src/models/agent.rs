@@ -35,6 +35,20 @@ impl ReasoningEffort {
             ReasoningEffort::High => "high",
         }
     }
+
+    /// Converts to the Mistral API value for `reasoning_effort`.
+    ///
+    /// The Mistral API only accepts `"high"` (full thinking) or `"none"`
+    /// (minimal thinking). Any explicit `ReasoningEffort` variant means
+    /// "the user wants reasoning enabled", so `Low`/`Medium` are mapped to
+    /// `"high"` (Mistral does not expose intensity levels). Disabling
+    /// reasoning entirely is done by passing `None` (no field sent), not
+    /// by selecting a level.
+    pub fn to_mistral_str(&self) -> &'static str {
+        match self {
+            ReasoningEffort::Low | ReasoningEffort::Medium | ReasoningEffort::High => "high",
+        }
+    }
 }
 
 /// Agent lifecycle type
@@ -304,6 +318,30 @@ mod tests {
 
         let high: ReasoningEffort = serde_json::from_str("\"high\"").unwrap();
         assert_eq!(high, ReasoningEffort::High);
+    }
+
+    #[test]
+    fn test_to_mistral_str_high() {
+        assert_eq!(ReasoningEffort::High.to_mistral_str(), "high");
+    }
+
+    #[test]
+    fn test_to_mistral_str_low_medium_maps_to_high() {
+        // Mistral only accepts "high" or "none"; preserve the "reasoning enabled"
+        // intent for Low/Medium by mapping both to "high". Disabling reasoning is
+        // done by passing None (no field sent), not by selecting a level.
+        assert_eq!(ReasoningEffort::Low.to_mistral_str(), "high");
+        assert_eq!(ReasoningEffort::Medium.to_mistral_str(), "high");
+    }
+
+    #[test]
+    fn test_as_str_unchanged_for_openai_compat() {
+        // Regression guard: as_str() must keep producing the OpenAI-compatible
+        // values (low/medium/high), since OpenAI-compat providers (OpenRouter,
+        // vLLM, etc.) accept all three intensity levels.
+        assert_eq!(ReasoningEffort::Low.as_str(), "low");
+        assert_eq!(ReasoningEffort::Medium.as_str(), "medium");
+        assert_eq!(ReasoningEffort::High.as_str(), "high");
     }
 
     #[test]

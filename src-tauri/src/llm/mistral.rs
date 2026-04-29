@@ -158,7 +158,8 @@ impl MistralProvider {
             messages,
             temperature: Some(temperature),
             max_tokens: Some(max_tokens),
-            reasoning_effort: reasoning_effort.map(|e: &ReasoningEffort| e.as_str().to_string()),
+            reasoning_effort: reasoning_effort
+                .map(|e: &ReasoningEffort| e.to_mistral_str().to_string()),
         };
 
         debug!(
@@ -263,7 +264,7 @@ impl MistralProvider {
             .clone()
             .ok_or_else(|| LLMError::NotConfigured("Mistral".to_string()))?;
 
-        let body = ToolChatRequest::from_params(params, params.messages.clone());
+        let body = build_mistral_tool_request(params);
         send_tool_completion(
             &self.http_client,
             "Mistral",
@@ -273,6 +274,22 @@ impl MistralProvider {
         )
         .await
     }
+}
+
+/// Builds the Mistral-specific tool chat request body.
+///
+/// Starts from the shared OpenAI-compat shape produced by
+/// [`ToolChatRequest::from_params`] then overrides `reasoning_effort` to use
+/// [`ReasoningEffort::to_mistral_str`], which only emits the values accepted
+/// by the Mistral API (`"high"` or omitted). OpenAI-compat providers
+/// (OpenRouter, vLLM, ...) keep the default `low`/`medium`/`high` mapping.
+fn build_mistral_tool_request(params: &ToolCompletionParams) -> ToolChatRequest {
+    let mut body = ToolChatRequest::from_params(params, params.messages.clone());
+    body.reasoning_effort = params
+        .reasoning_effort
+        .as_ref()
+        .map(|e| e.to_mistral_str().to_string());
+    body
 }
 
 #[async_trait]
@@ -499,5 +516,59 @@ mod tests {
         };
         let json = serde_json::to_value(&request).unwrap();
         assert!(json.get("reasoning_effort").is_none());
+    }
+
+    fn sample_tool_params(effort: Option<ReasoningEffort>) -> ToolCompletionParams {
+        ToolCompletionParams {
+            messages: vec![serde_json::json!({"role": "user", "content": "hi"})],
+            tools: vec![],
+            tool_choice: None,
+            model: "mistral-medium-3.5".to_string(),
+            temperature: 0.7,
+            max_tokens: 1024,
+            context_window: None,
+            reasoning_effort: effort,
+        }
+    }
+
+    #[test]
+    fn build_mistral_tool_request_maps_high_to_high() {
+        let params = sample_tool_params(Some(ReasoningEffort::High));
+        let body = build_mistral_tool_request(&params);
+        let json = serde_json::to_value(&body).unwrap();
+        assert_eq!(json["reasoning_effort"], "high");
+    }
+
+    #[test]
+    fn build_mistral_tool_request_maps_low_medium_to_high() {
+        // Mistral does not expose intensity levels: any explicit reasoning level
+        // means "reasoning enabled" and is sent as "high". Disabling reasoning
+        // is done by passing None (no field), not by selecting a level.
+        for effort in [ReasoningEffort::Low, ReasoningEffort::Medium] {
+            let params = sample_tool_params(Some(effort.clone()));
+            let body = build_mistral_tool_request(&params);
+            let json = serde_json::to_value(&body).unwrap();
+            assert_eq!(
+                json["reasoning_effort"], "high",
+                "{:?} should map to \"high\" for Mistral",
+                effort
+            );
+        }
+    }
+
+    #[test]
+    fn build_mistral_tool_request_omits_reasoning_when_none() {
+        let params = sample_tool_params(None);
+        let body = build_mistral_tool_request(&params);
+        let json = serde_json::to_value(&body).unwrap();
+        assert!(json.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn build_mistral_tool_request_preserves_messages_and_model() {
+        let params = sample_tool_params(Some(ReasoningEffort::Medium));
+        let body = build_mistral_tool_request(&params);
+        assert_eq!(body.model, "mistral-medium-3.5");
+        assert_eq!(body.messages, params.messages);
     }
 }

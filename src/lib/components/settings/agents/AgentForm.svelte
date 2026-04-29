@@ -46,6 +46,11 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { i18n, t } from '$lib/i18n';
+	import {
+		getReasoningHelp,
+		getReasoningOptions,
+		normalizeReasoningEffortForProvider
+	} from '$lib/utils/agent-reasoning';
 	import AgentFolders from './AgentFolders.svelte';
 	/**
 	 * Component props
@@ -150,6 +155,28 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	const selectedModel = $derived.by(() => {
 		const providerType = toProviderType(provider);
 		return getModelByApiName(llmState, model, providerType);
+	});
+
+	/**
+	 * Reasoning-effort options for the Select. Mistral only exposes Off / High;
+	 * other providers keep the full Off / Low / Medium / High range.
+	 */
+	const reasoningOptions = $derived(getReasoningOptions(provider, $i18n));
+
+	/** Help text below the reasoning-effort Select (provider-specific). */
+	const reasoningHelp = $derived(getReasoningHelp(provider, $i18n));
+
+	/**
+	 * Keep `reasoningEffort` consistent with the available options when the
+	 * provider switches to Mistral while a non-exposed value (low/medium) is
+	 * selected. Promotes to "high" so the user's reasoning intent is preserved
+	 * (matches the backend mapping in ReasoningEffort::to_mistral_str).
+	 */
+	$effect(() => {
+		const normalized = normalizeReasoningEffortForProvider(provider, reasoningEffort);
+		if (normalized !== reasoningEffort) {
+			reasoningEffort = normalized;
+		}
 	});
 
 	/** Available skills (enabled only) */
@@ -479,17 +506,12 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							id="reasoning-effort"
 							label={$i18n('agents_reasoning_effort')}
 							value={reasoningEffort ?? ''}
-							options={[
-								{ value: '', label: $i18n('agents_reasoning_off') },
-								{ value: 'low', label: $i18n('agents_reasoning_low') },
-								{ value: 'medium', label: $i18n('agents_reasoning_medium') },
-								{ value: 'high', label: $i18n('agents_reasoning_high') }
-							]}
+							options={reasoningOptions}
 							onchange={(e) => {
 								const v = e.currentTarget.value;
-								reasoningEffort = v ? v as ReasoningEffort : undefined;
+								reasoningEffort = v ? (v as ReasoningEffort) : undefined;
 							}}
-							help={$i18n('agents_reasoning_tooltip')}
+							help={reasoningHelp}
 						/>
 					{/if}
 

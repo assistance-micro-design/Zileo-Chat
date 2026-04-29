@@ -194,6 +194,29 @@ mod tests {
     }
 
     #[test]
+    fn from_params_preserves_low_medium_for_openai_compat() {
+        // Regression guard: OpenAI-compat providers (OpenRouter, vLLM, ...) accept
+        // low/medium/high. The Mistral-specific override lives in
+        // `llm::mistral::build_mistral_tool_request`; from_params itself must keep
+        // forwarding the value verbatim (via ReasoningEffort::as_str).
+        for (effort, expected) in [
+            (ReasoningEffort::Low, "low"),
+            (ReasoningEffort::Medium, "medium"),
+            (ReasoningEffort::High, "high"),
+        ] {
+            let mut params = sample_params();
+            params.reasoning_effort = Some(effort.clone());
+            let body = ToolChatRequest::from_params(&params, vec![]);
+            let serialized = serde_json::to_value(&body).unwrap();
+            assert_eq!(
+                serialized["reasoning_effort"], expected,
+                "OpenAI-compat must preserve {:?} as {:?}",
+                effort, expected
+            );
+        }
+    }
+
+    #[test]
     fn from_params_skips_reasoning_effort_when_none() {
         let body = ToolChatRequest::from_params(&sample_params(), vec![]);
         let serialized = serde_json::to_value(&body).unwrap();
