@@ -7,17 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.21.0] - 2026-04-29
+
 ### Added
 
 - **MCP HTTP authentication (v1.2)**: First-class HTTP auth for remote MCP servers -- methods `Bearer`, `API Key` (custom header, default `X-API-Key`) and `Basic`, plus a cumulative "Extra HTTP headers" list. Secrets are persisted in the OS keychain (per-server namespace `mcp_auth_<id>`) and never written to the database, logs, or export bundles. Symmetric TS+Rust validation (length limits, `\r\n` rejection, header-name regex `^[A-Za-z0-9_-]+$`), redacted debug logging, and full i18n coverage (`mcp_auth_*`, EN+FR)
 - **Database schema migration (`mcp_auth_v1`)**: Adds `auth_type`, `auth_metadata`, `extra_headers` columns on the `mcp_server` table (idempotent `DEFINE FIELD OVERWRITE`)
 - **Legacy migration assistance UI**: Settings > MCP banner that lists HTTP servers still relying on `API_KEY` / `HEADER_*` env vars; the form exposes one-click actions to convert the legacy value into the new Bearer or `X-API-Key` field
 - **Import/Export schema v1.2**: `EXPORT_SCHEMA_VERSION` bumped to `"1.2"` (still accepts `1.0` and `1.1`). Adds `authType`, `authMetadata`, `extraHeaderKeys` on MCP summaries, `clearAuthMetadata` / `clearExtraHeaders` checkboxes in `MCPFieldEditor`, a `Secret required` badge in `ImportPreview`, and a structured `McpSecretMissing` warning + post-import action per HTTP MCP server with active auth
+- **Provider-aware reasoning options (`$lib/utils/agent-reasoning.ts`)**: New utility module (with tests) that exposes the supported `reasoning_effort` values per provider and normalizes the agent's stored value when switching providers (auto-promotes `low` / `medium` to `high` for Mistral so the user's intent survives the reduced option set)
 
 ### Changed
 
 - **BREAKING -- HTTP MCP auth**: HTTP servers no longer interpret the legacy `API_KEY` / `HEADER_*` env vars at runtime. Existing servers must be migrated to the new auth fields via the in-app banner; the legacy env values are preserved for one-click migration but ignored by the HTTP transport
 - **`create_mcp_server` / `update_mcp_server` IPC payload**: Now accepts `MCPServerConfigWithSecret` (`MCPServerConfig` + optional `authSecret`). Read commands never echo the secret back
+- **`AgentForm` reasoning effort**: Now provider-aware -- shows `Off` / `High` only when the agent's provider is Mistral (with help text), full `Off` / `Low` / `Medium` / `High` for OpenAI-compatible providers
+- **Agent snapshot hydration**: `hydrate_llm_from_model` is now called on agent create/update so `is_reasoning` and `context_window` are re-read from the `llm_model` row. Toggling reasoning on a model card now propagates to existing agents on the next save (user-editable `temperature` and `max_tokens` are left untouched)
+
+### Fixed
+
+- **Mistral thinking not displayed**: `extract_thinking` only walked the content-blocks array, so variants surfacing thinking at `message.reasoning` / `reasoning_content` / top-level `message.thinking` returned `None` on `mistral-medium-3.5` (and OpenRouter-relayed Mistral). Now delegates to `llm::utils::extract_thinking_from_message` which covers all six known shapes; diagnostic log when nothing surfaces despite `is_reasoning=true`
+- **Mistral assistant-message replay rejected (`extra_forbidden`)**: `build_assistant_message` echoed the raw response, including `ThinkChunk` fields (`signature`, `closed`) which Mistral rejects on input. Now flattens content to the visible text and preserves only `role` + `tool_calls` (drops thinking blocks entirely, including the empty-content / tool_calls-only case)
+- **Mistral `reasoning_effort` low/medium errored**: Mistral only accepts `high` or no field; sending `low` / `medium` errored. New `ReasoningEffort::to_mistral_str` maps `Low` / `Medium` to `high` so any explicit level means "reasoning enabled"; `off` is `None` (no field). Used by `build_mistral_tool_request` and the chat path. OpenAI-compatible providers (OpenRouter, vLLM, ...) still get the full `low/medium/high` mapping via `from_params`
+
+### Documentation
+
+- Synced `API_REFERENCE`, `ARCHITECTURE_DECISIONS`, `DATABASE_SCHEMA`, `FRONTEND_SPECIFICATIONS`, `GETTING_STARTED` with the v1.2 schema, MCP auth fields, `mcp_auth_v1` migration, provider-aware reasoning utility, and updated component / utils tables (utils 14 -> 16, components 102 -> 103)
 
 ---
 
@@ -693,7 +710,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.21.0
 [0.20.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.1
 [0.20.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.0
 [0.19.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.19.1
