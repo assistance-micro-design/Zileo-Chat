@@ -53,11 +53,64 @@ impl std::fmt::Display for MCPDeploymentMethod {
     }
 }
 
+/// HTTP authentication method for remote MCP servers (v1.2).
+///
+/// Only applicable when `command == MCPDeploymentMethod::Http`.
+/// `None` means no authentication header is generated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MCPAuthType {
+    /// No HTTP authentication
+    #[default]
+    None,
+    /// Authorization: Bearer <token>
+    Bearer,
+    /// Custom header (default `X-API-Key`) with secret value
+    Apikey,
+    /// Authorization: Basic base64(user:pass)
+    Basic,
+}
+
+/// Non-sensitive auth metadata persisted alongside the server config (v1.2).
+///
+/// Secrets (token / value / password) are stored separately in the OS
+/// keychain via [`MCPAuthSecret`]; this struct never carries secret data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MCPAuthMetadata {
+    /// Header name for `Apikey` mode (default `X-API-Key` if absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_name: Option<String>,
+    /// Username for `Basic` mode (the password is a secret).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+}
+
+/// Auth secret payload — token / value / password depending on `MCPAuthType` (v1.2).
+///
+/// Sent only on create/update by the frontend, persisted in the OS keychain,
+/// and reloaded by the HTTP transport at connect time. Never returned by
+/// read commands.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MCPAuthSecret {
+    /// Bearer token (when `auth_type == Bearer`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    /// API key value (when `auth_type == Apikey`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// Basic auth password (when `auth_type == Basic`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
 /// MCP server configuration
 ///
 /// Contains all settings needed to spawn and connect to an MCP server.
 /// This is the input type for creating/updating server configurations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MCPServerConfig {
     /// Technical ID (for database storage only)
     pub id: String,
@@ -74,6 +127,49 @@ pub struct MCPServerConfig {
     /// Optional description of the server's purpose
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    // ---- v1.2 (HTTP authentication) ----
+    /// HTTP authentication type (HTTP deployment only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_type: Option<MCPAuthType>,
+    /// Non-sensitive auth metadata (header name, username).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_metadata: Option<MCPAuthMetadata>,
+    /// Additional HTTP headers (cumulative with main auth).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_headers: Option<HashMap<String, String>>,
+}
+
+/// Write payload for `create_mcp_server` / `update_mcp_server` (v1.2).
+///
+/// Carries the optional `auth_secret` next to the persisted config.
+/// The command splits metadata (DB) and secret (keychain) before
+/// persisting and never echoes the secret back.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MCPServerConfigWithSecret {
+    /// Persisted server config (DB).
+    #[serde(flatten)]
+    pub config: MCPServerConfig,
+    /// Optional auth secret (token / value / password).
+    #[serde(default)]
+    pub auth_secret: Option<MCPAuthSecret>,
+}
+
+/// Legacy HTTP auth warning surfaced at startup (v1.2).
+///
+/// Emitted for HTTP MCP servers still configured with the deprecated
+/// env-based auth (`API_KEY` or `HEADER_*`) so the UI can offer a
+/// migration banner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyHttpAuthWarning {
+    /// MCP server ID
+    pub id: String,
+    /// Display name
+    pub name: String,
+    /// Detected legacy env var keys (`API_KEY` and/or `HEADER_*`)
+    pub env_keys: Vec<String>,
 }
 
 /// MCP server status
@@ -284,9 +380,10 @@ pub struct MCPCallLogCreate {
 /// Used for database persistence. Converts command enum to string
 /// for SurrealDB compatibility.
 ///
-/// IMPORTANT: `env` is stored as a JSON string (not an object) to work around
-/// SurrealDB SCHEMAFULL filtering of nested object fields. The string is
-/// deserialized back to HashMap when reading from the database.
+/// IMPORTANT: `env`, `auth_metadata` and `extra_headers` are stored as
+/// JSON strings (not objects) to work around SurrealDB SCHEMAFULL filtering
+/// of nested object fields (ERR_SURREAL_001). The strings are deserialized
+/// back to typed structs when reading from the database.
 #[derive(Debug, Clone, Serialize)]
 pub struct MCPServerCreate {
     /// Server name
@@ -302,11 +399,40 @@ pub struct MCPServerCreate {
     /// Optional description
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    // ---- v1.2 (HTTP authentication) ----
+    /// Authentication type as serialized string (`none` / `bearer` / `apikey` / `basic`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_type: Option<String>,
+    /// Auth metadata serialized as JSON string (or `None` when no auth).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_metadata: Option<String>,
+    /// Extra headers serialized as JSON string (or `None` when empty).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_headers: Option<String>,
 }
 
 impl MCPServerCreate {
     /// Creates a new MCPServerCreate from MCPServerConfig
     pub fn from_config(config: &MCPServerConfig) -> Self {
+        let auth_type = config
+            .auth_type
+            .filter(|t| *t != MCPAuthType::None)
+            .and_then(|t| serde_json::to_value(t).ok())
+            .and_then(|v| v.as_str().map(String::from));
+
+        let auth_metadata = config
+            .auth_metadata
+            .as_ref()
+            .filter(|m| m.header_name.is_some() || m.username.is_some())
+            .and_then(|m| serde_json::to_string(m).ok());
+
+        let extra_headers = config
+            .extra_headers
+            .as_ref()
+            .filter(|h| !h.is_empty())
+            .and_then(|h| serde_json::to_string(h).ok());
+
         Self {
             name: config.name.clone(),
             enabled: config.enabled,
@@ -315,6 +441,9 @@ impl MCPServerCreate {
             // Serialize env HashMap to JSON string to bypass SurrealDB SCHEMAFULL filtering
             env: serde_json::to_string(&config.env).unwrap_or_else(|_| "{}".to_string()),
             description: config.description.clone(),
+            auth_type,
+            auth_metadata,
+            extra_headers,
         }
     }
 }
@@ -375,6 +504,9 @@ mod tests {
             ],
             env: HashMap::from([("DEBUG".to_string(), "true".to_string())]),
             description: Some("Code analysis server".to_string()),
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -510,6 +642,9 @@ mod tests {
             args: vec!["-y".to_string(), "@test/mcp".to_string()],
             env: HashMap::from([("API_KEY".to_string(), "secret".to_string())]),
             description: None,
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
         };
 
         let create = MCPServerCreate::from_config(&config);
@@ -518,6 +653,219 @@ mod tests {
         assert_eq!(create.command, "npx");
         assert!(create.enabled);
         assert!(create.description.is_none());
+        assert!(create.auth_type.is_none());
+        assert!(create.auth_metadata.is_none());
+        assert!(create.extra_headers.is_none());
+    }
+
+    #[test]
+    fn test_auth_type_serialization() {
+        assert_eq!(
+            serde_json::to_string(&MCPAuthType::None).unwrap(),
+            "\"none\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MCPAuthType::Bearer).unwrap(),
+            "\"bearer\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MCPAuthType::Apikey).unwrap(),
+            "\"apikey\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MCPAuthType::Basic).unwrap(),
+            "\"basic\""
+        );
+
+        let bearer: MCPAuthType = serde_json::from_str("\"bearer\"").unwrap();
+        assert_eq!(bearer, MCPAuthType::Bearer);
+        let apikey: MCPAuthType = serde_json::from_str("\"apikey\"").unwrap();
+        assert_eq!(apikey, MCPAuthType::Apikey);
+    }
+
+    #[test]
+    fn test_auth_metadata_camelcase_serialization() {
+        let metadata = MCPAuthMetadata {
+            header_name: Some("X-API-Key".to_string()),
+            username: Some("alice".to_string()),
+        };
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("\"headerName\":\"X-API-Key\""));
+        assert!(json.contains("\"username\":\"alice\""));
+
+        // Round-trip
+        let parsed: MCPAuthMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.header_name.as_deref(), Some("X-API-Key"));
+        assert_eq!(parsed.username.as_deref(), Some("alice"));
+    }
+
+    #[test]
+    fn test_auth_metadata_skip_none() {
+        let metadata = MCPAuthMetadata::default();
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert_eq!(json, "{}");
+    }
+
+    #[test]
+    fn test_auth_secret_camelcase_serialization() {
+        let secret = MCPAuthSecret {
+            token: Some("sk-abc".to_string()),
+            value: None,
+            password: None,
+        };
+        let json = serde_json::to_string(&secret).unwrap();
+        assert!(json.contains("\"token\":\"sk-abc\""));
+        assert!(!json.contains("value"));
+        assert!(!json.contains("password"));
+
+        // Round-trip with empty default
+        let empty: MCPAuthSecret = serde_json::from_str("{}").unwrap();
+        assert!(empty.token.is_none());
+        assert!(empty.value.is_none());
+        assert!(empty.password.is_none());
+    }
+
+    #[test]
+    fn test_server_config_with_auth_serialization() {
+        let config = MCPServerConfig {
+            id: "srv1".to_string(),
+            name: "Remote".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["https://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+            auth_type: Some(MCPAuthType::Bearer),
+            auth_metadata: Some(MCPAuthMetadata {
+                header_name: None,
+                username: None,
+            }),
+            extra_headers: Some(HashMap::from([("X-Tenant".to_string(), "42".to_string())])),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        // camelCase via rename_all
+        assert!(json.contains("\"authType\":\"bearer\""));
+        assert!(json.contains("\"authMetadata\""));
+        assert!(json.contains("\"extraHeaders\""));
+
+        // Round-trip
+        let parsed: MCPServerConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.auth_type, Some(MCPAuthType::Bearer));
+        assert!(parsed.auth_metadata.is_some());
+        assert_eq!(
+            parsed
+                .extra_headers
+                .as_ref()
+                .and_then(|h| h.get("X-Tenant"))
+                .map(String::as_str),
+            Some("42")
+        );
+    }
+
+    #[test]
+    fn test_server_config_without_auth_omits_fields() {
+        let config = MCPServerConfig {
+            id: "srv1".to_string(),
+            name: "Stdio".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Docker,
+            args: vec!["run".to_string()],
+            env: HashMap::new(),
+            description: None,
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(!json.contains("authType"));
+        assert!(!json.contains("authMetadata"));
+        assert!(!json.contains("extraHeaders"));
+    }
+
+    #[test]
+    fn test_server_config_with_secret_flatten_deserialization() {
+        let payload = r#"{
+            "id": "srv1",
+            "name": "Remote",
+            "enabled": true,
+            "command": "http",
+            "args": ["https://api.example.com"],
+            "env": {},
+            "authType": "bearer",
+            "authSecret": { "token": "sk-secret" }
+        }"#;
+
+        let parsed: MCPServerConfigWithSecret = serde_json::from_str(payload).unwrap();
+        assert_eq!(parsed.config.id, "srv1");
+        assert_eq!(parsed.config.auth_type, Some(MCPAuthType::Bearer));
+        assert_eq!(
+            parsed.auth_secret.as_ref().and_then(|s| s.token.as_deref()),
+            Some("sk-secret")
+        );
+    }
+
+    #[test]
+    fn test_server_create_from_config_with_auth() {
+        let config = MCPServerConfig {
+            id: "srv1".to_string(),
+            name: "Remote".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["https://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+            auth_type: Some(MCPAuthType::Apikey),
+            auth_metadata: Some(MCPAuthMetadata {
+                header_name: Some("X-Custom-Key".to_string()),
+                username: None,
+            }),
+            extra_headers: Some(HashMap::from([("X-Tenant".to_string(), "42".to_string())])),
+        };
+
+        let create = MCPServerCreate::from_config(&config);
+        assert_eq!(create.auth_type.as_deref(), Some("apikey"));
+
+        let metadata_str = create.auth_metadata.expect("metadata json");
+        assert!(metadata_str.contains("\"headerName\":\"X-Custom-Key\""));
+
+        let headers_str = create.extra_headers.expect("headers json");
+        assert!(headers_str.contains("X-Tenant"));
+    }
+
+    #[test]
+    fn test_server_create_from_config_with_none_auth_skips_fields() {
+        let config = MCPServerConfig {
+            id: "srv1".to_string(),
+            name: "Remote".to_string(),
+            enabled: true,
+            command: MCPDeploymentMethod::Http,
+            args: vec!["https://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+            auth_type: Some(MCPAuthType::None),
+            auth_metadata: None,
+            extra_headers: None,
+        };
+
+        let create = MCPServerCreate::from_config(&config);
+        // None must be persisted as absent (not as "none" string) to keep DB clean
+        assert!(create.auth_type.is_none());
+        assert!(create.auth_metadata.is_none());
+        assert!(create.extra_headers.is_none());
+    }
+
+    #[test]
+    fn test_legacy_http_auth_warning_serialization() {
+        let warning = LegacyHttpAuthWarning {
+            id: "abc-123".to_string(),
+            name: "Remote".to_string(),
+            env_keys: vec!["API_KEY".to_string(), "HEADER_X-Trace".to_string()],
+        };
+        let json = serde_json::to_string(&warning).unwrap();
+        assert!(json.contains("\"envKeys\""));
+        assert!(json.contains("\"id\":\"abc-123\""));
     }
 }
 

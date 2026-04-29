@@ -168,6 +168,13 @@ DEFINE FIELD OVERWRITE args ON mcp_server TYPE array<string>;
 -- Store env as JSON string to bypass SurrealDB SCHEMAFULL nested object filtering
 DEFINE FIELD OVERWRITE env ON mcp_server TYPE string DEFAULT '{}';
 DEFINE FIELD OVERWRITE description ON mcp_server TYPE option<string>;
+-- HTTP authentication (v1.2): metadata only; secrets live in the OS keychain.
+-- All three are optional and stored as JSON strings (ERR_SURREAL_001) to keep
+-- backward compatibility with existing rows.
+DEFINE FIELD OVERWRITE auth_type ON mcp_server TYPE option<string>
+    ASSERT $value IS NONE OR $value IN ['none', 'bearer', 'apikey', 'basic'];
+DEFINE FIELD OVERWRITE auth_metadata ON mcp_server TYPE option<string>;
+DEFINE FIELD OVERWRITE extra_headers ON mcp_server TYPE option<string>;
 DEFINE FIELD OVERWRITE created_at ON mcp_server TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON mcp_server TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE unique_mcp_id ON mcp_server FIELDS id UNIQUE;

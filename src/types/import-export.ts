@@ -25,6 +25,8 @@
  */
 
 import type { ReasoningEffort } from './agent';
+import type { MCPAuthMetadata, MCPAuthType } from './mcp';
+
 
 // ============ EXPORT TYPES ============
 
@@ -52,12 +54,19 @@ export interface ExportOptions {
 
 /**
  * MCP server sanitization configuration for export.
+ *
+ * v1.2: added `clearAuthMetadata` and `clearExtraHeaders` to let the user
+ * opt out of exporting HTTP auth metadata. Secrets are never exported.
  */
 export interface MCPSanitizationConfig {
 	clearEnvKeys: string[];
 	modifyEnv: Record<string, string>;
 	modifyArgs: string[];
 	excludeFromExport: boolean;
+	/** v1.2 - if true, strip authType + authMetadata before export */
+	clearAuthMetadata?: boolean;
+	/** v1.2 - if true, strip extraHeaders before export */
+	clearExtraHeaders?: boolean;
 }
 
 /**
@@ -136,6 +145,9 @@ export interface AgentExportData {
 
 /**
  * MCP Server data for export.
+ *
+ * v1.2: added `authType`, `authMetadata`, `extraHeaders` (HTTP auth metadata).
+ * Secrets are NEVER exported — they live in the OS keychain.
  */
 export interface MCPServerExportData {
 	name: string;
@@ -144,6 +156,12 @@ export interface MCPServerExportData {
 	args: string[];
 	env: Record<string, string>;
 	description?: string;
+	/** HTTP auth type (v1.2). Absent = no auth (legacy v1.0 / v1.1 behavior). */
+	authType?: MCPAuthType;
+	/** HTTP auth metadata (v1.2). Secrets are stored separately in keychain. */
+	authMetadata?: MCPAuthMetadata;
+	/** Additional HTTP headers (v1.2). */
+	extraHeaders?: Record<string, string>;
 	createdAt?: string;
 	updatedAt?: string;
 }
@@ -239,6 +257,10 @@ export interface MCPServerExportSummary {
 	enabled: boolean;
 	command: string;
 	toolsCount: number;
+	/** Active HTTP auth method (omitted when none). v1.2. */
+	authType?: MCPAuthType;
+	/** Names of the extra HTTP headers attached to the server. v1.2. */
+	extraHeaderKeys?: string[];
 }
 
 /** LLM model summary for preview. */
@@ -316,7 +338,8 @@ export type ImportWarningType =
 	| 'missing_dependency'
 	| 'machine_specific'
 	| 'default_applied'
-	| 'builtin_model';
+	| 'builtin_model'
+	| 'mcp_secret_missing';
 
 /**
  * Structured import warning with actionable context (v1.1).
@@ -390,7 +413,7 @@ export interface ImportError {
 // ============ CONSTANTS ============
 
 /** Current schema version for export packages */
-export const EXPORT_SCHEMA_VERSION = '1.1';
+export const EXPORT_SCHEMA_VERSION = '1.2';
 
 /** Maximum import file size in bytes (10MB) */
 export const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;

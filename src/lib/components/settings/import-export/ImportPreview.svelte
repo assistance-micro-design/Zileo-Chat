@@ -27,7 +27,11 @@ Uses data-driven loops for summary cards and entity lists.
 <script lang="ts">
 	import { Card, Badge } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import type { ImportValidation, ImportSelection } from '$types/import-export';
+	import type {
+		ImportValidation,
+		ImportSelection,
+		MCPServerExportSummary
+	} from '$types/import-export';
 
 	/** Props */
 	interface Props {
@@ -102,6 +106,15 @@ Uses data-driven loops for summary cards and entity lists.
 	 */
 	function hasMissingEnv(serverName: string): boolean {
 		return validation.missingMcpEnv[serverName]?.length > 0;
+	}
+
+	/**
+	 * Returns true when an MCP server uses HTTP authentication. The auth
+	 * secret is never part of the export bundle so the importer must
+	 * surface a "secret required" prompt for the user (v1.2).
+	 */
+	function mcpRequiresSecret(server: MCPServerExportSummary): boolean {
+		return server.authType !== undefined && server.authType !== 'none';
 	}
 
 	/**
@@ -204,6 +217,9 @@ Uses data-driven loops for summary cards and entity lists.
 									{/if}
 									{#if def.type === 'mcpServers' && hasMissingEnv(item.name)}
 										<Badge variant="error">{$i18n('ie_missing_env_vars')}</Badge>
+									{/if}
+									{#if def.type === 'mcpServers' && mcpRequiresSecret(item as MCPServerExportSummary)}
+										<Badge variant="warning">{$i18n('ie_mcp_secret_required_badge')}</Badge>
 									{/if}
 								</label>
 							{/each}

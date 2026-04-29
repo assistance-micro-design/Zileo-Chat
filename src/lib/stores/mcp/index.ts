@@ -53,5 +53,6 @@ export {
 	startServer,
 	stopServer,
 	callTool,
-	listServerTools
+	listServerTools,
+	listLegacyHttpAuth
 } from './actions';

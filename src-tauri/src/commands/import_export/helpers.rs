@@ -136,15 +136,27 @@ pub async fn load_mcp_preview(
     env_keys: &mut HashMap<String, Vec<String>>,
 ) -> Result<(), String> {
     for server_id in server_ids {
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, env FROM mcp_server WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, enabled, command, env, auth_type, extra_headers FROM mcp_server WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, server_id, "MCP server").await? {
             let id = row["id"].as_str().unwrap_or("").to_string();
+
+            // v1.2 — auth metadata for the MCPFieldEditor section.
+            let auth_type = crate::mcp::helpers::parse_auth_type(Some(&row["auth_type"]))
+                .filter(|t| !matches!(t, crate::models::mcp::MCPAuthType::None));
+
+            let extra_header_keys: Vec<String> =
+                crate::mcp::helpers::parse_extra_headers_json(Some(&row["extra_headers"]))
+                    .map(|map| map.into_keys().collect())
+                    .unwrap_or_default();
+
             mcp_summaries.push(MCPServerExportSummary {
                 id: Some(id.clone()),
                 name: row["name"].as_str().unwrap_or("Unknown").to_string(),
                 enabled: row["enabled"].as_bool().unwrap_or(false),
                 command: row["command"].as_str().unwrap_or("").to_string(),
                 tools_count: 0,
+                auth_type,
+                extra_header_keys,
             });
 
             let env_str = row["env"].as_str().unwrap_or("{}");

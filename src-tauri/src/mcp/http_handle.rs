@@ -32,12 +32,16 @@
 //! The client will POST JSON-RPC messages to this URL and optionally
 //! connect to `{base_url}/sse` for server-sent events.
 
+use crate::mcp::http_auth::build_auth_headers;
+use crate::mcp::redact::redact_headers;
+use crate::mcp::secrets::load_mcp_secret;
 use crate::mcp::{
     JsonRpcRequest, JsonRpcResponse, MCPError, MCPInitializeParams, MCPInitializeResult,
     MCPResourcesListResult, MCPResult, MCPToolCallParams, MCPToolCallResponse, MCPToolsListResult,
 };
 use crate::models::custom_provider::check_http_warning;
-use crate::models::mcp::{MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
+use crate::models::mcp::{MCPAuthType, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
+use crate::security::KeyStore;
 use reqwest::Client;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::LazyLock;
@@ -70,6 +74,74 @@ static SHARED_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
             Client::new()
         })
 });
+
+/// Builds the HTTP `HeaderMap` for a server config (v1.2).
+///
+/// Loads the optional auth secret from the OS keychain, runs
+/// [`build_auth_headers`], and surfaces any conflict warnings via
+/// `tracing::warn!`. Pure auth path — no fallback on legacy env vars.
+fn build_headers_from_config(config: &MCPServerConfig) -> MCPResult<reqwest::header::HeaderMap> {
+    let auth_type = config.auth_type.unwrap_or(MCPAuthType::None);
+    let metadata = config.auth_metadata.clone().unwrap_or_default();
+    let extra = config.extra_headers.clone().unwrap_or_default();
+
+    // Only hit the keychain when an auth header is actually needed. The
+    // KeyStore constructor performs a few keyring round-trips; skip them
+    // for the no-auth case (the most common stdio→http transition path).
+    let secret = if auth_type == MCPAuthType::None {
+        None
+    } else {
+        let keystore = KeyStore::new().map_err(|e| MCPError::InvalidConfig {
+            field: "keystore".to_string(),
+            reason: format!("failed to access keychain: {}", e),
+        })?;
+        load_mcp_secret(&keystore, &config.id)?
+    };
+
+    let (headers, warnings) = build_auth_headers(auth_type, &metadata, secret.as_ref(), &extra)?;
+
+    if !warnings.is_empty() {
+        for w in &warnings {
+            warn!(
+                server_id = %config.id,
+                server_name = %config.name,
+                "{}",
+                w
+            );
+        }
+    }
+
+    debug!(
+        server_id = %config.id,
+        headers = ?redact_headers(&headers),
+        "MCP HTTP handle headers built"
+    );
+
+    Ok(headers)
+}
+
+/// Detects legacy env-based HTTP auth (`API_KEY` and/or `HEADER_*`) on a
+/// HTTP server with `auth_type=None`. Used by the migration banner.
+pub fn detect_legacy_http_auth_keys(config: &MCPServerConfig) -> Vec<String> {
+    use crate::models::mcp::MCPDeploymentMethod;
+    if config.command != MCPDeploymentMethod::Http {
+        return Vec::new();
+    }
+    let auth_active = matches!(config.auth_type, Some(t) if t != MCPAuthType::None);
+    if auth_active {
+        // The user has already migrated; no banner needed.
+        return Vec::new();
+    }
+
+    let mut keys: Vec<String> = config
+        .env
+        .keys()
+        .filter(|k| k.as_str() == "API_KEY" || k.starts_with("HEADER_"))
+        .cloned()
+        .collect();
+    keys.sort();
+    keys
+}
 
 /// MCP HTTP Transport Handle
 ///
@@ -177,34 +249,11 @@ impl MCPHttpHandle {
             );
         }
 
-        // Build HTTP client with custom headers from env
-        let mut headers = reqwest::header::HeaderMap::new();
-
-        // Add authorization header if API key is provided in env
-        if let Some(api_key) = config.env.get("API_KEY") {
-            headers.insert(
-                reqwest::header::AUTHORIZATION,
-                format!("Bearer {}", api_key)
-                    .parse()
-                    .map_err(|e| MCPError::InvalidConfig {
-                        field: "env.API_KEY".to_string(),
-                        reason: format!("Invalid API key format: {}", e),
-                    })?,
-            );
-        }
-
-        // Add custom headers from env (prefixed with HEADER_)
-        for (key, value) in &config.env {
-            if let Some(header_name) = key.strip_prefix("HEADER_") {
-                if let Ok(header_value) = value.parse() {
-                    if let Ok(name) =
-                        reqwest::header::HeaderName::try_from(header_name.to_lowercase())
-                    {
-                        headers.insert(name, header_value);
-                    }
-                }
-            }
-        }
+        // Build the auth + extra headers from the v1.2 model. The legacy
+        // env-based path (API_KEY / HEADER_*) was removed: a HTTP MCP
+        // server with `auth_type=None` is now plain — env vars are no
+        // longer interpreted by the transport.
+        let headers = build_headers_from_config(&config)?;
 
         // Use shared client for connection pooling
         let client = SHARED_HTTP_CLIENT.clone();
@@ -683,55 +732,89 @@ mod tests {
             args: vec!["https://api.example.com/mcp".to_string()],
             env: HashMap::new(),
             description: Some("Test HTTP MCP server".to_string()),
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
         }
     }
 
-    #[test]
-    fn test_http_config_validation() {
-        let config = create_test_http_config();
-        assert_eq!(config.command, MCPDeploymentMethod::Http);
-        assert!(!config.args.is_empty());
-        assert!(config.args[0].starts_with("https://"));
+    /// Test-only entry point that bypasses the keychain (auth_type=None
+    /// path only). Production code uses [`build_headers_from_config`].
+    fn build_headers_for_tests(config: &MCPServerConfig) -> MCPResult<reqwest::header::HeaderMap> {
+        let auth_type = config.auth_type.unwrap_or(MCPAuthType::None);
+        let metadata = config.auth_metadata.clone().unwrap_or_default();
+        let extra: HashMap<String, String> = config.extra_headers.clone().unwrap_or_default();
+        let (headers, _) = build_auth_headers(auth_type, &metadata, None, &extra)?;
+        Ok(headers)
     }
 
     #[test]
-    fn test_http_config_with_api_key() {
+    fn test_detect_legacy_http_auth_keys_with_api_key_only() {
+        let mut config = create_test_http_config();
+        config.env.insert("API_KEY".to_string(), "abc".to_string());
+        let keys = detect_legacy_http_auth_keys(&config);
+        assert_eq!(keys, vec!["API_KEY"]);
+    }
+
+    #[test]
+    fn test_detect_legacy_http_auth_keys_with_header_prefix() {
         let mut config = create_test_http_config();
         config
             .env
-            .insert("API_KEY".to_string(), "test_key_123".to_string());
-
-        assert!(config.env.contains_key("API_KEY"));
+            .insert("HEADER_X-Trace".to_string(), "abc".to_string());
+        config
+            .env
+            .insert("HEADER_X-Tenant".to_string(), "42".to_string());
+        let mut keys = detect_legacy_http_auth_keys(&config);
+        keys.sort();
+        assert_eq!(keys, vec!["HEADER_X-Tenant", "HEADER_X-Trace"]);
     }
 
     #[test]
-    fn test_http_config_with_custom_headers() {
+    fn test_detect_legacy_http_auth_keys_skips_when_auth_active() {
         let mut config = create_test_http_config();
+        config.env.insert("API_KEY".to_string(), "abc".to_string());
+        config.auth_type = Some(MCPAuthType::Bearer);
+        // The user has migrated; legacy keys are no longer flagged.
+        assert!(detect_legacy_http_auth_keys(&config).is_empty());
+    }
+
+    #[test]
+    fn test_detect_legacy_http_auth_keys_skips_stdio_servers() {
+        let mut config = create_test_http_config();
+        config.command = crate::models::mcp::MCPDeploymentMethod::Docker;
+        config.env.insert("API_KEY".to_string(), "abc".to_string());
+        // Stdio servers (Docker/NPX/UVX) are unaffected by the v1.2 change.
+        assert!(detect_legacy_http_auth_keys(&config).is_empty());
+    }
+
+    #[test]
+    fn test_build_headers_from_config_no_auth_ignores_legacy_env() {
+        let mut config = create_test_http_config();
+        // Even with legacy env vars present, no Authorization header
+        // is generated — that's the breaking change of v1.2.
+        config
+            .env
+            .insert("API_KEY".to_string(), "should-be-ignored".to_string());
         config.env.insert(
-            "HEADER_X-Custom-Auth".to_string(),
-            "custom_value".to_string(),
+            "HEADER_X-Trace".to_string(),
+            "should-be-ignored".to_string(),
         );
-
-        assert!(config.env.contains_key("HEADER_X-Custom-Auth"));
+        let headers = build_headers_for_tests(&config).unwrap();
+        assert!(headers.is_empty());
     }
 
     #[test]
-    fn test_invalid_url_detection() {
+    fn test_build_headers_from_config_extra_headers_only() {
         let mut config = create_test_http_config();
-        config.args = vec!["not-a-valid-url".to_string()];
-
-        // This would fail at connect time, but we can check the config
-        assert!(!config.args[0].starts_with("http://"));
-        assert!(!config.args[0].starts_with("https://"));
-    }
-
-    #[test]
-    fn test_empty_args_detection() {
-        let mut config = create_test_http_config();
-        config.args = vec![];
-
-        // Empty args should fail at connect time
-        assert!(config.args.is_empty());
+        config.extra_headers = Some({
+            let mut h = HashMap::new();
+            h.insert("X-Tenant".to_string(), "42".to_string());
+            h
+        });
+        let headers = build_headers_for_tests(&config).unwrap();
+        assert_eq!(headers.get("X-Tenant").unwrap(), "42");
+        assert!(headers.get(reqwest::header::AUTHORIZATION).is_none());
     }
 
     // HTTP warning integration tests

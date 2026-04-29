@@ -111,6 +111,9 @@ impl Default for ExportOptions {
 
 /// MCP server sanitization configuration for export.
 /// Allows clearing or modifying sensitive environment variables.
+///
+/// v1.2: added `clear_auth_metadata` and `clear_extra_headers` to let the
+/// user opt out of exporting HTTP auth metadata (secrets are never exported).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MCPSanitizationConfig {
@@ -122,6 +125,12 @@ pub struct MCPSanitizationConfig {
     pub modify_args: Vec<String>,
     /// If true, skip this server entirely from export
     pub exclude_from_export: bool,
+    /// If true, strip auth_type + auth_metadata before export (v1.2)
+    #[serde(default)]
+    pub clear_auth_metadata: bool,
+    /// If true, strip extra_headers before export (v1.2)
+    #[serde(default)]
+    pub clear_extra_headers: bool,
 }
 
 /// Export manifest with metadata.
@@ -234,6 +243,9 @@ pub struct LLMConfigExport {
 }
 
 /// MCP Server data for export.
+///
+/// v1.2: added `auth_type`, `auth_metadata`, `extra_headers` (HTTP auth metadata).
+/// Secrets are NEVER exported — they live in the OS keychain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MCPServerExportData {
@@ -245,6 +257,15 @@ pub struct MCPServerExportData {
     pub env: HashMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// HTTP auth type (v1.2). Absent = no auth (legacy v1.0 / v1.1 behavior).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_type: Option<crate::models::mcp::MCPAuthType>,
+    /// HTTP auth metadata (v1.2). Secrets are stored separately in keychain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_metadata: Option<crate::models::mcp::MCPAuthMetadata>,
+    /// Additional HTTP headers (v1.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_headers: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -361,6 +382,9 @@ pub struct AgentExportSummary {
 }
 
 /// MCP server summary for preview.
+///
+/// v1.2: exposes `auth_type` and `extra_header_keys` so the export UI can
+/// render the dedicated auth section on `MCPFieldEditor`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MCPServerExportSummary {
@@ -370,6 +394,12 @@ pub struct MCPServerExportSummary {
     pub enabled: bool,
     pub command: String,
     pub tools_count: usize,
+    /// Active HTTP auth method (`None` / absent for non-HTTP servers).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub auth_type: Option<crate::models::mcp::MCPAuthType>,
+    /// Names of the extra HTTP headers attached to the server.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_header_keys: Vec<String>,
 }
 
 /// LLM model summary for preview.
@@ -493,6 +523,8 @@ pub enum ImportWarningType {
     DefaultApplied,
     /// Builtin model reimport
     BuiltinModel,
+    /// MCP server has authentication configured but no secret was included (v1.2)
+    McpSecretMissing,
 }
 
 /// Import validation result.
@@ -564,10 +596,10 @@ pub struct ImportError {
 }
 
 /// Current schema version for export packages
-pub const EXPORT_SCHEMA_VERSION: &str = "1.1";
+pub const EXPORT_SCHEMA_VERSION: &str = "1.2";
 
 /// Supported schema versions for import (backward compatibility)
-pub const SUPPORTED_SCHEMA_VERSIONS: &[&str] = &["1.0", "1.1"];
+pub const SUPPORTED_SCHEMA_VERSIONS: &[&str] = &["1.0", "1.1", "1.2"];
 
 /// Application version (read from Cargo.toml at compile time)
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -752,7 +784,7 @@ mod tests {
         );
 
         assert_eq!(package.manifest.version, EXPORT_SCHEMA_VERSION);
-        assert_eq!(package.manifest.version, "1.1");
+        assert_eq!(package.manifest.version, "1.2");
         assert_eq!(package.manifest.app_version, env!("CARGO_PKG_VERSION"));
         assert!(package.manifest.description.is_some());
         assert_eq!(package.manifest.counts.agents, 0);
@@ -872,7 +904,66 @@ mod tests {
     fn test_supported_schema_versions() {
         assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.0"));
         assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.1"));
+        assert!(SUPPORTED_SCHEMA_VERSIONS.contains(&"1.2"));
         assert!(!SUPPORTED_SCHEMA_VERSIONS.contains(&"2.0"));
+    }
+
+    #[test]
+    fn test_mcp_server_export_v1_2_serialization() {
+        let server = MCPServerExportData {
+            name: "Remote".to_string(),
+            enabled: true,
+            command: "http".to_string(),
+            args: vec!["https://api.example.com/mcp".to_string()],
+            env: HashMap::new(),
+            description: None,
+            auth_type: Some(crate::models::mcp::MCPAuthType::Bearer),
+            auth_metadata: Some(crate::models::mcp::MCPAuthMetadata::default()),
+            extra_headers: Some(HashMap::from([("X-Tenant".to_string(), "42".to_string())])),
+            created_at: None,
+            updated_at: None,
+        };
+        let json = serde_json::to_string(&server).unwrap();
+        assert!(json.contains("\"authType\":\"bearer\""));
+        assert!(json.contains("\"extraHeaders\""));
+    }
+
+    #[test]
+    fn test_mcp_server_export_v1_1_backward_compat_deserialization() {
+        // Simulate a v1.1 MCP server JSON without auth fields
+        let v1_1_json = r#"{
+            "name": "Stdio",
+            "enabled": true,
+            "command": "docker",
+            "args": ["run"],
+            "env": { "DEBUG": "true" }
+        }"#;
+        let server: MCPServerExportData = serde_json::from_str(v1_1_json).unwrap();
+        assert_eq!(server.name, "Stdio");
+        assert!(server.auth_type.is_none());
+        assert!(server.auth_metadata.is_none());
+        assert!(server.extra_headers.is_none());
+    }
+
+    #[test]
+    fn test_mcp_secret_missing_warning_serialization() {
+        let warning = ImportWarning {
+            warning_type: ImportWarningType::McpSecretMissing,
+            severity: "high".to_string(),
+            entity: "mcp:Remote".to_string(),
+            detail: "Authentication secret not included in export".to_string(),
+            action: "Open MCP settings and re-enter the secret for this server".to_string(),
+        };
+        let json = serde_json::to_string(&warning).unwrap();
+        assert!(json.contains("\"warningType\":\"mcp_secret_missing\""));
+        assert!(json.contains("\"severity\":\"high\""));
+    }
+
+    #[test]
+    fn test_sanitization_config_v1_2_fields_default_false() {
+        let config = MCPSanitizationConfig::default();
+        assert!(!config.clear_auth_metadata);
+        assert!(!config.clear_extra_headers);
     }
 
     #[test]

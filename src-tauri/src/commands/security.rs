@@ -60,6 +60,15 @@ impl SecureKeyStore {
     pub fn delete_key(&self, provider: &str) -> Result<(), KeyStoreError> {
         self.inner.delete(provider)
     }
+
+    /// Returns a reference to the underlying [`KeyStore`].
+    ///
+    /// Used by modules that need the lower-level `save / get / delete`
+    /// API (e.g. `mcp::secrets` for per-server MCP secret storage in
+    /// the same keyring service).
+    pub fn inner(&self) -> &KeyStore {
+        &self.inner
+    }
 }
 
 impl Default for SecureKeyStore {

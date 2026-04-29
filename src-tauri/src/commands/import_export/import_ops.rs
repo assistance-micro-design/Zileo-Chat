@@ -112,6 +112,26 @@ pub async fn import_mcp_servers(
                     }
                 }
                 let env_str = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+
+                // v1.2 — HTTP auth metadata (secrets are NOT in the export
+                // payload). `auth_type::None` is normalised to no row entry,
+                // matching `MCPServerCreate::from_config` semantics.
+                let auth_type = server.auth_type.and_then(|t| match t {
+                    crate::models::mcp::MCPAuthType::None => None,
+                    other => serde_json::to_value(other)
+                        .ok()
+                        .and_then(|v| v.as_str().map(str::to_string)),
+                });
+                let auth_metadata = server
+                    .auth_metadata
+                    .as_ref()
+                    .and_then(|m| serde_json::to_string(m).ok());
+                let extra_headers = server
+                    .extra_headers
+                    .as_ref()
+                    .filter(|h| !h.is_empty())
+                    .and_then(|h| serde_json::to_string(h).ok());
+
                 let data = sanitize_for_surrealdb(serde_json::json!({
                     "name": name,
                     "enabled": server.enabled,
@@ -119,6 +139,9 @@ pub async fn import_mcp_servers(
                     "args": server.args,
                     "env": env_str,
                     "description": server.description,
+                    "auth_type": auth_type,
+                    "auth_metadata": auth_metadata,
+                    "extra_headers": extra_headers,
                 }));
                 match persist_imported_entity(db, "mcp_server", &id, data, is_overwrite).await {
                     Ok(()) => t.imported.mcp_servers += 1,

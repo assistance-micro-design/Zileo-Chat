@@ -60,10 +60,16 @@ pub mod error;
 #[allow(dead_code)]
 pub mod helpers;
 #[allow(dead_code)]
+pub mod http_auth;
+#[allow(dead_code)]
 pub mod http_handle;
 pub mod manager;
 #[allow(dead_code)]
 pub mod protocol;
+#[allow(dead_code)]
+pub mod redact;
+#[allow(dead_code)]
+pub mod secrets;
 #[allow(dead_code)]
 pub mod server_handle;
 

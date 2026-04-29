@@ -18,10 +18,14 @@
 //! MCP server configurations.
 
 use crate::commands::mcp::validation::{
-    check_mcp_http_warning, validate_mcp_server_config, validate_mcp_server_id,
+    check_mcp_http_warning, validate_extra_headers, validate_mcp_auth, validate_mcp_server_config,
+    validate_mcp_server_id,
 };
-use crate::models::mcp::{MCPServer, MCPServerConfig, MCPServerResponse};
+use crate::commands::SecureKeyStore;
+use crate::mcp::secrets::{delete_mcp_secret, save_mcp_secret};
+use crate::models::mcp::{MCPAuthType, MCPServer, MCPServerConfigWithSecret, MCPServerResponse};
 use crate::state::AppState;
+use std::collections::HashMap;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
@@ -86,11 +90,12 @@ pub async fn get_mcp_server(id: String, state: State<'_, AppState>) -> Result<MC
 ///
 /// # Arguments
 ///
-/// * `config` - The MCP server configuration
+/// * `config` - The MCP server configuration with optional `authSecret` payload (v1.2)
 ///
 /// # Returns
 ///
-/// The created [`MCPServer`] with initial status.
+/// The created [`MCPServer`] with initial status. The auth secret (if any)
+/// is persisted in the OS keychain and never echoed back.
 ///
 /// # Errors
 ///
@@ -99,20 +104,32 @@ pub async fn get_mcp_server(id: String, state: State<'_, AppState>) -> Result<MC
 /// - A server with the same ID already exists
 /// - The server fails to start (if enabled)
 #[tauri::command]
-#[instrument(name = "create_mcp_server", skip(state, config), fields(server_id))]
+#[instrument(
+    name = "create_mcp_server",
+    skip(state, keystore, config),
+    fields(server_id)
+)]
 pub async fn create_mcp_server(
-    config: MCPServerConfig,
+    config: MCPServerConfigWithSecret,
     state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
 ) -> Result<MCPServerResponse, String> {
+    let MCPServerConfigWithSecret {
+        config: server_config,
+        auth_secret,
+    } = config;
+
     // Log what we received from frontend BEFORE validation
     info!(
-        name = %config.name,
-        env_count_received = config.env.len(),
-        env_keys_received = ?config.env.keys().collect::<Vec<_>>(),
+        name = %server_config.name,
+        env_count_received = server_config.env.len(),
+        env_keys_received = ?server_config.env.keys().collect::<Vec<_>>(),
+        auth_type = ?server_config.auth_type,
+        has_secret = auth_secret.is_some(),
         "Received MCP server config from frontend"
     );
 
-    let validated_config = validate_mcp_server_config(&config)?;
+    let validated_config = validate_mcp_server_config(&server_config)?;
     tracing::Span::current().record("server_id", &validated_config.id);
     info!(
         name = %validated_config.name,
@@ -121,6 +138,22 @@ pub async fn create_mcp_server(
         env_count_validated = validated_config.env.len(),
         "Creating MCP server"
     );
+
+    // ---- v1.2 HTTP auth validation ----
+    let auth_type = validated_config.auth_type.unwrap_or(MCPAuthType::None);
+    let needs_secret = auth_type != MCPAuthType::None;
+    validate_mcp_auth(
+        Some(auth_type),
+        validated_config.auth_metadata.as_ref(),
+        auth_secret.as_ref(),
+        needs_secret, // create -> secret required when auth is enabled
+    )?;
+
+    if let Some(headers) = validated_config.extra_headers.as_ref() {
+        validate_extra_headers(headers, needs_secret)?;
+    } else {
+        validate_extra_headers(&HashMap::new(), needs_secret)?;
+    }
 
     // Check if server already exists
     if state
@@ -144,15 +177,37 @@ pub async fn create_mcp_server(
         );
     }
 
+    // ---- Persist secret in OS keychain BEFORE spawning the server ----
+    // The transport reloads the secret from the keychain at connect time;
+    // saving first guarantees the spawn finds a fresh entry.
+    if needs_secret {
+        if let Some(secret) = auth_secret.as_ref() {
+            save_mcp_secret(keystore.inner().inner(), &validated_config.id, secret).map_err(
+                |e| {
+                    error!(error = %e, "Failed to persist MCP secret to keychain");
+                    format!("Failed to persist MCP secret: {}", e)
+                },
+            )?;
+        }
+    }
+
     // Spawn the server (this also saves to DB)
-    let server = state
+    let server = match state
         .mcp_manager
-        .spawn_server(validated_config)
+        .spawn_server(validated_config.clone())
         .await
-        .map_err(|e| {
+    {
+        Ok(s) => s,
+        Err(e) => {
+            // Best-effort cleanup of the keychain entry to avoid orphaned
+            // secrets when the spawn fails.
+            if needs_secret {
+                let _ = delete_mcp_secret(keystore.inner().inner(), &validated_config.id);
+            }
             error!(error = %e, "Failed to create MCP server");
-            format!("Failed to create MCP server: {}", e)
-        })?;
+            return Err(format!("Failed to create MCP server: {}", e));
+        }
+    };
 
     info!(
         id = %server.config.id,
@@ -169,11 +224,16 @@ pub async fn create_mcp_server(
 /// # Arguments
 ///
 /// * `id` - The unique identifier of the server to update
-/// * `config` - The new configuration
+/// * `config` - The new configuration with optional `authSecret` payload (v1.2)
 ///
 /// # Returns
 ///
-/// The updated [`MCPServer`] with current status.
+/// The updated [`MCPServer`] with current status. Behaviour for the auth
+/// secret:
+/// - `auth_type` becomes `None` → existing keychain entry is deleted.
+/// - `auth_secret` is provided → the keychain entry is overwritten.
+/// - `auth_secret` is absent (and auth_type stays non-None) → the existing
+///   keychain entry is preserved (placeholder UI scenario).
 ///
 /// # Errors
 ///
@@ -183,14 +243,20 @@ pub async fn create_mcp_server(
 /// - The server is not found
 /// - The update fails
 #[tauri::command]
-#[instrument(name = "update_mcp_server", skip(state, config), fields(server_id = %id))]
+#[instrument(name = "update_mcp_server", skip(state, keystore, config), fields(server_id = %id))]
 pub async fn update_mcp_server(
     id: String,
-    config: MCPServerConfig,
+    config: MCPServerConfigWithSecret,
     state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
 ) -> Result<MCPServerResponse, String> {
+    let MCPServerConfigWithSecret {
+        config: server_config,
+        auth_secret,
+    } = config;
+
     let validated_id = validate_mcp_server_id(&id)?;
-    let validated_config = validate_mcp_server_config(&config)?;
+    let validated_config = validate_mcp_server_config(&server_config)?;
 
     // Ensure the ID in config matches the path ID
     if validated_config.id != validated_id {
@@ -200,8 +266,30 @@ pub async fn update_mcp_server(
     info!(
         id = %validated_id,
         name = %validated_config.name,
+        auth_type = ?validated_config.auth_type,
+        rotating_secret = auth_secret.is_some(),
         "Updating MCP server"
     );
+
+    // ---- v1.2 HTTP auth validation ----
+    let auth_type = validated_config.auth_type.unwrap_or(MCPAuthType::None);
+    let auth_active = auth_type != MCPAuthType::None;
+    // On update, the secret is required only when the user is rotating it.
+    // If the user keeps the existing keychain value, we don't enforce its
+    // presence — but metadata invariants (header name / username) are
+    // still validated.
+    validate_mcp_auth(
+        Some(auth_type),
+        validated_config.auth_metadata.as_ref(),
+        auth_secret.as_ref(),
+        false,
+    )?;
+
+    if let Some(headers) = validated_config.extra_headers.as_ref() {
+        validate_extra_headers(headers, auth_active)?;
+    } else {
+        validate_extra_headers(&HashMap::new(), auth_active)?;
+    }
 
     // Check if server exists
     if state.mcp_manager.get_server(&validated_id).await.is_none() {
@@ -215,6 +303,22 @@ pub async fn update_mcp_server(
             name = %validated_config.name,
             "MCP server updated with insecure HTTP URL"
         );
+    }
+
+    // ---- Keychain update BEFORE the DB / restart ----
+    // The transport reloads the secret at connect time, so the keychain
+    // must reflect the new value first.
+    if !auth_active {
+        // Either auth was disabled OR is now `None`: delete any leftover
+        // entry. Best-effort — missing entries are not errors.
+        if let Err(e) = delete_mcp_secret(keystore.inner().inner(), &validated_id) {
+            warn!(error = %e, "Best-effort secret delete failed during update");
+        }
+    } else if let Some(secret) = auth_secret.as_ref() {
+        save_mcp_secret(keystore.inner().inner(), &validated_id, secret).map_err(|e| {
+            error!(error = %e, "Failed to persist MCP secret to keychain");
+            format!("Failed to persist MCP secret: {}", e)
+        })?;
     }
 
     // Update the configuration in database
@@ -266,8 +370,12 @@ pub async fn update_mcp_server(
 /// - The server is not found
 /// - Deletion fails
 #[tauri::command]
-#[instrument(name = "delete_mcp_server", skip(state), fields(server_id = %id))]
-pub async fn delete_mcp_server(id: String, state: State<'_, AppState>) -> Result<(), String> {
+#[instrument(name = "delete_mcp_server", skip(state, keystore), fields(server_id = %id))]
+pub async fn delete_mcp_server(
+    id: String,
+    state: State<'_, AppState>,
+    keystore: State<'_, SecureKeyStore>,
+) -> Result<(), String> {
     let validated_id = validate_mcp_server_id(&id)?;
     info!(id = %validated_id, "Deleting MCP server");
 
@@ -284,6 +392,16 @@ pub async fn delete_mcp_server(id: String, state: State<'_, AppState>) -> Result
             error!(error = %e, "Failed to delete MCP server");
             format!("Failed to delete MCP server: {}", e)
         })?;
+
+    // Best-effort: clean up the keychain entry. Failures are logged
+    // but do not abort the delete (the DB row is already gone).
+    if let Err(e) = delete_mcp_secret(keystore.inner().inner(), &validated_id) {
+        warn!(
+            id = %validated_id,
+            error = %e,
+            "Failed to delete MCP secret from keychain (best-effort)"
+        );
+    }
 
     info!(id = %validated_id, "MCP server deleted");
     Ok(())

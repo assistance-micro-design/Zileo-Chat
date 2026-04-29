@@ -14,7 +14,9 @@
 
 use crate::commands::mcp::validation::*;
 use crate::constants::commands as cmd_const;
-use crate::models::mcp::{MCPDeploymentMethod, MCPServerConfig};
+use crate::models::mcp::{
+    MCPAuthMetadata, MCPAuthSecret, MCPAuthType, MCPDeploymentMethod, MCPServerConfig,
+};
 use std::collections::HashMap;
 
 #[test]
@@ -200,6 +202,9 @@ fn test_validate_mcp_server_config() {
         args: vec!["run".to_string(), "-i".to_string()],
         env: HashMap::new(),
         description: Some("A test server".to_string()),
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
 
     let result = validate_mcp_server_config(&config);
@@ -216,6 +221,9 @@ fn test_validate_mcp_server_config_invalid_id() {
         args: vec![],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
 
     let result = validate_mcp_server_config(&config);
@@ -329,6 +337,9 @@ fn test_check_mcp_http_warning_docker_no_warning() {
         args: vec!["run".to_string(), "-i".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_none());
 }
@@ -343,6 +354,9 @@ fn test_check_mcp_http_warning_npx_no_warning() {
         args: vec!["-y".to_string(), "@test/mcp".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_none());
 }
@@ -357,6 +371,9 @@ fn test_check_mcp_http_warning_https_no_warning() {
         args: vec!["https://api.example.com/mcp".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_none());
 }
@@ -371,6 +388,9 @@ fn test_check_mcp_http_warning_localhost_no_warning() {
         args: vec!["http://localhost:3000/mcp".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_none());
 }
@@ -385,6 +405,9 @@ fn test_check_mcp_http_warning_remote_http_returns_warning() {
         args: vec!["http://api.example.com/mcp".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     let warning = check_mcp_http_warning(&config);
     assert!(warning.is_some());
@@ -403,6 +426,9 @@ fn test_check_mcp_http_warning_remote_ip_returns_warning() {
         args: vec!["http://192.168.1.100:8080/mcp".to_string()],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_some());
 }
@@ -417,6 +443,235 @@ fn test_check_mcp_http_warning_empty_args_no_warning() {
         args: vec![],
         env: HashMap::new(),
         description: None,
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     };
     assert!(check_mcp_http_warning(&config).is_none());
+}
+
+// ============================================================================
+// Phase 2 — HTTP authentication validation (v1.2)
+// ============================================================================
+
+#[test]
+fn test_validate_bearer_token_ok() {
+    assert!(validate_bearer_token("sk-1234567890abcdef").is_ok());
+    assert!(validate_bearer_token(&"a".repeat(4096)).is_ok());
+}
+
+#[test]
+fn test_validate_bearer_token_rejects_empty() {
+    let err = validate_bearer_token("").unwrap_err();
+    assert!(err.contains("empty"));
+}
+
+#[test]
+fn test_validate_bearer_token_rejects_too_long() {
+    let too_long = "a".repeat(4097);
+    let err = validate_bearer_token(&too_long).unwrap_err();
+    assert!(err.contains("maximum length"));
+}
+
+#[test]
+fn test_validate_bearer_token_rejects_newlines() {
+    assert!(validate_bearer_token("sk-abc\nInjection").is_err());
+    assert!(validate_bearer_token("sk-abc\rInjection").is_err());
+    assert!(validate_bearer_token("sk-abc\r\nInjection").is_err());
+}
+
+#[test]
+fn test_validate_apikey_header_name_default() {
+    let resolved = validate_apikey_header_name(None).unwrap();
+    assert_eq!(resolved, "X-API-Key");
+}
+
+#[test]
+fn test_validate_apikey_header_name_explicit_ok() {
+    let resolved = validate_apikey_header_name(Some("X-Custom-Key")).unwrap();
+    assert_eq!(resolved, "X-Custom-Key");
+}
+
+#[test]
+fn test_validate_apikey_header_name_rejects_invalid_chars() {
+    assert!(validate_apikey_header_name(Some("X Custom Key")).is_err());
+    assert!(validate_apikey_header_name(Some("X-Custom Key:Bad")).is_err());
+    assert!(validate_apikey_header_name(Some("éclair")).is_err());
+}
+
+#[test]
+fn test_validate_apikey_header_name_rejects_too_long() {
+    let too_long = "A".repeat(65);
+    assert!(validate_apikey_header_name(Some(&too_long)).is_err());
+}
+
+#[test]
+fn test_validate_api_key_value_ok() {
+    assert!(validate_api_key_value("abc123").is_ok());
+}
+
+#[test]
+fn test_validate_api_key_value_rejects_newlines() {
+    assert!(validate_api_key_value("abc\nbad").is_err());
+    assert!(validate_api_key_value("abc\rbad").is_err());
+}
+
+#[test]
+fn test_validate_basic_auth_ok() {
+    assert!(validate_basic_auth("alice", "p@ss").is_ok());
+}
+
+#[test]
+fn test_validate_basic_auth_rejects_colon_in_username() {
+    let err = validate_basic_auth("ali:ce", "p@ss").unwrap_err();
+    assert!(err.contains(':'));
+}
+
+#[test]
+fn test_validate_basic_auth_rejects_empty() {
+    assert!(validate_basic_auth("", "p@ss").is_err());
+    assert!(validate_basic_auth("alice", "").is_err());
+}
+
+#[test]
+fn test_validate_basic_auth_rejects_newlines() {
+    assert!(validate_basic_auth("alice\n", "p@ss").is_err());
+    assert!(validate_basic_auth("alice", "p@\nss").is_err());
+}
+
+#[test]
+fn test_validate_extra_headers_ok() {
+    let mut headers = HashMap::new();
+    headers.insert("X-Tenant-ID".to_string(), "42".to_string());
+    headers.insert("X-Trace".to_string(), "abc123".to_string());
+    assert!(validate_extra_headers(&headers, false).is_ok());
+}
+
+#[test]
+fn test_validate_extra_headers_rejects_too_many() {
+    let mut headers = HashMap::new();
+    for i in 0..21 {
+        headers.insert(format!("X-Header-{}", i), "v".to_string());
+    }
+    let err = validate_extra_headers(&headers, false).unwrap_err();
+    assert!(err.contains("Too many"));
+}
+
+#[test]
+fn test_validate_extra_headers_rejects_authorization_when_auth_set() {
+    let mut headers = HashMap::new();
+    headers.insert("Authorization".to_string(), "Bearer xxx".to_string());
+    assert!(validate_extra_headers(&headers, true).is_err());
+
+    // Lower / mixed case must also be rejected (HTTP headers are case-insensitive)
+    let mut headers2 = HashMap::new();
+    headers2.insert("authorization".to_string(), "Bearer xxx".to_string());
+    assert!(validate_extra_headers(&headers2, true).is_err());
+}
+
+#[test]
+fn test_validate_extra_headers_allows_authorization_when_no_auth() {
+    let mut headers = HashMap::new();
+    headers.insert("Authorization".to_string(), "Bearer xxx".to_string());
+    assert!(validate_extra_headers(&headers, false).is_ok());
+}
+
+#[test]
+fn test_validate_extra_headers_rejects_invalid_name() {
+    let mut headers = HashMap::new();
+    headers.insert("X Tenant".to_string(), "42".to_string());
+    assert!(validate_extra_headers(&headers, false).is_err());
+}
+
+#[test]
+fn test_validate_extra_headers_rejects_newline_in_value() {
+    let mut headers = HashMap::new();
+    headers.insert("X-Tenant".to_string(), "42\nInjection".to_string());
+    assert!(validate_extra_headers(&headers, false).is_err());
+}
+
+#[test]
+fn test_validate_extra_headers_rejects_empty_value() {
+    let mut headers = HashMap::new();
+    headers.insert("X-Tenant".to_string(), "".to_string());
+    assert!(validate_extra_headers(&headers, false).is_err());
+}
+
+#[test]
+fn test_validate_mcp_auth_none_always_ok() {
+    assert!(validate_mcp_auth(None, None, None, true).is_ok());
+    assert!(validate_mcp_auth(Some(MCPAuthType::None), None, None, true).is_ok());
+}
+
+#[test]
+fn test_validate_mcp_auth_bearer_requires_secret() {
+    let err = validate_mcp_auth(Some(MCPAuthType::Bearer), None, None, true).unwrap_err();
+    assert!(err.contains("Bearer"));
+
+    let secret = MCPAuthSecret {
+        token: Some("sk-abc".to_string()),
+        ..Default::default()
+    };
+    assert!(validate_mcp_auth(Some(MCPAuthType::Bearer), None, Some(&secret), true).is_ok());
+}
+
+#[test]
+fn test_validate_mcp_auth_bearer_secret_optional_on_update() {
+    // secret_required=false simulates an "update without rotating the secret"
+    assert!(validate_mcp_auth(Some(MCPAuthType::Bearer), None, None, false).is_ok());
+}
+
+#[test]
+fn test_validate_mcp_auth_apikey_default_header_name() {
+    let secret = MCPAuthSecret {
+        value: Some("abc".to_string()),
+        ..Default::default()
+    };
+    // No header name -> defaults to X-API-Key, accepted
+    assert!(validate_mcp_auth(Some(MCPAuthType::Apikey), None, Some(&secret), true).is_ok());
+}
+
+#[test]
+fn test_validate_mcp_auth_apikey_invalid_header_name() {
+    let metadata = MCPAuthMetadata {
+        header_name: Some("Bad Header".to_string()),
+        username: None,
+    };
+    let secret = MCPAuthSecret {
+        value: Some("abc".to_string()),
+        ..Default::default()
+    };
+    assert!(validate_mcp_auth(
+        Some(MCPAuthType::Apikey),
+        Some(&metadata),
+        Some(&secret),
+        true
+    )
+    .is_err());
+}
+
+#[test]
+fn test_validate_mcp_auth_basic_requires_username_and_password() {
+    // Missing username
+    let secret = MCPAuthSecret {
+        password: Some("p@ss".to_string()),
+        ..Default::default()
+    };
+    assert!(validate_mcp_auth(Some(MCPAuthType::Basic), None, Some(&secret), true).is_err());
+
+    // Missing password (with secret_required=true)
+    let metadata = MCPAuthMetadata {
+        username: Some("alice".to_string()),
+        header_name: None,
+    };
+    assert!(validate_mcp_auth(Some(MCPAuthType::Basic), Some(&metadata), None, true).is_err());
+
+    // Both present -> OK
+    assert!(validate_mcp_auth(
+        Some(MCPAuthType::Basic),
+        Some(&metadata),
+        Some(&secret),
+        true
+    )
+    .is_ok());
 }

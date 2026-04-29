@@ -5,6 +5,22 @@ All notable changes to Zileo Chat will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **MCP HTTP authentication (v1.2)**: First-class HTTP auth for remote MCP servers -- methods `Bearer`, `API Key` (custom header, default `X-API-Key`) and `Basic`, plus a cumulative "Extra HTTP headers" list. Secrets are persisted in the OS keychain (per-server namespace `mcp_auth_<id>`) and never written to the database, logs, or export bundles. Symmetric TS+Rust validation (length limits, `\r\n` rejection, header-name regex `^[A-Za-z0-9_-]+$`), redacted debug logging, and full i18n coverage (`mcp_auth_*`, EN+FR)
+- **Database schema migration (`mcp_auth_v1`)**: Adds `auth_type`, `auth_metadata`, `extra_headers` columns on the `mcp_server` table (idempotent `DEFINE FIELD OVERWRITE`)
+- **Legacy migration assistance UI**: Settings > MCP banner that lists HTTP servers still relying on `API_KEY` / `HEADER_*` env vars; the form exposes one-click actions to convert the legacy value into the new Bearer or `X-API-Key` field
+- **Import/Export schema v1.2**: `EXPORT_SCHEMA_VERSION` bumped to `"1.2"` (still accepts `1.0` and `1.1`). Adds `authType`, `authMetadata`, `extraHeaderKeys` on MCP summaries, `clearAuthMetadata` / `clearExtraHeaders` checkboxes in `MCPFieldEditor`, a `Secret required` badge in `ImportPreview`, and a structured `McpSecretMissing` warning + post-import action per HTTP MCP server with active auth
+
+### Changed
+
+- **BREAKING -- HTTP MCP auth**: HTTP servers no longer interpret the legacy `API_KEY` / `HEADER_*` env vars at runtime. Existing servers must be migrated to the new auth fields via the in-app banner; the legacy env values are preserved for one-click migration but ignored by the HTTP transport
+- **`create_mcp_server` / `update_mcp_server` IPC payload**: Now accepts `MCPServerConfigWithSecret` (`MCPServerConfig` + optional `authSecret`). Read commands never echo the secret back
+
+---
+
 ## [0.20.1] - 2026-04-26
 
 ### Fixed

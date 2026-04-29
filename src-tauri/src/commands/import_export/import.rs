@@ -100,6 +100,7 @@ pub async fn validate_import(
         &package.mcp_servers,
         &mut conflicts,
         &mut missing_mcp_env,
+        &mut warnings,
     )
     .await;
     let model_summaries =
@@ -301,21 +302,33 @@ async fn validate_agents(
     summaries
 }
 
-/// Builds MCP server summaries, detects conflicts, and checks for missing env keys.
+/// Builds MCP server summaries, detects conflicts, checks for missing env
+/// keys and emits a `McpSecretMissing` warning per server that uses HTTP
+/// authentication (the secret is never part of the export bundle).
 async fn validate_mcp_servers(
     db: &DBClient,
     servers: &[MCPServerExportData],
     conflicts: &mut Vec<ImportConflict>,
     missing_mcp_env: &mut HashMap<String, Vec<String>>,
+    warnings: &mut Vec<ImportWarning>,
 ) -> Vec<MCPServerExportSummary> {
     let mut summaries = Vec::new();
     for server in servers {
+        let extra_header_keys: Vec<String> = server
+            .extra_headers
+            .as_ref()
+            .map(|h| h.keys().cloned().collect())
+            .unwrap_or_default();
         summaries.push(MCPServerExportSummary {
             id: None,
             name: server.name.clone(),
             enabled: server.enabled,
             command: server.command.clone(),
             tools_count: 0,
+            auth_type: server
+                .auth_type
+                .filter(|t| !matches!(t, crate::models::mcp::MCPAuthType::None)),
+            extra_header_keys,
         });
 
         let missing_keys: Vec<String> = server
@@ -326,6 +339,29 @@ async fn validate_mcp_servers(
             .collect();
         if !missing_keys.is_empty() {
             missing_mcp_env.insert(server.name.clone(), missing_keys);
+        }
+
+        // v1.2 — secrets are never exported. Warn the user that any HTTP MCP
+        // server with active auth will need its secret re-entered.
+        if matches!(
+            server.auth_type,
+            Some(crate::models::mcp::MCPAuthType::Bearer)
+                | Some(crate::models::mcp::MCPAuthType::Apikey)
+                | Some(crate::models::mcp::MCPAuthType::Basic)
+        ) {
+            warnings.push(ImportWarning {
+                warning_type: ImportWarningType::McpSecretMissing,
+                severity: "warning".to_string(),
+                entity: format!("MCP server '{}'", server.name),
+                detail: "auth secret must be re-entered after import".to_string(),
+                action: format!(
+                    "Open Settings > MCP and configure the {:?} secret for '{}'",
+                    server
+                        .auth_type
+                        .unwrap_or(crate::models::mcp::MCPAuthType::None),
+                    server.name
+                ),
+            });
         }
 
         if let Some(conflict) = check_name_conflict(db, "mcp_server", "mcp", &server.name).await {
@@ -668,6 +704,26 @@ async fn generate_post_import_actions(
                 "Agent '{}': verify {} folder path(s) on this machine (Settings > Agents)",
                 agent.name,
                 agent.folders.len()
+            ));
+        }
+    }
+
+    // v1.2 — actionable items for HTTP MCP servers with auth: the secret is
+    // never exported, so the user must re-enter it after import.
+    let selected_mcp: HashSet<&str> = selection.mcp_servers.iter().map(|s| s.as_str()).collect();
+    for server in &package.mcp_servers {
+        if !selected_mcp.contains(server.name.as_str()) {
+            continue;
+        }
+        if matches!(
+            server.auth_type,
+            Some(crate::models::mcp::MCPAuthType::Bearer)
+                | Some(crate::models::mcp::MCPAuthType::Apikey)
+                | Some(crate::models::mcp::MCPAuthType::Basic)
+        ) {
+            actions.push(format!(
+                "MCP server '{}': re-enter the auth secret (Settings > MCP)",
+                server.name
             ));
         }
     }

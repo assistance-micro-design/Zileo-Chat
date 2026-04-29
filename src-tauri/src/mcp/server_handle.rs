@@ -705,6 +705,9 @@ mod tests {
             ],
             env: HashMap::new(),
             description: Some("Test server for unit tests".to_string()),
+            auth_type: None,
+            auth_metadata: None,
+            extra_headers: None,
         }
     }
 

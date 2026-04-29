@@ -21,7 +21,13 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { MCPServer, MCPServerConfig, MCPTestResult } from '$types/mcp';
+	import type {
+		LegacyHttpAuthWarning,
+		MCPServer,
+		MCPServerConfig,
+		MCPServerConfigWithSecret,
+		MCPTestResult
+	} from '$types/mcp';
 	import { Card, Button, StatusIndicator, Modal, DeleteConfirmModal, ErrorBanner } from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import SettingsSectionHeader from './SettingsSectionHeader.svelte';
@@ -41,6 +47,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		testServer,
 		startServer,
 		stopServer,
+		listLegacyHttpAuth,
 		type MCPState
 	} from '$lib/stores/mcp';
 	import { Plus, Plug } from '@lucide/svelte';
@@ -64,6 +71,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	let serverToDelete = $state<MCPServer | null>(null);
 	let serverDeleting = $state(false);
 
+	/** Legacy HTTP auth migration state. */
+	let legacyAuthWarnings = $state<LegacyHttpAuthWarning[]>([]);
+	let legacyBannerDismissed = $state(false);
+
 	/**
 	 * Loads MCP servers from backend
 	 */
@@ -78,7 +89,9 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	}
 
 	/**
-	 * Opens the edit server modal (create uses mcpModal.openCreate() directly)
+	 * Opens the edit server modal (create uses mcpModal.openCreate() directly).
+	 * Auth fields are propagated so the form can pre-fill the auth method and
+	 * metadata without exposing any secret.
 	 */
 	function openEditModal(server: MCPServer): void {
 		mcpModal.openEdit({
@@ -88,14 +101,19 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			command: server.command,
 			args: server.args,
 			env: server.env,
-			description: server.description
+			description: server.description,
+			authType: server.authType,
+			authMetadata: server.authMetadata,
+			extraHeaders: server.extraHeaders
 		});
 	}
 
 	/**
-	 * Saves an MCP server (create or update)
+	 * Saves an MCP server (create or update). Accepts a config that may
+	 * include an `authSecret` payload; the backend persists the secret in
+	 * the OS keychain and never returns it on read.
 	 */
-	async function handleSaveMCPServer(config: MCPServerConfig): Promise<void> {
+	async function handleSaveMCPServer(config: MCPServerConfigWithSecret): Promise<void> {
 		mcpSaving = true;
 		mcpWarning = null;
 		try {
@@ -109,10 +127,43 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 				mcpWarning = response.warning ?? null;
 			}
 			mcpModal.close();
+			// Refresh the legacy banner: a successful save likely cleared a warning.
+			refreshLegacyAuthWarnings();
 		} catch (err) {
 			mcpState = setMCPError(mcpState, $i18n('settings_mcp_save_failed', { error: getErrorMessage(err) }));
 		} finally {
 			mcpSaving = false;
+		}
+	}
+
+	/**
+	 * Reloads the list of HTTP MCP servers still relying on legacy env-var
+	 * authentication. Failures are silent — the banner just stays hidden.
+	 */
+	async function refreshLegacyAuthWarnings(): Promise<void> {
+		try {
+			legacyAuthWarnings = await listLegacyHttpAuth();
+		} catch {
+			legacyAuthWarnings = [];
+		}
+	}
+
+	/**
+	 * Opens the edit modal for the first server flagged in the legacy banner.
+	 * If the server has been deleted between mount and click, falls back to
+	 * dismissing the banner.
+	 */
+	function configureLegacyAuth(): void {
+		const first = legacyAuthWarnings[0];
+		if (!first) {
+			legacyBannerDismissed = true;
+			return;
+		}
+		const target = mcpState.servers.find((s) => s.id === first.id);
+		if (target) {
+			openEditModal(target);
+		} else {
+			legacyBannerDismissed = true;
 		}
 	}
 
@@ -132,7 +183,9 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		serverDeleting = true;
 		try {
 			await deleteServer(serverToDelete.id);
-			mcpState = removeServer(mcpState, serverToDelete.id);
+			const deletedId = serverToDelete.id;
+			mcpState = removeServer(mcpState, deletedId);
+			legacyAuthWarnings = legacyAuthWarnings.filter((w) => w.id !== deletedId);
 			showDeleteConfirm = false;
 			serverToDelete = null;
 		} catch (err) {
@@ -164,7 +217,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			command: server.command,
 			args: server.args,
 			env: server.env,
-			description: server.description
+			description: server.description,
+			authType: server.authType,
+			authMetadata: server.authMetadata,
+			extraHeaders: server.extraHeaders
 		};
 		showTestModal = true;
 
@@ -234,6 +290,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 
 	onMount(() => {
 		loadMCPServers();
+		refreshLegacyAuthWarnings();
 	});
 </script>
 
@@ -253,6 +310,28 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 
 	{#if mcpState.error}
 		<ErrorBanner message={mcpState.error} onDismiss={() => (mcpState = setMCPError(mcpState, null))} />
+	{/if}
+
+	{#if !legacyBannerDismissed && legacyAuthWarnings.length > 0}
+		<div class="legacy-auth-banner" role="region" aria-label={$i18n('mcp_auth_legacy_banner_title')}>
+			<div class="legacy-auth-text">
+				<strong>{$i18n('mcp_auth_legacy_banner_title')}</strong>
+				<p>{$i18n('mcp_auth_legacy_banner_body')}</p>
+				<ul class="legacy-auth-list">
+					{#each legacyAuthWarnings as warning (warning.id)}
+						<li>{warning.name}</li>
+					{/each}
+				</ul>
+			</div>
+			<div class="legacy-auth-actions">
+				<Button variant="primary" size="sm" onclick={configureLegacyAuth}>
+					{$i18n('mcp_auth_legacy_banner_action')}
+				</Button>
+				<Button variant="ghost" size="sm" onclick={() => (legacyBannerDismissed = true)}>
+					{$i18n('common_close')}
+				</Button>
+			</div>
+		</div>
 	{/if}
 
 	{#if mcpState.loading}
@@ -391,6 +470,43 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
+	}
+
+	.legacy-auth-banner {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+		padding: var(--spacing-md);
+		margin-bottom: var(--spacing-md);
+		background: var(--color-warning-bg);
+		border: 1px solid var(--color-warning);
+		border-radius: var(--border-radius-md);
+	}
+
+	.legacy-auth-text strong {
+		display: block;
+		color: var(--color-warning);
+		margin-bottom: var(--spacing-xs);
+		font-weight: var(--font-weight-semibold);
+	}
+
+	.legacy-auth-text p {
+		margin: 0 0 var(--spacing-xs) 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
+
+	.legacy-auth-list {
+		margin: 0;
+		padding-left: var(--spacing-lg);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
+
+	.legacy-auth-actions {
+		display: flex;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
 	/* Responsive */

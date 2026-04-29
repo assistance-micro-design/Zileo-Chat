@@ -237,10 +237,15 @@ MCP server configurations.
 | args | array\<string\> | | Command arguments |
 | env | string | '{}' | JSON-encoded env vars |
 | description | option\<string\> | | |
+| auth_type | option\<string\> ASSERT IN [none, bearer, apikey, basic] | | HTTP auth method (HTTP transport only) |
+| auth_metadata | option\<string\> | | JSON-encoded non-sensitive auth metadata (header name, username) |
+| extra_headers | option\<string\> | | JSON-encoded additional HTTP headers |
 | created_at | datetime | time::now() | |
 | updated_at | datetime | time::now() | |
 
 **Indexes**: `unique_mcp_id` (id, UNIQUE), `unique_mcp_name` (name, UNIQUE)
+
+**Secrets**: Bearer tokens, API key values, and Basic passwords are stored in the OS keychain under `mcp_auth_<server_id>`, never in the database. See `src-tauri/src/mcp/secrets.rs`.
 
 ---
 

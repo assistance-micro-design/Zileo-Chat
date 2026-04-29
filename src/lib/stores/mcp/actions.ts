@@ -21,8 +21,10 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
+	LegacyHttpAuthWarning,
 	MCPServer,
 	MCPServerConfig,
+	MCPServerConfigWithSecret,
 	MCPServerResponse,
 	MCPTestResult,
 	MCPTool,
@@ -77,25 +79,38 @@ export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
 }
 
 /**
- * Creates a new MCP server
- * @param config - Server configuration
+ * Creates a new MCP server.
+ *
+ * For HTTP servers using authentication, pass `authType`, `authMetadata` and
+ * `authSecret` on the config. The secret is moved to the OS keychain on the
+ * backend; it is never persisted to the database.
+ *
+ * @param config - Server configuration (with optional auth secret)
  * @returns Promise resolving to server response with optional warning
  */
-export async function createServer(config: MCPServerConfig): Promise<MCPServerResponse> {
+export async function createServer(
+	config: MCPServerConfigWithSecret
+): Promise<MCPServerResponse> {
 	const response = await invoke<MCPServerResponse>('create_mcp_server', { config });
 	invalidateMCPCache();
 	return response;
 }
 
 /**
- * Updates an existing MCP server
+ * Updates an existing MCP server.
+ *
+ * Secret rotation rules (handled backend-side):
+ * - `authType === 'none'`: any stored secret is removed.
+ * - `authSecret` provided: the keychain entry is overwritten.
+ * - `authSecret` omitted with active auth: the existing secret is kept.
+ *
  * @param id - Server ID to update
- * @param config - New server configuration
+ * @param config - New server configuration (with optional auth secret)
  * @returns Promise resolving to server response with optional warning
  */
 export async function updateServerConfig(
 	id: string,
-	config: MCPServerConfig
+	config: MCPServerConfigWithSecret
 ): Promise<MCPServerResponse> {
 	const response = await invoke<MCPServerResponse>('update_mcp_server', { id, config });
 	invalidateMCPCache();
@@ -155,4 +170,16 @@ export async function callTool(request: MCPToolCallRequest): Promise<MCPToolCall
  */
 export async function listServerTools(serverName: string): Promise<MCPTool[]> {
 	return invoke<MCPTool[]>('list_mcp_tools', { serverName });
+}
+
+/**
+ * Lists HTTP MCP servers that still rely on the legacy `API_KEY` / `HEADER_*`
+ * environment variables. These are no longer interpreted at runtime since the
+ * v0.21 HTTP auth refactor, so the user must migrate them to the new
+ * authentication fields to restore the connection.
+ *
+ * @returns Promise resolving to one warning entry per affected server
+ */
+export async function listLegacyHttpAuth(): Promise<LegacyHttpAuthWarning[]> {
+	return invoke<LegacyHttpAuthWarning[]>('list_mcp_legacy_http_auth');
 }

@@ -120,11 +120,13 @@ Uses ExportEntitySection for collapsible entity sections.
 								</div>
 							</div>
 
-							{#if envKeys.length > 0 && sanitization}
+							{#if sanitization && (envKeys.length > 0 || server.authType !== undefined || (server.extraHeaderKeys && server.extraHeaderKeys.length > 0))}
 								<MCPFieldEditor
 									serverName={server.name}
 									{envKeys}
 									{sanitization}
+									authType={server.authType}
+									extraHeaderKeys={server.extraHeaderKeys ?? []}
 									onchange={(config) => onMcpSanitizationChange(serverId, config)}
 								/>
 							{/if}

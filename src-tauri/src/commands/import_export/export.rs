@@ -364,9 +364,35 @@ async fn export_mcp_servers(
                 continue;
             }
         }
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, created_at, updated_at FROM mcp_server WHERE meta::id(id) = $id";
+        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, \
+                     auth_type, auth_metadata, extra_headers, created_at, updated_at \
+                     FROM mcp_server WHERE meta::id(id) = $id";
         if let Some(row) = query_entity_by_id(db, query, server_id, "MCP server").await? {
             let (env, args) = apply_mcp_sanitization(&row, server_id, sanitization);
+
+            let san = sanitization.get(server_id);
+            let clear_auth = san.is_some_and(|c| c.clear_auth_metadata);
+            let clear_headers = san.is_some_and(|c| c.clear_extra_headers);
+
+            // v1.2 auth metadata - parsed from JSON strings stored in DB.
+            // Secrets are NEVER exported; only the type + non-sensitive metadata.
+            let auth_type = if clear_auth {
+                None
+            } else {
+                crate::mcp::helpers::parse_auth_type(row.get("auth_type"))
+                    .filter(|t| *t != crate::models::mcp::MCPAuthType::None)
+            };
+            let auth_metadata = if clear_auth {
+                None
+            } else {
+                crate::mcp::helpers::parse_auth_metadata_json(row.get("auth_metadata"))
+            };
+            let extra_headers = if clear_headers {
+                None
+            } else {
+                crate::mcp::helpers::parse_extra_headers_json(row.get("extra_headers"))
+            };
+
             servers.push(MCPServerExportData {
                 name: row["name"].as_str().unwrap_or("").to_string(),
                 enabled: row["enabled"].as_bool().unwrap_or(false),
@@ -374,6 +400,9 @@ async fn export_mcp_servers(
                 args,
                 env,
                 description: row["description"].as_str().map(String::from),
+                auth_type,
+                auth_metadata,
+                extra_headers,
                 created_at: extract_optional_timestamp(&row, "created_at", include_timestamps),
                 updated_at: extract_optional_timestamp(&row, "updated_at", include_timestamps),
             });

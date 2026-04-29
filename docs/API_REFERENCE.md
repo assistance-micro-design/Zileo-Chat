@@ -234,6 +234,9 @@ MCP server management and tool execution.
 | `list_mcp_tools` | List available tools from a server |
 | `call_mcp_tool` | Execute a tool on an MCP server |
 | `get_mcp_latency_metrics` | Get latency percentiles (p50/p95/p99) |
+| `list_mcp_legacy_http_auth` | Detect HTTP servers still using legacy `API_KEY`/`HEADER_*` env vars |
+
+HTTP servers support auth methods Bearer, API Key, and Basic. Secrets are persisted in the OS keychain via `commands/security.rs`; only metadata fields (`auth_type`, `auth_metadata`, `extra_headers`) live in the database. See `src-tauri/src/mcp/http_auth.rs`.
 
 ### File Manager (`commands/file_manager.rs`)
 
@@ -285,7 +288,7 @@ Secure API key storage (AES-256-GCM via SecureKeyStore).
 
 ### Import/Export (`commands/import_export/`)
 
-Configuration import/export (schema v1.0 and v1.1).
+Configuration import/export (schema v1.0, v1.1, and v1.2).
 
 | Command | Description |
 |---------|-------------|
@@ -304,6 +307,7 @@ Database schema migrations (idempotent with migration guards).
 | `migrate_memory_schema` | Migrate memory table for vector search |
 | `get_memory_schema_status` | Get memory schema migration status |
 | `migrate_mcp_http_schema` | Migrate MCP schema for HTTP support |
+| `migrate_mcp_auth_v1` | Migrate MCP schema for HTTP auth fields (auth_type, auth_metadata, extra_headers) |
 | `migrate_memory_v2_schema` | Migrate memory table for v2 (importance + TTL) |
 | `migrate_reasoning_effort` | Migrate agent enable_thinking to reasoning_effort |
 | `migrate_sidebar_features` | Migrate sidebar features (folders, pinning) |
@@ -365,6 +369,12 @@ Types are manually synchronized between frontend and backend.
 | Type | Location | Description |
 |------|----------|-------------|
 | `MCPServer` | `$types/mcp` | MCP server config and status |
+| `MCPServerConfig` | `$types/mcp` | Server config (transport + HTTP auth metadata) |
+| `MCPServerConfigWithSecret` | `$types/mcp` | Config payload that carries `authSecret` for create/update only |
+| `MCPAuthType` | `$types/mcp` | Union: `'none' \| 'bearer' \| 'apikey' \| 'basic'` |
+| `MCPAuthMetadata` | `$types/mcp` | Non-sensitive auth metadata (header name, username) |
+| `MCPAuthSecret` | `$types/mcp` | Secret payload (token/value/password); never returned by read commands |
+| `LegacyHttpAuthWarning` | `$types/mcp` | HTTP servers still using legacy env vars |
 | `MCPLatencyMetrics` | `$types/mcp` | Latency percentiles (p50/p95/p99) |
 | `AvailableToolInfo` | `$types/tool` | Tool info (local or MCP source) |
 
@@ -372,7 +382,7 @@ Types are manually synchronized between frontend and backend.
 
 | Type | Location | Description |
 |------|----------|-------------|
-| `ExportConfig` | `$types/import-export` | Exported configuration (schema v1.0/v1.1) |
+| `ExportConfig` | `$types/import-export` | Exported configuration (schema v1.0/v1.1/v1.2) |
 | `ImportResult` | `$types/import-export` | Import result with warnings and post-actions |
 | `ImportWarning` | `$types/import-export` | Structured warning (type, severity, entity, action) |
 

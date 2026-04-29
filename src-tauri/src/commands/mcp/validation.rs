@@ -19,8 +19,26 @@
 
 use crate::constants::commands as cmd_const;
 use crate::models::custom_provider::check_http_warning;
-use crate::models::mcp::{MCPDeploymentMethod, MCPServerConfig};
+use crate::models::mcp::{
+    MCPAuthMetadata, MCPAuthSecret, MCPAuthType, MCPDeploymentMethod, MCPServerConfig,
+};
 use crate::tools::validation_helper::validate_trimmed_name;
+use std::collections::HashMap;
+
+/// Maximum length of a Bearer token (after trim).
+pub(crate) const MAX_BEARER_TOKEN_LEN: usize = 4096;
+/// Maximum length of an API key value.
+pub(crate) const MAX_API_KEY_VALUE_LEN: usize = 1024;
+/// Maximum length of a Basic auth username.
+pub(crate) const MAX_BASIC_USERNAME_LEN: usize = 256;
+/// Maximum length of a Basic auth password.
+pub(crate) const MAX_BASIC_PASSWORD_LEN: usize = 1024;
+/// Maximum length of an HTTP header name (auth or extra).
+pub(crate) const MAX_HEADER_NAME_LEN: usize = 64;
+/// Maximum length of an HTTP header value (extra headers).
+pub(crate) const MAX_HEADER_VALUE_LEN: usize = 1024;
+/// Maximum number of extra headers per server.
+pub(crate) const MAX_EXTRA_HEADERS: usize = 20;
 
 /// Validates an MCP server ID.
 ///
@@ -210,6 +228,11 @@ pub fn validate_mcp_server_config(config: &MCPServerConfig) -> Result<MCPServerC
         args: validated_args,
         env: validated_env,
         description: validated_description,
+        // Auth fields are validated separately by `validate_mcp_auth` (Phase 2)
+        // before persistence; here we propagate them unchanged.
+        auth_type: config.auth_type,
+        auth_metadata: config.auth_metadata.clone(),
+        extra_headers: config.extra_headers.clone(),
     })
 }
 
@@ -251,4 +274,231 @@ pub fn check_mcp_http_warning(config: &MCPServerConfig) -> Option<String> {
         return None;
     }
     config.args.first().and_then(|url| check_http_warning(url))
+}
+
+/// Returns true when `name` is a valid HTTP header name for our purposes
+/// (1..=64 chars, only `[A-Za-z0-9_-]`).
+fn is_valid_header_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_HEADER_NAME_LEN
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Validates a Bearer token (v1.2).
+///
+/// Rules: 1..=`MAX_BEARER_TOKEN_LEN` chars after trim, no `\r` / `\n`.
+/// The bearer token is auto-trimmed by callers; this function only checks
+/// the post-trim invariants.
+pub fn validate_bearer_token(token: &str) -> Result<(), String> {
+    if token.is_empty() {
+        return Err("Bearer token cannot be empty".to_string());
+    }
+    if token.len() > MAX_BEARER_TOKEN_LEN {
+        return Err(format!(
+            "Bearer token exceeds maximum length of {} characters",
+            MAX_BEARER_TOKEN_LEN
+        ));
+    }
+    if token.contains('\r') || token.contains('\n') {
+        return Err("Bearer token cannot contain newline characters".to_string());
+    }
+    Ok(())
+}
+
+/// Validates an API-Key header value (v1.2).
+///
+/// Rules: 1..=`MAX_API_KEY_VALUE_LEN` chars, no `\r` / `\n`.
+pub fn validate_api_key_value(value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err("API key value cannot be empty".to_string());
+    }
+    if value.len() > MAX_API_KEY_VALUE_LEN {
+        return Err(format!(
+            "API key value exceeds maximum length of {} characters",
+            MAX_API_KEY_VALUE_LEN
+        ));
+    }
+    if value.contains('\r') || value.contains('\n') {
+        return Err("API key value cannot contain newline characters".to_string());
+    }
+    Ok(())
+}
+
+/// Validates the API-Key header name (v1.2).
+///
+/// Defaults to `X-API-Key` when caller passes `None`. Rejects names that
+/// are not within 1..=`MAX_HEADER_NAME_LEN` chars or contain characters
+/// outside `^[A-Za-z0-9_-]+$`.
+pub fn validate_apikey_header_name(name: Option<&str>) -> Result<String, String> {
+    let header = name
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("X-API-Key");
+    if !is_valid_header_name(header) {
+        return Err(format!(
+            "Invalid API key header name '{}': must match [A-Za-z0-9_-] (1..={} chars)",
+            header, MAX_HEADER_NAME_LEN
+        ));
+    }
+    Ok(header.to_string())
+}
+
+/// Validates Basic auth credentials (v1.2).
+///
+/// Rules:
+/// - username: 1..=`MAX_BASIC_USERNAME_LEN` chars, no `\r` / `\n`, no `:`
+///   (the colon would break the `user:password` colon-separator).
+/// - password: 1..=`MAX_BASIC_PASSWORD_LEN` chars, no `\r` / `\n`.
+pub fn validate_basic_auth(username: &str, password: &str) -> Result<(), String> {
+    if username.is_empty() {
+        return Err("Basic auth username cannot be empty".to_string());
+    }
+    if username.len() > MAX_BASIC_USERNAME_LEN {
+        return Err(format!(
+            "Basic auth username exceeds maximum length of {} characters",
+            MAX_BASIC_USERNAME_LEN
+        ));
+    }
+    if username.contains('\r') || username.contains('\n') {
+        return Err("Basic auth username cannot contain newline characters".to_string());
+    }
+    if username.contains(':') {
+        return Err(
+            "Basic auth username cannot contain ':' (would break credential encoding)".to_string(),
+        );
+    }
+    if password.is_empty() {
+        return Err("Basic auth password cannot be empty".to_string());
+    }
+    if password.len() > MAX_BASIC_PASSWORD_LEN {
+        return Err(format!(
+            "Basic auth password exceeds maximum length of {} characters",
+            MAX_BASIC_PASSWORD_LEN
+        ));
+    }
+    if password.contains('\r') || password.contains('\n') {
+        return Err("Basic auth password cannot contain newline characters".to_string());
+    }
+    Ok(())
+}
+
+/// Validates the `extra_headers` map (v1.2).
+///
+/// Rules:
+/// - At most `MAX_EXTRA_HEADERS` entries.
+/// - Each key matches `is_valid_header_name`.
+/// - Each value is 1..=`MAX_HEADER_VALUE_LEN` chars and free of `\r` / `\n`.
+/// - When `auth_type_set` is true, an `Authorization` extra header is rejected
+///   (would conflict with the main auth header).
+pub fn validate_extra_headers(
+    headers: &HashMap<String, String>,
+    auth_type_set: bool,
+) -> Result<(), String> {
+    if headers.len() > MAX_EXTRA_HEADERS {
+        return Err(format!(
+            "Too many extra HTTP headers (max {})",
+            MAX_EXTRA_HEADERS
+        ));
+    }
+    for (name, value) in headers {
+        if !is_valid_header_name(name) {
+            return Err(format!(
+                "Invalid extra header name '{}': must match [A-Za-z0-9_-] (1..={} chars)",
+                name, MAX_HEADER_NAME_LEN
+            ));
+        }
+        if auth_type_set && name.eq_ignore_ascii_case("authorization") {
+            return Err(
+                "extraHeaders.Authorization conflicts with the main authentication; remove one"
+                    .to_string(),
+            );
+        }
+        if value.is_empty() {
+            return Err(format!(
+                "Extra header '{}' has empty value (drop it instead)",
+                name
+            ));
+        }
+        if value.len() > MAX_HEADER_VALUE_LEN {
+            return Err(format!(
+                "Extra header '{}' value exceeds maximum length of {} characters",
+                name, MAX_HEADER_VALUE_LEN
+            ));
+        }
+        if value.contains('\r') || value.contains('\n') {
+            return Err(format!(
+                "Extra header '{}' value cannot contain newline characters",
+                name
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validates an MCP HTTP auth configuration (v1.2).
+///
+/// Pure function: takes the auth type, optional metadata, and optional
+/// secret, and verifies that the combination is internally consistent
+/// (lengths, charset, presence rules). Used by the create/update commands
+/// before persisting to DB / keychain.
+///
+/// `secret_required` controls whether a missing secret is an error. On
+/// create-with-non-`None` auth the secret IS required. On update without
+/// secret rotation, callers pass `false` so they can preserve the previous
+/// keychain value.
+pub fn validate_mcp_auth(
+    auth_type: Option<MCPAuthType>,
+    metadata: Option<&MCPAuthMetadata>,
+    secret: Option<&MCPAuthSecret>,
+    secret_required: bool,
+) -> Result<(), String> {
+    match auth_type.unwrap_or(MCPAuthType::None) {
+        MCPAuthType::None => Ok(()),
+        MCPAuthType::Bearer => {
+            if let Some(s) = secret.and_then(|s| s.token.as_deref()) {
+                validate_bearer_token(s.trim())
+            } else if secret_required {
+                Err("Bearer auth requires a token (auth_secret.token missing)".to_string())
+            } else {
+                Ok(())
+            }
+        }
+        MCPAuthType::Apikey => {
+            // Header name (defaults to X-API-Key when absent) must be valid.
+            validate_apikey_header_name(metadata.and_then(|m| m.header_name.as_deref()))?;
+            if let Some(v) = secret.and_then(|s| s.value.as_deref()) {
+                validate_api_key_value(v)
+            } else if secret_required {
+                Err("Apikey auth requires a value (auth_secret.value missing)".to_string())
+            } else {
+                Ok(())
+            }
+        }
+        MCPAuthType::Basic => {
+            let username = metadata.and_then(|m| m.username.as_deref()).unwrap_or("");
+            if username.is_empty() {
+                return Err("Basic auth requires a username (auth_metadata.username)".to_string());
+            }
+            if let Some(p) = secret.and_then(|s| s.password.as_deref()) {
+                validate_basic_auth(username, p)
+            } else if secret_required {
+                Err("Basic auth requires a password (auth_secret.password missing)".to_string())
+            } else {
+                // No password rotation: still validate the username invariants.
+                if username.len() > MAX_BASIC_USERNAME_LEN
+                    || username.contains('\r')
+                    || username.contains('\n')
+                    || username.contains(':')
+                {
+                    return Err(
+                        "Basic auth username invalid (length, newlines, or ':' forbidden)"
+                            .to_string(),
+                    );
+                }
+                Ok(())
+            }
+        }
+    }
 }

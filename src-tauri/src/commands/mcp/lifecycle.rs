@@ -17,7 +17,8 @@
 //! Tauri commands for starting, stopping, and testing MCP servers.
 
 use crate::commands::mcp::validation::{validate_mcp_server_config, validate_mcp_server_id};
-use crate::models::mcp::{MCPServer, MCPServerConfig, MCPTestResult};
+use crate::mcp::http_handle::detect_legacy_http_auth_keys;
+use crate::models::mcp::{LegacyHttpAuthWarning, MCPServer, MCPServerConfig, MCPTestResult};
 use crate::state::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -188,4 +189,43 @@ pub async fn stop_mcp_server(id: String, state: State<'_, AppState>) -> Result<M
         "MCP server stopped"
     );
     Ok(updated_server)
+}
+
+/// Lists HTTP MCP servers still using the deprecated env-based auth (v1.2).
+///
+/// Walks the loaded servers and returns a [`LegacyHttpAuthWarning`] entry
+/// for every HTTP server with `auth_type=None` whose env still contains
+/// `API_KEY` or any `HEADER_*`. The frontend uses this to surface a
+/// migration banner — the auth path itself does NOT fall back on those
+/// env vars (breaking change in v1.2).
+#[tauri::command]
+#[instrument(name = "list_mcp_legacy_http_auth", skip(state))]
+pub async fn list_mcp_legacy_http_auth(
+    state: State<'_, AppState>,
+) -> Result<Vec<LegacyHttpAuthWarning>, String> {
+    info!("Scanning for MCP servers with legacy HTTP auth env vars");
+
+    let servers = state.mcp_manager.list_servers().await.map_err(|e| {
+        error!(error = %e, "Failed to enumerate MCP servers for legacy auth scan");
+        format!("Failed to scan MCP servers: {}", e)
+    })?;
+
+    let warnings: Vec<LegacyHttpAuthWarning> = servers
+        .into_iter()
+        .filter_map(|s| {
+            let keys = detect_legacy_http_auth_keys(&s.config);
+            if keys.is_empty() {
+                None
+            } else {
+                Some(LegacyHttpAuthWarning {
+                    id: s.config.id.clone(),
+                    name: s.config.name.clone(),
+                    env_keys: keys,
+                })
+            }
+        })
+        .collect();
+
+    info!(count = warnings.len(), "Legacy HTTP auth scan complete");
+    Ok(warnings)
 }

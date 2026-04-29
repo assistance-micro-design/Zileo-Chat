@@ -38,9 +38,40 @@ Allows clearing sensitive env vars and excluding servers from export.
 		sanitization: MCPSanitizationConfig;
 		/** Callback when sanitization changes */
 		onchange: (config: MCPSanitizationConfig) => void;
+		/** Optional auth type (v1.2). Drives the auth-section visibility. */
+		authType?: 'none' | 'bearer' | 'apikey' | 'basic';
+		/** Names of extra HTTP headers attached to the server (v1.2). */
+		extraHeaderKeys?: string[];
 	}
 
-	let { serverName, envKeys, sanitization, onchange }: Props = $props();
+	let {
+		serverName,
+		envKeys,
+		sanitization,
+		onchange,
+		authType,
+		extraHeaderKeys = []
+	}: Props = $props();
+
+	/** Whether the server has an active HTTP auth method. */
+	const hasAuth = $derived(authType !== undefined && authType !== 'none');
+
+	/** Whether the server declares any extra HTTP headers. */
+	const hasExtraHeaders = $derived(extraHeaderKeys.length > 0);
+
+	function toggleClearAuthMetadata(): void {
+		onchange({
+			...sanitization,
+			clearAuthMetadata: !sanitization.clearAuthMetadata
+		});
+	}
+
+	function toggleClearExtraHeaders(): void {
+		onchange({
+			...sanitization,
+			clearExtraHeaders: !sanitization.clearExtraHeaders
+		});
+	}
 
 	/**
 	 * Checks if an env key is sensitive
@@ -149,6 +180,48 @@ Allows clearing sensitive env vars and excluding servers from export.
 					</span>
 				</div>
 			{/if}
+		{/if}
+
+		{#if hasAuth}
+			<div class="auth-section">
+				<div class="list-header">
+					<span class="header-label">{$i18n('ie_mcp_auth_section')}</span>
+				</div>
+				<p class="auth-info">
+					<strong>{$i18n('ie_mcp_auth_method')}:</strong>
+					<span>{authType}</span>
+				</p>
+				<p class="auth-hint">{$i18n('ie_mcp_auth_secret_never_exported')}</p>
+				<label class="exclude-checkbox">
+					<input
+						type="checkbox"
+						checked={sanitization.clearAuthMetadata ?? false}
+						onchange={toggleClearAuthMetadata}
+					/>
+					<span>{$i18n('ie_mcp_clear_auth_metadata')}</span>
+				</label>
+			</div>
+		{/if}
+
+		{#if hasExtraHeaders}
+			<div class="auth-section">
+				<div class="list-header">
+					<span class="header-label">{$i18n('ie_mcp_extra_headers_section')}</span>
+				</div>
+				<ul class="header-list">
+					{#each extraHeaderKeys as key (key)}
+						<li>{key}</li>
+					{/each}
+				</ul>
+				<label class="exclude-checkbox">
+					<input
+						type="checkbox"
+						checked={sanitization.clearExtraHeaders ?? false}
+						onchange={toggleClearExtraHeaders}
+					/>
+					<span>{$i18n('ie_mcp_clear_extra_headers')}</span>
+				</label>
+			</div>
 		{/if}
 	{/if}
 </div>
@@ -309,5 +382,36 @@ Allows clearing sensitive env vars and excluding servers from export.
 		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		font-weight: var(--font-weight-medium);
+	}
+
+	.auth-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-sm);
+		background: var(--color-bg-primary);
+		border-radius: var(--border-radius-sm);
+		margin-top: var(--spacing-sm);
+	}
+
+	.auth-info {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
+
+	.auth-hint {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+		font-style: italic;
+	}
+
+	.header-list {
+		margin: 0;
+		padding-left: var(--spacing-lg);
+		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		color: var(--color-text-primary);
 	}
 </style>

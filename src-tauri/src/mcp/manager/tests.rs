@@ -28,6 +28,9 @@ fn create_test_config(id: &str, name: &str) -> MCPServerConfig {
         ],
         env: HashMap::new(),
         description: Some("Test server".to_string()),
+        auth_type: None,
+        auth_metadata: None,
+        extra_headers: None,
     }
 }
 

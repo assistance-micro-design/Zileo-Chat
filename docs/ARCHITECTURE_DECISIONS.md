@@ -328,16 +328,17 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 
 ## 11. Import/Export
 
-### Q27: Import/Export Schema v1.1
+### Q27: Import/Export Schema v1.2
 
-**Decision**: Versioned schema (v1.0 backward compatible, v1.1 current) with 6 entity types.
+**Decision**: Versioned schema (v1.0 and v1.1 backward compatible, v1.2 current) with 6 entity types.
 
 **Rationale**:
 - Schema v1.1 adds skills and custom providers to the original 4 entity types
+- Schema v1.2 adds MCP HTTP auth metadata (`auth_type`, `auth_metadata`, `extra_headers`); secrets remain in OS keychain and are never exported
 - Import order enforces dependency resolution: custom_providers -> models -> mcp_servers -> skills -> agents -> prompts
 - Cross-entity references by NAME (not UUID) so orphan refs are safe (user creates missing entity later)
-- API keys never exported (OS keyring) with structured ImportWarning for user guidance
-- `SUPPORTED_SCHEMA_VERSIONS = ["1.0", "1.1"]` for backward compatibility
+- API keys and MCP auth secrets never exported (OS keyring) with structured ImportWarning for user guidance
+- `SUPPORTED_SCHEMA_VERSIONS = ["1.0", "1.1", "1.2"]` for backward compatibility
 - postImportActions in ImportResult for actionable post-import checklist
 
 ---
@@ -370,7 +371,7 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 | Testing | Critical paths, 1000+ tests, GitHub Actions CI |
 | Deployment | Linux first, manual updates v1, auto-updates v1.5 |
 | Frontend | CRUD factory stores, Svelte 5 runes (completed), route-based settings |
-| Import/Export | Schema v1.1, 6 entity types, cross-ref by name, no API key export |
+| Import/Export | Schema v1.2, 6 entity types, cross-ref by name, no API key/MCP secret export |
 
 **Technical documentation**: `docs/DATABASE_SCHEMA.md`, `docs/API_REFERENCE.md`, `docs/TECH_STACK.md`.
 

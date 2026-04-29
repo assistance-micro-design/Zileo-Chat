@@ -40,6 +40,7 @@ const MIGRATION_MEMORY_V2_SCHEMA: &str = "memory_v2_schema";
 const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
 const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
+const MIGRATION_MCP_AUTH_V1: &str = "mcp_auth_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -470,6 +471,59 @@ pub async fn migrate_reasoning_effort(
     })
 }
 
+/// SQL for adding HTTP authentication fields to mcp_server (v1.2).
+///
+/// All three fields are optional and stored as JSON strings (ERR_SURREAL_001).
+/// Existing rows keep working: the values default to NONE so servers without
+/// auth behave exactly as before.
+const MCP_AUTH_V1_MIGRATION: &str = r#"
+DEFINE FIELD OVERWRITE auth_type ON mcp_server TYPE option<string>
+    ASSERT $value IS NONE OR $value IN ['none', 'bearer', 'apikey', 'basic'];
+DEFINE FIELD OVERWRITE auth_metadata ON mcp_server TYPE option<string>;
+DEFINE FIELD OVERWRITE extra_headers ON mcp_server TYPE option<string>;
+"#;
+
+/// Migrates the `mcp_server` table to support HTTP authentication (v1.2).
+///
+/// Adds three optional fields (`auth_type`, `auth_metadata`, `extra_headers`)
+/// stored as JSON strings. Existing rows are unaffected — they keep the
+/// no-auth behavior. Secrets remain in the OS keychain, never in DB.
+///
+/// # Safety
+/// Guarded by migration_log to prevent redundant re-execution.
+/// All fields use OVERWRITE for idempotency (ERR_SURREAL_011).
+#[tauri::command]
+#[instrument(name = "migrate_mcp_auth_v1", skip(state))]
+pub async fn migrate_mcp_auth_v1(state: State<'_, AppState>) -> Result<MigrationResult, String> {
+    info!("Running MCP auth v1 schema migration");
+
+    if check_migration_applied(&state.db, MIGRATION_MCP_AUTH_V1).await? {
+        info!("MCP auth v1 migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: "Already applied: mcp_auth_v1".to_string(),
+            records_affected: 0,
+        });
+    }
+
+    let _: Vec<serde_json::Value> = state.db.query(MCP_AUTH_V1_MIGRATION).await.map_err(|e| {
+        error!(error = %e, "MCP auth v1 migration failed");
+        format!("MCP auth v1 migration failed: {}", e)
+    })?;
+
+    record_migration_applied(&state.db, MIGRATION_MCP_AUTH_V1).await?;
+
+    info!("MCP auth v1 migration completed successfully");
+
+    Ok(MigrationResult {
+        success: true,
+        message:
+            "MCP schema extended with HTTP auth fields (auth_type, auth_metadata, extra_headers)"
+                .to_string(),
+        records_affected: 0,
+    })
+}
+
 /// SQL for migrating workflow table to support folders and pinning.
 ///
 /// Changes:
@@ -755,6 +809,40 @@ mod tests {
             .await
             .unwrap();
         assert!(applied, "Memory v2 migration should be marked as applied");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_auth_v1_migration_guard() {
+        let (state, _db_guard) = setup_test_state().await;
+
+        // First run: not applied yet
+        let applied = check_migration_applied(&state.db, MIGRATION_MCP_AUTH_V1)
+            .await
+            .unwrap();
+        assert!(!applied);
+
+        // Run the migration SQL directly and record it
+        let _: Vec<serde_json::Value> = state.db.query(MCP_AUTH_V1_MIGRATION).await.unwrap();
+        record_migration_applied(&state.db, MIGRATION_MCP_AUTH_V1)
+            .await
+            .unwrap();
+
+        // Second run: should be applied
+        let applied = check_migration_applied(&state.db, MIGRATION_MCP_AUTH_V1)
+            .await
+            .unwrap();
+        assert!(applied, "MCP auth v1 migration should be marked as applied");
+    }
+
+    #[test]
+    fn test_mcp_auth_v1_migration_sql_contains_required_fields() {
+        assert!(MCP_AUTH_V1_MIGRATION.contains("auth_type"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("auth_metadata"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("extra_headers"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("DEFINE FIELD OVERWRITE"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("'bearer'"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("'apikey'"));
+        assert!(MCP_AUTH_V1_MIGRATION.contains("'basic'"));
     }
 
     #[tokio::test]

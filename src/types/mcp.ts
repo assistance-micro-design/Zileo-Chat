@@ -63,6 +63,50 @@ export type MCPServerStatus =
 	| 'disconnected';
 
 /**
+ * HTTP authentication methods for remote MCP servers (v1.2).
+ *
+ * - `none`: No authentication (default)
+ * - `bearer`: Authorization: Bearer <token>
+ * - `apikey`: Custom header (default X-API-Key) with secret value
+ * - `basic`: Authorization: Basic base64(user:pass)
+ *
+ * Only applicable when `command === 'http'`.
+ */
+export type MCPAuthType = 'none' | 'bearer' | 'apikey' | 'basic';
+
+/**
+ * Non-sensitive metadata describing the auth configuration (v1.2).
+ *
+ * Stored in DB alongside the server config. Secrets are stored separately
+ * in the OS keychain via `MCPAuthSecret` and never written to DB.
+ */
+export interface MCPAuthMetadata {
+	/** Header name for `apikey` mode (default: 'X-API-Key'). */
+	headerName?: string;
+	/** Username for `basic` mode (the password is a secret). */
+	username?: string;
+}
+
+/**
+ * Auth secret payload (v1.2).
+ *
+ * Discriminated by the parent `MCPAuthType`:
+ * - `bearer` -> `token`
+ * - `apikey` -> `value`
+ * - `basic`  -> `password`
+ *
+ * Only ever sent on create/update; never returned in read payloads.
+ */
+export interface MCPAuthSecret {
+	/** Bearer token (when authType === 'bearer'). */
+	token?: string;
+	/** API key value (when authType === 'apikey'). */
+	value?: string;
+	/** Basic auth password (when authType === 'basic'). */
+	password?: string;
+}
+
+/**
  * Configuration for an MCP server.
  * Used when creating or updating an MCP server configuration.
  */
@@ -81,6 +125,44 @@ export interface MCPServerConfig {
 	env: Record<string, string>;
 	/** Optional description of the server's purpose */
 	description?: string;
+
+	// ---- v1.2 (HTTP authentication) ----
+	/** Authentication type for HTTP transport. Absent or 'none' means no auth. */
+	authType?: MCPAuthType;
+	/** Non-sensitive auth metadata (header name, username). Secrets are stored separately. */
+	authMetadata?: MCPAuthMetadata;
+	/** Additional HTTP headers (cumulative with main auth). */
+	extraHeaders?: Record<string, string>;
+}
+
+/**
+ * Write payload for create/update commands (v1.2).
+ *
+ * Carries the optional `authSecret` separately from the persisted
+ * `MCPServerConfig`. The backend splits metadata (DB) from secret
+ * (OS keychain) before persisting.
+ *
+ * Never returned by read commands; the secret is never echoed back.
+ */
+export interface MCPServerConfigWithSecret extends MCPServerConfig {
+	/** Optional auth secret (token / value / password depending on authType). */
+	authSecret?: MCPAuthSecret;
+}
+
+/**
+ * Legacy HTTP auth warning (v1.2).
+ *
+ * Emitted at startup for HTTP MCP servers configured with the deprecated
+ * env-based auth (`API_KEY`, `HEADER_*`). Used by `MCPSection.svelte`
+ * to surface a banner inviting the user to migrate.
+ */
+export interface LegacyHttpAuthWarning {
+	/** MCP server ID */
+	id: string;
+	/** Display name */
+	name: string;
+	/** Detected legacy env var keys (`API_KEY` and/or `HEADER_*`) */
+	envKeys: string[];
 }
 
 /**

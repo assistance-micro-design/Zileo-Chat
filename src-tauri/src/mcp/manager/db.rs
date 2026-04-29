@@ -65,6 +65,43 @@ impl MCPManager {
             None => "NONE".to_string(),
         };
 
+        // v1.2 auth fields - persisted as JSON strings (ERR_SURREAL_001).
+        // `MCPAuthType::None` is stored as NONE so the DB stays clean for
+        // servers without authentication (no auth_type / no auth_metadata).
+        let auth_type_json = match config.auth_type {
+            Some(t) if t != crate::models::mcp::MCPAuthType::None => {
+                let s = serde_json::to_value(t)?
+                    .as_str()
+                    .map(String::from)
+                    .ok_or_else(|| MCPError::DatabaseError {
+                        context: "update server config".to_string(),
+                        message: "auth_type serialization produced non-string".to_string(),
+                    })?;
+                serde_json::to_string(&s)?
+            }
+            _ => "NONE".to_string(),
+        };
+
+        let auth_metadata_json = match config
+            .auth_metadata
+            .as_ref()
+            .filter(|m| m.header_name.is_some() || m.username.is_some())
+        {
+            Some(m) => {
+                let inner = serde_json::to_string(m)?;
+                serde_json::to_string(&inner)?
+            }
+            None => "NONE".to_string(),
+        };
+
+        let extra_headers_json = match config.extra_headers.as_ref().filter(|h| !h.is_empty()) {
+            Some(h) => {
+                let inner = serde_json::to_string(h)?;
+                serde_json::to_string(&inner)?
+            }
+            None => "NONE".to_string(),
+        };
+
         let query = format!(
             "UPDATE mcp_server:`{}` SET \
                 name = {}, \
@@ -73,6 +110,9 @@ impl MCPManager {
                 args = {}, \
                 env = {}, \
                 description = {}, \
+                auth_type = {}, \
+                auth_metadata = {}, \
+                extra_headers = {}, \
                 updated_at = time::now()",
             config.id,
             name_json,
@@ -80,7 +120,10 @@ impl MCPManager {
             command_json,
             args_json,
             env_json,
-            description_json
+            description_json,
+            auth_type_json,
+            auth_metadata_json,
+            extra_headers_json
         );
 
         self.db
@@ -143,9 +186,13 @@ impl MCPManager {
 
     /// Gets all saved server configurations from the database
     pub(crate) async fn get_saved_configs(&self) -> MCPResult<Vec<MCPServerConfig>> {
-        use crate::mcp::helpers::{parse_deployment_method, parse_env_json};
+        use crate::mcp::helpers::{
+            parse_auth_metadata_json, parse_auth_type, parse_deployment_method, parse_env_json,
+            parse_extra_headers_json,
+        };
 
-        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description FROM mcp_server";
+        let query = "SELECT meta::id(id) AS id, name, enabled, command, args, env, description, \
+                     auth_type, auth_metadata, extra_headers FROM mcp_server";
 
         let result: Vec<serde_json::Value> =
             self.db
@@ -190,6 +237,11 @@ impl MCPManager {
                     );
                 }
 
+                // v1.2 auth fields - all optional, parsed from JSON strings
+                let auth_type = parse_auth_type(v.get("auth_type"));
+                let auth_metadata = parse_auth_metadata_json(v.get("auth_metadata"));
+                let extra_headers = parse_extra_headers_json(v.get("extra_headers"));
+
                 Some(MCPServerConfig {
                     id: v.get("id")?.as_str()?.to_string(),
                     name: v.get("name")?.as_str()?.to_string(),
@@ -205,6 +257,9 @@ impl MCPManager {
                     description: v
                         .get("description")
                         .and_then(|d| d.as_str().map(String::from)),
+                    auth_type,
+                    auth_metadata,
+                    extra_headers,
                 })
             })
             .collect();

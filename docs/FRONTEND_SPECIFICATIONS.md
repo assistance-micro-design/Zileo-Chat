@@ -146,7 +146,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
-| `ui/` | 19 | Atomic UI: Badge, Button, Card, ContextMenu, DeleteConfirmModal, ErrorBanner, HelpButton, Input, LanguageSelector, MarkdownRenderer, Modal, ProgressBar, Select, Skeleton, Spinner, StatusIndicator, Textarea, ToastContainer, ToastItem |
+| `ui/` | 20 | Atomic UI: Badge, Button, Card, ContextMenu, DeleteConfirmModal, ErrorBanner, HelpButton, Input, LanguageSelector, MarkdownRenderer, Modal, PasswordInput, ProgressBar, Select, Skeleton, Spinner, StatusIndicator, Textarea, ToastContainer, ToastItem |
 | `layout/` | 3 | AppContainer, FloatingMenu, Sidebar |
 | `navigation/` | 1 | NavItem |
 | `agent/` | 3 | AgentHeader, ChatContainer, WorkflowSidebar |
@@ -196,7 +196,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `i18n.ts` | Locale, LocaleInfo, LOCALES | Internationalization |
 | `import-export.ts` | Import/export structures | Backup/restore |
 | `llm.ts` | LLMModel, ProviderSettings, ConnectionTestResult, LLMState, ProviderType | LLM providers |
-| `mcp.ts` | MCPServer, MCPServerConfig, MCPTool, MCPTestResult | MCP servers |
+| `mcp.ts` | MCPServer, MCPServerConfig, MCPServerConfigWithSecret, MCPAuthType, MCPAuthMetadata, MCPAuthSecret, LegacyHttpAuthWarning, MCPTool, MCPTestResult | MCP servers (HTTP auth: Bearer/API Key/Basic, secrets in keychain) |
 | `memory.ts` | Memory, MemoryType | Memory/RAG |
 | `message.ts` | Message | Chat messages |
 | `onboarding.ts` | Onboarding state types | First-launch wizard |
