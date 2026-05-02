@@ -141,6 +141,10 @@ impl SubAgentExecutor {
 
     /// Updates the execution record with the result.
     ///
+    /// Persists cache_tokens, cache_write_tokens, thinking_tokens and the
+    /// per-sub-agent cost (computed with the SUB-AGENT's own pricing — not
+    /// the parent's), in addition to the basic status / tokens / summary.
+    ///
     /// # Arguments
     /// * `execution_id` - Execution record ID
     /// * `result` - Execution result with success, report, metrics
@@ -154,6 +158,10 @@ impl SubAgentExecutor {
              duration_ms = $duration_ms, \
              tokens_input = $tokens_input, \
              tokens_output = $tokens_output, \
+             cached_tokens = $cached_tokens, \
+             cache_write_tokens = $cache_write_tokens, \
+             thinking_tokens = $thinking_tokens, \
+             cost_usd = $cost_usd, \
              result_summary = $result_summary, \
              error_message = $error_message, \
              completed_at = time::now()",
@@ -165,6 +173,16 @@ impl SubAgentExecutor {
             .as_ref()
             .map(|s| serde_json::Value::String(s.clone()))
             .unwrap_or(serde_json::Value::Null);
+
+        // Wrap optional u64/f64 as JSON null when absent.
+        let opt_u64 = |v: Option<u64>| match v {
+            Some(n) => serde_json::json!(n),
+            None => serde_json::Value::Null,
+        };
+        let opt_f64 = |v: Option<f64>| match v {
+            Some(n) => serde_json::json!(n),
+            None => serde_json::Value::Null,
+        };
 
         if let Err(e) = self
             .db
@@ -184,6 +202,19 @@ impl SubAgentExecutor {
                         "tokens_output".to_string(),
                         serde_json::json!(result.metrics.tokens_output),
                     ),
+                    (
+                        "cached_tokens".to_string(),
+                        opt_u64(result.metrics.cached_tokens),
+                    ),
+                    (
+                        "cache_write_tokens".to_string(),
+                        opt_u64(result.metrics.cache_write_tokens),
+                    ),
+                    (
+                        "thinking_tokens".to_string(),
+                        opt_u64(result.metrics.thinking_tokens),
+                    ),
+                    ("cost_usd".to_string(), opt_f64(result.metrics.cost_usd)),
                     (
                         "result_summary".to_string(),
                         serde_json::Value::String(result_summary),

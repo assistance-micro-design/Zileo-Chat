@@ -27,6 +27,10 @@ fn test_delegate_result_serialization() {
             duration_ms: 1500,
             tokens_input: 200,
             tokens_output: 400,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
+            cost_usd: None,
         },
     };
 

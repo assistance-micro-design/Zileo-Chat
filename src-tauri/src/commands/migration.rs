@@ -41,6 +41,7 @@ const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
 const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
 const MIGRATION_MCP_AUTH_V1: &str = "mcp_auth_v1";
+const MIGRATION_TOKEN_COST_ACCURACY_V1: &str = "token_cost_accuracy_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -602,6 +603,75 @@ pub async fn migrate_sidebar_features(
     })
 }
 
+/// SQL for the token-cost-accuracy v1 data backfill.
+///
+/// Schema for the new fields lives in `SCHEMA_SQL` (DEFINE FIELD OVERWRITE),
+/// so on a fresh DB this migration is a no-op. On an existing DB whose
+/// `workflow` rows predate the refactor, the new TYPE float field
+/// `sub_agent_cost_usd` was never written and thus reads as NONE despite the
+/// DEFAULT clause (DEFAULT only applies on CREATE). This UPDATE materializes
+/// it so frontends and aggregations can rely on `(... ?? 0.0)` consistently.
+///
+/// `total_cached_tokens` and `total_cache_write_tokens` follow the same logic
+/// for the cache columns added during this refactor.
+const TOKEN_COST_ACCURACY_V1_MIGRATION: &str = r#"
+-- Backfill sub-agent cost on legacy workflow rows. Phase 6 added this column
+-- with DEFAULT 0.0, but DEFAULT only applies on CREATE so existing rows are
+-- still missing the field. This makes them readable as `0.0` rather than NONE.
+UPDATE workflow SET sub_agent_cost_usd = 0.0 WHERE sub_agent_cost_usd IS NONE;
+
+-- Same logic for the cache totals introduced earlier in the same refactor.
+UPDATE workflow SET total_cached_tokens = 0 WHERE total_cached_tokens IS NONE;
+UPDATE workflow SET total_cache_write_tokens = 0 WHERE total_cache_write_tokens IS NONE;
+"#;
+
+/// Backfills new `workflow` columns added by the token-cost-accuracy refactor.
+///
+/// Called automatically once at startup from `AppState::new` so users never
+/// need to invoke it manually; gated by `migration_log` for idempotency.
+/// Also exposed as a Tauri command for completeness / power-user re-runs.
+///
+/// On a fresh database, completes in microseconds (zero rows touched).
+#[tauri::command]
+#[instrument(name = "migrate_token_cost_accuracy_v1", skip(state))]
+pub async fn migrate_token_cost_accuracy_v1(
+    state: State<'_, AppState>,
+) -> Result<MigrationResult, String> {
+    run_token_cost_accuracy_v1(&state.db).await
+}
+
+/// Internal entrypoint for `migrate_token_cost_accuracy_v1`, callable without
+/// a Tauri `State` handle (used from `AppState::new` at startup).
+pub async fn run_token_cost_accuracy_v1(db: &DBClient) -> Result<MigrationResult, String> {
+    if check_migration_applied(db, MIGRATION_TOKEN_COST_ACCURACY_V1).await? {
+        info!("Token cost accuracy migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: format!("Already applied: {}", MIGRATION_TOKEN_COST_ACCURACY_V1),
+            records_affected: 0,
+        });
+    }
+
+    let _: Vec<serde_json::Value> =
+        db.query(TOKEN_COST_ACCURACY_V1_MIGRATION)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Token cost accuracy migration failed");
+                format!("Token cost accuracy migration failed: {}", e)
+            })?;
+
+    record_migration_applied(db, MIGRATION_TOKEN_COST_ACCURACY_V1).await?;
+
+    info!("Token cost accuracy migration completed successfully");
+
+    Ok(MigrationResult {
+        success: true,
+        message: "Backfilled sub_agent_cost_usd and cache token totals on legacy workflow rows."
+            .to_string(),
+        records_affected: 0,
+    })
+}
+
 /// Memory schema status information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySchemaStatus {
@@ -866,5 +936,152 @@ mod tests {
             .await
             .unwrap();
         assert!(applied, "MCP HTTP migration should be marked as applied");
+    }
+
+    // -------------------------------------------------------------------------
+    // token_cost_accuracy_v1 — backfill migration tests
+    // -------------------------------------------------------------------------
+
+    /// Inserts a workflow row that LACKS the new columns by writing only the
+    /// minimum fields required by the schema. Used to simulate legacy DB rows
+    /// that predate the token-cost-accuracy refactor. Returns the workflow id.
+    async fn seed_legacy_workflow_row(db: &DBClient) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE workflow:`{id}` SET \
+                name = 'Legacy WF', \
+                agent_id = 'legacy-agent', \
+                status = 'completed', \
+                pinned = false"
+        );
+        db.db
+            .query(&query)
+            .await
+            .expect("Query execution failed")
+            .check()
+            .expect("CREATE workflow failed validation");
+        id
+    }
+
+    #[tokio::test]
+    async fn token_cost_accuracy_v1_backfills_legacy_workflow_rows() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = seed_legacy_workflow_row(&state.db).await;
+
+        // The schema's DEFAULT 0.0 only fires on CREATE. Whether the freshly
+        // initialized schema in the test backfills the row is implementation
+        // dependent; what we care about is the migration's POST-state.
+        let result = run_token_cost_accuracy_v1(&state.db).await.unwrap();
+        assert!(result.success, "Migration must succeed");
+
+        let rows = state
+            .db
+            .query_json(&format!(
+                "SELECT \
+                    sub_agent_cost_usd, total_cached_tokens, total_cache_write_tokens \
+                 FROM workflow:`{}`",
+                workflow_id
+            ))
+            .await
+            .unwrap();
+        let row = rows.into_iter().next().expect("Workflow row missing");
+
+        assert_eq!(
+            row.get("sub_agent_cost_usd").and_then(|v| v.as_f64()),
+            Some(0.0),
+            "sub_agent_cost_usd must be materialized as 0.0 (was NONE on legacy row)"
+        );
+        assert_eq!(
+            row.get("total_cached_tokens").and_then(|v| v.as_i64()),
+            Some(0),
+            "total_cached_tokens must be materialized as 0"
+        );
+        assert_eq!(
+            row.get("total_cache_write_tokens").and_then(|v| v.as_i64()),
+            Some(0),
+            "total_cache_write_tokens must be materialized as 0"
+        );
+    }
+
+    #[tokio::test]
+    async fn token_cost_accuracy_v1_is_idempotent() {
+        let (state, _db_guard) = setup_test_state().await;
+        let _ = seed_legacy_workflow_row(&state.db).await;
+
+        let first = run_token_cost_accuracy_v1(&state.db).await.unwrap();
+        let second = run_token_cost_accuracy_v1(&state.db).await.unwrap();
+
+        assert!(first.success);
+        assert!(second.success);
+        assert!(
+            second.message.contains("Already applied"),
+            "Second run must short-circuit via migration_log, got: {}",
+            second.message
+        );
+    }
+
+    #[tokio::test]
+    async fn token_cost_accuracy_v1_does_not_overwrite_existing_values() {
+        let (state, _db_guard) = setup_test_state().await;
+
+        // Workflow already has non-zero values written. Migration must NOT
+        // reset them to 0 — it only touches rows where the field IS NONE.
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE workflow:`{id}` SET \
+                name = 'Has Cost', \
+                agent_id = 'a', \
+                status = 'completed', \
+                pinned = false, \
+                sub_agent_cost_usd = 1.23, \
+                total_cached_tokens = 500, \
+                total_cache_write_tokens = 100",
+            id = workflow_id
+        );
+        state.db.db.query(&query).await.unwrap().check().unwrap();
+
+        run_token_cost_accuracy_v1(&state.db).await.unwrap();
+
+        let rows = state
+            .db
+            .query_json(&format!(
+                "SELECT sub_agent_cost_usd, total_cached_tokens, total_cache_write_tokens \
+                 FROM workflow:`{}`",
+                workflow_id
+            ))
+            .await
+            .unwrap();
+        let row = rows.into_iter().next().unwrap();
+        assert_eq!(
+            row.get("sub_agent_cost_usd").and_then(|v| v.as_f64()),
+            Some(1.23),
+            "Existing value must be preserved"
+        );
+        assert_eq!(
+            row.get("total_cached_tokens").and_then(|v| v.as_i64()),
+            Some(500)
+        );
+        assert_eq!(
+            row.get("total_cache_write_tokens").and_then(|v| v.as_i64()),
+            Some(100)
+        );
+    }
+
+    #[test]
+    fn token_cost_accuracy_v1_sql_targets_only_none_rows() {
+        // Defence: a future edit that drops the WHERE clause would silently
+        // wipe production cost data. Lock the SQL contract via assertions.
+        assert!(
+            TOKEN_COST_ACCURACY_V1_MIGRATION.contains("WHERE sub_agent_cost_usd IS NONE"),
+            "sub_agent_cost_usd UPDATE must guard with IS NONE"
+        );
+        assert!(
+            TOKEN_COST_ACCURACY_V1_MIGRATION.contains("WHERE total_cached_tokens IS NONE"),
+            "total_cached_tokens UPDATE must guard with IS NONE"
+        );
+        assert!(
+            TOKEN_COST_ACCURACY_V1_MIGRATION.contains("WHERE total_cache_write_tokens IS NONE"),
+            "total_cache_write_tokens UPDATE must guard with IS NONE"
+        );
     }
 }

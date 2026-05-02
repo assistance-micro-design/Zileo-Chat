@@ -118,6 +118,21 @@ pub struct LLMResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub thinking_tokens: Option<usize>,
+    /// Cached prompt tokens (cache reads).
+    /// `None` when the provider does not expose cache stats.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub cached_tokens: Option<usize>,
+    /// Prompt tokens written to cache (cache writes, first request).
+    /// `None` when the provider does not expose cache stats.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub cache_write_tokens: Option<usize>,
+    /// Provider-reported cost in USD when available (e.g. OpenRouter `usage.cost`).
+    /// When `Some`, takes precedence over local pricing calculation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub provider_cost_usd: Option<f64>,
 }
 
 /// LLM error types
@@ -315,9 +330,9 @@ mod tests {
         assert_eq!(custom, ProviderType::Custom("RouterLab".to_string()));
     }
 
-    #[test]
-    fn test_llm_response_serialization() {
-        let response = LLMResponse {
+    /// Helper for tests: builds a baseline response with all optional fields None.
+    fn baseline_response() -> LLMResponse {
+        LLMResponse {
             content: "Hello, world!".to_string(),
             tokens_input: 10,
             tokens_output: 5,
@@ -326,8 +341,15 @@ mod tests {
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
             thinking_tokens: None,
-        };
+            cached_tokens: None,
+            cache_write_tokens: None,
+            provider_cost_usd: None,
+        }
+    }
 
+    #[test]
+    fn test_llm_response_serialization() {
+        let response = baseline_response();
         let json = serde_json::to_string(&response).unwrap();
         let deserialized: LLMResponse = serde_json::from_str(&json).unwrap();
 
@@ -350,6 +372,9 @@ mod tests {
             finish_reason: Some("stop".to_string()),
             thinking_content: Some("Let me reason about this...".to_string()),
             thinking_tokens: Some(6),
+            cached_tokens: None,
+            cache_write_tokens: None,
+            provider_cost_usd: None,
         };
 
         // When Some, thinking_content IS serialized
@@ -375,11 +400,55 @@ mod tests {
             finish_reason: None,
             thinking_content: None,
             thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            provider_cost_usd: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(!json.contains("thinking_content"));
         assert!(!json.contains("thinking_tokens"));
+        // Cache + provider cost fields also omitted when None.
+        assert!(!json.contains("cached_tokens"));
+        assert!(!json.contains("cache_write_tokens"));
+        assert!(!json.contains("provider_cost_usd"));
+    }
+
+    #[test]
+    fn test_llm_response_cache_fields_serialized_when_some() {
+        let response = LLMResponse {
+            cached_tokens: Some(100),
+            cache_write_tokens: Some(50),
+            provider_cost_usd: Some(0.0123),
+            ..baseline_response()
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"cached_tokens\":100"));
+        assert!(json.contains("\"cache_write_tokens\":50"));
+        assert!(json.contains("\"provider_cost_usd\":0.0123"));
+
+        let deserialized: LLMResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.cached_tokens, Some(100));
+        assert_eq!(deserialized.cache_write_tokens, Some(50));
+        assert_eq!(deserialized.provider_cost_usd, Some(0.0123));
+    }
+
+    #[test]
+    fn test_llm_response_deserializes_legacy_payload_without_cache_fields() {
+        // A persisted payload from before Phase 1 lacks the new optional fields.
+        // serde(default) must produce None for all of them.
+        let legacy_json = r#"{
+            "content": "ok",
+            "tokens_input": 1,
+            "tokens_output": 2,
+            "model": "m",
+            "provider": "mistral",
+            "finish_reason": "stop"
+        }"#;
+        let parsed: LLMResponse = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(parsed.cached_tokens, None);
+        assert_eq!(parsed.cache_write_tokens, None);
+        assert_eq!(parsed.provider_cost_usd, None);
     }
 
     #[test]

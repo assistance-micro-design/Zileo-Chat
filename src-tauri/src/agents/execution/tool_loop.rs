@@ -56,6 +56,9 @@ pub(crate) struct TokenTracker {
     pub total_cached: Option<usize>,
     pub total_cache_write: Option<usize>,
     pub total_thinking: Option<usize>,
+    /// Cumulative provider-reported cost (e.g. OpenRouter) summed across iterations.
+    /// Stays `None` if no iteration reported a cost.
+    pub total_provider_cost_usd: Option<f64>,
     // Per-iteration values (overwritten each iteration, read for IterationMetrics)
     pub iter_input: usize,
     pub iter_output: usize,
@@ -73,6 +76,7 @@ impl TokenTracker {
             total_cached: None,
             total_cache_write: None,
             total_thinking: None,
+            total_provider_cost_usd: None,
             iter_input: 0,
             iter_output: 0,
             iter_cached: None,
@@ -96,6 +100,7 @@ impl TokenTracker {
         Self::accumulate(&mut self.total_cached, usage.cached_tokens);
         Self::accumulate(&mut self.total_cache_write, usage.cache_write_tokens);
         Self::accumulate(&mut self.total_thinking, usage.thinking_tokens);
+        Self::accumulate_f64(&mut self.total_provider_cost_usd, usage.provider_cost_usd);
     }
 
     /// Adds estimated thinking tokens (fallback when provider doesn't report them).
@@ -107,6 +112,12 @@ impl TokenTracker {
     fn accumulate(total: &mut Option<usize>, value: Option<usize>) {
         if let Some(val) = value {
             *total = Some(total.unwrap_or(0) + val);
+        }
+    }
+
+    fn accumulate_f64(total: &mut Option<f64>, value: Option<f64>) {
+        if let Some(val) = value {
+            *total = Some(total.unwrap_or(0.0) + val);
         }
     }
 
@@ -126,6 +137,7 @@ impl TokenTracker {
             cached_tokens: self.total_cached,
             cache_write_tokens: self.total_cache_write,
             thinking_tokens: self.total_thinking,
+            provider_cost_usd: self.total_provider_cost_usd,
             tools_used,
             mcp_calls,
             tool_executions,
@@ -312,9 +324,10 @@ pub(crate) async fn execute_simple(
                     tokens_input: response.tokens_input,
                     tokens_output: response.tokens_output,
                     context_tokens: response.tokens_input,
-                    cached_tokens: None,
-                    cache_write_tokens: None,
+                    cached_tokens: response.cached_tokens,
+                    cache_write_tokens: response.cache_write_tokens,
                     thinking_tokens: response.thinking_tokens,
+                    provider_cost_usd: response.provider_cost_usd,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],

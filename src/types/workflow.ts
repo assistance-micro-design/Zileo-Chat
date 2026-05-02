@@ -91,6 +91,11 @@ export interface Workflow {
   total_cached_tokens: number | null;
   /** Cumulative cache-write tokens for this workflow */
   total_cache_write_tokens: number | null;
+  /**
+   * Cumulative USD cost from sub-agents only (computed with each sub-agent's
+   * own pricing, not the parent's). Defaults to 0 on legacy rows.
+   */
+  sub_agent_cost_usd?: number;
   /** Folder ID for organization (absent = uncategorized) */
   folder_id?: string;
   /** Whether this workflow is pinned to the top of the sidebar */
@@ -184,8 +189,22 @@ export interface WorkflowMetrics {
   cache_write_tokens?: number;
   /** Thinking/reasoning tokens (for reasoning models) */
   thinking_tokens?: number;
+  /** Provider-reported cost (e.g. OpenRouter `usage.cost`) when available. */
+  provider_cost_usd?: number;
+  /**
+   * `llm_model.id` of the model that generated this response. Used by Phase
+   * 13 to look up the exact pricing used at execution time.
+   */
+  model_id_used?: string;
   /** Per-iteration token breakdown (one entry per LLM API call) */
   iteration_metrics?: IterationMetrics[];
+  /**
+   * Status of the pricing lookup at the moment cost was computed.
+   * - `ok`: model found and prices are non-zero.
+   * - `model_not_found`: pricing row missing (cost defaults to 0).
+   * - `no_pricing_set`: model found but input/output prices are 0.
+   */
+  pricing_status?: 'ok' | 'model_not_found' | 'no_pricing_set';
 }
 
 /**
@@ -227,8 +246,15 @@ export interface TokenDisplayData {
   cumulative_output: number;
   /** Context window maximum from model */
   context_max: number;
-  /** Estimated cost for current message (USD) */
-  cost_usd: number;
+  /**
+   * Cost for the current/last session in USD.
+   *
+   * `null` means the backend has not yet provided a cost for this session
+   * (e.g. fresh streaming where the response_block has not landed). Components
+   * MUST render a neutral placeholder (em-dash) in that case rather than
+   * displaying "Free" or "$0.00", which would be misleading.
+   */
+  cost_usd: number | null;
   /** Cumulative cost for workflow (USD) */
   cumulative_cost_usd: number;
   /** Sub-agent cumulative input tokens */
@@ -245,6 +271,12 @@ export interface TokenDisplayData {
   cache_write_tokens?: number;
   /** Cumulative cache-write tokens for workflow */
   cumulative_cache_write?: number;
+  /**
+   * Outcome of the most recent pricing lookup. `null` when no lookup has
+   * happened yet (Phase 8). Components use this to render a "pricing unknown"
+   * badge instead of misleadingly showing "Free".
+   */
+  pricing_status?: 'ok' | 'model_not_found' | 'no_pricing_set' | null;
   /** Token generation speed (tokens/second) - only during streaming */
   speed_tks?: number;
   /** Whether currently streaming */

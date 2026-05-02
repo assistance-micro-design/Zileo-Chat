@@ -15,7 +15,7 @@
 //! Model pricing and workflow metrics updates.
 
 use crate::{
-    llm::pricing::{calculate_cost_with_cache, CostParams},
+    llm::pricing::{calculate_cost_with_cache, resolve_cost, CostParams},
     models::llm_models::LLMModel,
     AppState,
 };
@@ -27,12 +27,31 @@ pub struct ModelPricingInfo {
     pub model: String,
     pub model_id: String,
     pub cost_usd: f64,
+    /// Status of the pricing lookup. `Ok` only when prices > 0.
+    pub status: PricingStatus,
+}
+
+/// Outcome of the pricing lookup. Phase 8 surfaces this to the frontend so
+/// "free" can be distinguished from "pricing missing".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PricingStatus {
+    /// Model row found and prices are non-zero.
+    Ok,
+    /// No matching model row in the `llm_model` table.
+    ModelNotFound,
+    /// Model found but `input_price` and `output_price` are both 0.
+    NoPricingSet,
 }
 
 /// Loads agent configuration and model pricing info, then calculates cost.
 ///
 /// Supports cached token pricing: when `cached_tokens` or `cache_write_tokens`
 /// is provided, the cost splits input tokens between regular, cache-read, and cache-write rates.
+///
+/// When `provider_cost_usd` is provided (e.g. OpenRouter `usage.cost`), it
+/// takes precedence over the locally-computed cost — the provider's billing
+/// is the source of truth.
 pub async fn load_model_pricing_info(
     state: &AppState,
     agent_id: &str,
@@ -40,6 +59,7 @@ pub async fn load_model_pricing_info(
     tokens_output: usize,
     cached_tokens: Option<usize>,
     cache_write_tokens: Option<usize>,
+    provider_cost_usd: Option<f64>,
 ) -> ModelPricingInfo {
     let (provider, model) = match state.registry.get(agent_id).await {
         Some(agent) => {
@@ -49,7 +69,7 @@ pub async fn load_model_pricing_info(
         None => ("Unknown".to_string(), agent_id.to_string()),
     };
 
-    let (input_price, output_price, cache_read_price, cache_write_price, model_id) = {
+    let (input_price, output_price, cache_read_price, cache_write_price, model_id, status) = {
         let provider_lower = provider.to_lowercase();
         let model_query = "SELECT meta::id(id) AS id, provider, name, api_name, context_window, \
              max_output_tokens, temperature_default, is_builtin, is_reasoning, \
@@ -82,28 +102,50 @@ pub async fn load_model_pricing_info(
                             cache_write_price = loaded_model.cache_write_price_per_mtok,
                             "Loaded model for pricing"
                         );
+                        let status = if loaded_model.input_price_per_mtok == 0.0
+                            && loaded_model.output_price_per_mtok == 0.0
+                        {
+                            PricingStatus::NoPricingSet
+                        } else {
+                            PricingStatus::Ok
+                        };
                         (
                             loaded_model.input_price_per_mtok,
                             loaded_model.output_price_per_mtok,
                             loaded_model.cache_read_price_per_mtok,
                             loaded_model.cache_write_price_per_mtok,
                             loaded_model.id,
+                            status,
                         )
                     }
                     _ => {
                         warn!(model_api_name = %model, provider = %provider, "Model not found for pricing, using defaults");
-                        (0.0, 0.0, 0.0, 0.0, model.clone())
+                        (
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            model.clone(),
+                            PricingStatus::ModelNotFound,
+                        )
                     }
                 }
             }
             Err(e) => {
                 warn!(error = %e, "Failed to load model for pricing, using defaults");
-                (0.0, 0.0, 0.0, 0.0, model.clone())
+                (
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    model.clone(),
+                    PricingStatus::ModelNotFound,
+                )
             }
         }
     };
 
-    let cost_usd = calculate_cost_with_cache(&CostParams {
+    let local_cost = calculate_cost_with_cache(&CostParams {
         tokens_input,
         tokens_output,
         cached_tokens,
@@ -114,6 +156,8 @@ pub async fn load_model_pricing_info(
         cache_write_price_per_mtok: cache_write_price,
     });
 
+    let cost_usd = resolve_cost(provider_cost_usd, local_cost);
+
     info!(
         tokens_input = tokens_input,
         tokens_output = tokens_output,
@@ -123,8 +167,12 @@ pub async fn load_model_pricing_info(
         output_price = output_price,
         cache_read_price = cache_read_price,
         cache_write_price = cache_write_price,
+        local_cost = local_cost,
+        provider_cost_usd = ?provider_cost_usd,
         cost_usd = cost_usd,
-        "Calculated token cost"
+        pricing_status = ?status,
+        cost_source = if matches!(provider_cost_usd, Some(c) if c > 0.0) { "provider" } else { "local" },
+        "Resolved token cost"
     );
 
     ModelPricingInfo {
@@ -132,6 +180,7 @@ pub async fn load_model_pricing_info(
         model,
         model_id,
         cost_usd,
+        status,
     }
 }
 
@@ -213,5 +262,38 @@ pub async fn update_workflow_cumulative_metrics(
             model_id = %model_id,
             "Updated workflow cumulative tokens and context"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_cost_prefers_positive_provider_value() {
+        // Provider value wins, even if locally we would compute something else.
+        assert_eq!(resolve_cost(Some(0.42), 0.10), 0.42);
+        assert_eq!(resolve_cost(Some(0.001), 999.0), 0.001);
+    }
+
+    #[test]
+    fn resolve_cost_falls_back_to_local_when_none() {
+        assert_eq!(resolve_cost(None, 0.05), 0.05);
+        assert_eq!(resolve_cost(None, 0.0), 0.0);
+    }
+
+    #[test]
+    fn resolve_cost_falls_back_to_local_when_provider_is_zero() {
+        // `Some(0.0)` is treated as "no signal" — a real free request also
+        // yields `local_cost == 0.0` so falling back is consistent.
+        assert_eq!(resolve_cost(Some(0.0), 0.05), 0.05);
+        assert_eq!(resolve_cost(Some(0.0), 0.0), 0.0);
+    }
+
+    #[test]
+    fn resolve_cost_falls_back_when_provider_negative() {
+        // Defensive: providers shouldn't return negatives, but if they do, we
+        // ignore the bad signal rather than persist absurd values.
+        assert_eq!(resolve_cost(Some(-1.0), 0.10), 0.10);
     }
 }

@@ -73,11 +73,54 @@ struct ChatResponseMessage {
     content: ParsedContent,
 }
 
-/// Usage statistics from API response
-#[derive(Debug, Deserialize)]
+/// Usage statistics from API response.
+///
+/// Optional details fields handle provider-specific extensions:
+/// - `prompt_tokens_details.cached_tokens`: OpenAI / OpenRouter cache reads.
+/// - `prompt_tokens_details.cache_write_tokens`: OpenRouter Anthropic cache writes.
+/// - `completion_tokens_details.reasoning_tokens`: OpenAI / OpenRouter reasoning models.
+/// - `cost`: OpenRouter provider-reported cost in USD.
+#[derive(Debug, Deserialize, Default)]
 struct ChatUsage {
+    #[serde(default)]
     prompt_tokens: usize,
+    #[serde(default)]
     completion_tokens: usize,
+    #[serde(default)]
+    prompt_tokens_details: Option<PromptTokensDetails>,
+    #[serde(default)]
+    completion_tokens_details: Option<CompletionTokensDetails>,
+    /// Provider-reported cost in USD (OpenRouter; absent on most others).
+    #[serde(default)]
+    cost: Option<f64>,
+}
+
+/// `usage.prompt_tokens_details` payload (OpenAI / OpenRouter).
+#[derive(Debug, Deserialize, Default)]
+struct PromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: Option<usize>,
+    #[serde(default)]
+    cache_write_tokens: Option<usize>,
+}
+
+/// `usage.completion_tokens_details` payload (OpenAI / OpenRouter).
+#[derive(Debug, Deserialize, Default)]
+struct CompletionTokensDetails {
+    #[serde(default)]
+    reasoning_tokens: Option<usize>,
+}
+
+/// Selects the reasoning-tokens count to expose downstream.
+///
+/// Order of preference:
+/// 1. `api_reasoning` — exact count from
+///    `usage.completion_tokens_details.reasoning_tokens` (OpenAI / OpenRouter).
+/// 2. Heuristic estimate from `thinking_content.len()` when the provider does
+///    not separate reasoning from completion (Mistral, Ollama).
+/// 3. `None` if neither is available.
+fn select_thinking_tokens(api_reasoning: Option<usize>, thinking: Option<&str>) -> Option<usize> {
+    api_reasoning.or_else(|| thinking.map(crate::llm::utils::estimate_tokens))
 }
 
 /// Generic provider for any OpenAI-compatible API.
@@ -235,15 +278,33 @@ impl OpenAiCompatibleProvider {
             thinking_content = Self::extract_thinking_from_raw(&body);
         }
 
-        let (tokens_input, tokens_output) = chat_response
-            .usage
-            .map(|u| (u.prompt_tokens, u.completion_tokens))
-            .unwrap_or((0, 0));
+        let usage = chat_response.usage.unwrap_or_default();
+        let tokens_input = usage.prompt_tokens;
+        let tokens_output = usage.completion_tokens;
+        let cached_tokens = usage
+            .prompt_tokens_details
+            .as_ref()
+            .and_then(|d| d.cached_tokens);
+        let cache_write_tokens = usage
+            .prompt_tokens_details
+            .as_ref()
+            .and_then(|d| d.cache_write_tokens);
+        let api_reasoning_tokens = usage
+            .completion_tokens_details
+            .as_ref()
+            .and_then(|d| d.reasoning_tokens);
+        let provider_cost_usd = usage.cost;
+
+        let thinking_tokens =
+            select_thinking_tokens(api_reasoning_tokens, thinking_content.as_deref());
 
         info!(
             provider = %self.provider_name,
             tokens_input = tokens_input,
             tokens_output = tokens_output,
+            cached_tokens = ?cached_tokens,
+            cache_write_tokens = ?cache_write_tokens,
+            provider_cost_usd = ?provider_cost_usd,
             response_len = content.len(),
             has_thinking = thinking_content.is_some(),
             "Custom provider completion successful"
@@ -256,10 +317,11 @@ impl OpenAiCompatibleProvider {
             model: model.to_string(),
             provider: ProviderType::Custom(self.provider_name.clone()),
             finish_reason,
-            thinking_tokens: thinking_content
-                .as_ref()
-                .map(|t| crate::llm::utils::estimate_tokens(t)),
+            thinking_tokens,
             thinking_content,
+            cached_tokens,
+            cache_write_tokens,
+            provider_cost_usd,
         })
     }
 
@@ -430,5 +492,105 @@ mod tests {
         let body = r#"{"choices": [{"message": {"role": "assistant", "content": "Answer"}}]}"#;
         let result = OpenAiCompatibleProvider::extract_thinking_from_raw(body);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_chat_usage_parses_cached_and_cache_write_tokens() {
+        let json = r#"{
+            "prompt_tokens": 194,
+            "completion_tokens": 12,
+            "prompt_tokens_details": {
+                "cached_tokens": 42,
+                "cache_write_tokens": 100
+            }
+        }"#;
+        let usage: ChatUsage = serde_json::from_str(json).expect("usage parses");
+        assert_eq!(usage.prompt_tokens, 194);
+        assert_eq!(usage.completion_tokens, 12);
+        let details = usage
+            .prompt_tokens_details
+            .expect("prompt_tokens_details present");
+        assert_eq!(details.cached_tokens, Some(42));
+        assert_eq!(details.cache_write_tokens, Some(100));
+    }
+
+    #[test]
+    fn test_chat_usage_parses_openrouter_cost_field() {
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cost": 0.0123
+        }"#;
+        let usage: ChatUsage = serde_json::from_str(json).expect("usage parses");
+        assert_eq!(usage.cost, Some(0.0123));
+    }
+
+    #[test]
+    fn test_chat_usage_parses_reasoning_tokens() {
+        let json = r#"{
+            "prompt_tokens": 50,
+            "completion_tokens": 200,
+            "completion_tokens_details": { "reasoning_tokens": 128 }
+        }"#;
+        let usage: ChatUsage = serde_json::from_str(json).expect("usage parses");
+        let details = usage
+            .completion_tokens_details
+            .expect("completion_tokens_details present");
+        assert_eq!(details.reasoning_tokens, Some(128));
+    }
+
+    #[test]
+    fn test_chat_usage_omitted_details_default_to_none() {
+        // A provider without prompt caching (e.g. Mistral) returns no details.
+        let json = r#"{ "prompt_tokens": 10, "completion_tokens": 5 }"#;
+        let usage: ChatUsage = serde_json::from_str(json).expect("usage parses");
+        assert!(usage.prompt_tokens_details.is_none());
+        assert!(usage.completion_tokens_details.is_none());
+        assert!(usage.cost.is_none());
+    }
+
+    #[test]
+    fn select_thinking_tokens_prefers_api_value_when_present() {
+        // Even if thinking_content would estimate to 99, the API number wins.
+        let estimated_text = "lots of reasoning here ".repeat(100);
+        let result = select_thinking_tokens(Some(128), Some(&estimated_text));
+        assert_eq!(result, Some(128));
+    }
+
+    #[test]
+    fn select_thinking_tokens_falls_back_to_estimate_when_api_absent() {
+        // No API value, but thinking_content present → estimate from content.
+        let result = select_thinking_tokens(None, Some("Some short reasoning"));
+        assert!(result.is_some(), "expected an estimated count");
+        assert!(
+            result.unwrap() > 0,
+            "estimate should be > 0 for non-empty text"
+        );
+    }
+
+    #[test]
+    fn select_thinking_tokens_returns_none_when_neither_available() {
+        assert_eq!(select_thinking_tokens(None, None), None);
+    }
+
+    #[test]
+    fn select_thinking_tokens_api_zero_is_kept_as_explicit_zero() {
+        // A model run that did 0 reasoning tokens should report 0, not estimate.
+        let result = select_thinking_tokens(Some(0), Some("anything"));
+        assert_eq!(result, Some(0));
+    }
+
+    #[test]
+    fn test_chat_usage_partial_details_handle_missing_subfields() {
+        // OpenAI sometimes returns only cached_tokens, no cache_write_tokens.
+        let json = r#"{
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "prompt_tokens_details": { "cached_tokens": 8 }
+        }"#;
+        let usage: ChatUsage = serde_json::from_str(json).expect("usage parses");
+        let details = usage.prompt_tokens_details.expect("details present");
+        assert_eq!(details.cached_tokens, Some(8));
+        assert_eq!(details.cache_write_tokens, None);
     }
 }

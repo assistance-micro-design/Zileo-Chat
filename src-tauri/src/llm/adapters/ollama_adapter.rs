@@ -229,6 +229,7 @@ impl ProviderToolAdapter for OllamaToolAdapter {
             cached_tokens: None,
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
         }
     }
 }

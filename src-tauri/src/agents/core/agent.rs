@@ -125,6 +125,10 @@ pub struct ReportMetrics {
     pub cache_write_tokens: Option<usize>,
     /// Thinking/reasoning tokens (if reasoning model used)
     pub thinking_tokens: Option<usize>,
+    /// Provider-reported cost in USD when available (sum across iterations).
+    /// `Some` only for providers that report cost directly (e.g. OpenRouter
+    /// `usage.cost`); takes precedence over local pricing calculation.
+    pub provider_cost_usd: Option<f64>,
     /// Tools used (names only, for backward compatibility)
     pub tools_used: Vec<String>,
     /// MCP calls made (names only, for backward compatibility)
@@ -151,6 +155,7 @@ impl ReportMetrics {
             cached_tokens: None,
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
             tools_used: vec![],
             mcp_calls: vec![],
             tool_executions: vec![],

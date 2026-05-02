@@ -32,6 +32,14 @@ impl AgentOrchestrator {
         Self { registry }
     }
 
+    /// Returns a clone of the underlying registry handle.
+    ///
+    /// Used by sub-agent infrastructure that needs to inspect the sub-agent's
+    /// own `AgentConfig` (e.g. pricing lookup with the sub-agent's model).
+    pub fn registry(&self) -> &Arc<AgentRegistry> {
+        &self.registry
+    }
+
     /// Executes a task via a specific agent with MCP tool support
     ///
     /// # Arguments
@@ -152,6 +160,7 @@ mod tests {
                     cached_tokens: None,
                     cache_write_tokens: None,
                     thinking_tokens: None,
+                    provider_cost_usd: None,
                     tools_used: vec![],
                     mcp_calls: vec![],
                     tool_executions: vec![],

@@ -106,10 +106,15 @@ pub async fn get_memory_token_stats(
 ) -> Result<MemoryTokenStats, String> {
     info!(type_filter = ?type_filter, "Getting memory token statistics");
 
+    // Phase 10: aggregate the actual word counts (via SurrealDB
+    // `array::len(string::words(...))`) so per-category token estimates use
+    // the same `words × 1.5` heuristic as `crate::llm::utils::estimate_tokens`,
+    // not the looser `chars / 4` approximation we used before.
     let base_query = r#"SELECT
             type,
             count() AS count,
             math::sum(string::len(content)) AS total_chars,
+            math::sum(array::len(string::words(content))) AS total_words,
             count(embedding != NONE) AS with_embeddings
         FROM memory"#;
 
@@ -134,6 +139,7 @@ pub async fn get_memory_token_stats(
     let mut categories = Vec::new();
     let mut total_chars: usize = 0;
     let mut total_memories: usize = 0;
+    let mut total_words: usize = 0;
 
     for row in results {
         let memory_type = row
@@ -169,8 +175,11 @@ pub async fn get_memory_token_stats(
                 0
             }) as usize;
 
+        let words = row.get("total_words").and_then(|w| w.as_u64()).unwrap_or(0) as usize;
+
         let avg_chars = chars.checked_div(count).unwrap_or(0);
-        let estimated_tokens = chars / 4; // Standard approximation
+        // Match crate::llm::utils::estimate_tokens (words × 1.5, ceil).
+        let estimated_tokens = ((words as f64) * 1.5).ceil() as usize;
 
         categories.push(CategoryTokenStats {
             memory_type,
@@ -183,12 +192,13 @@ pub async fn get_memory_token_stats(
 
         total_chars += chars;
         total_memories += count;
+        total_words += words;
     }
 
     let stats = MemoryTokenStats {
         categories,
         total_chars,
-        total_estimated_tokens: total_chars / 4,
+        total_estimated_tokens: ((total_words as f64) * 1.5).ceil() as usize,
         total_memories,
     };
 

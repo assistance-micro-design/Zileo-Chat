@@ -129,15 +129,19 @@ pub async fn load_conversation_history(
     (history_context, history_count)
 }
 
-/// Aggregates sub-agent tokens into separate workflow fields.
+/// Aggregates sub-agent metrics into separate workflow fields.
 ///
-/// Queries all completed sub_agent_execution records for this workflow
-/// and stores their token totals in sub_agent_tokens_input/output.
-/// These are kept separate from total_tokens_input/output (main agent only)
-/// so the frontend can display both independently and compute combined totals.
-pub async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
+/// Queries all completed sub_agent_execution records for this workflow and
+/// stores their totals in `sub_agent_tokens_input/output` and
+/// `sub_agent_cost_usd`. The cost is the sum of each sub-agent's own pricing,
+/// not the parent's (Phase 6).
+///
+/// Kept separate from `total_*` (main agent only) so the frontend can display
+/// both independently and compute combined totals.
+pub async fn aggregate_sub_agent_metrics(state: &AppState, workflow_id: &str) {
     let sum_query = "SELECT math::sum(tokens_input) AS total_in, \
-                            math::sum(tokens_output) AS total_out \
+                            math::sum(tokens_output) AS total_out, \
+                            math::sum(cost_usd ?? 0.0) AS total_cost \
                      FROM sub_agent_execution \
                      WHERE workflow_id = $wf_id AND status = 'completed' \
                      GROUP ALL";
@@ -155,12 +159,17 @@ pub async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
                 let tokens_in = row.get("total_in").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                 let tokens_out =
                     row.get("total_out").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let total_cost = row
+                    .get("total_cost")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
 
-                if tokens_in > 0 || tokens_out > 0 {
+                if tokens_in > 0 || tokens_out > 0 || total_cost > 0.0 {
                     let update_query = format!(
                         "UPDATE workflow:`{}` SET \
                             sub_agent_tokens_input = $tokens_in, \
-                            sub_agent_tokens_output = $tokens_out",
+                            sub_agent_tokens_output = $tokens_out, \
+                            sub_agent_cost_usd = $cost",
                         workflow_id
                     );
 
@@ -170,24 +179,32 @@ pub async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
                         .query(&update_query)
                         .bind(("tokens_in", tokens_in))
                         .bind(("tokens_out", tokens_out))
+                        .bind(("cost", total_cost))
                         .await
                     {
-                        error!(error = %e, "Failed to store sub-agent tokens");
+                        error!(error = %e, "Failed to store sub-agent metrics");
                     } else {
                         info!(
                             workflow_id = %workflow_id,
                             sub_agent_tokens_in = tokens_in,
                             sub_agent_tokens_out = tokens_out,
-                            "Stored sub-agent tokens in separate fields"
+                            sub_agent_cost_usd = total_cost,
+                            "Stored aggregated sub-agent metrics"
                         );
                     }
                 }
             }
         }
         Err(e) => {
-            error!(error = %e, "Failed to query sub-agent tokens for aggregation");
+            error!(error = %e, "Failed to query sub-agent metrics for aggregation");
         }
     }
+}
+
+/// Backwards-compatible alias for callers that still use the old name.
+/// New code should call `aggregate_sub_agent_metrics` directly.
+pub async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
+    aggregate_sub_agent_metrics(state, workflow_id).await;
 }
 
 #[cfg(test)]
@@ -344,5 +361,217 @@ mod tests {
         let (context_b, count_b) = load_conversation_history(&state, &workflow_b, "en").await;
         assert_eq!(count_b, 1);
         assert_eq!(context_b["conversation_messages"][0]["content"], "from B");
+    }
+
+    // =========================================================================
+    // aggregate_sub_agent_metrics — verifies that the workflow row receives
+    // accurate sub-agent totals (Phase 6 of the token-cost-accuracy refactor).
+    //
+    // Fixtures use seed_test_workflow + seed_sub_agent_execution helpers so
+    // each test gets a clean ephemeral DB scoped via setup_test_state.
+    // =========================================================================
+
+    use crate::test_utils::{seed_sub_agent_execution, seed_test_workflow};
+
+    /// Reads back a workflow's aggregated sub-agent metrics for assertions.
+    async fn fetch_workflow_sub_agent_totals(
+        state: &AppState,
+        workflow_id: &str,
+    ) -> (i64, i64, f64) {
+        let query = format!(
+            "SELECT \
+                (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
+                (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+                (sub_agent_cost_usd ?? 0.0) AS sub_agent_cost_usd \
+             FROM workflow:`{}`",
+            workflow_id
+        );
+        let rows = state
+            .db
+            .query_json(&query)
+            .await
+            .expect("Failed to fetch workflow row");
+        let row = rows.into_iter().next().expect("Workflow row missing");
+        (
+            row.get("sub_agent_tokens_input")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            row.get("sub_agent_tokens_output")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            row.get("sub_agent_cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
+        )
+    }
+
+    #[tokio::test]
+    async fn aggregate_sub_agent_metrics_sums_completed_executions_only() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = seed_test_workflow(&state.db).await;
+
+        // Two completed executions on different sub-agents, each with their
+        // own (potentially-different) cost computed upstream.
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-1",
+            "completed",
+            1_000,
+            500,
+            Some(0.05),
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-2",
+            "completed",
+            2_000,
+            800,
+            Some(0.07),
+        )
+        .await;
+        // A still-running execution that MUST be excluded from totals.
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-running",
+            "running",
+            9_999,
+            9_999,
+            Some(99.0),
+        )
+        .await;
+
+        aggregate_sub_agent_metrics(&state, &workflow_id).await;
+
+        let (tin, tout, cost) = fetch_workflow_sub_agent_totals(&state, &workflow_id).await;
+        assert_eq!(tin, 3_000, "Only completed inputs summed");
+        assert_eq!(tout, 1_300, "Only completed outputs summed");
+        assert!(
+            (cost - 0.12).abs() < 0.000001,
+            "Expected $0.12 (0.05 + 0.07), got ${}",
+            cost
+        );
+    }
+
+    #[tokio::test]
+    async fn aggregate_sub_agent_metrics_treats_missing_cost_as_zero() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = seed_test_workflow(&state.db).await;
+
+        // Legacy execution row predating Phase 6 — `cost_usd` is NONE.
+        // Aggregation must not crash and must treat NONE as 0.
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-legacy",
+            "completed",
+            1_000,
+            500,
+            None,
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-new",
+            "completed",
+            500,
+            250,
+            Some(0.04),
+        )
+        .await;
+
+        aggregate_sub_agent_metrics(&state, &workflow_id).await;
+
+        let (tin, tout, cost) = fetch_workflow_sub_agent_totals(&state, &workflow_id).await;
+        assert_eq!(tin, 1_500);
+        assert_eq!(tout, 750);
+        assert!(
+            (cost - 0.04).abs() < 0.000001,
+            "Legacy NONE-cost row should contribute 0, got ${}",
+            cost
+        );
+    }
+
+    #[tokio::test]
+    async fn aggregate_sub_agent_metrics_isolates_per_workflow() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_a = seed_test_workflow(&state.db).await;
+        let workflow_b = seed_test_workflow(&state.db).await;
+
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_a,
+            "sub-a",
+            "completed",
+            1_000,
+            500,
+            Some(0.10),
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_b,
+            "sub-b",
+            "completed",
+            2_000,
+            1_000,
+            Some(0.20),
+        )
+        .await;
+
+        aggregate_sub_agent_metrics(&state, &workflow_a).await;
+        aggregate_sub_agent_metrics(&state, &workflow_b).await;
+
+        let (tin_a, tout_a, cost_a) = fetch_workflow_sub_agent_totals(&state, &workflow_a).await;
+        let (tin_b, tout_b, cost_b) = fetch_workflow_sub_agent_totals(&state, &workflow_b).await;
+
+        assert_eq!((tin_a, tout_a), (1_000, 500));
+        assert!((cost_a - 0.10).abs() < 0.000001);
+
+        assert_eq!((tin_b, tout_b), (2_000, 1_000));
+        assert!((cost_b - 0.20).abs() < 0.000001);
+    }
+
+    #[tokio::test]
+    async fn aggregate_sub_agent_metrics_noop_when_no_completed_rows() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = seed_test_workflow(&state.db).await;
+
+        // Only non-completed rows exist — totals must remain at their seeded
+        // defaults (the function intentionally skips the UPDATE in this case).
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-pending",
+            "pending",
+            5_000,
+            2_500,
+            Some(1.5),
+        )
+        .await;
+        seed_sub_agent_execution(
+            &state.db,
+            &workflow_id,
+            "sub-error",
+            "error",
+            100,
+            50,
+            Some(0.01),
+        )
+        .await;
+
+        aggregate_sub_agent_metrics(&state, &workflow_id).await;
+
+        let (tin, tout, cost) = fetch_workflow_sub_agent_totals(&state, &workflow_id).await;
+        assert_eq!(
+            (tin, tout),
+            (0, 0),
+            "Non-completed rows must not bump totals"
+        );
+        assert_eq!(cost, 0.0, "Non-completed rows must not bump cost");
     }
 }

@@ -194,6 +194,7 @@ pub async fn finalize_completion(
         report.metrics.tokens_output,
         report.metrics.cached_tokens,
         report.metrics.cache_write_tokens,
+        report.metrics.provider_cost_usd,
     )
     .await;
 
@@ -286,6 +287,16 @@ pub async fn finalize_completion(
         "Persisted tool executions and thinking steps to database"
     );
 
+    let pricing_status = match pricing.status {
+        crate::commands::streaming::pricing::PricingStatus::Ok => Some("ok".to_string()),
+        crate::commands::streaming::pricing::PricingStatus::ModelNotFound => {
+            Some("model_not_found".to_string())
+        }
+        crate::commands::streaming::pricing::PricingStatus::NoPricingSet => {
+            Some("no_pricing_set".to_string())
+        }
+    };
+
     let result = WorkflowResult {
         report: report.content,
         response: report.response,
@@ -299,6 +310,9 @@ pub async fn finalize_completion(
             cached_tokens: report.metrics.cached_tokens,
             cache_write_tokens: report.metrics.cache_write_tokens,
             thinking_tokens: report.metrics.thinking_tokens,
+            provider_cost_usd: report.metrics.provider_cost_usd,
+            model_id_used: Some(pricing.model_id.clone()),
+            pricing_status,
             iteration_metrics: report.metrics.iteration_metrics.clone(),
         },
         tools_used: report.metrics.tools_used.clone(),

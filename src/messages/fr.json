@@ -946,6 +946,9 @@
   "workflow_metrics_cost_title": "Cout",
   "workflow_metrics_cost": "cout",
   "workflow_metrics_free": "Gratuit",
+  "tokens_pricing_unknown": "Tarif inconnu",
+  "tokens_pricing_unknown_help": "Aucun tarif configuré pour ce modèle — le coût réel n'est pas affiché.",
+  "tokens_cost_pending": "Coût pas encore disponible",
 
   "workflow_reasoning_title": "Raisonnement",
   "workflow_reasoning_step": "etape",

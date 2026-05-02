@@ -241,6 +241,10 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handles workflow switching for background workflows by restoring streaming state.
 	 */
 	async function selectWorkflow(workflowId: string): Promise<void> {
+		// Phase 13 — clear "zombie" values from the previous workflow IMMEDIATELY
+		// so the user never sees a flash of the wrong session metrics.
+		tokenStore.reset();
+
 		pageState.selectedWorkflowId = workflowId;
 		workflowStore.select(workflowId);
 		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
@@ -251,6 +255,16 @@ Uses extracted components, services, and stores for clean architecture.
 		// Load workflow data (messages and historical activities)
 		await loadWorkflowData(workflowId);
 
+		// Update token store with workflow cumulative metrics
+		const workflow = workflowStore.getSelected();
+		if (workflow) {
+			tokenStore.updateFromWorkflow(workflow);
+		}
+
+		// Phase 13 — fetch the metrics of the last assistant message so the
+		// session display reflects "what the last run cost" rather than zeros.
+		const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
+
 		// Check if this workflow is running in the background
 		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
 		if (bgExecution && bgExecution.status === 'running') {
@@ -258,20 +272,24 @@ Uses extracted components, services, and stores for clean architecture.
 			streamingStore.restoreFrom(bgExecution);
 			executionBlocksStore.start(workflowId);
 			tokenStore.startStreaming();
-			tokenStore.setSessionTokens(0, bgExecution.tokensReceived);
+			// Phase 13: hydrate the FULL session token display, not just outputs.
+			// Inputs/cache survive workflow switches because chunkProcessor.ts
+			// keeps them on the bg execution itself (response_block updates).
+			tokenStore.setSessionTokens(
+				bgExecution.tokensSent,
+				bgExecution.tokensReceived,
+				bgExecution.cachedTokens ?? undefined,
+				bgExecution.cacheWriteTokens ?? undefined
+			);
 
 			// Open user question modal if there are pending questions for this workflow
 			userQuestionStore.openForWorkflow(workflowId);
 		} else {
-			// Not running in background - reset streaming and execution state
+			// Not running in background — show the last assistant message's
+			// metrics so the user sees a meaningful session summary.
 			streamingStore.reset();
 			executionBlocksStore.reset();
-		}
-
-		// Update token store with workflow cumulative metrics
-		const workflow = workflowStore.getSelected();
-		if (workflow) {
-			tokenStore.updateFromWorkflow(workflow);
+			tokenStore.restoreFromLastMessage(lastMetrics);
 		}
 
 		// Auto-select agent if workflow has one

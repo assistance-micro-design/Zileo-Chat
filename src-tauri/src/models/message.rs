@@ -79,6 +79,17 @@ pub struct Message {
     /// Thinking/reasoning tokens (for reasoning models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_tokens: Option<u64>,
+    /// Cached prompt tokens (cache reads) when the provider exposes them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+    /// Cache-write prompt tokens (first request that primes the cache).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// `llm_model.id` of the model that produced this assistant message.
+    /// Captured at write time so cross-workflow restoration uses the exact
+    /// pricing snapshot of the moment, not the agent's current configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id_used: Option<String>,
     /// Message timestamp
     pub timestamp: DateTime<Utc>,
 }
@@ -118,6 +129,32 @@ pub struct MessageCreate {
     /// Thinking/reasoning tokens (for reasoning models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_tokens: Option<u64>,
+    /// Cached prompt tokens (cache reads) when the provider exposes them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+    /// Cache-write prompt tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// `llm_model.id` of the model that produced this assistant message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id_used: Option<String>,
+}
+
+/// Lightweight metrics from the most recent assistant message of a workflow.
+///
+/// Used by the frontend (Phase 13) to restore the session display when the
+/// user switches to a workflow that has no live execution running. Lets the UI
+/// show "what the last run cost" rather than blank zeros.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageMetrics {
+    pub tokens_input: Option<u64>,
+    pub tokens_output: Option<u64>,
+    pub cached_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
+    pub thinking_tokens: Option<u64>,
+    pub cost_usd: Option<f64>,
+    /// `llm_model.id` of the model that produced the message (for pricing lookup).
+    pub model_id_used: Option<String>,
 }
 
 /// Response for paginated message loading.
@@ -180,6 +217,9 @@ mod tests {
             cost_usd: None,
             duration_ms: None,
             thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            model_id_used: None,
             timestamp: Utc::now(),
         };
 
@@ -208,6 +248,9 @@ mod tests {
             cost_usd: Some(0.001),
             duration_ms: Some(1500),
             thinking_tokens: Some(25),
+            cached_tokens: Some(20),
+            cache_write_tokens: Some(15),
+            model_id_used: Some("model-uuid-123".to_string()),
             timestamp: Utc::now(),
         };
 
@@ -217,6 +260,70 @@ mod tests {
         assert!(json.contains("\"tokens_output\":10"));
         assert!(json.contains("\"model\":\"mistral-large-latest\""));
         assert!(json.contains("\"provider\":\"Mistral\""));
+        assert!(json.contains("\"cached_tokens\":20"));
+        assert!(json.contains("\"cache_write_tokens\":15"));
+        assert!(json.contains("\"model_id_used\":\"model-uuid-123\""));
+    }
+
+    #[test]
+    fn test_message_create_omits_cache_fields_when_none() {
+        let create = MessageCreate {
+            workflow_id: "wf-1".to_string(),
+            role: "user".to_string(),
+            content: "hi".to_string(),
+            tokens: 0,
+            tokens_input: None,
+            tokens_output: None,
+            model: None,
+            provider: None,
+            cost_usd: None,
+            duration_ms: None,
+            thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            model_id_used: None,
+        };
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(!json.contains("cached_tokens"));
+        assert!(!json.contains("cache_write_tokens"));
+        assert!(!json.contains("model_id_used"));
+    }
+
+    #[test]
+    fn test_message_create_serializes_cache_fields_when_some() {
+        let create = MessageCreate {
+            workflow_id: "wf-1".to_string(),
+            role: "assistant".to_string(),
+            content: "hi".to_string(),
+            tokens: 0,
+            tokens_input: Some(100),
+            tokens_output: Some(50),
+            model: Some("m".to_string()),
+            provider: Some("Mistral".to_string()),
+            cost_usd: Some(0.001),
+            duration_ms: Some(1200),
+            thinking_tokens: None,
+            cached_tokens: Some(40),
+            cache_write_tokens: Some(60),
+            model_id_used: Some("mid".to_string()),
+        };
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(json.contains("\"cached_tokens\":40"));
+        assert!(json.contains("\"cache_write_tokens\":60"));
+        assert!(json.contains("\"model_id_used\":\"mid\""));
+    }
+
+    #[test]
+    fn test_message_deserializes_legacy_payload_without_cache_fields() {
+        // Pre-Phase-5 rows lack cache fields → must default to None.
+        let json = r#"{
+            "id":"m1","workflow_id":"wf","role":"user","content":"hi","tokens":1,
+            "timestamp":"2026-05-02T00:00:00Z"
+        }"#;
+        let msg: Message = serde_json::from_str(json).expect("legacy parses");
+        assert_eq!(msg.cached_tokens, None);
+        assert_eq!(msg.cache_write_tokens, None);
+        assert_eq!(msg.model_id_used, None);
     }
 
     #[test]

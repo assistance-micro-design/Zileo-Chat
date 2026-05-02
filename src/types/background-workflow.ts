@@ -61,8 +61,24 @@ export interface WorkflowStreamState {
 	subAgents: ActiveSubAgent[];
 	/** Task tracking */
 	tasks: ActiveTask[];
-	/** Total tokens received so far */
+	/** Total output tokens received so far (response_block.tokens_output) */
 	tokensReceived: number;
+	/**
+	 * Cumulative input/prompt tokens reported by `response_block` chunks.
+	 * Phase 13: kept on the bg execution itself so switching back to a still-
+	 * running workflow restores the FULL session display, not just outputs.
+	 */
+	tokensSent: number;
+	/**
+	 * Cached input tokens reported by the latest `response_block` chunk.
+	 * `null` when the provider does not expose cache metrics.
+	 */
+	cachedTokens: number | null;
+	/**
+	 * Cache-write tokens reported by the latest `response_block` chunk.
+	 * `null` when the provider does not expose cache-write metrics.
+	 */
+	cacheWriteTokens: number | null;
 	/** Error message if status is 'error' */
 	error: string | null;
 	/** Timestamp (ms) when the workflow started */

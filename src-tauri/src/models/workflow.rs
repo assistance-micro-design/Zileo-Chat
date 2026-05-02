@@ -217,6 +217,17 @@ pub struct WorkflowMetrics {
     /// Thinking/reasoning tokens for this execution (if reasoning model)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_tokens: Option<usize>,
+    /// Provider-reported cost (e.g. OpenRouter `usage.cost`) when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_cost_usd: Option<f64>,
+    /// `llm_model.id` of the model that produced this response. Used by Phase
+    /// 13 to look up the exact pricing used at execution time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id_used: Option<String>,
+    /// Outcome of the pricing lookup (Phase 8). Lets the frontend distinguish
+    /// "free" from "pricing missing".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pricing_status: Option<String>,
     /// Per-iteration token breakdown (one entry per LLM API call)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iteration_metrics: Vec<IterationMetrics>,
@@ -361,6 +372,9 @@ mod tests {
                 cached_tokens: None,
                 cache_write_tokens: None,
                 thinking_tokens: None,
+                provider_cost_usd: None,
+                model_id_used: None,
+                pricing_status: None,
                 iteration_metrics: vec![],
             },
             tools_used: vec!["tool1".to_string(), "tool2".to_string()],
@@ -390,6 +404,9 @@ mod tests {
             cached_tokens: None,
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
+            model_id_used: None,
+            pricing_status: None,
             iteration_metrics: vec![],
         };
 

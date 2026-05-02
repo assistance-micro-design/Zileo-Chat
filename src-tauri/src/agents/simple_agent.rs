@@ -82,6 +82,7 @@ impl Agent for SimpleAgent {
                 cached_tokens: None,
                 cache_write_tokens: None,
                 thinking_tokens: None,
+                provider_cost_usd: None,
                 tools_used: vec![],
                 mcp_calls: vec![],
                 tool_executions: vec![],

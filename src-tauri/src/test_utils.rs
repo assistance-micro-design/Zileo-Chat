@@ -201,3 +201,199 @@ pub async fn seed_test_memory_with_embedding(db: &DBClient) -> String {
         .expect("CREATE memory with embedding failed validation");
     id
 }
+
+// ============================================================================
+// Agent test fixtures (cross-module use)
+// ============================================================================
+
+/// Minimal `Agent` implementation usable across crate test modules.
+///
+/// Carries an `AgentConfig` with caller-controlled `provider` and `model`
+/// fields, which is the only data downstream pricing code reads from the
+/// registry. The trait body returns degenerate values: registering this
+/// instance is enough to make `AgentRegistry::get` resolve the id.
+pub struct TestRegistryAgent {
+    config: crate::models::AgentConfig,
+}
+
+impl TestRegistryAgent {
+    /// Builds a test agent whose `config().llm` reports the given provider /
+    /// api_name. Used by sub-agent cost tests to assert that pricing lookup
+    /// uses the SUB-agent's model, not the parent's.
+    pub fn new(id: &str, provider: &str, api_name: &str) -> Self {
+        use crate::models::{AgentConfig, LLMConfig, Lifecycle};
+        Self {
+            config: AgentConfig {
+                id: id.to_string(),
+                name: format!("Test Agent {}", id),
+                lifecycle: Lifecycle::Temporary,
+                llm: LLMConfig {
+                    provider: provider.to_string(),
+                    model: api_name.to_string(),
+                    temperature: 0.0,
+                    max_tokens: 0,
+                    is_reasoning: false,
+                    context_window: None,
+                },
+                tools: vec![],
+                mcp_servers: vec![],
+                skills: vec![],
+                folders: vec![],
+                require_file_confirmation: false,
+                system_prompt: String::new(),
+                max_tool_iterations: 0,
+                reasoning_effort: None,
+            },
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::agents::core::agent::Agent for TestRegistryAgent {
+    async fn execute(
+        &self,
+        _task: crate::agents::core::agent::Task,
+    ) -> anyhow::Result<crate::agents::core::agent::Report> {
+        anyhow::bail!("TestRegistryAgent::execute is intentionally unsupported")
+    }
+    fn capabilities(&self) -> Vec<String> {
+        vec![]
+    }
+    fn lifecycle(&self) -> crate::models::Lifecycle {
+        self.config.lifecycle.clone()
+    }
+    fn tools(&self) -> Vec<String> {
+        vec![]
+    }
+    fn mcp_servers(&self) -> Vec<String> {
+        vec![]
+    }
+    fn system_prompt(&self) -> String {
+        String::new()
+    }
+    fn config(&self) -> &crate::models::AgentConfig {
+        &self.config
+    }
+}
+
+/// Seeds an `llm_model` row with explicit per-MTok prices.
+///
+/// Returns the model id. Used by pricing/aggregation tests so
+/// `load_pricing_row` finds a row with deterministic prices.
+pub async fn seed_llm_model(
+    db: &DBClient,
+    provider: &str,
+    api_name: &str,
+    input_price: f64,
+    output_price: f64,
+) -> String {
+    seed_llm_model_with_cache(db, provider, api_name, input_price, output_price, 0.0, 0.0).await
+}
+
+/// Seeds an `llm_model` row including cache pricing (for cache-aware tests).
+pub async fn seed_llm_model_with_cache(
+    db: &DBClient,
+    provider: &str,
+    api_name: &str,
+    input_price: f64,
+    output_price: f64,
+    cache_read_price: f64,
+    cache_write_price: f64,
+) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let provider_lower = provider.to_lowercase();
+    let query = "CREATE llm_model:`{id}` SET \
+            id = $id, \
+            provider = $provider, \
+            name = $api_name, \
+            api_name = $api_name, \
+            context_window = 128000, \
+            max_output_tokens = 4096, \
+            temperature_default = 0.0, \
+            is_builtin = false, \
+            is_reasoning = false, \
+            input_price_per_mtok = $input_price, \
+            output_price_per_mtok = $output_price, \
+            cache_read_price_per_mtok = $cache_read_price, \
+            cache_write_price_per_mtok = $cache_write_price"
+        .replace("{id}", &id);
+    db.db
+        .query(&query)
+        .bind(("id", id.clone()))
+        .bind(("provider", provider_lower))
+        .bind(("api_name", api_name.to_string()))
+        .bind(("input_price", input_price))
+        .bind(("output_price", output_price))
+        .bind(("cache_read_price", cache_read_price))
+        .bind(("cache_write_price", cache_write_price))
+        .await
+        .expect("Query execution failed")
+        .check()
+        .expect("CREATE llm_model failed validation");
+    id
+}
+
+/// Seeds a minimal `workflow` row so subsequent UPDATEs land somewhere.
+///
+/// Returns the workflow id. Used by aggregation tests to verify that
+/// `aggregate_sub_agent_metrics` writes onto the right row.
+pub async fn seed_test_workflow(db: &DBClient) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let query = format!(
+        "CREATE workflow:`{id}` SET \
+            name = 'Test Workflow', \
+            agent_id = 'test-agent', \
+            status = 'idle', \
+            pinned = false"
+    );
+    db.db
+        .query(&query)
+        .await
+        .expect("Query execution failed")
+        .check()
+        .expect("CREATE workflow failed validation");
+    id
+}
+
+/// Inserts a `sub_agent_execution` row with arbitrary metrics + status.
+///
+/// `cost_usd = None` is stored as SurrealQL NONE so the aggregation can
+/// verify that legacy rows (no cost) cleanly sum to 0.
+#[allow(clippy::too_many_arguments)]
+pub async fn seed_sub_agent_execution(
+    db: &DBClient,
+    workflow_id: &str,
+    sub_agent_id: &str,
+    status: &str,
+    tokens_input: i64,
+    tokens_output: i64,
+    cost_usd: Option<f64>,
+) {
+    let id = uuid::Uuid::new_v4().to_string();
+    let cost_clause = match cost_usd {
+        Some(c) => format!("cost_usd = {}", c),
+        None => "cost_usd = NONE".to_string(),
+    };
+    let query = format!(
+        "CREATE sub_agent_execution:`{id}` SET \
+            workflow_id = $wf_id, \
+            parent_agent_id = 'test-parent', \
+            sub_agent_id = $sub_id, \
+            sub_agent_name = 'Test SubAgent', \
+            task_description = 'Test task', \
+            status = $status, \
+            duration_ms = 100, \
+            tokens_input = {tokens_input}, \
+            tokens_output = {tokens_output}, \
+            {cost_clause}"
+    );
+    db.db
+        .query(&query)
+        .bind(("wf_id", workflow_id.to_string()))
+        .bind(("sub_id", sub_agent_id.to_string()))
+        .bind(("status", status.to_string()))
+        .await
+        .expect("Query execution failed")
+        .check()
+        .expect("CREATE sub_agent_execution failed validation");
+}

@@ -40,6 +40,9 @@ function createState(): ChunkableState {
 		subAgents: [],
 		tasks: [],
 		tokensReceived: 0,
+		tokensSent: 0,
+		cachedTokens: null,
+		cacheWriteTokens: null,
 		error: null
 	};
 }
@@ -399,6 +402,74 @@ describe('applyChunkToState', () => {
 
 			expect(result.content).toBe('Final answer.');
 			expect(result.tokensReceived).toBe(50);
+		});
+
+		// Phase 13: persist input/cache tokens on the bg execution itself so a
+		// switch back to a still-running workflow restores the FULL session.
+		it('should persist tokensSent from response_block input tokens', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1234,
+				tokens_output: 50
+			}));
+
+			expect(result.tokensSent).toBe(1234);
+			expect(result.tokensReceived).toBe(50);
+		});
+
+		it('should persist cachedTokens and cacheWriteTokens when reported', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1000,
+				tokens_output: 200,
+				cached_tokens: 800,
+				cache_write_tokens: 50
+			}));
+
+			expect(result.cachedTokens).toBe(800);
+			expect(result.cacheWriteTokens).toBe(50);
+		});
+
+		it('should preserve previous cache values when chunk omits them', () => {
+			// First chunk reports cache; later chunk omits it -> keep previous
+			// (don't clear), so the bg execution display stays stable.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1000,
+				tokens_output: 50,
+				cached_tokens: 600,
+				cache_write_tokens: 100
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1500,
+				tokens_output: 80
+			}));
+
+			expect(s.tokensSent).toBe(1500);
+			expect(s.tokensReceived).toBe(80);
+			expect(s.cachedTokens).toBe(600);
+			expect(s.cacheWriteTokens).toBe(100);
+		});
+
+		it('should leave token fields unchanged when chunk has no token info', () => {
+			// Defensive: chunk without tokens_input/output mustn't reset
+			// previously-recorded values to undefined or 0.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 200,
+				tokens_output: 100,
+				cached_tokens: 50
+			}));
+			const before = { ...s };
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'response_block',
+				content: 'partial'
+			}));
+
+			expect(s.tokensSent).toBe(before.tokensSent);
+			expect(s.tokensReceived).toBe(before.tokensReceived);
+			expect(s.cachedTokens).toBe(before.cachedTokens);
 		});
 	});
 

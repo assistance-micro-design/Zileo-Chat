@@ -140,8 +140,14 @@ export interface StreamingState {
 	isStreaming: boolean;
 	/** Whether streaming completed but activities not yet captured */
 	completed: boolean;
-	/** Total tokens received */
+	/** Total output tokens received */
 	tokensReceived: number;
+	/** Total input tokens reported by response_block chunks (Phase 13) */
+	tokensSent: number;
+	/** Cached input tokens reported by the latest response_block chunk */
+	cachedTokens: number | null;
+	/** Cache-write tokens reported by the latest response_block chunk */
+	cacheWriteTokens: number | null;
 	/** Error message if streaming failed */
 	error: string | null;
 	/** Whether workflow was cancelled */
@@ -165,6 +171,9 @@ const initialState: StreamingState = {
 	isStreaming: false,
 	completed: false,
 	tokensReceived: 0,
+	tokensSent: 0,
+	cachedTokens: null,
+	cacheWriteTokens: null,
 	error: null,
 	cancelled: false
 };
@@ -268,7 +277,11 @@ export const streamingStore = {
 	 * Restore streaming state from a background workflow execution.
 	 * Used when switching to view a running background workflow.
 	 *
-	 * @param state - The background workflow state to restore from
+	 * Phase 13: hydrates `tokensSent`, `cachedTokens` and `cacheWriteTokens`
+	 * from the bg state so the session display reflects what the running
+	 * workflow has actually consumed (not just the output count).
+	 *
+	 * @param bgState - The background workflow state to restore from
 	 */
 	restoreFrom(bgState: {
 		workflowId: string;
@@ -278,6 +291,9 @@ export const streamingStore = {
 		subAgents: ActiveSubAgent[];
 		tasks: ActiveTask[];
 		tokensReceived: number;
+		tokensSent?: number;
+		cachedTokens?: number | null;
+		cacheWriteTokens?: number | null;
 		error: string | null;
 		status: string;
 	}): void {
@@ -292,6 +308,9 @@ export const streamingStore = {
 			isStreaming: isRunning,
 			completed: !isRunning,
 			tokensReceived: bgState.tokensReceived,
+			tokensSent: bgState.tokensSent ?? 0,
+			cachedTokens: bgState.cachedTokens ?? null,
+			cacheWriteTokens: bgState.cacheWriteTokens ?? null,
 			error: bgState.error,
 			cancelled: bgState.status === 'cancelled'
 		});

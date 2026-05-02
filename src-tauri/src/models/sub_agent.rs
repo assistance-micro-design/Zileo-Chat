@@ -206,7 +206,9 @@ impl SubAgentExecutionCreate {
 
 /// Metrics from a sub-agent execution.
 ///
-/// Returned as part of the tool result to the primary agent.
+/// Returned as part of the tool result to the primary agent and persisted
+/// in the `sub_agent_execution` table. Cache and cost fields are optional —
+/// they are only populated when the underlying provider exposes them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubAgentMetrics {
     /// Execution duration in milliseconds
@@ -215,6 +217,19 @@ pub struct SubAgentMetrics {
     pub tokens_input: u64,
     /// Output tokens generated
     pub tokens_output: u64,
+    /// Cached prompt tokens (cache reads) when the provider exposes them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+    /// Cache-write prompt tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// Thinking/reasoning tokens (for reasoning models).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u64>,
+    /// USD cost computed with the SUB-AGENT'S OWN pricing (not the parent's).
+    /// `None` when pricing was unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
 }
 
 /// Result of a sub-agent spawn operation.
@@ -334,6 +349,10 @@ mod tests {
                 duration_ms: 2000,
                 tokens_input: 150,
                 tokens_output: 300,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                cost_usd: None,
             },
         };
 
@@ -358,6 +377,10 @@ mod tests {
                     duration_ms: 1000,
                     tokens_input: 100,
                     tokens_output: 200,
+                    cached_tokens: None,
+                    cache_write_tokens: None,
+                    thinking_tokens: None,
+                    cost_usd: None,
                 }),
             }],
             aggregated_report: "# Combined Report\n\n3 tasks completed.".to_string(),

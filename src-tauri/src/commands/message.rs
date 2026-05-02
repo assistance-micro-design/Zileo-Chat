@@ -25,7 +25,7 @@ use crate::{
     db::extract_count,
     models::{
         merge_into_chat_blocks, sub_agent::SubAgentExecution, ChatBlock, Message, MessageCreate,
-        PaginatedMessages, ThinkingStep, ToolExecution,
+        MessageMetrics, PaginatedMessages, ThinkingStep, ToolExecution,
     },
     security::validate_uuid_field,
     AppState,
@@ -46,6 +46,9 @@ use uuid::Uuid;
 /// * `provider` - Provider used (optional)
 /// * `duration_ms` - Generation duration in milliseconds (optional)
 /// * `cost_usd` - Estimated cost in USD (optional)
+/// * `cached_tokens` - Cache-read prompt tokens (optional)
+/// * `cache_write_tokens` - Cache-write prompt tokens (optional)
+/// * `model_id_used` - `llm_model.id` of the model that produced the response (optional)
 ///
 /// # Returns
 /// The ID of the created message
@@ -71,6 +74,9 @@ pub async fn save_message(
     duration_ms: Option<u64>,
     thinking_tokens: Option<u64>,
     cost_usd: Option<f64>,
+    cached_tokens: Option<u64>,
+    cache_write_tokens: Option<u64>,
+    model_id_used: Option<String>,
     message_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -107,12 +113,18 @@ pub async fn save_message(
         None => Uuid::new_v4().to_string(),
     };
 
-    // Build MessageCreate payload
+    // Build MessageCreate payload.
+    //
+    // Phase 12: legacy `tokens` field stores the sum input + output rather than
+    // just output, so old consumers that read it get a more meaningful number
+    // (a non-zero count even on user messages). Prefer `tokens_input` /
+    // `tokens_output` for new code; the field is kept for back-compat.
+    let legacy_tokens = (tokens_input.unwrap_or(0) + tokens_output.unwrap_or(0)) as usize;
     let message = MessageCreate {
         workflow_id: validated_workflow_id,
         role: validated_role,
         content,
-        tokens: tokens_output.unwrap_or(0) as usize,
+        tokens: legacy_tokens,
         tokens_input,
         tokens_output,
         model,
@@ -120,6 +132,9 @@ pub async fn save_message(
         cost_usd,
         duration_ms,
         thinking_tokens,
+        cached_tokens,
+        cache_write_tokens,
+        model_id_used,
     };
 
     // Insert into database
@@ -155,9 +170,11 @@ pub async fn load_workflow_messages(
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
-    // ORDER BY timestamp ASC for chronological order
-    let query = format!(
-        r#"SELECT
+    // ORDER BY timestamp ASC for chronological order.
+    //
+    // Phase 11: bind workflow_id as a parameter for defence-in-depth (UUID is
+    // already validated, but parameterised queries keep the SQL static).
+    let query = r#"SELECT
             meta::id(id) AS id,
             workflow_id,
             role,
@@ -170,17 +187,28 @@ pub async fn load_workflow_messages(
             cost_usd,
             duration_ms,
             thinking_tokens,
+            cached_tokens,
+            cache_write_tokens,
+            model_id_used,
             timestamp
         FROM message
-        WHERE workflow_id = '{}'
-        ORDER BY timestamp ASC"#,
-        validated_workflow_id
-    );
+        WHERE workflow_id = $wf_id
+        ORDER BY timestamp ASC"#;
 
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load workflow messages");
-        format!("Failed to load workflow messages: {}", e)
-    })?;
+    let json_results = state
+        .db
+        .query_json_with_params(
+            query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to load workflow messages");
+            format!("Failed to load workflow messages: {}", e)
+        })?;
 
     // Deserialize using serde_json which respects our custom deserializers
     let messages: Vec<Message> = json_results
@@ -225,17 +253,25 @@ pub async fn load_workflow_messages_paginated(
     let limit = limit.unwrap_or(50).min(200); // Cap at 200 max
     let offset = offset.unwrap_or(0);
 
-    // Get total count
-    let count_query = format!(
-        "SELECT count() FROM message WHERE workflow_id = '{}' GROUP ALL",
-        validated_workflow_id
-    );
-    let count_result: Vec<serde_json::Value> =
-        state.db.query(&count_query).await.unwrap_or_default();
+    // Get total count (Phase 11: bind workflow_id).
+    let count_query = "SELECT count() FROM message WHERE workflow_id = $wf_id GROUP ALL";
+    let count_result: Vec<serde_json::Value> = state
+        .db
+        .query_json_with_params(
+            count_query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .unwrap_or_default();
 
     let total = extract_count(&count_result) as u32;
 
-    // Load paginated messages
+    // Load paginated messages. LIMIT / START accept literals only (not bound
+    // parameters in this SDK version), so we still format them in — they come
+    // from validated `u32` so injection is impossible. workflow_id is bound.
     let query = format!(
         r#"SELECT
             meta::id(id) AS id,
@@ -250,18 +286,31 @@ pub async fn load_workflow_messages_paginated(
             cost_usd,
             duration_ms,
             thinking_tokens,
+            cached_tokens,
+            cache_write_tokens,
+            model_id_used,
             timestamp
         FROM message
-        WHERE workflow_id = '{}'
+        WHERE workflow_id = $wf_id
         ORDER BY timestamp ASC
         LIMIT {} START {}"#,
-        validated_workflow_id, limit, offset
+        limit, offset
     );
 
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
-        error!(error = %e, "Failed to load paginated messages");
-        format!("Failed to load paginated messages: {}", e)
-    })?;
+    let json_results = state
+        .db
+        .query_json_with_params(
+            &query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to load paginated messages");
+            format!("Failed to load paginated messages: {}", e)
+        })?;
 
     let messages: Vec<Message> = json_results
         .into_iter()
@@ -336,23 +385,32 @@ pub async fn clear_workflow_messages(
 
     let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
-    // First count existing messages
-    let count_query = format!(
-        "SELECT count() FROM message WHERE workflow_id = '{}' GROUP ALL",
-        validated_workflow_id
-    );
-    let count_result: Vec<serde_json::Value> =
-        state.db.query(&count_query).await.unwrap_or_default();
+    // First count existing messages (Phase 11: bind workflow_id).
+    let count_query = "SELECT count() FROM message WHERE workflow_id = $wf_id GROUP ALL";
+    let count_result: Vec<serde_json::Value> = state
+        .db
+        .query_json_with_params(
+            count_query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .unwrap_or_default();
 
     let count = extract_count(&count_result);
 
-    // Delete all messages for the workflow
+    // Delete all messages for the workflow (Phase 11: bind workflow_id).
     state
         .db
-        .execute(&format!(
-            "DELETE message WHERE workflow_id = '{}'",
-            validated_workflow_id
-        ))
+        .execute_with_params(
+            "DELETE message WHERE workflow_id = $wf_id",
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
         .await
         .map_err(|e| {
             error!(error = %e, "Failed to clear workflow messages");
@@ -361,6 +419,64 @@ pub async fn clear_workflow_messages(
 
     info!(count = count, "Workflow messages cleared");
     Ok(count)
+}
+
+/// Returns lightweight metrics from the most recent assistant message of a workflow.
+///
+/// Phase 13: when the user switches to a workflow that is not currently
+/// streaming, the frontend calls this to restore the session display from the
+/// last persisted assistant message — so the user sees "what the last run
+/// cost" instead of blank zeros.
+///
+/// # Returns
+/// `Some(MessageMetrics)` if the workflow has at least one assistant message,
+/// `None` if it has no assistant messages yet (fresh workflow).
+#[tauri::command]
+#[instrument(
+    name = "get_workflow_last_assistant_message_metrics",
+    skip(state),
+    fields(workflow_id = %workflow_id)
+)]
+pub async fn get_workflow_last_assistant_message_metrics(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<MessageMetrics>, String> {
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+
+    let query = "SELECT \
+            tokens_input, tokens_output, cached_tokens, cache_write_tokens, \
+            thinking_tokens, cost_usd, model_id_used \
+        FROM message \
+        WHERE workflow_id = $wf_id AND role = 'assistant' \
+        ORDER BY timestamp DESC LIMIT 1";
+
+    let rows = state
+        .db
+        .query_json_with_params(
+            query,
+            vec![(
+                "wf_id".to_string(),
+                serde_json::json!(validated_workflow_id),
+            )],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to load last assistant message metrics");
+            format!("Failed to load metrics: {}", e)
+        })?;
+
+    let row = match rows.into_iter().next() {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    // serde_json::from_value gracefully handles missing optional fields.
+    let metrics: MessageMetrics = serde_json::from_value(row).map_err(|e| {
+        error!(error = %e, "Failed to deserialize MessageMetrics");
+        format!("Failed to deserialize metrics: {}", e)
+    })?;
+
+    Ok(Some(metrics))
 }
 
 /// Loads execution blocks (thinking steps + tool calls) for a message,

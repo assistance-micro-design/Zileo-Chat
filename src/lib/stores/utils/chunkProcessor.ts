@@ -30,6 +30,10 @@ import type { ActiveTool, ActiveReasoningStep, ActiveSubAgent, ActiveTask } from
 /**
  * Common state fields that can be updated by stream chunks.
  * Both StreamingState and WorkflowStreamState extend this shape.
+ *
+ * Phase 13 added the input/cache token fields so that switching back to a
+ * still-running background workflow restores the full session display from
+ * its bg state, not only the output count.
  */
 export interface ChunkableState {
 	content: string;
@@ -38,6 +42,9 @@ export interface ChunkableState {
 	subAgents: ActiveSubAgent[];
 	tasks: ActiveTask[];
 	tokensReceived: number;
+	tokensSent: number;
+	cachedTokens: number | null;
+	cacheWriteTokens: number | null;
 	error: string | null;
 }
 
@@ -269,12 +276,19 @@ function handleToolCallComplete(s: ChunkableState, c: StreamChunk): ChunkableSta
 /**
  * Handle response_block chunk - set final content and token counts (backward compat).
  * The executionBlocksStore handles the full response display separately.
+ *
+ * Phase 13: also persists `tokens_input`, `cached_tokens` and `cache_write_tokens`
+ * so a switch back to a still-running bg workflow can restore the full session
+ * display, not just the output count.
  */
 function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
 	return {
 		...s,
 		content: c.content ?? s.content,
-		tokensReceived: c.tokens_output ?? s.tokensReceived
+		tokensReceived: c.tokens_output ?? s.tokensReceived,
+		tokensSent: c.tokens_input ?? s.tokensSent,
+		cachedTokens: c.cached_tokens ?? s.cachedTokens,
+		cacheWriteTokens: c.cache_write_tokens ?? s.cacheWriteTokens
 	};
 }
 

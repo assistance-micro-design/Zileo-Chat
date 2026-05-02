@@ -163,6 +163,10 @@ mod sub_agent_execution_tests {
             duration_ms: 1500,
             tokens_input: 100,
             tokens_output: 200,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
+            cost_usd: None,
         };
 
         let json = serde_json::to_string(&metrics).unwrap();
@@ -184,6 +188,10 @@ mod sub_agent_execution_tests {
                 duration_ms: 2000,
                 tokens_input: 150,
                 tokens_output: 300,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                cost_usd: None,
             },
         };
 
@@ -203,6 +211,10 @@ mod sub_agent_execution_tests {
                 duration_ms: 3000,
                 tokens_input: 200,
                 tokens_output: 400,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                cost_usd: None,
             },
         };
 
@@ -226,6 +238,10 @@ mod sub_agent_execution_tests {
                         duration_ms: 1000,
                         tokens_input: 50,
                         tokens_output: 100,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
+                        thinking_tokens: None,
+                        cost_usd: None,
                     }),
                 },
                 ParallelTaskResult {

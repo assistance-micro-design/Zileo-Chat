@@ -22,7 +22,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { Message, SubAgentSummary } from '$types/message';
+import type { Message, MessageMetrics, SubAgentSummary } from '$types/message';
 import type { SubAgentExecution } from '$types/sub-agent';
 import type { WorkflowMetrics } from '$types/workflow';
 import { getErrorMessage } from '$lib/utils/error';
@@ -153,6 +153,9 @@ export const MessageService = {
 			durationMs: params.metrics?.duration_ms ?? null,
 			thinkingTokens: params.metrics?.thinking_tokens ?? null,
 			costUsd: params.metrics?.cost_usd ?? null,
+			cachedTokens: params.metrics?.cached_tokens ?? null,
+			cacheWriteTokens: params.metrics?.cache_write_tokens ?? null,
+			modelIdUsed: params.metrics?.model_id_used ?? null,
 			messageId: params.messageId ?? null
 		});
 	},
@@ -198,5 +201,23 @@ export const MessageService = {
 	 */
 	async clear(workflowId: string): Promise<void> {
 		return invoke<void>('clear_workflow_messages', { workflowId });
+	},
+
+	/**
+	 * Returns lightweight metrics from the most recent assistant message of a
+	 * workflow (Phase 13). `null` when the workflow has no assistant message
+	 * yet, or when the call fails (caller falls back to a blank session).
+	 */
+	async getLastAssistantMetrics(workflowId: string): Promise<MessageMetrics | null> {
+		try {
+			return await invoke<MessageMetrics | null>(
+				'get_workflow_last_assistant_message_metrics',
+				{ workflowId }
+			);
+		} catch (e) {
+			// Non-blocking: log and fall back to empty session display.
+			console.warn('Failed to load last assistant metrics:', getErrorMessage(e));
+			return null;
+		}
 	}
 };

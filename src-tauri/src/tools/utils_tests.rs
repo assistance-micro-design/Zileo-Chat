@@ -134,6 +134,7 @@ impl Agent for TestAgent {
                 reasoning_steps: vec![],
                 iteration_metrics: vec![],
                 thinking_tokens: None,
+                provider_cost_usd: None,
             },
         })
     }

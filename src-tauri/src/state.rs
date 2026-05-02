@@ -63,6 +63,16 @@ impl AppState {
         let db = Arc::new(DBClient::new(db_path).await?);
         db.initialize_schema().await?;
 
+        // One-shot data backfill for the token-cost-accuracy refactor.
+        // Idempotent (gated by migration_log) and a no-op on fresh DBs:
+        // touches only legacy `workflow` rows that lack the new columns.
+        if let Err(e) = crate::commands::migration::run_token_cost_accuracy_v1(&db).await {
+            tracing::warn!(
+                error = %e,
+                "token_cost_accuracy_v1 backfill failed; new fields will read as NONE on legacy rows"
+            );
+        }
+
         // Initialize agent registry and orchestrator
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));

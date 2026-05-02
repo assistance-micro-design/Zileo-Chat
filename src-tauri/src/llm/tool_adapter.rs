@@ -33,7 +33,9 @@ use serde_json::Value;
 /// Different providers report varying levels of detail.
 /// `cached_tokens` is only available from providers that support prompt caching
 /// (e.g., OpenAI-compatible APIs with prefixes >= 1024 tokens).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// `provider_cost_usd` is only set by providers that report cost directly
+/// (e.g. OpenRouter `usage.cost`).
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TokenUsage {
     /// Number of input/prompt tokens consumed
     pub input_tokens: usize,
@@ -45,6 +47,8 @@ pub struct TokenUsage {
     pub cache_write_tokens: Option<usize>,
     /// Number of tokens used for reasoning/thinking (e.g. OpenAI reasoning_tokens)
     pub thinking_tokens: Option<usize>,
+    /// Provider-reported cost in USD when available (e.g. OpenRouter `usage.cost`).
+    pub provider_cost_usd: Option<f64>,
 }
 
 /// Trait for adapting between internal tool system and provider-specific JSON formats.
@@ -225,6 +229,9 @@ pub trait ProviderToolAdapter: Send + Sync {
             .pointer("/usage/completion_tokens_details/reasoning_tokens")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
+        // OpenRouter exposes provider-side cost at `usage.cost`. Other providers
+        // omit the field, so we fall back to None and rely on local pricing.
+        let provider_cost_usd = response.pointer("/usage/cost").and_then(|v| v.as_f64());
 
         TokenUsage {
             input_tokens: input,
@@ -232,6 +239,7 @@ pub trait ProviderToolAdapter: Send + Sync {
             cached_tokens: cached,
             cache_write_tokens: cache_write,
             thinking_tokens: thinking,
+            provider_cost_usd,
         }
     }
 }
@@ -370,6 +378,7 @@ mod tests {
             cached_tokens: Some(80),
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
         };
         let b = TokenUsage {
             input_tokens: 100,
@@ -377,6 +386,7 @@ mod tests {
             cached_tokens: Some(80),
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
         };
         assert_eq!(a, b);
 
@@ -386,6 +396,7 @@ mod tests {
             cached_tokens: None,
             cache_write_tokens: None,
             thinking_tokens: None,
+            provider_cost_usd: None,
         };
         assert_ne!(a, c);
     }

@@ -140,6 +140,10 @@ impl SubAgentExecutor {
                     duration_ms: 0,
                     tokens_input: 0,
                     tokens_output: 0,
+                    cached_tokens: None,
+                    cache_write_tokens: None,
+                    thinking_tokens: None,
+                    cost_usd: None,
                 },
                 error_message: Some(e.to_string()),
                 tool_executions: Vec::new(),
@@ -249,6 +253,22 @@ impl SubAgentExecutor {
                     reasoning_steps = report.metrics.reasoning_steps.len(),
                     "Sub-agent execution completed successfully (with heartbeat monitoring)"
                 );
+                // Phase 6: compute cost using THIS sub-agent's pricing.
+                // Falls back to None when the sub-agent isn't registered or
+                // its model has no pricing row.
+                let cost = crate::llm::pricing::compute_sub_agent_cost(
+                    &self.db,
+                    self.orchestrator.registry(),
+                    agent_id,
+                    crate::llm::pricing::SubAgentCostInput {
+                        tokens_input: report.metrics.tokens_input,
+                        tokens_output: report.metrics.tokens_output,
+                        cached_tokens: report.metrics.cached_tokens,
+                        cache_write_tokens: report.metrics.cache_write_tokens,
+                        provider_cost_usd: report.metrics.provider_cost_usd,
+                    },
+                )
+                .await;
                 ExecutionResult {
                     success: true,
                     report: report.content,
@@ -256,6 +276,10 @@ impl SubAgentExecutor {
                         duration_ms,
                         tokens_input: report.metrics.tokens_input as u64,
                         tokens_output: report.metrics.tokens_output as u64,
+                        cached_tokens: report.metrics.cached_tokens.map(|n| n as u64),
+                        cache_write_tokens: report.metrics.cache_write_tokens.map(|n| n as u64),
+                        thinking_tokens: report.metrics.thinking_tokens.map(|n| n as u64),
+                        cost_usd: cost.map(|c| c.cost_usd),
                     },
                     error_message: None,
                     tool_executions: report.metrics.tool_executions,
@@ -278,6 +302,10 @@ impl SubAgentExecutor {
                         duration_ms,
                         tokens_input: 0,
                         tokens_output: 0,
+                        cached_tokens: None,
+                        cache_write_tokens: None,
+                        thinking_tokens: None,
+                        cost_usd: None,
                     },
                     error_message: Some(error_msg),
                     tool_executions: Vec::new(),
@@ -307,6 +335,10 @@ impl SubAgentExecutor {
                 duration_ms,
                 tokens_input: 0,
                 tokens_output: 0,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                cost_usd: None,
             },
             error_message: Some("Execution cancelled by user".to_string()),
             tool_executions: Vec::new(),
@@ -345,6 +377,10 @@ impl SubAgentExecutor {
                 duration_ms,
                 tokens_input: 0,
                 tokens_output: 0,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                cost_usd: None,
             },
             error_message: Some(format!(
                 "Inactivity timeout: no activity for {} seconds (threshold: {}s)",

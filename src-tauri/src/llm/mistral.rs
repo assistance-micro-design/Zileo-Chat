@@ -25,12 +25,7 @@ use super::provider::{
 use super::tool_format::{send_tool_completion, ToolChatRequest};
 use crate::models::agent::ReasoningEffort;
 use async_trait::async_trait;
-use rig::completion::Prompt;
-use rig::providers::mistral;
 use serde::{Deserialize, Serialize};
-
-// Trait required for .agent() method on rig::client::Client
-use rig::client::CompletionClient;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
@@ -83,11 +78,13 @@ struct MistralUsage {
     completion_tokens: usize,
 }
 
-/// Mistral AI provider implementation
+/// Mistral AI provider implementation.
+///
+/// All chat completions go through direct HTTP calls to expose real
+/// `usage.prompt_tokens` / `usage.completion_tokens` (the rig client masks
+/// usage behind its `Prompt::prompt()` API which returns only a `String`).
 pub struct MistralProvider {
-    /// Mistral client (wrapped in RwLock for interior mutability)
-    client: Arc<RwLock<Option<mistral::Client>>>,
-    /// API key (stored for reconfiguration)
+    /// API key (stored under RwLock for interior mutability across reconfigure)
     api_key: Arc<RwLock<Option<String>>>,
     /// Shared HTTP client for direct API calls (connection pooling)
     http_client: Arc<reqwest::Client>,
@@ -99,22 +96,20 @@ const MISTRAL_API_URL: &str = "https://api.mistral.ai/v1/chat/completions";
 impl MistralProvider {
     /// Creates a new unconfigured Mistral provider with a shared HTTP client.
     ///
-    /// The HTTP client is used for direct API calls (reasoning models, tool calls)
+    /// The HTTP client is used for direct API calls (chat, reasoning, tool calls)
     /// and provides connection pooling for better performance.
     pub fn new(http_client: Arc<reqwest::Client>) -> Self {
         Self {
-            client: Arc::new(RwLock::new(None)),
             api_key: Arc::new(RwLock::new(None)),
             http_client,
         }
     }
 
-    /// Configures the provider with an API key
+    /// Configures the provider with an API key.
     pub async fn configure(&self, api_key: &str) -> Result<(), LLMError> {
-        let client = mistral::Client::new(api_key).map_err(|e| {
-            LLMError::RequestFailed(format!("Failed to create Mistral client: {}", e))
-        })?;
-        *self.client.write().await = Some(client);
+        if api_key.is_empty() {
+            return Err(LLMError::MissingApiKey("Mistral".to_string()));
+        }
         *self.api_key.write().await = Some(api_key.to_string());
         info!("Mistral provider configured");
         Ok(())
@@ -185,53 +180,26 @@ impl MistralProvider {
             return Err(http::parse_api_error("Mistral", status, &body));
         }
 
-        let chat_response: MistralChatResponse = http::parse_json_response("Mistral", &body)?;
+        let response = parse_mistral_chat_response(&body, model)?;
 
-        let choice = chat_response
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| LLMError::RequestFailed("No choices in response".to_string()))?;
-
-        let parsed = choice.message.content;
-        let content = parsed.text;
-        let thinking_content = parsed.thinking;
-        let finish_reason = choice.finish_reason;
-
-        let (tokens_input, tokens_output) = chat_response
-            .usage
-            .map(|u| (u.prompt_tokens, u.completion_tokens))
-            .unwrap_or((0, 0));
-
-        if thinking_content.is_some() {
+        if response.thinking_content.is_some() {
             info!(
-                tokens_input = tokens_input,
-                tokens_output = tokens_output,
-                response_len = content.len(),
-                thinking_len = thinking_content.as_ref().map_or(0, |t| t.len()),
+                tokens_input = response.tokens_input,
+                tokens_output = response.tokens_output,
+                response_len = response.content.len(),
+                thinking_len = response.thinking_content.as_ref().map_or(0, |t| t.len()),
                 "Mistral reasoning model completion with thinking"
             );
         } else {
             info!(
-                tokens_input = tokens_input,
-                tokens_output = tokens_output,
-                response_len = content.len(),
-                "Mistral reasoning model completion successful"
+                tokens_input = response.tokens_input,
+                tokens_output = response.tokens_output,
+                response_len = response.content.len(),
+                "Mistral chat completion successful"
             );
         }
 
-        Ok(LLMResponse {
-            content,
-            tokens_input,
-            tokens_output,
-            model: model.to_string(),
-            provider: ProviderType::Mistral,
-            finish_reason,
-            thinking_tokens: thinking_content
-                .as_ref()
-                .map(|t| crate::llm::utils::estimate_tokens(t)),
-            thinking_content,
-        })
+        Ok(response)
     }
 
     /// Makes a direct HTTP call to Mistral API with function calling support.
@@ -276,6 +244,52 @@ impl MistralProvider {
     }
 }
 
+/// Parses a Mistral `/v1/chat/completions` JSON body into an `LLMResponse`.
+///
+/// Mistral does not expose cache stats or provider-side cost, so the
+/// corresponding `LLMResponse` fields are always `None` here. `thinking_tokens`
+/// is estimated from `thinking_content.len()` because Mistral folds reasoning
+/// tokens into `usage.completion_tokens` (no separate `reasoning_tokens` field
+/// — confirmed against the Mistral chat completions docs as of 2026-05).
+///
+/// Extracted as a standalone function so the parsing logic can be unit-tested
+/// against fixture JSON without spinning up a mock HTTP server.
+fn parse_mistral_chat_response(body: &str, model: &str) -> Result<LLMResponse, LLMError> {
+    let chat_response: MistralChatResponse = http::parse_json_response("Mistral", body)?;
+
+    let choice = chat_response
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| LLMError::RequestFailed("No choices in response".to_string()))?;
+
+    let parsed = choice.message.content;
+    let content = parsed.text;
+    let thinking_content = parsed.thinking;
+    let finish_reason = choice.finish_reason;
+
+    let (tokens_input, tokens_output) = chat_response
+        .usage
+        .map(|u| (u.prompt_tokens, u.completion_tokens))
+        .unwrap_or((0, 0));
+
+    Ok(LLMResponse {
+        content,
+        tokens_input,
+        tokens_output,
+        model: model.to_string(),
+        provider: ProviderType::Mistral,
+        finish_reason,
+        thinking_tokens: thinking_content
+            .as_ref()
+            .map(|t| crate::llm::utils::estimate_tokens(t)),
+        thinking_content,
+        cached_tokens: None,
+        cache_write_tokens: None,
+        provider_cost_usd: None,
+    })
+}
+
 /// Builds the Mistral-specific tool chat request body.
 ///
 /// Starts from the shared OpenAI-compat shape produced by
@@ -308,91 +322,38 @@ impl LLMProvider for MistralProvider {
 
     fn is_configured(&self) -> bool {
         // Use try_read to avoid blocking - returns false if lock unavailable
-        self.client
+        self.api_key
             .try_read()
             .map(|guard| guard.is_some())
             .unwrap_or(false)
     }
 
+    /// All Mistral chat completions go through `custom_complete` (direct HTTP)
+    /// so that real `usage.prompt_tokens` / `usage.completion_tokens` reach
+    /// `LLMResponse`. The previous rig path returned only the assistant text
+    /// (Mistral's rig `Prompt::prompt()` impl exposes a `String`), which forced
+    /// us to estimate token counts heuristically and diverge from the API
+    /// invoice.
     async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
         let model_name = params.model.as_deref().unwrap_or("mistral-large-latest");
 
-        // Use custom HTTP client for reasoning models (e.g. Magistral, mistral-small)
-        // because rig-core doesn't support their response format.
-        // Send reasoning_effort to Mistral API for adjustable reasoning models.
-        if params.reasoning_effort.is_some() {
-            debug!(
-                model = model_name,
-                effort = ?params.reasoning_effort,
-                "Using custom HTTP client for reasoning model"
-            );
-            return self
-                .custom_complete(
-                    &params.prompt,
-                    params.system_prompt.as_deref(),
-                    model_name,
-                    params.temperature,
-                    params.max_tokens,
-                    params.reasoning_effort.as_ref(),
-                )
-                .await;
-        }
-
-        // Standard models use rig-core client
-        let client_guard = self.client.read().await;
-        let client = client_guard
-            .as_ref()
-            .ok_or_else(|| LLMError::NotConfigured("Mistral".to_string()))?;
-
         debug!(
             model = model_name,
+            effort = ?params.reasoning_effort,
             temperature = params.temperature,
             max_tokens = params.max_tokens,
-            "Starting Mistral completion"
+            "Starting Mistral completion (direct HTTP)"
         );
 
-        // Include system prompt in input token count
-        let system_text = params
-            .system_prompt
-            .as_deref()
-            .unwrap_or("You are a helpful assistant.");
-        let tokens_input_estimate = crate::llm::utils::estimate_tokens(&params.prompt)
-            + crate::llm::utils::estimate_tokens(system_text);
-
-        // Build agent and execute prompt
-        // Use temperature and max_tokens from agent config
-        let agent = client
-            .agent(model_name)
-            .preamble(system_text)
-            .temperature(params.temperature)
-            .max_tokens(params.max_tokens as u64)
-            .build();
-
-        let response = agent
-            .prompt(&params.prompt)
-            .await
-            .map_err(|e| LLMError::RequestFailed(e.to_string()))?;
-
-        // Estimate output tokens
-        let tokens_output_estimate = crate::llm::utils::estimate_tokens(&response);
-
-        info!(
-            tokens_input = tokens_input_estimate,
-            tokens_output = tokens_output_estimate,
-            response_len = response.len(),
-            "Mistral completion successful"
-        );
-
-        Ok(LLMResponse {
-            content: response,
-            tokens_input: tokens_input_estimate,
-            tokens_output: tokens_output_estimate,
-            model: model_name.to_string(),
-            provider: ProviderType::Mistral,
-            finish_reason: Some("stop".to_string()),
-            thinking_content: None,
-            thinking_tokens: None,
-        })
+        self.custom_complete(
+            &params.prompt,
+            params.system_prompt.as_deref(),
+            model_name,
+            params.temperature,
+            params.max_tokens,
+            params.reasoning_effort.as_ref(),
+        )
+        .await
     }
 }
 
@@ -570,5 +531,71 @@ mod tests {
         let body = build_mistral_tool_request(&params);
         assert_eq!(body.model, "mistral-medium-3.5");
         assert_eq!(body.messages, params.messages);
+    }
+
+    // Phase 2: parse_mistral_chat_response — exact tokens from API.
+
+    #[test]
+    fn parse_response_uses_real_tokens_from_usage() {
+        let body = r#"{
+            "choices": [{
+                "message": {"role":"assistant","content":"Bonjour"},
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 42, "completion_tokens": 18, "total_tokens": 60}
+        }"#;
+        let resp =
+            parse_mistral_chat_response(body, "mistral-large-latest").expect("response parses");
+        assert_eq!(resp.tokens_input, 42);
+        assert_eq!(resp.tokens_output, 18);
+        assert_eq!(resp.content, "Bonjour");
+        assert_eq!(resp.provider, ProviderType::Mistral);
+        // Mistral never reports cache stats or provider cost.
+        assert_eq!(resp.cached_tokens, None);
+        assert_eq!(resp.cache_write_tokens, None);
+        assert_eq!(resp.provider_cost_usd, None);
+    }
+
+    #[test]
+    fn parse_response_handles_magistral_thinking_blocks() {
+        // Magistral returns content as an array of blocks (thinking + text).
+        let body = r#"{
+            "choices": [{
+                "message": {"role":"assistant","content":[
+                    {"type":"thinking","thinking":[{"type":"text","text":"Step 1"}]},
+                    {"type":"text","text":"42"}
+                ]},
+                "finish_reason": "stop"
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        }"#;
+        let resp =
+            parse_mistral_chat_response(body, "magistral-medium-2509").expect("response parses");
+        assert_eq!(resp.content, "42");
+        assert_eq!(resp.thinking_content, Some("Step 1".to_string()));
+        // Mistral folds reasoning_tokens into completion_tokens — thinking_tokens
+        // is therefore an estimate from thinking_content (not zero).
+        assert!(resp.thinking_tokens.is_some());
+        assert_eq!(resp.tokens_output, 20);
+    }
+
+    #[test]
+    fn parse_response_falls_back_to_zero_when_usage_missing() {
+        let body = r#"{
+            "choices": [{
+                "message": {"role":"assistant","content":"Hi"},
+                "finish_reason": "stop"
+            }]
+        }"#;
+        let resp = parse_mistral_chat_response(body, "test").expect("response parses");
+        assert_eq!(resp.tokens_input, 0);
+        assert_eq!(resp.tokens_output, 0);
+    }
+
+    #[test]
+    fn parse_response_errors_when_no_choices() {
+        let body = r#"{"choices":[]}"#;
+        let result = parse_mistral_chat_response(body, "test");
+        assert!(matches!(result, Err(LLMError::RequestFailed(_))));
     }
 }

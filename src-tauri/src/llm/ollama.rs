@@ -307,6 +307,14 @@ impl OllamaProvider {
             "Ollama thinking completion successful"
         );
 
+        // Ollama folds reasoning into `eval_count` (no separate thinking
+        // count). When `message.thinking` is present, we estimate from text
+        // length so downstream display has a non-zero figure. Real billing is
+        // not affected since Ollama is local and free.
+        let thinking_tokens = thinking_content
+            .as_ref()
+            .map(|t| crate::llm::utils::estimate_tokens(t));
+
         Ok(LLMResponse {
             content,
             tokens_input,
@@ -314,10 +322,12 @@ impl OllamaProvider {
             model: model.to_string(),
             provider: ProviderType::Ollama,
             finish_reason: Some("stop".to_string()),
-            thinking_tokens: thinking_content
-                .as_ref()
-                .map(|t| crate::llm::utils::estimate_tokens(t)),
+            thinking_tokens,
             thinking_content,
+            // Ollama is local: no cache stats, no provider-side cost.
+            cached_tokens: None,
+            cache_write_tokens: None,
+            provider_cost_usd: None,
         })
     }
 }
@@ -446,6 +456,9 @@ impl LLMProvider for OllamaProvider {
             finish_reason: Some("stop".to_string()),
             thinking_content: None,
             thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            provider_cost_usd: None,
         })
     }
 }

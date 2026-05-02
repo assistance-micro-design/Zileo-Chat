@@ -69,9 +69,31 @@ export interface Message {
   duration_ms?: number;
   /** Thinking/reasoning tokens (for reasoning models) */
   thinking_tokens?: number;
+  /** Cached prompt tokens (cache reads) when the provider exposes them. */
+  cached_tokens?: number;
+  /** Cache-write prompt tokens (priming cost on first request). */
+  cache_write_tokens?: number;
+  /** `llm_model.id` of the model that produced the assistant response. */
+  model_id_used?: string;
   /** Message timestamp */
   timestamp: Date;
   /** Sub-agent summaries (transient, captured from StreamingState) */
   sub_agents?: SubAgentSummary[];
+}
+
+/**
+ * Lightweight metrics extracted from the most recent assistant message of a
+ * workflow. Used by `selectWorkflow` to restore the session display when the
+ * workflow has no live execution running.
+ */
+export interface MessageMetrics {
+  tokens_input: number | null;
+  tokens_output: number | null;
+  cached_tokens: number | null;
+  cache_write_tokens: number | null;
+  thinking_tokens: number | null;
+  cost_usd: number | null;
+  /** `llm_model.id` of the model that produced the response (for pricing lookup). */
+  model_id_used: string | null;
 }
 

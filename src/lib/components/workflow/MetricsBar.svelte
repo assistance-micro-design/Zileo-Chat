@@ -27,6 +27,7 @@
 	import { Clock, Hash, Server, DollarSign } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
+	import { formatCost } from '$lib/utils/currency';
 
 	/**
 	 * MetricsBar props
@@ -39,15 +40,6 @@
 	}
 
 	let { metrics, compact = false }: Props = $props();
-
-	/**
-	 * Format cost in USD
-	 */
-	function formatCost(usd: number): string {
-		if (usd === 0) return $i18n('workflow_metrics_free');
-		if (usd < 0.01) return '<$0.01';
-		return `$${usd.toFixed(4)}`;
-	}
 
 	/**
 	 * Format token count
@@ -94,7 +86,7 @@
 	{#if metrics.cost_usd > 0 || !compact}
 		<div class="metric" title={$i18n('workflow_metrics_cost_title')}>
 			<DollarSign size={14} />
-			<span class="metric-value">{formatCost(metrics.cost_usd)}</span>
+			<span class="metric-value">{formatCost(metrics.cost_usd, $i18n('workflow_metrics_free'))}</span>
 			{#if !compact}
 				<span class="metric-label">{$i18n('workflow_metrics_cost')}</span>
 			{/if}
