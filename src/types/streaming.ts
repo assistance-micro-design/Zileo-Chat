@@ -47,7 +47,8 @@ export type ChunkType =
   | 'user_question_complete'
   | 'thinking_block'
   | 'tool_call_complete'
-  | 'response_block';
+  | 'response_block'
+  | 'iteration_progress';
 
 /**
  * Metrics included in sub-agent complete events.
@@ -127,6 +128,19 @@ export interface StreamChunk {
   cache_write_tokens?: number;
   /** Thinking/reasoning tokens count (for response_block) */
   thinking_tokens?: number;
+  /**
+   * Per-iteration cost in USD computed by the backend pricing layer
+   * (for response_block). Frontend never multiplies tokens by prices itself —
+   * this field carries the authoritative number so a backgrounded workflow
+   * can accumulate `partialCostUsd` on its bg execution.
+   */
+  cost_usd?: number;
+  /**
+   * 1-based iteration index for `iteration_progress` chunks emitted from
+   * inside the tool loop. Useful for diagnostics; the metrics handler keys
+   * off the cumulative tokens, not the iteration number.
+   */
+  iteration?: number;
 }
 
 /**

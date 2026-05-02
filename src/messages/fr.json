@@ -949,6 +949,7 @@
   "tokens_pricing_unknown": "Tarif inconnu",
   "tokens_pricing_unknown_help": "Aucun tarif configuré pour ce modèle — le coût réel n'est pas affiché.",
   "tokens_cost_pending": "Coût pas encore disponible",
+  "tokens_cost_in_progress_help": "Total en cours — workflow toujours en exécution, le coût peut augmenter.",
 
   "workflow_reasoning_title": "Raisonnement",
   "workflow_reasoning_step": "etape",

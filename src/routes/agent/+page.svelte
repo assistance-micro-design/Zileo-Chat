@@ -281,6 +281,12 @@ Uses extracted components, services, and stores for clean architecture.
 				bgExecution.cachedTokens ?? undefined,
 				bgExecution.cacheWriteTokens ?? undefined
 			);
+			// Option A: also restore the in-progress cost so a switch back to
+			// a still-running workflow shows what's accrued so far, marked as
+			// partial via the `~` prefix in MetricsBar / TokenDisplay.
+			if (bgExecution.partialCostUsd != null) {
+				tokenStore.setPartialSessionCost(bgExecution.partialCostUsd);
+			}
 
 			// Open user question modal if there are pending questions for this workflow
 			userQuestionStore.openForWorkflow(workflowId);
@@ -551,6 +557,36 @@ Uses extracted components, services, and stores for clean architecture.
 			(chunk) => {
 				streamingStore.processChunkDirect(chunk);
 				executionBlocksStore.processChunk(chunk);
+				// Mirror live token & cost updates so the metrics bar reflects
+				// each tool-loop iteration in real time. Two chunk types feed
+				// this: `iteration_progress` (during streaming, fired after
+				// every LLM call) and `response_block` (final, fires once at
+				// workflow completion). Both carry the same token shape.
+				if (
+					chunk.chunk_type === 'iteration_progress' ||
+					chunk.chunk_type === 'response_block'
+				) {
+					const tIn = chunk.tokens_input;
+					const tOut = chunk.tokens_output;
+					if (typeof tIn === 'number' && typeof tOut === 'number') {
+						// Drives the ENTREE/SORTIE display + speed (t/s) live.
+						tokenStore.setSessionTokens(
+							tIn,
+							tOut,
+							chunk.cached_tokens,
+							chunk.cache_write_tokens
+						);
+						// `tokens_input` IS the context-window usage of that call.
+						tokenStore.setContextUsed(tIn);
+					}
+					// Option A: in-progress cost (running sum of backend values).
+					if (typeof chunk.cost_usd === 'number') {
+						const bgExec = backgroundWorkflowsStore.getExecution(chunk.workflow_id);
+						if (bgExec?.partialCostUsd != null) {
+							tokenStore.setPartialSessionCost(bgExec.partialCostUsd);
+						}
+					}
+				}
 			},
 			(complete) => {
 				streamingStore.processCompleteDirect(complete);

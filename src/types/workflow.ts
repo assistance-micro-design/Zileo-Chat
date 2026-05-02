@@ -255,6 +255,12 @@ export interface TokenDisplayData {
    * displaying "Free" or "$0.00", which would be misleading.
    */
   cost_usd: number | null;
+  /**
+   * `true` when `cost_usd` is the running sum of per-iteration backend costs
+   * (Option A): the workflow is still progressing and the value may grow.
+   * Components prefix the figure with `~` to make the partial nature visible.
+   */
+  cost_is_partial: boolean;
   /** Cumulative cost for workflow (USD) */
   cumulative_cost_usd: number;
   /** Sub-agent cumulative input tokens */

@@ -133,6 +133,7 @@ function createInitialExecution(
 		tokensSent: 0,
 		cachedTokens: null,
 		cacheWriteTokens: null,
+		partialCostUsd: null,
 		error: null,
 		startedAt: Date.now(),
 		completedAt: null,

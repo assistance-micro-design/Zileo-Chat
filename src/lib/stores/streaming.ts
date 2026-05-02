@@ -148,6 +148,11 @@ export interface StreamingState {
 	cachedTokens: number | null;
 	/** Cache-write tokens reported by the latest response_block chunk */
 	cacheWriteTokens: number | null;
+	/**
+	 * Running sum of `cost_usd` from response_block chunks (backend-computed).
+	 * `null` until the first chunk with a cost arrives. Option A follow-up.
+	 */
+	partialCostUsd: number | null;
 	/** Error message if streaming failed */
 	error: string | null;
 	/** Whether workflow was cancelled */
@@ -174,6 +179,7 @@ const initialState: StreamingState = {
 	tokensSent: 0,
 	cachedTokens: null,
 	cacheWriteTokens: null,
+	partialCostUsd: null,
 	error: null,
 	cancelled: false
 };
@@ -294,6 +300,7 @@ export const streamingStore = {
 		tokensSent?: number;
 		cachedTokens?: number | null;
 		cacheWriteTokens?: number | null;
+		partialCostUsd?: number | null;
 		error: string | null;
 		status: string;
 	}): void {
@@ -311,6 +318,7 @@ export const streamingStore = {
 			tokensSent: bgState.tokensSent ?? 0,
 			cachedTokens: bgState.cachedTokens ?? null,
 			cacheWriteTokens: bgState.cacheWriteTokens ?? null,
+			partialCostUsd: bgState.partialCostUsd ?? null,
 			error: bgState.error,
 			cancelled: bgState.status === 'cancelled'
 		});

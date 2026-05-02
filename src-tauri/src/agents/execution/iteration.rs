@@ -198,6 +198,25 @@ pub(crate) async fn run_single_iteration(
         duration_ms: iter_start.elapsed().as_millis() as u64,
     });
 
+    // Emit a live progress chunk so the frontend metrics bar reflects each
+    // tool-loop iteration in real time. Without this, ENTREE/SORTIE,
+    // contexte and t/s stay at 0 until the workflow completes (the final
+    // `response_block` only fires once at the very end). `cost_usd` is left
+    // None here — the per-iteration cost would require caching pricing
+    // rates upfront; the final `response_block` carries the resolved cost.
+    emit_progress(
+        ctx.agent_context,
+        StreamChunk::iteration_progress(
+            inputs.event_workflow_id.to_string(),
+            inputs.iteration as u32,
+            mstate.tokens.total_input,
+            mstate.tokens.total_output,
+            mstate.tokens.total_cached,
+            mstate.tokens.total_cache_write,
+            None,
+        ),
+    );
+
     if function_calls.is_empty() {
         let final_text = match inputs.adapter.extract_content(&response) {
             Some(content) if !content.trim().is_empty() => content,

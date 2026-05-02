@@ -75,6 +75,14 @@ interface TokenState {
 	 */
 	sessionCost: number | null;
 	/**
+	 * `true` when `sessionCost` is the running sum of per-iteration costs
+	 * carried by `response_block` chunks (Option A): the workflow is still
+	 * progressing and more iterations may bump the value. Components show a
+	 * `~` prefix to make the partial nature visible. `false` when the cost
+	 * is the final post-completion value.
+	 */
+	sessionCostInProgress: boolean;
+	/**
 	 * Pricing lookup status from the most recent backend response. Allows the
 	 * UI to differentiate "free" from "pricing unknown" (Phase 8).
 	 */
@@ -97,6 +105,7 @@ const initialState: TokenState = {
 	isStreaming: false,
 	streamStartTime: null,
 	sessionCost: null,
+	sessionCostInProgress: false,
 	pricingStatus: null
 };
 
@@ -161,7 +170,9 @@ export const tokenStore = {
 				cacheWrite: metrics?.cache_write_tokens ?? null,
 				speed: null
 			},
-			sessionCost: metrics?.cost_usd ?? null
+			sessionCost: metrics?.cost_usd ?? null,
+			// A persisted message is a finalised cost — never partial.
+			sessionCostInProgress: false
 		}));
 	},
 
@@ -201,31 +212,51 @@ export const tokenStore = {
 			streaming: { input: 0, output: 0, cached: null, cacheWrite: null, speed: null },
 			isStreaming: true,
 			streamStartTime: Date.now(),
-			sessionCost: null
+			sessionCost: null,
+			sessionCostInProgress: false
 		}));
 	},
 
 	/**
 	 * Set session tokens from a response_block event.
-	 * Sets both input and output tokens at once without speed calculation.
-	 * Used with the block-by-block execution model.
+	 *
+	 * Computes `speed` (tokens/sec) when streaming is active and a start time
+	 * was recorded by `startStreaming()`. Without this, the `t/s` indicator
+	 * stays `null` forever — a regression from a prior refactor that moved
+	 * the speed calculation out of an older streaming helper. Outside of
+	 * streaming (e.g. restoring a previous session), speed is set to `null`
+	 * since there's no in-progress generation to measure.
 	 *
 	 * @param tokensIn - Input tokens consumed
 	 * @param tokensOut - Output tokens generated
 	 * @param cachedTokens - Cached input tokens (if reported by provider)
 	 * @param cacheWriteTokens - Cache-write tokens (if reported by provider)
 	 */
-	setSessionTokens(tokensIn: number, tokensOut: number, cachedTokens?: number, cacheWriteTokens?: number): void {
-		store.update((s) => ({
-			...s,
-			streaming: {
-				input: tokensIn,
-				output: tokensOut,
-				cached: cachedTokens ?? null,
-				cacheWrite: cacheWriteTokens ?? null,
-				speed: null
+	setSessionTokens(
+		tokensIn: number,
+		tokensOut: number,
+		cachedTokens?: number,
+		cacheWriteTokens?: number
+	): void {
+		store.update((s) => {
+			let speed: number | null = null;
+			if (s.isStreaming && s.streamStartTime !== null && tokensOut > 0) {
+				const elapsedSec = (Date.now() - s.streamStartTime) / 1000;
+				if (elapsedSec > 0) {
+					speed = tokensOut / elapsedSec;
+				}
 			}
-		}));
+			return {
+				...s,
+				streaming: {
+					input: tokensIn,
+					output: tokensOut,
+					cached: cachedTokens ?? null,
+					cacheWrite: cacheWriteTokens ?? null,
+					speed
+				}
+			};
+		});
 	},
 
 	/**
@@ -241,15 +272,48 @@ export const tokenStore = {
 	},
 
 	/**
-	 * Set session cost directly from backend result.
-	 * Used when the backend has already calculated the cost.
+	 * Update the live context-window usage from a `response_block` chunk.
+	 *
+	 * `tokens_input` reported by the latest LLM iteration IS the context
+	 * window size that call consumed, so mirroring it here makes the
+	 * "contexte" gauge update during streaming instead of only after the
+	 * workflow finishes (which is when `current_context_tokens` is persisted
+	 * onto the workflow row).
+	 */
+	setContextUsed(tokensInput: number): void {
+		store.update((s) => ({ ...s, contextUsed: tokensInput }));
+	},
+
+	/**
+	 * Set the FINAL session cost from a completed workflow result.
+	 * Always clears the in-progress flag since this value won't change again.
 	 *
 	 * @param costUsd - Cost in USD from WorkflowMetrics
 	 */
 	setSessionCost(costUsd: number): void {
 		store.update((s) => ({
 			...s,
-			sessionCost: costUsd
+			sessionCost: costUsd,
+			sessionCostInProgress: false
+		}));
+	},
+
+	/**
+	 * Set a PARTIAL session cost from a `response_block` chunk during streaming.
+	 *
+	 * The backend pricing layer computes one `cost_usd` per LLM iteration; the
+	 * chunkProcessor accumulates them into `partialCostUsd` on the bg execution.
+	 * This method mirrors that running total to the visible `sessionCost` and
+	 * marks it as still-progressing so the UI can render a `~` prefix.
+	 *
+	 * Phase 7 invariant preserved: the value comes 100% from the backend; the
+	 * frontend just stores it.
+	 */
+	setPartialSessionCost(costUsd: number | null): void {
+		store.update((s) => ({
+			...s,
+			sessionCost: costUsd,
+			sessionCostInProgress: costUsd !== null
 		}));
 	},
 
@@ -294,6 +358,9 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cumulative_output: $s.cumulative.output,
 		context_max: $s.contextMax,
 		cost_usd: displayCost,
+		// Only mark as partial when we're actually showing the session value
+		// (not when displaying the workflow's cumulative cost as fallback).
+		cost_is_partial: hasActiveSession && $s.sessionCostInProgress,
 		cumulative_cost_usd: $s.cumulative.cost,
 		sub_agent_input: $s.subAgent.input,
 		sub_agent_output: $s.subAgent.output,

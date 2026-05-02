@@ -441,17 +441,31 @@ pub async fn get_workflow_last_assistant_message_metrics(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<MessageMetrics>, String> {
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    last_assistant_message_metrics_core(&state.db, &workflow_id).await
+}
 
+/// Core implementation of `get_workflow_last_assistant_message_metrics`,
+/// extracted so it can be exercised by integration tests against a real
+/// SurrealDB instance (the `#[tauri::command]` wrapper requires a live
+/// `tauri::State` and isn't directly testable).
+pub(crate) async fn last_assistant_message_metrics_core(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> Result<Option<MessageMetrics>, String> {
+    let validated_workflow_id = validate_uuid_field(workflow_id, "workflow_id")?;
+
+    // ERR_SURREAL_005: SurrealDB requires every ORDER BY field to appear in
+    // the SELECT clause. Without `timestamp` here, the query rejects with
+    // "Missing order idiom `timestamp` in statement selection". The field is
+    // discarded post-deserialisation since `MessageMetrics` doesn't carry it.
     let query = "SELECT \
             tokens_input, tokens_output, cached_tokens, cache_write_tokens, \
-            thinking_tokens, cost_usd, model_id_used \
+            thinking_tokens, cost_usd, model_id_used, timestamp \
         FROM message \
         WHERE workflow_id = $wf_id AND role = 'assistant' \
         ORDER BY timestamp DESC LIMIT 1";
 
-    let rows = state
-        .db
+    let rows = db
         .query_json_with_params(
             query,
             vec![(
@@ -693,4 +707,115 @@ pub async fn load_message_blocks(
     );
 
     Ok(blocks)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::setup_test_state;
+
+    /// Inserts an `assistant` row directly (matches the columns the metrics
+    /// query reads). `timestamp` is offset to allow ordering tests without
+    /// having to wait between inserts.
+    #[allow(clippy::too_many_arguments)]
+    async fn insert_assistant_message(
+        db: &crate::db::DBClient,
+        workflow_id: &str,
+        tokens_input: i64,
+        tokens_output: i64,
+        cost_usd: f64,
+        model_id_used: &str,
+        timestamp_offset_secs: i64,
+    ) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        let offset = format!("{}s", timestamp_offset_secs);
+        let query = format!(
+            "CREATE message:`{id}` SET \
+                workflow_id = $wf_id, \
+                role = 'assistant', \
+                content = 'test response', \
+                tokens = {sum}, \
+                tokens_input = {tokens_input}, \
+                tokens_output = {tokens_output}, \
+                cost_usd = {cost_usd}, \
+                model_id_used = $model_id, \
+                timestamp = time::now() + <duration>$offset",
+            sum = tokens_input + tokens_output
+        );
+        db.db
+            .query(&query)
+            .bind(("wf_id", workflow_id.to_string()))
+            .bind(("model_id", model_id_used.to_string()))
+            .bind(("offset", offset))
+            .await
+            .expect("Insert message query failed")
+            .check()
+            .expect("CREATE message failed validation");
+        id
+    }
+
+    // Regression: the production query rejected with ERR_SURREAL_005
+    // ("Missing order idiom `timestamp` in statement selection") because
+    // `timestamp` was used in ORDER BY but absent from SELECT. This test
+    // exercises the real query so the same bug can never silently land again.
+    #[tokio::test]
+    async fn last_assistant_metrics_query_runs_against_real_db() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+
+        insert_assistant_message(&state.db, &workflow_id, 1234, 567, 0.0123, "gpt-x", 0).await;
+
+        let metrics = last_assistant_message_metrics_core(&state.db, &workflow_id)
+            .await
+            .expect("query must succeed (regression: ERR_SURREAL_005)")
+            .expect("seeded message must be returned");
+
+        assert_eq!(metrics.tokens_input, Some(1234));
+        assert_eq!(metrics.tokens_output, Some(567));
+        assert_eq!(metrics.cost_usd, Some(0.0123));
+        assert_eq!(metrics.model_id_used.as_deref(), Some("gpt-x"));
+    }
+
+    #[tokio::test]
+    async fn last_assistant_metrics_returns_none_for_empty_workflow() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+
+        let result = last_assistant_message_metrics_core(&state.db, &workflow_id)
+            .await
+            .expect("empty workflow must succeed, not error");
+
+        assert!(result.is_none(), "no assistant rows -> None");
+    }
+
+    #[tokio::test]
+    async fn last_assistant_metrics_picks_most_recent_row() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+
+        // Three iterations of a continuation; the LIMIT 1 + ORDER BY DESC
+        // must return the LAST one (highest cost in this fixture).
+        insert_assistant_message(&state.db, &workflow_id, 100, 50, 0.001, "model-a", 0).await;
+        insert_assistant_message(&state.db, &workflow_id, 200, 100, 0.002, "model-b", 1).await;
+        insert_assistant_message(&state.db, &workflow_id, 300, 150, 0.003, "model-c", 2).await;
+
+        let metrics = last_assistant_message_metrics_core(&state.db, &workflow_id)
+            .await
+            .expect("query OK")
+            .expect("rows present");
+
+        assert_eq!(metrics.tokens_input, Some(300));
+        assert_eq!(metrics.cost_usd, Some(0.003));
+        assert_eq!(metrics.model_id_used.as_deref(), Some("model-c"));
+    }
+
+    #[tokio::test]
+    async fn last_assistant_metrics_validates_workflow_id() {
+        let (state, _db_guard) = setup_test_state().await;
+        let result = last_assistant_message_metrics_core(&state.db, "not-a-uuid").await;
+        assert!(
+            result.is_err(),
+            "invalid UUID must be rejected at validation"
+        );
+    }
 }

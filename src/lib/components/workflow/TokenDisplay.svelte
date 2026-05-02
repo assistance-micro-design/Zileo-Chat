@@ -254,14 +254,21 @@
 	<div class="separator"></div>
 
 	<!-- Cost -->
-	<div class="metric cost-metric">
+	<div class="metric cost-metric" class:cost-partial={data.cost_is_partial}>
 		<div class="metric-icon cost-icon">
 			<CircleDollarSign size={14} />
 		</div>
-		<span class="cost-value">{
+		<!-- Option A: prefix with `~` when the cost is the running sum of
+		     per-iteration backend values (workflow still progressing). -->
+		<span
+			class="cost-value"
+			title={data.cost_is_partial ? $i18n('tokens_cost_in_progress_help') : undefined}
+		>{
 			hasSubAgents
 				? formatCost(data.workflow_total_cost, $i18n('workflow_metrics_free'))
-				: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))
+				: data.cost_is_partial && data.cost_usd !== null
+					? `~ ${formatCost(data.cost_usd, $i18n('workflow_metrics_free'))}`
+					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))
 		}</span>
 		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
 		{#if !compact && data.pricing_status && data.pricing_status !== 'ok'}
@@ -572,6 +579,25 @@
 		font-family: var(--font-mono);
 		font-weight: var(--font-weight-semibold);
 		color: var(--color-secondary);
+	}
+
+	/* Option A: a workflow that's still progressing reports a partial cost.
+	   Lower opacity + animated pulse keep the figure readable while signalling
+	   that it's not the final number yet. */
+	.cost-partial .cost-value {
+		opacity: 0.85;
+		animation: cost-pulse 1.6s ease-in-out infinite;
+	}
+
+	@keyframes cost-pulse {
+		0%, 100% { opacity: 0.85; }
+		50% { opacity: 0.55; }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.cost-partial .cost-value {
+			animation: none;
+		}
 	}
 
 	.cost-estimate {

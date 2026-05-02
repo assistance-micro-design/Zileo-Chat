@@ -79,6 +79,12 @@ export interface WorkflowStreamState {
 	 * `null` when the provider does not expose cache-write metrics.
 	 */
 	cacheWriteTokens: number | null;
+	/**
+	 * Sum of `cost_usd` carried by every `response_block` chunk. `null` until
+	 * the first chunk with a cost lands. Computed by the backend pricing
+	 * layer; the frontend only stores the running total. Phase 13 + Option A.
+	 */
+	partialCostUsd: number | null;
 	/** Error message if status is 'error' */
 	error: string | null;
 	/** Timestamp (ms) when the workflow started */

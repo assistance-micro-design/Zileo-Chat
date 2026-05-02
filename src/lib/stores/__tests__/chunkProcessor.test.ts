@@ -43,6 +43,7 @@ function createState(): ChunkableState {
 		tokensSent: 0,
 		cachedTokens: null,
 		cacheWriteTokens: null,
+		partialCostUsd: null,
 		error: null
 	};
 }
@@ -470,6 +471,147 @@ describe('applyChunkToState', () => {
 			expect(s.tokensSent).toBe(before.tokensSent);
 			expect(s.tokensReceived).toBe(before.tokensReceived);
 			expect(s.cachedTokens).toBe(before.cachedTokens);
+		});
+
+		// Option A: cost_usd carried by each chunk accumulates into
+		// partialCostUsd. The frontend never multiplies tokens × prices itself;
+		// it only sums the backend-computed values.
+		it('should set partialCostUsd from the first response_block carrying cost_usd', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1000,
+				tokens_output: 500,
+				cost_usd: 0.0123
+			}));
+
+			expect(result.partialCostUsd).toBeCloseTo(0.0123, 6);
+		});
+
+		it('should accumulate cost_usd across consecutive response_block chunks', () => {
+			// Three iterations of a tool loop, each with its own cost.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				cost_usd: 0.01
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'response_block',
+				cost_usd: 0.02
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'response_block',
+				cost_usd: 0.03
+			}));
+
+			expect(s.partialCostUsd).toBeCloseTo(0.06, 6);
+		});
+
+		it('should preserve partialCostUsd when chunk omits cost_usd', () => {
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				cost_usd: 0.0123
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 500
+			}));
+
+			expect(s.partialCostUsd).toBeCloseTo(0.0123, 6);
+		});
+
+		it('should leave partialCostUsd null until first cost_usd is reported', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'response_block',
+				tokens_input: 1000,
+				tokens_output: 500
+			}));
+
+			// Defensive: chunk without cost_usd MUST NOT default to 0
+			// (would imply a free request that never happened).
+			expect(result.partialCostUsd).toBeNull();
+		});
+	});
+
+	// =========================================================================
+	// iteration_progress — emitted after every LLM call inside the tool loop
+	// so the metrics bar updates live (response_block only fires once at end).
+	// Symmetric with response_block on the token/cost shape.
+	// =========================================================================
+	describe('iteration_progress', () => {
+		it('should update tokens_input/output from cumulative iteration totals', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 1,
+				tokens_input: 1500,
+				tokens_output: 250
+			}));
+
+			expect(result.tokensSent).toBe(1500);
+			expect(result.tokensReceived).toBe(250);
+		});
+
+		it('should accumulate cumulative tokens across iterations (not delta)', () => {
+			// Backend emits cumulative totals (mstate.tokens.total_input/output).
+			// Each chunk OVERWRITES the previous value rather than summing
+			// — sums would double-count.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 1,
+				tokens_input: 100,
+				tokens_output: 50
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 2,
+				tokens_input: 220, // cumulative, includes iter 1
+				tokens_output: 110
+			}));
+
+			expect(s.tokensSent).toBe(220);
+			expect(s.tokensReceived).toBe(110);
+		});
+
+		it('should propagate cache fields when reported', () => {
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 3,
+				tokens_input: 5000,
+				tokens_output: 800,
+				cached_tokens: 4000,
+				cache_write_tokens: 200
+			}));
+
+			expect(result.cachedTokens).toBe(4000);
+			expect(result.cacheWriteTokens).toBe(200);
+		});
+
+		it('should accumulate cost_usd into partialCostUsd when present', () => {
+			// Backend may add per-iteration cost in a future revision; the
+			// handler is ready for it (mirrors response_block).
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 1,
+				cost_usd: 0.005
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 2,
+				cost_usd: 0.007
+			}));
+
+			expect(s.partialCostUsd).toBeCloseTo(0.012, 6);
+		});
+
+		it('should leave partialCostUsd null when cost_usd is absent', () => {
+			// Today the backend emits cost_usd=None per iteration (final cost
+			// arrives via response_block). Display stays neutral until then.
+			const result = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 1,
+				tokens_input: 1500,
+				tokens_output: 250
+			}));
+
+			expect(result.partialCostUsd).toBeNull();
 		});
 	});
 

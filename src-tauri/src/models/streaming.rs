@@ -57,6 +57,11 @@ pub enum ChunkType {
     ToolCallComplete,
     /// Complete response block with real tokens
     ResponseBlock,
+    /// Per-iteration progress: tokens + cost emitted after every LLM call
+    /// inside the tool loop. Lets the frontend metrics bar (TokenDisplay)
+    /// update live during streaming instead of waiting for the final
+    /// response_block which only fires once at the very end of the workflow.
+    IterationProgress,
 }
 
 /// Streaming chunk emitted during workflow execution
@@ -147,6 +152,19 @@ pub struct StreamChunk {
     /// Thinking/reasoning tokens (for response_block, reasoning models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_tokens: Option<usize>,
+    /// Per-iteration cost in USD computed by the backend pricing layer
+    /// (`load_model_pricing_info` -> `resolve_cost`). Carried in `response_block`
+    /// so a switched-away workflow can accumulate `partialCostUsd` on its
+    /// background execution without the frontend ever multiplying tokens by
+    /// prices itself (Phase 7 invariant).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+    /// 1-based iteration index for `iteration_progress` chunks emitted from
+    /// inside the tool loop. Lets the frontend tell consecutive iterations
+    /// apart for diagnostics; numerically equivalent to "how many LLM calls
+    /// have completed in this workflow so far".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iteration: Option<u32>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -195,6 +213,8 @@ impl StreamChunk {
             cached_tokens: None,
             cache_write_tokens: None,
             thinking_tokens: None,
+            cost_usd: None,
+            iteration: None,
         }
     }
 
@@ -397,9 +417,40 @@ impl StreamChunk {
         }
     }
 
+    /// Creates an `iteration_progress` chunk emitted after every LLM call
+    /// in the tool loop. Carries CUMULATIVE tokens (sum across iterations
+    /// so far) and the cumulative cost computed by the backend pricing
+    /// layer — the frontend mirrors them straight onto the metrics bar
+    /// without inventing any number itself (Phase 7 invariant).
+    #[allow(clippy::too_many_arguments)]
+    pub fn iteration_progress(
+        workflow_id: impl Into<String>,
+        iteration: u32,
+        tokens_input: usize,
+        tokens_output: usize,
+        cached_tokens: Option<usize>,
+        cache_write_tokens: Option<usize>,
+        cost_usd: Option<f64>,
+    ) -> Self {
+        Self {
+            iteration: Some(iteration),
+            tokens_input: Some(tokens_input),
+            tokens_output: Some(tokens_output),
+            cached_tokens,
+            cache_write_tokens,
+            cost_usd,
+            ..Self::base(workflow_id, ChunkType::IterationProgress)
+        }
+    }
+
     /// Creates a response block chunk with complete content and real tokens.
     ///
     /// Replaces progressive token streaming with a single complete response.
+    /// `cost_usd` is the per-iteration cost computed by the backend pricing
+    /// layer; when present it lets background executions accumulate a real
+    /// in-progress cost (Phase 13 follow-up) without the frontend ever
+    /// multiplying tokens × prices itself.
+    #[allow(clippy::too_many_arguments)]
     pub fn response_block(
         workflow_id: impl Into<String>,
         content: impl Into<String>,
@@ -408,6 +459,7 @@ impl StreamChunk {
         cached_tokens: Option<usize>,
         cache_write_tokens: Option<usize>,
         thinking_tokens: Option<usize>,
+        cost_usd: Option<f64>,
     ) -> Self {
         Self {
             content: Some(content.into()),
@@ -416,6 +468,7 @@ impl StreamChunk {
             cached_tokens,
             cache_write_tokens,
             thinking_tokens,
+            cost_usd,
             ..Self::base(workflow_id, ChunkType::ResponseBlock)
         }
     }
@@ -895,18 +948,79 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_response_block() {
-        let chunk =
-            StreamChunk::response_block("wf_001", "The answer is 42.", 100, 25, None, None, None);
+        let chunk = StreamChunk::response_block(
+            "wf_001",
+            "The answer is 42.",
+            100,
+            25,
+            None,
+            None,
+            None,
+            None,
+        );
         assert_eq!(chunk.chunk_type, ChunkType::ResponseBlock);
         assert_eq!(chunk.content, Some("The answer is 42.".to_string()));
         assert_eq!(chunk.tokens_input, Some(100));
         assert_eq!(chunk.tokens_output, Some(25));
         assert!(chunk.tool.is_none());
         assert!(chunk.tool_input.is_none());
+        assert!(chunk.cost_usd.is_none());
 
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(json.contains("\"chunk_type\":\"response_block\""));
         assert!(json.contains("\"tokens_input\":100"));
         assert!(json.contains("\"tokens_output\":25"));
+        // None cost MUST be omitted from the JSON payload (skip_serializing_if).
+        assert!(!json.contains("\"cost_usd\""));
+    }
+
+    #[test]
+    fn test_stream_chunk_response_block_carries_cost() {
+        let chunk = StreamChunk::response_block(
+            "wf_001",
+            "Costed answer.",
+            100,
+            25,
+            None,
+            None,
+            None,
+            Some(0.0123),
+        );
+        assert_eq!(chunk.cost_usd, Some(0.0123));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        // Backend-computed cost MUST round-trip through the wire so the
+        // frontend can accumulate it on the bg execution without inventing
+        // any value (Phase 7 invariant).
+        assert!(
+            json.contains("\"cost_usd\":0.0123"),
+            "cost_usd must serialize when Some, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    fn test_stream_chunk_iteration_progress() {
+        // Drives the live metrics bar during a tool loop. Carries CUMULATIVE
+        // tokens (not deltas) so the frontend can overwrite, not sum.
+        let chunk =
+            StreamChunk::iteration_progress("wf_001", 3, 5_000, 800, Some(4_000), Some(200), None);
+        assert_eq!(chunk.chunk_type, ChunkType::IterationProgress);
+        assert_eq!(chunk.iteration, Some(3));
+        assert_eq!(chunk.tokens_input, Some(5_000));
+        assert_eq!(chunk.tokens_output, Some(800));
+        assert_eq!(chunk.cached_tokens, Some(4_000));
+        assert_eq!(chunk.cache_write_tokens, Some(200));
+        assert!(chunk.cost_usd.is_none());
+        assert!(
+            chunk.content.is_none(),
+            "iteration_progress carries no text"
+        );
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"chunk_type\":\"iteration_progress\""));
+        assert!(json.contains("\"iteration\":3"));
+        // None cost MUST be omitted from the wire payload.
+        assert!(!json.contains("\"cost_usd\""));
     }
 }

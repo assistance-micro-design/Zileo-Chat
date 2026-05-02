@@ -33,7 +33,10 @@ import type { ActiveTool, ActiveReasoningStep, ActiveSubAgent, ActiveTask } from
  *
  * Phase 13 added the input/cache token fields so that switching back to a
  * still-running background workflow restores the full session display from
- * its bg state, not only the output count.
+ * its bg state, not only the output count. `partialCostUsd` (Option A
+ * follow-up) accumulates the per-iteration backend-computed cost so the
+ * in-progress display stays accurate without the frontend multiplying
+ * tokens by prices itself.
  */
 export interface ChunkableState {
 	content: string;
@@ -45,6 +48,12 @@ export interface ChunkableState {
 	tokensSent: number;
 	cachedTokens: number | null;
 	cacheWriteTokens: number | null;
+	/**
+	 * Sum of `cost_usd` carried by every `response_block` chunk seen so far.
+	 * `null` until the first chunk with a cost lands. The backend is the
+	 * single source of truth for these numbers.
+	 */
+	partialCostUsd: number | null;
 	error: string | null;
 }
 
@@ -280,16 +289,47 @@ function handleToolCallComplete(s: ChunkableState, c: StreamChunk): ChunkableSta
  * Phase 13: also persists `tokens_input`, `cached_tokens` and `cache_write_tokens`
  * so a switch back to a still-running bg workflow can restore the full session
  * display, not just the output count.
+ *
+ * Option A follow-up: accumulates `cost_usd` from each chunk into
+ * `partialCostUsd`. The cost is computed by the backend pricing layer; the
+ * frontend only sums values it receives — never multiplies tokens × prices.
  */
 function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
+	const next: ChunkableState = {
 		...s,
 		content: c.content ?? s.content,
 		tokensReceived: c.tokens_output ?? s.tokensReceived,
 		tokensSent: c.tokens_input ?? s.tokensSent,
 		cachedTokens: c.cached_tokens ?? s.cachedTokens,
-		cacheWriteTokens: c.cache_write_tokens ?? s.cacheWriteTokens
+		cacheWriteTokens: c.cache_write_tokens ?? s.cacheWriteTokens,
+		partialCostUsd: s.partialCostUsd
 	};
+	if (typeof c.cost_usd === 'number') {
+		next.partialCostUsd = (s.partialCostUsd ?? 0) + c.cost_usd;
+	}
+	return next;
+}
+
+/**
+ * Handle iteration_progress chunk - cumulative tokens reported after every
+ * LLM call inside the tool loop. Same shape as response_block (carries
+ * tokens_input/output/cached/cache_write + optional cost_usd) but without
+ * content. Symmetric with handleResponseBlock so the metrics bar updates
+ * live during streaming, not only after completion.
+ */
+function handleIterationProgress(s: ChunkableState, c: StreamChunk): ChunkableState {
+	const next: ChunkableState = {
+		...s,
+		tokensReceived: c.tokens_output ?? s.tokensReceived,
+		tokensSent: c.tokens_input ?? s.tokensSent,
+		cachedTokens: c.cached_tokens ?? s.cachedTokens,
+		cacheWriteTokens: c.cache_write_tokens ?? s.cacheWriteTokens,
+		partialCostUsd: s.partialCostUsd
+	};
+	if (typeof c.cost_usd === 'number') {
+		next.partialCostUsd = (s.partialCostUsd ?? 0) + c.cost_usd;
+	}
+	return next;
 }
 
 /**
@@ -309,7 +349,8 @@ const chunkHandlers: Record<string, ChunkHandler> = {
 	task_complete: handleTaskComplete,
 	thinking_block: handleThinkingBlock,
 	tool_call_complete: handleToolCallComplete,
-	response_block: handleResponseBlock
+	response_block: handleResponseBlock,
+	iteration_progress: handleIterationProgress
 };
 
 /**

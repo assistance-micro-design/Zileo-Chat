@@ -172,21 +172,10 @@ pub async fn finalize_completion(
     }
     thinking_step_number += 1;
 
-    // 3. Emit response block.
-    emit_chunk(
-        window,
-        StreamChunk::response_block(
-            workflow_id.to_string(),
-            report.response.clone(),
-            report.metrics.tokens_input,
-            report.metrics.tokens_output,
-            report.metrics.cached_tokens,
-            report.metrics.cache_write_tokens,
-            report.metrics.thinking_tokens,
-        ),
-    );
-
-    // 4. Pricing +warning.
+    // 3. Resolve pricing BEFORE emitting the response_block so the chunk can
+    //    carry the per-iteration cost. This lets a backgrounded workflow
+    //    accumulate `partialCostUsd` on its bg execution without the frontend
+    //    inventing any number (Phase 7 invariant preserved).
     let pricing = load_model_pricing_info(
         state,
         agent_id,
@@ -207,6 +196,21 @@ pub async fn finalize_completion(
             "Cost is $0.00 with non-zero token usage — model pricing likely missing"
         );
     }
+
+    // 4. Emit response block with the resolved cost embedded.
+    emit_chunk(
+        window,
+        StreamChunk::response_block(
+            workflow_id.to_string(),
+            report.response.clone(),
+            report.metrics.tokens_input,
+            report.metrics.tokens_output,
+            report.metrics.cached_tokens,
+            report.metrics.cache_write_tokens,
+            report.metrics.thinking_tokens,
+            Some(pricing.cost_usd),
+        ),
+    );
 
     // 5. Workflow row cumulative update.
     update_workflow_cumulative_metrics(
