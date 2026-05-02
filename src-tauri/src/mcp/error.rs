@@ -164,6 +164,19 @@ pub enum MCPError {
         /// Last error message
         last_error: String,
     },
+    /// Server returned HTTP 429 Too Many Requests (rate-limited).
+    ///
+    /// Distinct from `ConnectionFailed` so callers/UI can show a clean
+    /// message and the cooldown the upstream gave us, instead of a wall
+    /// of HTML body.
+    RateLimited {
+        /// Server name
+        server: String,
+        /// Cooldown in seconds, parsed from the HTTP `Retry-After` header
+        /// (or the o2switch HTML `<meta name="retry-after">` fallback).
+        /// `None` when the upstream did not advertise one.
+        retry_after_secs: Option<u64>,
+    },
 }
 
 impl fmt::Display for MCPError {
@@ -248,6 +261,21 @@ impl fmt::Display for MCPError {
                     server, attempts, last_error
                 )
             }
+            MCPError::RateLimited {
+                server,
+                retry_after_secs,
+            } => match retry_after_secs {
+                Some(secs) => write!(
+                    f,
+                    "MCP server '{}' rate-limited the request (HTTP 429). Retry in {}s.",
+                    server, secs
+                ),
+                None => write!(
+                    f,
+                    "MCP server '{}' rate-limited the request (HTTP 429). Slow down and retry later.",
+                    server
+                ),
+            },
         }
     }
 }
@@ -292,6 +320,7 @@ impl MCPError {
             // Resilience category
             MCPError::CircuitBreakerOpen { .. } => MCPErrorCategory::Resilience,
             MCPError::RetryExhausted { .. } => MCPErrorCategory::Resilience,
+            MCPError::RateLimited { .. } => MCPErrorCategory::Resilience,
         }
     }
 
@@ -542,5 +571,49 @@ mod tests {
         assert_eq!(MCPErrorCategory::Connection.to_string(), "connection");
         assert_eq!(MCPErrorCategory::Protocol.to_string(), "protocol");
         assert_eq!(MCPErrorCategory::Database.to_string(), "database");
+    }
+
+    #[test]
+    fn test_rate_limited_display_with_cooldown() {
+        let err = MCPError::RateLimited {
+            server: "assistance-micro-design".to_string(),
+            retry_after_secs: Some(240),
+        };
+        let s = err.to_string();
+        assert!(s.contains("assistance-micro-design"));
+        assert!(s.contains("429"));
+        assert!(s.contains("240"));
+    }
+
+    #[test]
+    fn test_rate_limited_display_without_cooldown() {
+        let err = MCPError::RateLimited {
+            server: "remote".to_string(),
+            retry_after_secs: None,
+        };
+        let s = err.to_string();
+        assert!(s.contains("remote"));
+        assert!(s.contains("429"));
+        // Should NOT echo a numeric cooldown when none was advertised.
+        assert!(!s.contains(" 0s"));
+    }
+
+    #[test]
+    fn test_rate_limited_category_is_resilience() {
+        let err = MCPError::RateLimited {
+            server: "x".to_string(),
+            retry_after_secs: Some(60),
+        };
+        assert_eq!(err.category(), MCPErrorCategory::Resilience);
+    }
+
+    #[test]
+    fn test_rate_limited_is_transient() {
+        let err = MCPError::RateLimited {
+            server: "x".to_string(),
+            retry_after_secs: None,
+        };
+        assert!(err.is_transient());
+        assert!(!err.is_connection_error());
     }
 }

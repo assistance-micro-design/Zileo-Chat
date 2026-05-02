@@ -104,7 +104,7 @@ For testing Rust commands in isolation.
 zileo-chat-3/
 +- src/                     # Frontend SvelteKit
 |  +- routes/               # Pages (file-based routing)
-|  |  +- settings/          # Settings page (9 sections)
+|  |  +- settings/          # Settings page (10 sections)
 |  |  +- agent/             # Agent page (main chat)
 |  +- lib/
 |  |  +- components/        # Svelte components
@@ -153,7 +153,7 @@ On first launch, a guided assistant helps with initial configuration:
 
 ### 3. Advanced Configuration
 
-**Settings Page** (9 sections):
+**Settings Page** (10 sections):
 
 | Section | Description |
 |---------|-------------|
@@ -163,6 +163,7 @@ On first launch, a guided assistant helps with initial configuration:
 | **Skills** | Manage skill documents assignable to agents |
 | **Memory** | Configure embeddings + manage memories |
 | **Validation** | Human-in-the-loop parameters |
+| **Audit Log** | Validation audit log: filters, stats, manual purge, CSV export |
 | **Prompts** | Prompt library |
 | **Import/Export** | Backup and restore configuration (schema v1.2) |
 | **Theme** | Light/Dark theme selection |

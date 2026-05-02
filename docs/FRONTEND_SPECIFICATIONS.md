@@ -184,7 +184,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 7. Types
 
-24 type files (including `index.ts`) in `src/types/`. Always import via `$types/module`.
+25 type files (including `index.ts`) in `src/types/`. Always import via `$types/module`.
 
 | Module | Key Types | Description |
 |--------|-----------|-------------|
@@ -214,7 +214,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 16 modules)
+### Utilities (`src/lib/utils/`, 17 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|

@@ -33,6 +33,7 @@
 //! connect to `{base_url}/sse` for server-sent events.
 
 use crate::mcp::http_auth::build_auth_headers;
+use crate::mcp::protocol::MCPServerCapabilities;
 use crate::mcp::redact::redact_headers;
 use crate::mcp::secrets::load_mcp_secret;
 use crate::mcp::{
@@ -43,8 +44,9 @@ use crate::models::custom_provider::check_http_warning;
 use crate::models::mcp::{MCPAuthType, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool};
 use crate::security::KeyStore;
 use reqwest::Client;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -52,9 +54,150 @@ use tracing::{debug, info, warn};
 /// Default timeout for HTTP operations (30 seconds)
 const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
 
-/// Minimum delay between consecutive HTTP requests to the same server (ms).
-/// Prevents rate-limiting on shared hosting (e.g. o2switch Tiger Protect).
-const HTTP_THROTTLE_DELAY_MS: u64 = 500;
+/// Minimum delay between consecutive HTTP requests to the same host (ms).
+///
+/// Prevents rate-limiting on shared hosting (o2switch Tiger Protect ≥ 3 req/s
+/// on a 1 s sliding window). At 500 ms the burst centred on the 1 s mark
+/// contains 3 requests (initialize + notif/initialized + tools/list) which
+/// is exactly the trip threshold. 700 ms keeps every 1 s window at ≤ 2
+/// requests, with margin for clock skew and TLS jitter.
+const HTTP_THROTTLE_DELAY_MS: u64 = 700;
+
+/// Per-host throttle state, shared across every `MCPHttpHandle` that targets
+/// the same hostname.
+///
+/// This prevents bursts when several handles hit the same host in quick
+/// succession (e.g. "Test connection" followed by "Save server" each issue
+/// 5 requests within 2 seconds — without a shared throttle they cumulate to
+/// ~5 req/s for the same hostname, which trips shared-host rate limits.
+///
+/// Loopback hosts (`localhost`, `127.0.0.0/8`, `[::1]`) are not registered
+/// here — see `get_host_throttle`.
+static HOST_THROTTLES: LazyLock<Mutex<HashMap<String, Arc<Mutex<Instant>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Extracts the lowercased hostname from a URL string.
+///
+/// Returns `None` if the URL has no scheme or no host. Handles userinfo
+/// (`user:pass@host`), explicit ports (`host:8080`), IPv6 brackets
+/// (`[::1]:port`), and trailing path/query/fragment.
+///
+/// Delegates to `reqwest::Url` (the battle-tested `url` crate) for parsing,
+/// then re-brackets IPv6 literals so `[::1]:8080` and `[::1]:9090` share a
+/// single throttle key.
+fn extract_host(url: &str) -> Option<String> {
+    // Guard against the WHATWG URL parser collapsing `://` + extra slashes:
+    // `https:///path` would otherwise yield host="path" instead of None.
+    // We treat an empty authority as "no host" — the same semantic our
+    // call sites rely on.
+    let after_scheme = url.split_once("://")?.1;
+    if after_scheme.starts_with('/') {
+        return None;
+    }
+    let parsed = reqwest::Url::parse(url).ok()?;
+    let host_str = parsed.host_str()?;
+    if host_str.is_empty() {
+        return None;
+    }
+    // url::Url normalises ASCII hosts to lowercase, but be defensive in
+    // case a future version surfaces unicode/percent-encoded forms.
+    let lowered = host_str.to_ascii_lowercase();
+    // IPv6 literals contain `:` (segment separator). url::Url::host_str
+    // historically strips the brackets; restore them so the throttle key
+    // stays consistent with the source URL form.
+    if lowered.contains(':') && !lowered.starts_with('[') {
+        Some(format!("[{}]", lowered))
+    } else {
+        Some(lowered)
+    }
+}
+
+/// Returns true for loopback hostnames that should bypass throttling.
+///
+/// Loopback hosts have no rate limit and slowing them down only hurts
+/// local development (e.g. running an MCP server on `localhost:8080`).
+fn is_loopback_host(host: &str) -> bool {
+    host == "localhost" || host == "[::1]" || host.starts_with("127.")
+}
+
+/// Extracts a cooldown in seconds from a 429 response.
+///
+/// Tries, in order:
+/// 1. The HTTP `Retry-After` header — RFC 9110 allows either a delta-seconds
+///    integer or an HTTP-date. We honour the integer form; the date form is
+///    silently ignored (callers fall back to the default cooldown).
+/// 2. A `<meta name="retry-after" content="N" />` tag in the response body.
+///    Some shared-host WAFs emit this even though it is not standard.
+///
+/// Returns `None` when neither source yields a parseable integer.
+fn parse_retry_after_secs(headers: &reqwest::header::HeaderMap, body: &str) -> Option<u64> {
+    if let Some(raw) = headers.get(reqwest::header::RETRY_AFTER) {
+        if let Ok(s) = raw.to_str() {
+            if let Ok(n) = s.trim().parse::<u64>() {
+                return Some(n);
+            }
+        }
+    }
+
+    // Fallback: scan the HTML body for `<meta name="retry-after" content="N">`.
+    // We do a tolerant string scan rather than pull in an HTML parser; the
+    // tag is short and quote-style varies (single, double, none).
+    //
+    // Cap at 8 KiB — WAF 429 pages are tiny, and a pathological multi-MB
+    // body would otherwise allocate a full lowercased copy. Walk back to a
+    // char boundary so the slice stays valid UTF-8.
+    const SCAN_LIMIT: usize = 8 * 1024;
+    let scan = if body.len() <= SCAN_LIMIT {
+        body
+    } else {
+        let mut end = SCAN_LIMIT;
+        while end > 0 && !body.is_char_boundary(end) {
+            end -= 1;
+        }
+        &body[..end]
+    };
+
+    // Single allocation: lowercase once, drive both the `name=` lookup and
+    // the `content=` lookup off the same buffer.
+    let lower = scan.to_ascii_lowercase();
+    let needle = "name=\"retry-after\"";
+    let alt = "name='retry-after'";
+    let idx = lower.find(needle).or_else(|| lower.find(alt))?;
+    let after = &scan[idx..];
+    let content_idx = lower[idx..].find("content=")?;
+    let after_content = &after[content_idx + "content=".len()..];
+    let bytes = after_content.as_bytes();
+    let (start, quote) = match bytes.first()? {
+        b'"' => (1, b'"'),
+        b'\'' => (1, b'\''),
+        _ => (0, b' '), // unquoted: read until whitespace or `>`
+    };
+    let rest = &after_content[start..];
+    let end = rest
+        .bytes()
+        .position(|b| b == quote || (quote == b' ' && (b == b' ' || b == b'>' || b == b'/')))
+        .unwrap_or(rest.len());
+    rest[..end].trim().parse::<u64>().ok()
+}
+
+/// Returns the shared throttle mutex for `host`, creating it lazily.
+///
+/// Returns `None` for loopback hosts (no throttling needed).
+async fn get_host_throttle(host: &str) -> Option<Arc<Mutex<Instant>>> {
+    if is_loopback_host(host) {
+        return None;
+    }
+    let mut map = HOST_THROTTLES.lock().await;
+    let arc = map
+        .entry(host.to_string())
+        .or_insert_with(|| {
+            Arc::new(Mutex::new(
+                Instant::now() - Duration::from_millis(HTTP_THROTTLE_DELAY_MS),
+            ))
+        })
+        .clone();
+    Some(arc)
+}
 
 /// Shared HTTP client for connection pooling
 ///
@@ -193,8 +336,15 @@ pub struct MCPHttpHandle {
     connected: bool,
     /// Custom headers for this connection (API key, etc.)
     headers: reqwest::header::HeaderMap,
-    /// Timestamp of last HTTP request (for throttling)
-    last_request_time: Mutex<Instant>,
+    /// Lowercased hostname extracted from `base_url`, used as the key into
+    /// `HOST_THROTTLES` so all handles targeting the same host share a single
+    /// rate-limit cadence. Empty for loopback hosts (throttling bypassed).
+    host: String,
+    /// Capabilities advertised by the server in its `initialize` response.
+    /// Used to skip `tools/list` and `resources/list` calls when the server
+    /// announces it does not support those capabilities — saves 1-2 HTTP
+    /// requests per connect on rate-limited hosts.
+    capabilities: MCPServerCapabilities,
 }
 
 impl MCPHttpHandle {
@@ -258,7 +408,13 @@ impl MCPHttpHandle {
         // Use shared client for connection pooling
         let client = SHARED_HTTP_CLIENT.clone();
 
-        let mut handle = Self {
+        // Extract the hostname so this handle joins the per-host throttle
+        // cadence. An unparseable URL falls back to an empty key — the
+        // throttle still works (it just degenerates to per-empty-host
+        // sharing), and the URL would have failed validation above anyway.
+        let host = extract_host(&base_url).unwrap_or_default();
+
+        let handle = Self {
             config,
             client,
             base_url,
@@ -267,59 +423,26 @@ impl MCPHttpHandle {
             resources: Vec::new(),
             request_id: AtomicI64::new(1),
             server_info: None,
-            connected: false,
+            connected: true,
             headers,
-            last_request_time: Mutex::new(
-                Instant::now() - Duration::from_millis(HTTP_THROTTLE_DELAY_MS),
-            ),
+            host,
+            capabilities: MCPServerCapabilities::default(),
         };
 
-        // Test connection with a simple request
-        handle.test_connectivity().await?;
-        handle.connected = true;
-        handle.status = MCPServerStatus::Running;
+        // No prelude HEAD request: it isn't part of the MCP wire protocol
+        // and burns a request against shared-host rate limits. The
+        // subsequent `initialize` POST already validates that the endpoint
+        // speaks MCP. Mark connected so the Drop impl doesn't whine if
+        // `initialize` fails (caller handles the error and the handle is
+        // dropped immediately after).
 
         info!(
             server_id = %handle.config.id,
             base_url = %handle.base_url,
-            "Connected to MCP HTTP server"
+            "Prepared MCP HTTP handle"
         );
 
         Ok(handle)
-    }
-
-    /// Tests connectivity to the HTTP endpoint
-    async fn test_connectivity(&self) -> MCPResult<()> {
-        self.throttle().await;
-
-        debug!(
-            server_id = %self.config.id,
-            base_url = %self.base_url,
-            "Testing HTTP connectivity"
-        );
-
-        // Try a HEAD request to check if the endpoint is reachable
-        let response = self
-            .client
-            .head(&self.base_url)
-            .headers(self.headers.clone())
-            .send()
-            .await
-            .map_err(|e| MCPError::ConnectionFailed {
-                server: self.config.name.clone(),
-                message: format!("Failed to connect to HTTP endpoint: {}", e),
-            })?;
-
-        // Accept 2xx, 4xx (might require auth), or 405 (method not allowed - means server is there)
-        let status = response.status();
-        if !status.is_success() && !status.is_client_error() && status.as_u16() != 405 {
-            return Err(MCPError::ConnectionFailed {
-                server: self.config.name.clone(),
-                message: format!("HTTP endpoint returned unexpected status: {}", status),
-            });
-        }
-
-        Ok(())
     }
 
     /// Initializes the MCP session with the server
@@ -355,19 +478,43 @@ impl MCPHttpHandle {
                 }
             })?)?;
 
-        // Store server info
+        // Store server info + capabilities so we can skip irrelevant
+        // follow-up calls (saves 1-2 HTTP requests per connect on
+        // rate-limited hosts).
         self.server_info = Some((
             init_result.server_info.name.clone(),
             init_result.server_info.version.clone(),
         ));
+        self.capabilities = init_result.capabilities.clone();
 
         // Send initialized notification
         self.send_notification("notifications/initialized", None)
             .await?;
 
-        // Refresh tools and resources
-        self.refresh_tools_internal().await?;
-        self.refresh_resources_internal().await?;
+        // Only fetch tools/resources the server actually advertises. Per the
+        // MCP spec, calling `tools/list` or `resources/list` against a server
+        // that didn't declare the capability is undefined — and on a shared
+        // host that ban-throttles per-IP, every wasted POST counts toward
+        // the budget.
+        if self.capabilities.tools.is_some() {
+            self.refresh_tools_internal().await?;
+        } else {
+            // info! (not debug!) so spec-non-compliant servers that omit
+            // `capabilities.tools` while actually serving `tools/list` are
+            // diagnosable in production logs without a debug build.
+            info!(
+                server_id = %self.config.id,
+                "Skipping tools/list — server did not advertise tools capability"
+            );
+        }
+        if self.capabilities.resources.is_some() {
+            self.refresh_resources_internal().await?;
+        } else {
+            info!(
+                server_id = %self.config.id,
+                "Skipping resources/list — server did not advertise resources capability"
+            );
+        }
 
         self.status = MCPServerStatus::Running;
 
@@ -377,6 +524,8 @@ impl MCPHttpHandle {
             server_version = %init_result.server_info.version,
             tools_count = self.tools.len(),
             resources_count = self.resources.len(),
+            tools_supported = self.capabilities.tools.is_some(),
+            resources_supported = self.capabilities.resources.is_some(),
             "MCP HTTP session initialized"
         );
 
@@ -393,8 +542,21 @@ impl MCPHttpHandle {
         &self.resources
     }
 
-    /// Refreshes the tools list from the server
+    /// Refreshes the tools list from the server.
+    ///
+    /// Returns the cached (empty) list without contacting the server when
+    /// the server did not advertise the `tools` capability in `initialize`.
+    /// This avoids burning a request on a method the server has explicitly
+    /// said it does not implement (and avoids a needless 429 against
+    /// rate-limited shared hosts).
     pub async fn refresh_tools(&mut self) -> MCPResult<Vec<MCPTool>> {
+        if self.capabilities.tools.is_none() {
+            debug!(
+                server_id = %self.config.id,
+                "refresh_tools no-op — server did not advertise tools capability"
+            );
+            return Ok(self.tools.clone());
+        }
         self.refresh_tools_internal().await?;
         Ok(self.tools.clone())
     }
@@ -507,16 +669,25 @@ impl MCPHttpHandle {
         Ok(tool_response)
     }
 
-    /// Sends a JSON-RPC request to the server
-    /// Enforces minimum delay between consecutive HTTP requests to avoid rate-limiting.
+    /// Enforces minimum delay between consecutive HTTP requests to the same
+    /// host. The cadence is shared across all `MCPHttpHandle` instances that
+    /// target the same hostname so concurrent flows (test connection +
+    /// register, parallel `load_from_db()` startup, etc.) cannot bypass the
+    /// per-host rate limit. Loopback hosts are exempted.
     async fn throttle(&self) {
-        let mut last_time = self.last_request_time.lock().await;
+        let throttle = match get_host_throttle(&self.host).await {
+            Some(t) => t,
+            None => return,
+        };
+
+        let mut last_time = throttle.lock().await;
         let elapsed = last_time.elapsed();
         let min_delay = Duration::from_millis(HTTP_THROTTLE_DELAY_MS);
         if elapsed < min_delay {
             let wait = min_delay - elapsed;
             debug!(
                 server_id = %self.config.id,
+                host = %self.host,
                 wait_ms = wait.as_millis(),
                 "Throttling HTTP request"
             );
@@ -550,7 +721,17 @@ impl MCPHttpHandle {
         // Check HTTP status
         let status = response.status();
         if !status.is_success() {
+            let response_headers = response.headers().clone();
             let body = response.text().await.unwrap_or_default();
+            // Surface 429 as a typed RateLimited error so the UI can render
+            // a clean cooldown message instead of upstream HTML.
+            if status.as_u16() == 429 {
+                let retry_after_secs = parse_retry_after_secs(&response_headers, &body);
+                return Err(MCPError::RateLimited {
+                    server: self.config.name.clone(),
+                    retry_after_secs,
+                });
+            }
             return Err(MCPError::ConnectionFailed {
                 server: self.config.name.clone(),
                 message: format!("HTTP {} - {}", status, body),
@@ -621,9 +802,21 @@ impl MCPHttpHandle {
             })?;
 
         // For notifications, we just check that the request succeeded
-        // The server may or may not return a response
-        if !response.status().is_success() {
-            let status = response.status();
+        // The server may or may not return a response. The one exception
+        // is 429: that's the host rate-limiting us, and silently swallowing
+        // it would let the init sequence continue and burn more requests
+        // into a ban window.
+        let status = response.status();
+        if status.as_u16() == 429 {
+            let response_headers = response.headers().clone();
+            let body = response.text().await.unwrap_or_default();
+            let retry_after_secs = parse_retry_after_secs(&response_headers, &body);
+            return Err(MCPError::RateLimited {
+                server: self.config.name.clone(),
+                retry_after_secs,
+            });
+        }
+        if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             warn!(
                 server_id = %self.config.id,
@@ -815,6 +1008,260 @@ mod tests {
         let headers = build_headers_for_tests(&config).unwrap();
         assert_eq!(headers.get("X-Tenant").unwrap(), "42");
         assert!(headers.get(reqwest::header::AUTHORIZATION).is_none());
+    }
+
+    // -------- parse_retry_after_secs --------
+
+    fn empty_headers() -> reqwest::header::HeaderMap {
+        reqwest::header::HeaderMap::new()
+    }
+
+    fn headers_with_retry_after(value: &str) -> reqwest::header::HeaderMap {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::RETRY_AFTER,
+            reqwest::header::HeaderValue::from_str(value).unwrap(),
+        );
+        h
+    }
+
+    #[test]
+    fn test_parse_retry_after_from_http_header_seconds() {
+        let h = headers_with_retry_after("120");
+        assert_eq!(parse_retry_after_secs(&h, ""), Some(120));
+    }
+
+    #[test]
+    fn test_parse_retry_after_trims_whitespace() {
+        let h = headers_with_retry_after("  42  ");
+        assert_eq!(parse_retry_after_secs(&h, ""), Some(42));
+    }
+
+    #[test]
+    fn test_parse_retry_after_http_date_returns_none() {
+        // RFC 9110 also allows HTTP-date; we don't honour it.
+        let h = headers_with_retry_after("Wed, 21 Oct 2026 07:28:00 GMT");
+        assert_eq!(parse_retry_after_secs(&h, ""), None);
+    }
+
+    #[test]
+    fn test_parse_retry_after_meta_double_quotes() {
+        let body = r#"<html><head><meta name="retry-after" content="240" /></head></html>"#;
+        assert_eq!(parse_retry_after_secs(&empty_headers(), body), Some(240));
+    }
+
+    #[test]
+    fn test_parse_retry_after_meta_single_quotes() {
+        let body = r#"<html><meta name='retry-after' content='90'/></html>"#;
+        assert_eq!(parse_retry_after_secs(&empty_headers(), body), Some(90));
+    }
+
+    #[test]
+    fn test_parse_retry_after_meta_case_insensitive() {
+        let body = r#"<META NAME="Retry-After" CONTENT="60">"#;
+        assert_eq!(parse_retry_after_secs(&empty_headers(), body), Some(60));
+    }
+
+    #[test]
+    fn test_parse_retry_after_header_takes_precedence_over_meta() {
+        let h = headers_with_retry_after("10");
+        let body = r#"<meta name="retry-after" content="240">"#;
+        assert_eq!(parse_retry_after_secs(&h, body), Some(10));
+    }
+
+    #[test]
+    fn test_parse_retry_after_returns_none_when_absent() {
+        assert_eq!(parse_retry_after_secs(&empty_headers(), ""), None);
+        assert_eq!(
+            parse_retry_after_secs(&empty_headers(), "<html><body>nope</body></html>"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_parse_retry_after_o2switch_real_payload() {
+        // Trimmed snapshot of the actual TigerProtect 429 page the user hit.
+        let body = r#"<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+  <meta name="retry-after" content="240" />
+</head>
+<body>HTTP 429</body>
+</html>"#;
+        assert_eq!(parse_retry_after_secs(&empty_headers(), body), Some(240));
+    }
+
+    // -------- Per-host throttle helpers --------
+
+    #[test]
+    fn test_extract_host_https_simple() {
+        assert_eq!(
+            extract_host("https://api.example.com/mcp"),
+            Some("api.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_http_with_port() {
+        assert_eq!(
+            extract_host("http://example.com:8080/mcp"),
+            Some("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_strips_query_and_fragment() {
+        assert_eq!(
+            extract_host("https://host.tld/path?a=1#x"),
+            Some("host.tld".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_strips_userinfo() {
+        assert_eq!(
+            extract_host("https://user:pass@example.com/mcp"),
+            Some("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_lowercases() {
+        assert_eq!(
+            extract_host("https://Example.COM/mcp"),
+            Some("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_ipv6_with_port() {
+        assert_eq!(
+            extract_host("http://[::1]:8080/mcp"),
+            Some("[::1]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_ipv6_without_port() {
+        assert_eq!(
+            extract_host("http://[2001:db8::1]/mcp"),
+            Some("[2001:db8::1]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_host_no_scheme_returns_none() {
+        assert_eq!(extract_host("example.com/mcp"), None);
+    }
+
+    #[test]
+    fn test_extract_host_empty_authority_returns_none() {
+        assert_eq!(extract_host("https:///path"), None);
+    }
+
+    #[test]
+    fn test_is_loopback_localhost() {
+        assert!(is_loopback_host("localhost"));
+    }
+
+    #[test]
+    fn test_is_loopback_ipv4_loopback_range() {
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("127.1.2.3"));
+    }
+
+    #[test]
+    fn test_is_loopback_ipv6() {
+        assert!(is_loopback_host("[::1]"));
+    }
+
+    #[test]
+    fn test_is_loopback_rejects_remote() {
+        assert!(!is_loopback_host("example.com"));
+        assert!(!is_loopback_host("192.168.1.1"));
+        assert!(!is_loopback_host("0.0.0.0"));
+    }
+
+    #[tokio::test]
+    async fn test_get_host_throttle_returns_none_for_loopback() {
+        assert!(get_host_throttle("localhost").await.is_none());
+        assert!(get_host_throttle("127.0.0.1").await.is_none());
+        assert!(get_host_throttle("[::1]").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_host_throttle_shares_arc_for_same_host() {
+        // Use a unique host name per test run to avoid interference with
+        // other tests sharing the static HOST_THROTTLES map.
+        let host = "throttle-share-test.invalid";
+        let a = get_host_throttle(host).await.expect("non-loopback");
+        let b = get_host_throttle(host).await.expect("non-loopback");
+        assert!(
+            Arc::ptr_eq(&a, &b),
+            "two lookups for the same host must return the same Arc"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_host_throttle_separates_different_hosts() {
+        let a = get_host_throttle("host-a.invalid")
+            .await
+            .expect("non-loopback");
+        let b = get_host_throttle("host-b.invalid")
+            .await
+            .expect("non-loopback");
+        assert!(
+            !Arc::ptr_eq(&a, &b),
+            "different hosts must own independent throttles"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_throttle_serializes_concurrent_calls_on_same_host() {
+        // Two real handles targeting the same host must share the throttle
+        // cadence: back-to-back `throttle()` calls in production code must
+        // wait ~HTTP_THROTTLE_DELAY_MS between them.
+        //
+        // This test exercises `MCPHttpHandle::throttle()` directly (per the
+        // project TDD rule "tests must exercise real production code") so a
+        // regression in the locking, the host-key derivation, or the elapsed
+        // arithmetic is caught here instead of slipping through.
+        let mut config_a = create_test_http_config();
+        config_a.id = "throttle-prod-a".to_string();
+        config_a.args = vec!["https://throttle-prod-test.invalid/mcp".to_string()];
+        let mut config_b = config_a.clone();
+        config_b.id = "throttle-prod-b".to_string();
+
+        // `auth_type=None` keeps `connect()` off the keychain, so this
+        // works in headless CI without OS keyring access. No network is
+        // touched until `initialize()`, which we don't call.
+        let handle_a = MCPHttpHandle::connect(config_a).await.unwrap();
+        let handle_b = MCPHttpHandle::connect(config_b).await.unwrap();
+
+        // Both handles must derive the same host key.
+        assert_eq!(handle_a.host, handle_b.host);
+        assert!(!handle_a.host.is_empty());
+
+        // Reset the shared cadence so the first throttle() doesn't wait
+        // (otherwise a prior test on this host could leave a fresh stamp).
+        let throttle = get_host_throttle(&handle_a.host)
+            .await
+            .expect("non-loopback host registers a throttle");
+        {
+            let mut t = throttle.lock().await;
+            *t = Instant::now() - Duration::from_millis(HTTP_THROTTLE_DELAY_MS);
+        }
+
+        let start = Instant::now();
+        handle_a.throttle().await; // First call: cadence is stale, no wait.
+        handle_b.throttle().await; // Second call: must wait ~HTTP_THROTTLE_DELAY_MS.
+        let total = start.elapsed();
+
+        assert!(
+            total >= Duration::from_millis(HTTP_THROTTLE_DELAY_MS - 50),
+            "back-to-back throttle() on the same host must respect cadence (got {:?})",
+            total
+        );
     }
 
     // HTTP warning integration tests

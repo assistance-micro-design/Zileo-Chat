@@ -1,6 +1,6 @@
 # API Reference - Tauri Commands
 
-> Technical reference for Frontend-Backend IPC communication. **138 commands** across 23 modules.
+> Technical reference for Frontend-Backend IPC communication. **139 commands** across 23 modules.
 
 ## IPC Architecture
 

@@ -6,7 +6,7 @@
 
 | Item | Value |
 |------|-------|
-| **Version** | 0.18.0 |
+| **Version** | 0.21.0 |
 | **Strategy** | Linux + macOS + Windows (parallel via GitHub Actions) |
 | **Formats** | AppImage, .deb (Linux), .dmg (macOS), .msi (Windows) |
 | **CI/CD** | GitHub Actions (`.github/workflows/`) |

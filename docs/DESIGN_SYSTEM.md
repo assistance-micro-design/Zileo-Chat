@@ -473,7 +473,7 @@ Components are organized in `src/lib/components/`:
 
 | Directory | Contents |
 |-----------|----------|
-| `ui/` | 19 atomic components (Button, Card, Modal, Badge, Input, Select, etc.) |
+| `ui/` | 20 atomic components (Button, Card, Modal, Badge, Input, Select, etc.) |
 | `layout/` | AppContainer, FloatingMenu, Sidebar |
 | `navigation/` | NavItem |
 
