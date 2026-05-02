@@ -173,7 +173,7 @@ pub enum MCPError {
         /// Server name
         server: String,
         /// Cooldown in seconds, parsed from the HTTP `Retry-After` header
-        /// (or the o2switch HTML `<meta name="retry-after">` fallback).
+        /// (or an HTML `<meta name="retry-after">` fallback some WAFs emit).
         /// `None` when the upstream did not advertise one.
         retry_after_secs: Option<u64>,
     },

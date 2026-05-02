@@ -56,11 +56,11 @@ const DEFAULT_HTTP_TIMEOUT_MS: u64 = 30000;
 
 /// Minimum delay between consecutive HTTP requests to the same host (ms).
 ///
-/// Prevents rate-limiting on shared hosting (o2switch Tiger Protect ≥ 3 req/s
-/// on a 1 s sliding window). At 500 ms the burst centred on the 1 s mark
-/// contains 3 requests (initialize + notif/initialized + tools/list) which
-/// is exactly the trip threshold. 700 ms keeps every 1 s window at ≤ 2
-/// requests, with margin for clock skew and TLS jitter.
+/// Prevents rate-limiting on shared-hosting WAFs that ban-throttle around
+/// 3 req/s on a 1 s sliding window. At 500 ms the burst centred on the 1 s
+/// mark contains 3 requests (initialize + notif/initialized + tools/list)
+/// which is exactly the trip threshold. 700 ms keeps every 1 s window at
+/// ≤ 2 requests, with margin for clock skew and TLS jitter.
 const HTTP_THROTTLE_DELAY_MS: u64 = 700;
 
 /// Per-host throttle state, shared across every `MCPHttpHandle` that targets
@@ -1079,8 +1079,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_retry_after_o2switch_real_payload() {
-        // Trimmed snapshot of the actual TigerProtect 429 page the user hit.
+    fn test_parse_retry_after_meta_fallback_real_payload() {
+        // Trimmed snapshot of a real shared-hosting WAF 429 page that emits
+        // the cooldown only via <meta>, not via the Retry-After header.
         let body = r#"<!DOCTYPE HTML>
 <html lang="en-US">
 <head>
