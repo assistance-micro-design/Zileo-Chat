@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_llm_response_deserializes_legacy_payload_without_cache_fields() {
-        // A persisted payload from before Phase 1 lacks the new optional fields.
+        // A legacy persisted payload lacks the new optional fields.
         // serde(default) must produce None for all of them.
         let legacy_json = r#"{
             "content": "ok",

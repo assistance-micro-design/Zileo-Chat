@@ -125,7 +125,7 @@ export const tokenStore = {
 			subAgent: {
 				input: workflow.sub_agent_tokens_input ?? 0,
 				output: workflow.sub_agent_tokens_output ?? 0,
-				// Phase 6: read sub-agent cost computed by backend with each sub-agent's
+				// Read sub-agent cost computed by backend with each sub-agent's
 				// own pricing. Falls back to 0 on legacy rows that predate the column.
 				costUsd: workflow.sub_agent_cost_usd ?? 0
 			},
@@ -136,7 +136,7 @@ export const tokenStore = {
 	/**
 	 * Restore the session display from the last assistant message of a workflow.
 	 *
-	 * Called by Phase 13's `selectWorkflow` when switching to a workflow that
+	 * Called by `selectWorkflow` when switching to a workflow that
 	 * has no live execution running, so the UI shows "what the last run cost"
 	 * rather than blank zeros (which would look like a free / fresh session).
 	 *
@@ -275,8 +275,8 @@ export const tokenStore = {
 	 * This method mirrors that running total to the visible `sessionCost` and
 	 * marks it as still-progressing so the UI can render a `~` prefix.
 	 *
-	 * Phase 7 invariant preserved: the value comes 100% from the backend; the
-	 * frontend just stores it.
+	 * Backend-as-source-of-truth invariant preserved: the value comes 100%
+	 * from the backend; the frontend just stores it.
 	 */
 	setPartialSessionCost(costUsd: number | null): void {
 		store.update((s) => ({
@@ -301,8 +301,8 @@ export const tokenStore = {
  * Combines streaming and cumulative metrics with cost calculations.
  */
 export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
-	// Phase 7: the frontend NEVER multiplies tokens × price. The backend is the
-	// single source of truth for cost. When no session cost has been provided,
+	// The frontend NEVER multiplies tokens × price. The backend is the single
+	// source of truth for cost. When no session cost has been provided,
 	// we fall back to the workflow's cumulative cost (so a freshly opened
 	// workflow doesn't show a blank); during a live session we wait for the
 	// backend value rather than inventing one.
@@ -316,7 +316,7 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		? $s.sessionCost
 		: $s.cumulative.cost;
 
-	// Phase 6: sub-agent cost comes from the workflow row, not a per-call
+	// Sub-agent cost comes from the workflow row, not a per-call
 	// approximation with the parent's pricing.
 	const subAgentCost = $s.subAgent.costUsd;
 

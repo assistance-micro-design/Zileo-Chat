@@ -533,7 +533,7 @@ mod tests {
         assert_eq!(body.messages, params.messages);
     }
 
-    // Phase 2: parse_mistral_chat_response — exact tokens from API.
+    // parse_mistral_chat_response — exact tokens from API.
 
     #[test]
     fn parse_response_uses_real_tokens_from_usage() {

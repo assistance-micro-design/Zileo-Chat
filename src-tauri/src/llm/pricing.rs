@@ -209,7 +209,6 @@ pub async fn compute_sub_agent_cost(
         0.0
     };
 
-    let _ = pricing; // model_id intentionally not surfaced (see SubAgentCost docs)
     Some(SubAgentCost {
         cost_usd: resolve_cost(usage.provider_cost_usd, local_cost),
     })

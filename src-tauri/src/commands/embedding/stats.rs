@@ -106,7 +106,7 @@ pub async fn get_memory_token_stats(
 ) -> Result<MemoryTokenStats, String> {
     info!(type_filter = ?type_filter, "Getting memory token statistics");
 
-    // Phase 10: aggregate the actual word counts (via SurrealDB
+    // Aggregate the actual word counts (via SurrealDB
     // `array::len(string::words(...))`) so per-category token estimates use
     // the same `words × 1.5` heuristic as `crate::llm::utils::estimate_tokens`,
     // not the looser `chars / 4` approximation we used before.

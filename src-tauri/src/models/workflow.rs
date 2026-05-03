@@ -220,12 +220,12 @@ pub struct WorkflowMetrics {
     /// Provider-reported cost (e.g. OpenRouter `usage.cost`) when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_cost_usd: Option<f64>,
-    /// `llm_model.id` of the model that produced this response. Used by Phase
-    /// 13 to look up the exact pricing used at execution time.
+    /// `llm_model.id` of the model that produced this response. Used to look
+    /// up the exact pricing used at execution time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_id_used: Option<String>,
-    /// Outcome of the pricing lookup (Phase 8). Lets the frontend distinguish
-    /// "free" from "pricing missing".
+    /// Outcome of the pricing lookup. Lets the frontend distinguish "free"
+    /// from "pricing missing".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing_status: Option<String>,
     /// Per-iteration token breakdown (one entry per LLM API call)

@@ -41,7 +41,7 @@ DEFINE FIELD OVERWRITE sub_agent_tokens_input ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE sub_agent_tokens_output ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE total_cached_tokens ON workflow TYPE option<int> DEFAULT 0;
 DEFINE FIELD OVERWRITE total_cache_write_tokens ON workflow TYPE option<int> DEFAULT 0;
--- Phase 6: cumulative sub-agent cost (computed per sub-agent with its own pricing).
+-- Cumulative sub-agent cost (computed per sub-agent with its own pricing).
 DEFINE FIELD OVERWRITE sub_agent_cost_usd ON workflow TYPE float DEFAULT 0.0;
 
 -- Table: message
@@ -61,8 +61,8 @@ DEFINE FIELD OVERWRITE duration_ms ON message TYPE option<int>;
 DEFINE FIELD OVERWRITE thinking_tokens ON message TYPE option<int> DEFAULT NONE;
 DEFINE FIELD OVERWRITE cached_tokens ON message TYPE option<int> DEFAULT NONE;
 DEFINE FIELD OVERWRITE cache_write_tokens ON message TYPE option<int> DEFAULT NONE;
--- model_id_used: persist the exact model that produced this response so cross-workflow
--- pricing restoration (Phase 13) survives agent reconfiguration.
+-- model_id_used: persist the exact model that produced this response so
+-- cross-workflow pricing restoration survives agent reconfiguration.
 DEFINE FIELD OVERWRITE model_id_used ON message TYPE option<string> DEFAULT NONE;
 DEFINE FIELD OVERWRITE timestamp ON message TYPE datetime DEFAULT time::now();
 
@@ -405,8 +405,8 @@ DEFINE FIELD OVERWRITE status ON sub_agent_execution TYPE string
 DEFINE FIELD OVERWRITE duration_ms ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE tokens_input ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE tokens_output ON sub_agent_execution TYPE option<int>;
--- Phase 6: per-sub-agent cost computed with the sub-agent's OWN pricing,
--- not the parent's. Aggregated into workflow.sub_agent_cost_usd.
+-- Per-sub-agent cost computed with the sub-agent's OWN pricing, not the
+-- parent's. Aggregated into workflow.sub_agent_cost_usd.
 DEFINE FIELD OVERWRITE cost_usd ON sub_agent_execution TYPE option<float>;
 DEFINE FIELD OVERWRITE cached_tokens ON sub_agent_execution TYPE option<int>;
 DEFINE FIELD OVERWRITE cache_write_tokens ON sub_agent_execution TYPE option<int>;

@@ -115,8 +115,8 @@ pub async fn save_message(
 
     // Build MessageCreate payload.
     //
-    // Phase 12: legacy `tokens` field stores the sum input + output rather than
-    // just output, so old consumers that read it get a more meaningful number
+    // Legacy `tokens` field stores the sum input + output rather than just
+    // output, so old consumers that read it get a more meaningful number
     // (a non-zero count even on user messages). Prefer `tokens_input` /
     // `tokens_output` for new code; the field is kept for back-compat.
     let legacy_tokens = (tokens_input.unwrap_or(0) + tokens_output.unwrap_or(0)) as usize;
@@ -172,8 +172,8 @@ pub async fn load_workflow_messages(
     // serialization issues with internal Thing type (see CLAUDE.md)
     // ORDER BY timestamp ASC for chronological order.
     //
-    // Phase 11: bind workflow_id as a parameter for defence-in-depth (UUID is
-    // already validated, but parameterised queries keep the SQL static).
+    // Bind workflow_id as a parameter for defence-in-depth (UUID is already
+    // validated, but parameterised queries keep the SQL static).
     let query = r#"SELECT
             meta::id(id) AS id,
             workflow_id,
@@ -253,7 +253,7 @@ pub async fn load_workflow_messages_paginated(
     let limit = limit.unwrap_or(50).min(200); // Cap at 200 max
     let offset = offset.unwrap_or(0);
 
-    // Get total count (Phase 11: bind workflow_id).
+    // Get total count (bind workflow_id).
     let count_query = "SELECT count() FROM message WHERE workflow_id = $wf_id GROUP ALL";
     let count_result: Vec<serde_json::Value> = state
         .db
@@ -385,7 +385,7 @@ pub async fn clear_workflow_messages(
 
     let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
-    // First count existing messages (Phase 11: bind workflow_id).
+    // First count existing messages (bind workflow_id).
     let count_query = "SELECT count() FROM message WHERE workflow_id = $wf_id GROUP ALL";
     let count_result: Vec<serde_json::Value> = state
         .db
@@ -401,7 +401,7 @@ pub async fn clear_workflow_messages(
 
     let count = extract_count(&count_result);
 
-    // Delete all messages for the workflow (Phase 11: bind workflow_id).
+    // Delete all messages for the workflow (bind workflow_id).
     state
         .db
         .execute_with_params(
@@ -423,10 +423,10 @@ pub async fn clear_workflow_messages(
 
 /// Returns lightweight metrics from the most recent assistant message of a workflow.
 ///
-/// Phase 13: when the user switches to a workflow that is not currently
-/// streaming, the frontend calls this to restore the session display from the
-/// last persisted assistant message — so the user sees "what the last run
-/// cost" instead of blank zeros.
+/// When the user switches to a workflow that is not currently streaming, the
+/// frontend calls this to restore the session display from the last persisted
+/// assistant message — so the user sees "what the last run cost" instead of
+/// blank zeros.
 ///
 /// # Returns
 /// `Some(MessageMetrics)` if the workflow has at least one assistant message,

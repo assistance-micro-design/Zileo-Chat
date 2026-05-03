@@ -253,9 +253,9 @@ impl SubAgentExecutor {
                     reasoning_steps = report.metrics.reasoning_steps.len(),
                     "Sub-agent execution completed successfully (with heartbeat monitoring)"
                 );
-                // Phase 6: compute cost using THIS sub-agent's pricing.
-                // Falls back to None when the sub-agent isn't registered or
-                // its model has no pricing row.
+                // Compute cost using THIS sub-agent's pricing. Falls back to
+                // None when the sub-agent isn't registered or its model has
+                // no pricing row.
                 let cost = crate::llm::pricing::compute_sub_agent_cost(
                     &self.db,
                     self.orchestrator.registry(),

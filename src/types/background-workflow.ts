@@ -66,8 +66,8 @@ export interface WorkflowStreamState {
 	tokensReceived: number;
 	/**
 	 * Cumulative input/prompt tokens reported by `response_block` chunks.
-	 * Phase 13: kept on the bg execution itself so switching back to a still-
-	 * running workflow restores the FULL session display, not just outputs.
+	 * Kept on the bg execution itself so switching back to a still-running
+	 * workflow restores the FULL session display, not just outputs.
 	 */
 	tokensSent: number;
 	/**
@@ -83,7 +83,7 @@ export interface WorkflowStreamState {
 	/**
 	 * Sum of `cost_usd` carried by every `response_block` chunk. `null` until
 	 * the first chunk with a cost lands. Computed by the backend pricing
-	 * layer; the frontend only stores the running total. Phase 13 + Option A.
+	 * layer; the frontend only stores the running total.
 	 */
 	partialCostUsd: number | null;
 	/** Error message if status is 'error' */

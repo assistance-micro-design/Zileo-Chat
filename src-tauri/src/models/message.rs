@@ -142,9 +142,9 @@ pub struct MessageCreate {
 
 /// Lightweight metrics from the most recent assistant message of a workflow.
 ///
-/// Used by the frontend (Phase 13) to restore the session display when the
-/// user switches to a workflow that has no live execution running. Lets the UI
-/// show "what the last run cost" rather than blank zeros.
+/// Used by the frontend to restore the session display when the user switches
+/// to a workflow that has no live execution running. Lets the UI show
+/// "what the last run cost" rather than blank zeros.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageMetrics {
     pub tokens_input: Option<u64>,

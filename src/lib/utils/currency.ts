@@ -47,7 +47,7 @@ export function formatCost(usd: number, freeLabel: string = DEFAULT_FREE_LABEL):
 
 /**
  * Formats an optional cost. When `null`/`undefined` (backend has not yet
- * provided a cost), returns the placeholder used by Phase 7 metrics surfaces.
+ * provided a cost), returns the placeholder used by metrics surfaces.
  *
  * The placeholder is a literal `—` (em-dash) so it doesn't compete visually
  * with real numeric values, and it doesn't say "Free" — the absence of cost

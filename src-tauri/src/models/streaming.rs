@@ -146,7 +146,7 @@ pub struct StreamChunk {
     /// (`load_model_pricing_info` -> `resolve_cost`). Carried in `response_block`
     /// so a switched-away workflow can accumulate `partialCostUsd` on its
     /// background execution without the frontend ever multiplying tokens by
-    /// prices itself (Phase 7 invariant).
+    /// prices itself (backend-as-source-of-truth invariant).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost_usd: Option<f64>,
     /// 1-based iteration index for `iteration_progress` chunks emitted from
@@ -409,7 +409,7 @@ impl StreamChunk {
     /// in the tool loop. Carries CUMULATIVE tokens (sum across iterations
     /// so far) and the cumulative cost computed by the backend pricing
     /// layer — the frontend mirrors them straight onto the metrics bar
-    /// without inventing any number itself (Phase 7 invariant).
+    /// without inventing any number itself (backend-as-source-of-truth invariant).
     #[allow(clippy::too_many_arguments)]
     pub fn iteration_progress(
         workflow_id: impl Into<String>,
@@ -436,7 +436,7 @@ impl StreamChunk {
     /// Replaces progressive token streaming with a single complete response.
     /// `cost_usd` is the per-iteration cost computed by the backend pricing
     /// layer; when present it lets background executions accumulate a real
-    /// in-progress cost (Phase 13 follow-up) without the frontend ever
+    /// in-progress cost without the frontend ever
     /// multiplying tokens × prices itself.
     #[allow(clippy::too_many_arguments)]
     pub fn response_block(
@@ -971,7 +971,7 @@ mod tests {
         let json = serde_json::to_string(&chunk).unwrap();
         // Backend-computed cost MUST round-trip through the wire so the
         // frontend can accumulate it on the bg execution without inventing
-        // any value (Phase 7 invariant).
+        // any value (backend-as-source-of-truth invariant).
         assert!(
             json.contains("\"cost_usd\":0.0123"),
             "cost_usd must serialize when Some, got: {}",

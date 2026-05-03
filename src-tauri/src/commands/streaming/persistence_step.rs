@@ -175,7 +175,7 @@ pub async fn finalize_completion(
     // 3. Resolve pricing BEFORE emitting the response_block so the chunk can
     //    carry the per-iteration cost. This lets a backgrounded workflow
     //    accumulate `partialCostUsd` on its bg execution without the frontend
-    //    inventing any number (Phase 7 invariant preserved).
+    //    inventing any number (backend-as-source-of-truth invariant).
     let pricing = load_model_pricing_info(
         state,
         agent_id,

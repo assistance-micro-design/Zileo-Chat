@@ -142,7 +142,7 @@ export interface StreamingState {
 	completed: boolean;
 	/** Total output tokens received */
 	tokensReceived: number;
-	/** Total input tokens reported by response_block chunks (Phase 13) */
+	/** Total input tokens reported by response_block chunks */
 	tokensSent: number;
 	/** Cached input tokens reported by the latest response_block chunk */
 	cachedTokens: number | null;
@@ -283,9 +283,9 @@ export const streamingStore = {
 	 * Restore streaming state from a background workflow execution.
 	 * Used when switching to view a running background workflow.
 	 *
-	 * Phase 13: hydrates `tokensSent`, `cachedTokens` and `cacheWriteTokens`
-	 * from the bg state so the session display reflects what the running
-	 * workflow has actually consumed (not just the output count).
+	 * Hydrates `tokensSent`, `cachedTokens` and `cacheWriteTokens` from the
+	 * bg state so the session display reflects what the running workflow has
+	 * actually consumed (not just the output count).
 	 *
 	 * @param bgState - The background workflow state to restore from
 	 */

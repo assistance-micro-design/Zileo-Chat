@@ -31,8 +31,8 @@ pub struct ModelPricingInfo {
     pub status: PricingStatus,
 }
 
-/// Outcome of the pricing lookup. Phase 8 surfaces this to the frontend so
-/// "free" can be distinguished from "pricing missing".
+/// Outcome of the pricing lookup. Surfaced to the frontend so "free" can be
+/// distinguished from "pricing missing".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PricingStatus {

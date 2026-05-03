@@ -91,7 +91,7 @@
 		return count.toLocaleString();
 	}
 
-	// formatCost is imported from $lib/utils/currency (Phase 9 — single source).
+	// formatCost is imported from $lib/utils/currency (single source of truth).
 
 	/**
 	 * Format speed in tokens per second

@@ -329,8 +329,8 @@ describe('applyChunkToState', () => {
 			expect(result.tokensReceived).toBe(50);
 		});
 
-		// Phase 13: persist input/cache tokens on the bg execution itself so a
-		// switch back to a still-running workflow restores the FULL session.
+		// Persist input/cache tokens on the bg execution itself so a switch
+		// back to a still-running workflow restores the FULL session.
 		it('should persist tokensSent from response_block input tokens', () => {
 			const result = applyChunkToState(state, makeChunk({
 				chunk_type: 'response_block',

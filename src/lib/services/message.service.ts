@@ -205,8 +205,8 @@ export const MessageService = {
 
 	/**
 	 * Returns lightweight metrics from the most recent assistant message of a
-	 * workflow (Phase 13). `null` when the workflow has no assistant message
-	 * yet, or when the call fails (caller falls back to a blank session).
+	 * workflow. `null` when the workflow has no assistant message yet, or when
+	 * the call fails (caller falls back to a blank session).
 	 */
 	async getLastAssistantMetrics(workflowId: string): Promise<MessageMetrics | null> {
 		try {
