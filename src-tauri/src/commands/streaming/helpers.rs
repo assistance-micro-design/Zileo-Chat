@@ -339,7 +339,7 @@ mod tests {
                 workflow_id = $wf_id, \
                 role = 'user', \
                 content = 'malformed row', \
-                tokens = NULL, \
+                tokens = -1, \
                 timestamp = time::now()"
         );
 
