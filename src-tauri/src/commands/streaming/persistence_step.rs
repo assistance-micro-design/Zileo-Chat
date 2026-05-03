@@ -302,6 +302,7 @@ pub async fn finalize_completion(
             model: pricing.model,
             cached_tokens: report.metrics.cached_tokens,
             cache_write_tokens: report.metrics.cache_write_tokens,
+            model_id_used: Some(pricing.model_id.clone()),
             thinking_tokens: report.metrics.thinking_tokens,
             provider_cost_usd: report.metrics.provider_cost_usd,
             model_id_used: Some(pricing.model_id.clone()),

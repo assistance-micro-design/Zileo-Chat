@@ -105,14 +105,15 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    let (task, task_id) = match build_task(&state, &workflow_id, &message, &locale, &message_id).await {
-        Ok(task) => task,
-        Err(err) => {
-            emit_error(&window, &workflow_id, &err);
-            state.clear_cancellation(&workflow_id).await;
-            return Err(err);
-        }
-    };
+    let (task, task_id) =
+        match build_task(&state, &workflow_id, &message, &locale, &message_id).await {
+            Ok(task) => task,
+            Err(err) => {
+                emit_error(&window, &workflow_id, &err);
+                state.clear_cancellation(&workflow_id).await;
+                return Err(err);
+            }
+        };
 
     // Look up the orchestrator's display name for the spinner (M4 audit
     // 2026-05-02). Falls back to agent_id inside `run_orchestrator_with_cancel`

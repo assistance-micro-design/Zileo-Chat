@@ -214,6 +214,9 @@ pub struct WorkflowMetrics {
     /// Cache-write tokens for this execution (if provider supports caching)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_write_tokens: Option<usize>,
+    /// ID of the model record used for pricing (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id_used: Option<String>,
     /// Thinking/reasoning tokens for this execution (if reasoning model)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_tokens: Option<usize>,
@@ -371,6 +374,7 @@ mod tests {
                 model: "mistral-large".to_string(),
                 cached_tokens: None,
                 cache_write_tokens: None,
+                model_id_used: None,
                 thinking_tokens: None,
                 provider_cost_usd: None,
                 model_id_used: None,
@@ -403,6 +407,7 @@ mod tests {
             model: "llama3".to_string(),
             cached_tokens: None,
             cache_write_tokens: None,
+            model_id_used: None,
             thinking_tokens: None,
             provider_cost_usd: None,
             model_id_used: None,

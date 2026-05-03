@@ -227,7 +227,10 @@ impl MCPManager {
         };
 
         // Stop if running (by ID)
-        self.stop_server(id).await?;
+        match self.stop_server(id).await {
+            Ok(()) | Err(MCPError::ServerNotFound { .. }) => {}
+            Err(err) => return Err(err),
+        }
 
         // Spawn again (this will create fresh circuit breaker and id_to_name entry)
         self.spawn_server_internal(config).await

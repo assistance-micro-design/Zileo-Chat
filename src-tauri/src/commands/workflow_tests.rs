@@ -119,6 +119,7 @@ async fn test_workflow_result_structure() {
             model: "test-model".to_string(),
             cached_tokens: None,
             cache_write_tokens: None,
+            model_id_used: None,
             thinking_tokens: None,
             provider_cost_usd: None,
             model_id_used: None,
