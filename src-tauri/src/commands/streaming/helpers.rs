@@ -255,7 +255,9 @@ mod tests {
         let (state, _db_guard) = setup_test_state().await;
         let workflow_id = uuid::Uuid::new_v4().to_string();
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "en").await.unwrap();
+        let (context, count) = load_conversation_history(&state, &workflow_id, "en")
+            .await
+            .unwrap();
 
         assert_eq!(count, 0, "No messages → count should be 0");
         assert!(
@@ -275,7 +277,9 @@ mod tests {
         insert_message(&state, &workflow_id, "user", "Mon nom est Bob", 0).await;
         insert_message(&state, &workflow_id, "assistant", "Enchante Bob", 1).await;
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await.unwrap();
+        let (context, count) = load_conversation_history(&state, &workflow_id, "fr")
+            .await
+            .unwrap();
 
         assert_eq!(count, 2, "Should load 2 messages (user + assistant)");
         let messages = context
@@ -302,7 +306,9 @@ mod tests {
         insert_message(&state, &workflow_id, "system", "Error: provider offline", 2).await;
         insert_message(&state, &workflow_id, "user", "Deuxieme tour", 3).await;
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await.unwrap();
+        let (context, count) = load_conversation_history(&state, &workflow_id, "fr")
+            .await
+            .unwrap();
 
         assert_eq!(
             count, 3,
@@ -367,7 +373,9 @@ mod tests {
         insert_message(&state, &workflow_id, "user", "msg-3", 2).await;
         insert_message(&state, &workflow_id, "assistant", "msg-4", 3).await;
 
-        let (context, _count) = load_conversation_history(&state, &workflow_id, "en").await.unwrap();
+        let (context, _count) = load_conversation_history(&state, &workflow_id, "en")
+            .await
+            .unwrap();
         let messages = context
             .get("conversation_messages")
             .and_then(|v| v.as_array())
@@ -389,11 +397,15 @@ mod tests {
         insert_message(&state, &workflow_a, "user", "from A", 0).await;
         insert_message(&state, &workflow_b, "user", "from B", 0).await;
 
-        let (context_a, count_a) = load_conversation_history(&state, &workflow_a, "en").await.unwrap();
+        let (context_a, count_a) = load_conversation_history(&state, &workflow_a, "en")
+            .await
+            .unwrap();
         assert_eq!(count_a, 1);
         assert_eq!(context_a["conversation_messages"][0]["content"], "from A");
 
-        let (context_b, count_b) = load_conversation_history(&state, &workflow_b, "en").await.unwrap();
+        let (context_b, count_b) = load_conversation_history(&state, &workflow_b, "en")
+            .await
+            .unwrap();
         assert_eq!(count_b, 1);
         assert_eq!(context_b["conversation_messages"][0]["content"], "from B");
     }

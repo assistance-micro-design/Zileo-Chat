@@ -27,10 +27,10 @@ use tauri::{State, Window};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
+use super::helpers::emit_error;
 use super::orchestrator_bridge::{
     build_task, load_workflow, run_orchestrator_with_cancel, BridgeOutcome,
 };
-use super::helpers::emit_error;
 use super::persistence_step::{finalize_completion, persist_initial_reasoning, CompletionContext};
 use super::validator::{validate_inputs, ValidatedInputs};
 
