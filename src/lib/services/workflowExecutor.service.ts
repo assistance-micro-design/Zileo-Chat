@@ -134,7 +134,9 @@ function createAssistantMessage(workflowId: string, result: WorkflowResult): Mes
 		tokens_output: result.metrics.tokens_output,
 		model: result.metrics.model,
 		provider: result.metrics.provider,
+		cost_usd: result.metrics.cost_usd,
 		duration_ms: result.metrics.duration_ms,
+		thinking_tokens: result.metrics.thinking_tokens,
 		timestamp: new Date()
 	};
 }

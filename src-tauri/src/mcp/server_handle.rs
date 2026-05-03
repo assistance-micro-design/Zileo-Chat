@@ -159,6 +159,35 @@ impl MCPServerHandle {
                 message: "Failed to capture stdout".to_string(),
             })?;
 
+        if let Some(stderr) = child.stderr.take() {
+            let server_id = config.id.clone();
+            let server_name = config.name.clone();
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            warn!(
+                                server_id = %server_id,
+                                server_name = %server_name,
+                                stderr = %line,
+                                "MCP server stderr"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                server_id = %server_id,
+                                server_name = %server_name,
+                                error = %e,
+                                "Failed to read MCP server stderr"
+                            );
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
         info!(
             server_id = %config.id,
             pid = ?child.id(),

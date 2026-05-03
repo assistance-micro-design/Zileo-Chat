@@ -167,7 +167,13 @@ impl MCPManager {
                 })?
         };
 
-        // Cleanup lookup table and circuit breaker
+        if let Err(err) = client.disconnect().await {
+            let mut clients = self.clients.write().await;
+            clients.insert(name.clone(), client);
+            return Err(err);
+        }
+
+        // Cleanup lookup table and circuit breaker after confirmed disconnect
         {
             let mut id_lookup = self.id_to_name.write().await;
             id_lookup.remove(id);
@@ -176,8 +182,6 @@ impl MCPManager {
             let mut breakers = self.circuit_breakers.write().await;
             breakers.remove(&name);
         }
-
-        client.disconnect().await?;
 
         info!(server_id = %id, server_name = %name, "MCP server stopped");
 
@@ -223,7 +227,7 @@ impl MCPManager {
         };
 
         // Stop if running (by ID)
-        let _ = self.stop_server(id).await;
+        self.stop_server(id).await?;
 
         // Spawn again (this will create fresh circuit breaker and id_to_name entry)
         self.spawn_server_internal(config).await

@@ -181,12 +181,14 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Load workflow data (messages and persisted blocks).
 	 */
-	async function loadWorkflowData(workflowId: string): Promise<void> {
+	async function loadWorkflowData(workflowId: string): Promise<boolean> {
+		const isStillViewed = () => backgroundWorkflowsStore.getViewedWorkflowId() === workflowId;
 		pageState.messagesLoading = true;
 
 		try {
 			// Load messages
 			const result = await MessageService.loadWithSubAgents(workflowId);
+			if (!isStillViewed()) return false;
 			messages = result.messages;
 			if (result.error) {
 				toastStore.add({
@@ -202,10 +204,12 @@ Uses extracted components, services, and stores for clean architecture.
 			messageBlocks.clear();
 			try {
 				const blocks = await BlockService.loadForMessages(result.messages);
+				if (!isStillViewed()) return false;
 				for (const [id, b] of blocks) {
 					messageBlocks.set(id, b);
 				}
 			} catch {
+				if (!isStillViewed()) return false;
 				// Already cleared above
 			}
 
@@ -213,12 +217,18 @@ Uses extracted components, services, and stores for clean architecture.
 			persistedTasks = [];
 			try {
 				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
+				if (!isStillViewed()) return false;
 				persistedTasks = mapPersistedTasks(tasks);
 			} catch {
+				if (!isStillViewed()) return false;
 				// Tasks are optional; silently continue if loading fails
 			}
+
+			return true;
 		} finally {
-			pageState.messagesLoading = false;
+			if (isStillViewed()) {
+				pageState.messagesLoading = false;
+			}
 		}
 	}
 
@@ -253,7 +263,8 @@ Uses extracted components, services, and stores for clean architecture.
 		backgroundWorkflowsStore.setViewed(workflowId);
 
 		// Load workflow data (messages and historical activities)
-		await loadWorkflowData(workflowId);
+		const dataLoaded = await loadWorkflowData(workflowId);
+		if (!dataLoaded) return;
 
 		// Update token store with workflow cumulative metrics
 		const workflow = workflowStore.getSelected();
@@ -264,9 +275,11 @@ Uses extracted components, services, and stores for clean architecture.
 		// Fetch the metrics of the last assistant message so the session
 		// display reflects "what the last run cost" rather than zeros.
 		const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
+		if (backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
 
 		// Check if this workflow is running in the background
 		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
+		if (backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
 		if (bgExecution && bgExecution.status === 'running') {
 			// Restore streaming state from background execution
 			streamingStore.restoreFrom(bgExecution);
@@ -547,13 +560,13 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Initialize component on mount.
 	 */
 	onMount(async () => {
-		// Load workflows, folders, and agents
-		await workflowStore.loadWorkflows();
-		await folderStore.loadFolders();
-		await agentStore.loadAgents();
-
-		// Load validation settings (needed for concurrent workflow limits)
-		await validationSettingsStore.loadSettings().catch(() => {});
+		// Load workflows, folders, agents, and validation settings
+		await Promise.all([
+			workflowStore.loadWorkflows(),
+			folderStore.loadFolders(),
+			agentStore.loadAgents(),
+			validationSettingsStore.loadSettings().catch(() => {})
+		]);
 
 		// Initialize background workflows store (owns event listeners)
 		await backgroundWorkflowsStore.init();
