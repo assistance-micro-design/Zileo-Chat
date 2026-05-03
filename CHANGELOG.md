@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.22.0] - 2026-05-02
+
+### Added
+
+- **Live workflow metrics during streaming**: New `ChunkType::IterationProgress` is emitted from the tool loop after every LLM call (cumulative tokens + per-iteration cost). The metrics bar now updates ENTREE/SORTIE, contexte and t/s on each iteration instead of staying frozen at 0 until completion. `TokenDisplay` shows a `~` prefix and pulse animation while a partial cost is still progressing
+- **Per-iteration provider cost**: `StreamChunk.cost_usd` is resolved by `persistence_step` before emitting `response_block`, so the chunk carries the per-iteration cost. Frontend accumulates it via `tokenStore.setPartialSessionCost` + a `sessionCostInProgress` flag; `BackgroundExecution` carries `partialCostUsd` so a switch back to a still-running workflow restores the in-progress cost
+- **Sub-agent self-cost**: Sub-agents persist their own cost (computed with their own pricing, not the parent's) into `sub_agent_execution.cost_usd`; `aggregate_sub_agent_metrics` sums it into `workflow.sub_agent_cost_usd`. `compute_sub_agent_cost` covered by unit tests
+- **`PricingStatus` enum**: Surfaces "free" vs "pricing missing" instead of a binary present/absent. Frontend renders a "pricing inconnu" badge for missing pricing rather than the misleading "Free"
+- **`formatCost` utility (`$lib/utils/currency.ts`)**: Single source of truth for cost formatting (USD, em-dash placeholder when null) with full Vitest coverage
+- **`resolveOrchestratorLabel` helper**: Resolves the agent's display name for the orchestrator spinner with a graceful fallback to `agent_id` when the name is missing or blank
+- **Bounded chunk-history buffer for background workflows**: `WorkflowStreamState.chunkHistory` (FIFO, `MAX_CHUNK_HISTORY = 1000`) records every incoming streaming chunk. Pairs with the new `executionBlocksStore.restoreFromChunks(workflowId, chunks)` to rebuild the timeline when the user reattaches to a still-running workflow
+- **Migration `token_cost_accuracy_v1`**: Backfills `sub_agent_cost_usd`, `total_cached_tokens` and `total_cache_write_tokens` on legacy `workflow` rows. Auto-runs at boot, idempotent via `migration_log`
+
+### Changed
+
+- **LLM provider response shape**: `LLMResponse` now exposes `cached_tokens`, `cache_write_tokens` and `provider_cost_usd` across Mistral, OpenAI-compatible and Ollama adapters
+- **Mistral standard path tokens**: Reads from rig-core's `GetTokenUsage` instead of word-count estimates; Magistral content-block array fully handled
+- **`pricing` module**: Extracted to `llm/pricing.rs` with `compute_sub_agent_cost` + `resolve_cost`; the streaming `pricing` step now drives both the resolved cost and `pricing_status`
+- **`execute_simple` wiring**: Cache + provider_cost_usd flow into `ReportMetrics` so the pricing layer sees the same data the tool-loop already had
+- **Embedding stats**: Use real `prompt_tokens` from the embedding response instead of estimates
+- **`BackgroundExecution` carries token state**: `tokensSent`, `cachedTokens`, `cacheWriteTokens`, `partialCostUsd` so reattaching to a running workflow restores the full token panel (not only the output count)
+- **`selectWorkflow`**: Restores the full session display from the last assistant message (`model_id_used` + tokens + cost) so a workflow that hasn't run today no longer shows blank zeros
+- **Sub-agent `parent_message_id` set at CREATE time**: `SubAgentExecutionCreate` now persists `parent_message_id` per sub-agent (via `with_parent_message`), threading it through `AgentToolContext.current_message_id` and the spawn / delegate / parallel tools. Replaces the previous bulk `UPDATE WHERE parent_message_id IS NONE` patch in `persistence_step.rs` which incorrectly attached every orphan sub-agent to the same primary message. Spawning agents put a fresh UUID in their sub-agent's `task.context["message_id"]` so chains (B→C, defensive) attribute correctly
+- **`migration_log` queries use parameter binding**: `check_migration_applied` and `record_migration_applied` switch from `format!()` interpolation to `query_json_with_params` / `execute_with_params` with `$name` binding. Defence-in-depth aligning with the SA-001 / ERR_SEC_001 cleanup; locked in by a new test that round-trips a migration name containing an apostrophe
+
+### Fixed
+
+- **`ERR_SURREAL_005` in `get_workflow_last_assistant_message_metrics`**: The query used `ORDER BY timestamp` without including `timestamp` in the `SELECT` idiom, which SurrealDB rejects with "Missing order idiom in statement selection". Logic extracted to `last_assistant_message_metrics_core` for testability with 4 new integration tests against a real DB
+- **Speed (t/s) regression**: `setSessionTokens` now computes `tokens_output / elapsed` when streaming is active. The previous helper had been removed in a refactor, leaving the displayed speed permanently at `null`
+- **Orchestrator spinner shows raw UUID at workflow start**: `tool_start` was emitted with `agent_id` as the tool name, so the spinner displayed the UUID until the first agent label was resolved. The orchestrator bridge now resolves the agent's display name via the registry once, just before the race, and feeds it through `resolve_orchestrator_label` (M4 audit 2026-05-02)
+- **`submit_user_response` / `skip_question` lost workflow_id**: Both commands emitted `user_question_complete` with `String::new()`, so the background-workflows dispatcher silently dropped the chunk via `executions.get("")` -- leaving `hasPendingQuestion` stuck at `true` until `workflow_complete`. Both commands now require and validate the UUID; the emitted chunk carries it (H1 audit 2026-05-02)
+- **Sub-agent execution timeline blank on reattach**: Switching back to a workflow already running in the background reset `executionBlocksStore` on every selection, leaving the execution area blank until the next chunk arrived. `selectWorkflow` now calls `restoreFromChunks` instead of `start()` when reattaching, replaying the buffered `chunkHistory` through the existing chunk handlers (H3 audit 2026-05-02)
+
+### Removed
+
+- **Dead code (Lot C)**: ~603 LOC across 17 files
+  - Backend: `ChunkType::ToolEnd` and `SubAgentProgress` variants (no production emission site -- `tool_call_complete` already carries the closure for tools); `tokens_delta` / `tokens_total` fields on `StreamChunk` (never set, never read); `aggregate_sub_agent_tokens` backwards-compat alias (callers migrated to `aggregate_sub_agent_metrics`); duplicate `test_stream_chunk_creation` / `test_workflow_complete_creation` in `commands/streaming/execution.rs`
+  - Frontend: legacy `MetricsBar.svelte` (never mounted) and `navigation/` folder (`NavItem` + barrel, never imported); `inputPrice` / `outputPrice` / `cacheReadPrice` / `cacheWritePrice` fields, `setPricingStatus` method + `pricingStatus` state, `streamingTokens` and `cumulativeTokens` derived stores from `tokens.ts`; `SubAgentSpawnResult`, `DelegateResult`, `ParallelTaskResult`, `ParallelBatchResult`, `SubAgentEventType`, `SubAgentStreamEvent`, `SubAgentOperationType`, `ValidationResponseEvent` from `sub-agent.ts`; `STREAM_EVENTS` constant; `handleToolEnd` / `handleSubAgentProgress` chunk handlers
+- **41 stale "Phase N" sequencing comments**: Carried over from staged refactors and no longer meaningful once merged. Stripped from Rust production code, frontend stores, components, types, tests and schema SQL while preserving the semantic content that followed each marker
+
+---
+
 ## [0.21.0] - 2026-04-29
 
 ### Added
@@ -710,7 +752,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.0
 [0.21.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.21.0
 [0.20.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.1
 [0.20.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.0

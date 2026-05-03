@@ -1,6 +1,6 @@
 # Zileo Chat
 
-[![Version](https://img.shields.io/badge/version-0.21.0-orange)](https://github.com/assistance-micro-design/zileo-chat)
+[![Version](https://img.shields.io/badge/version-0.22.0-orange)](https://github.com/assistance-micro-design/zileo-chat)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Status](https://img.shields.io/badge/status-beta-yellow)](https://github.com/assistance-micro-design/zileo-chat)
 
@@ -14,7 +14,7 @@
 
 ## Beta Warning
 
-**This software is currently in beta (v0.21.0).**
+**This software is currently in beta (v0.22.0).**
 
 Before using Zileo Chat, please be aware of the following risks:
 
@@ -72,7 +72,7 @@ Zileo Chat supports built-in and custom LLM providers:
 
 ### Custom Providers (OpenAI-compatible)
 
-- Add any OpenAI-compatible API endpoint (OpenRouter, Together AI, vLLM, LM Studio, etc.)
+- Add any OpenAI-compatible API endpoint (Routerlab, OpenRouter, Together AI, vLLM, LM Studio, etc.)
 - Full streaming, tool calling, and reasoning support
 - Configure via Settings > Providers
 
