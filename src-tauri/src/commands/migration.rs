@@ -47,12 +47,15 @@ const MIGRATION_TOKEN_COST_ACCURACY_V1: &str = "token_cost_accuracy_v1";
 ///
 /// Queries the `migration_log` table for a record with the given name.
 /// Returns `true` if the migration was already applied.
+///
+/// The migration name is bound as a parameter rather than interpolated, so
+/// names containing SQL-special characters round-trip safely.
 async fn check_migration_applied(db: &DBClient, migration_name: &str) -> Result<bool, String> {
-    let results: Vec<serde_json::Value> = db
-        .query_json(&format!(
-            "SELECT name FROM migration_log WHERE name = '{}'",
-            migration_name
-        ))
+    let results = db
+        .query_json_with_params(
+            "SELECT name FROM migration_log WHERE name = $name",
+            vec![("name".to_string(), serde_json::json!(migration_name))],
+        )
         .await
         .map_err(|e| format!("Failed to check migration status: {}", e))?;
 
@@ -61,12 +64,14 @@ async fn check_migration_applied(db: &DBClient, migration_name: &str) -> Result<
 
 /// Records a migration as applied in the `migration_log` table.
 ///
-/// Creates a record with the migration name and current timestamp.
+/// Creates a record with the migration name and current timestamp. The name
+/// is bound as a parameter; `time::now()` is a SurrealQL function evaluated
+/// server-side.
 async fn record_migration_applied(db: &DBClient, migration_name: &str) -> Result<(), String> {
-    db.execute(&format!(
-        "CREATE migration_log SET name = '{}', applied_at = time::now()",
-        migration_name
-    ))
+    db.execute_with_params(
+        "CREATE migration_log SET name = $name, applied_at = time::now()",
+        vec![("name".to_string(), serde_json::json!(migration_name))],
+    )
     .await
     .map_err(|e| format!("Failed to record migration: {}", e))?;
 
@@ -615,9 +620,10 @@ pub async fn migrate_sidebar_features(
 /// `total_cached_tokens` and `total_cache_write_tokens` follow the same logic
 /// for the cache columns added during this refactor.
 const TOKEN_COST_ACCURACY_V1_MIGRATION: &str = r#"
--- Backfill sub-agent cost on legacy workflow rows. Phase 6 added this column
--- with DEFAULT 0.0, but DEFAULT only applies on CREATE so existing rows are
--- still missing the field. This makes them readable as `0.0` rather than NONE.
+-- Backfill sub-agent cost on legacy workflow rows. The token-cost-accuracy
+-- refactor added this column with DEFAULT 0.0, but DEFAULT only applies on
+-- CREATE so existing rows are still missing the field. This makes them
+-- readable as `0.0` rather than NONE.
 UPDATE workflow SET sub_agent_cost_usd = 0.0 WHERE sub_agent_cost_usd IS NONE;
 
 -- Same logic for the cache totals introduced earlier in the same refactor.
@@ -758,6 +764,34 @@ mod tests {
             .await
             .unwrap();
         assert!(applied, "Migration should be marked as applied");
+    }
+
+    #[tokio::test]
+    async fn check_and_record_migration_handle_sql_special_chars() {
+        // Locks in the parameterised-binding contract: a migration name
+        // containing characters that would break a `format!("'{}'", name)`
+        // SQL literal must round-trip cleanly. A future regression to string
+        // interpolation would either fail the CREATE (syntax error) or skip
+        // the SELECT match — both observable here.
+        let (state, _db_guard) = setup_test_state().await;
+        let weird_name = "weird'name_v1";
+
+        let applied_before = check_migration_applied(&state.db, weird_name)
+            .await
+            .unwrap();
+        assert!(!applied_before);
+
+        record_migration_applied(&state.db, weird_name)
+            .await
+            .unwrap();
+
+        let applied_after = check_migration_applied(&state.db, weird_name)
+            .await
+            .unwrap();
+        assert!(
+            applied_after,
+            "Migration name with apostrophe must round-trip via parameterised binding"
+        );
     }
 
     #[tokio::test]
