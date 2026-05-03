@@ -1,6 +1,6 @@
 {
   "name": "zileo-chat",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "description": "Zileo Chat - Multi-agent AI desktop application",
   "license": "Apache-2.0",
   "author": {
@@ -60,7 +60,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "^0.563.1",
-    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "dompurify": "^3.4.1",

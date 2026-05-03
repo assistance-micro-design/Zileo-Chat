@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.22.1] - 2026-05-03
+
+### Fixed
+
+- **Multi-platform release CI broken on v0.22.0**: `release.yml` (Linux / macOS aarch64 + x86_64 / Windows) failed at the `Build Tauri app` step on all four platforms with `Found version mismatched Tauri packages. tauri (v2.11.0) : @tauri-apps/api (v2.10.1)`. The v0.22.0 version-bump regenerated `Cargo.lock` and silently moved the Rust `tauri` crate from 2.10.x to 2.11.0 (caret range in `Cargo.toml`), while `package.json` still pinned `@tauri-apps/api` at `^2.9.0` (resolved 2.10.1). `tauri-action` rejects the mismatch and offers no escape hatch, so the multi-platform release never produced macOS / Windows assets -- v0.22.0 shipped Linux-only
+
+### Changed
+
+- **`@tauri-apps/api` bumped to `^2.11.0`** to match the Rust crate. `npm install` re-resolves the lockfile to 2.11.x. Local `tauri build` no longer needs `--ignore-version-mismatches`
+
+---
+
 ## [0.22.0] - 2026-05-02
 
 ### Added
@@ -752,7 +764,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.1
 [0.22.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.0
 [0.21.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.21.0
 [0.20.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.20.1
