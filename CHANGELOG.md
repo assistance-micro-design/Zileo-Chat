@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.22.2] - 2026-05-03
+
+### Fixed
+
+- **MCP `stop_server` race losing the client on `disconnect()` failure**: The previous order removed the client from `clients` and cleaned the lookup tables BEFORE calling `disconnect()`. If `disconnect()` errored, the `MCPServerHandle` was already gone from the registry -- the child process was leaked and the user could not restart the server cleanly. The lock is now held atomically: `disconnect()` runs while the client is still in `clients`, the registry cleanup only happens once the disconnect has succeeded, and a `disconnect()` failure surfaces to the caller without dropping the handle (PR #125)
+- **MCP `restart_server` swallowing real stop errors**: `let _ = self.stop_server(id).await` discarded every failure, including legitimate disconnect errors that should have blocked respawn. The match now treats only `MCPError::ServerNotFound` as a no-op (server already stopped) and propagates every other error so a broken disconnect doesn't lead to a duplicate process / state (PR #125)
+- **Workflow streaming: cancellation tokens leaked on early errors**: `execute_workflow_streaming` allocated a `cancellation_token` then bailed out via `?` on `load_workflow` / `build_task` failures, leaving the token in `state.streaming_cancellations`. Both error paths now call `state.clear_cancellation(&workflow_id)` before returning. `build_task` errors also emit `WORKFLOW_COMPLETE` to the frontend so the user sees the failure instead of a silent stall (PR #125)
+- **`load_conversation_history` swallowing DB and deserialization errors**: The previous code chained `.unwrap_or_default()` on the DB response and `.filter_map(|v| ... .ok())` on row deserialization, so a real failure produced an empty history and the workflow ran without any context. Both stages now propagate `Result<_, String>` with structured `tracing::error!` logs; `build_task` and `execute_workflow_streaming` propagate the error to the frontend instead of silently masking it (PR #125)
+- **Race after `getLastAssistantMetrics` in `selectWorkflow`**: The `await MessageService.getLastAssistantMetrics(workflowId)` call introduced by v0.22.0 had no `isStillViewed()` guard, so a fast workflow switch could overwrite the newly-selected workflow's session metrics with the previous workflow's last-message metrics. A `if (backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;` check is now wired right after the await (PR #125)
+- **Assistant bubble missing cost / cache / thinking metrics until reload**: `createAssistantMessage` only forwarded `tokens`, `tokens_input`, `tokens_output`, `model`, `provider`, `duration_ms`. The other fields exposed by `WorkflowMetrics` (`cost_usd`, `thinking_tokens`, `cached_tokens`, `cache_write_tokens`, `model_id_used`) defaulted to `undefined` on the local `Message` until the next workflow reload pulled them from the persisted row. The local message now mirrors the persisted assistant message field-for-field (PR #125)
+
+### Changed
+
+- **MCP child process stderr is drained continuously**: `MCPServerHandle::spawn` now starts a named (`mcp-stderr-{name}`) background thread that reads the child's stderr line by line and forwards non-empty lines to the `tracing` log. Without this, a chatty MCP server eventually filled the OS pipe buffer and the child blocked on `write(stderr)`. The thread terminates naturally when the child exits / EOF is reached, and a failure to spawn the drain thread is logged via `warn!` rather than panicking (PR #125)
+
+---
+
 ## [0.22.1] - 2026-05-03
 
 ### Fixed
@@ -764,7 +781,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.2...HEAD
+[0.22.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.2
 [0.22.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.1
 [0.22.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.0
 [0.21.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.21.0
