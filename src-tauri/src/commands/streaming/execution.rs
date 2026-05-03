@@ -100,11 +100,22 @@ pub async fn execute_workflow_streaming(
 
     let (task, task_id) = build_task(&state, &workflow_id, &message, &locale, &message_id).await;
 
+    // Look up the orchestrator's display name for the spinner (M4 audit
+    // 2026-05-02). Falls back to agent_id inside `run_orchestrator_with_cancel`
+    // when the agent is not registered yet.
+    let agent_name = state
+        .orchestrator
+        .registry()
+        .get(&agent_id)
+        .await
+        .map(|agent| agent.config().name.clone());
+
     let (report, duration_ms) = match run_orchestrator_with_cancel(
         &window,
         &state,
         &workflow_id,
         &agent_id,
+        agent_name.as_deref(),
         task,
         cancellation_token,
     )

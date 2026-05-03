@@ -134,22 +134,40 @@ pub async fn build_task(
     (task, task_id)
 }
 
+/// Resolve the human-readable label for the orchestrator spinner.
+///
+/// Prefers the agent's display name; falls back to the agent_id when the name
+/// is missing or blank. Keeps the spinner informative ("Marie") instead of
+/// surfacing a raw UUID (M4 audit 2026-05-02).
+pub fn resolve_orchestrator_label(agent_name: Option<&str>, agent_id: &str) -> String {
+    match agent_name.map(str::trim) {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => agent_id.to_string(),
+    }
+}
+
 /// Race the orchestrator against the cancellation token.
 ///
 /// On failure or cancellation this function emits the corresponding stream
 /// chunks + completion event AND clears the cancellation token from the
 /// app state, so callers only need to handle the [`BridgeOutcome`] variant.
+///
+/// `agent_name` feeds the orchestrator spinner via `tool_start` (M4 audit
+/// 2026-05-02). Pass the agent's display name; the helper falls back to
+/// `agent_id` when the name is missing.
 pub async fn run_orchestrator_with_cancel(
     window: &Window,
     state: &State<'_, AppState>,
     workflow_id: &str,
     agent_id: &str,
+    agent_name: Option<&str>,
     task: Task,
     cancellation_token: CancellationToken,
 ) -> BridgeOutcome {
+    let spinner_label = resolve_orchestrator_label(agent_name, agent_id);
     emit_chunk(
         window,
-        StreamChunk::tool_start(workflow_id.to_string(), agent_id.to_string()),
+        StreamChunk::tool_start(workflow_id.to_string(), spinner_label),
     );
 
     let task_id = task.id.clone();
@@ -205,5 +223,35 @@ pub async fn run_orchestrator_with_cancel(
             state.clear_cancellation(workflow_id).await;
             BridgeOutcome::Cancelled
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn label_uses_agent_name_when_present() {
+        let label =
+            resolve_orchestrator_label(Some("Marie"), "11111111-1111-1111-1111-111111111111");
+        assert_eq!(label, "Marie");
+    }
+
+    #[test]
+    fn label_falls_back_to_agent_id_when_name_missing() {
+        let label = resolve_orchestrator_label(None, "11111111-1111-1111-1111-111111111111");
+        assert_eq!(label, "11111111-1111-1111-1111-111111111111");
+    }
+
+    #[test]
+    fn label_falls_back_to_agent_id_when_name_blank() {
+        let label = resolve_orchestrator_label(Some("   "), "11111111-1111-1111-1111-111111111111");
+        assert_eq!(label, "11111111-1111-1111-1111-111111111111");
+    }
+
+    #[test]
+    fn label_trims_surrounding_whitespace() {
+        let label = resolve_orchestrator_label(Some("  Marie  "), "agent-id");
+        assert_eq!(label, "Marie");
     }
 }
