@@ -135,6 +135,11 @@ function createAssistantMessage(workflowId: string, result: WorkflowResult): Mes
 		model: result.metrics.model,
 		provider: result.metrics.provider,
 		duration_ms: result.metrics.duration_ms,
+		cost_usd: result.metrics.cost_usd,
+		thinking_tokens: result.metrics.thinking_tokens,
+		cached_tokens: result.metrics.cached_tokens,
+		cache_write_tokens: result.metrics.cache_write_tokens,
+		model_id_used: result.metrics.model_id_used,
 		timestamp: new Date()
 	};
 }

@@ -30,6 +30,7 @@ use uuid::Uuid;
 use super::orchestrator_bridge::{
     build_task, load_workflow, run_orchestrator_with_cancel, BridgeOutcome,
 };
+use super::helpers::emit_error;
 use super::persistence_step::{finalize_completion, persist_initial_reasoning, CompletionContext};
 use super::validator::{validate_inputs, ValidatedInputs};
 
@@ -78,7 +79,13 @@ pub async fn execute_workflow_streaming(
     let cancellation_token = state.create_cancellation_token(&workflow_id).await;
 
     // Confirm workflow exists (errors emitted to frontend by load_workflow).
-    let _workflow = load_workflow(&window, &workflow_id, &state).await?;
+    let _workflow = match load_workflow(&window, &workflow_id, &state).await {
+        Ok(workflow) => workflow,
+        Err(err) => {
+            state.clear_cancellation(&workflow_id).await;
+            return Err(err);
+        }
+    };
 
     let message_id = Uuid::new_v4().to_string();
     let mut thinking_step_number: u32 = 0;
@@ -98,7 +105,15 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    let (task, task_id) = build_task(&state, &workflow_id, &message, &locale, &message_id).await;
+    let (task, task_id) =
+        match build_task(&state, &workflow_id, &message, &locale, &message_id).await {
+            Ok(task) => task,
+            Err(err) => {
+                emit_error(&window, &workflow_id, &err);
+                state.clear_cancellation(&workflow_id).await;
+                return Err(err);
+            }
+        };
 
     // Look up the orchestrator's display name for the spinner (M4 audit
     // 2026-05-02). Falls back to agent_id inside `run_orchestrator_with_cancel`

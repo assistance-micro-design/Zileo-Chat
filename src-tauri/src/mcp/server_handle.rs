@@ -39,7 +39,7 @@ use crate::models::mcp::{
     MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTool,
 };
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -142,7 +142,7 @@ impl MCPServerHandle {
             message: e.to_string(),
         })?;
 
-        // Take ownership of stdin/stdout
+        // Take ownership of stdin/stdout/stderr
         let stdin = child
             .stdin
             .take()
@@ -158,6 +158,15 @@ impl MCPServerHandle {
                 command: command.clone(),
                 message: "Failed to capture stdout".to_string(),
             })?;
+
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| MCPError::ProcessSpawnFailed {
+                command: command.clone(),
+                message: "Failed to capture stderr".to_string(),
+            })?;
+        Self::spawn_stderr_drain(config.id.clone(), config.name.clone(), stderr);
 
         info!(
             server_id = %config.id,
@@ -176,6 +185,37 @@ impl MCPServerHandle {
             request_id: AtomicI64::new(1),
             server_info: None,
         })
+    }
+
+    /// Drains stderr continuously so MCP child processes cannot block when the
+    /// OS pipe buffer fills. Lines are logged for diagnostics only.
+    fn spawn_stderr_drain(server_id: String, server_name: String, stderr: ChildStderr) {
+        let thread_server_id = server_id.clone();
+        let thread_server_name = server_name.clone();
+
+        match std::thread::Builder::new()
+            .name(format!("mcp-stderr-{server_name}"))
+            .spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    match line {
+                        Ok(line) if !line.trim().is_empty() => {
+                            warn!(server_id = %thread_server_id, server_name = %thread_server_name, stderr = %line, "MCP server stderr");
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!(server_id = %thread_server_id, server_name = %thread_server_name, error = %e, "Failed to read MCP stderr");
+                            break;
+                        }
+                    }
+                }
+            })
+        {
+            Ok(_handle) => {}
+            Err(e) => {
+                warn!(server_id = %server_id, server_name = %server_name, error = %e, "Failed to spawn MCP stderr drain thread");
+            }
+        }
     }
 
     /// Builds the command and arguments based on deployment method

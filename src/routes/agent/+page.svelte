@@ -264,6 +264,7 @@ Uses extracted components, services, and stores for clean architecture.
 		// Fetch the metrics of the last assistant message so the session
 		// display reflects "what the last run cost" rather than zeros.
 		const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
+		if (backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
 
 		// Check if this workflow is running in the background
 		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);

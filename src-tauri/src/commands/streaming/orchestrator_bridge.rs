@@ -108,9 +108,9 @@ pub async fn build_task(
     message: &str,
     locale: &str,
     message_id: &str,
-) -> (Task, String) {
+) -> Result<(Task, String), String> {
     let (mut history_context, _history_count) =
-        load_conversation_history(state, workflow_id, locale).await;
+        load_conversation_history(state, workflow_id, locale).await?;
 
     if let Some(obj) = history_context.as_object_mut() {
         obj.insert(
@@ -131,7 +131,7 @@ pub async fn build_task(
         context: history_context,
     };
 
-    (task, task_id)
+    Ok((task, task_id))
 }
 
 /// Resolve the human-readable label for the orchestrator spinner.

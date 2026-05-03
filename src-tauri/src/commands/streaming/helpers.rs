@@ -55,7 +55,7 @@ pub async fn load_conversation_history(
     state: &AppState,
     workflow_id: &str,
     locale: &str,
-) -> (serde_json::Value, usize) {
+) -> Result<(serde_json::Value, usize), String> {
     // Filter to user/assistant only: `system` rows are persisted by the frontend
     // catch{} branch as error notifications (workflowExecutor.service.ts) — they
     // are not real system prompts and must never be replayed to the LLM.
@@ -88,11 +88,18 @@ pub async fn load_conversation_history(
             vec![("wf_id".to_string(), serde_json::json!(workflow_id))],
         )
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            error!(error = %e, workflow_id = %workflow_id, "Failed to load conversation history");
+            format!("Failed to load conversation history: {}", e)
+        })?;
     let conversation_history: Vec<Message> = history_json
         .into_iter()
-        .filter_map(|v| serde_json::from_value(v).ok())
-        .collect();
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<Message>, _>>()
+        .map_err(|e| {
+            error!(error = %e, workflow_id = %workflow_id, "Failed to deserialize conversation history");
+            format!("Failed to deserialize conversation history: {}", e)
+        })?;
 
     let history_count = conversation_history.len();
     let is_continuation = !conversation_history.is_empty();
@@ -126,7 +133,7 @@ pub async fn load_conversation_history(
         is_continuation, "Loaded conversation history for context"
     );
 
-    (history_context, history_count)
+    Ok((history_context, history_count))
 }
 
 /// Aggregates sub-agent metrics into separate workflow fields.
@@ -248,7 +255,7 @@ mod tests {
         let (state, _db_guard) = setup_test_state().await;
         let workflow_id = uuid::Uuid::new_v4().to_string();
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "en").await;
+        let (context, count) = load_conversation_history(&state, &workflow_id, "en").await.unwrap();
 
         assert_eq!(count, 0, "No messages → count should be 0");
         assert!(
@@ -268,7 +275,7 @@ mod tests {
         insert_message(&state, &workflow_id, "user", "Mon nom est Bob", 0).await;
         insert_message(&state, &workflow_id, "assistant", "Enchante Bob", 1).await;
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await;
+        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await.unwrap();
 
         assert_eq!(count, 2, "Should load 2 messages (user + assistant)");
         let messages = context
@@ -295,7 +302,7 @@ mod tests {
         insert_message(&state, &workflow_id, "system", "Error: provider offline", 2).await;
         insert_message(&state, &workflow_id, "user", "Deuxieme tour", 3).await;
 
-        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await;
+        let (context, count) = load_conversation_history(&state, &workflow_id, "fr").await.unwrap();
 
         assert_eq!(
             count, 3,
@@ -317,6 +324,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_load_conversation_history_fails_fast_on_malformed_row() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE message:`{id}` SET \
+                workflow_id = $wf_id, \
+                role = 'user', \
+                content = 'malformed row', \
+                tokens = NULL, \
+                timestamp = time::now()"
+        );
+
+        state
+            .db
+            .db
+            .query(&query)
+            .bind(("wf_id", workflow_id.to_string()))
+            .await
+            .expect("Insert malformed message query failed")
+            .check()
+            .expect("CREATE malformed message failed validation");
+
+        let err = load_conversation_history(&state, &workflow_id, "en")
+            .await
+            .expect_err("Malformed message rows must fail fast");
+
+        assert!(
+            err.contains("Failed to deserialize conversation history"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_load_conversation_history_chronological_order() {
         let (state, _db_guard) = setup_test_state().await;
         let workflow_id = uuid::Uuid::new_v4().to_string();
@@ -326,7 +367,7 @@ mod tests {
         insert_message(&state, &workflow_id, "user", "msg-3", 2).await;
         insert_message(&state, &workflow_id, "assistant", "msg-4", 3).await;
 
-        let (context, _count) = load_conversation_history(&state, &workflow_id, "en").await;
+        let (context, _count) = load_conversation_history(&state, &workflow_id, "en").await.unwrap();
         let messages = context
             .get("conversation_messages")
             .and_then(|v| v.as_array())
@@ -348,11 +389,11 @@ mod tests {
         insert_message(&state, &workflow_a, "user", "from A", 0).await;
         insert_message(&state, &workflow_b, "user", "from B", 0).await;
 
-        let (context_a, count_a) = load_conversation_history(&state, &workflow_a, "en").await;
+        let (context_a, count_a) = load_conversation_history(&state, &workflow_a, "en").await.unwrap();
         assert_eq!(count_a, 1);
         assert_eq!(context_a["conversation_messages"][0]["content"], "from A");
 
-        let (context_b, count_b) = load_conversation_history(&state, &workflow_b, "en").await;
+        let (context_b, count_b) = load_conversation_history(&state, &workflow_b, "en").await.unwrap();
         assert_eq!(count_b, 1);
         assert_eq!(context_b["conversation_messages"][0]["content"], "from B");
     }

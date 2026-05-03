@@ -158,16 +158,19 @@ impl MCPManager {
             server: id.to_string(),
         })?;
 
-        let mut client = {
+        {
             let mut clients = self.clients.write().await;
-            clients
-                .remove(&name)
+            let client = clients
+                .get_mut(&name)
                 .ok_or_else(|| MCPError::ServerNotFound {
                     server: id.to_string(),
-                })?
-        };
+                })?;
 
-        // Cleanup lookup table and circuit breaker
+            client.disconnect().await?;
+            clients.remove(&name);
+        }
+
+        // Cleanup lookup table and circuit breaker only after disconnect succeeded.
         {
             let mut id_lookup = self.id_to_name.write().await;
             id_lookup.remove(id);
@@ -176,8 +179,6 @@ impl MCPManager {
             let mut breakers = self.circuit_breakers.write().await;
             breakers.remove(&name);
         }
-
-        client.disconnect().await?;
 
         info!(server_id = %id, server_name = %name, "MCP server stopped");
 
@@ -222,8 +223,13 @@ impl MCPManager {
                 })?
         };
 
-        // Stop if running (by ID)
-        let _ = self.stop_server(id).await;
+        // Stop if running (by ID). A missing runtime client means the server is
+        // already stopped; every other stop failure must block restart to avoid
+        // duplicate process/state.
+        match self.stop_server(id).await {
+            Ok(()) | Err(MCPError::ServerNotFound { .. }) => {}
+            Err(err) => return Err(err),
+        }
 
         // Spawn again (this will create fresh circuit breaker and id_to_name entry)
         self.spawn_server_internal(config).await
