@@ -74,133 +74,9 @@ export interface SubAgentExecution {
   completed_at?: string;
 }
 
-/**
- * Metrics from a sub-agent execution.
- *
- * Returned as part of the tool result to the primary agent.
- */
-export interface SubAgentMetrics {
-  /** Execution duration in milliseconds */
-  duration_ms: number;
-  /** Input tokens consumed */
-  tokens_input: number;
-  /** Output tokens generated */
-  tokens_output: number;
-}
-
-/**
- * Result of a sub-agent spawn operation.
- *
- * Returned by SpawnAgentTool after successful execution.
- */
-export interface SubAgentSpawnResult {
-  /** Whether the spawn was successful */
-  success: boolean;
-  /** ID of the spawned sub-agent */
-  child_id: string;
-  /** Markdown report from the sub-agent */
-  report: string;
-  /** Execution metrics */
-  metrics: SubAgentMetrics;
-}
-
-/**
- * Result of a delegate operation.
- *
- * Returned by DelegateTaskTool after successful delegation.
- */
-export interface DelegateResult {
-  /** Whether the delegation was successful */
-  success: boolean;
-  /** ID of the delegated-to agent */
-  agent_id: string;
-  /** Markdown report from the agent */
-  report: string;
-  /** Execution metrics */
-  metrics: SubAgentMetrics;
-}
-
-/**
- * Result of a single task in a parallel batch.
- */
-export interface ParallelTaskResult {
-  /** Agent ID that executed the task */
-  agent_id: string;
-  /** Whether this task succeeded */
-  success: boolean;
-  /** Report from the agent (if successful) */
-  report?: string;
-  /** Error message (if failed) */
-  error?: string;
-  /** Execution metrics (if available) */
-  metrics?: SubAgentMetrics;
-}
-
-/**
- * Result of a parallel batch execution.
- *
- * Returned by ParallelTasksTool after executing multiple tasks.
- */
-export interface ParallelBatchResult {
-  /** Whether all tasks completed successfully */
-  success: boolean;
-  /** Number of tasks that completed successfully */
-  completed: number;
-  /** Number of tasks that failed */
-  failed: number;
-  /** Individual results for each task */
-  results: ParallelTaskResult[];
-  /** Aggregated report from all tasks */
-  aggregated_report: string;
-}
-
-/**
- * Streaming event types for sub-agent operations.
- */
-export type SubAgentEventType =
-  | 'sub_agent_start'
-  | 'sub_agent_progress'
-  | 'sub_agent_complete'
-  | 'sub_agent_error';
-
-/**
- * Streaming event payload for sub-agent operations.
- *
- * Emitted via Tauri events to update the frontend in real-time.
- */
-export interface SubAgentStreamEvent {
-  /** Type of the event */
-  type: SubAgentEventType;
-  /** Workflow ID */
-  workflow_id: string;
-  /** Parent agent ID */
-  parent_agent_id: string;
-  /** Sub-agent ID */
-  sub_agent_id: string;
-  /** Sub-agent name */
-  sub_agent_name: string;
-  /** Event-specific data */
-  data?: {
-    /** Report from sub-agent (on complete) */
-    report?: string;
-    /** Error message (on error) */
-    error?: string;
-    /** Execution metrics (on complete) */
-    metrics?: SubAgentMetrics;
-    /** Progress percentage (on progress) */
-    progress?: number;
-  };
-}
-
 // =============================================================================
 // Validation Types for Human-in-the-Loop
 // =============================================================================
-
-/**
- * Type of sub-agent operation requiring validation.
- * Matches Rust SubAgentOperationType in streaming.rs.
- */
-export type SubAgentOperationType = 'spawn' | 'delegate' | 'parallel_batch';
 
 import type { RiskLevel } from './validation';
 
@@ -222,18 +98,5 @@ export interface ValidationRequiredEvent {
   risk_level: RiskLevel;
   /** Additional details about the operation (structure varies by type) */
   details: Record<string, unknown>;
-}
-
-/**
- * Validation response event payload.
- * Emitted after user approves or rejects a validation request.
- */
-export interface ValidationResponseEvent {
-  /** Validation request ID */
-  validation_id: string;
-  /** Whether approved (true) or rejected (false) */
-  approved: boolean;
-  /** Rejection reason if not approved */
-  reason?: string;
 }
 

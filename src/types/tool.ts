@@ -30,7 +30,7 @@
 /**
  * Tool type indicating execution context
  */
-export type ToolType = 'local' | 'mcp';
+type ToolType = 'local' | 'mcp';
 
 /**
  * Common input parameters for tool execution.
@@ -38,7 +38,7 @@ export type ToolType = 'local' | 'mcp';
  * Tools may have additional specific parameters beyond these common fields.
  * Maps to serde_json::Value in Rust for flexibility.
  */
-export interface ToolInputParams {
+interface ToolInputParams {
   /** Operation type (e.g., "add", "get", "update", "delete", "list", "search") */
   operation?: string;
   /** Content or data to process */
@@ -57,7 +57,7 @@ export interface ToolInputParams {
  * Tools may return additional specific fields beyond these common ones.
  * Maps to serde_json::Value in Rust for flexibility.
  */
-export interface ToolOutputResult {
+interface ToolOutputResult {
   /** Whether the operation was successful */
   success?: boolean;
   /** Created or retrieved entity ID */

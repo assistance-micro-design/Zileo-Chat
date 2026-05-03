@@ -201,12 +201,6 @@ pub async fn aggregate_sub_agent_metrics(state: &AppState, workflow_id: &str) {
     }
 }
 
-/// Backwards-compatible alias for callers that still use the old name.
-/// New code should call `aggregate_sub_agent_metrics` directly.
-pub async fn aggregate_sub_agent_tokens(state: &AppState, workflow_id: &str) {
-    aggregate_sub_agent_metrics(state, workflow_id).await;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

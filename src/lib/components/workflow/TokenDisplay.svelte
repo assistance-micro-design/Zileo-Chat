@@ -271,13 +271,7 @@
 					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))
 		}</span>
 		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
-		{#if !compact && data.pricing_status && data.pricing_status !== 'ok'}
-			<!-- Phase 8: backend reports pricing missing — surface a discreet badge
-			     so users don't read a $0 / "Free" display as a real free request. -->
-			<span class="cost-total" title={$i18n('tokens_pricing_unknown_help')}>
-				⚠ {$i18n('tokens_pricing_unknown')}
-			</span>
-		{:else if !compact && hasSubAgents && data.cumulative_cost_usd > 0}
+		{#if !compact && hasSubAgents && data.cumulative_cost_usd > 0}
 			<span class="cost-total">({$i18n('workflow_token_agent')}: {formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span>
 		{:else if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
 			<span class="cost-total">({formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span>

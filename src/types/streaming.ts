@@ -33,11 +33,9 @@ import type { UserQuestionStreamPayload } from './user-question';
  */
 export type ChunkType =
   | 'tool_start'
-  | 'tool_end'
   | 'reasoning'
   | 'error'
   | 'sub_agent_start'
-  | 'sub_agent_progress'
   | 'sub_agent_complete'
   | 'sub_agent_error'
   | 'task_create'
@@ -76,9 +74,9 @@ export interface StreamChunk {
   chunk_type: ChunkType;
   /** Text content (for token/reasoning/error/sub_agent chunks) */
   content?: string;
-  /** Tool name (for tool_start/tool_end chunks) */
+  /** Tool name (for tool_start/tool_call_complete chunks) */
   tool?: string;
-  /** Duration in milliseconds (for tool_end/sub_agent_complete/sub_agent_error/task_complete chunks) */
+  /** Duration in milliseconds (for tool_call_complete/sub_agent_complete/sub_agent_error/task_complete chunks) */
   duration?: number;
   /** Sub-agent ID (for sub_agent_* chunks) */
   sub_agent_id?: string;
@@ -88,7 +86,7 @@ export interface StreamChunk {
   parent_agent_id?: string;
   /** Sub-agent metrics (for sub_agent_complete chunks) */
   metrics?: SubAgentStreamMetrics;
-  /** Progress percentage 0-100 (for sub_agent_progress chunks) */
+  /** Progress percentage 0-100 (for sub_agent_complete chunks; always 100) */
   progress?: number;
   /** Task ID (for task_* chunks) */
   task_id?: string;
@@ -104,10 +102,6 @@ export interface StreamChunk {
   user_question?: UserQuestionStreamPayload;
   /** Question ID (for user_question_complete chunks) */
   question_id?: string;
-  /** Token count for this chunk (incremental) */
-  tokens_delta?: number;
-  /** Cumulative token count (running total) */
-  tokens_total?: number;
   /** Tool type: "local" or "mcp" (for tool_call_complete) */
   tool_type?: 'local' | 'mcp';
   /** MCP server name (for tool_call_complete, only for MCP tools) */
@@ -154,13 +148,3 @@ export interface WorkflowComplete {
   /** Error message if status is 'error' */
   error?: string;
 }
-
-/**
- * Event names for Tauri event listeners
- */
-export const STREAM_EVENTS = {
-  /** Streaming chunk event */
-  WORKFLOW_STREAM: 'workflow_stream',
-  /** Workflow completion event */
-  WORKFLOW_COMPLETE: 'workflow_complete',
-} as const;

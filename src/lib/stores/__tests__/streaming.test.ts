@@ -107,7 +107,7 @@ describe('streamingStore', () => {
 			expect(state.tools[0].status).toBe('running');
 
 			streamingStore.processChunkDirect({
-				chunk_type: 'tool_end',
+				chunk_type: 'tool_call_complete',
 				tool: 'MemoryTool',
 				duration: 150
 			} as StreamChunk);
@@ -127,7 +127,7 @@ describe('streamingStore', () => {
 				tool: 'TodoTool'
 			} as StreamChunk);
 			streamingStore.processChunkDirect({
-				chunk_type: 'tool_end',
+				chunk_type: 'tool_call_complete',
 				tool: 'MemoryTool',
 				duration: 100
 			} as StreamChunk);

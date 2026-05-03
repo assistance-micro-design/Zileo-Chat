@@ -88,42 +88,6 @@ describe('applyChunkToState', () => {
 		});
 	});
 
-	describe('tool_end', () => {
-		it('should mark running tool as completed with duration', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'tool_start',
-				tool: 'MemoryTool'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'tool_end',
-				tool: 'MemoryTool',
-				duration: 150
-			}));
-
-			expect(s.tools[0].status).toBe('completed');
-			expect(s.tools[0].duration).toBe(150);
-		});
-
-		it('should not affect non-matching tools', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'tool_start',
-				tool: 'ToolA'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'tool_start',
-				tool: 'ToolB'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'tool_end',
-				tool: 'ToolA',
-				duration: 100
-			}));
-
-			expect(s.tools[0].status).toBe('completed');
-			expect(s.tools[1].status).toBe('running');
-		});
-	});
-
 	describe('reasoning', () => {
 		it('should add reasoning step with incrementing step number', () => {
 			let s = applyChunkToState(state, makeChunk({
@@ -181,46 +145,6 @@ describe('applyChunkToState', () => {
 				status: 'running',
 				progress: 0
 			});
-		});
-	});
-
-	describe('sub_agent_progress', () => {
-		it('should update progress and status message', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-1',
-				sub_agent_name: 'Agent'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'sub_agent_progress',
-				sub_agent_id: 'sa-1',
-				progress: 50,
-				content: 'Halfway done'
-			}));
-
-			expect(s.subAgents[0].progress).toBe(50);
-			expect(s.subAgents[0].statusMessage).toBe('Halfway done');
-		});
-
-		it('should not affect unrelated sub-agents', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-1',
-				sub_agent_name: 'Agent A'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-2',
-				sub_agent_name: 'Agent B'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'sub_agent_progress',
-				sub_agent_id: 'sa-1',
-				progress: 75
-			}));
-
-			expect(s.subAgents[0].progress).toBe(75);
-			expect(s.subAgents[1].progress).toBe(0);
 		});
 	});
 

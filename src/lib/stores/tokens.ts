@@ -57,14 +57,6 @@ interface TokenState {
 	contextUsed: number;
 	/** Model context window size */
 	contextMax: number;
-	/** Input token price (per million tokens) — kept only for context-window UX, NOT for cost calculation. */
-	inputPrice: number;
-	/** Output token price (per million tokens) */
-	outputPrice: number;
-	/** Cache-read token price (per million tokens) */
-	cacheReadPrice: number;
-	/** Cache-write token price (per million tokens) */
-	cacheWritePrice: number;
 	/** Whether streaming is currently active */
 	isStreaming: boolean;
 	/** Timestamp when streaming started */
@@ -82,11 +74,6 @@ interface TokenState {
 	 * is the final post-completion value.
 	 */
 	sessionCostInProgress: boolean;
-	/**
-	 * Pricing lookup status from the most recent backend response. Allows the
-	 * UI to differentiate "free" from "pricing unknown" (Phase 8).
-	 */
-	pricingStatus: 'ok' | 'model_not_found' | 'no_pricing_set' | null;
 }
 
 /**
@@ -98,15 +85,10 @@ const initialState: TokenState = {
 	subAgent: { input: 0, output: 0, costUsd: 0 },
 	contextUsed: 0,
 	contextMax: 128000,
-	inputPrice: 0,
-	outputPrice: 0,
-	cacheReadPrice: 0,
-	cacheWritePrice: 0,
 	isStreaming: false,
 	streamStartTime: null,
 	sessionCost: null,
-	sessionCostInProgress: false,
-	pricingStatus: null
+	sessionCostInProgress: false
 };
 
 /**
@@ -177,28 +159,15 @@ export const tokenStore = {
 	},
 
 	/**
-	 * Records the pricing-lookup outcome reported by the backend for the most
-	 * recent response. Lets the UI show a discreet "pricing unknown" badge
-	 * instead of misleadingly displaying "Free" (Phase 8).
-	 */
-	setPricingStatus(status: 'ok' | 'model_not_found' | 'no_pricing_set' | null): void {
-		store.update((s) => ({ ...s, pricingStatus: status }));
-	},
-
-	/**
-	 * Update pricing and context info from model configuration.
-	 * Used when selecting a model to update cost calculations and context limits.
+	 * Update context window size from model configuration.
+	 * Used when selecting a model to update the context-usage gauge ceiling.
 	 *
 	 * @param model - The LLM model configuration
 	 */
 	updateFromModel(model: LLMModel): void {
 		store.update((s) => ({
 			...s,
-			contextMax: model.context_window ?? 128000,
-			inputPrice: model.input_price_per_mtok ?? 0,
-			outputPrice: model.output_price_per_mtok ?? 0,
-			cacheReadPrice: model.cache_read_price_per_mtok ?? 0,
-			cacheWritePrice: model.cache_write_price_per_mtok ?? 0
+			contextMax: model.context_window ?? 128000
 		}));
 	},
 
@@ -369,7 +338,6 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cache_write_tokens: $s.streaming.cacheWrite ?? undefined,
 		cumulative_cache_write: $s.cumulative.cacheWrite ?? undefined,
 		workflow_total_cost: $s.cumulative.cost + subAgentCost,
-		pricing_status: $s.pricingStatus,
 		speed_tks: $s.streaming.speed ?? undefined,
 		is_streaming: $s.isStreaming,
 		context_used: $s.contextUsed,
@@ -380,12 +348,3 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 	};
 });
 
-/**
- * Derived store: streaming token metrics
- */
-export const streamingTokens = derived(store, ($s) => $s.streaming);
-
-/**
- * Derived store: cumulative token metrics
- */
-export const cumulativeTokens = derived(store, ($s) => $s.cumulative);

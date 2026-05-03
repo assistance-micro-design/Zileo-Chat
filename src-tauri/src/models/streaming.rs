@@ -27,16 +27,12 @@ use super::UserQuestionStreamPayload;
 pub enum ChunkType {
     /// Tool execution started
     ToolStart,
-    /// Tool execution completed
-    ToolEnd,
     /// Reasoning/thinking step
     Reasoning,
     /// Error occurred
     Error,
     /// Sub-agent execution started
     SubAgentStart,
-    /// Sub-agent execution progress update
-    SubAgentProgress,
     /// Sub-agent execution completed
     SubAgentComplete,
     /// Sub-agent execution error
@@ -74,10 +70,10 @@ pub struct StreamChunk {
     /// Text content (for reasoning/error/thinking_block/response_block chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
-    /// Tool name (for tool_start/tool_end chunks)
+    /// Tool name (for tool_start/tool_call_complete chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool: Option<String>,
-    /// Duration in milliseconds (for tool_end chunks)
+    /// Duration in milliseconds (for tool_call_complete/task_complete/sub_agent_* chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
     /// Sub-agent ID (for sub_agent_* chunks)
@@ -92,7 +88,7 @@ pub struct StreamChunk {
     /// Sub-agent metrics (for sub_agent_complete chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metrics: Option<SubAgentStreamMetrics>,
-    /// Progress percentage 0-100 (for sub_agent_progress chunks)
+    /// Progress percentage 0-100 (for sub_agent_complete chunks; always 100)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<u8>,
     /// Task ID (for task_* chunks)
@@ -116,12 +112,6 @@ pub struct StreamChunk {
     /// Question ID (for user_question_complete chunks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub question_id: Option<String>,
-    /// Token count for this chunk (incremental)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tokens_delta: Option<usize>,
-    /// Cumulative token count (running total)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tokens_total: Option<usize>,
     /// Tool type: "local" or "mcp" (for tool_call_complete)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_type: Option<String>,
@@ -201,8 +191,6 @@ impl StreamChunk {
             task_agent_name: None,
             user_question: None,
             question_id: None,
-            tokens_delta: None,
-            tokens_total: None,
             tool_type: None,
             server_name: None,
             tool_input: None,
@@ -393,7 +381,7 @@ impl StreamChunk {
 
     /// Creates a tool call complete chunk with full input/output details.
     ///
-    /// Replaces tool_end with enriched data for inline display.
+    /// Carries the enriched data for inline display.
     #[allow(clippy::too_many_arguments)]
     pub fn tool_call_complete(
         workflow_id: impl Into<String>,
@@ -607,10 +595,6 @@ mod tests {
             "\"tool_start\""
         );
         assert_eq!(
-            serde_json::to_string(&ChunkType::ToolEnd).unwrap(),
-            "\"tool_end\""
-        );
-        assert_eq!(
             serde_json::to_string(&ChunkType::ThinkingBlock).unwrap(),
             "\"thinking_block\""
         );
@@ -692,10 +676,6 @@ mod tests {
         let chunk_type = ChunkType::SubAgentStart;
         let json = serde_json::to_string(&chunk_type).unwrap();
         assert_eq!(json, "\"sub_agent_start\"");
-
-        let chunk_type = ChunkType::SubAgentProgress;
-        let json = serde_json::to_string(&chunk_type).unwrap();
-        assert_eq!(json, "\"sub_agent_progress\"");
 
         let chunk_type = ChunkType::SubAgentComplete;
         let json = serde_json::to_string(&chunk_type).unwrap();

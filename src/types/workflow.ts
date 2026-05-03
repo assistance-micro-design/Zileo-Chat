@@ -277,12 +277,6 @@ export interface TokenDisplayData {
   cache_write_tokens?: number;
   /** Cumulative cache-write tokens for workflow */
   cumulative_cache_write?: number;
-  /**
-   * Outcome of the most recent pricing lookup. `null` when no lookup has
-   * happened yet (Phase 8). Components use this to render a "pricing unknown"
-   * badge instead of misleadingly showing "Free".
-   */
-  pricing_status?: 'ok' | 'model_not_found' | 'no_pricing_set' | null;
   /** Token generation speed (tokens/second) - only during streaming */
   speed_tks?: number;
   /** Whether currently streaming */

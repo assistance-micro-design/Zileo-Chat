@@ -33,7 +33,7 @@ use tauri::{State, Window};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use super::helpers::{aggregate_sub_agent_tokens, emit_chunk, emit_complete};
+use super::helpers::{aggregate_sub_agent_metrics, emit_chunk, emit_complete};
 use super::pricing::{
     load_model_pricing_info, update_workflow_cumulative_metrics, CumulativeMetricsUpdate,
 };
@@ -229,7 +229,7 @@ pub async fn finalize_completion(
     .await;
 
     // 6. Sub-agent token rollup.
-    aggregate_sub_agent_tokens(state, workflow_id).await;
+    aggregate_sub_agent_metrics(state, workflow_id).await;
 
     // 7. Persist tool executions and reasoning steps.
     let tool_executions: Vec<WorkflowToolExecution> = report

@@ -82,20 +82,6 @@ function handleToolStart(s: ChunkableState, c: StreamChunk): ChunkableState {
 }
 
 /**
- * Handle tool_end chunk - mark tool as completed with duration.
- */
-function handleToolEnd(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tools: s.tools.map((t) =>
-			t.name === c.tool && t.status === 'running'
-				? { ...t, status: 'completed' as const, duration: c.duration }
-				: t
-		)
-	};
-}
-
-/**
  * Handle reasoning chunk - add new reasoning step.
  */
 function handleReasoning(s: ChunkableState, c: StreamChunk): ChunkableState {
@@ -145,23 +131,6 @@ function handleSubAgentStart(s: ChunkableState, c: StreamChunk): ChunkableState 
 	};
 }
 
-/**
- * Handle sub_agent_progress chunk - update sub-agent progress.
- */
-function handleSubAgentProgress(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		subAgents: s.subAgents.map((a) =>
-			a.id === c.sub_agent_id
-				? {
-						...a,
-						progress: c.progress ?? a.progress,
-						statusMessage: c.content ?? a.statusMessage
-					}
-				: a
-		)
-	};
-}
 
 /**
  * Handle sub_agent_complete chunk - mark sub-agent as completed with metrics.
@@ -337,11 +306,9 @@ function handleIterationProgress(s: ChunkableState, c: StreamChunk): ChunkableSt
  */
 const chunkHandlers: Record<string, ChunkHandler> = {
 	tool_start: handleToolStart,
-	tool_end: handleToolEnd,
 	reasoning: handleReasoning,
 	error: handleError,
 	sub_agent_start: handleSubAgentStart,
-	sub_agent_progress: handleSubAgentProgress,
 	sub_agent_complete: handleSubAgentComplete,
 	sub_agent_error: handleSubAgentError,
 	task_create: handleTaskCreate,
