@@ -30,6 +30,7 @@ import type {
 	ActiveSubAgent,
 	ActiveTask
 } from '$lib/stores/streaming';
+import type { StreamChunk } from '$types/streaming';
 
 /**
  * Possible statuses for a background workflow execution.
@@ -93,6 +94,17 @@ export interface WorkflowStreamState {
 	completedAt: number | null;
 	/** Whether the workflow is waiting for user input */
 	hasPendingQuestion: boolean;
+	/**
+	 * Buffer of raw stream chunks received for this workflow.
+	 *
+	 * Used to reconstruct `executionBlocks` when the user switches BACK to a
+	 * still-running workflow that was started in the background — without it
+	 * the execution area appears empty until the next chunk arrives because
+	 * `executionBlocksStore.start()` resets state on every switch (H3 audit
+	 * 2026-05-02). Soft-capped at `MAX_CHUNK_HISTORY` to keep memory bounded
+	 * on long-running workflows.
+	 */
+	chunkHistory: StreamChunk[];
 }
 
 /**

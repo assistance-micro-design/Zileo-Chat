@@ -98,14 +98,26 @@ pub async fn load_workflow(
 
 /// Build the [`Task`] payload by interpolating skill references and loading
 /// conversation history.
+///
+/// `message_id` is injected into `task.context["message_id"]` so the tool loop
+/// can propagate it to sub-agent tools as `parent_message_id` at CREATE time
+/// (H2 audit 2026-05-02), replacing the legacy bulk UPDATE.
 pub async fn build_task(
     state: &State<'_, AppState>,
     workflow_id: &str,
     message: &str,
     locale: &str,
+    message_id: &str,
 ) -> (Task, String) {
-    let (history_context, _history_count) =
+    let (mut history_context, _history_count) =
         load_conversation_history(state, workflow_id, locale).await;
+
+    if let Some(obj) = history_context.as_object_mut() {
+        obj.insert(
+            "message_id".to_string(),
+            serde_json::Value::String(message_id.to_string()),
+        );
+    }
 
     let task_id = Uuid::new_v4().to_string();
     info!(task_id = %task_id, "Creating task for streaming workflow");

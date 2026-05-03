@@ -380,6 +380,33 @@ export const executionBlocksStore = {
 	},
 
 	/**
+	 * Reconstruct execution blocks by replaying buffered raw chunks.
+	 *
+	 * Used when switching BACK to a workflow that is still running in the
+	 * background (H3 audit 2026-05-02). Without this, `start()` resets state
+	 * on every selection so the execution area appears empty until the next
+	 * chunk arrives. By replaying the buffered chunk history through the same
+	 * `processChunk` path, we recreate the exact block sequence the user
+	 * would have seen if they had stayed on this workflow.
+	 *
+	 * @param workflowId - ID of the workflow being restored
+	 * @param chunks - Buffered raw stream chunks for this workflow
+	 */
+	restoreFromChunks(workflowId: string, chunks: StreamChunk[]): void {
+		store.set({
+			...initialState,
+			workflowId,
+			isExecuting: true
+		});
+		for (const chunk of chunks) {
+			store.update((s) => {
+				const handler = chunkHandlers[chunk.chunk_type];
+				return handler ? handler(s, chunk) : s;
+			});
+		}
+	},
+
+	/**
 	 * Reset to initial state.
 	 */
 	reset(): void {

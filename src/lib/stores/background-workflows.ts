@@ -48,6 +48,17 @@ const MAX_CONCURRENT_AUTO = 3;
 /** Maximum concurrent workflows for other validation modes */
 const MAX_CONCURRENT_OTHER = 1;
 
+/**
+ * Soft cap for buffered raw chunks per workflow (H3 audit 2026-05-02).
+ *
+ * Each chunk is typically <2KB, so 1000 chunks ≈ 2MB per active workflow.
+ * Older chunks are dropped FIFO when the cap is reached — restoring on a
+ * very long-running workflow may show a partial timeline, which is
+ * acceptable since the persisted message blocks fill in the rest after
+ * `workflow_complete`.
+ */
+const MAX_CHUNK_HISTORY = 1000;
+
 /** Tauri event names for workflow streaming */
 const STREAM_EVENTS = {
 	WORKFLOW_STREAM: 'workflow_stream',
@@ -137,7 +148,8 @@ function createInitialExecution(
 		error: null,
 		startedAt: Date.now(),
 		completedAt: null,
-		hasPendingQuestion: false
+		hasPendingQuestion: false,
+		chunkHistory: []
 	};
 }
 
@@ -157,15 +169,23 @@ function updateExecutionFromChunk(
 	// Apply common state update (token, tool, reasoning, sub-agent, task, error)
 	const updated = applyChunkToState(exec, chunk);
 
+	// H3 audit (2026-05-02): keep a bounded raw-chunk history so a switch BACK
+	// to a still-running workflow can rebuild executionBlocks from scratch
+	// (executionBlocksStore.start() resets state on every selection).
+	const nextHistory =
+		exec.chunkHistory.length >= MAX_CHUNK_HISTORY
+			? [...exec.chunkHistory.slice(1), chunk]
+			: [...exec.chunkHistory, chunk];
+
 	// Background-specific chunk types
 	if (chunk.chunk_type === 'user_question_start') {
-		return { ...updated, hasPendingQuestion: true };
+		return { ...updated, hasPendingQuestion: true, chunkHistory: nextHistory };
 	}
 	if (chunk.chunk_type === 'user_question_complete') {
-		return { ...updated, hasPendingQuestion: false };
+		return { ...updated, hasPendingQuestion: false, chunkHistory: nextHistory };
 	}
 
-	return updated;
+	return { ...updated, chunkHistory: nextHistory };
 }
 
 /**

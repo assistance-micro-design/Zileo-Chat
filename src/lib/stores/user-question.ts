@@ -187,6 +187,7 @@ export const userQuestionStore = {
 		try {
 			await invoke('submit_user_response', {
 				questionId: response.questionId,
+				workflowId: answeredWorkflowId,
 				selectedOptions: response.selectedOptions,
 				textResponse: response.textResponse
 			});
@@ -235,7 +236,7 @@ export const userQuestionStore = {
 			get(store).pendingQuestions.find((q) => q.id === questionId)?.workflowId ?? '';
 
 		try {
-			await invoke('skip_question', { questionId });
+			await invoke('skip_question', { questionId, workflowId: skippedWorkflowId });
 
 			store.update((s) => {
 				const remaining = s.pendingQuestions.filter((q) => q.id !== questionId);

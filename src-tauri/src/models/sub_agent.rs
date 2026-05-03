@@ -141,6 +141,15 @@ pub struct SubAgentExecutionCreate {
     /// Links to a parent execution record for correlation tracking.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_execution_id: Option<String>,
+    /// Parent message ID for message-level correlation.
+    ///
+    /// Set at CREATE time to the assistant message_id of the agent that
+    /// spawned this sub-agent (the primary's message_id for top-level
+    /// sub-agents, the spawning sub-agent's pre-allocated message_id for
+    /// nested chains). Used by `load_message_blocks` to attach the
+    /// sub-agent block to the right assistant turn (H2 audit 2026-05-02).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_message_id: Option<String>,
 }
 
 // Constructor used by commands/sub_agent_execution; lib/bin split.
@@ -169,7 +178,18 @@ impl SubAgentExecutionCreate {
             task_description,
             status: SubAgentStatus::Pending.to_string(),
             parent_execution_id: None,
+            parent_message_id: None,
         }
+    }
+
+    /// Sets the `parent_message_id` (assistant message_id of the spawning agent).
+    ///
+    /// Use at CREATE time so the sub-agent execution is correlated to the
+    /// right message turn from the start, instead of relying on the legacy
+    /// bulk UPDATE in `persistence_step.rs` (H2 audit 2026-05-02).
+    pub fn with_parent_message(mut self, parent_message_id: String) -> Self {
+        self.parent_message_id = Some(parent_message_id);
+        self
     }
 
     /// Creates a new SubAgentExecutionCreate with a parent execution ID.
@@ -200,6 +220,7 @@ impl SubAgentExecutionCreate {
             task_description,
             status: SubAgentStatus::Pending.to_string(),
             parent_execution_id,
+            parent_message_id: None,
         }
     }
 }
@@ -472,5 +493,65 @@ mod tests {
         let json = serde_json::to_string(&create).unwrap();
         // parent_execution_id should be skipped when None due to skip_serializing_if
         assert!(!json.contains("parent_execution_id"));
+    }
+
+    // H2 (audit 2026-05-02): parent_message_id must be set at CREATE time so
+    // the bulk UPDATE in persistence_step.rs can be removed without losing the
+    // message-level correlation for sub-agent executions.
+
+    #[test]
+    fn test_sub_agent_execution_create_with_parent_message() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+        )
+        .with_parent_message("msg_a_001".to_string());
+
+        assert_eq!(create.parent_message_id, Some("msg_a_001".to_string()));
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_default_parent_message_is_none() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+        );
+
+        assert_eq!(create.parent_message_id, None);
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_parent_message_serialization_skips_none() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+        );
+
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(!json.contains("parent_message_id"));
+    }
+
+    #[test]
+    fn test_sub_agent_execution_create_parent_message_serialization_some() {
+        let create = SubAgentExecutionCreate::new(
+            "wf_001".to_string(),
+            "parent_agent".to_string(),
+            "sub_agent_001".to_string(),
+            "Analysis Sub-Agent".to_string(),
+            "Task description".to_string(),
+        )
+        .with_parent_message("msg_a_001".to_string());
+
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(json.contains("\"parent_message_id\":\"msg_a_001\""));
     }
 }

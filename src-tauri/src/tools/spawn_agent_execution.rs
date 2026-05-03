@@ -151,7 +151,8 @@ impl SpawnAgentTool {
             self.workflow_id.clone(),
             self.parent_agent_id.clone(),
             self.cancellation_token.clone(),
-        );
+        )
+        .with_parent_message(self.parent_message_id.clone());
 
         let details = ValidationHelper::spawn_details(
             name,
@@ -308,14 +309,20 @@ impl SpawnAgentTool {
         // Emit sub_agent_start event
         executor.emit_start_event(&sub_agent_id, name, prompt);
 
-        // Create task for sub-agent
+        // Create task for sub-agent.
+        //
+        // Each sub-agent gets a fresh `message_id` (its own logical
+        // assistant turn). If this sub-agent itself spawns sub-agents
+        // (defensive — currently single-level enforced), its descendants
+        // chain through this id (H2 audit 2026-05-02).
         let task = Task {
             id: format!("task_{}", Uuid::new_v4()),
             description: prompt.to_string(),
             context: serde_json::json!({
                 "workflow_id": self.workflow_id,
                 "parent_agent_id": self.parent_agent_id,
-                "is_sub_agent": true
+                "is_sub_agent": true,
+                "message_id": Uuid::new_v4().to_string(),
             }),
         };
 

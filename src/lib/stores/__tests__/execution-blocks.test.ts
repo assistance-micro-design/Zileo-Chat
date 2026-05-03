@@ -286,6 +286,78 @@ describe('executionBlocksStore', () => {
 		});
 	});
 
+	describe('restoreFromChunks (H3 audit 2026-05-02)', () => {
+		it('rebuilds blocks in arrival order from a buffered chunk history', () => {
+			const chunks: StreamChunk[] = [
+				{
+					chunk_type: 'thinking_block',
+					workflow_id: 'wf-h3',
+					content: 'Plan the work'
+				},
+				{
+					chunk_type: 'tool_call_complete',
+					workflow_id: 'wf-h3',
+					tool: 'Search',
+					tool_type: 'local',
+					tool_input: '{}',
+					tool_output: '{"results":[]}',
+					tool_success: true,
+					duration: 250
+				},
+				{
+					chunk_type: 'sub_agent_complete',
+					workflow_id: 'wf-h3',
+					sub_agent_id: 'sub-1',
+					sub_agent_name: 'Helper',
+					content: 'Done',
+					metrics: { duration_ms: 1000, tokens_input: 10, tokens_output: 20 }
+				}
+			];
+
+			executionBlocksStore.restoreFromChunks('wf-h3', chunks);
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(3);
+			expect(blocks[0].block_type).toBe('thinking');
+			expect(blocks[1].block_type).toBe('tool_call');
+			expect(blocks[2].block_type).toBe('sub_agent');
+			expect(get(isExecuting)).toBe(true);
+		});
+
+		it('handles an empty history without errors', () => {
+			executionBlocksStore.restoreFromChunks('wf-empty', []);
+
+			expect(get(executionBlocks)).toEqual([]);
+			expect(get(isExecuting)).toBe(true);
+		});
+
+		it('ignores unrecognized chunk types in the history', () => {
+			const chunks: StreamChunk[] = [
+				{
+					chunk_type: 'thinking_block',
+					workflow_id: 'wf-mix',
+					content: 'Step 1'
+				},
+				{
+					chunk_type: 'iteration_progress',
+					workflow_id: 'wf-mix'
+				} as unknown as StreamChunk,
+				{
+					chunk_type: 'reasoning',
+					workflow_id: 'wf-mix',
+					content: 'Step 2'
+				}
+			];
+
+			executionBlocksStore.restoreFromChunks('wf-mix', chunks);
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(2);
+			expect(blocks[0].block_type).toBe('thinking');
+			expect(blocks[1].block_type).toBe('thinking');
+		});
+	});
+
 	describe('reset', () => {
 		it('resets all state', () => {
 			executionBlocksStore.start('wf-123');

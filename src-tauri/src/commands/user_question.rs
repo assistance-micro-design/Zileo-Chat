@@ -126,17 +126,24 @@ async fn verify_update_success(db: &DBClient, question_id: &str) -> Result<Strin
     Ok(new_status.to_string())
 }
 
-/// Submit a response to a pending question
+/// Submit a response to a pending question.
+///
+/// `workflow_id` is required so the emitted `user_question_complete` chunk
+/// carries the correct workflow context — the frontend dispatcher routes by
+/// `workflow_id` and silently drops chunks with an empty value (H1 audit
+/// 2026-05-02).
 #[tauri::command]
 #[instrument(name = "submit_user_response", skip(state, window))]
 pub async fn submit_user_response(
     question_id: String,
+    workflow_id: String,
     selected_options: Vec<String>,
     text_response: Option<String>,
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
     let validated_id = validate_uuid_field(&question_id, "question_id")?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     validate_question_pending(&state.db, &validated_id).await?;
     update_question_answered(
@@ -150,13 +157,15 @@ pub async fn submit_user_response(
 
     info!(
         question_id = %validated_id,
+        workflow_id = %validated_workflow_id,
         new_status = %new_status,
         "User submitted response - verified status"
     );
 
-    // Emit typed event for any listeners
+    // Emit typed event so the frontend can clear `hasPendingQuestion` for
+    // this workflow (background-workflows.ts routes by workflow_id).
     let chunk = StreamChunk::user_question_complete(
-        String::new(), // workflow_id not available in this command context
+        validated_workflow_id.to_string(),
         validated_id.to_string(),
     );
 
@@ -210,15 +219,22 @@ pub async fn get_pending_questions(
     Ok(questions)
 }
 
-/// Skip a question (user chooses not to answer)
+/// Skip a question (user chooses not to answer).
+///
+/// `workflow_id` is required so the emitted `user_question_complete` chunk
+/// carries the correct workflow context — the frontend dispatcher routes by
+/// `workflow_id` and silently drops chunks with an empty value (H1 audit
+/// 2026-05-02).
 #[tauri::command]
 #[instrument(name = "skip_question", skip(state, window))]
 pub async fn skip_question(
     question_id: String,
+    workflow_id: String,
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<(), String> {
     let validated_id = validate_uuid_field(&question_id, "question_id")?;
+    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
     // Validate question exists and is pending (validated_id is safe UUID)
     let result: Vec<serde_json::Value> = state
@@ -255,11 +271,16 @@ pub async fn skip_question(
         .await
         .map_err(|e| format!("Failed to skip question: {}", e))?;
 
-    info!(question_id = %validated_id, "User skipped question");
+    info!(
+        question_id = %validated_id,
+        workflow_id = %validated_workflow_id,
+        "User skipped question"
+    );
 
-    // Emit typed event
+    // Emit typed event so the frontend can clear `hasPendingQuestion` for
+    // this workflow (background-workflows.ts routes by workflow_id).
     let chunk = StreamChunk::user_question_complete(
-        String::new(), // workflow_id not available in this command context
+        validated_workflow_id.to_string(),
         validated_id.to_string(),
     );
 

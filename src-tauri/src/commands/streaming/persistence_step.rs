@@ -268,22 +268,11 @@ pub async fn finalize_completion(
     )
     .await;
 
-    // 8. Link orphan sub-agent executions.
-    if let Err(e) = state
-        .db
-        .execute_with_params(
-            "UPDATE sub_agent_execution SET parent_message_id = $msg_id \
-             WHERE workflow_id = $wf_id \
-               AND (parent_message_id IS NONE OR parent_message_id IS NULL)",
-            vec![
-                ("msg_id".to_string(), serde_json::json!(message_id)),
-                ("wf_id".to_string(), serde_json::json!(workflow_id)),
-            ],
-        )
-        .await
-    {
-        warn!(error = %e, "Failed to link sub-agent executions to message");
-    }
+    // 8. Sub-agent executions get `parent_message_id` at CREATE time
+    //    (see SubAgentExecutor::create_execution_record_with_parent and
+    //    SubAgentExecutionCreate::parent_message_id) — H2 audit 2026-05-02.
+    //    The legacy bulk UPDATE was removed because it over-attributed
+    //    nested sub-agents (A→B→C) all to the same primary message.
 
     info!(
         tool_executions_count = tool_executions.len(),

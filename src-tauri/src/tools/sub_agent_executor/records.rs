@@ -111,6 +111,14 @@ impl SubAgentExecutor {
             parent_execution_id.clone(),
         );
         execution_create.status = "running".to_string();
+        // Persist message-level correlation at CREATE time so the legacy bulk
+        // UPDATE in `persistence_step.rs` is no longer needed (H2 audit
+        // 2026-05-02). When `parent_message_id` is None (e.g. unit tests
+        // without a primary workflow context), the field stays absent thanks
+        // to `skip_serializing_if`.
+        if let Some(ref msg_id) = self.parent_message_id {
+            execution_create.parent_message_id = Some(msg_id.clone());
+        }
 
         self.db
             .create("sub_agent_execution", &execution_id, execution_create)

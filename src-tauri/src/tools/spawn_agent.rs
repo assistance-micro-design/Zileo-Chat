@@ -253,6 +253,10 @@ pub struct SpawnAgentTool {
     pub(crate) workflow_id: String,
     /// Whether this tool is for the primary agent (true) or a sub-agent (false)
     pub(crate) is_primary_agent: bool,
+    /// Spawning agent's assistant message_id, propagated to
+    /// `sub_agent_execution.parent_message_id` at CREATE time (H2 audit
+    /// 2026-05-02). Pulled from `AgentToolContext::current_message_id`.
+    pub(crate) parent_message_id: Option<String>,
     /// Tracked spawned children for this workflow
     pub(crate) spawned_children: Arc<RwLock<Vec<SpawnedChild>>>,
 }
@@ -302,6 +306,7 @@ impl SpawnAgentTool {
             parent_agent_id,
             workflow_id,
             is_primary_agent,
+            parent_message_id: context.current_message_id,
             spawned_children: Arc::new(RwLock::new(Vec::new())),
         }
     }

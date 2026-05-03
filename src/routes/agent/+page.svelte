@@ -270,7 +270,11 @@ Uses extracted components, services, and stores for clean architecture.
 		if (bgExecution && bgExecution.status === 'running') {
 			// Restore streaming state from background execution
 			streamingStore.restoreFrom(bgExecution);
-			executionBlocksStore.start(workflowId);
+			// H3 audit (2026-05-02): rebuild the execution-blocks timeline by
+			// replaying the buffered chunks of this workflow, instead of just
+			// resetting state via `start()` (which left the execution area
+			// blank until the next chunk landed).
+			executionBlocksStore.restoreFromChunks(workflowId, bgExecution.chunkHistory);
 			tokenStore.startStreaming();
 			// Phase 13: hydrate the FULL session token display, not just outputs.
 			// Inputs/cache survive workflow switches because chunkProcessor.ts

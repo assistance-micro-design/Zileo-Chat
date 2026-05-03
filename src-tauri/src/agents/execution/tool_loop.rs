@@ -433,9 +433,30 @@ pub(crate) async fn execute_with_tools(
         .and_then(|v| v.as_str())
         .map(String::from);
 
+    // Pre-allocated assistant message_id propagated from execution.rs via
+    // build_task. Sub-agent tools persist it as `parent_message_id` on
+    // sub_agent_execution at CREATE time (H2 audit 2026-05-02).
+    let current_message_id = task
+        .context
+        .get("message_id")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     let effective_context = match (ctx.agent_context, &cancellation_token) {
         (Some(agent_ctx), Some(token)) => {
-            Some(agent_ctx.clone().with_cancellation_token(token.clone()))
+            let mut ctx = agent_ctx.clone().with_cancellation_token(token.clone());
+            if let Some(ref msg_id) = current_message_id {
+                ctx = ctx.with_current_message_id(msg_id.clone());
+            }
+            Some(ctx)
+        }
+        (Some(agent_ctx), None) => {
+            let ctx = if let Some(ref msg_id) = current_message_id {
+                agent_ctx.clone().with_current_message_id(msg_id.clone())
+            } else {
+                agent_ctx.clone()
+            };
+            Some(ctx)
         }
         _ => None,
     };

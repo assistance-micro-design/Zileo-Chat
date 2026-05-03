@@ -98,7 +98,7 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    let (task, task_id) = build_task(&state, &workflow_id, &message, &locale).await;
+    let (task, task_id) = build_task(&state, &workflow_id, &message, &locale, &message_id).await;
 
     let (report, duration_ms) = match run_orchestrator_with_cancel(
         &window,

@@ -148,6 +148,12 @@ pub struct SubAgentExecutor {
     pub(crate) cancellation_token: Option<CancellationToken>,
     /// Optional circuit breaker for execution resilience
     pub(crate) circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
+    /// Assistant message_id of the spawning agent.
+    ///
+    /// Persisted on the new `sub_agent_execution` record's `parent_message_id`
+    /// at CREATE time (H2 audit 2026-05-02). `None` for callers that do not
+    /// have message-level correlation (e.g. legacy tests).
+    pub(crate) parent_message_id: Option<String>,
 }
 
 impl SubAgentExecutor {
@@ -179,7 +185,18 @@ impl SubAgentExecutor {
             parent_agent_id,
             cancellation_token,
             circuit_breaker: None,
+            parent_message_id: None,
         }
+    }
+
+    /// Sets the spawning agent's assistant message_id.
+    ///
+    /// Used downstream when building the `sub_agent_execution` record so
+    /// `parent_message_id` is set at CREATE time (replaces the legacy bulk
+    /// UPDATE in `persistence_step.rs` — H2 audit 2026-05-02).
+    pub fn with_parent_message(mut self, parent_message_id: Option<String>) -> Self {
+        self.parent_message_id = parent_message_id;
+        self
     }
 
     /// Checks that the caller is the primary agent.

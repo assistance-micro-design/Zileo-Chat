@@ -145,7 +145,8 @@ impl ParallelTasksTool {
             self.workflow_id.clone(),
             self.current_agent_id.clone(),
             self.cancellation_token.clone(),
-        );
+        )
+        .with_parent_message(self.parent_message_id.clone());
 
         let batch_id = Uuid::new_v4().to_string();
         let mut orchestrator_tasks: Vec<(String, Task)> = Vec::new();
@@ -165,6 +166,11 @@ impl ParallelTasksTool {
                 Some(batch_id.clone()), // Link parallel tasks to batch
             );
             execution_create.status = "running".to_string();
+            // Persist message-level correlation at CREATE time (H2 audit
+            // 2026-05-02). Skipped when None (no spawning agent message_id).
+            if let Some(ref msg_id) = self.parent_message_id {
+                execution_create.parent_message_id = Some(msg_id.clone());
+            }
 
             if let Err(e) = self
                 .db
@@ -179,12 +185,17 @@ impl ParallelTasksTool {
                 );
             }
 
-            // Resolve task_ids if provided for this task
+            // Resolve task_ids if provided for this task.
+            //
+            // Each parallel sub-agent gets a fresh `message_id` (its own
+            // logical assistant turn) so descendants chain through
+            // `parent_message_id` at CREATE time (H2 audit 2026-05-02).
             let mut context = serde_json::json!({
                 "workflow_id": self.workflow_id,
                 "parent_agent_id": self.current_agent_id,
                 "batch_id": batch_id,
-                "is_parallel_task": true
+                "is_parallel_task": true,
+                "message_id": Uuid::new_v4().to_string(),
             });
 
             if let Some(ref ids) = task_spec.task_ids {

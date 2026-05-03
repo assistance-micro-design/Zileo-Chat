@@ -99,6 +99,14 @@ pub struct AgentToolContext {
     ///
     /// The circuit breaker is shared across all sub-agent tools in the workflow.
     pub circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
+    /// Assistant message_id of the agent that owns this context.
+    ///
+    /// Set on the primary's tool loop to the workflow's pre-allocated
+    /// message_id. Sub-agent tools propagate it as `parent_message_id` when
+    /// creating `sub_agent_execution` records, so attribution is correct
+    /// at CREATE time (replaces the legacy bulk UPDATE in
+    /// `persistence_step.rs` — H2 audit 2026-05-02).
+    pub current_message_id: Option<String>,
 }
 
 // Constructor used by sub-agent tool factories in the lib; lib/bin split.
@@ -145,6 +153,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token,
             circuit_breaker: None, // Default to None for backward compatibility
+            current_message_id: None,
         }
     }
 
@@ -177,6 +186,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token: None, // Use from_app_state_with_cancellation for token support
             circuit_breaker: None, // Use from_app_state_with_resilience for full resilience support
+            current_message_id: None,
         }
     }
 
@@ -217,6 +227,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token,
             circuit_breaker: None, // Use from_app_state_with_resilience for circuit breaker
+            current_message_id: None,
         }
     }
 
@@ -261,6 +272,7 @@ impl AgentToolContext {
             app_handle,
             cancellation_token,
             circuit_breaker,
+            current_message_id: None,
         }
     }
 
@@ -280,6 +292,17 @@ impl AgentToolContext {
     /// ```
     pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
         self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Returns a new context with `current_message_id` set.
+    ///
+    /// Used by `tool_loop::execute_with_tools` to propagate the agent's
+    /// pre-allocated assistant message_id from `task.context["message_id"]`
+    /// down to sub-agent tools so they can persist `parent_message_id` on
+    /// `sub_agent_execution` records at CREATE time (H2 audit 2026-05-02).
+    pub fn with_current_message_id(mut self, message_id: String) -> Self {
+        self.current_message_id = Some(message_id);
         self
     }
 

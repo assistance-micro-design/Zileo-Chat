@@ -150,6 +150,11 @@ impl DelegateTaskTool {
         );
         // Set status to running (new() defaults to pending)
         execution_create.status = "running".to_string();
+        // Persist message-level correlation at CREATE time (H2 audit
+        // 2026-05-02). Skipped when None (no spawning agent message_id).
+        if let Some(ref msg_id) = self.parent_message_id {
+            execution_create.parent_message_id = Some(msg_id.clone());
+        }
 
         // Use db.create() which handles serialization correctly (avoids SDK enum issues)
         self.db
@@ -199,11 +204,16 @@ impl DelegateTaskTool {
             None
         };
 
-        // 11. Create task for agent with optional assigned_tasks in context
+        // 11. Create task for agent with optional assigned_tasks in context.
+        //
+        // Each delegate gets a fresh `message_id` (its own logical assistant
+        // turn) so any sub-agents it spawns chain correctly via
+        // `parent_message_id` at CREATE time (H2 audit 2026-05-02).
         let mut context = serde_json::json!({
             "workflow_id": self.workflow_id,
             "delegator_agent_id": self.current_agent_id,
-            "is_delegation": true
+            "is_delegation": true,
+            "message_id": Uuid::new_v4().to_string(),
         });
 
         if let Some(ref tasks) = assigned_tasks {
