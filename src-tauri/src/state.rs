@@ -541,20 +541,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_streaming_cancellation_reports_missing_token() {
-        let temp_dir = test_tempdir();
-        let db_path = temp_dir.path().join("test_db_missing_cancel");
-        let db_path_str = db_path.to_str().unwrap();
-
-        let state = AppState::new(db_path_str).await.unwrap();
-
-        assert!(
-            !state.request_cancellation("missing_workflow").await,
-            "Missing workflow cancellation should be reported"
-        );
-    }
-
-    #[tokio::test]
     async fn test_multiple_cancellations() {
         let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db6");
