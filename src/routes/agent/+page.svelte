@@ -181,46 +181,52 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Load workflow data (messages and persisted blocks).
 	 */
-	async function loadWorkflowData(workflowId: string): Promise<void> {
-		pageState.messagesLoading = true;
+		async function loadWorkflowData(workflowId: string): Promise<void> {
+			const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
+			pageState.messagesLoading = true;
 
-		try {
-			// Load messages
-			const result = await MessageService.loadWithSubAgents(workflowId);
-			messages = result.messages;
-			if (result.error) {
-				toastStore.add({
-					type: 'error',
-					title: result.error,
-					message: '',
-					persistent: false,
-					duration: 5000
-				});
-			}
-
-			// Load persisted execution blocks for all messages
-			messageBlocks.clear();
 			try {
-				const blocks = await BlockService.loadForMessages(result.messages);
-				for (const [id, b] of blocks) {
-					messageBlocks.set(id, b);
+				// Load messages
+				const result = await MessageService.loadWithSubAgents(workflowId);
+				if (!isStillSelected()) return;
+				messages = result.messages;
+				if (result.error) {
+					toastStore.add({
+						type: 'error',
+						title: result.error,
+						message: '',
+						persistent: false,
+						duration: 5000
+					});
 				}
-			} catch {
-				// Already cleared above
-			}
 
-			// Load persisted tasks for this workflow
-			persistedTasks = [];
-			try {
-				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
-				persistedTasks = mapPersistedTasks(tasks);
-			} catch {
-				// Tasks are optional; silently continue if loading fails
+				// Load persisted execution blocks for all messages
+				messageBlocks.clear();
+				try {
+					const blocks = await BlockService.loadForMessages(result.messages);
+					if (!isStillSelected()) return;
+					for (const [id, b] of blocks) {
+						messageBlocks.set(id, b);
+					}
+				} catch (err) {
+					console.warn('Failed to load message blocks:', getErrorMessage(err));
+				}
+
+				// Load persisted tasks for this workflow
+				persistedTasks = [];
+				try {
+					const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
+					if (!isStillSelected()) return;
+					persistedTasks = mapPersistedTasks(tasks);
+				} catch (err) {
+					console.warn('Failed to load workflow tasks:', getErrorMessage(err));
+				}
+			} finally {
+				if (isStillSelected()) {
+					pageState.messagesLoading = false;
+				}
 			}
-		} finally {
-			pageState.messagesLoading = false;
 		}
-	}
 
 	/**
 	 * Create a new workflow.
@@ -240,75 +246,80 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Select a workflow and load its data.
 	 * Handles workflow switching for background workflows by restoring streaming state.
 	 */
-	async function selectWorkflow(workflowId: string): Promise<void> {
-		// Clear "zombie" values from the previous workflow IMMEDIATELY so the
-		// user never sees a flash of the wrong session metrics.
-		tokenStore.reset();
+		async function selectWorkflow(workflowId: string): Promise<void> {
+			const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
 
-		pageState.selectedWorkflowId = workflowId;
-		workflowStore.select(workflowId);
-		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
+			// Clear "zombie" values from the previous workflow IMMEDIATELY so the
+			// user never sees a flash of the wrong session metrics.
+			tokenStore.reset();
 
-		// Notify background store which workflow is being viewed
-		backgroundWorkflowsStore.setViewed(workflowId);
+			pageState.selectedWorkflowId = workflowId;
+			workflowStore.select(workflowId);
+			LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
 
-		// Load workflow data (messages and historical activities)
-		await loadWorkflowData(workflowId);
+			// Notify background store which workflow is being viewed
+			backgroundWorkflowsStore.setViewed(workflowId);
 
-		// Update token store with workflow cumulative metrics
-		const workflow = workflowStore.getSelected();
-		if (workflow) {
-			tokenStore.updateFromWorkflow(workflow);
-		}
+			// Load workflow data (messages and historical activities)
+			await loadWorkflowData(workflowId);
+			if (!isStillSelected()) return;
 
-		// Fetch the metrics of the last assistant message so the session
-		// display reflects "what the last run cost" rather than zeros.
-		const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
-		if (backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
-
-		// Check if this workflow is running in the background
-		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
-		if (bgExecution && bgExecution.status === 'running') {
-			// Restore streaming state from background execution
-			streamingStore.restoreFrom(bgExecution);
-			// H3 audit (2026-05-02): rebuild the execution-blocks timeline by
-			// replaying the buffered chunks of this workflow, instead of just
-			// resetting state via `start()` (which left the execution area
-			// blank until the next chunk landed).
-			executionBlocksStore.restoreFromChunks(workflowId, bgExecution.chunkHistory);
-			tokenStore.startStreaming();
-			// Hydrate the FULL session token display, not just outputs. Inputs
-			// and cache survive workflow switches because chunkProcessor.ts
-			// keeps them on the bg execution itself (response_block updates).
-			tokenStore.setSessionTokens(
-				bgExecution.tokensSent,
-				bgExecution.tokensReceived,
-				bgExecution.cachedTokens ?? undefined,
-				bgExecution.cacheWriteTokens ?? undefined
-			);
-			// Option A: also restore the in-progress cost so a switch back to
-			// a still-running workflow shows what's accrued so far, marked as
-			// partial via the `~` prefix in MetricsBar / TokenDisplay.
-			if (bgExecution.partialCostUsd != null) {
-				tokenStore.setPartialSessionCost(bgExecution.partialCostUsd);
+			// Update token store with workflow cumulative metrics
+			const workflow = workflowStore.getSelected();
+			if (workflow) {
+				tokenStore.updateFromWorkflow(workflow);
 			}
 
-			// Open user question modal if there are pending questions for this workflow
-			userQuestionStore.openForWorkflow(workflowId);
-		} else {
-			// Not running in background — show the last assistant message's
-			// metrics so the user sees a meaningful session summary.
-			streamingStore.reset();
-			executionBlocksStore.reset();
-			tokenStore.restoreFromLastMessage(lastMetrics);
-		}
+			// Fetch the metrics of the last assistant message so the session
+			// display reflects "what the last run cost" rather than zeros.
+			const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
+			if (!isStillSelected() || backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
 
-		// Auto-select agent if workflow has one
-		const agentId = workflow?.agent_id;
-		if (agentId && agentId !== pageState.selectedAgentId) {
-			await handleAgentChange(agentId);
+			// Check if this workflow is running in the background
+			const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
+			if (!isStillSelected()) return;
+			if (bgExecution && bgExecution.status === 'running') {
+				// Restore streaming state from background execution
+				streamingStore.restoreFrom(bgExecution);
+				// H3 audit (2026-05-02): rebuild the execution-blocks timeline by
+				// replaying the buffered chunks of this workflow, instead of just
+				// resetting state via `start()` (which left the execution area
+				// blank until the next chunk landed).
+				executionBlocksStore.restoreFromChunks(workflowId, bgExecution.chunkHistory);
+				tokenStore.startStreaming();
+				// Hydrate the FULL session token display, not just outputs. Inputs
+				// and cache survive workflow switches because chunkProcessor.ts
+				// keeps them on the bg execution itself (response_block updates).
+				tokenStore.setSessionTokens(
+					bgExecution.tokensSent,
+					bgExecution.tokensReceived,
+					bgExecution.cachedTokens ?? undefined,
+					bgExecution.cacheWriteTokens ?? undefined
+				);
+				// Option A: also restore the in-progress cost so a switch back to
+				// a still-running workflow shows what's accrued so far, marked as
+				// partial via the `~` prefix in MetricsBar / TokenDisplay.
+				if (bgExecution.partialCostUsd != null) {
+					tokenStore.setPartialSessionCost(bgExecution.partialCostUsd);
+				}
+
+				// Open user question modal if there are pending questions for this workflow
+				userQuestionStore.openForWorkflow(workflowId);
+			} else {
+				// Not running in background — show the last assistant message's
+				// metrics so the user sees a meaningful session summary.
+				streamingStore.reset();
+				executionBlocksStore.reset();
+				tokenStore.restoreFromLastMessage(lastMetrics);
+			}
+
+			// Auto-select agent if workflow has one
+			const agentId = workflow?.agent_id;
+			if (agentId && agentId !== pageState.selectedAgentId) {
+				await handleAgentChange(agentId);
+				if (!isStillSelected()) return;
+			}
 		}
-	}
 
 	/**
 	 * Delete a workflow.
@@ -471,62 +482,87 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle sending a message with streaming.
 	 * Delegates orchestration to WorkflowExecutorService.
 	 */
-	async function handleSend(message: string): Promise<void> {
-		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
+		async function handleSend(message: string): Promise<void> {
+			if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
 
-		const result = await WorkflowExecutorService.execute(
-			{
-				workflowId: pageState.selectedWorkflowId,
-				message,
-				agentId: pageState.selectedAgentId,
-				locale: $locale
-			},
-			{
-				onUserMessage: (msg) => {
-					messages = [...messages, msg];
+			const executionWorkflowId = pageState.selectedWorkflowId;
+			const isStillSelected = () => pageState.selectedWorkflowId === executionWorkflowId;
+
+			const result = await WorkflowExecutorService.execute(
+				{
+					workflowId: executionWorkflowId,
+					message,
+					agentId: pageState.selectedAgentId,
+					locale: $locale
 				},
-				onAssistantMessage: (msg) => {
-					messages = [...messages, msg];
-				},
-				onError: (msg) => {
-					messages = [...messages, msg];
+				{
+					onUserMessage: (msg) => {
+						if (isStillSelected()) messages = [...messages, msg];
+					},
+					onAssistantMessage: (msg) => {
+						if (isStillSelected()) messages = [...messages, msg];
+					},
+					onError: (msg) => {
+						if (isStillSelected()) messages = [...messages, msg];
+					}
+				}
+			);
+
+			// Transfer execution blocks to persisted messageBlocks
+			// Blocks snapshot is captured in execute() before the store reset.
+			// No ID patching needed: createAssistantMessage uses result.message_id directly.
+			if (
+				isStillSelected() &&
+				result.success &&
+				result.assistantMessageId &&
+				result.blocks &&
+				result.blocks.length > 0
+			) {
+				messageBlocks.set(result.assistantMessageId, result.blocks);
+			}
+
+			// Reload persisted tasks from DB after execution completes
+			// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
+			// switches to persistedTasks which must be fresh from DB.
+			if (isStillSelected()) {
+				try {
+					const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', {
+						workflowId: executionWorkflowId
+					});
+					if (isStillSelected()) {
+						persistedTasks = mapPersistedTasks(tasks);
+					}
+				} catch (err) {
+					console.warn('Failed to reload workflow tasks after execution:', getErrorMessage(err));
 				}
 			}
-		);
-
-		// Transfer execution blocks to persisted messageBlocks
-		// Blocks snapshot is captured in execute() before the store reset.
-		// No ID patching needed: createAssistantMessage uses result.message_id directly.
-		if (result.success && result.assistantMessageId && result.blocks && result.blocks.length > 0) {
-			messageBlocks.set(result.assistantMessageId, result.blocks);
 		}
-
-		// Reload persisted tasks from DB after execution completes
-		// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
-		// switches to persistedTasks which must be fresh from DB.
-		if (pageState.selectedWorkflowId) {
-			try {
-				const tasks = await invoke<PersistedTask[]>('list_workflow_tasks', {
-					workflowId: pageState.selectedWorkflowId
-				});
-				persistedTasks = mapPersistedTasks(tasks);
-			} catch {
-				// Tasks are optional; silently continue
-			}
-		}
-	}
 
 	/**
 	 * Handle canceling streaming workflow.
 	 */
-	function handleCancel(): void {
-		if (pageState.selectedWorkflowId) {
-			WorkflowService.cancel(pageState.selectedWorkflowId);
-			streamingStore.reset();
-			executionBlocksStore.cancel();
-			tokenStore.stopStreaming();
+		async function handleCancel(): Promise<void> {
+			if (!pageState.selectedWorkflowId) return;
+
+			const workflowId = pageState.selectedWorkflowId;
+			try {
+				await WorkflowService.cancel(workflowId);
+			} catch (err) {
+				toastStore.add({
+					type: 'error',
+					title: getErrorMessage(err),
+					message: '',
+					persistent: false,
+					duration: 5000
+				});
+			} finally {
+				if (pageState.selectedWorkflowId === workflowId) {
+					streamingStore.reset();
+					executionBlocksStore.cancel();
+					tokenStore.stopStreaming();
+				}
+			}
 		}
-	}
 
 	/**
 	 * Handle validation approval.

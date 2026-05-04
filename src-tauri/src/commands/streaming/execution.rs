@@ -24,7 +24,7 @@ use crate::{
 };
 use std::sync::Arc;
 use tauri::{State, Window};
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
 use super::helpers::emit_error;
@@ -184,8 +184,12 @@ pub async fn cancel_workflow_streaming(
 
     let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
 
-    state.request_cancellation(&validated_id).await;
-    info!(workflow_id = %validated_id, "Workflow cancellation requested");
+    if state.request_cancellation(&validated_id).await {
+        info!(workflow_id = %validated_id, "Workflow cancellation requested");
+    } else {
+        warn!(workflow_id = %validated_id, "No running workflow cancellation token found");
+        return Err("No running workflow found for cancellation".to_string());
+    }
 
     Ok(())
 }

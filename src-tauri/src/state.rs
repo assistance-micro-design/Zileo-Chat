@@ -129,10 +129,15 @@ impl AppState {
         token
     }
 
-    /// Marks a workflow for cancellation by cancelling its token
-    pub async fn request_cancellation(&self, workflow_id: &str) {
+    /// Marks a workflow for cancellation by cancelling its token.
+    ///
+    /// Returns `true` when a running workflow token existed, `false` otherwise.
+    pub async fn request_cancellation(&self, workflow_id: &str) -> bool {
         if let Some(token) = self.streaming_cancellations.lock().await.get(workflow_id) {
             token.cancel();
+            true
+        } else {
+            false
         }
     }
 
@@ -517,7 +522,7 @@ mod tests {
         );
 
         // Request cancellation
-        state.request_cancellation(workflow_id).await;
+        assert!(state.request_cancellation(workflow_id).await);
         assert!(
             token.is_cancelled(),
             "Token should be cancelled after request"
@@ -536,6 +541,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_streaming_cancellation_reports_missing_token() {
+        let temp_dir = test_tempdir();
+        let db_path = temp_dir.path().join("test_db_missing_cancel");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let state = AppState::new(db_path_str).await.unwrap();
+
+        assert!(
+            !state.request_cancellation("missing_workflow").await,
+            "Missing workflow cancellation should be reported"
+        );
+    }
+
+    #[tokio::test]
     async fn test_multiple_cancellations() {
         let temp_dir = test_tempdir();
         let db_path = temp_dir.path().join("test_db6");
@@ -549,9 +568,9 @@ mod tests {
         let token3 = state.create_cancellation_token("wf3").await;
 
         // Cancel all three
-        state.request_cancellation("wf1").await;
-        state.request_cancellation("wf2").await;
-        state.request_cancellation("wf3").await;
+        assert!(state.request_cancellation("wf1").await);
+        assert!(state.request_cancellation("wf2").await);
+        assert!(state.request_cancellation("wf3").await);
 
         assert!(token1.is_cancelled());
         assert!(token2.is_cancelled());
@@ -587,7 +606,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Request cancellation
-        state.request_cancellation(workflow_id).await;
+        assert!(state.request_cancellation(workflow_id).await);
 
         // The task should complete quickly now
         let result = tokio::time::timeout(tokio::time::Duration::from_millis(100), handle).await;
