@@ -73,14 +73,29 @@ pub fn apply_prompt_cache_control(messages: &[serde_json::Value]) -> Vec<serde_j
                             "cache_control": { "type": "ephemeral" }
                         }]
                     });
-                    // Preserve tool-specific fields
-                    if role == "tool" {
-                        if let Some(tool_call_id) = msg.get("tool_call_id") {
-                            marked["tool_call_id"] = tool_call_id.clone();
+                    // Preserve role-specific fields. Without these, OpenRouter
+                    // forwards orphan tool_result messages to Anthropic and the
+                    // request is rejected with HTTP 400.
+                    match role {
+                        "tool" => {
+                            if let Some(tool_call_id) = msg.get("tool_call_id") {
+                                marked["tool_call_id"] = tool_call_id.clone();
+                            }
+                            if let Some(name) = msg.get("name") {
+                                marked["name"] = name.clone();
+                            }
                         }
-                        if let Some(name) = msg.get("name") {
-                            marked["name"] = name.clone();
+                        "assistant" => {
+                            if let Some(tool_calls) = msg.get("tool_calls") {
+                                marked["tool_calls"] = tool_calls.clone();
+                            }
+                            // Anthropic thinking blocks via OpenRouter must be
+                            // echoed unmodified across multi-turn tool calls.
+                            if let Some(reasoning_details) = msg.get("reasoning_details") {
+                                marked["reasoning_details"] = reasoning_details.clone();
+                            }
                         }
+                        _ => {}
                     }
                     marked
                 } else {
@@ -302,5 +317,73 @@ mod tests {
         assert_eq!(result[6]["content"][0]["text"], "A3"); // BP2
         assert_eq!(result[7]["content"][0]["text"], "T3"); // BP3
         assert_eq!(result[8]["content"], "A4"); // Not marked
+    }
+
+    /// Regression: assistant message marked as BP2 must keep its `tool_calls`
+    /// field. Dropping it produces orphan tool_result messages on the next
+    /// iteration, which Anthropic via OpenRouter rejects with HTTP 400
+    /// ("Provider returned error").
+    #[test]
+    fn test_cache_control_preserves_assistant_tool_calls() {
+        let tool_calls = serde_json::json!([{
+            "id": "call_abc",
+            "type": "function",
+            "function": { "name": "MemoryTool", "arguments": "{}" }
+        }]);
+        let messages = vec![
+            serde_json::json!({"role": "system", "content": "S"}),
+            serde_json::json!({"role": "user", "content": "U"}),
+            serde_json::json!({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": tool_calls,
+            }),
+            serde_json::json!({"role": "tool", "content": "ok", "tool_call_id": "call_abc", "name": "MemoryTool"}),
+        ];
+
+        let result = apply_prompt_cache_control(&messages);
+
+        // Assistant at index 2 must be marked (last assistant in stable prefix).
+        assert!(
+            result[2]["content"].is_array(),
+            "assistant should be marked with cache_control"
+        );
+        // Critical: tool_calls must survive the rebuild, otherwise tool message
+        // at index 3 references a non-existent tool_use_id.
+        assert_eq!(
+            result[2]["tool_calls"], tool_calls,
+            "tool_calls must be preserved on the marked assistant message"
+        );
+    }
+
+    /// Regression: assistant message marked as BP2 must keep its
+    /// `reasoning_details` field. OpenRouter requires Anthropic thinking
+    /// blocks (with cryptographic signatures) to be passed back unmodified
+    /// across multi-turn tool calls.
+    #[test]
+    fn test_cache_control_preserves_assistant_reasoning_details() {
+        let reasoning_details = serde_json::json!([{
+            "type": "reasoning.text",
+            "text": "Step 1: analyze",
+            "signature": "sig_xyz"
+        }]);
+        let messages = vec![
+            serde_json::json!({"role": "system", "content": "S"}),
+            serde_json::json!({"role": "user", "content": "U"}),
+            serde_json::json!({
+                "role": "assistant",
+                "content": "answer",
+                "reasoning_details": reasoning_details,
+            }),
+            serde_json::json!({"role": "tool", "content": "ok", "tool_call_id": "c1"}),
+        ];
+
+        let result = apply_prompt_cache_control(&messages);
+
+        assert!(result[2]["content"].is_array());
+        assert_eq!(
+            result[2]["reasoning_details"], reasoning_details,
+            "reasoning_details must be preserved on the marked assistant message"
+        );
     }
 }
