@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Prompt-cache breakpoint dropped `tool_calls` and `reasoning_details` from assistant messages**: The BP2 marker in `cache_control` rebuilt the assistant message keeping only `role` + `content`, silently stripping `tool_calls` and `reasoning_details`. On iteration 2 of the tool loop, OpenRouter forwarded `tool_result` messages whose `tool_call_id` no longer matched any `tool_use`, and Anthropic rejected the request with HTTP 400 ("Provider returned error"). The deterministic 400 was retried 3x at exponential backoff, amplifying cost on what should have been an instant fail. The marker now mirrors the existing tool-role preservation via a match on `role`; `reasoning_details` is preserved as required by OpenRouter docs for Anthropic thinking continuity (signed blocks). Mistral native and Ollama bypass this code path and were unaffected. Two regression tests added
+
 ---
 
 ## [0.22.2] - 2026-05-03
