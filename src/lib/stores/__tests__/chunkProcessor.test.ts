@@ -537,6 +537,50 @@ describe('applyChunkToState', () => {
 
 			expect(result.partialCostUsd).toBeNull();
 		});
+
+		it('should ignore iteration_progress chunks emitted by sub-agents', () => {
+			// A sub-agent has its own TokenTracker that resets to 0; if its
+			// cumulative chunk reached the orchestrator's metrics bar it would
+			// stomp the parent's running totals. The chunk is flagged
+			// is_sub_agent=true so the handler returns state unchanged.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 2,
+				tokens_input: 5000,
+				tokens_output: 800,
+				cached_tokens: 4000
+			}));
+			const orchestratorTotals = { ...s };
+
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'iteration_progress',
+				iteration: 1,
+				tokens_input: 200,
+				tokens_output: 50,
+				is_sub_agent: true
+			}));
+
+			expect(s.tokensSent).toBe(orchestratorTotals.tokensSent);
+			expect(s.tokensReceived).toBe(orchestratorTotals.tokensReceived);
+			expect(s.cachedTokens).toBe(orchestratorTotals.cachedTokens);
+		});
+
+		it('should ignore sub-agent cost_usd accumulation', () => {
+			// Sub-agent costs are aggregated server-side via
+			// aggregate_sub_agent_metrics and surfaced through `subAgentCost`,
+			// not by summing iteration_progress costs into partialCostUsd.
+			let s = applyChunkToState(state, makeChunk({
+				chunk_type: 'iteration_progress',
+				cost_usd: 0.01
+			}));
+			s = applyChunkToState(s, makeChunk({
+				chunk_type: 'iteration_progress',
+				cost_usd: 0.05,
+				is_sub_agent: true
+			}));
+
+			expect(s.partialCostUsd).toBeCloseTo(0.01, 6);
+		});
 	});
 
 	describe('extended state preservation', () => {

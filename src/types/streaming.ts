@@ -135,6 +135,20 @@ export interface StreamChunk {
    * off the cumulative tokens, not the iteration number.
    */
   iteration?: number;
+  /**
+   * Input tokens consumed by the LATEST LLM call only (= context window
+   * usage of that single call). Distinct from `tokens_input`, which is the
+   * cumulative sum across iterations. Drives the "/ context_max" gauge so
+   * it tracks the last call rather than the cumulative total.
+   */
+  iter_input?: number;
+  /**
+   * `true` when the chunk is emitted from a delegated sub-agent rather than
+   * the orchestrator. The frontend skips these chunks for the orchestrator's
+   * metrics bar so a sub-agent's TokenTracker (which resets to 0) cannot
+   * stomp the parent's running totals.
+   */
+  is_sub_agent?: boolean;
 }
 
 /**

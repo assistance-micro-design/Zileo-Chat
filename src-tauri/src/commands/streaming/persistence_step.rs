@@ -198,6 +198,10 @@ pub async fn finalize_completion(
     }
 
     // 4. Emit response block with the resolved cost embedded.
+    //    `tokens_input` is the cumulative input across iterations;
+    //    `context_tokens` is the last call's input alone (drives the
+    //    context-window gauge frontend-side without saturating after
+    //    multiple iterations).
     emit_chunk(
         window,
         StreamChunk::response_block(
@@ -209,6 +213,7 @@ pub async fn finalize_completion(
             report.metrics.cache_write_tokens,
             report.metrics.thinking_tokens,
             Some(pricing.cost_usd),
+            report.metrics.context_tokens,
         ),
     );
 

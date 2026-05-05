@@ -65,6 +65,10 @@ pub(crate) struct IterationInputs<'a> {
     pub start_instant: std::time::Instant,
     pub iteration: usize,
     pub cancellation_token: Option<CancellationToken>,
+    /// True when this tool loop runs for a delegated sub-agent rather than
+    /// the workflow's primary agent. Propagated to `iteration_progress`
+    /// chunks so the frontend can keep the orchestrator's metrics bar clean.
+    pub is_sub_agent: bool,
 }
 
 /// Runs a single iteration of the tool loop.
@@ -204,6 +208,9 @@ pub(crate) async fn run_single_iteration(
     // `response_block` only fires once at the very end). `cost_usd` is left
     // None here — the per-iteration cost would require caching pricing
     // rates upfront; the final `response_block` carries the resolved cost.
+    // `iter_input` carries the LAST call's input alone so the context-window
+    // gauge tracks the current call instead of the cumulative sum (which
+    // would saturate the bar after a few iterations).
     emit_progress(
         ctx.agent_context,
         StreamChunk::iteration_progress(
@@ -214,6 +221,8 @@ pub(crate) async fn run_single_iteration(
             mstate.tokens.total_cached,
             mstate.tokens.total_cache_write,
             None,
+            mstate.tokens.iter_input,
+            inputs.is_sub_agent,
         ),
     );
 

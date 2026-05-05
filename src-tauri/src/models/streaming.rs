@@ -155,6 +155,19 @@ pub struct StreamChunk {
     /// have completed in this workflow so far".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub iteration: Option<u32>,
+    /// Input tokens consumed by the LATEST LLM call only (= context window
+    /// usage of that single call). Distinct from `tokens_input`, which carries
+    /// the cumulative sum across iterations. Drives the "/ context_max" gauge
+    /// in TokenDisplay so it reflects the last call rather than the cumulative
+    /// total — critical when the tool loop runs many iterations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iter_input: Option<usize>,
+    /// True when this chunk is emitted by a delegated sub-agent rather than
+    /// the orchestrator. The frontend uses it to keep the orchestrator's
+    /// metrics bar untouched while a sub-agent runs (the sub-agent has its
+    /// own TokenTracker that resets `total_input` to 0).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_sub_agent: Option<bool>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -203,6 +216,8 @@ impl StreamChunk {
             thinking_tokens: None,
             cost_usd: None,
             iteration: None,
+            iter_input: None,
+            is_sub_agent: None,
         }
     }
 
@@ -406,10 +421,15 @@ impl StreamChunk {
     }
 
     /// Creates an `iteration_progress` chunk emitted after every LLM call
-    /// in the tool loop. Carries CUMULATIVE tokens (sum across iterations
-    /// so far) and the cumulative cost computed by the backend pricing
-    /// layer — the frontend mirrors them straight onto the metrics bar
-    /// without inventing any number itself (backend-as-source-of-truth invariant).
+    /// in the tool loop.
+    ///
+    /// Carries CUMULATIVE tokens (sum across iterations so far) for the
+    /// ENTREE/SORTIE display and the cumulative cost computed by the
+    /// backend pricing layer. `iter_input` carries the LATEST call's input
+    /// tokens for the context-window gauge (so it tracks the last call,
+    /// not the cumulative sum that would saturate the gauge). `is_sub_agent`
+    /// lets the frontend ignore chunks coming from delegated agents so the
+    /// orchestrator's metrics bar stays clean.
     #[allow(clippy::too_many_arguments)]
     pub fn iteration_progress(
         workflow_id: impl Into<String>,
@@ -419,6 +439,8 @@ impl StreamChunk {
         cached_tokens: Option<usize>,
         cache_write_tokens: Option<usize>,
         cost_usd: Option<f64>,
+        iter_input: usize,
+        is_sub_agent: bool,
     ) -> Self {
         Self {
             iteration: Some(iteration),
@@ -427,6 +449,8 @@ impl StreamChunk {
             cached_tokens,
             cache_write_tokens,
             cost_usd,
+            iter_input: Some(iter_input),
+            is_sub_agent: if is_sub_agent { Some(true) } else { None },
             ..Self::base(workflow_id, ChunkType::IterationProgress)
         }
     }
@@ -434,6 +458,8 @@ impl StreamChunk {
     /// Creates a response block chunk with complete content and real tokens.
     ///
     /// Replaces progressive token streaming with a single complete response.
+    /// `tokens_input` is the cumulative input across iterations; `iter_input`
+    /// is the last call's input alone (drives the context-window gauge).
     /// `cost_usd` is the per-iteration cost computed by the backend pricing
     /// layer; when present it lets background executions accumulate a real
     /// in-progress cost without the frontend ever
@@ -448,6 +474,7 @@ impl StreamChunk {
         cache_write_tokens: Option<usize>,
         thinking_tokens: Option<usize>,
         cost_usd: Option<f64>,
+        iter_input: usize,
     ) -> Self {
         Self {
             content: Some(content.into()),
@@ -457,6 +484,7 @@ impl StreamChunk {
             cache_write_tokens,
             thinking_tokens,
             cost_usd,
+            iter_input: Some(iter_input),
             ..Self::base(workflow_id, ChunkType::ResponseBlock)
         }
     }
@@ -937,11 +965,13 @@ mod tests {
             None,
             None,
             None,
+            80,
         );
         assert_eq!(chunk.chunk_type, ChunkType::ResponseBlock);
         assert_eq!(chunk.content, Some("The answer is 42.".to_string()));
         assert_eq!(chunk.tokens_input, Some(100));
         assert_eq!(chunk.tokens_output, Some(25));
+        assert_eq!(chunk.iter_input, Some(80));
         assert!(chunk.tool.is_none());
         assert!(chunk.tool_input.is_none());
         assert!(chunk.cost_usd.is_none());
@@ -950,6 +980,7 @@ mod tests {
         assert!(json.contains("\"chunk_type\":\"response_block\""));
         assert!(json.contains("\"tokens_input\":100"));
         assert!(json.contains("\"tokens_output\":25"));
+        assert!(json.contains("\"iter_input\":80"));
         // None cost MUST be omitted from the JSON payload (skip_serializing_if).
         assert!(!json.contains("\"cost_usd\""));
     }
@@ -965,6 +996,7 @@ mod tests {
             None,
             None,
             Some(0.0123),
+            100,
         );
         assert_eq!(chunk.cost_usd, Some(0.0123));
 
@@ -983,15 +1015,28 @@ mod tests {
     fn test_stream_chunk_iteration_progress() {
         // Drives the live metrics bar during a tool loop. Carries CUMULATIVE
         // tokens (not deltas) so the frontend can overwrite, not sum.
-        let chunk =
-            StreamChunk::iteration_progress("wf_001", 3, 5_000, 800, Some(4_000), Some(200), None);
+        // `iter_input` carries the LAST call's input alone for the
+        // context-window gauge.
+        let chunk = StreamChunk::iteration_progress(
+            "wf_001",
+            3,
+            5_000,
+            800,
+            Some(4_000),
+            Some(200),
+            None,
+            1_500,
+            false,
+        );
         assert_eq!(chunk.chunk_type, ChunkType::IterationProgress);
         assert_eq!(chunk.iteration, Some(3));
         assert_eq!(chunk.tokens_input, Some(5_000));
         assert_eq!(chunk.tokens_output, Some(800));
+        assert_eq!(chunk.iter_input, Some(1_500));
         assert_eq!(chunk.cached_tokens, Some(4_000));
         assert_eq!(chunk.cache_write_tokens, Some(200));
         assert!(chunk.cost_usd.is_none());
+        assert!(chunk.is_sub_agent.is_none());
         assert!(
             chunk.content.is_none(),
             "iteration_progress carries no text"
@@ -1000,7 +1045,22 @@ mod tests {
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(json.contains("\"chunk_type\":\"iteration_progress\""));
         assert!(json.contains("\"iteration\":3"));
+        assert!(json.contains("\"iter_input\":1500"));
         // None cost MUST be omitted from the wire payload.
         assert!(!json.contains("\"cost_usd\""));
+        // is_sub_agent absent when emitter is the orchestrator.
+        assert!(!json.contains("\"is_sub_agent\""));
+    }
+
+    #[test]
+    fn test_stream_chunk_iteration_progress_from_sub_agent() {
+        // Sub-agent chunks must be flagged so the frontend keeps the
+        // orchestrator's metrics bar untouched while a delegated agent runs.
+        let chunk =
+            StreamChunk::iteration_progress("wf_001", 1, 200, 50, None, None, None, 200, true);
+        assert_eq!(chunk.is_sub_agent, Some(true));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"is_sub_agent\":true"));
     }
 }

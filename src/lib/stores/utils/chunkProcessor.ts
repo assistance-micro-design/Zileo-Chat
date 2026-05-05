@@ -284,8 +284,16 @@ function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState 
  * tokens_input/output/cached/cache_write + optional cost_usd) but without
  * content. Symmetric with handleResponseBlock so the metrics bar updates
  * live during streaming, not only after completion.
+ *
+ * Chunks flagged `is_sub_agent: true` are ignored: a delegated agent runs
+ * its own TokenTracker (resets to 0) and its cumulative chunk would stomp
+ * the orchestrator's running totals. Sub-agent token rollup happens
+ * server-side via aggregate_sub_agent_metrics and surfaces separately.
  */
 function handleIterationProgress(s: ChunkableState, c: StreamChunk): ChunkableState {
+	if (c.is_sub_agent) {
+		return s;
+	}
 	const next: ChunkableState = {
 		...s,
 		tokensReceived: c.tokens_output ?? s.tokensReceived,

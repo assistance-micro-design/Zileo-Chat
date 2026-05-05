@@ -427,6 +427,20 @@ pub(crate) async fn execute_with_tools(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    // True for any agent invoked through the orchestrator's delegation
+    // tools (SpawnAgent / DelegateTask / ParallelTasks). Each one sets a
+    // distinct flag on the task context — read all three so future tools
+    // and renames can't silently dodge the filter and leak chunks back
+    // onto the orchestrator's metrics bar.
+    let is_sub_agent = ["is_sub_agent", "is_delegation", "is_parallel_task"]
+        .iter()
+        .any(|key| {
+            task.context
+                .get(*key)
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        });
+
     let locale = task
         .context
         .get("locale")
@@ -590,6 +604,7 @@ pub(crate) async fn execute_with_tools(
             start_instant: start,
             iteration,
             cancellation_token: cancellation_token.clone(),
+            is_sub_agent,
         };
 
         let mut mstate = IterationMutState {
