@@ -142,16 +142,15 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 5. Component Library
 
-103 total components organized under `src/lib/components/`:
+101 total components organized under `src/lib/components/`:
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
 | `ui/` | 20 | Atomic UI: Badge, Button, Card, ContextMenu, DeleteConfirmModal, ErrorBanner, HelpButton, Input, LanguageSelector, MarkdownRenderer, Modal, PasswordInput, ProgressBar, Select, Skeleton, Spinner, StatusIndicator, Textarea, ToastContainer, ToastItem |
 | `layout/` | 3 | AppContainer, FloatingMenu, Sidebar |
-| `navigation/` | 1 | NavItem |
 | `agent/` | 3 | AgentHeader, ChatContainer, WorkflowSidebar |
 | `chat/` | 11 | ChatInput, ExecutionSpinner, MessageBubble, MessageList, MessageListSkeleton, MessageMetrics, PromptSelectorModal, SubAgentBlock, ThinkingBlock, TodoTasksBlock, ToolCallBlock |
-| `workflow/` | 11 | AgentSelector, FolderItem, MetricsBar, NewWorkflowModal, StatusFilters, TokenDisplay, UserQuestionModal, ValidationModal, WorkflowItem, WorkflowItemCompact, WorkflowList |
+| `workflow/` | 10 | AgentSelector, FolderItem, NewWorkflowModal, StatusFilters, TokenDisplay, UserQuestionModal, ValidationModal, WorkflowItem, WorkflowItemCompact, WorkflowList |
 | `legal/` | 1 | LegalModal |
 | `mcp/` | 3 | MCPServerCard, MCPServerForm, MCPServerTester |
 | `llm/` | 4 | ConnectionTester, ModelCard, ModelForm, ProviderCard |

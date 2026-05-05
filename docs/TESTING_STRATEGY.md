@@ -18,12 +18,12 @@ For bugs, a reproduction test is written BEFORE the fix.
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Backend (lib) | 80+ | 1086 |
+| Backend (lib) | 145+ | 1306 |
 | Backend (bin/integration) | 5+ | 48 |
-| Frontend Unit | 16 | 285 |
-| **Total** | **101+** | **~1419** |
+| Frontend Unit | 27 | 386 |
+| **Total** | **177+** | **~1740** |
 
-> Last Updated: 2026-03-27
+> Last Updated: 2026-05-05 (counts drift over time; run `cargo test --lib && npm run test` for current values)
 
 ---
 
@@ -74,7 +74,7 @@ Module `src-tauri/src/test_utils.rs` provides:
 
 No mocking library used. Tests use real implementations with temporary databases via `tempfile::tempdir()`.
 
-### Unit Tests (80+ files)
+### Unit Tests (145+ files)
 
 See `src-tauri/src/` for Rust test modules.
 
@@ -101,7 +101,7 @@ See `src-tauri/tests/` for integration test files.
 
 ## Frontend Tests (SvelteKit)
 
-### Unit Tests (285 tests, 16 files)
+### Unit Tests (~386 tests, 27 files)
 
 See `src/lib/` for TypeScript test files.
 

@@ -1,6 +1,6 @@
 # Tech Stack: Svelte + Rust + SurrealDB
 
-> **Current project versions: 24 April 2026**
+> **Current project versions: 5 May 2026**
 > Production versions used in the project (tested compatibility).
 
 ## Stack Overview
@@ -29,7 +29,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **svelte-check**: ^4.4.4
 
 **Tauri Integration**:
-- **@tauri-apps/api**: ^2.9.0
+- **@tauri-apps/api**: ^2.11.0
 - **@tauri-apps/cli**: ^2.10.1
 - **@tauri-apps/plugin-dialog**: ^2.7.0
 - **@tauri-apps/plugin-opener**: ^2.5.3

@@ -83,6 +83,6 @@ SurrealDB + External MCP Servers
 
 ## Status
 
-- 1000+ backend lib tests + 280+ frontend tests (see `cargo test` and `npm run test` for current counts)
+- 1300+ backend lib tests + 380+ frontend tests (see `cargo test` and `npm run test` for current counts)
 - 24 security audits completed
-- Last validation: 2026-04-25
+- Last validation: 2026-05-05
