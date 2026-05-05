@@ -84,7 +84,7 @@ const initialState: TokenState = {
 	cumulative: { input: 0, output: 0, cost: 0, cached: null, cacheWrite: null },
 	subAgent: { input: 0, output: 0, costUsd: 0 },
 	contextUsed: 0,
-	contextMax: 128000,
+	contextMax: 0,
 	isStreaming: false,
 	streamStartTime: null,
 	sessionCost: null,
@@ -167,7 +167,7 @@ export const tokenStore = {
 	updateFromModel(model: LLMModel): void {
 		store.update((s) => ({
 			...s,
-			contextMax: model.context_window ?? 128000
+			contextMax: model.context_window
 		}));
 	},
 

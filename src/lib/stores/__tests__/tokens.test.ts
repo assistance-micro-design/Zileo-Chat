@@ -134,3 +134,36 @@ describe('tokenStore.setPartialSessionCost', () => {
 		expect(data.cost_is_partial).toBe(false);
 	});
 });
+
+describe('tokenStore.updateFromModel', () => {
+	beforeEach(() => tokenStore.reset());
+
+	it('starts with context_max at 0 before a model is loaded', () => {
+		// No hardcoded fallback: the gauge ceiling must come from the
+		// agent's configured model in the database, not a guess (e.g. 128k).
+		// 0 keeps the percentage at 0 in TokenDisplay (it guards against
+		// divide-by-zero) and signals "no model selected yet".
+		expect(get(tokenDisplayData).context_max).toBe(0);
+	});
+
+	it('reflects the configured model context_window', () => {
+		tokenStore.updateFromModel({
+			id: 'm1',
+			provider: 'mistral',
+			name: 'Test',
+			api_name: 'test',
+			context_window: 256_000,
+			max_output_tokens: 8192,
+			temperature_default: 0.7,
+			is_builtin: false,
+			is_reasoning: false,
+			input_price_per_mtok: 0,
+			output_price_per_mtok: 0,
+			cache_read_price_per_mtok: 0,
+			cache_write_price_per_mtok: 0,
+			created_at: '2026-01-01T00:00:00Z',
+			updated_at: '2026-01-01T00:00:00Z'
+		});
+		expect(get(tokenDisplayData).context_max).toBe(256_000);
+	});
+});

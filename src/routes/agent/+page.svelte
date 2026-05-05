@@ -104,7 +104,6 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedWorkflowId: string | null;
 		selectedAgentId: string | null;
 		currentMaxIterations: number;
-		currentContextWindow: number;
 		messagesLoading: boolean;
 	}
 
@@ -129,7 +128,6 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedWorkflowId: null,
 		selectedAgentId: null,
 		currentMaxIterations: ITERATIONS_LIMITS.DEFAULT,
-		currentContextWindow: 128000,
 		messagesLoading: false
 	};
 
@@ -450,7 +448,8 @@ Uses extracted components, services, and stores for clean architecture.
 			const config = await agentStore.getAgentConfig(agentId);
 			pageState.currentMaxIterations = config.max_tool_iterations ?? ITERATIONS_LIMITS.DEFAULT;
 
-			// Load full model data to get context_window and pricing
+			// Load full model data so the context-usage gauge reads the agent's
+			// configured ceiling from the database (no hardcoded fallback).
 			if (config.llm?.model && config.llm?.provider) {
 				try {
 					const model = await fetchModelByApiName(
@@ -458,16 +457,13 @@ Uses extracted components, services, and stores for clean architecture.
 						config.llm.provider.toLowerCase() as ProviderType
 					);
 					tokenStore.updateFromModel(model);
-					pageState.currentContextWindow = model.context_window;
 				} catch {
-					pageState.currentContextWindow = 128000;
+					// Model fetch failed: keep the previous ceiling rather than
+					// inventing one. The gauge reads as 0% until a valid model loads.
 				}
-			} else {
-				pageState.currentContextWindow = 128000;
 			}
 		} catch {
 			pageState.currentMaxIterations = ITERATIONS_LIMITS.DEFAULT;
-			pageState.currentContextWindow = 128000;
 		}
 	}
 
