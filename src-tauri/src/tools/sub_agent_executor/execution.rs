@@ -24,6 +24,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use tokio_util::task::AbortOnDropHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::agents::core::agent::{Report, Task};
@@ -162,33 +163,34 @@ impl SubAgentExecutor {
         let mcp_manager = self.mcp_manager.clone();
         let agent_id_owned = agent_id.to_string();
         let monitor_for_exec = monitor.clone();
+        // Forward the workflow's cancellation token into the sub-agent so its
+        // own tool loop and LLM retry helpers see it explicitly. The
+        // AbortOnDropHandle below is the cooperative-failsafe for the
+        // tokio::select! drop case in `orchestrator_bridge`; the explicit
+        // token is the fast path that lets reqwest abort mid-flight without
+        // waiting for the runtime to tear down the task.
+        let inner_cancellation = self.cancellation_token.clone();
 
-        // Spawn the execution in a separate task so select! can properly poll
-        let execution_handle = tokio::spawn(async move {
+        // Spawn the execution in a separate task so select! can poll the
+        // heartbeat branch without being starved by a hot LLM loop.
+        // `AbortOnDropHandle` ties the spawned task's lifetime to this
+        // future: when the outer chain (e.g. the bridge `tokio::select!`
+        // racing the workflow CancellationToken) drops us, the inner task
+        // is aborted. Without this, `tokio::spawn` would detach the task
+        // and the sub-agent would keep running after a user cancel.
+        let execution_handle = AbortOnDropHandle::new(tokio::spawn(async move {
             monitor_for_exec.record_activity();
             let result = orchestrator
-                .execute_with_mcp(&agent_id_owned, task, mcp_manager, None)
+                .execute_with_mcp(&agent_id_owned, task, mcp_manager, inner_cancellation)
                 .await;
             monitor_for_exec.record_activity();
             result
-        });
-
-        let abort_handle = execution_handle.abort_handle();
-
-        let execution_future = async {
-            execution_handle.await.map_err(|e| {
-                if e.is_cancelled() {
-                    anyhow::anyhow!("Task was cancelled (timeout or user cancellation)")
-                } else {
-                    anyhow::anyhow!("Task join error: {}", e)
-                }
-            })?
-        };
+        }));
 
         // Call the activity callback once to signal start
         activity_callback();
 
-        tokio::pin!(execution_future);
+        tokio::pin!(execution_handle);
 
         // Create cancellation future based on whether token is present
         let cancellation_future = async {
@@ -203,14 +205,23 @@ impl SubAgentExecutor {
         // Monitoring loop with tokio::select!
         loop {
             tokio::select! {
-                result = &mut execution_future => {
+                join_result = &mut execution_handle => {
                     let duration_ms = start_time.elapsed().as_millis() as u64;
+                    let result = match join_result {
+                        Ok(report_result) => report_result,
+                        Err(e) if e.is_cancelled() => {
+                            return Self::build_cancelled_result(agent_id, duration_ms);
+                        }
+                        Err(e) => Err(anyhow::anyhow!("Task join error: {}", e)),
+                    };
                     return self.handle_execution_result(agent_id, result, duration_ms).await;
                 }
 
                 _ = &mut cancellation_future => {
+                    // Drop of `execution_handle` on return aborts the inner
+                    // task via `AbortOnDropHandle::drop`; no explicit
+                    // `abort_handle.abort()` needed.
                     let duration_ms = start_time.elapsed().as_millis() as u64;
-                    abort_handle.abort();
                     return Self::build_cancelled_result(agent_id, duration_ms);
                 }
 
@@ -221,7 +232,7 @@ impl SubAgentExecutor {
                     if inactive_secs > INACTIVITY_TIMEOUT_SECS {
                         self.record_failure().await;
                         let duration_ms = start_time.elapsed().as_millis() as u64;
-                        abort_handle.abort();
+                        // Same drop-on-return semantics as cancellation.
                         return Self::build_timeout_result(agent_id, inactive_secs, duration_ms);
                     }
 

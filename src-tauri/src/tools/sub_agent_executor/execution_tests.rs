@@ -383,6 +383,173 @@ async fn test_with_parent_message_none_keeps_default() {
     assert!(executor.parent_message_id.is_none());
 }
 
+/// Cancellation regression: when the outer chain that invokes
+/// `execute_with_heartbeat_timeout` is dropped (the real-world case is the
+/// `tokio::select!` in `commands/streaming/orchestrator_bridge.rs` racing the
+/// workflow's `CancellationToken`), the sub-agent's inner task must be
+/// aborted too. Before the fix, the inner `tokio::spawn` was a detached task
+/// that survived the drop and kept burning the LLM/HTTP call — visible to the
+/// user as "cancel does not stop the sub-agent".
+#[tokio::test]
+async fn test_inner_task_aborted_when_outer_future_dropped() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use async_trait::async_trait;
+
+    use crate::agents::core::agent::{
+        Agent, Report, ReportMetrics, ReportStatus, Task as AgentTask,
+    };
+    use crate::agents::core::orchestrator::AgentOrchestrator;
+    use crate::agents::core::AgentRegistry;
+    use crate::mcp::MCPManager;
+    use crate::models::{AgentConfig, LLMConfig, Lifecycle};
+
+    /// Test agent that ticks a shared counter every 10ms forever. If the
+    /// agent's task is aborted, the counter stops growing; otherwise it
+    /// keeps climbing. This is the discriminating signal — a one-shot
+    /// `completed` flag protected by a long sleep cannot tell aborted
+    /// apart from still-sleeping.
+    struct TickingAgent {
+        config: AgentConfig,
+        ticks: Arc<AtomicU32>,
+    }
+
+    #[async_trait]
+    impl Agent for TickingAgent {
+        async fn execute(&self, _task: AgentTask) -> anyhow::Result<Report> {
+            loop {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                self.ticks.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        async fn execute_with_mcp(
+            &self,
+            task: AgentTask,
+            _mcp_manager: Option<Arc<MCPManager>>,
+            _cancellation_token: Option<CancellationToken>,
+        ) -> anyhow::Result<Report> {
+            // We never return Ok here — the loop in execute() is infinite.
+            // execute_with_mcp's signature requires Result<Report,_>, so
+            // the unreachable arm uses an empty success report.
+            self.execute(task).await?;
+            Ok(Report {
+                status: ReportStatus::Success,
+                content: String::new(),
+                response: String::new(),
+                metrics: ReportMetrics::empty(0),
+            })
+        }
+
+        fn capabilities(&self) -> Vec<String> {
+            vec!["tick".to_string()]
+        }
+        fn lifecycle(&self) -> Lifecycle {
+            self.config.lifecycle.clone()
+        }
+        fn tools(&self) -> Vec<String> {
+            vec![]
+        }
+        fn mcp_servers(&self) -> Vec<String> {
+            vec![]
+        }
+        fn system_prompt(&self) -> String {
+            self.config.system_prompt.clone()
+        }
+        fn config(&self) -> &AgentConfig {
+            &self.config
+        }
+    }
+
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+
+    let ticks = Arc::new(AtomicU32::new(0));
+
+    let registry = Arc::new(AgentRegistry::new());
+    let agent = Arc::new(TickingAgent {
+        config: AgentConfig {
+            id: "ticking".to_string(),
+            name: "Ticking Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Test".to_string(),
+                model: "test-model".to_string(),
+                temperature: 0.7,
+                max_tokens: 100,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "Test prompt".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: None,
+        },
+        ticks: ticks.clone(),
+    });
+    registry.register("ticking".to_string(), agent).await;
+    let orchestrator = Arc::new(AgentOrchestrator::new(registry));
+
+    let token = CancellationToken::new();
+    let executor = SubAgentExecutor::with_cancellation(
+        state.db.clone(),
+        orchestrator,
+        None,
+        None,
+        "wf_cancel_drop".to_string(),
+        "primary".to_string(),
+        Some(token.clone()),
+    );
+
+    let task = AgentTask {
+        id: "task_drop".to_string(),
+        description: "tick forever".to_string(),
+        context: serde_json::json!({}),
+    };
+
+    // Simulate the bridge `tokio::select!` that drops `execute_with_mcp`'s
+    // future when cancellation fires. The sub-executor future is dropped
+    // here without ever reaching its internal cancellation branch.
+    {
+        let exec_future = executor.execute_with_heartbeat_timeout("ticking", task, None);
+        tokio::pin!(exec_future);
+
+        tokio::select! {
+            _ = &mut exec_future => panic!("ticking agent must not complete in this test"),
+            _ = tokio::time::sleep(Duration::from_millis(150)) => {
+                // Drop happens at end of select arm — exec_future drops here.
+            }
+        }
+    }
+
+    let ticks_at_drop = ticks.load(Ordering::SeqCst);
+    assert!(
+        ticks_at_drop > 0,
+        "ticking agent must have run before the drop, otherwise the test \
+         does not exercise the abort path"
+    );
+
+    // After the outer future is dropped, the inner spawned task MUST be
+    // aborted. If it is, ticks will not climb any further. If it isn't,
+    // ticks will keep growing every ~10ms.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let ticks_after_wait = ticks.load(Ordering::SeqCst);
+
+    assert_eq!(
+        ticks_at_drop, ticks_after_wait,
+        "inner sub-agent task kept ticking after the outer future was dropped \
+         (drop={}, after wait={}). Cancellation does not propagate to the \
+         spawned tokio task — drop the bridge select! and the sub-agent \
+         survives.",
+        ticks_at_drop, ticks_after_wait
+    );
+}
+
 /// E2E: A→B chain — verifies that a sub-agent execution record is persisted
 /// with `parent_message_id` set at CREATE time (replaces the legacy bulk
 /// UPDATE in `persistence_step.rs`). The same wiring chains B→C correctly
