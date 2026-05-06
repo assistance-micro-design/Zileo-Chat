@@ -1,5 +1,8 @@
 use super::*;
-use crate::models::sub_agent::{ParallelBatchResult, ParallelTaskResult, SubAgentMetrics};
+use crate::models::sub_agent::{
+    constants::MAX_PARALLEL_TASKS_PER_BATCH, ParallelBatchResult, ParallelTaskResult,
+    SubAgentMetrics,
+};
 
 #[test]
 fn test_parallel_task_spec_serialization() {
@@ -26,18 +29,60 @@ fn test_parallel_task_spec_serialization() {
 }
 
 #[test]
-fn test_input_validation_too_many_tasks() {
-    let mut tasks = Vec::new();
-    for i in 0..=MAX_SUB_AGENTS {
-        tasks.push(serde_json::json!({"agent_id": format!("a{}", i), "prompt": format!("p{}", i)}));
-    }
-    let invalid_input = serde_json::json!({
-        "operation": "execute_batch",
-        "tasks": tasks
-    });
+fn test_validate_batch_size_accepts_one() {
+    assert!(validate_batch_size(1).is_ok());
+}
 
-    let tasks_len = invalid_input["tasks"].as_array().unwrap().len();
-    assert!(tasks_len > MAX_SUB_AGENTS);
+#[test]
+fn test_validate_batch_size_accepts_max() {
+    assert!(validate_batch_size(MAX_PARALLEL_TASKS_PER_BATCH).is_ok());
+}
+
+#[test]
+fn test_validate_batch_size_rejects_zero() {
+    let err = validate_batch_size(0).unwrap_err();
+    assert!(matches!(err, ToolError::InvalidInput(_)));
+}
+
+#[test]
+fn test_validate_batch_size_rejects_above_max() {
+    let err = validate_batch_size(MAX_PARALLEL_TASKS_PER_BATCH + 1).unwrap_err();
+    match err {
+        ToolError::ValidationFailed(msg) => {
+            assert!(msg.contains(&MAX_PARALLEL_TASKS_PER_BATCH.to_string()));
+            assert!(msg.contains("parallel tasks"));
+        }
+        other => panic!("expected ValidationFailed, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_validate_batch_size_rejects_total_workflow_limit() {
+    // Regression: MAX_SUB_AGENTS (15) is the cumulative per-workflow cap,
+    // not a per-batch cap. A batch of 4..=15 must still be rejected.
+    let err = validate_batch_size(MAX_SUB_AGENTS).unwrap_err();
+    assert!(matches!(err, ToolError::ValidationFailed(_)));
+}
+
+#[test]
+fn test_definition_text_matches_batch_constant() {
+    let def = DEFINITION.clone();
+    let expected = format!("max {} per batch", MAX_PARALLEL_TASKS_PER_BATCH);
+    assert!(
+        def.description.contains(&expected),
+        "tool description must mention 'max {} per batch', got: {}",
+        MAX_PARALLEL_TASKS_PER_BATCH,
+        def.description
+    );
+}
+
+#[test]
+fn test_input_schema_max_items_matches_batch_constant() {
+    let schema = parallel_tasks_input_schema();
+    let max_items = schema["properties"]["tasks"]["maxItems"]
+        .as_u64()
+        .expect("maxItems must be a number");
+    assert_eq!(max_items as usize, MAX_PARALLEL_TASKS_PER_BATCH);
 }
 
 #[test]

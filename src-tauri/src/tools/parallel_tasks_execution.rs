@@ -16,12 +16,13 @@
 //!
 //! Contains task validation, preparation, parallel execution, and result collection.
 
-use super::parallel_tasks::{ParallelTaskSpec, ParallelTasksTool, PreparedExecution};
+use super::parallel_tasks::{
+    validate_batch_size, ParallelTaskSpec, ParallelTasksTool, PreparedExecution,
+};
 use crate::agents::core::agent::Task;
 use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
-    constants::MAX_SUB_AGENTS, ParallelBatchResult, ParallelTaskResult, SubAgentExecutionCreate,
-    SubAgentMetrics,
+    ParallelBatchResult, ParallelTaskResult, SubAgentExecutionCreate, SubAgentMetrics,
 };
 use crate::tools::sub_agent_executor::{ExecutionResult, SubAgentExecutor};
 use crate::tools::task_bridge::resolve_and_reassign_tasks;
@@ -37,24 +38,14 @@ impl ParallelTasksTool {
     ///
     /// Checks:
     /// - Task array is not empty
-    /// - Task count does not exceed MAX_SUB_AGENTS
+    /// - Task count does not exceed `MAX_PARALLEL_TASKS_PER_BATCH`
+    ///   (cumulative `MAX_SUB_AGENTS` per workflow is enforced separately
+    ///   by `SubAgentExecutor::check_limit`)
     /// - Each task has a non-empty resolved agent_id (already resolved from ID or name)
     /// - Each task has a non-empty prompt
     /// - No task delegates to self
     fn validate_tasks(&self, tasks: &[ParallelTaskSpec]) -> ToolResult<()> {
-        if tasks.is_empty() {
-            return Err(ToolError::ValidationFailed(
-                "Tasks array cannot be empty. Provide at least one task.".to_string(),
-            ));
-        }
-
-        if tasks.len() > MAX_SUB_AGENTS {
-            return Err(ToolError::ValidationFailed(format!(
-                "Maximum {} parallel tasks allowed. Received {}.",
-                MAX_SUB_AGENTS,
-                tasks.len()
-            )));
-        }
+        validate_batch_size(tasks.len())?;
 
         for (i, task) in tasks.iter().enumerate() {
             if task.agent_id.trim().is_empty() {

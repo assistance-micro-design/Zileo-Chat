@@ -86,7 +86,7 @@ pub mod user_question {
 
 #[allow(unused_imports)]
 pub mod sub_agent {
-    pub use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
+    pub use crate::models::sub_agent::constants::{MAX_PARALLEL_TASKS_PER_BATCH, MAX_SUB_AGENTS};
 
     // Inactivity Timeout with Heartbeat
     /// Timeout (seconds) without any activity before aborting sub-agent execution.

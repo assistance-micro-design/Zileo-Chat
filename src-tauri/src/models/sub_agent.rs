@@ -317,8 +317,17 @@ pub struct ParallelTaskResult {
 
 /// Constants for sub-agent system.
 pub mod constants {
-    /// Maximum number of sub-agents per workflow
+    /// Maximum cumulative number of sub-agent operations per workflow.
+    ///
+    /// Counts every spawn/delegate/parallel task across the whole workflow,
+    /// not the size of a single parallel batch.
     pub const MAX_SUB_AGENTS: usize = 15;
+
+    /// Maximum number of tasks in a single ParallelTasksTool batch.
+    ///
+    /// Bounds one `execute_batch` call. Distinct from `MAX_SUB_AGENTS`,
+    /// which caps the cumulative count for the whole workflow.
+    pub const MAX_PARALLEL_TASKS_PER_BATCH: usize = 3;
 }
 
 #[cfg(test)]
@@ -415,6 +424,15 @@ mod tests {
     #[test]
     fn test_max_sub_agents_constant() {
         assert_eq!(constants::MAX_SUB_AGENTS, 15);
+    }
+
+    #[test]
+    fn test_max_parallel_tasks_per_batch_constant() {
+        assert_eq!(constants::MAX_PARALLEL_TASKS_PER_BATCH, 3);
+        const _: () = assert!(
+            constants::MAX_PARALLEL_TASKS_PER_BATCH < constants::MAX_SUB_AGENTS,
+            "per-batch cap must stay smaller than the cumulative workflow cap"
+        );
     }
 
     // Tests for parent_execution_id (Correlation ID for Hierarchical Tracing)

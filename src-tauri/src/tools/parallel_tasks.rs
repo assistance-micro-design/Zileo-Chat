@@ -22,7 +22,8 @@
 //!
 //! - Only the primary workflow agent can use this tool
 //! - Sub-agents CANNOT use parallel execution (single level only)
-//! - Maximum 3 agents in a batch (enforced in validation)
+//! - Maximum `MAX_PARALLEL_TASKS_PER_BATCH` (3) agents in one batch
+//! - Total of `MAX_SUB_AGENTS` (15) sub-agent operations per workflow (cumulative)
 //! - Each agent only receives its prompt, no shared context/memory/state
 //!
 //! # Communication Pattern: "Prompt In, Report Out"
@@ -43,7 +44,7 @@ use crate::agents::core::agent::Task;
 use crate::agents::core::{AgentOrchestrator, AgentRegistry};
 use crate::db::DBClient;
 use crate::mcp::MCPManager;
-use crate::models::sub_agent::constants::MAX_SUB_AGENTS;
+use crate::models::sub_agent::constants::{MAX_PARALLEL_TASKS_PER_BATCH, MAX_SUB_AGENTS};
 use crate::tools::context::AgentToolContext;
 use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
@@ -77,6 +78,8 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     ])
     .operations(&[(
         "execute_batch",
+        // Keep this string in sync with `MAX_PARALLEL_TASKS_PER_BATCH`
+        // (test_definition_text_matches_batch_constant guards it).
         "Run multiple tasks in parallel (max 3 per batch). Required: tasks (array of {agent_name or agent_id, prompt, optional task_ids})",
     )])
     .note(
@@ -158,6 +161,26 @@ pub(crate) struct PreparedExecution {
     pub(crate) orchestrator_tasks: Vec<(String, Task)>,
 }
 
+/// Validates a parallel batch size against `MAX_PARALLEL_TASKS_PER_BATCH`.
+///
+/// Pure function for testability. Used by both `ParallelTasksTool::validate_input`
+/// (input-schema gate) and `ParallelTasksTool::validate_tasks`
+/// (post-resolution gate inside `parallel_tasks_execution`).
+pub(crate) fn validate_batch_size(len: usize) -> ToolResult<()> {
+    if len == 0 {
+        return Err(ToolError::InvalidInput(
+            "'tasks' array cannot be empty".to_string(),
+        ));
+    }
+    if len > MAX_PARALLEL_TASKS_PER_BATCH {
+        return Err(ToolError::ValidationFailed(format!(
+            "Maximum {} parallel tasks allowed per batch. Received {}.",
+            MAX_PARALLEL_TASKS_PER_BATCH, len
+        )));
+    }
+    Ok(())
+}
+
 /// Validates a single parallel task item: requires prompt + (agent_id OR agent_name).
 ///
 /// Pure function for testability. Used by `ParallelTasksTool::validate_input`.
@@ -208,8 +231,8 @@ fn parallel_tasks_input_schema() -> Value {
             },
             "tasks": {
                 "type": "array",
-                "maxItems": 3,
-                "description": "Array of agent-prompt pairs (max 3)",
+                "maxItems": MAX_PARALLEL_TASKS_PER_BATCH,
+                "description": format!("Array of agent-prompt pairs (max {})", MAX_PARALLEL_TASKS_PER_BATCH),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -437,19 +460,7 @@ impl Tool for ParallelTasksTool {
                     ToolError::InvalidInput("'tasks' must be an array".to_string())
                 })?;
 
-                if tasks_array.is_empty() {
-                    return Err(ToolError::InvalidInput(
-                        "'tasks' array cannot be empty".to_string(),
-                    ));
-                }
-
-                if tasks_array.len() > MAX_SUB_AGENTS {
-                    return Err(ToolError::ValidationFailed(format!(
-                        "Maximum {} tasks allowed. Received {}.",
-                        MAX_SUB_AGENTS,
-                        tasks_array.len()
-                    )));
-                }
+                validate_batch_size(tasks_array.len())?;
 
                 for (i, task) in tasks_array.iter().enumerate() {
                     validate_parallel_task_item(task, i)?;
