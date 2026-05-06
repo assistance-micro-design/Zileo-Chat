@@ -162,9 +162,25 @@ export const tokenStore = {
 	 * Update context window size from model configuration.
 	 * Used when selecting a model to update the context-usage gauge ceiling.
 	 *
+	 * Skips the update when `model.context_window` is falsy (0, null, or
+	 * undefined). This guards against malformed DB rows (e.g. legacy custom
+	 * models inserted without `context_window`, or schema drift after a
+	 * migration) — without the guard, a single bad row would silently zero
+	 * the gauge ceiling and the user would see "X / 0 contexte" with no
+	 * way to recover until a healthy model is selected. Logs the skip so
+	 * the underlying data issue is surfaced to the console.
+	 *
 	 * @param model - The LLM model configuration
 	 */
 	updateFromModel(model: LLMModel): void {
+		if (!model.context_window || model.context_window <= 0) {
+			console.warn(
+				`Model ${model.api_name} (provider=${model.provider}) has invalid ` +
+					`context_window=${model.context_window}; keeping previous gauge ceiling. ` +
+					`Fix the model row in Settings > LLM Models.`
+			);
+			return;
+		}
 		store.update((s) => ({
 			...s,
 			contextMax: model.context_window

@@ -407,10 +407,46 @@ async fn main() -> anyhow::Result<()> {
                         continue;
                     }
                     // Clamp max_tool_iterations to safe range
-                    let config = crate::models::AgentConfig {
+                    let mut config = crate::models::AgentConfig {
                         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
                         ..config
                     };
+                    // Refresh model-owned LLMConfig fields (`is_reasoning`,
+                    // `context_window`) from the current `llm_model` row.
+                    // Without this, an agent saved before the model was
+                    // flagged `is_reasoning=true` keeps a stale snapshot —
+                    // `effective_reasoning_effort` returns None, the
+                    // `reasoning_effort` parameter never reaches the
+                    // provider, and the Reflexion UI block never appears.
+                    // See ERR_LLM_010.
+                    let pre_hydrate_is_reasoning = config.llm.is_reasoning;
+                    let pre_hydrate_context_window = config.llm.context_window;
+                    if let Err(e) = crate::commands::agent::hydrate_llm_from_model(
+                        &db,
+                        &mut config.llm,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            agent_id = %config.id,
+                            error = %e,
+                            "Failed to hydrate LLM snapshot from model card on startup; \
+                             keeping the persisted snapshot. Reasoning may be missing \
+                             until the model card is re-saved."
+                        );
+                    } else {
+                        tracing::info!(
+                            agent_id = %config.id,
+                            agent_name = %config.name,
+                            provider = %config.llm.provider,
+                            model = %config.llm.model,
+                            is_reasoning_before = pre_hydrate_is_reasoning,
+                            is_reasoning_after = config.llm.is_reasoning,
+                            context_window_before = ?pre_hydrate_context_window,
+                            context_window_after = ?config.llm.context_window,
+                            "Hydrated agent LLM snapshot from model card"
+                        );
+                    }
                     let id = config.id.clone();
 
                     // Create agent context with app_handle

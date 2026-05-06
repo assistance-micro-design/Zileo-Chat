@@ -28,10 +28,11 @@
 
 use crate::llm::http;
 use crate::llm::provider::LLMError;
+use crate::llm::sse::{collect_sse_to_json, ProviderWireFormat};
 use crate::llm::ToolCompletionParams;
 use serde::Serialize;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{info, warn};
 
 /// Body of an OpenAI-style chat-completions request that supports tools.
 ///
@@ -53,15 +54,67 @@ pub(crate) struct ToolChatRequest {
     pub tool_choice: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    /// Wire-level streaming flag. When `Some(true)`, the request asks the
+    /// provider to emit Server-Sent Events; the body is then reconstructed
+    /// to look identical to the non-stream JSON response. This exists
+    /// solely to defeat Cloudflare's ~100s origin-idle timeout on slow
+    /// thinking models (no UI streaming, no adapter changes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+    /// `stream_options.include_usage: true` asks OpenAI-compatible
+    /// providers to emit a final empty-`choices` chunk that carries
+    /// `usage`, so token counts survive the streaming path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<StreamOptions>,
+    /// OpenRouter-style reasoning toggle (`reasoning: { effort: "high" }`).
+    ///
+    /// OpenAI's standard `reasoning_effort: "high"` parameter is silently
+    /// ignored by some provider gateways (notably OpenRouter and RouterLab)
+    /// — they only enable reasoning when the dedicated `reasoning` object
+    /// is present. We send BOTH side-by-side so each gateway picks up
+    /// whichever it understands. Mistral cloud overrides this through
+    /// [`crate::llm::mistral::build_mistral_tool_request`] which clears
+    /// the field (Mistral's API rejects unknown top-level keys for some
+    /// model families).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<ReasoningParam>,
+}
+
+/// `stream_options` payload for OpenAI-compatible chat completions.
+#[derive(Debug, Serialize)]
+pub(crate) struct StreamOptions {
+    pub include_usage: bool,
+}
+
+/// `reasoning` payload (OpenRouter / RouterLab dialect).
+///
+/// Mirrored from
+/// <https://openrouter.ai/docs/guides/best-practices/reasoning-tokens>.
+/// The `effort` variant is what we use today; OpenRouter also documents
+/// `max_tokens` (Anthropic-style budget) and `enabled` (boolean toggle),
+/// neither of which is needed by the current adapters.
+#[derive(Debug, Serialize)]
+pub(crate) struct ReasoningParam {
+    pub effort: String,
 }
 
 impl ToolChatRequest {
-    /// Build a request body from completion params, optionally rewriting the
-    /// `messages` array (used by OpenAI-compat to apply prompt caching).
+    /// Build a non-streaming request body from completion params, optionally
+    /// rewriting the `messages` array (used by OpenAI-compat to apply prompt
+    /// caching).
+    ///
+    /// Used for any call path that does not need wire-level streaming
+    /// (embeddings, connectivity tests, ...). The two production tool-loop
+    /// providers (Mistral, OpenAI-compat) call
+    /// [`from_params_streaming`](Self::from_params_streaming) instead.
     pub(crate) fn from_params(
         params: &ToolCompletionParams,
         messages: Vec<serde_json::Value>,
     ) -> Self {
+        let effort_str = params
+            .reasoning_effort
+            .as_ref()
+            .map(|e| e.as_str().to_string());
         Self {
             model: params.model.clone(),
             messages,
@@ -73,11 +126,36 @@ impl ToolChatRequest {
                 Some(params.tools.clone())
             },
             tool_choice: params.tool_choice.clone(),
-            reasoning_effort: params
-                .reasoning_effort
-                .as_ref()
-                .map(|e| e.as_str().to_string()),
+            reasoning_effort: effort_str.clone(),
+            stream: None,
+            stream_options: None,
+            // Mirror reasoning_effort into the OpenRouter-style object so
+            // provider gateways that only honour the `reasoning` shape
+            // (RouterLab, OpenRouter, ...) still enable thinking. The
+            // standard `reasoning_effort` field above stays for OpenAI /
+            // Mistral dialects. Mistral overrides BOTH explicitly via
+            // `build_mistral_tool_request` to avoid sending the unknown
+            // key.
+            reasoning: effort_str.map(|effort| ReasoningParam { effort }),
         }
+    }
+
+    /// Same as [`from_params`](Self::from_params) but flips the wire to SSE.
+    ///
+    /// Sets `stream: true` and `stream_options.include_usage: true`. The
+    /// response is reassembled by [`crate::llm::sse::collect_sse_to_json`]
+    /// into a JSON value structurally identical to the non-stream body, so
+    /// downstream adapters are unaffected.
+    pub(crate) fn from_params_streaming(
+        params: &ToolCompletionParams,
+        messages: Vec<serde_json::Value>,
+    ) -> Self {
+        let mut body = Self::from_params(params, messages);
+        body.stream = Some(true);
+        body.stream_options = Some(StreamOptions {
+            include_usage: true,
+        });
+        body
     }
 }
 
@@ -85,48 +163,80 @@ impl ToolChatRequest {
 ///
 /// Common steps:
 /// 1. POST `body` to `url` with `Authorization: Bearer <api_key>`
-/// 2. Read the response body (HTTP-level errors → [`LLMError::RequestFailed`])
-/// 3. Reject non-2xx by mapping the error JSON via [`http::parse_api_error`]
-/// 4. Parse the success body as JSON via [`http::parse_json_response`]
-/// 5. Log token usage if the response carries a `usage` object
+/// 2. Reject non-2xx by mapping the error JSON via [`http::parse_api_error`]
+///    (the body is read with `.text()`; SSE is never parsed on errors)
+/// 3. On success, choose between two body-collection paths:
+///    - **Streaming** (`body.stream == Some(true)` AND response advertises
+///      `text/event-stream`): hand the response body to
+///      [`collect_sse_to_json`], which reassembles the deltas into the same
+///      JSON shape the provider would have returned non-streaming.
+///    - **Non-streaming**: classic `.text()` + `parse_json_response`.
+/// 4. Log token usage if the resulting JSON carries a `usage` object.
 ///
-/// Cancellation is handled at the upper layer (the future returned by the
-/// HTTP client is dropped on cancel, which tears down the in-flight TCP
-/// stream).
+/// Cancellation is handled at the upper layer
+/// (`complete_with_tools_cancellable`): the future returned by this fn is
+/// dropped on cancel, which closes the in-flight TCP stream and tears down
+/// the SSE reader.
 pub(crate) async fn send_tool_completion(
     http_client: &Arc<reqwest::Client>,
     provider_name: &str,
     url: &str,
     api_key: &str,
     body: &ToolChatRequest,
+    wire_format: ProviderWireFormat,
 ) -> Result<serde_json::Value, LLMError> {
-    debug!(
+    info!(
         provider = provider_name,
         model = %body.model,
         temperature = ?body.temperature,
         max_tokens = ?body.max_tokens,
         reasoning_effort = ?body.reasoning_effort,
         tools_count = body.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+        stream = body.stream.unwrap_or(false),
         "Sending tool completion request"
     );
 
-    let (status, response_body) = http::send_and_read_body(
-        http_client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(body)
-            .send()
-            .await,
-    )
-    .await?;
+    let response = http_client
+        .post(url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| LLMError::RequestFailed(format!("HTTP request failed: {}", e)))?;
 
+    let status = response.status();
+
+    // 4xx/5xx: drain the body as text and surface a structured error. SSE is
+    // never parsed on the error path — proxies almost always serve error
+    // bodies as JSON or plain text, even when streaming was requested.
     if !status.is_success() {
-        return Err(http::parse_api_error(provider_name, status, &response_body));
+        let body_text = response.text().await.map_err(|e| {
+            LLMError::RequestFailed(format!("Failed to read error response body: {}", e))
+        })?;
+        return Err(http::parse_api_error(provider_name, status, &body_text));
     }
 
-    let json_response: serde_json::Value =
-        http::parse_json_response(provider_name, &response_body)?;
+    // 2xx: choose between streaming reassembly and the classic JSON path.
+    let want_stream = body.stream == Some(true);
+    let is_sse = http::is_sse_response(response.headers());
+
+    let json_response: serde_json::Value = if want_stream && is_sse {
+        collect_sse_to_json(response, wire_format).await?
+    } else {
+        if want_stream && !is_sse {
+            warn!(
+                provider = provider_name,
+                content_type = ?response.headers().get(reqwest::header::CONTENT_TYPE),
+                "Streaming requested but response is not SSE; falling back to text body"
+            );
+        }
+        let body_text = response
+            .text()
+            .await
+            .map_err(|e| LLMError::RequestFailed(format!("Failed to read response body: {}", e)))?;
+        http::parse_json_response(provider_name, &body_text)?
+    };
 
     if let Some(usage) = json_response.get("usage") {
         let prompt_tokens = usage
@@ -228,5 +338,68 @@ mod tests {
         let custom = vec![json!({"role": "system", "content": "rewritten"})];
         let body = ToolChatRequest::from_params(&sample_params(), custom.clone());
         assert_eq!(body.messages, custom);
+    }
+
+    #[test]
+    fn from_params_omits_stream_fields_by_default() {
+        let body = ToolChatRequest::from_params(&sample_params(), vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert!(serialized.get("stream").is_none());
+        assert!(serialized.get("stream_options").is_none());
+    }
+
+    #[test]
+    fn from_params_streaming_sets_stream_and_include_usage() {
+        let body = ToolChatRequest::from_params_streaming(&sample_params(), vec![]);
+        assert_eq!(body.stream, Some(true));
+        assert!(body.stream_options.is_some());
+        assert!(body.stream_options.as_ref().unwrap().include_usage);
+    }
+
+    #[test]
+    fn from_params_streaming_serializes_correctly() {
+        let body = ToolChatRequest::from_params_streaming(&sample_params(), vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert_eq!(serialized["stream"], true);
+        assert_eq!(serialized["stream_options"]["include_usage"], true);
+    }
+
+    /// Regression: providers like RouterLab and OpenRouter only honour the
+    /// OpenRouter-style `reasoning: { effort: "high" }` object. Sending only
+    /// the standard `reasoning_effort` left them with thinking silently
+    /// disabled. The tool format must mirror BOTH so each gateway picks up
+    /// whichever it understands.
+    #[test]
+    fn from_params_emits_openrouter_reasoning_object() {
+        let mut params = sample_params();
+        params.reasoning_effort = Some(ReasoningEffort::High);
+        let body = ToolChatRequest::from_params(&params, vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert_eq!(serialized["reasoning_effort"], "high");
+        assert_eq!(serialized["reasoning"]["effort"], "high");
+    }
+
+    /// Without `reasoning_effort` the OpenRouter-style object must be
+    /// omitted entirely (no empty `reasoning: {}` shape that would confuse
+    /// gateways).
+    #[test]
+    fn from_params_omits_reasoning_object_when_effort_absent() {
+        let body = ToolChatRequest::from_params(&sample_params(), vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert!(serialized.get("reasoning").is_none());
+        assert!(serialized.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn from_params_streaming_preserves_tool_fields() {
+        // Streaming flips wire flags but does not alter tool wiring or
+        // reasoning_effort: regression guard for the bascule.
+        let mut params = sample_params();
+        params.tools = vec![json!({"type": "function", "function": {"name": "x"}})];
+        params.reasoning_effort = Some(ReasoningEffort::High);
+        let body = ToolChatRequest::from_params_streaming(&params, vec![]);
+        assert_eq!(body.stream, Some(true));
+        assert!(body.tools.is_some());
+        assert_eq!(body.reasoning_effort, Some("high".to_string()));
     }
 }

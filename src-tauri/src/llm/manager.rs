@@ -22,6 +22,7 @@ use super::provider::{
     CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
 };
 use super::retry::{with_retry, with_retry_cancellable, RetryConfig};
+use crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -53,10 +54,7 @@ impl Default for ProviderConfig {
     }
 }
 
-/// Default HTTP timeout for LLM requests (5 minutes for long completions)
-const HTTP_TIMEOUT_SECS: u64 = 300;
-
-/// Maximum idle connections per host for connection pooling
+/// Maximum idle connections per host for connection pooling.
 const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 5;
 
 /// Manager for LLM providers
@@ -102,10 +100,20 @@ impl ProviderManager {
     /// # Errors
     /// Returns an error if the HTTP client fails to initialize.
     pub fn new() -> Result<Self, String> {
-        // Create shared HTTP client with connection pooling
+        // Create shared HTTP client with connection pooling.
+        //
+        // `read_timeout` (per-read, resets on each successful read) replaces
+        // the old total `.timeout()` so wire-level streaming
+        // (`complete_with_tools` over SSE) can sit idle through long
+        // thinking phases without tripping reqwest. Cloudflare's
+        // ~100s origin-idle limit is defeated separately because the
+        // server keeps emitting SSE chunks during thinking. Uses the same
+        // shared `DEFAULT_READ_TIMEOUT_SECS` as `mistral.rs` /
+        // `openai_compatible.rs` test clients to keep stall behavior
+        // uniform across provider HTTP pools.
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+                .read_timeout(Duration::from_secs(DEFAULT_READ_TIMEOUT_SECS))
                 .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
                 .build()
                 .map_err(|e| format!("Failed to create HTTP client: {}", e))?,

@@ -22,6 +22,7 @@ use super::http::{self, ParsedContent};
 use super::provider::{
     CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
 };
+use super::sse::ProviderWireFormat;
 use super::tool_format::{send_tool_completion, ToolChatRequest};
 use crate::models::agent::ReasoningEffort;
 use async_trait::async_trait;
@@ -239,6 +240,7 @@ impl MistralProvider {
             MISTRAL_API_URL,
             &api_key,
             &body,
+            ProviderWireFormat::Mistral,
         )
         .await
     }
@@ -292,17 +294,23 @@ fn parse_mistral_chat_response(body: &str, model: &str) -> Result<LLMResponse, L
 
 /// Builds the Mistral-specific tool chat request body.
 ///
-/// Starts from the shared OpenAI-compat shape produced by
-/// [`ToolChatRequest::from_params`] then overrides `reasoning_effort` to use
-/// [`ReasoningEffort::to_mistral_str`], which only emits the values accepted
-/// by the Mistral API (`"high"` or omitted). OpenAI-compat providers
-/// (OpenRouter, vLLM, ...) keep the default `low`/`medium`/`high` mapping.
+/// Uses the streaming wire (SSE) variant of
+/// [`ToolChatRequest::from_params_streaming`] to defeat Cloudflare's
+/// origin-idle timeout on slow thinking models, then overrides
+/// `reasoning_effort` to use [`ReasoningEffort::to_mistral_str`], which
+/// only emits the values accepted by the Mistral API (`"high"` or
+/// omitted). OpenAI-compat providers (OpenRouter, vLLM, ...) keep the
+/// default `low`/`medium`/`high` mapping.
 fn build_mistral_tool_request(params: &ToolCompletionParams) -> ToolChatRequest {
-    let mut body = ToolChatRequest::from_params(params, params.messages.clone());
+    let mut body = ToolChatRequest::from_params_streaming(params, params.messages.clone());
     body.reasoning_effort = params
         .reasoning_effort
         .as_ref()
         .map(|e| e.to_mistral_str().to_string());
+    // The OpenRouter-style `reasoning` object is rejected by Mistral cloud
+    // (their schema only accepts `reasoning_effort` at the top level for
+    // tool chat completions). Strip it so the request stays valid.
+    body.reasoning = None;
     body
 }
 
@@ -365,8 +373,8 @@ mod tests {
     fn test_mistral_provider() -> MistralProvider {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                .read_timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS,
                 ))
                 .build()
                 .expect("test HTTP client"),
@@ -523,6 +531,25 @@ mod tests {
         let body = build_mistral_tool_request(&params);
         let json = serde_json::to_value(&body).unwrap();
         assert!(json.get("reasoning_effort").is_none());
+        assert!(json.get("reasoning").is_none());
+    }
+
+    /// Regression: the OpenRouter-style `reasoning: { effort }` object is
+    /// added by the shared `from_params` builder so OpenAI-compat gateways
+    /// pick it up. Mistral cloud rejects unknown top-level keys — strip the
+    /// object so the request stays valid even when reasoning_effort is set.
+    #[test]
+    fn build_mistral_tool_request_strips_openrouter_reasoning_object() {
+        let params = sample_tool_params(Some(ReasoningEffort::High));
+        let body = build_mistral_tool_request(&params);
+        let json = serde_json::to_value(&body).unwrap();
+        assert_eq!(json["reasoning_effort"], "high");
+        assert!(
+            json.get("reasoning").is_none(),
+            "Mistral request must NOT carry the OpenRouter-style \
+             `reasoning` object, got: {}",
+            json
+        );
     }
 
     #[test]

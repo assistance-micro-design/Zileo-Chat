@@ -57,8 +57,19 @@ pub mod audit {
 // Used by lib LLM providers; not reachable from binary target.
 #[allow(dead_code)]
 pub mod llm_http {
-    /// Default HTTP read timeout (seconds) for non-streaming LLM responses.
+    /// Default HTTP total timeout (seconds) for non-streaming LLM responses.
+    ///
+    /// Kept for connectivity tests and any non-tool-loop call path. Not used
+    /// for `complete_with_tools` anymore since the bascule to wire-level
+    /// streaming — see `DEFAULT_READ_TIMEOUT_SECS`.
     pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
+    /// Per-read timeout (seconds) for streaming chat completions.
+    ///
+    /// `reqwest::ClientBuilder::read_timeout` resets after each successful
+    /// read, so as long as the provider keeps emitting SSE chunks the client
+    /// waits indefinitely. Cloudflare's origin-idle limit (~100s) ceases to
+    /// matter; this value bounds the wait between two consecutive frames.
+    pub const DEFAULT_READ_TIMEOUT_SECS: u64 = 30;
 }
 
 /// Default limits for database queries to prevent memory explosion.

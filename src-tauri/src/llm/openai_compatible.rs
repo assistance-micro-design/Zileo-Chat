@@ -26,6 +26,7 @@ use super::http::{self, ParsedContent};
 use super::provider::{
     CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
+use super::sse::ProviderWireFormat;
 use super::tool_format::{send_tool_completion, ToolChatRequest};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -350,7 +351,7 @@ impl OpenAiCompatibleProvider {
         // (required for Anthropic Claude, harmlessly ignored by others).
         let cached_messages = apply_prompt_cache_control(&params.messages);
 
-        let body = ToolChatRequest::from_params(params, cached_messages);
+        let body = ToolChatRequest::from_params_streaming(params, cached_messages);
         let url = format!("{}/chat/completions", base_url);
         send_tool_completion(
             &self.http_client,
@@ -358,6 +359,7 @@ impl OpenAiCompatibleProvider {
             &url,
             &api_key,
             &body,
+            ProviderWireFormat::OpenAi,
         )
         .await
     }
@@ -408,8 +410,8 @@ mod tests {
     fn test_http_client() -> Arc<reqwest::Client> {
         Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
+                .read_timeout(std::time::Duration::from_secs(
+                    crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS,
                 ))
                 .build()
                 .expect("test HTTP client"),

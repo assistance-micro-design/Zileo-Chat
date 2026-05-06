@@ -8613,6 +8613,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "globset",
+ "http",
  "keyring",
  "regex",
  "reqwest 0.12.28",

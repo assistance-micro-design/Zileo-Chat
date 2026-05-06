@@ -212,6 +212,26 @@ pub struct ApiErrorDetail {
     pub message: String,
 }
 
+/// Returns `true` when the response advertises a Server-Sent Events body
+/// (`Content-Type: text/event-stream`, possibly with charset/parameter
+/// suffixes).
+///
+/// Used by the streaming tool-completion path to confirm that a successful
+/// response can be safely fed to the SSE collector. A `200 OK` body that
+/// is *not* SSE (e.g. some proxies fall back to non-stream JSON) takes the
+/// classic `.text()` + `parse_json_response` path instead.
+pub fn is_sse_response(headers: &reqwest::header::HeaderMap) -> bool {
+    headers
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| {
+            // Split on `;` to ignore `charset=utf-8` and other parameters.
+            let main = ct.split(';').next().unwrap_or("").trim();
+            main.eq_ignore_ascii_case("text/event-stream")
+        })
+        .unwrap_or(false)
+}
+
 /// Sends an HTTP request and reads the response body as text.
 ///
 /// Returns `(status_code, body_text)`.
@@ -378,6 +398,52 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("Rate limit exceeded"));
         assert!(msg.contains("TestProvider"));
+    }
+
+    #[test]
+    fn test_is_sse_response_basic() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::CONTENT_TYPE,
+            "text/event-stream".parse().unwrap(),
+        );
+        assert!(is_sse_response(&h));
+    }
+
+    #[test]
+    fn test_is_sse_response_with_charset() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::CONTENT_TYPE,
+            "text/event-stream; charset=utf-8".parse().unwrap(),
+        );
+        assert!(is_sse_response(&h));
+    }
+
+    #[test]
+    fn test_is_sse_response_case_insensitive() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::CONTENT_TYPE,
+            "Text/Event-Stream".parse().unwrap(),
+        );
+        assert!(is_sse_response(&h));
+    }
+
+    #[test]
+    fn test_is_sse_response_rejects_json() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert(
+            reqwest::header::CONTENT_TYPE,
+            "application/json".parse().unwrap(),
+        );
+        assert!(!is_sse_response(&h));
+    }
+
+    #[test]
+    fn test_is_sse_response_rejects_missing_header() {
+        let h = reqwest::header::HeaderMap::new();
+        assert!(!is_sse_response(&h));
     }
 
     #[test]

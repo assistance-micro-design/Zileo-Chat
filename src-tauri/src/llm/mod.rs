@@ -46,6 +46,7 @@ pub mod openai_compatible;
 pub mod pricing;
 mod provider;
 pub mod retry;
+pub(crate) mod sse;
 pub mod tool_adapter;
 pub(crate) mod tool_format;
 pub mod utils;

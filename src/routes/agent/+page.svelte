@@ -311,11 +311,24 @@ Uses extracted components, services, and stores for clean architecture.
 				tokenStore.restoreFromLastMessage(lastMetrics);
 			}
 
-			// Auto-select agent if workflow has one
+			// Auto-select agent if workflow has one.
+			//
+			// We must reload the agent's model context window every time, even
+			// when the agent did not change: `tokenStore.reset()` at the top of
+			// this function zeroes `contextMax`, so the gauge would otherwise
+			// stay stuck at "X / 0 contexte" until the user manually picks
+			// another agent. The fast path (agent unchanged) only refreshes
+			// the model row instead of running the full `handleAgentChange`
+			// pipeline (which also resets max-iterations and other UI state).
 			const agentId = workflow?.agent_id;
-			if (agentId && agentId !== pageState.selectedAgentId) {
-				await handleAgentChange(agentId);
-				if (!isStillSelected()) return;
+			if (agentId) {
+				if (agentId !== pageState.selectedAgentId) {
+					await handleAgentChange(agentId);
+					if (!isStillSelected()) return;
+				} else {
+					await loadAgentConfig(agentId);
+					if (!isStillSelected()) return;
+				}
 			}
 		}
 
@@ -457,9 +470,22 @@ Uses extracted components, services, and stores for clean architecture.
 						config.llm.provider.toLowerCase() as ProviderType
 					);
 					tokenStore.updateFromModel(model);
-				} catch {
-					// Model fetch failed: keep the previous ceiling rather than
-					// inventing one. The gauge reads as 0% until a valid model loads.
+				} catch (err) {
+					// Model fetch failed (most common cause: the agent references
+					// a model api_name + provider pair that is not in the
+					// `llm_model` table — e.g. a custom model that was never
+					// saved, or whose provider casing diverged). Log the actual
+					// reason so the user can see the missing row in the console
+					// and add it via Settings > LLM Models. Without this log,
+					// the bottom gauge silently reads "/ 0 contexte" with no
+					// hint of the underlying cause.
+					console.warn(
+						`Context window unavailable for agent ${agentId}: ` +
+							`model "${config.llm.model}" not found for provider ` +
+							`"${config.llm.provider}". ` +
+							`Add the model in Settings > LLM Models. ` +
+							`Original error: ${getErrorMessage(err)}`
+					);
 				}
 			}
 		} catch {

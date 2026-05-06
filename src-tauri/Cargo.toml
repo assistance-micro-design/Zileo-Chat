@@ -69,6 +69,10 @@ base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3.24"
+# Used by llm::sse tests to forge a `reqwest::Response` from an in-memory
+# body without touching the network. Pinned to the same major as the version
+# transitively required by `reqwest` 0.12 to avoid duplicate copies.
+http = "1"
 
 [features]
 default = ["custom-protocol"]

@@ -246,6 +246,29 @@ async fn seed_llm_model(
     is_reasoning: bool,
     context_window: u64,
 ) {
+    seed_llm_model_full(
+        db,
+        provider,
+        api_name,
+        is_reasoning,
+        context_window,
+        0.7,
+        4096,
+    )
+    .await;
+}
+
+/// Seeds an `llm_model` row with full control over the model defaults so
+/// hydrate tests can assert each field independently.
+async fn seed_llm_model_full(
+    db: &DBClient,
+    provider: &str,
+    api_name: &str,
+    is_reasoning: bool,
+    context_window: u64,
+    temperature_default: f64,
+    max_output_tokens: u64,
+) {
     let model_id = uuid::Uuid::new_v4().to_string();
     let data = serde_json::json!({
         "id": model_id,
@@ -253,8 +276,8 @@ async fn seed_llm_model(
         "name": api_name,
         "api_name": api_name,
         "context_window": context_window,
-        "max_output_tokens": 4096,
-        "temperature_default": 0.7,
+        "max_output_tokens": max_output_tokens,
+        "temperature_default": temperature_default,
         "is_builtin": false,
         "is_reasoning": is_reasoning,
         "input_price_per_mtok": 0.0,
@@ -288,7 +311,16 @@ fn stale_llm_config(provider: &str, model: &str) -> LLMConfig {
 #[tokio::test]
 async fn test_hydrate_llm_from_model_overrides_stale_snapshot() {
     let (state, _db_guard) = setup_test_state().await;
-    seed_llm_model(&state.db, "mistral", "magistral-medium", true, 128_000).await;
+    seed_llm_model_full(
+        &state.db,
+        "mistral",
+        "magistral-medium",
+        true,
+        128_000,
+        0.3,
+        8192,
+    )
+    .await;
 
     let mut llm = stale_llm_config("Mistral", "magistral-medium");
     super::hydrate_llm_from_model(&state.db, &mut llm)
@@ -304,8 +336,54 @@ async fn test_hydrate_llm_from_model_overrides_stale_snapshot() {
         Some(128_000),
         "context_window should be overridden from DB"
     );
-    assert_eq!(llm.temperature, 0.7, "user-editable fields untouched");
-    assert_eq!(llm.max_tokens, 1000, "user-editable fields untouched");
+    // The frontend AgentForm copies these four fields straight from the
+    // selected model and offers no per-agent override, so the snapshot is
+    // a derived copy. Hydrate must keep them in sync with the model card.
+    assert!(
+        (llm.temperature - 0.3).abs() < 1e-9,
+        "temperature should follow the model's temperature_default"
+    );
+    assert_eq!(
+        llm.max_tokens, 8192,
+        "max_tokens should follow the model's max_output_tokens"
+    );
+}
+
+/// Regression: an existing agent whose model later raised its
+/// `temperature_default` / `max_output_tokens` must inherit the new values
+/// at next hydrate (typically at app startup), without the user having to
+/// re-edit the agent.
+#[tokio::test]
+async fn test_hydrate_llm_from_model_overrides_temperature_and_max_tokens() {
+    let (state, _db_guard) = setup_test_state().await;
+    seed_llm_model_full(
+        &state.db,
+        "routerlab",
+        "deepseek-v4-pro",
+        true,
+        1_000_000,
+        0.1,
+        65_536,
+    )
+    .await;
+
+    // Agent saved when the model still defaulted to 0.7 / 4096.
+    let mut llm = LLMConfig {
+        provider: "routerlab".to_string(),
+        model: "deepseek-v4-pro".to_string(),
+        temperature: 0.7,
+        max_tokens: 4096,
+        is_reasoning: false,
+        context_window: Some(32_000),
+    };
+    super::hydrate_llm_from_model(&state.db, &mut llm)
+        .await
+        .expect("hydrate should succeed");
+
+    assert!((llm.temperature - 0.1).abs() < 1e-9);
+    assert_eq!(llm.max_tokens, 65_536);
+    assert!(llm.is_reasoning);
+    assert_eq!(llm.context_window, Some(1_000_000));
 }
 
 #[tokio::test]

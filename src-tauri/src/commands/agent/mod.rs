@@ -145,22 +145,29 @@ async fn check_agent_name_unique(
 }
 
 /// Refreshes the LLMConfig snapshot fields that are owned by the model card
-/// (`is_reasoning`, `context_window`) from the current `llm_model` row.
+/// (`is_reasoning`, `context_window`, `temperature`, `max_tokens`) from the
+/// current `llm_model` row.
 ///
-/// The frontend snapshots these fields at agent save time, but the snapshot
-/// can become stale: editing the model card (e.g. toggling "reasoning") does
-/// not propagate to existing agents until they are re-saved, and the
-/// `loadAllLLMData()` cache inside `AgentForm.svelte` is only refreshed at
-/// `onMount`. By re-reading from the DB just before persisting the agent we
-/// make the model card the single source of truth for these fields and
-/// eliminate the entire class of "snapshot stale" bugs (see ERR_LLM_010).
+/// The frontend (`AgentForm.svelte`) snapshots all four fields from
+/// `selectedModel.{is_reasoning,context_window,temperature_default,
+/// max_output_tokens}` at agent save time and does not expose any of them
+/// for per-agent editing. They are therefore conceptually copies of the
+/// model card, but the snapshot can drift after the user later edits the
+/// model card — without re-syncing, an agent saved before the model was
+/// flagged `is_reasoning=true` keeps `is_reasoning=false`,
+/// `effective_reasoning_effort` returns `None`, the `reasoning_effort`
+/// parameter never reaches the provider, and the Reflexion UI block
+/// disappears (see ERR_LLM_010). The same risk applies symmetrically to
+/// `temperature_default` / `max_output_tokens` — a user who lowers the
+/// model's max output expects existing agents to follow.
 ///
-/// Fields that may legitimately diverge from the model defaults
-/// (`temperature`, `max_tokens`) are NOT overridden — those stay user-editable.
+/// By re-reading from the DB the model card stays the single source of
+/// truth for these four fields, eliminating the entire class of
+/// "snapshot stale" bugs.
 ///
 /// If no matching `llm_model` row exists (e.g. ad-hoc model name not yet
 /// registered), the snapshot is kept as-is so creation does not fail.
-async fn hydrate_llm_from_model(
+pub async fn hydrate_llm_from_model(
     db: &crate::db::DBClient,
     llm: &mut crate::models::LLMConfig,
 ) -> Result<(), String> {
@@ -175,7 +182,8 @@ async fn hydrate_llm_from_model(
         return Ok(());
     }
 
-    let query = "SELECT is_reasoning, context_window FROM llm_model \
+    let query = "SELECT is_reasoning, context_window, temperature_default, max_output_tokens \
+                 FROM llm_model \
                  WHERE provider = $provider AND api_name = $api_name LIMIT 1";
     let rows: Vec<serde_json::Value> = db
         .query_with_params(
@@ -212,6 +220,37 @@ async fn hydrate_llm_from_model(
                     );
                 }
                 // Field absent from row: leave snapshot as-is.
+            }
+        }
+        // `temperature_default` is stored as f64 in `llm_model`. Accept both
+        // f64 and i64 (some DB drivers serialize whole-number floats as ints)
+        // before falling back. Only override the snapshot when a valid number
+        // arrives so a schema drift can't reset agents to 0.0 silently.
+        let temp_value = row
+            .get("temperature_default")
+            .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|n| n as f64)));
+        match temp_value {
+            Some(t) => llm.temperature = t,
+            None => {
+                if row.get("temperature_default").is_some() {
+                    warn!(
+                        provider = %provider_id,
+                        api_name = %api_name,
+                        "llm_model.temperature_default is not numeric — keeping snapshot value (schema drift?)"
+                    );
+                }
+            }
+        }
+        match row.get("max_output_tokens").and_then(|v| v.as_u64()) {
+            Some(max_out) => llm.max_tokens = max_out as usize,
+            None => {
+                if row.get("max_output_tokens").is_some() {
+                    warn!(
+                        provider = %provider_id,
+                        api_name = %api_name,
+                        "llm_model.max_output_tokens is not an unsigned int — keeping snapshot value (schema drift?)"
+                    );
+                }
             }
         }
     }
