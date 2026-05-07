@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.23.0] - 2026-05-06
+
+### Added
+
+- **SSE streaming shim for LLM responses**: New internal `llm::sse` module decodes upstream Server-Sent Events from streamed LLM completions. Lays the groundwork for live token deltas without blocking on full responses
+- **LLM snapshot hydration on startup**: At app startup, every agent's persisted `LLMConfig` snapshot now refreshes its `is_reasoning` and `context_window` fields from the current `llm_models` row via `commands/agent::hydrate_llm_from_model`. Without this, an agent saved before its model was flagged `is_reasoning=true` kept a stale snapshot -- `effective_reasoning_effort` returned `None`, the `reasoning_effort` parameter never reached the provider, and the Reflexion UI block never appeared. Failure to hydrate logs a warning and keeps the persisted snapshot, so a transient DB error does not break startup
+
+### Changed
+
+- **HTTP `read_timeout` replaces total `timeout` in the shared LLM client** (`llm/manager.rs`): The previous `Client::builder().timeout(300s)` cut the wire mid-thinking on long reasoning sessions even when the server kept emitting SSE chunks. The shared client now uses `read_timeout(DEFAULT_READ_TIMEOUT_SECS)` (per-read, resets on each successful read), uniform with the per-provider test clients in `mistral.rs` / `openai_compatible.rs`, so streaming sits idle through long thinking phases as long as the server keeps emitting chunks
+- **Frontend Tauri adapter layer (`src/lib/tauri/`)**: 6 modules (`core`, `events`, `window`, `dialog`, `opener`, `environment`) centralize all `@tauri-apps/*` access. 62 frontend files migrated from direct `@tauri-apps/*` imports to `$lib/tauri`. Browser-runtime fallbacks make Vitest / preview environments work without touching the native runtime. Vitest mocks now target `$lib/tauri`. Includes onboarding `localStorage` guards and a new i18n parity test for `en.json` / `fr.json` placeholders (PR #130)
+
 ### Fixed
 
-- **Prompt-cache breakpoint dropped `tool_calls` and `reasoning_details` from assistant messages**: The BP2 marker in `cache_control` rebuilt the assistant message keeping only `role` + `content`, silently stripping `tool_calls` and `reasoning_details`. On iteration 2 of the tool loop, OpenRouter forwarded `tool_result` messages whose `tool_call_id` no longer matched any `tool_use`, and Anthropic rejected the request with HTTP 400 ("Provider returned error"). The deterministic 400 was retried 3x at exponential backoff, amplifying cost on what should have been an instant fail. The marker now mirrors the existing tool-role preservation via a match on `role`; `reasoning_details` is preserved as required by OpenRouter docs for Anthropic thinking continuity (signed blocks). Mistral native and Ollama bypass this code path and were unaffected. Two regression tests added
+- **`ParallelTasksTool` per-batch cap was using the cumulative workflow cap**: `validate_input` and `validate_tasks` both compared `tasks.len() > MAX_SUB_AGENTS` (15). `MAX_SUB_AGENTS` is the cumulative cap counting every spawn / delegate / parallel operation across the whole workflow, not the size of a single batch. The tool's JSON schema (`maxItems: 3`) and description (`max 3 per batch`) already pointed at 3, but server-side validation accepted up to 15 per call. New constant `MAX_PARALLEL_TASKS_PER_BATCH = 3` and a pure `validate_batch_size(len)` helper now drive both validation sites; guard tests keep the description text and schema wired to the constant. `MAX_SUB_AGENTS` still enforced by `SubAgentExecutor::check_limit` for the cumulative cap (PR #131)
+- **Context window gauge stuck at hardcoded `/128000`**: `tokens.ts` initial `contextMax` was 128000 plus a `?? 128000` fallback in `updateFromModel`, even though `LLMModel.context_window: number` is a required field. Frontend dead code field `PageState.currentContextWindow` (written 4 places, never read) compounded the confusion -- the actual value flows through `tokenStore.updateFromModel()`. Initial `contextMax` is now 0 (TokenDisplay already guards against division by zero, gauge stays at 0% until the model loads), `updateFromModel` reads `model.context_window` directly, and `currentContextWindow` is removed (PR #129)
+- **Cancellation did not propagate to sub-agents**: Cancelling a primary workflow left active sub-agents running in the background. The cancellation token is now propagated through spawn / delegate / parallel paths so child agents stop with the parent (PR #129)
+- **Orchestrator context gauge showed cumulative tokens, not the last call**: The "context" gauge on the agent page summed every iteration's tokens instead of showing the last orchestrator call. The display now reflects the last LLM call only, matching what the next call will actually send (PR #129)
+- **Frontend race on workflow switch overwrote metrics from the previous workflow**: Several `await`s on workflow load (`MessageService`, runtime preferences, theme persistence) had no guard against the user switching to a different workflow mid-await. Race guards now check the currently-viewed workflow id before applying state (PR #127)
+- **`localStorage` / `document` / `navigator` / `matchMedia` accesses unsafe in non-browser contexts**: Several stores (`theme`, `locale`, onboarding) accessed these globals without guards, which broke in the Vitest / preview environments and in any code path that ran before the renderer was ready. All accesses now go through guarded helpers; failures degrade gracefully with logs / toasts instead of throwing silently (PR #127)
+- **Streaming cancellation cycle: backend kept handles after frontend disconnects**: The streaming execution path could leak an `MCPServerHandle` or a cancellation token if the frontend stopped listening between iterations. The backend now cleans up under the same lock that decided to abort, and the frontend toggles `isStreaming` only after the cancel ack (PR #127)
+- **Prompt-cache breakpoint dropped `tool_calls` and `reasoning_details` from assistant messages**: The BP2 marker in `cache_control` rebuilt the assistant message keeping only `role` + `content`, silently stripping `tool_calls` and `reasoning_details`. On iteration 2 of the tool loop, OpenRouter forwarded `tool_result` messages whose `tool_call_id` no longer matched any `tool_use`, and Anthropic rejected the request with HTTP 400 ("Provider returned error"). The deterministic 400 was retried 3x at exponential backoff, amplifying cost on what should have been an instant fail. The marker now mirrors the existing tool-role preservation via a match on `role`; `reasoning_details` is preserved as required by OpenRouter docs for Anthropic thinking continuity (signed blocks). Mistral native and Ollama bypass this code path and were unaffected. Two regression tests added (PR #128)
 
 ---
 
@@ -785,7 +806,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.22.2...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.0
 [0.22.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.2
 [0.22.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.1
 [0.22.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.0
