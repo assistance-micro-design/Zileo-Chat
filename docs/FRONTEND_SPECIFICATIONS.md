@@ -253,13 +253,17 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 9. Frontend-Backend Communication
 
+### Tauri Adapter Layer (`src/lib/tauri/`)
+
+All `@tauri-apps/*` access is centralized in this adapter (modules: `core`, `events`, `window`, `dialog`, `opener`, `environment`). Components, routes, stores, services and tests import from `$lib/tauri` instead of `@tauri-apps/*` directly. The adapter provides browser-runtime fallbacks so non-Tauri environments (Vitest, preview) stay functional.
+
 ### Tauri Commands
 
-Frontend calls backend via `invoke()` from `@tauri-apps/api/core`. Parameter names are automatically converted from camelCase (TypeScript) to snake_case (Rust).
+Frontend calls backend via `tauriInvoke()` from `$lib/tauri` (wraps `invoke()` from `@tauri-apps/api/core`). Parameter names are automatically converted from camelCase (TypeScript) to snake_case (Rust).
 
 ### Streaming (Tauri Events)
 
-Real-time updates use Tauri's event system via `listen()`. The backend emits `workflow_stream` events with typed `StreamChunk` payloads containing token content, tool start/end, reasoning steps, and sub-agent updates.
+Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `@tauri-apps/api/event`). The backend emits `workflow_stream` events with typed `StreamChunk` payloads containing token content, tool start/end, reasoning steps, and sub-agent updates.
 
 ### Key Patterns
 

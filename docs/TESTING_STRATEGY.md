@@ -117,7 +117,7 @@ See `src/lib/` for TypeScript test files.
 | `utils/__tests__/debounce.test.ts` | 10 | Debounce/throttle utilities |
 | (others) | - | Error handling, URL validation, date grouping, chunk processing |
 
-**Pattern**: Store-based testing (no @testing-library/svelte). Tauri IPC mocked via `vi.mock('@tauri-apps/api/core')`.
+**Pattern**: Store-based testing (no @testing-library/svelte). Tauri IPC mocked via `vi.mock('$lib/tauri')` (the centralized adapter that wraps `@tauri-apps/*`).
 
 ### E2E Tests (112 tests, 10 files)
 
@@ -175,7 +175,7 @@ See `.github/workflows/validate.yml` for full configuration.
 ### Frontend
 
 - **Store Testing**: Test Svelte stores with `get()` from `svelte/store`
-- **Tauri Mocking**: Mock `@tauri-apps/api/core` with `vi.fn()`
+- **Tauri Mocking**: Mock `$lib/tauri` (the centralized adapter) with `vi.fn()`
 - **State Reset**: `beforeEach()` hooks reset store state
 - **Type Validation**: Tests verify TypeScript type compatibility
 

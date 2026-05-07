@@ -97,7 +97,8 @@ The primary agent decomposes complex tasks and delegates them. It analyzes depen
 | **ParallelTasksTool** | Parallel execution of multiple tasks (by ID or name) | execute_batch |
 
 **Constraints**:
-- Maximum 15 sub-agents per workflow (`MAX_SUB_AGENTS`)
+- Maximum 15 cumulative sub-agent operations per workflow across spawn/delegate/parallel (`MAX_SUB_AGENTS`)
+- Maximum 3 tasks in a single ParallelTasks batch (`MAX_PARALLEL_TASKS_PER_BATCH`)
 - Only accessible when `is_primary_agent = true`
 - "Prompt In, Report Out" pattern (no shared context)
 - Sub-agents CANNOT spawn other sub-agents
