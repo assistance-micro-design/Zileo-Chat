@@ -8615,6 +8615,7 @@ dependencies = [
  "globset",
  "http",
  "keyring",
+ "rand 0.8.6",
  "regex",
  "reqwest 0.12.28",
  "rig-core",
