@@ -39,7 +39,8 @@ export default [
   {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      '@typescript-eslint/no-explicit-any': 'error',
+      'no-console': 'error',
       'svelte/no-navigation-without-resolve': 'off'
     }
   }

@@ -210,8 +210,8 @@ Uses extracted components, services, and stores for clean architecture.
 					for (const [id, b] of blocks) {
 						messageBlocks.set(id, b);
 					}
-				} catch (err) {
-					console.warn('Failed to load message blocks:', getErrorMessage(err));
+				} catch {
+					// Non-blocking: render the page without prior message blocks.
 				}
 
 				// Load persisted tasks for this workflow
@@ -220,8 +220,8 @@ Uses extracted components, services, and stores for clean architecture.
 					const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
 					if (!isStillSelected()) return;
 					persistedTasks = mapPersistedTasks(tasks);
-				} catch (err) {
-					console.warn('Failed to load workflow tasks:', getErrorMessage(err));
+				} catch {
+					// Non-blocking: render the page without persisted tasks.
 				}
 			} finally {
 				if (isStillSelected()) {
@@ -475,22 +475,13 @@ Uses extracted components, services, and stores for clean architecture.
 						config.llm.provider.toLowerCase() as ProviderType
 					);
 					tokenStore.updateFromModel(model);
-				} catch (err) {
+				} catch {
 					// Model fetch failed (most common cause: the agent references
 					// a model api_name + provider pair that is not in the
 					// `llm_model` table — e.g. a custom model that was never
-					// saved, or whose provider casing diverged). Log the actual
-					// reason so the user can see the missing row in the console
-					// and add it via Settings > LLM Models. Without this log,
-					// the bottom gauge silently reads "/ 0 contexte" with no
-					// hint of the underlying cause.
-					console.warn(
-						`Context window unavailable for agent ${agentId}: ` +
-							`model "${config.llm.model}" not found for provider ` +
-							`"${config.llm.provider}". ` +
-							`Add the model in Settings > LLM Models. ` +
-							`Original error: ${getErrorMessage(err)}`
-					);
+					// saved, or whose provider casing diverged). Swallow it:
+					// the bottom gauge will read "/ 0 contexte" until the user
+					// adds the missing row in Settings > LLM Models.
 				}
 			}
 		} catch {
@@ -559,8 +550,10 @@ Uses extracted components, services, and stores for clean architecture.
 					if (isStillSelected()) {
 						persistedTasks = mapPersistedTasks(tasks);
 					}
-				} catch (err) {
-					console.warn('Failed to reload workflow tasks after execution:', getErrorMessage(err));
+				} catch {
+					// Non-blocking: the page already shows the live tasks from
+					// the execution stream; missing the post-execution reload
+					// just means the persisted-task panel may be slightly stale.
 				}
 			}
 		}
