@@ -96,9 +96,11 @@ Manages API key configuration modal for LLM providers.
 		saveConfirming = true;
 
 		try {
-			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+			// Pass the provider id verbatim (lowercase, e.g. "mistral", "routerlab").
+			// The backend stores keys keyed by this id; capitalizing it here would
+			// silently desync save vs. read on case-sensitive keystores.
 			await tauriInvoke('save_api_key', {
-				provider: providerName,
+				provider: provider,
 				apiKey: apiKey
 			});
 			apiKey = '';
@@ -134,8 +136,8 @@ Manages API key configuration modal for LLM providers.
 		deleteConfirming = true;
 
 		try {
-			const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-			await tauriInvoke('delete_api_key', { provider: providerName });
+			// Same id as the save path — see confirmSaveApiKey.
+			await tauriInvoke('delete_api_key', { provider: provider });
 			onReload();
 			notify('success', $i18n('settings_api_key_deleted'));
 			showDeleteConfirm = false;
@@ -251,7 +253,7 @@ Manages API key configuration modal for LLM providers.
 	titleKey="api_key_delete_title"
 	confirmMessageKey="api_key_delete_confirm_msg"
 	deleting={deleteConfirming}
-	itemName={provider.charAt(0).toUpperCase() + provider.slice(1)}
+	itemName={providerDisplayName ?? provider}
 	onConfirm={confirmDeleteApiKey}
 	onCancel={cancelDeleteApiKey}
 />

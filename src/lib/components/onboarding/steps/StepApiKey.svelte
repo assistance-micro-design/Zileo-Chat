@@ -57,8 +57,12 @@
 		testSuccess = false;
 
 		try {
-			// First save the API key (must use 'Mistral' capitalized - KeyStore is case-sensitive)
-			await tauriInvoke('save_api_key', { provider: 'Mistral', apiKey: apiKey.trim() });
+			// Use the lowercase provider id consistently across save and test.
+			// The previous code mixed 'Mistral' (save) with 'mistral' (test);
+			// this worked only because the keystore happens to be case-insensitive
+			// today. APIKeysSection.svelte was migrated to lowercase in the same
+			// commit so the convention is now uniform across the app.
+			await tauriInvoke('save_api_key', { provider: 'mistral', apiKey: apiKey.trim() });
 
 			// Then test the connection
 			const result = await tauriInvoke<{ success: boolean; latency_ms?: number; error?: string }>(
