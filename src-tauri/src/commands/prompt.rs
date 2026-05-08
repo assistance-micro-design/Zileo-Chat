@@ -20,7 +20,7 @@ use crate::models::prompt::{
     Prompt, PromptCreate, PromptSummary, PromptUpdate, MAX_PROMPT_CONTENT_LEN,
     MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
-use crate::security::serialize_for_query;
+use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -100,6 +100,8 @@ pub async fn list_prompts(state: State<'_, AppState>) -> Result<Vec<PromptSummar
 #[instrument(name = "get_prompt", skip(state), fields(prompt_id = %prompt_id))]
 pub async fn get_prompt(prompt_id: String, state: State<'_, AppState>) -> Result<Prompt, String> {
     info!("Getting prompt");
+
+    let prompt_id = validate_uuid_field(&prompt_id, "prompt_id")?;
 
     let query = format!(
         r#"
@@ -204,6 +206,8 @@ pub async fn update_prompt(
 ) -> Result<Prompt, String> {
     info!("Updating prompt");
 
+    let prompt_id = validate_uuid_field(&prompt_id, "prompt_id")?;
+
     // Build SET clauses for non-None fields
     let mut set_clauses = Vec::new();
 
@@ -264,6 +268,8 @@ pub async fn update_prompt(
 #[instrument(name = "delete_prompt", skip(state), fields(prompt_id = %prompt_id))]
 pub async fn delete_prompt(prompt_id: String, state: State<'_, AppState>) -> Result<(), String> {
     info!("Deleting prompt");
+
+    let prompt_id = validate_uuid_field(&prompt_id, "prompt_id")?;
 
     let query = format!("DELETE prompt:`{}`", prompt_id);
 
