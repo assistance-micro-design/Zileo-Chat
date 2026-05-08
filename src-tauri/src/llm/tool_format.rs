@@ -30,6 +30,7 @@ use crate::llm::http;
 use crate::llm::provider::LLMError;
 use crate::llm::sse::{collect_sse_to_json, ProviderWireFormat};
 use crate::llm::ToolCompletionParams;
+use crate::models::agent::ReasoningEffort;
 use serde::Serialize;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -90,12 +91,41 @@ pub(crate) struct StreamOptions {
 ///
 /// Mirrored from
 /// <https://openrouter.ai/docs/guides/best-practices/reasoning-tokens>.
-/// The `effort` variant is what we use today; OpenRouter also documents
-/// `max_tokens` (Anthropic-style budget) and `enabled` (boolean toggle),
-/// neither of which is needed by the current adapters.
+///
+/// Both fields are sent side-by-side because the gateways diverge on what
+/// they actually honour:
+/// - OpenRouter natif lit `effort` et le mappe selon le backend (OpenAI,
+///   Anthropic 4.6+, Gemini, ...).
+/// - RouterLab (proxy Anthropic Messages API) ignore `effort` et n'honore
+///   que `max_tokens` (mappé sur `thinking.budget_tokens` côté Anthropic).
+/// - Anthropic legacy via OpenRouter accepte `max_tokens` (budget tokens).
+///
+/// `skip_serializing_if` garantit qu'aucun champ vide ne pollue le payload
+/// pour les providers stricts.
 #[derive(Debug, Serialize)]
 pub(crate) struct ReasoningParam {
-    pub effort: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+}
+
+/// Maps a [`ReasoningEffort`] level to a thinking budget in tokens.
+///
+/// Used by gateways that ignore `reasoning.effort` and only honour the
+/// Anthropic-style `reasoning.max_tokens` field (notably RouterLab, which
+/// proxies via Anthropic Messages API). Values respect:
+/// - >= 1024 (Anthropic minimum, below which `thinking.budget_tokens` errors)
+/// - <= 8192 (DeepSeek-R1 quality cliff, cohérent with the OpenRouter
+///   Anthropic legacy mapping for `effort: "high"`)
+/// - < default `max_tokens` global (16384 chez Zileo), pour laisser de la
+///   place a la reponse finale apres le budget de raisonnement
+pub(crate) fn effort_to_max_tokens(effort: &ReasoningEffort) -> u32 {
+    match effort {
+        ReasoningEffort::Low => 2048,
+        ReasoningEffort::Medium => 4096,
+        ReasoningEffort::High => 8192,
+    }
 }
 
 impl ToolChatRequest {
@@ -115,6 +145,23 @@ impl ToolChatRequest {
             .reasoning_effort
             .as_ref()
             .map(|e| e.as_str().to_string());
+        // Mirror reasoning_effort into the OpenRouter-style object so
+        // provider gateways that only honour the `reasoning` shape
+        // (RouterLab, OpenRouter, ...) still enable thinking. The
+        // standard `reasoning_effort` field above stays for OpenAI /
+        // Mistral dialects. Both `effort` and `max_tokens` are emitted
+        // because gateways diverge: RouterLab proxies via Anthropic and
+        // ignores `effort` entirely, only honouring `max_tokens`.
+        // Mistral overrides BOTH explicitly via
+        // `build_mistral_tool_request` to avoid sending the unknown
+        // key.
+        let reasoning_param = params
+            .reasoning_effort
+            .as_ref()
+            .map(|effort| ReasoningParam {
+                effort: Some(effort.as_str().to_string()),
+                max_tokens: Some(effort_to_max_tokens(effort)),
+            });
         Self {
             model: params.model.clone(),
             messages,
@@ -126,17 +173,10 @@ impl ToolChatRequest {
                 Some(params.tools.clone())
             },
             tool_choice: params.tool_choice.clone(),
-            reasoning_effort: effort_str.clone(),
+            reasoning_effort: effort_str,
             stream: None,
             stream_options: None,
-            // Mirror reasoning_effort into the OpenRouter-style object so
-            // provider gateways that only honour the `reasoning` shape
-            // (RouterLab, OpenRouter, ...) still enable thinking. The
-            // standard `reasoning_effort` field above stays for OpenAI /
-            // Mistral dialects. Mistral overrides BOTH explicitly via
-            // `build_mistral_tool_request` to avoid sending the unknown
-            // key.
-            reasoning: effort_str.map(|effort| ReasoningParam { effort }),
+            reasoning: reasoning_param,
         }
     }
 
@@ -388,6 +428,74 @@ mod tests {
         let serialized = serde_json::to_value(&body).unwrap();
         assert!(serialized.get("reasoning").is_none());
         assert!(serialized.get("reasoning_effort").is_none());
+    }
+
+    /// Regression: RouterLab proxies via Anthropic Messages API and
+    /// silently ignores `reasoning.effort`. The only field it honours is
+    /// `reasoning.max_tokens` (mapped to `thinking.budget_tokens` côté
+    /// Anthropic). Verified empirically with a curl matrix on
+    /// `kimi-k2.6` — without `max_tokens` the model returns no
+    /// `reasoning_content`.
+    #[test]
+    fn from_params_emits_reasoning_max_tokens_for_routerlab() {
+        let mut params = sample_params();
+        params.reasoning_effort = Some(ReasoningEffort::High);
+        let body = ToolChatRequest::from_params(&params, vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert_eq!(serialized["reasoning"]["max_tokens"], 8192);
+    }
+
+    /// `effort` and `max_tokens` must coexist in the same `reasoning`
+    /// object so each gateway picks up whichever it understands. Sending
+    /// only one would silently disable thinking on the gateways that
+    /// honour the other.
+    #[test]
+    fn from_params_emits_both_effort_and_max_tokens() {
+        let mut params = sample_params();
+        params.reasoning_effort = Some(ReasoningEffort::Medium);
+        let body = ToolChatRequest::from_params(&params, vec![]);
+        let serialized = serde_json::to_value(&body).unwrap();
+        assert_eq!(serialized["reasoning"]["effort"], "medium");
+        assert_eq!(serialized["reasoning"]["max_tokens"], 4096);
+    }
+
+    /// Mapping enforced for every variant — picked from the doc matrix:
+    /// `>= 1024` (Anthropic min) and `<= 8192` (DeepSeek-R1 quality cliff,
+    /// cohérent with OpenRouter Anthropic legacy mapping for "high").
+    #[test]
+    fn effort_to_max_tokens_maps_each_variant() {
+        assert_eq!(effort_to_max_tokens(&ReasoningEffort::Low), 2048);
+        assert_eq!(effort_to_max_tokens(&ReasoningEffort::Medium), 4096);
+        assert_eq!(effort_to_max_tokens(&ReasoningEffort::High), 8192);
+    }
+
+    /// Anthropic rejects `thinking.budget_tokens >= max_tokens` with a
+    /// 400 error. Default `max_tokens` for tool completions in Zileo is
+    /// 16384 (cf. `ToolCompletionParams::max_tokens` defaults), so every
+    /// budget must stay strictly below that ceiling.
+    #[test]
+    fn effort_to_max_tokens_stays_below_default_max_tokens() {
+        const DEFAULT_MAX_TOKENS: u32 = 16384;
+        for effort in [
+            ReasoningEffort::Low,
+            ReasoningEffort::Medium,
+            ReasoningEffort::High,
+        ] {
+            let budget = effort_to_max_tokens(&effort);
+            assert!(
+                budget < DEFAULT_MAX_TOKENS,
+                "{:?} budget {} must be < {}",
+                effort,
+                budget,
+                DEFAULT_MAX_TOKENS
+            );
+            assert!(
+                budget >= 1024,
+                "{:?} budget {} must be >= 1024 (Anthropic min)",
+                effort,
+                budget
+            );
+        }
     }
 
     #[test]
