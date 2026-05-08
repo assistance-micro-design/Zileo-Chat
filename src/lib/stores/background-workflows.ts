@@ -95,6 +95,13 @@ let isInitialized = false;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
+ * Memoized in-flight init promise. Guards against concurrent `init()` calls
+ * (e.g. multiple components mounting simultaneously) registering duplicate
+ * Tauri listeners. Reset to null in `destroy()` and on init failure.
+ */
+let initPromise: Promise<void> | null = null;
+
+/**
  * Callback for forwarding chunks to the streaming store when the
  * chunk belongs to the currently-viewed workflow. Set via setForwardCallbacks.
  */
@@ -311,30 +318,47 @@ export const backgroundWorkflowsStore = {
 
 	/**
 	 * Initialize the store by registering Tauri event listeners and starting
-	 * the cleanup timer. Safe to call multiple times (will destroy and re-init).
+	 * the cleanup timer.
+	 *
+	 * Safe to call multiple times: concurrent calls share the same in-flight
+	 * promise (preventing duplicate listener registration), and a call after
+	 * a successful init resolves immediately. To re-initialize, call
+	 * `destroy()` first.
 	 */
 	async init(): Promise<void> {
+		if (initPromise) {
+			return initPromise;
+		}
 		if (isInitialized) {
-			await this.destroy();
+			return;
 		}
 
-		const unlistenChunk = await listen<StreamChunk>(
-			STREAM_EVENTS.WORKFLOW_STREAM,
-			(event) => {
-				handleStreamChunk(event.payload);
-			}
-		);
+		initPromise = (async () => {
+			const unlistenChunk = await listen<StreamChunk>(
+				STREAM_EVENTS.WORKFLOW_STREAM,
+				(event) => {
+					handleStreamChunk(event.payload);
+				}
+			);
 
-		const unlistenComplete = await listen<WorkflowComplete>(
-			STREAM_EVENTS.WORKFLOW_COMPLETE,
-			(event) => {
-				handleStreamComplete(event.payload);
-			}
-		);
+			const unlistenComplete = await listen<WorkflowComplete>(
+				STREAM_EVENTS.WORKFLOW_COMPLETE,
+				(event) => {
+					handleStreamComplete(event.payload);
+				}
+			);
 
-		unlisteners = [unlistenChunk, unlistenComplete];
-		cleanupTimer = setInterval(cleanupOldExecutions, CLEANUP_INTERVAL_MS);
-		isInitialized = true;
+			unlisteners = [unlistenChunk, unlistenComplete];
+			cleanupTimer = setInterval(cleanupOldExecutions, CLEANUP_INTERVAL_MS);
+			isInitialized = true;
+		})();
+
+		try {
+			await initPromise;
+		} catch (e) {
+			initPromise = null;
+			throw e;
+		}
 	},
 
 	/**
@@ -475,6 +499,7 @@ export const backgroundWorkflowsStore = {
 		onCompleteForViewed = null;
 		onUserQuestion = null;
 		isInitialized = false;
+		initPromise = null;
 		store.set(initialState);
 	}
 };
