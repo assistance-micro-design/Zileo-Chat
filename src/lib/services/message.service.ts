@@ -214,9 +214,10 @@ export const MessageService = {
 				'get_workflow_last_assistant_message_metrics',
 				{ workflowId }
 			);
-		} catch (e) {
-			// Non-blocking: log and fall back to empty session display.
-			console.warn('Failed to load last assistant metrics:', getErrorMessage(e));
+		} catch {
+			// Non-blocking: fall back to an empty session display. The user is
+			// not waiting on this metrics call; surfacing the error here would
+			// be more noise than signal.
 			return null;
 		}
 	}

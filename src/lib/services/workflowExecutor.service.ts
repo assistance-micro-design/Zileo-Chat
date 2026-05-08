@@ -349,11 +349,9 @@ export const WorkflowExecutorService = {
       const errorMsg = getErrorMessage(error);
       try {
         await MessageService.saveSystem(workflowId, `Error: ${errorMsg}`);
-      } catch (saveError) {
-        console.warn(
-          "Failed to persist workflow error message:",
-          getErrorMessage(saveError),
-        );
+      } catch {
+        // Best-effort persistence: if saving the system error row itself
+        // fails, the original errorMsg is still pushed to the UI below.
       }
 
       // Only push error to UI if still viewing this workflow
