@@ -24,6 +24,7 @@ use aes_gcm::{
 };
 use keyring::Entry;
 use thiserror::Error;
+use tracing::warn;
 
 /// Service name for keyring entries
 const KEYRING_SERVICE: &str = "zileo-chat";
@@ -268,7 +269,18 @@ impl KeyStore {
 
 impl Default for KeyStore {
     fn default() -> Self {
-        Self::new().unwrap_or_else(|_| Self::new_without_encryption())
+        match Self::new() {
+            Ok(store) => store,
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    "KeyStore master-key bootstrap failed; falling back to keyring-only storage \
+                     (no AES layer). API keys will still be stored in the OS keychain but without \
+                     defense-in-depth encryption. Investigate the keyring backend on this host."
+                );
+                Self::new_without_encryption()
+            }
+        }
     }
 }
 

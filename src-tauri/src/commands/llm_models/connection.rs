@@ -83,7 +83,10 @@ async fn test_mistral_api(
         Ok(resp) => {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            warn!(status = %status, body = %body, "Mistral API error");
+            // Don't log the full body: Mistral can echo back account-level
+            // metadata or quota details. The user-facing error already carries
+            // it; logs only need the HTTP status to diagnose.
+            warn!(status = %status, "Mistral API error");
             ConnectionTestResult::failure(
                 provider_type,
                 format!("API error ({}): {}", status, body),
