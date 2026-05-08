@@ -455,9 +455,6 @@ async fn test_inner_task_aborted_when_outer_future_dropped() {
         fn mcp_servers(&self) -> Vec<String> {
             vec![]
         }
-        fn system_prompt(&self) -> String {
-            self.config.system_prompt.clone()
-        }
         fn config(&self) -> &AgentConfig {
             &self.config
         }

@@ -268,9 +268,6 @@ impl crate::agents::core::agent::Agent for TestRegistryAgent {
     fn mcp_servers(&self) -> Vec<String> {
         vec![]
     }
-    fn system_prompt(&self) -> String {
-        String::new()
-    }
     fn config(&self) -> &crate::models::AgentConfig {
         &self.config
     }

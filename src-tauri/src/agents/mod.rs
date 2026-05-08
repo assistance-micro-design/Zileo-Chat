@@ -22,7 +22,7 @@
 //! - [`core::agent::Agent`] - Trait defining agent interface
 //! - [`core::AgentRegistry`] - Thread-safe registry for agent discovery
 //! - [`core::AgentOrchestrator`] - Coordinator for agent task execution
-//! - [`SimpleAgent`] - Base implementation for demonstration
+//! - [`LLMAgent`] - Agent that uses real LLM calls via ProviderManager
 //!
 //! ## Agent Lifecycle
 //!
@@ -36,19 +36,15 @@
 //! - Human-readable output
 //! - Machine-parsable structure
 //! - Standardized metrics
-//!
-//! ## Agent Types
-//!
-//! - [`SimpleAgent`] - Base implementation for demonstration (no LLM calls)
-//! - [`LLMAgent`] - Agent that uses real LLM calls via ProviderManager
 
 pub mod core;
 pub(crate) mod execution;
 pub mod llm_agent;
 pub(crate) mod prompt;
+// SimpleAgent is a test double, gated to test builds only.
+#[cfg(test)]
 pub mod simple_agent;
 
 pub use llm_agent::LLMAgent;
-// SimpleAgent is used in tests only
-#[allow(unused_imports)]
+#[cfg(test)]
 pub use simple_agent::SimpleAgent;

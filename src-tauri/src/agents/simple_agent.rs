@@ -17,18 +17,14 @@ use crate::models::{AgentConfig, Lifecycle};
 use async_trait::async_trait;
 use tracing::{debug, info, instrument};
 
-/// Simple agent implementation for demonstration (base implementation)
+/// Simple agent implementation used as a test double.
 ///
-/// Note: This agent is primarily used for testing purposes.
-/// In production, agents are created via Settings UI and stored in SurrealDB.
-// Test double for commands/agent/tests.rs; not constructed in the binary path.
-#[allow(dead_code)]
+/// Not registered in production code; the module is gated to `#[cfg(test)]`
+/// in `agents::mod`. Real agents are created via Settings UI + LLMAgent.
 pub struct SimpleAgent {
     config: AgentConfig,
 }
 
-// Constructor for the SimpleAgent test double; lib/bin split.
-#[allow(dead_code)]
 impl SimpleAgent {
     /// Creates a new simple agent
     pub fn new(config: AgentConfig) -> Self {
@@ -114,10 +110,6 @@ impl Agent for SimpleAgent {
 
     fn mcp_servers(&self) -> Vec<String> {
         self.config.mcp_servers.clone()
-    }
-
-    fn system_prompt(&self) -> String {
-        self.config.system_prompt.clone()
     }
 
     fn config(&self) -> &AgentConfig {
@@ -206,14 +198,6 @@ mod tests {
 
         let mcp_servers = agent.mcp_servers();
         assert_eq!(mcp_servers, vec!["mcp_server1".to_string()]);
-    }
-
-    #[test]
-    fn test_simple_agent_system_prompt() {
-        let config = create_test_config();
-        let agent = SimpleAgent::new(config);
-
-        assert_eq!(agent.system_prompt(), "You are a test agent.");
     }
 
     #[tokio::test]

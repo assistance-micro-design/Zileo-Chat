@@ -136,33 +136,6 @@ impl AgentRegistry {
         None
     }
 
-    /// Cleans up all temporary agents.
-    ///
-    /// This method removes all agents with Lifecycle::Temporary from the registry.
-    /// Used for workflow cleanup after completion.
-    #[allow(dead_code)] // Reserved for workflow cleanup
-    #[instrument(name = "registry_cleanup_temporary", skip(self))]
-    pub async fn cleanup_temporary(&self) {
-        let mut agents = self.agents.write().await;
-        use crate::models::Lifecycle;
-
-        let initial_count = agents.len();
-
-        agents.retain(|id, agent| {
-            let is_permanent = matches!(agent.lifecycle(), Lifecycle::Permanent);
-            if !is_permanent {
-                info!(agent_id = %id, "Cleaning up temporary agent");
-            }
-            is_permanent
-        });
-
-        let removed_count = initial_count - agents.len();
-        info!(
-            removed_count = removed_count,
-            remaining_count = agents.len(),
-            "Temporary agent cleanup completed"
-        );
-    }
 }
 
 impl Default for AgentRegistry {
@@ -252,10 +225,6 @@ mod tests {
             self.config.mcp_servers.clone()
         }
 
-        fn system_prompt(&self) -> String {
-            self.config.system_prompt.clone()
-        }
-
         fn config(&self) -> &AgentConfig {
             &self.config
         }
@@ -336,27 +305,6 @@ mod tests {
         let registry = AgentRegistry::new();
         let result = registry.unregister("nonexistent").await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_registry_cleanup_temporary() {
-        let registry = AgentRegistry::new();
-
-        let perm_agent = Arc::new(TestAgent::new("perm", Lifecycle::Permanent));
-        let temp_agent1 = Arc::new(TestAgent::new("temp1", Lifecycle::Temporary));
-        let temp_agent2 = Arc::new(TestAgent::new("temp2", Lifecycle::Temporary));
-
-        registry.register("perm".to_string(), perm_agent).await;
-        registry.register("temp1".to_string(), temp_agent1).await;
-        registry.register("temp2".to_string(), temp_agent2).await;
-
-        assert_eq!(registry.list().await.len(), 3);
-
-        registry.cleanup_temporary().await;
-
-        let remaining = registry.list().await;
-        assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0], "perm");
     }
 
     #[tokio::test]

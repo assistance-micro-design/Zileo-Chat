@@ -36,7 +36,7 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use zileo_chat::{AppState, agents::SimpleAgent};
+//! use zileo_chat::AppState;
 //!
 //! // Initialize application state
 //! let state = AppState::new("/path/to/db").await?;

@@ -222,8 +222,6 @@ impl Report {
 
 /// Agent trait - unified interface for all agents
 #[async_trait]
-// Trait used via dyn dispatch in agent registry; methods called from lib code only.
-#[allow(dead_code)]
 pub trait Agent: Send + Sync {
     /// Executes a task and returns a report
     ///
@@ -266,9 +264,6 @@ pub trait Agent: Send + Sync {
 
     /// Returns required MCP servers
     fn mcp_servers(&self) -> Vec<String>;
-
-    /// Returns system prompt
-    fn system_prompt(&self) -> String;
 
     /// Returns agent configuration
     fn config(&self) -> &AgentConfig;

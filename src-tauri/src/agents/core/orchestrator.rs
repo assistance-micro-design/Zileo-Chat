@@ -186,10 +186,6 @@ mod tests {
             self.config.mcp_servers.clone()
         }
 
-        fn system_prompt(&self) -> String {
-            self.config.system_prompt.clone()
-        }
-
         fn config(&self) -> &AgentConfig {
             &self.config
         }
@@ -248,10 +244,6 @@ mod tests {
 
         fn mcp_servers(&self) -> Vec<String> {
             self.config.mcp_servers.clone()
-        }
-
-        fn system_prompt(&self) -> String {
-            self.config.system_prompt.clone()
         }
 
         fn config(&self) -> &AgentConfig {
