@@ -160,13 +160,25 @@ impl Validator {
     /// Validates a UUID string.
     ///
     /// Rules:
-    /// - Must be valid UUID v4 format
+    /// - Must be valid UUID v4 format (random)
+    /// - Rejects v1 (timestamp), v3 (MD5), v5 (SHA1) and other variants
+    /// - Rejects any string that contains backticks, newlines, or null bytes
+    ///   (rejected implicitly by `Uuid::parse_str`)
     pub fn validate_uuid(id: &str) -> Result<String, ValidationError> {
         let trimmed = id.trim();
 
-        uuid::Uuid::parse_str(trimmed).map_err(|_| ValidationError::InvalidUuid {
+        let parsed = uuid::Uuid::parse_str(trimmed).map_err(|_| ValidationError::InvalidUuid {
             value: trimmed.to_string(),
         })?;
+
+        // Strict v4 check: this codebase only generates v4 UUIDs (Uuid::new_v4 in Rust,
+        // crypto.randomUUID in JS). Reject other versions to prevent crafted IDs that
+        // pass parse_str from reaching SurrealQL interpolation sites.
+        if parsed.get_version() != Some(uuid::Version::Random) {
+            return Err(ValidationError::InvalidUuid {
+                value: trimmed.to_string(),
+            });
+        }
 
         Ok(trimmed.to_string())
     }
@@ -458,13 +470,93 @@ mod tests {
 
     // UUID validation tests
     #[test]
-    fn test_validate_uuid_valid() {
+    fn test_validate_uuid_valid_v4() {
+        // Standard v4 UUID (version nibble = 4)
         assert!(Validator::validate_uuid("550e8400-e29b-41d4-a716-446655440000").is_ok());
+        // Generated v4
+        let generated = uuid::Uuid::new_v4().to_string();
+        assert!(Validator::validate_uuid(&generated).is_ok());
     }
 
     #[test]
     fn test_validate_uuid_invalid() {
         let result = Validator::validate_uuid("not-a-uuid");
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_v1() {
+        // Hardcoded v1 UUID (version nibble = 1, timestamp-based)
+        let v1 = "c232ab00-9414-11ec-b3c8-9f6bdeced846";
+        let parsed = uuid::Uuid::parse_str(v1).unwrap();
+        assert_eq!(parsed.get_version_num(), 1);
+        let result = Validator::validate_uuid(v1);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_v3() {
+        // Hardcoded v3 UUID (version nibble = 3, MD5 namespace)
+        let v3 = "5df41881-3aed-3515-88a7-2f4a814cf09e";
+        let parsed = uuid::Uuid::parse_str(v3).unwrap();
+        assert_eq!(parsed.get_version_num(), 3);
+        let result = Validator::validate_uuid(v3);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_v5() {
+        // Hardcoded v5 UUID (version nibble = 5, SHA1 namespace)
+        let v5 = "74738ff5-5367-5958-9aee-98fffdcd1876";
+        let parsed = uuid::Uuid::parse_str(v5).unwrap();
+        assert_eq!(parsed.get_version_num(), 5);
+        let result = Validator::validate_uuid(v5);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_nil() {
+        // Nil UUID (all zeros, version = 0)
+        let nil = "00000000-0000-0000-0000-000000000000";
+        let result = Validator::validate_uuid(nil);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_backtick_injection() {
+        // Backticks would break SurrealQL ID escaping
+        let injected = "550e8400-e29b-41d4-a716-446655440000`";
+        let result = Validator::validate_uuid(injected);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_null_byte() {
+        // Null bytes panic SurrealDB (ERR_SURREAL_006)
+        let injected = "550e8400-e29b-41d4-a716-44665544\u{0000}0000";
+        let result = Validator::validate_uuid(injected);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_newline() {
+        // Newlines would break inline SurrealQL queries
+        let injected = "550e8400-e29b-41d4-a716-446655440000\nDELETE workflow:abc";
+        let result = Validator::validate_uuid(injected);
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_empty() {
+        let result = Validator::validate_uuid("");
+        assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
+    }
+
+    #[test]
+    fn test_validate_uuid_rejects_oversized() {
+        // 36 chars + noise — parse_str rejects
+        let oversized = "550e8400-e29b-41d4-a716-446655440000ABCDEFGHIJK";
+        let result = Validator::validate_uuid(oversized);
         assert!(matches!(result, Err(ValidationError::InvalidUuid { .. })));
     }
 
