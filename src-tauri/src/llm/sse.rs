@@ -794,9 +794,7 @@ impl SseParser {
         self.buffer.push_str(&String::from_utf8_lossy(bytes));
 
         if self.buffer.len() > MAX_SSE_BUFFER_BYTES {
-            return Err(LLMError::ResponseTooLarge {
-                what: "SSE buffer",
-            });
+            return Err(LLMError::ResponseTooLarge { what: "SSE buffer" });
         }
 
         let mut result = SseParseResult::default();
@@ -1583,9 +1581,7 @@ mod tests {
         let result = p.feed(&big);
         assert!(matches!(
             result,
-            Err(LLMError::ResponseTooLarge {
-                what: "SSE buffer"
-            })
+            Err(LLMError::ResponseTooLarge { what: "SSE buffer" })
         ));
     }
 

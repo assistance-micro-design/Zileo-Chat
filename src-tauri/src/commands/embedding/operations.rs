@@ -199,8 +199,7 @@ pub async fn import_memories(
         // It also enforces the depth limit and handles nested JSON consistently
         // — required because `metadata` is opaque user-provided JSON that may
         // contain null bytes anywhere in the tree (ERR_SURREAL_006).
-        let sanitized_content =
-            sanitize_for_surrealdb(serde_json::json!(content));
+        let sanitized_content = sanitize_for_surrealdb(serde_json::json!(content));
         let sanitized_metadata = sanitize_for_surrealdb(metadata.clone());
         let create_query = format!(
             "CREATE memory:`{}` CONTENT {{ type: $mtype, content: $content, metadata: $metadata }}",

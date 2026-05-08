@@ -122,10 +122,11 @@ pub async fn restore_from_trash_cmd(
         return Err(msg);
     }
 
-    let restored = trash_management::restore_from_trash(&trash_canonical, &folder).map_err(|e| {
-        warn!(error = %e, "Failed to restore from trash");
-        e.to_string()
-    })?;
+    let restored =
+        trash_management::restore_from_trash(&trash_canonical, &folder).map_err(|e| {
+            warn!(error = %e, "Failed to restore from trash");
+            e.to_string()
+        })?;
 
     let restored_str = restored
         .to_str()
