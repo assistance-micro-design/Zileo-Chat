@@ -1341,5 +1341,10 @@
   "sidebar_pin_section_title": "Epingles",
 
   "sidebar_drag_drop_hint": "Deposer ici pour deplacer dans ce dossier",
-  "sidebar_drag_drop_uncategorized": "Deposer ici pour retirer du dossier"
+  "sidebar_drag_drop_uncategorized": "Deposer ici pour retirer du dossier",
+
+  "error_page_title": "Une erreur est survenue",
+  "error_page_unknown": "Une erreur inattendue s'est produite.",
+  "error_page_retry": "Recharger",
+  "error_page_home": "Retour a l'accueil"
 }

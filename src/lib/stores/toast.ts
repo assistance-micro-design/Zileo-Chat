@@ -28,6 +28,7 @@
 import { writable, derived } from 'svelte/store';
 import type { Toast } from '$types/background-workflow';
 import { t } from '$lib/i18n';
+import { generateUuid } from '$lib/utils/uuid';
 
 /** Maximum number of toasts visible at once */
 const MAX_VISIBLE_TOASTS = 5;
@@ -64,7 +65,7 @@ export const toastStore = {
 	 * @returns The generated toast ID
 	 */
 	add(toast: Omit<Toast, 'id' | 'createdAt'>): string {
-		const id = crypto.randomUUID();
+		const id = generateUuid();
 		const newToast: Toast = {
 			...toast,
 			id,

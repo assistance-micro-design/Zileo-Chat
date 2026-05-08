@@ -17,3 +17,14 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export function isUuid(value: string): boolean {
 	return UUID_REGEX.test(value);
 }
+
+/**
+ * Generates a v4 UUID via `crypto.randomUUID`. Centralized so call sites do
+ * not need to duplicate the call (and any future polyfill / fallback lives
+ * in one place).
+ *
+ * @returns A new UUID v4 string
+ */
+export function generateUuid(): string {
+	return crypto.randomUUID();
+}

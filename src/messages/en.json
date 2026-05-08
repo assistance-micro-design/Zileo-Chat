@@ -1340,5 +1340,10 @@
   "sidebar_pin_section_title": "Pinned",
 
   "sidebar_drag_drop_hint": "Drop here to move to this folder",
-  "sidebar_drag_drop_uncategorized": "Drop here to remove from folder"
+  "sidebar_drag_drop_uncategorized": "Drop here to remove from folder",
+
+  "error_page_title": "Something went wrong",
+  "error_page_unknown": "An unexpected error occurred.",
+  "error_page_retry": "Reload",
+  "error_page_home": "Back to home"
 }
