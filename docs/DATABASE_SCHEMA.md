@@ -57,12 +57,13 @@ Workflow lifecycle with cumulative token tracking.
 | current_context_tokens | int | 0 | Last API call context size |
 | sub_agent_tokens_input | int | 0 | Sub-agent input tokens |
 | sub_agent_tokens_output | int | 0 | Sub-agent output tokens |
+| sub_agent_cost_usd | option\<float\> | 0.0 | Aggregated sub-agent cost (USD) |
 | total_cached_tokens | option\<int\> | 0 | Prompt cache read tokens |
 | total_cache_write_tokens | option\<int\> | 0 | Prompt cache write tokens |
 | folder_id | option\<string\> | | Reference to workflow_folder |
 | pinned | bool | false | Pinned in sidebar |
 
-**Indexes**: (none explicitly defined beyond field-level constraints; queries filter on status, created_at, agent_id)
+**Indexes**: none (queries filter on status, created_at, agent_id via field-level constraints)
 
 ---
 
@@ -134,7 +135,7 @@ Human-in-the-loop validation requests.
 
 ### validation_audit
 
-Append-only audit log of validation decisions (user / auto / timeout). Resilient: write failures never block the validation flow. Retention is user-configurable (7-90 days, see `RETENTION_MIN_DAYS` / `RETENTION_MAX_DAYS` in `constants.rs`).
+Append-only audit log of validation decisions (user / auto / timeout). Write failures never block the validation flow. Retention is user-configurable (7-90 days, see `RETENTION_MIN_DAYS` / `RETENTION_MAX_DAYS` in `constants.rs`).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -493,8 +494,4 @@ Embedding dimensions by provider: OpenAI 1536D/3072D, Mistral 1024D, Ollama 768D
 
 ## Source of Truth
 
-- Schema definition: `src-tauri/src/db/schema.rs`
-- Query implementations: `src-tauri/src/db/queries.rs`
-- Persistence layer: `src-tauri/src/db/persistence.rs`
-- Migrations: `src-tauri/src/commands/migration.rs`
-- Security helpers: `src-tauri/src/security/validation.rs`
+Schema in `src-tauri/src/db/schema.rs`; queries in `db/queries.rs`; persistence in `db/persistence.rs`; migrations in `commands/migration.rs`; security helpers in `security/validation.rs`.

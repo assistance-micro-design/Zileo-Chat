@@ -27,6 +27,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 **TypeScript**:
 - **typescript**: ^5.9.3
 - **svelte-check**: ^4.4.4
+- Strict-mode flags enabled in `tsconfig.json`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`
 
 **Tauri Integration**:
 - **@tauri-apps/api**: ^2.11.0
@@ -55,6 +56,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **@typescript-eslint/parser**: ^8.54.0
 - **typescript-eslint**: ^8.53.1
 - **globals**: ^17.4.0
+- ESLint enforces `no-console: error` and `@typescript-eslint/no-explicit-any: error` (build-breaking)
 
 ### Backend (Cargo.toml)
 
@@ -96,6 +98,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **regex**: 1.10
 - **globset**: 0.4 (glob pattern matching for FileManagerTool)
 - **base64**: 0.22 (base64 encoding/decoding)
+- **rand**: 0.8 (jittered retry backoff in `llm/retry.rs`)
 
 **HTTP & Network**:
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
@@ -144,6 +147,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - Communication via `invoke()` (frontend) to `#[tauri::command]` (backend)
 - Type-safe with TypeScript + Rust types (camelCase auto-converted to snake_case)
 - Async/await on both sides
+- Vite build target: `es2022` / `chrome105` / `safari15` (matches Tauri 2 WebView baselines)
 
 ### Rust <-> SurrealDB
 - Native embedded Rust client (surrealdb.rs)

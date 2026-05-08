@@ -43,6 +43,8 @@ Route-based architecture with code splitting per section. The settings layout pr
 | `/settings/import-export` | Import/Export | Data portability (schema v1.2, 6 entity types) |
 | `/settings/theme` | Theme | Light/Dark/Auto theme, color scheme, font settings, live preview |
 
+A global `+error.svelte` boundary at the route root renders 500/load errors with i18n copy and retry/home buttons (see `src/routes/+error.svelte`). It replaces the default unstyled SvelteKit error page.
+
 See `src/routes/settings/` for all section pages.
 
 ### Settings Components
@@ -227,7 +229,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `url.ts` | `isAllowedScheme()` | URL scheme validation for safe external links |
 | `duration.ts` | `formatDuration()` | Duration formatting (ms / s / m,s) |
 | `debounce.ts` | `debounce()` | Debounce wrapper |
-| `uuid.ts` | `isUuid()` | Canonical 8-4-4-4-12 hex UUID validation |
+| `uuid.ts` | `isUuid()`, `generateUuid()` | Canonical 8-4-4-4-12 hex UUID validation; `generateUuid()` wraps `crypto.randomUUID()` for centralized ID creation |
 | `constants.ts` | `ITERATIONS_LIMITS` | Shared frontend constants (synchronized with backend clamping) |
 | `settings-refresh.ts` | `onSettingsRefresh()`, `attachSettingsRefreshListener()`, `SETTINGS_REFRESH_EVENT` | Subscribe to the global `settings:refresh` event after import/export |
 | `mcp-auth-validation.ts` | MCP HTTP auth validators | Validates `MCPAuthMetadata`/`MCPAuthSecret` symmetrically with the Rust backend |
