@@ -276,8 +276,37 @@ pub(crate) async fn run_single_iteration(
         .messages
         .push(inputs.adapter.build_assistant_message(&response));
 
+    // Cancellation gate before any tool execution: if the user cancelled while
+    // the LLM call was in flight, do not start a single tool. Drops the loop
+    // entirely; tool_loop's outer cancellation handling will surface this.
+    if inputs
+        .cancellation_token
+        .as_ref()
+        .is_some_and(|t| t.is_cancelled())
+    {
+        info!(
+            iteration = inputs.iteration,
+            "Cancellation detected before tool execution, aborting iteration"
+        );
+        return IterationOutcome::Failed("cancelled".to_string());
+    }
+
     // Execute each function call.
     for call in &function_calls {
+        // Check cancellation between tool executions: a long-running iteration
+        // with N tool calls must not keep going after the user cancelled.
+        if inputs
+            .cancellation_token
+            .as_ref()
+            .is_some_and(|t| t.is_cancelled())
+        {
+            info!(
+                iteration = inputs.iteration,
+                "Cancellation detected mid-iteration, aborting remaining tool calls"
+            );
+            return IterationOutcome::Failed("cancelled".to_string());
+        }
+
         let exec_start = std::time::Instant::now();
 
         emit_progress(

@@ -582,6 +582,34 @@ pub(crate) async fn execute_with_tools(
             break;
         }
 
+        // Cancellation gate between iterations: align with the existing check
+        // around enforce_report. The in-flight LLM call inside run_single_iteration
+        // is already cancellable, but a Continue outcome that lands here while
+        // the user has just cancelled would otherwise spin one more iteration.
+        if cancellation_token
+            .as_ref()
+            .is_some_and(|t| t.is_cancelled())
+        {
+            info!(
+                iteration = iteration,
+                "Cancellation detected between iterations, stopping tool loop"
+            );
+            let mut metrics = tokens.to_report_metrics(
+                tools_used,
+                mcp_calls_made,
+                tool_executions_data,
+                reasoning_steps_data,
+                iteration_metrics_data,
+            );
+            metrics.duration_ms = start.elapsed().as_millis() as u64;
+            return Ok(Report::failed_with_metrics(
+                &ctx.config.id,
+                &task.description,
+                "cancelled".to_string(),
+                metrics,
+            ));
+        }
+
         if iteration > 1 {
             global_sequence += 1;
             emit_reasoning(
