@@ -15,7 +15,11 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { attachSettingsRefreshListener, SETTINGS_REFRESH_EVENT } from '../settings-refresh';
+import {
+	attachSettingsRefreshListener,
+	dispatchSettingsRefresh,
+	SETTINGS_REFRESH_EVENT
+} from '../settings-refresh';
 
 describe('attachSettingsRefreshListener', () => {
 	it('invokes the handler when the settings:refresh event fires', () => {
@@ -78,4 +82,31 @@ describe('attachSettingsRefreshListener', () => {
 		}
 	});
 
+});
+
+describe('dispatchSettingsRefresh', () => {
+	it('dispatches a settings:refresh event observable by listeners', () => {
+		const handler = vi.fn();
+		const teardown = attachSettingsRefreshListener(handler);
+
+		dispatchSettingsRefresh();
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		teardown();
+	});
+
+	it('is a no-op when window is unavailable', () => {
+		const originalWindow = globalThis.window;
+		Reflect.deleteProperty(globalThis, 'window');
+
+		try {
+			expect(() => dispatchSettingsRefresh()).not.toThrow();
+		} finally {
+			Object.defineProperty(globalThis, 'window', {
+				value: originalWindow,
+				configurable: true,
+				writable: true
+			});
+		}
+	});
 });

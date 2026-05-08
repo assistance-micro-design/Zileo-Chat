@@ -28,6 +28,18 @@ import { onMount } from 'svelte';
 export const SETTINGS_REFRESH_EVENT = 'settings:refresh';
 
 /**
+ * Broadcasts a `settings:refresh` event so sibling Settings surfaces
+ * (Agents form, MCP, LLM, Validation, etc.) pick up CRUD changes without
+ * waiting for a remount. No-op when `window` is unavailable (SSR).
+ */
+export function dispatchSettingsRefresh(): void {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
+}
+
+/**
  * Attaches a listener for `settings:refresh` events and returns the teardown.
  * Exported for unit testing; components should use {@link onSettingsRefresh}.
  *

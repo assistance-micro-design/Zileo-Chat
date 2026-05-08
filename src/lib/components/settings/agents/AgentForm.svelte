@@ -53,7 +53,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	} from '$lib/utils/agent-reasoning';
 	import {
 		attachSettingsRefreshListener,
-		SETTINGS_REFRESH_EVENT
+		dispatchSettingsRefresh
 	} from '$lib/utils/settings-refresh';
 	import AgentFolders from './AgentFolders.svelte';
 	/**
@@ -208,6 +208,10 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	 * `settings:refresh` event fires (e.g. the user toggled `is_reasoning` on a
 	 * model in Settings -> Models, which must be reflected here without forcing
 	 * a remount of the form).
+	 *
+	 * Each refresh starts from a clean local `warnings` array (assigned once at
+	 * the end) rather than appending to `loadWarnings`, so warnings resolved in
+	 * a previous run do not stay pinned after a successful reload.
 	 */
 	async function loadAgentFormResources(): Promise<void> {
 		const warnings: string[] = [];
@@ -355,7 +359,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			}
 			// Notify other Settings surfaces (workflow sidebar, sibling forms) so
 			// they pick up the new agent set without waiting for the next mount.
-			window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
+			dispatchSettingsRefresh();
 		} catch {
 			// Error handled by store
 		} finally {

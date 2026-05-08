@@ -38,7 +38,7 @@
   import { loadServers } from '$lib/stores/mcp';
   import { toastStore } from '$lib/stores/toast';
   import { auditLogStore } from '$lib/stores/audit-log';
-  import { SETTINGS_REFRESH_EVENT } from '$lib/utils/settings-refresh';
+  import { dispatchSettingsRefresh } from '$lib/utils/settings-refresh';
   import type { ToastType } from '$types/background-workflow';
   import ValidationInfoCard from './ValidationInfoCard.svelte';
   import type {
@@ -100,7 +100,7 @@
       // (refreshes the entries list). We then fire the global settings:refresh
       // event so an open audit-log page reloads its stats too.
       const deleted = await auditLogStore.purgeNow();
-      window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
+      dispatchSettingsRefresh();
       notify('success', $i18n('validation_audit_purge_success').replace('{count}', String(deleted)));
     } catch (err) {
       errorMessage = $i18n('validation_audit_purge_failed').replace('{error}', getErrorMessage(err));
