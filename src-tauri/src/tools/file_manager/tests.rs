@@ -672,6 +672,89 @@ async fn test_op_search_glob_recursive() {
     assert_eq!(val["count"], 2);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn test_search_glob_skips_symlink_outside_sandbox() {
+    use std::os::unix::fs::symlink;
+
+    // Authorized sandbox.
+    let tmp = create_test_dir();
+    let base = tmp.path();
+
+    // Outside the sandbox: a directory containing a "secret" file we should NOT see.
+    let outside = create_test_dir();
+    fs::write(outside.path().join("secret.rs"), "TOP SECRET").expect("write");
+
+    // Plant a regular file inside the sandbox so we have at least one legit hit.
+    fs::write(base.join("legit.rs"), "fn main() {}").expect("write");
+
+    // Plant a symlink inside the sandbox pointing to the outside directory.
+    // A naive recursive search would follow it and surface secret.rs.
+    symlink(outside.path(), base.join("escape")).expect("symlink");
+
+    let tool = create_tool_with_dir(&tmp);
+    let result = tool
+        .execute(json!({
+            "operation": "search_glob",
+            "path": base.to_string_lossy(),
+            "pattern": "*.rs",
+            "recursive": true,
+        }))
+        .await
+        .expect("search_glob");
+
+    let matches = result["matches"].as_array().expect("matches");
+    let paths: Vec<String> = matches
+        .iter()
+        .filter_map(|m| m["path"].as_str().map(String::from))
+        .collect();
+
+    assert!(
+        paths.iter().any(|p| p.ends_with("legit.rs")),
+        "expected legit.rs to be present, got {:?}",
+        paths
+    );
+    assert!(
+        !paths.iter().any(|p| p.contains("secret.rs")),
+        "TOCTOU breach: secret.rs leaked through symlink, got {:?}",
+        paths
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_search_content_skips_symlink_outside_sandbox() {
+    use std::os::unix::fs::symlink;
+
+    let tmp = create_test_dir();
+    let base = tmp.path();
+
+    // Outside file the symlink will resolve to.
+    let outside = create_test_dir();
+    let outside_file = outside.path().join("secret.txt");
+    fs::write(&outside_file, "PRIVATE_TOKEN_xyz").expect("write");
+
+    // Plant a symlink inside the sandbox pointing to the outside file.
+    symlink(&outside_file, base.join("config.txt")).expect("symlink");
+
+    let tool = create_tool_with_dir(&tmp);
+    let result = tool
+        .execute(json!({
+            "operation": "search_content",
+            "path": base.to_string_lossy(),
+            "pattern": "PRIVATE_TOKEN",
+            "recursive": true,
+        }))
+        .await
+        .expect("search_content");
+
+    assert_eq!(
+        result["count"], 0,
+        "TOCTOU breach: PRIVATE_TOKEN read through symlink, got {}",
+        result
+    );
+}
+
 #[tokio::test]
 async fn test_op_search_content_literal() {
     let tmp = create_test_dir();

@@ -22,8 +22,8 @@ use crate::tools::file_manager::operations::is_trash_dir;
 use crate::tools::file_manager::security::validate_path;
 use crate::tools::{ToolError, ToolResult};
 use serde_json::{json, Value};
-use std::path::Path;
-use tracing::{debug, info};
+use std::path::{Path, PathBuf};
+use tracing::{debug, info, warn};
 
 use super::tool::FileManagerTool;
 
@@ -216,7 +216,14 @@ impl FileManagerTool {
             .compile_matcher();
 
         let mut matches = Vec::new();
-        search_glob_recursive(&validated_path, &glob, recursive, max_results, &mut matches)?;
+        search_glob_recursive(
+            &validated_path,
+            &glob,
+            recursive,
+            max_results,
+            &mut matches,
+            &self.authorized_folders,
+        )?;
 
         debug!(
             path = %validated_path.display(),
@@ -290,7 +297,12 @@ impl FileManagerTool {
         };
 
         let mut matches = Vec::new();
-        search_content_recursive(&validated_path, &ctx, &mut matches)?;
+        search_content_recursive(
+            &validated_path,
+            &ctx,
+            &mut matches,
+            &self.authorized_folders,
+        )?;
 
         debug!(
             path = %validated_path.display(),
@@ -312,6 +324,41 @@ impl FileManagerTool {
 // Free helper functions (no &self needed)
 // ---------------------------------------------------------------------------
 
+/// Re-canonicalize a directory entry and verify it remains within the agent's
+/// authorized sandbox. Defends against TOCTOU attacks where an attacker swaps
+/// a directory entry for a symlink pointing outside the sandbox between the
+/// initial `validate_path()` and the moment we read or descend into it.
+///
+/// Returns `Some(canonical_path)` if the entry is safe to access,
+/// or `None` if it must be skipped (broken link, unreachable, or escapes sandbox).
+fn canonicalize_within_sandbox(
+    entry_path: &Path,
+    authorized_folders: &[PathBuf],
+) -> Option<PathBuf> {
+    let canonical = match entry_path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            debug!(
+                path = %entry_path.display(),
+                error = %e,
+                "Skipping entry: cannot canonicalize"
+            );
+            return None;
+        }
+    };
+
+    if !authorized_folders.iter().any(|f| canonical.starts_with(f)) {
+        warn!(
+            path = %entry_path.display(),
+            canonical = %canonical.display(),
+            "Skipping entry: resolves outside sandbox (TOCTOU defense)"
+        );
+        return None;
+    }
+
+    Some(canonical)
+}
+
 /// Recursively search for files matching a glob pattern.
 fn search_glob_recursive(
     dir: &Path,
@@ -319,6 +366,7 @@ fn search_glob_recursive(
     recursive: bool,
     max_results: usize,
     matches: &mut Vec<Value>,
+    authorized_folders: &[PathBuf],
 ) -> ToolResult<()> {
     let read_dir = std::fs::read_dir(dir).map_err(|e| {
         ToolError::ExecutionFailed(format!(
@@ -343,6 +391,13 @@ fn search_glob_recursive(
             continue;
         }
 
+        // TOCTOU defense: re-canonicalize each entry every time we touch it
+        // (vs. relying on the initial validate_path on `dir` only).
+        let Some(canonical_entry) = canonicalize_within_sandbox(&entry_path, authorized_folders)
+        else {
+            continue;
+        };
+
         if let Some(file_name) = entry_path.file_name() {
             if glob.is_match(file_name) {
                 let metadata = entry.metadata().map_err(|e| {
@@ -352,8 +407,15 @@ fn search_glob_recursive(
             }
         }
 
-        if recursive && entry_path.is_dir() && matches.len() < max_results {
-            search_glob_recursive(&entry_path, glob, true, max_results, matches)?;
+        if recursive && canonical_entry.is_dir() && matches.len() < max_results {
+            search_glob_recursive(
+                &canonical_entry,
+                glob,
+                true,
+                max_results,
+                matches,
+                authorized_folders,
+            )?;
         }
     }
 
@@ -365,6 +427,7 @@ fn search_content_recursive(
     dir: &Path,
     ctx: &ContentSearchContext<'_>,
     matches: &mut Vec<Value>,
+    authorized_folders: &[PathBuf],
 ) -> ToolResult<()> {
     let read_dir = std::fs::read_dir(dir).map_err(|e| {
         ToolError::ExecutionFailed(format!(
@@ -389,12 +452,21 @@ fn search_content_recursive(
             continue;
         }
 
-        if entry_path.is_file() && is_text_file(&entry_path) {
-            if let Ok(content) = std::fs::read_to_string(&entry_path) {
+        // TOCTOU defense: re-canonicalize each entry before reading file content
+        // or descending. Defends against an attacker swapping a directory entry
+        // for a symlink to a sensitive file (e.g. /etc/passwd) between the
+        // initial sandbox check and the actual filesystem access.
+        let Some(canonical_entry) = canonicalize_within_sandbox(&entry_path, authorized_folders)
+        else {
+            continue;
+        };
+
+        if canonical_entry.is_file() && is_text_file(&canonical_entry) {
+            if let Ok(content) = std::fs::read_to_string(&canonical_entry) {
                 search_file_content(&entry_path, &content, ctx, matches);
             }
-        } else if ctx.recursive && entry_path.is_dir() && matches.len() < ctx.max_results {
-            search_content_recursive(&entry_path, ctx, matches)?;
+        } else if ctx.recursive && canonical_entry.is_dir() && matches.len() < ctx.max_results {
+            search_content_recursive(&canonical_entry, ctx, matches, authorized_folders)?;
         }
     }
 
