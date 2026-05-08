@@ -276,8 +276,10 @@ pub async fn clear_workflow_thinking_steps(
         "SELECT count() FROM thinking_step WHERE workflow_id = '{}' GROUP ALL",
         validated_workflow_id
     );
-    let count_result: Vec<serde_json::Value> =
-        state.db.query(&count_query).await.unwrap_or_default();
+    let count_result: Vec<serde_json::Value> = state.db.query(&count_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count workflow thinking steps");
+        format!("Failed to count workflow thinking steps: {}", e)
+    })?;
 
     let count = extract_count(&count_result);
 

@@ -110,8 +110,10 @@ pub async fn clear_workflow_sub_agent_executions(
         "SELECT count() FROM sub_agent_execution WHERE workflow_id = '{}' GROUP ALL",
         validated_workflow_id
     );
-    let count_result: Vec<serde_json::Value> =
-        state.db.query(&count_query).await.unwrap_or_default();
+    let count_result: Vec<serde_json::Value> = state.db.query(&count_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count workflow sub-agent executions");
+        format!("Failed to count workflow sub-agent executions: {}", e)
+    })?;
 
     let count = extract_count(&count_result);
 

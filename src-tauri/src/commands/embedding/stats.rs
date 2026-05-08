@@ -41,18 +41,20 @@ pub async fn get_memory_stats(state: State<'_, AppState>) -> Result<MemoryStats,
     // Get count with embeddings
     let with_embeddings_query =
         "SELECT count() AS count FROM memory WHERE embedding != NONE GROUP ALL";
-    let with_result: Vec<serde_json::Value> = state
-        .db
-        .query(with_embeddings_query)
-        .await
-        .unwrap_or_default();
+    let with_result: Vec<serde_json::Value> =
+        state.db.query(with_embeddings_query).await.map_err(|e| {
+            error!(error = %e, "Failed to count memories with embeddings");
+            format!("Failed to count memories with embeddings: {}", e)
+        })?;
 
     let with_embeddings = extract_count(&with_result) as usize;
 
     // Get count by type
     let by_type_query = "SELECT type, count() AS count FROM memory GROUP BY type";
-    let type_result: Vec<serde_json::Value> =
-        state.db.query(by_type_query).await.unwrap_or_default();
+    let type_result: Vec<serde_json::Value> = state.db.query(by_type_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count memories by type");
+        format!("Failed to count memories by type: {}", e)
+    })?;
 
     let mut by_type = HashMap::new();
     for row in type_result {
@@ -68,7 +70,10 @@ pub async fn get_memory_stats(state: State<'_, AppState>) -> Result<MemoryStats,
     let by_agent_query =
         "SELECT metadata.agent_source AS agent, count() AS count FROM memory WHERE metadata.agent_source != NONE GROUP BY metadata.agent_source";
     let agent_result: Vec<serde_json::Value> =
-        state.db.query(by_agent_query).await.unwrap_or_default();
+        state.db.query(by_agent_query).await.map_err(|e| {
+            error!(error = %e, "Failed to count memories by agent source");
+            format!("Failed to count memories by agent source: {}", e)
+        })?;
 
     let mut by_agent = HashMap::new();
     for row in agent_result {

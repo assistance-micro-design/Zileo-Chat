@@ -265,7 +265,10 @@ pub async fn load_workflow_messages_paginated(
             )],
         )
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            error!(error = %e, "Failed to count workflow messages");
+            format!("Failed to count workflow messages: {}", e)
+        })?;
 
     let total = extract_count(&count_result) as u32;
 
@@ -397,7 +400,10 @@ pub async fn clear_workflow_messages(
             )],
         )
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            error!(error = %e, "Failed to count workflow messages before delete");
+            format!("Failed to count workflow messages before delete: {}", e)
+        })?;
 
     let count = extract_count(&count_result);
 

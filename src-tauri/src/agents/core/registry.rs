@@ -135,7 +135,6 @@ impl AgentRegistry {
         debug!("Agent not found by name");
         None
     }
-
 }
 
 impl Default for AgentRegistry {

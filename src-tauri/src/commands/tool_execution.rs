@@ -398,8 +398,10 @@ pub async fn clear_workflow_tool_executions(
         "SELECT count() FROM tool_execution WHERE workflow_id = '{}' GROUP ALL",
         validated_workflow_id
     );
-    let count_result: Vec<serde_json::Value> =
-        state.db.query(&count_query).await.unwrap_or_default();
+    let count_result: Vec<serde_json::Value> = state.db.query(&count_query).await.map_err(|e| {
+        error!(error = %e, "Failed to count workflow tool executions");
+        format!("Failed to count workflow tool executions: {}", e)
+    })?;
 
     let count = extract_count(&count_result);
 
