@@ -462,6 +462,56 @@ describe('Workflow Store', () => {
 		});
 	});
 
+	describe('CRUD error handling (commit 8)', () => {
+		it('renameWorkflow sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('rename failed'));
+			await expect(workflowStore.renameWorkflow('wf-1', 'new')).rejects.toThrow('rename failed');
+			expect(get(workflowsError)).toBe('rename failed');
+		});
+
+		it('deleteWorkflow sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('delete failed'));
+			await expect(workflowStore.deleteWorkflow('wf-1')).rejects.toThrow('delete failed');
+			expect(get(workflowsError)).toBe('delete failed');
+		});
+
+		it('deleteBatch sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('batch failed'));
+			await expect(workflowStore.deleteBatch(['a', 'b'])).rejects.toThrow('batch failed');
+			expect(get(workflowsError)).toBe('batch failed');
+		});
+
+		it('moveToFolder sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('move failed'));
+			await expect(workflowStore.moveToFolder('wf-1', 'fld-1')).rejects.toThrow('move failed');
+			expect(get(workflowsError)).toBe('move failed');
+		});
+
+		it('moveBatchToFolder sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('batch move failed'));
+			await expect(workflowStore.moveBatchToFolder(['a'], null)).rejects.toThrow(
+				'batch move failed'
+			);
+			expect(get(workflowsError)).toBe('batch move failed');
+		});
+
+		it('togglePinned sets error and re-throws when invoke rejects', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('pin failed'));
+			await expect(workflowStore.togglePinned('wf-1')).rejects.toThrow('pin failed');
+			expect(get(workflowsError)).toBe('pin failed');
+		});
+
+		it('clears error on the next successful CRUD action', async () => {
+			vi.mocked(invoke).mockRejectedValueOnce(new Error('boom'));
+			await expect(workflowStore.togglePinned('wf-1')).rejects.toThrow();
+			expect(get(workflowsError)).toBe('boom');
+
+			vi.mocked(invoke).mockResolvedValueOnce(createMockWorkflow('wf-1', 'wf'));
+			await workflowStore.togglePinned('wf-1');
+			expect(get(workflowsError)).toBeNull();
+		});
+	});
+
 	describe('store subscription', () => {
 		it('should allow subscribing to store changes', async () => {
 			const states: WorkflowState[] = [];

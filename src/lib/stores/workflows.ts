@@ -118,14 +118,21 @@ export const workflowStore = {
 	 * @param workflowId - Workflow ID to rename
 	 * @param name - New workflow name
 	 * @returns Updated workflow entity
+	 * @throws The original error after setting `error` state.
 	 */
 	async renameWorkflow(workflowId: string, name: string): Promise<Workflow> {
-		const updated = await WorkflowService.rename(workflowId, name);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
-		}));
-		return updated;
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			const updated = await WorkflowService.rename(workflowId, name);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+			}));
+			return updated;
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -133,14 +140,21 @@ export const workflowStore = {
 	 * full reload.
 	 *
 	 * @param workflowId - Workflow ID to delete
+	 * @throws The original error after setting `error` state.
 	 */
 	async deleteWorkflow(workflowId: string): Promise<void> {
-		await WorkflowService.delete(workflowId);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.filter((w) => w.id !== workflowId),
-			selectedId: s.selectedId === workflowId ? null : s.selectedId
-		}));
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			await WorkflowService.delete(workflowId);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.filter((w) => w.id !== workflowId),
+				selectedId: s.selectedId === workflowId ? null : s.selectedId
+			}));
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -201,15 +215,24 @@ export const workflowStore = {
 	 *
 	 * @param ids - Array of workflow IDs to delete
 	 * @returns Result with deleted count and skipped running IDs
+	 * @throws The original error after setting `error` state.
 	 */
 	async deleteBatch(ids: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
-		const result = await WorkflowService.deleteBatch(ids);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.filter((w) => !ids.includes(w.id) || result.skipped_running.includes(w.id)),
-			selectedId: ids.includes(s.selectedId ?? '') ? null : s.selectedId
-		}));
-		return result;
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			const result = await WorkflowService.deleteBatch(ids);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.filter(
+					(w) => !ids.includes(w.id) || result.skipped_running.includes(w.id)
+				),
+				selectedId: ids.includes(s.selectedId ?? '') ? null : s.selectedId
+			}));
+			return result;
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -217,13 +240,20 @@ export const workflowStore = {
 	 *
 	 * @param workflowId - The workflow ID to move
 	 * @param folderId - Target folder ID, or null to remove from folder
+	 * @throws The original error after setting `error` state.
 	 */
 	async moveToFolder(workflowId: string, folderId: string | null): Promise<void> {
-		const updated = await WorkflowService.moveToFolder(workflowId, folderId);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
-		}));
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			const updated = await WorkflowService.moveToFolder(workflowId, folderId);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+			}));
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -232,29 +262,43 @@ export const workflowStore = {
 	 * @param workflowIds - Array of workflow IDs to move
 	 * @param folderId - Target folder ID, or null to remove from folder
 	 * @returns Number of workflows moved
+	 * @throws The original error after setting `error` state.
 	 */
 	async moveBatchToFolder(workflowIds: string[], folderId: string | null): Promise<number> {
-		const moved = await WorkflowService.moveBatchToFolder(workflowIds, folderId);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.map((w) =>
-				workflowIds.includes(w.id) ? { ...w, folder_id: folderId ?? undefined } : w
-			)
-		}));
-		return moved;
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			const moved = await WorkflowService.moveBatchToFolder(workflowIds, folderId);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.map((w) =>
+					workflowIds.includes(w.id) ? { ...w, folder_id: folderId ?? undefined } : w
+				)
+			}));
+			return moved;
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
 	 * Toggle the pinned state of a workflow.
 	 *
 	 * @param workflowId - The workflow ID to toggle
+	 * @throws The original error after setting `error` state.
 	 */
 	async togglePinned(workflowId: string): Promise<void> {
-		const updated = await WorkflowService.togglePinned(workflowId);
-		workflowWritable.update((s) => ({
-			...s,
-			workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
-		}));
+		workflowWritable.update((s) => ({ ...s, error: null }));
+		try {
+			const updated = await WorkflowService.togglePinned(workflowId);
+			workflowWritable.update((s) => ({
+				...s,
+				workflows: s.workflows.map((w) => (w.id === updated.id ? updated : w))
+			}));
+		} catch (e) {
+			workflowWritable.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**

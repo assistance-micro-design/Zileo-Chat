@@ -91,14 +91,23 @@ export const folderStore = {
 	 * @param name - Folder display name
 	 * @param color - Hex color (#RRGGBB)
 	 * @returns Created folder ID
+	 * @throws The original error after setting `error` state, so callers can
+	 *   decide whether to surface a toast.
 	 */
 	async createFolder(name: string, color: string): Promise<string> {
-		const folder = await invoke<WorkflowFolder>('create_workflow_folder', { name, color });
-		folderWritable.update((s) => ({
-			...s,
-			folders: [...s.folders, folder]
-		}));
-		return folder.id;
+		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const folder = await invoke<WorkflowFolder>('create_workflow_folder', { name, color });
+			folderWritable.update((s) => ({
+				...s,
+				folders: [...s.folders, folder],
+				loading: false
+			}));
+			return folder.id;
+		} catch (e) {
+			folderWritable.update((s) => ({ ...s, loading: false, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -106,13 +115,21 @@ export const folderStore = {
 	 *
 	 * @param folderId - The folder ID to rename
 	 * @param name - The new name
+	 * @throws The original error after setting `error` state.
 	 */
 	async renameFolder(folderId: string, name: string): Promise<void> {
-		const updated = await invoke<WorkflowFolder>('rename_workflow_folder', { folderId, name });
-		folderWritable.update((s) => ({
-			...s,
-			folders: s.folders.map((f) => (f.id === updated.id ? updated : f))
-		}));
+		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const updated = await invoke<WorkflowFolder>('rename_workflow_folder', { folderId, name });
+			folderWritable.update((s) => ({
+				...s,
+				folders: s.folders.map((f) => (f.id === updated.id ? updated : f)),
+				loading: false
+			}));
+		} catch (e) {
+			folderWritable.update((s) => ({ ...s, loading: false, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
@@ -120,50 +137,73 @@ export const folderStore = {
 	 *
 	 * @param folderId - The folder ID to update
 	 * @param color - The new hex color
+	 * @throws The original error after setting `error` state.
 	 */
 	async updateColor(folderId: string, color: string): Promise<void> {
-		const updated = await invoke<WorkflowFolder>('update_folder_color', { folderId, color });
-		folderWritable.update((s) => ({
-			...s,
-			folders: s.folders.map((f) => (f.id === updated.id ? updated : f))
-		}));
+		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const updated = await invoke<WorkflowFolder>('update_folder_color', { folderId, color });
+			folderWritable.update((s) => ({
+				...s,
+				folders: s.folders.map((f) => (f.id === updated.id ? updated : f)),
+				loading: false
+			}));
+		} catch (e) {
+			folderWritable.update((s) => ({ ...s, loading: false, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
 	 * Delete a folder. Workflows in it become uncategorized.
 	 *
 	 * @param folderId - The folder ID to delete
+	 * @throws The original error after setting `error` state.
 	 */
 	async deleteFolder(folderId: string): Promise<void> {
-		await invoke('delete_workflow_folder', { folderId });
-		folderWritable.update((s) => {
-			const expandedFolderIds = new Set(s.expandedFolderIds);
-			expandedFolderIds.delete(folderId);
-			persistExpandedIds(expandedFolderIds);
-			return {
-				...s,
-				folders: s.folders.filter((f) => f.id !== folderId),
-				expandedFolderIds
-			};
-		});
+		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			await invoke('delete_workflow_folder', { folderId });
+			folderWritable.update((s) => {
+				const expandedFolderIds = new Set(s.expandedFolderIds);
+				expandedFolderIds.delete(folderId);
+				persistExpandedIds(expandedFolderIds);
+				return {
+					...s,
+					folders: s.folders.filter((f) => f.id !== folderId),
+					expandedFolderIds,
+					loading: false
+				};
+			});
+		} catch (e) {
+			folderWritable.update((s) => ({ ...s, loading: false, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
 	 * Reorder folders by providing ordered list of IDs.
 	 *
 	 * @param folderIds - Ordered list of folder IDs
+	 * @throws The original error after setting `error` state.
 	 */
 	async reorderFolders(folderIds: string[]): Promise<void> {
-		await invoke('reorder_workflow_folders', { folderIds });
-		folderWritable.update((s) => {
-			const reordered = folderIds
-				.map((id, i) => {
-					const folder = s.folders.find((f) => f.id === id);
-					return folder ? { ...folder, sort_order: i } : null;
-				})
-				.filter((f): f is WorkflowFolder => f !== null);
-			return { ...s, folders: reordered };
-		});
+		folderWritable.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			await invoke('reorder_workflow_folders', { folderIds });
+			folderWritable.update((s) => {
+				const reordered = folderIds
+					.map((id, i) => {
+						const folder = s.folders.find((f) => f.id === id);
+						return folder ? { ...folder, sort_order: i } : null;
+					})
+					.filter((f): f is WorkflowFolder => f !== null);
+				return { ...s, folders: reordered, loading: false };
+			});
+		} catch (e) {
+			folderWritable.update((s) => ({ ...s, loading: false, error: getErrorMessage(e) }));
+			throw e;
+		}
 	},
 
 	/**
