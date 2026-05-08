@@ -61,7 +61,7 @@
 		onblur
 	}: Props = $props();
 
-	const generatedId = `password-${Math.random().toString(36).slice(2, 9)}`;
+	const generatedId = `password-${crypto.randomUUID()}`;
 	const inputId = $derived(id ?? generatedId);
 
 	let revealed = $state(false);

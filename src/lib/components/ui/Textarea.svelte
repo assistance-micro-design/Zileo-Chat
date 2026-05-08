@@ -71,7 +71,7 @@
 	 * Generate stable ID - uses provided id or generates once on mount
 	 * Using $derived to make the reactive relationship explicit
 	 */
-	const generatedId = `textarea-${Math.random().toString(36).slice(2, 9)}`;
+	const generatedId = `textarea-${crypto.randomUUID()}`;
 	const textareaId = $derived(id ?? generatedId);
 </script>
 

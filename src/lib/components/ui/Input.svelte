@@ -87,7 +87,7 @@
 	 * Generate stable ID - uses provided id or generates once on mount
 	 * Using $derived to make the reactive relationship explicit
 	 */
-	const generatedId = `input-${Math.random().toString(36).slice(2, 9)}`;
+	const generatedId = `input-${crypto.randomUUID()}`;
 	const inputId = $derived(id ?? generatedId);
 </script>
 
