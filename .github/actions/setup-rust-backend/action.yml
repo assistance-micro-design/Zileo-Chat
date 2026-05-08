@@ -23,7 +23,7 @@ runs:
         components: ${{ inputs.rust-components }}
 
     - name: Rust cache
-      uses: swatinem/rust-cache@400e7407cfd7a091e5fbb6afec01ec146c432b7c # v2.7.7
+      uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         workspaces: './src-tauri -> target'
         shared-key: validate-${{ inputs.cache-key }}

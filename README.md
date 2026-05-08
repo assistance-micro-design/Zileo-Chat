@@ -115,11 +115,11 @@ Use [Docker MCP Toolkit](https://docs.docker.com/ai/mcp-catalog-and-toolkit/tool
 
 ## Build Requirements
 
-- **Node.js** 20.19+ or 22.12+
+- **Node.js** 22.12+ or 24+ (Node 20 EOL April 2026)
 - **Rust** 1.80.1+
 
 ```bash
-node --version    # >= 20.19
+node --version    # >= 22.12
 rustc --version   # >= 1.80.1
 ```
 

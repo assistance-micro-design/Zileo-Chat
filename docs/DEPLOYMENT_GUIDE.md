@@ -28,7 +28,7 @@ Install Xcode CLI tools: `xcode-select --install`. Required: macOS 10.15+ (Catal
 
 - Visual Studio Build Tools 2022 with "Desktop development with C++"
 - Rust with MSVC toolchain: `rustup default stable-msvc`
-- Node.js 20+ LTS
+- Node.js 22+ LTS (Node 20 EOL April 2026)
 - WebView2 Runtime (pre-installed on recent Windows 10/11)
 
 See `scripts/setup-windows.ps1` for automated setup.
