@@ -16,6 +16,7 @@
 
 use crate::agents::core::registry::AgentRegistry;
 use crate::db::DBClient;
+use crate::security::validate_uuid_field;
 use crate::tools::{ToolError, ToolResult};
 use std::sync::Arc;
 use tracing::{debug, instrument};
@@ -52,15 +53,19 @@ pub async fn ensure_record_exists(
 }
 
 /// Deletes a record with existence check.
+///
+/// Validates `id` as a strict UUID v4 before interpolation into SurrealQL.
 pub async fn delete_with_check(
     db: &Arc<DBClient>,
     table: &str,
     id: &str,
     resource_name: &str,
 ) -> ToolResult<()> {
-    ensure_record_exists(db, table, id, resource_name).await?;
+    let validated_id = validate_uuid_field(id, "id").map_err(ToolError::ValidationFailed)?;
 
-    let delete_query = format!("DELETE {}:`{}`", table, id);
+    ensure_record_exists(db, table, &validated_id, resource_name).await?;
+
+    let delete_query = format!("DELETE {}:`{}`", table, validated_id);
     db.execute(&delete_query)
         .await
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;

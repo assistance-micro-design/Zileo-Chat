@@ -22,6 +22,7 @@ use crate::db::DBClient;
 use crate::llm::embedding::EmbeddingService;
 use crate::models::memory::MemoryDescribeResult;
 use crate::models::Memory;
+use crate::security::validate_uuid_field;
 use crate::tools::constants::memory as mem_constants;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -250,17 +251,29 @@ pub async fn text_search_core(
 }
 
 /// Retrieves statistics about memories (for the describe operation).
+///
+/// Uses parameterized queries: when a workflow_id is supplied, it is validated
+/// as a strict UUID v4 and bound as `$wf_id` rather than interpolated, preventing
+/// SurrealQL injection through composed scope filters.
 pub async fn describe_memories_core(
     workflow_id: Option<&str>,
     scope: &str,
     db: &DBClient,
 ) -> Result<MemoryDescribeResult, String> {
-    // Build scope filter
-    let scope_filter = match scope {
-        "workflow" => {
-            if let Some(wf_id) = workflow_id {
-                format!("AND workflow_id = '{}'", wf_id)
-            } else {
+    // Validate workflow_id once if provided, then bind it as a parameter
+    let validated_wf_id = match workflow_id {
+        Some(id) => Some(validate_uuid_field(id, "workflow_id")?),
+        None => None,
+    };
+
+    // Build scope filter using bind parameter for the workflow id
+    let (scope_filter, scope_params): (String, Vec<(String, serde_json::Value)>) = match scope {
+        "workflow" => match validated_wf_id.as_ref() {
+            Some(wf_id) => (
+                "AND workflow_id = $wf_id".to_string(),
+                vec![("wf_id".to_string(), serde_json::json!(wf_id))],
+            ),
+            None => {
                 return Ok(MemoryDescribeResult {
                     total: 0,
                     by_type: HashMap::new(),
@@ -271,16 +284,15 @@ pub async fn describe_memories_core(
                     newest: None,
                 });
             }
-        }
-        "general" => "AND workflow_id IS NONE".to_string(),
-        _ => {
-            // "both" - workflow + general
-            if let Some(wf_id) = workflow_id {
-                format!("AND (workflow_id = '{}' OR workflow_id IS NONE)", wf_id)
-            } else {
-                String::new() // No filter needed if no workflow
-            }
-        }
+        },
+        "general" => ("AND workflow_id IS NONE".to_string(), Vec::new()),
+        _ => match validated_wf_id.as_ref() {
+            Some(wf_id) => (
+                "AND (workflow_id = $wf_id OR workflow_id IS NONE)".to_string(),
+                vec![("wf_id".to_string(), serde_json::json!(wf_id))],
+            ),
+            None => (String::new(), Vec::new()),
+        },
     };
 
     let expiry = expiration_filter();
@@ -291,7 +303,7 @@ pub async fn describe_memories_core(
         expiry, scope_filter
     );
     let type_results: Vec<serde_json::Value> = db
-        .query_json(&type_query)
+        .query_json_with_params(&type_query, scope_params.clone())
         .await
         .map_err(|e| format!("Failed to count by type: {}", e))?;
 
@@ -313,7 +325,7 @@ pub async fn describe_memories_core(
         expiry, scope_filter
     );
     let tags_results: Vec<serde_json::Value> = db
-        .query_json(&tags_query)
+        .query_json_with_params(&tags_query, scope_params.clone())
         .await
         .map_err(|e| format!("Failed to get tags: {}", e))?;
 
@@ -334,7 +346,7 @@ pub async fn describe_memories_core(
         expiry, scope_filter
     );
     let date_results: Vec<serde_json::Value> = db
-        .query_json(&date_query)
+        .query_json_with_params(&date_query, scope_params.clone())
         .await
         .map_err(|e| format!("Failed to get date range: {}", e))?;
 
@@ -358,7 +370,7 @@ pub async fn describe_memories_core(
         expiry, scope_filter
     );
     let wf_count_results: Vec<serde_json::Value> = db
-        .query_json(&wf_count_query)
+        .query_json_with_params(&wf_count_query, scope_params)
         .await
         .map_err(|e| format!("Failed to count workflow memories: {}", e))?;
 

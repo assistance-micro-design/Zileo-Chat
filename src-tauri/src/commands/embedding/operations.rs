@@ -282,9 +282,20 @@ pub async fn regenerate_embeddings(
     for mem in &memories {
         processed += 1;
 
-        let id = match mem.get("id").and_then(|i| i.as_str()) {
+        let id_raw = match mem.get("id").and_then(|i| i.as_str()) {
             Some(i) => i,
             None => {
+                failed += 1;
+                continue;
+            }
+        };
+
+        // Defense-in-depth: validate the id even though it comes from our DB.
+        // Skips rather than aborts the whole batch on malformed rows.
+        let id = match validate_uuid_field(id_raw, "memory_id") {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(memory_id = %id_raw, error = %e, "Skipping memory with invalid id");
                 failed += 1;
                 continue;
             }

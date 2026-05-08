@@ -20,6 +20,7 @@ use super::MCPManager;
 use crate::db::sanitize_for_surrealdb;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{MCPCallLogCreate, MCPServerConfig, MCPServerCreate};
+use crate::security::Validator;
 use tracing::{debug, info, warn};
 
 impl MCPManager {
@@ -53,6 +54,14 @@ impl MCPManager {
 
     /// Updates a server configuration in the database
     pub async fn update_server_config(&self, config: &MCPServerConfig) -> MCPResult<()> {
+        // Validate the server id before interpolating it into the UPDATE query.
+        // Strict UUID v4 rejects backticks, null bytes and crafted ids.
+        let server_id =
+            Validator::validate_uuid(&config.id).map_err(|e| MCPError::InvalidConfig {
+                field: "id".to_string(),
+                reason: e.to_string(),
+            })?;
+
         // Serialize each field to JSON for the query
         let name_json = serde_json::to_string(&config.name)?;
         let command_json = serde_json::to_string(&config.command)?;
@@ -114,7 +123,7 @@ impl MCPManager {
                 auth_metadata = {}, \
                 extra_headers = {}, \
                 updated_at = time::now()",
-            config.id,
+            server_id,
             name_json,
             config.enabled,
             command_json,
