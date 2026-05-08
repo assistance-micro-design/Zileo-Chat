@@ -52,6 +52,7 @@ pub mod workflow {
         (current_context_tokens ?? 0) AS current_context_tokens, \
         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+        sub_agent_cost_usd, \
         folder_id, \
         (pinned ?? false) AS pinned";
 

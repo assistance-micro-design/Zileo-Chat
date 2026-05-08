@@ -82,6 +82,12 @@ pub struct Workflow {
     /// Whether this workflow is pinned to the top of the sidebar
     #[serde(default)]
     pub pinned: bool,
+    /// Cumulative cost in USD spent by sub-agents only (orchestrator excluded).
+    /// Stored alongside `sub_agent_tokens_*` so the workflow card can display
+    /// sub-agent vs. orchestrator cost split. Backward compatible: legacy rows
+    /// without the field deserialize to None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_agent_cost_usd: Option<f64>,
 }
 
 /// Workflow creation payload - only fields needed for creation
@@ -304,6 +310,7 @@ mod tests {
             total_cache_write_tokens: None,
             folder_id: Some("folder-123".to_string()),
             pinned: true,
+            sub_agent_cost_usd: Some(0.0125),
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
@@ -341,12 +348,17 @@ mod tests {
             total_cache_write_tokens: None,
             folder_id: None,
             pinned: false,
+            sub_agent_cost_usd: None,
         };
 
         let json = serde_json::to_string(&workflow).unwrap();
         assert!(
             !json.contains("folder_id"),
             "folder_id should be omitted when None"
+        );
+        assert!(
+            !json.contains("sub_agent_cost_usd"),
+            "sub_agent_cost_usd should be omitted when None"
         );
         assert!(json.contains("\"pinned\":false"));
 
