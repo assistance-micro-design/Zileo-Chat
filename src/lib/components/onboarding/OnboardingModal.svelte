@@ -23,6 +23,7 @@
 	import { i18n } from '$lib/i18n';
 	import { onboardingStore, currentStep, isLastStep, canGoBack } from '$lib/stores/onboarding';
 	import { Button } from '$lib/components/ui';
+	import { focusTrap } from '$lib/actions/focusTrap';
 	import OnboardingProgress from './OnboardingProgress.svelte';
 	import StepLanguage from './steps/StepLanguage.svelte';
 	import StepTheme from './steps/StepTheme.svelte';
@@ -71,9 +72,30 @@
 		onboardingStore.markComplete();
 		onComplete();
 	}
+
+	/**
+	 * Escape closes the onboarding modal and marks it complete so the user
+	 * is not blocked from the rest of the app. Without this, the dialog
+	 * trapped keyboard users with no exit path (WCAG 2.1.2 No Keyboard Trap).
+	 */
+	function handleKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			handleComplete();
+		}
+	}
 </script>
 
-<div class="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+<svelte:window onkeydown={handleKeydown} />
+
+<div
+	class="onboarding-modal"
+	role="dialog"
+	aria-modal="true"
+	aria-labelledby="onboarding-title"
+	tabindex="-1"
+	{@attach focusTrap}
+>
 	<div class="onboarding-container">
 		<OnboardingProgress currentStep={$currentStep} />
 

@@ -32,6 +32,7 @@
 	import type { AgentSummary } from '$types/agent';
 	import { Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { focusTrap } from '$lib/actions/focusTrap';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { tick } from 'svelte';
 
@@ -123,7 +124,14 @@
 
 {#if open}
 	<div class="modal-backdrop" role="presentation" onclick={handleBackdropClick} onkeydown={handleKeydown}>
-		<div class="modal new-workflow-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+		<div
+			class="modal new-workflow-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="modal-title"
+			tabindex="-1"
+			{@attach focusTrap}
+		>
 			<div class="modal-header">
 				<div class="modal-title-wrapper">
 					<Workflow size={24} class="modal-icon" />

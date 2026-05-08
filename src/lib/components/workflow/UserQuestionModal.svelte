@@ -26,6 +26,7 @@
 <script lang="ts">
 	import { Button, Textarea } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
+	import { focusTrap } from '$lib/actions/focusTrap';
 	import {
 		userQuestionStore,
 		currentQuestion,
@@ -112,6 +113,12 @@
 
 {#if $isModalOpen}
 	<div class="modal-backdrop" role="presentation">
+		<!--
+			Escape is intentionally swallowed: the user MUST answer or skip
+			explicitly so the agent's pending tool call resolves with a known
+			outcome. focusTrap still applies (WCAG 2.4.3 Focus Order) so Tab
+			cycles inside the dialog. See plan §1.4.
+		-->
 		<div
 			class="modal"
 			role="dialog"
@@ -120,6 +127,7 @@
 			tabindex="-1"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
+			{@attach focusTrap}
 		>
 			<div class="modal-header">
 				<h3 id="modal-title" class="modal-title">{$i18n('user_question_modal_title')}</h3>
