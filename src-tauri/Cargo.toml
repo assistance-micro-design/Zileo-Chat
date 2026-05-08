@@ -51,7 +51,7 @@ rand = "0.8"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # LLM Integration (Rig.rs)
-rig-core = "0.34.0"
+rig-core = "0.36.0"
 
 # HTTP client for provider connectivity tests and MCP HTTP transport
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
