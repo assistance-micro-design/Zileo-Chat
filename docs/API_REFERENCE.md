@@ -311,6 +311,7 @@ Database schema migrations (idempotent with migration guards).
 | `migrate_memory_v2_schema` | Migrate memory table for v2 (importance + TTL) |
 | `migrate_reasoning_effort` | Migrate agent enable_thinking to reasoning_effort |
 | `migrate_sidebar_features` | Migrate sidebar features (folders, pinning) |
+| `migrate_token_cost_accuracy_v1` | Backfill `sub_agent_cost_usd`, `total_cached_tokens`, `total_cache_write_tokens` defaults on legacy workflow rows (auto-applied at startup) |
 
 ### Workflow Folder (`commands/workflow_folder.rs`)
 

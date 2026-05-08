@@ -268,7 +268,7 @@ Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `
 ### Key Patterns
 
 - **PageState**: Aggregate page state into a single `$state<PageState>()` reactive object instead of many individual state variables
-- **Streaming store**: 14 derived stores (consolidated from 28) for filtering streaming data
+- **Streaming store**: `$state`-backed `streamingStore` exposes the live execution snapshot directly; only one `derived` (`activeSubAgents`) remains for legacy consumers
 - **Props**: Use `$props()` with typed `Props` interface (Svelte 5 pattern)
 
 ## 10. Accessibility (WCAG AA)
@@ -317,9 +317,9 @@ See `src/app.css` and `src/lib/styles/`
 
 ## 13. Testing Strategy
 
-- **Unit tests**: Vitest + `@testing-library/svelte` for component and store tests (280+ tests; run `npm run test` for the current count)
+- **Unit tests**: Vitest + `@testing-library/svelte` for component and store tests (380+ tests; run `npm run test` for the current count)
 - **E2E tests**: Playwright for workflow persistence, keyboard navigation, streaming indicators, responsive layout
-- **Backend tests**: Rust unit tests for all Tauri commands (1000+ tests; run `cargo test --lib` for the current count)
+- **Backend tests**: Rust unit tests for all Tauri commands (1300+ tests; run `cargo test --lib` for the current count)
 
 ## References
 

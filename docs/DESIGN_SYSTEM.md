@@ -479,20 +479,4 @@ Components are organized in `src/lib/components/`:
 
 ### Stores
 
-The application uses Svelte stores for state management, located in `src/lib/stores/`:
-
-| Store | Purpose |
-|-------|---------|
-| `theme` | Light/dark theme management |
-| `agentStore` | Agent CRUD and selection state |
-| `localeStore` | i18n language management |
-| `workflowStore` | Workflow execution state |
-| `foldersStore` | Workflow folder organization |
-| `tokenStore` | LLM token usage metrics |
-| `streamingStore` | Streaming workflow execution |
-| `validationStore` | Human-in-the-loop validation |
-| `promptStore` | System prompt library |
-| `llmStore` | LLM provider/model configuration |
-| `mcpStore` | MCP server management |
-| `onboardingStore` | First-launch wizard state |
-| `validationSettings` | Validation configuration |
+Theme-related stores live in `src/lib/stores/theme.ts` (light/dark mode + persistence) and `src/lib/stores/locale.ts` (i18n language). For the full inventory of stores see [FRONTEND_SPECIFICATIONS.md](FRONTEND_SPECIFICATIONS.md#6-stores).
