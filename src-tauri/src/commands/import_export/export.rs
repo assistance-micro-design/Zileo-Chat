@@ -292,7 +292,9 @@ pub async fn save_export_to_file(path: String, content: String) -> Result<usize,
         "Saving export file"
     );
 
-    std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
+    tokio::fs::write(&path, &content)
+        .await
+        .map_err(|e| format!("Failed to write file: {}", e))?;
 
     tracing::info!(path = %path.display(), "Export file saved successfully");
 
