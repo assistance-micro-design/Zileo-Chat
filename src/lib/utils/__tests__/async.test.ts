@@ -64,7 +64,7 @@ describe('withToastError', () => {
 		await wrapped();
 
 		expect(mockAdd).toHaveBeenCalledOnce();
-		expect(mockAdd.mock.calls[0][0].title).toBe('string error');
+		expect(mockAdd.mock.calls[0]![0].title).toBe('string error');
 	});
 
 	it('should preserve the function signature (pass-through args)', async () => {

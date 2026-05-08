@@ -80,7 +80,7 @@ describe('userQuestionStore — H1 workflowId propagation', () => {
 		});
 
 		expect(invokeMock).toHaveBeenCalledTimes(1);
-		const [cmd, args] = invokeMock.mock.calls[0];
+		const [cmd, args] = invokeMock.mock.calls[0]!;
 		expect(cmd).toBe('submit_user_response');
 		expect(args).toEqual({
 			questionId: QUESTION_ID,
@@ -96,7 +96,7 @@ describe('userQuestionStore — H1 workflowId propagation', () => {
 		await userQuestionStore.skipQuestion(QUESTION_ID);
 
 		expect(invokeMock).toHaveBeenCalledTimes(1);
-		const [cmd, args] = invokeMock.mock.calls[0];
+		const [cmd, args] = invokeMock.mock.calls[0]!;
 		expect(cmd).toBe('skip_question');
 		expect(args).toEqual({
 			questionId: QUESTION_ID,

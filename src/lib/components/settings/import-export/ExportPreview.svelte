@@ -52,8 +52,17 @@ Uses ExportEntitySection for collapsible entity sections.
 			(preview.customProviders?.length || 0)
 	);
 
-	/** Expanded state for all sections */
-	let expanded = $state<Record<string, boolean>>({
+	/** Expanded state for all sections (typed as struct so noUncheckedIndexedAccess
+	 * doesn't widen members to boolean | undefined). */
+	interface ExpandedState {
+		agents: boolean;
+		mcp: boolean;
+		models: boolean;
+		prompts: boolean;
+		skills: boolean;
+		customProviders: boolean;
+	}
+	let expanded = $state<ExpandedState>({
 		agents: false,
 		mcp: false,
 		models: false,

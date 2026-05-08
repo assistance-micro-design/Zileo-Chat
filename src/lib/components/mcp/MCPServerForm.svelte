@@ -273,7 +273,7 @@
 				newErrors.args = t('mcp_form_args_required');
 			}
 		} else if (formData.command === 'http') {
-			const url = formData.args.trim().split('\n')[0];
+			const url = formData.args.trim().split('\n')[0] ?? '';
 			if (!/^https?:\/\/.+/.test(url)) {
 				newErrors.args = t('mcp_form_args_invalid_url');
 			}
@@ -680,7 +680,10 @@
 								type="text"
 								class="env-input env-key"
 								value={header.key}
-								oninput={(e) => { formData.extraHeaders[index].key = e.currentTarget.value; }}
+								oninput={(e) => {
+									const row = formData.extraHeaders[index];
+									if (row) row.key = e.currentTarget.value;
+								}}
 								placeholder={$i18n('mcp_auth_extra_headers_key_placeholder')}
 								aria-label={$i18n('mcp_auth_extra_headers_key_placeholder')}
 							/>
@@ -689,7 +692,10 @@
 								type="text"
 								class="env-input env-value"
 								value={header.value}
-								oninput={(e) => { formData.extraHeaders[index].value = e.currentTarget.value; }}
+								oninput={(e) => {
+									const row = formData.extraHeaders[index];
+									if (row) row.value = e.currentTarget.value;
+								}}
 								placeholder={$i18n('mcp_auth_extra_headers_value_placeholder')}
 								aria-label={$i18n('mcp_auth_extra_headers_value_placeholder')}
 							/>
@@ -742,7 +748,10 @@
 							type="text"
 							class="env-input env-key"
 							value={envVar.key}
-							oninput={(e) => { formData.env[index].key = e.currentTarget.value; }}
+							oninput={(e) => {
+								const row = formData.env[index];
+								if (row) row.key = e.currentTarget.value;
+							}}
 							placeholder={$i18n('mcp_form_env_key_placeholder')}
 							aria-label={$i18n('mcp_form_env_key_arialabel')}
 							disabled={isHttp}
@@ -752,7 +761,10 @@
 							type="text"
 							class="env-input env-value"
 							value={envVar.value}
-							oninput={(e) => { formData.env[index].value = e.currentTarget.value; }}
+							oninput={(e) => {
+								const row = formData.env[index];
+								if (row) row.value = e.currentTarget.value;
+							}}
 							placeholder={$i18n('mcp_form_env_value_placeholder')}
 							aria-label={$i18n('mcp_form_env_value_arialabel')}
 							disabled={isHttp}

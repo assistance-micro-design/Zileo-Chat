@@ -157,14 +157,15 @@ export const userQuestionStore = {
 	 */
 	openForWorkflow(workflowId: string): void {
 		store.update((s) => {
-			const workflowQuestions = s.pendingQuestions.filter(
+			const [first, ...rest] = s.pendingQuestions.filter(
 				(q) => q.workflowId === workflowId
 			);
-			if (workflowQuestions.length === 0) return s;
+			if (!first) return s;
+			void rest; // discard, only the first question is opened
 
 			return {
 				...s,
-				currentQuestion: workflowQuestions[0],
+				currentQuestion: first,
 				isModalOpen: true,
 				error: null
 			};

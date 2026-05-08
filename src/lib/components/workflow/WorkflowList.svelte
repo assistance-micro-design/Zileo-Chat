@@ -360,7 +360,7 @@
 					{#if hasSectionsAbove || groupIdx > 0}
 						<div class="section-divider"></div>
 					{/if}
-					<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label])}</h3>
+					<h3 class="section-header">{$i18n(DATE_GROUP_I18N[group.label] ?? group.label)}</h3>
 					{#each group.items as workflow (workflow.id)}
 						{@render workflowItemSnippet(workflow)}
 					{/each}

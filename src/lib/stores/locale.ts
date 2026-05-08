@@ -95,7 +95,7 @@ function createLocaleStore() {
         // Detect system language
         const browserLang =
           typeof navigator !== "undefined"
-            ? navigator.language.split("-")[0]
+            ? navigator.language.split("-")[0] ?? DEFAULT_LOCALE
             : DEFAULT_LOCALE;
         if (isAvailableLanguageTag(browserLang)) {
           locale = browserLang as Locale;

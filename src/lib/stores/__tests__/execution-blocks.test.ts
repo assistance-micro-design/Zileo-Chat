@@ -45,12 +45,12 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(1);
-			expect(blocks[0].block_type).toBe('thinking');
-			expect(blocks[0].data).toEqual({
+			expect(blocks[0]!.block_type).toBe('thinking');
+			expect(blocks[0]!.data).toEqual({
 				content: 'Let me analyze this problem...',
 				source: 'model_thinking'
 			});
-			expect(blocks[0].sequence).toBe(1);
+			expect(blocks[0]!.sequence).toBe(1);
 		});
 	});
 
@@ -84,8 +84,8 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(1);
-			expect(blocks[0].block_type).toBe('tool_call');
-			expect(blocks[0].data).toEqual({
+			expect(blocks[0]!.block_type).toBe('tool_call');
+			expect(blocks[0]!.data).toEqual({
 				tool_name: 'SearchTool',
 				tool_type: 'local',
 				input_params: '{"query":"test"}',
@@ -132,7 +132,7 @@ describe('executionBlocksStore', () => {
 			});
 
 			const blocks = get(executionBlocks);
-			expect(blocks[0].data).toMatchObject({
+			expect(blocks[0]!.data).toMatchObject({
 				tool_name: 'FailTool',
 				success: false
 			});
@@ -178,8 +178,8 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(1);
-			expect(blocks[0].block_type).toBe('sub_agent');
-			expect(blocks[0].data).toMatchObject({
+			expect(blocks[0]!.block_type).toBe('sub_agent');
+			expect(blocks[0]!.data).toMatchObject({
 				agent_name: 'ResearchAgent',
 				status: 'completed',
 				duration_ms: 3000,
@@ -230,9 +230,9 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(3);
-			expect(blocks[0].sequence).toBe(1);
-			expect(blocks[1].sequence).toBe(2);
-			expect(blocks[2].sequence).toBe(3);
+			expect(blocks[0]!.sequence).toBe(1);
+			expect(blocks[1]!.sequence).toBe(2);
+			expect(blocks[2]!.sequence).toBe(3);
 		});
 	});
 
@@ -280,8 +280,8 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(2);
-			expect(blocks[0].block_type).toBe('thinking');
-			expect(blocks[1].block_type).toBe('tool_call');
+			expect(blocks[0]!.block_type).toBe('thinking');
+			expect(blocks[1]!.block_type).toBe('tool_call');
 			expect(get(isExecuting)).toBe(false);
 		});
 	});
@@ -318,9 +318,9 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(3);
-			expect(blocks[0].block_type).toBe('thinking');
-			expect(blocks[1].block_type).toBe('tool_call');
-			expect(blocks[2].block_type).toBe('sub_agent');
+			expect(blocks[0]!.block_type).toBe('thinking');
+			expect(blocks[1]!.block_type).toBe('tool_call');
+			expect(blocks[2]!.block_type).toBe('sub_agent');
 			expect(get(isExecuting)).toBe(true);
 		});
 
@@ -353,8 +353,8 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(2);
-			expect(blocks[0].block_type).toBe('thinking');
-			expect(blocks[1].block_type).toBe('thinking');
+			expect(blocks[0]!.block_type).toBe('thinking');
+			expect(blocks[1]!.block_type).toBe('thinking');
 		});
 	});
 
@@ -388,12 +388,12 @@ describe('executionBlocksStore', () => {
 
 			const blocks = get(executionBlocks);
 			expect(blocks).toHaveLength(1);
-			expect(blocks[0].block_type).toBe('thinking');
-			expect(blocks[0].data).toEqual({
+			expect(blocks[0]!.block_type).toBe('thinking');
+			expect(blocks[0]!.data).toEqual({
 				content: 'Analyzing the user request...',
 				source: 'agent_flow'
 			});
-			expect(blocks[0].sequence).toBe(1);
+			expect(blocks[0]!.sequence).toBe(1);
 		});
 	});
 
@@ -458,7 +458,7 @@ describe('executionBlocksStore', () => {
 			});
 
 			const tasks = get(executionTasks);
-			expect(tasks[0].agent_name).toBe('ResearchAgent');
+			expect(tasks[0]!.agent_name).toBe('ResearchAgent');
 		});
 
 		it('appends to existing tasks without replacing', () => {
@@ -480,8 +480,8 @@ describe('executionBlocksStore', () => {
 
 			const tasks = get(executionTasks);
 			expect(tasks).toHaveLength(2);
-			expect(tasks[0].id).toBe('task-001');
-			expect(tasks[1].id).toBe('task-002');
+			expect(tasks[0]!.id).toBe('task-001');
+			expect(tasks[1]!.id).toBe('task-002');
 		});
 
 		it('does not add blocks array entry (tasks are separate)', () => {
@@ -518,7 +518,7 @@ describe('executionBlocksStore', () => {
 			});
 
 			const tasks = get(executionTasks);
-			expect(tasks[0].status).toBe('in_progress');
+			expect(tasks[0]!.status).toBe('in_progress');
 		});
 
 		it('does not affect other tasks', () => {
@@ -546,8 +546,8 @@ describe('executionBlocksStore', () => {
 			});
 
 			const tasks = get(executionTasks);
-			expect(tasks[0].status).toBe('completed');
-			expect(tasks[1].status).toBe('pending');
+			expect(tasks[0]!.status).toBe('completed');
+			expect(tasks[1]!.status).toBe('pending');
 		});
 	});
 
@@ -570,8 +570,8 @@ describe('executionBlocksStore', () => {
 			});
 
 			const tasks = get(executionTasks);
-			expect(tasks[0].status).toBe('completed');
-			expect(tasks[0].duration_ms).toBe(1500);
+			expect(tasks[0]!.status).toBe('completed');
+			expect(tasks[0]!.duration_ms).toBe(1500);
 		});
 	});
 
@@ -597,8 +597,8 @@ describe('executionBlocksStore', () => {
 
 			const tasks = get(executionTasks);
 			expect(tasks).toHaveLength(2);
-			expect(tasks[0].agent_name).toBe('PlannerAgent');
-			expect(tasks[1].agent_name).toBe('ResearchAgent');
+			expect(tasks[0]!.agent_name).toBe('PlannerAgent');
+			expect(tasks[1]!.agent_name).toBe('ResearchAgent');
 		});
 
 		it('start resets tasks', () => {

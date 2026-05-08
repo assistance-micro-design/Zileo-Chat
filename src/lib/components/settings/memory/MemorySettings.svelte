@@ -218,9 +218,10 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		editConfig.provider = provider;
 
 		const providerModels = EMBEDDING_MODELS[provider] || [];
-		if (providerModels.length > 0) {
-			editConfig.model = providerModels[0].value;
-			editConfig.dimension = providerModels[0].dimension;
+		const firstModel = providerModels[0];
+		if (firstModel) {
+			editConfig.model = firstModel.value;
+			editConfig.dimension = firstModel.dimension;
 		}
 	}
 

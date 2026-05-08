@@ -85,8 +85,9 @@ export const focusTrap: Attachment<HTMLElement> = (element) => {
 			return;
 		}
 
-		const first = focusables[0];
-		const last = focusables[focusables.length - 1];
+		// focusables.length > 0 was checked above, so first/last are defined.
+		const first = focusables[0]!;
+		const last = focusables[focusables.length - 1]!;
 		const active = document.activeElement as HTMLElement | null;
 
 		if (event.shiftKey) {

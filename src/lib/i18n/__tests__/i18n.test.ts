@@ -50,7 +50,7 @@ let simpleText = '';
 for (let index = 0; index < value.length;) {
 const pluralMatch = value.slice(index).match(ICU_PLURAL_START_REGEX);
 if (pluralMatch) {
-placeholders.add(pluralMatch[1]);
+placeholders.add(pluralMatch[1]!);
 index = findIcuPluralEnd(value, index);
 continue;
 }
@@ -60,7 +60,7 @@ index += 1;
 }
 
 for (const match of simpleText.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
-placeholders.add(match[1]);
+placeholders.add(match[1]!);
 }
 
 return Array.from(placeholders).sort();
@@ -77,8 +77,8 @@ expect(sortedKeys(fr as Messages)).toEqual(sortedKeys(en as Messages));
 
 it('keeps interpolation placeholders in parity for every translated key', () => {
 for (const key of sortedKeys(en as Messages)) {
-expect(placeholdersFor((fr as Messages)[key]), key).toEqual(
-placeholdersFor((en as Messages)[key])
+expect(placeholdersFor((fr as Messages)[key] ?? ''), key).toEqual(
+placeholdersFor((en as Messages)[key] ?? '')
 );
 }
 });

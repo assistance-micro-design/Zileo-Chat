@@ -176,7 +176,7 @@ describe('LLM Store', () => {
 			const state = addModel(initialState, model);
 
 			expect(state.models).toHaveLength(1);
-			expect(state.models[0].id).toBe('m1');
+			expect(state.models[0]!.id).toBe('m1');
 			expect(state.error).toBeNull();
 		});
 
@@ -188,7 +188,7 @@ describe('LLM Store', () => {
 			state = addModel(state, model2);
 
 			expect(state.models).toHaveLength(2);
-			expect(state.models[1].id).toBe('m2');
+			expect(state.models[1]!.id).toBe('m2');
 		});
 
 		it('should update model if ID already exists', () => {
@@ -199,7 +199,7 @@ describe('LLM Store', () => {
 			state = addModel(state, updatedModel);
 
 			expect(state.models).toHaveLength(1);
-			expect(state.models[0].name).toBe('Updated Name');
+			expect(state.models[0]!.name).toBe('Updated Name');
 		});
 	});
 
@@ -211,7 +211,7 @@ describe('LLM Store', () => {
 			let state = addModel(initialState, model);
 			state = updateModelInState(state, 'm1', updatedModel);
 
-			expect(state.models[0].name).toBe('Updated Name');
+			expect(state.models[0]!.name).toBe('Updated Name');
 			expect(state.error).toBeNull();
 		});
 
@@ -225,8 +225,8 @@ describe('LLM Store', () => {
 			const updated1 = { ...model1, name: 'Updated' };
 			state = updateModelInState(state, 'm1', updated1);
 
-			expect(state.models[0].name).toBe('Updated');
-			expect(state.models[1].name).toBe('Model m2');
+			expect(state.models[0]!.name).toBe('Updated');
+			expect(state.models[1]!.name).toBe('Model m2');
 		});
 
 		it('should not crash when updating non-existent model', () => {
@@ -237,7 +237,7 @@ describe('LLM Store', () => {
 			const updated = updateModelInState(state, 'm2', nonExistent);
 
 			expect(updated.models).toHaveLength(1);
-			expect(updated.models[0].id).toBe('m1');
+			expect(updated.models[0]!.id).toBe('m1');
 		});
 	});
 
@@ -261,7 +261,7 @@ describe('LLM Store', () => {
 			state = removeModel(state, 'm1');
 
 			expect(state.models).toHaveLength(1);
-			expect(state.models[0].id).toBe('m2');
+			expect(state.models[0]!.id).toBe('m2');
 		});
 
 		it('should not crash when removing non-existent model', () => {
@@ -362,7 +362,7 @@ describe('LLM Store', () => {
 
 			const builtins = getBuiltinModels(state);
 			expect(builtins).toHaveLength(1);
-			expect(builtins[0].id).toBe('b1');
+			expect(builtins[0]!.id).toBe('b1');
 		});
 	});
 
@@ -376,7 +376,7 @@ describe('LLM Store', () => {
 
 			const customs = getCustomModels(state);
 			expect(customs).toHaveLength(1);
-			expect(customs[0].id).toBe('c1');
+			expect(customs[0]!.id).toBe('c1');
 		});
 	});
 
@@ -392,7 +392,7 @@ describe('LLM Store', () => {
 
 			const mistralBuiltins = getBuiltinModelsByProvider(state, 'mistral');
 			expect(mistralBuiltins).toHaveLength(1);
-			expect(mistralBuiltins[0].id).toBe('b1');
+			expect(mistralBuiltins[0]!.id).toBe('b1');
 		});
 	});
 
@@ -408,7 +408,7 @@ describe('LLM Store', () => {
 
 			const ollamaCustoms = getCustomModelsByProvider(state, 'ollama');
 			expect(ollamaCustoms).toHaveLength(1);
-			expect(ollamaCustoms[0].id).toBe('c2');
+			expect(ollamaCustoms[0]!.id).toBe('c2');
 		});
 	});
 
@@ -629,8 +629,8 @@ describe('LLM Store', () => {
 			const updatedModel = { ...model, name: 'Updated' };
 			const newState = updateModelInState(state, 'm1', updatedModel);
 
-			expect(state.models[0].name).toBe('Model m1');
-			expect(newState.models[0].name).toBe('Updated');
+			expect(state.models[0]!.name).toBe('Model m1');
+			expect(newState.models[0]!.name).toBe('Updated');
 		});
 
 		it('should not mutate original state when removing model', () => {

@@ -404,7 +404,8 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	const handleCreateFolder = withToastError(async () => {
 		const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-		const color = colors[($folders$).length % colors.length];
+		// Index is always in range — modulo by colors.length.
+		const color = colors[($folders$).length % colors.length]!;
 		await folderStore.createFolder($i18n('sidebar_folder_create'), color);
 	});
 
@@ -442,7 +443,7 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	const handleWorkflowMove = withToastError(async (workflowIds: string[], folderId: string | null) => {
 		if (workflowIds.length === 1) {
-			await workflowStore.moveToFolder(workflowIds[0], folderId);
+			await workflowStore.moveToFolder(workflowIds[0]!, folderId);
 		} else {
 			await workflowStore.moveBatchToFolder(workflowIds, folderId);
 		}

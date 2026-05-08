@@ -322,12 +322,12 @@ describe('Workflow Store', () => {
 			workflowStore.setSearchFilter('api');
 			let filtered = get(filteredWorkflows);
 			expect(filtered).toHaveLength(1);
-			expect(filtered[0].id).toBe('wf2');
+			expect(filtered[0]!.id).toBe('wf2');
 
 			workflowStore.setSearchFilter('migration');
 			filtered = get(filteredWorkflows);
 			expect(filtered).toHaveLength(1);
-			expect(filtered[0].id).toBe('wf1');
+			expect(filtered[0]!.id).toBe('wf1');
 		});
 
 		it('should show all workflows when filter is cleared', () => {
@@ -400,7 +400,7 @@ describe('Workflow Store', () => {
 
 			expect(get(workflowsError)).toBeNull();
 			expect(get(workflows)).toHaveLength(1);
-			expect(get(workflows)[0].name).toBe('Recovered Workflow');
+			expect(get(workflows)[0]!.name).toBe('Recovered Workflow');
 		});
 
 		it('should clear error at start of retry attempt', async () => {
@@ -458,7 +458,7 @@ describe('Workflow Store', () => {
 			// Error should be set, but existing workflows should remain
 			expect(get(workflowsError)).toBe('Transient error');
 			expect(get(workflows)).toHaveLength(1);
-			expect(get(workflows)[0].name).toBe('Existing Workflow');
+			expect(get(workflows)[0]!.name).toBe('Existing Workflow');
 		});
 	});
 
@@ -521,7 +521,7 @@ describe('Workflow Store', () => {
 
 			// Initial state
 			expect(states).toHaveLength(1);
-			expect(states[0].workflows).toEqual([]);
+			expect(states[0]!.workflows).toEqual([]);
 
 			// Load workflows
 			const mockWorkflows = [createMockWorkflow('wf1', 'Test')];
@@ -530,7 +530,7 @@ describe('Workflow Store', () => {
 
 			// Should have captured state changes
 			expect(states.length).toBeGreaterThan(1);
-			expect(states[states.length - 1].workflows).toEqual(mockWorkflows);
+			expect(states[states.length - 1]!.workflows).toEqual(mockWorkflows);
 
 			unsubscribe();
 		});

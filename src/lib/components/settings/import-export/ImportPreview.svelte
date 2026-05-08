@@ -105,7 +105,7 @@ Uses data-driven loops for summary cards and entity lists.
 	 * MissingMcpEnv is now keyed by server NAME.
 	 */
 	function hasMissingEnv(serverName: string): boolean {
-		return validation.missingMcpEnv[serverName]?.length > 0;
+		return (validation.missingMcpEnv[serverName]?.length ?? 0) > 0;
 	}
 
 	/**

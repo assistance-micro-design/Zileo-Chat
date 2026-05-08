@@ -74,9 +74,9 @@ describe('applyChunkToState', () => {
 			}));
 
 			expect(result.tools).toHaveLength(1);
-			expect(result.tools[0].name).toBe('MemoryTool');
-			expect(result.tools[0].status).toBe('running');
-			expect(result.tools[0].startedAt).toBeDefined();
+			expect(result.tools[0]!.name).toBe('MemoryTool');
+			expect(result.tools[0]!.status).toBe('running');
+			expect(result.tools[0]!.startedAt).toBeDefined();
 		});
 
 		it('should default to unknown when tool name missing', () => {
@@ -84,7 +84,7 @@ describe('applyChunkToState', () => {
 				chunk_type: 'tool_start'
 			}));
 
-			expect(result.tools[0].name).toBe('unknown');
+			expect(result.tools[0]!.name).toBe('unknown');
 		});
 	});
 
@@ -100,10 +100,10 @@ describe('applyChunkToState', () => {
 			}));
 
 			expect(s.reasoning).toHaveLength(2);
-			expect(s.reasoning[0].content).toBe('Analyzing...');
-			expect(s.reasoning[0].stepNumber).toBe(1);
-			expect(s.reasoning[1].content).toBe('Planning...');
-			expect(s.reasoning[1].stepNumber).toBe(2);
+			expect(s.reasoning[0]!.content).toBe('Analyzing...');
+			expect(s.reasoning[0]!.stepNumber).toBe(1);
+			expect(s.reasoning[1]!.content).toBe('Planning...');
+			expect(s.reasoning[1]!.stepNumber).toBe(2);
 		});
 	});
 
@@ -221,7 +221,7 @@ describe('applyChunkToState', () => {
 				task_name: 'Task'
 			}));
 
-			expect(result.tasks[0].priority).toBe(3);
+			expect(result.tasks[0]!.priority).toBe(3);
 		});
 	});
 
@@ -238,7 +238,7 @@ describe('applyChunkToState', () => {
 				task_status: 'in_progress'
 			}));
 
-			expect(s.tasks[0].status).toBe('in_progress');
+			expect(s.tasks[0]!.status).toBe('in_progress');
 		});
 	});
 
@@ -254,7 +254,7 @@ describe('applyChunkToState', () => {
 				task_id: 't-1'
 			}));
 
-			expect(s.tasks[0].status).toBe('completed');
+			expect(s.tasks[0]!.status).toBe('completed');
 		});
 	});
 
@@ -291,8 +291,8 @@ describe('applyChunkToState', () => {
 			}));
 
 			expect(result.reasoning).toHaveLength(1);
-			expect(result.reasoning[0].content).toBe('Let me analyze...');
-			expect(result.reasoning[0].stepNumber).toBe(1);
+			expect(result.reasoning[0]!.content).toBe('Let me analyze...');
+			expect(result.reasoning[0]!.stepNumber).toBe(1);
 		});
 	});
 
@@ -311,8 +311,8 @@ describe('applyChunkToState', () => {
 				tool_success: true
 			}));
 
-			expect(s.tools[0].status).toBe('completed');
-			expect(s.tools[0].duration).toBe(500);
+			expect(s.tools[0]!.status).toBe('completed');
+			expect(s.tools[0]!.duration).toBe(500);
 		});
 	});
 

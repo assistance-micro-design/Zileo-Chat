@@ -227,7 +227,7 @@ export function extractVariables(content: string): string[] {
 	let match;
 	while ((match = pattern.exec(content)) !== null) {
 		const name = match[1];
-		if (!seen.has(name)) {
+		if (name && !seen.has(name)) {
 			seen.add(name);
 			variables.push(name);
 		}
@@ -262,7 +262,7 @@ export function extractSkillReferences(content: string): string[] {
 	let match;
 	while ((match = pattern.exec(content)) !== null) {
 		const name = match[1];
-		if (!seen.has(name)) {
+		if (name && !seen.has(name)) {
 			seen.add(name);
 			skills.push(name);
 		}

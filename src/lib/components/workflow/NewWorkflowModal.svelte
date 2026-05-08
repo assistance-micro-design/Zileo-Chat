@@ -64,7 +64,7 @@
 	/** Sync chosen agent when modal opens or selectedAgentId changes */
 	$effect(() => {
 		if (open) {
-			chosenAgentId = selectedAgentId || (agents.length > 0 ? agents[0].id : null);
+			chosenAgentId = selectedAgentId || (agents[0]?.id ?? null);
 			workflowName = '';
 			error = null;
 			isSubmitting = false;

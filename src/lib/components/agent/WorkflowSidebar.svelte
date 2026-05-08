@@ -154,7 +154,8 @@ Left sidebar for workflow management with search and CRUD operations.
 			if (startIdx !== -1 && endIdx !== -1) {
 				const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
 				for (let i = from; i <= to; i++) {
-					selectedIds.add(ids[i]);
+					const id = ids[i];
+					if (id) selectedIds.add(id);
 				}
 			}
 		} else {

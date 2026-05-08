@@ -53,7 +53,7 @@ Visible during and after execution.
 				groups[key] = [task];
 			}
 		}
-		return order.map((key) => [key, groups[key]]);
+		return order.map((key): [string, TodoTaskDisplay[]] => [key, groups[key] ?? []]);
 	}
 
 	let grouped = $derived(groupByAgent(tasks));

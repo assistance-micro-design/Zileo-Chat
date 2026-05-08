@@ -257,10 +257,11 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	 * Updates model when provider changes (reset to first available if current invalid)
 	 */
 	$effect(() => {
-		if (availableModels.length > 0) {
+		const first = availableModels[0];
+		if (first) {
 			const currentModelValid = availableModels.some((m) => m.api_name === model);
 			if (!currentModelValid) {
-				model = availableModels[0].api_name;
+				model = first.api_name;
 			}
 		}
 	});

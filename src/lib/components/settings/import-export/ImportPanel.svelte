@@ -322,8 +322,8 @@ Orchestrates the multi-step import process:
 		const nameMatch = warning.detail.match(/'([^']+)'/);
 		const countMatch = warning.detail.match(/^(\d+)/);
 		let translated = $i18n(key);
-		if (nameMatch) translated = translated.replace('{name}', nameMatch[1]);
-		if (countMatch) translated = translated.replace('{count}', countMatch[1]);
+		if (nameMatch?.[1]) translated = translated.replace('{name}', nameMatch[1]);
+		if (countMatch?.[1]) translated = translated.replace('{count}', countMatch[1]);
 		return translated;
 	}
 

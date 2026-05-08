@@ -106,17 +106,18 @@
 				event.preventDefault();
 				onclose();
 				break;
-			case 'Home':
+			case 'Home': {
 				event.preventDefault();
-				focusedIndex = enabledItems.length > 0 ? items.indexOf(enabledItems[0]) : 0;
+				const first = enabledItems[0];
+				focusedIndex = first ? items.indexOf(first) : 0;
 				break;
-			case 'End':
+			}
+			case 'End': {
 				event.preventDefault();
-				focusedIndex =
-					enabledItems.length > 0
-						? items.indexOf(enabledItems[enabledItems.length - 1])
-						: items.length - 1;
+				const last = enabledItems[enabledItems.length - 1];
+				focusedIndex = last ? items.indexOf(last) : items.length - 1;
 				break;
+			}
 		}
 	}
 

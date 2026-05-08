@@ -89,10 +89,10 @@ describe('streamingStore', () => {
 
 			const state = get(streamingStore);
 			expect(state.reasoning).toHaveLength(2);
-			expect(state.reasoning[0].content).toBe('Analyzing request...');
-			expect(state.reasoning[0].stepNumber).toBe(1);
-			expect(state.reasoning[1].content).toBe('Planning response...');
-			expect(state.reasoning[1].stepNumber).toBe(2);
+			expect(state.reasoning[0]!.content).toBe('Analyzing request...');
+			expect(state.reasoning[0]!.stepNumber).toBe(1);
+			expect(state.reasoning[1]!.content).toBe('Planning response...');
+			expect(state.reasoning[1]!.stepNumber).toBe(2);
 		});
 
 		it('should track tool start and end', () => {
@@ -103,8 +103,8 @@ describe('streamingStore', () => {
 
 			let state = get(streamingStore);
 			expect(state.tools).toHaveLength(1);
-			expect(state.tools[0].name).toBe('MemoryTool');
-			expect(state.tools[0].status).toBe('running');
+			expect(state.tools[0]!.name).toBe('MemoryTool');
+			expect(state.tools[0]!.status).toBe('running');
 
 			streamingStore.processChunkDirect({
 				chunk_type: 'tool_call_complete',
@@ -113,8 +113,8 @@ describe('streamingStore', () => {
 			} as StreamChunk);
 
 			state = get(streamingStore);
-			expect(state.tools[0].status).toBe('completed');
-			expect(state.tools[0].duration).toBe(150);
+			expect(state.tools[0]!.status).toBe('completed');
+			expect(state.tools[0]!.duration).toBe(150);
 		});
 
 		it('should track multiple tools independently', () => {
@@ -137,9 +137,9 @@ describe('streamingStore', () => {
 			const completed = state.tools.filter((t) => t.status === 'completed');
 
 			expect(running).toHaveLength(1);
-			expect(running[0].name).toBe('TodoTool');
+			expect(running[0]!.name).toBe('TodoTool');
 			expect(completed).toHaveLength(1);
-			expect(completed[0].name).toBe('MemoryTool');
+			expect(completed[0]!.name).toBe('MemoryTool');
 		});
 
 		it('should set error and stop streaming on error chunk', async () => {
@@ -166,8 +166,8 @@ describe('streamingStore', () => {
 
 			let state = get(streamingStore);
 			expect(state.subAgents).toHaveLength(1);
-			expect(state.subAgents[0].name).toBe('Research Agent');
-			expect(state.subAgents[0].status).toBe('running');
+			expect(state.subAgents[0]!.name).toBe('Research Agent');
+			expect(state.subAgents[0]!.status).toBe('running');
 
 			streamingStore.processChunkDirect({
 				chunk_type: 'sub_agent_complete',
@@ -177,8 +177,8 @@ describe('streamingStore', () => {
 			} as StreamChunk);
 
 			state = get(streamingStore);
-			expect(state.subAgents[0].status).toBe('completed');
-			expect(state.subAgents[0].progress).toBe(100);
+			expect(state.subAgents[0]!.status).toBe('completed');
+			expect(state.subAgents[0]!.progress).toBe(100);
 		});
 
 		it('should handle task lifecycle', () => {
@@ -192,8 +192,8 @@ describe('streamingStore', () => {
 
 			let state = get(streamingStore);
 			expect(state.tasks).toHaveLength(1);
-			expect(state.tasks[0].id).toBe('t-1');
-			expect(state.tasks[0].name).toBe('Analyze data');
+			expect(state.tasks[0]!.id).toBe('t-1');
+			expect(state.tasks[0]!.name).toBe('Analyze data');
 
 			streamingStore.processChunkDirect({
 				chunk_type: 'task_complete',
@@ -201,7 +201,7 @@ describe('streamingStore', () => {
 			} as StreamChunk);
 
 			state = get(streamingStore);
-			expect(state.tasks[0].status).toBe('completed');
+			expect(state.tasks[0]!.status).toBe('completed');
 		});
 	});
 
@@ -356,7 +356,7 @@ describe('streamingStore', () => {
 
 			const subAgents = get(activeSubAgents);
 			expect(subAgents).toHaveLength(1);
-			expect(subAgents[0].name).toBe('Agent A');
+			expect(subAgents[0]!.name).toBe('Agent A');
 		});
 
 		it('should be cleared after reset', () => {
