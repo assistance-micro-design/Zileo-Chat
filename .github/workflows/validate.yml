@@ -39,6 +39,13 @@ jobs:
       - name: Test
         run: npm run test
 
+      # npm audit: fail only on production-only high/critical vulnerabilities.
+      # Dev-only advisories are noise on this branch (mostly typescript-eslint,
+      # vitest plugins, ...) and we don't ship them.
+      - name: npm audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
   backend-fmt:
     runs-on: ubuntu-latest
     steps:
@@ -87,12 +94,36 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+  backend-audit:
+    needs: backend-fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - name: Setup Rust Backend
+        uses: ./.github/actions/setup-rust-backend
+        with:
+          rust-components: ''
+          cache-key: audit
+      # cargo-audit prints advisories from RustSec/advisory-db.
+      # Informational for now: it runs but does not fail the build, so
+      # transient advisories on transitive deps don't block PRs. Promote to
+      # failing once the advisory baseline is clean.
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo-audit
+        working-directory: src-tauri
+        run: cargo audit
+        continue-on-error: true
+
   backend:
-    needs: [backend-fmt, backend-clippy, backend-test]
+    needs: [backend-fmt, backend-clippy, backend-test, backend-audit]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check backend results
+        # backend-audit is intentionally not gating: it runs `continue-on-error: true`
+        # so the aggregator only fails when fmt/clippy/test fail. The audit
+        # output is visible in the run logs as advisory information.
         run: |
           if [ "${{ needs.backend-fmt.result }}" != "success" ] || \
              [ "${{ needs.backend-clippy.result }}" != "success" ] || \
