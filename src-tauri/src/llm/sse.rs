@@ -757,6 +757,17 @@ struct SseParseResult {
 
 /// Stateful line-oriented SSE parser.
 ///
+/// Maximum size of the [`SseParser`] internal buffer before we abort the
+/// stream. A misbehaving upstream that never sends an event terminator
+/// (`\n\n`) would otherwise let the buffer grow without bound.
+pub(crate) const MAX_SSE_BUFFER_BYTES: usize = 16 * 1024 * 1024;
+
+/// Maximum size of a single SSE `data:` payload before it is parsed as JSON.
+/// 4 MiB is well above any realistic single-chunk completion (largest reported
+/// thinking-model chunks are ~150 KB) while still bounding `serde_json::from_str`
+/// CPU cost.
+pub(crate) const MAX_SSE_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
+
 /// Buffers incoming bytes (which may arrive split across TCP frames), splits
 /// on `\n\n` event boundaries, then within each event extracts every
 /// `data:` line. Comment lines (`:`-prefixed, used as keep-alives) are
@@ -773,13 +784,21 @@ impl SseParser {
     }
 
     /// Append a chunk of bytes (lossy UTF-8 conversion) and return any
-    /// completed events.
-    fn feed(&mut self, bytes: &[u8]) -> SseParseResult {
+    /// completed events. Errors with [`LLMError::ResponseTooLarge`] when the
+    /// internal buffer would exceed [`MAX_SSE_BUFFER_BYTES`].
+    fn feed(&mut self, bytes: &[u8]) -> Result<SseParseResult, LLMError> {
         // SSE is required to be UTF-8. Use lossy to avoid panicking on the
         // off chance a proxy hands us a malformed byte; lost chars are
         // replaced with U+FFFD which won't parse as JSON and will be
         // ignored downstream.
         self.buffer.push_str(&String::from_utf8_lossy(bytes));
+
+        if self.buffer.len() > MAX_SSE_BUFFER_BYTES {
+            return Err(LLMError::ResponseTooLarge {
+                what: "SSE buffer",
+            });
+        }
+
         let mut result = SseParseResult::default();
 
         while let Some(boundary) = find_event_boundary(&self.buffer) {
@@ -792,13 +811,13 @@ impl SseParser {
             if let Some(payload) = parse_event_block(&raw_event) {
                 if payload.trim() == "[DONE]" {
                     result.done = true;
-                    return result;
+                    return Ok(result);
                 }
                 result.events.push(payload);
             }
         }
 
-        result
+        Ok(result)
     }
 }
 
@@ -869,9 +888,14 @@ pub(crate) async fn collect_sse_to_json(
     while let Some(item) = stream.next().await {
         let bytes =
             item.map_err(|e| LLMError::RequestFailed(format!("SSE stream read failed: {}", e)))?;
-        let parsed = parser.feed(&bytes);
+        let parsed = parser.feed(&bytes)?;
         for payload in parsed.events {
             event_count += 1;
+            if payload.len() > MAX_SSE_PAYLOAD_BYTES {
+                return Err(LLMError::ResponseTooLarge {
+                    what: "single payload",
+                });
+            }
             match serde_json::from_str::<Value>(&payload) {
                 Ok(chunk) => accumulator.ingest(&chunk),
                 Err(e) => {
@@ -1487,7 +1511,7 @@ mod tests {
     #[test]
     fn test_parse_data_line_simple() {
         let mut p = SseParser::new();
-        let r = p.feed(b"data: {\"a\":1}\n\n");
+        let r = p.feed(b"data: {\"a\":1}\n\n").expect("feed ok");
         assert_eq!(r.events, vec!["{\"a\":1}".to_string()]);
         assert!(!r.done);
     }
@@ -1495,16 +1519,18 @@ mod tests {
     #[test]
     fn test_parse_handles_chunked_event() {
         let mut p = SseParser::new();
-        let r1 = p.feed(b"data: {\"a\"");
+        let r1 = p.feed(b"data: {\"a\"").expect("feed ok");
         assert!(r1.events.is_empty());
-        let r2 = p.feed(b":1}\n\n");
+        let r2 = p.feed(b":1}\n\n").expect("feed ok");
         assert_eq!(r2.events, vec!["{\"a\":1}".to_string()]);
     }
 
     #[test]
     fn test_parse_done_terminator() {
         let mut p = SseParser::new();
-        let r = p.feed(b"data: {\"a\":1}\n\ndata: [DONE]\n\n");
+        let r = p
+            .feed(b"data: {\"a\":1}\n\ndata: [DONE]\n\n")
+            .expect("feed ok");
         assert_eq!(r.events, vec!["{\"a\":1}".to_string()]);
         assert!(r.done);
     }
@@ -1512,14 +1538,18 @@ mod tests {
     #[test]
     fn test_parse_ignores_comments_and_keepalive() {
         let mut p = SseParser::new();
-        let r = p.feed(b": keepalive\n\ndata: {\"x\":2}\n\n");
+        let r = p
+            .feed(b": keepalive\n\ndata: {\"x\":2}\n\n")
+            .expect("feed ok");
         assert_eq!(r.events, vec!["{\"x\":2}".to_string()]);
     }
 
     #[test]
     fn test_parse_handles_multi_event_in_one_chunk() {
         let mut p = SseParser::new();
-        let r = p.feed(b"data: {\"a\":1}\n\ndata: {\"b\":2}\n\n");
+        let r = p
+            .feed(b"data: {\"a\":1}\n\ndata: {\"b\":2}\n\n")
+            .expect("feed ok");
         assert_eq!(
             r.events,
             vec!["{\"a\":1}".to_string(), "{\"b\":2}".to_string()]
@@ -1529,7 +1559,7 @@ mod tests {
     #[test]
     fn test_parse_handles_crlf() {
         let mut p = SseParser::new();
-        let r = p.feed(b"data: {\"a\":1}\r\n\r\n");
+        let r = p.feed(b"data: {\"a\":1}\r\n\r\n").expect("feed ok");
         assert_eq!(r.events, vec!["{\"a\":1}".to_string()]);
     }
 
@@ -1537,10 +1567,43 @@ mod tests {
     fn test_parse_strips_optional_space_after_colon() {
         let mut p = SseParser::new();
         // Per spec, "data: x" and "data:x" are both valid.
-        let r1 = p.feed(b"data:no_space\n\n");
+        let r1 = p.feed(b"data:no_space\n\n").expect("feed ok");
         assert_eq!(r1.events, vec!["no_space".to_string()]);
-        let r2 = p.feed(b"data: with_space\n\n");
+        let r2 = p.feed(b"data: with_space\n\n").expect("feed ok");
         assert_eq!(r2.events, vec!["with_space".to_string()]);
+    }
+
+    #[test]
+    fn test_parse_buffer_overflow_rejected() {
+        // A misbehaving upstream that never sends \n\n must not cause unbounded
+        // memory growth. Feeding > MAX_SSE_BUFFER_BYTES of data without an
+        // event terminator yields LLMError::ResponseTooLarge.
+        let mut p = SseParser::new();
+        let big = vec![b'a'; MAX_SSE_BUFFER_BYTES + 1];
+        let result = p.feed(&big);
+        assert!(matches!(
+            result,
+            Err(LLMError::ResponseTooLarge {
+                what: "SSE buffer"
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_collect_sse_payload_overflow_rejected() {
+        // A single SSE event whose payload exceeds MAX_SSE_PAYLOAD_BYTES is
+        // rejected before serde_json::from_str is invoked.
+        let payload: String = "x".repeat(MAX_SSE_PAYLOAD_BYTES + 1);
+        // Build a static body so fake_sse_response can use it.
+        let body: &'static str = Box::leak(format!("data: {}\n\n", payload).into_boxed_str());
+        let resp = fake_sse_response(body);
+        let result = collect_sse_to_json(resp, ProviderWireFormat::OpenAi).await;
+        assert!(matches!(
+            result,
+            Err(LLMError::ResponseTooLarge {
+                what: "single payload"
+            })
+        ));
     }
 
     // ---------------- collect_sse_to_json (integration) ----------------

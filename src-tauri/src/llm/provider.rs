@@ -173,6 +173,14 @@ pub enum LLMError {
     /// Non-retryable: cancellation is intentional, not a transient failure.
     #[error("Operation cancelled")]
     Cancelled,
+
+    /// SSE streaming response or single payload exceeded the safety cap.
+    /// Prevents OOM when a misbehaving upstream sends a runaway response.
+    #[error("Response too large: {what}")]
+    ResponseTooLarge {
+        /// What exceeded the cap (e.g. "SSE buffer", "single payload")
+        what: &'static str,
+    },
 }
 
 impl From<anyhow::Error> for LLMError {
