@@ -55,6 +55,16 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { SETTINGS_REFRESH_EVENT } from '$lib/utils/settings-refresh';
+
+	/**
+	 * Broadcasts a `settings:refresh` event so sibling Settings surfaces
+	 * (Agents form, etc.) pick up the new MCP server set without waiting
+	 * for a remount.
+	 */
+	function broadcastSettingsRefresh(): void {
+		window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
+	}
 
 	/** MCP state */
 	let mcpState = $state<MCPState>(createInitialMCPState());
@@ -129,6 +139,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			mcpModal.close();
 			// Refresh the legacy banner: a successful save likely cleared a warning.
 			refreshLegacyAuthWarnings();
+			broadcastSettingsRefresh();
 		} catch (err) {
 			mcpState = setMCPError(mcpState, $i18n('settings_mcp_save_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -188,6 +199,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			legacyAuthWarnings = legacyAuthWarnings.filter((w) => w.id !== deletedId);
 			showDeleteConfirm = false;
 			serverToDelete = null;
+			broadcastSettingsRefresh();
 		} catch (err) {
 			mcpState = setMCPError(mcpState, $i18n('settings_mcp_delete_failed', { error: getErrorMessage(err) }));
 		} finally {

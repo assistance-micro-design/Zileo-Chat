@@ -174,10 +174,19 @@ pub fn validate_mcp_servers(servers: &[String]) -> Result<Vec<String>, String> {
 
 /// Validates full agent creation config
 pub fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCreate, String> {
+    let llm = validate_llm_config(&config.llm)?;
+    // Mirror the runtime guard `effective_reasoning_effort`: a reasoning_effort
+    // submitted alongside a non-reasoning model is dropped at the persistence
+    // boundary so the DB state matches what the LLM provider actually sees.
+    let reasoning_effort = if llm.is_reasoning {
+        config.reasoning_effort.clone()
+    } else {
+        None
+    };
     Ok(AgentConfigCreate {
         name: validate_agent_name(&config.name)?,
         lifecycle: config.lifecycle.clone(),
-        llm: validate_llm_config(&config.llm)?,
+        llm,
         tools: validate_tools(&config.tools)?,
         mcp_servers: validate_mcp_servers(&config.mcp_servers)?,
         skills: validate_skills(&config.skills)?,
@@ -185,7 +194,7 @@ pub fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCr
         require_file_confirmation: config.require_file_confirmation,
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
-        reasoning_effort: config.reasoning_effort.clone(),
+        reasoning_effort,
     })
 }
 
@@ -228,9 +237,18 @@ pub fn merge_agent_config(
     let max_tool_iterations = update
         .max_tool_iterations
         .map_or(existing.max_tool_iterations, |m| m.clamp(1, 200));
-    let reasoning_effort = match &update.reasoning_effort {
+    let raw_reasoning_effort = match &update.reasoning_effort {
         Some(effort) => effort.clone(),
         None => existing.reasoning_effort.clone(),
+    };
+    // Mirror the runtime guard `effective_reasoning_effort`: drop a stale
+    // reasoning_effort whenever the merged LLM config is non-reasoning, so
+    // edits that switch to a non-thinking model do not leave a phantom value
+    // in the DB (the runtime would skip it anyway).
+    let reasoning_effort = if llm.is_reasoning {
+        raw_reasoning_effort
+    } else {
+        None
     };
 
     Ok(AgentConfig {
@@ -259,4 +277,137 @@ pub fn format_reasoning_effort(config: &AgentConfig) -> String {
         .reasoning_effort
         .as_ref()
         .map_or("NONE".to_string(), |e| format!("'{}'", e.as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::agent::ReasoningEffort;
+    use crate::models::Lifecycle;
+
+    fn sample_create(is_reasoning: bool, effort: Option<ReasoningEffort>) -> AgentConfigCreate {
+        AgentConfigCreate {
+            name: "Test Agent".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large-latest".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "You are a helpful assistant.".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: effort,
+        }
+    }
+
+    fn sample_existing(is_reasoning: bool, effort: Option<ReasoningEffort>) -> AgentConfig {
+        AgentConfig {
+            id: "agent_existing".to_string(),
+            name: "Existing".to_string(),
+            lifecycle: Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large-latest".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: true,
+            system_prompt: "You are a helpful assistant.".to_string(),
+            max_tool_iterations: 50,
+            reasoning_effort: effort,
+        }
+    }
+
+    #[test]
+    fn test_validate_create_drops_reasoning_effort_when_model_not_reasoning() {
+        // Frontend may submit a stale `reasoning_effort` carried over from a
+        // previous reasoning model. Persisting it with `is_reasoning=false`
+        // diverges from the runtime behaviour (`effective_reasoning_effort`
+        // returns None in that case), so we normalize here at the persistence
+        // boundary.
+        let config = sample_create(false, Some(ReasoningEffort::High));
+        let validated = validate_agent_create(&config).expect("validation should succeed");
+        assert_eq!(validated.reasoning_effort, None);
+    }
+
+    #[test]
+    fn test_validate_create_keeps_reasoning_effort_when_model_is_reasoning() {
+        let config = sample_create(true, Some(ReasoningEffort::High));
+        let validated = validate_agent_create(&config).expect("validation should succeed");
+        assert_eq!(validated.reasoning_effort, Some(ReasoningEffort::High));
+    }
+
+    #[test]
+    fn test_merge_drops_reasoning_effort_when_model_not_reasoning() {
+        // When the merged LLM config disables reasoning (e.g. the user picked
+        // a non-reasoning model in the form), any stale reasoning_effort must
+        // be dropped — otherwise it stays in the DB even though the runtime
+        // guard skips it on every call.
+        let existing = sample_existing(true, Some(ReasoningEffort::Medium));
+        let update = AgentConfigUpdate {
+            name: None,
+            llm: Some(LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-small-latest".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: false,
+                context_window: None,
+            }),
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: None,
+        };
+        let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
+        assert!(!merged.llm.is_reasoning);
+        assert_eq!(merged.reasoning_effort, None);
+    }
+
+    #[test]
+    fn test_merge_drops_explicit_reasoning_effort_when_model_not_reasoning() {
+        // Even when the update payload carries an explicit reasoning_effort,
+        // a non-reasoning model wins: silent normalization beats a coupled
+        // backend error message that would block legit edits.
+        let existing = sample_existing(false, None);
+        let update = AgentConfigUpdate {
+            name: None,
+            llm: Some(LLMConfig {
+                provider: "Mistral".to_string(),
+                model: "mistral-large-latest".to_string(),
+                temperature: 0.7,
+                max_tokens: 4096,
+                is_reasoning: false,
+                context_window: None,
+            }),
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: Some(Some(ReasoningEffort::Low)),
+        };
+        let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
+        assert_eq!(merged.reasoning_effort, None);
+    }
 }

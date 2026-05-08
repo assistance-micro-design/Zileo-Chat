@@ -125,3 +125,8 @@ docs/corrections/
 # Screenshots / Captures
 # ─────────────────────────────────────────────────────
 /Capture/
+
+# ─────────────────────────────────────────────────────
+# Local diagnostic scripts (curl tests, debug helpers)
+# ─────────────────────────────────────────────────────
+/scriptstest/

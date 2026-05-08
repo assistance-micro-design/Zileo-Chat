@@ -51,6 +51,10 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		getReasoningOptions,
 		normalizeReasoningEffortForProvider
 	} from '$lib/utils/agent-reasoning';
+	import {
+		attachSettingsRefreshListener,
+		SETTINGS_REFRESH_EVENT
+	} from '$lib/utils/settings-refresh';
 	import AgentFolders from './AgentFolders.svelte';
 	/**
 	 * Component props
@@ -200,35 +204,49 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	);
 
 	/**
-	 * Loads MCP servers and LLM models on mount
+	 * Loads MCP servers, skills, and LLM models. Used both on mount and when a
+	 * `settings:refresh` event fires (e.g. the user toggled `is_reasoning` on a
+	 * model in Settings -> Models, which must be reflected here without forcing
+	 * a remount of the form).
 	 */
-	onMount(async () => {
-		// Load MCP servers
+	async function loadAgentFormResources(): Promise<void> {
+		const warnings: string[] = [];
+
 		try {
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch {
-			loadWarnings = [...loadWarnings, t('agents_mcp_load_failed')];
+			warnings.push(t('agents_mcp_load_failed'));
 		}
 
-		// Load available skills
 		try {
 			availableSkillSummaries = await tauriInvoke<SkillSummary[]>('list_skills');
 		} catch {
-			loadWarnings = [...loadWarnings, t('agents_skills_load_failed')];
+			warnings.push(t('agents_skills_load_failed'));
 		}
 
-		// Load LLM models and provider list
 		try {
 			const data = await loadAllLLMData();
 			providerList = data.providerList;
+			let nextLlmState = createInitialLLMState();
 			for (const [providerId, provSettings] of Object.entries(data.settings)) {
-				llmState = setProviderSettings(llmState, providerId, provSettings);
+				nextLlmState = setProviderSettings(nextLlmState, providerId, provSettings);
 			}
-			llmState = setModels(llmState, data.models);
+			nextLlmState = setModels(nextLlmState, data.models);
+			llmState = nextLlmState;
 		} catch {
-			loadWarnings = [...loadWarnings, t('agents_llm_load_failed')];
+			warnings.push(t('agents_llm_load_failed'));
 		}
+
+		loadWarnings = warnings;
+	}
+
+	onMount(() => {
+		void loadAgentFormResources();
+		// React to CRUD events from sibling Settings pages (Models, MCP, etc.)
+		// so a freshly-toggled `is_reasoning` or a renamed/added model shows up
+		// here immediately, rather than only after the next remount.
+		return attachSettingsRefreshListener(loadAgentFormResources);
 	});
 
 	/**
@@ -240,6 +258,23 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			if (!currentModelValid) {
 				model = availableModels[0].api_name;
 			}
+		}
+	});
+
+	/**
+	 * Drop a stale reasoning_effort when the selected model is non-reasoning.
+	 * Mirrors the backend normalization in `validate_agent_create`: a value
+	 * carried over from a previous reasoning model would otherwise be sent on
+	 * save and silently dropped at runtime — leaving the form's hidden state
+	 * out of sync with what the backend persists.
+	 *
+	 * The strict `=== false` check is intentional: while the LLM list is still
+	 * loading, `selectedModel` is `undefined` and we leave the user's choice
+	 * untouched (avoids wiping a valid effort during the initial render).
+	 */
+	$effect(() => {
+		if (selectedModel?.is_reasoning === false && reasoningEffort !== undefined) {
+			reasoningEffort = undefined;
 		}
 	});
 
@@ -318,6 +353,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			} else if (agent) {
 				await agentStore.updateAgent(agent.id, config);
 			}
+			// Notify other Settings surfaces (workflow sidebar, sibling forms) so
+			// they pick up the new agent set without waiting for the next mount.
+			window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
 		} catch {
 			// Error handled by store
 		} finally {

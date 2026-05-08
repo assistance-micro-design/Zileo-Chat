@@ -60,8 +60,18 @@ Combines Providers and Models sections.
 	import { createModalController } from '$lib/utils/modal.svelte';
 	import type { ModalController } from '$lib/utils/modal.svelte';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { SETTINGS_REFRESH_EVENT } from '$lib/utils/settings-refresh';
 	import { toastStore } from '$lib/stores/toast';
 	import type { ToastType } from '$types/background-workflow';
+
+	/**
+	 * Broadcasts a `settings:refresh` event so sibling Settings surfaces
+	 * (Agents form, MCP, etc.) pick up the new model/provider state without
+	 * waiting for a remount. Centralised so every CRUD call site uses it.
+	 */
+	function broadcastSettingsRefresh(): void {
+		window.dispatchEvent(new CustomEvent(SETTINGS_REFRESH_EVENT));
+	}
 
 	/**
 	 * Emits a transient toast for a completed CRUD action. Centralised so every
@@ -153,6 +163,7 @@ Combines Providers and Models sections.
 			notify('success', $i18n('settings_provider_deleted', { name: deletedName }));
 			showProviderDeleteConfirm = false;
 			providerToDelete = null;
+			broadcastSettingsRefresh();
 		} catch (err) {
 			notify('error', $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -185,6 +196,7 @@ Combines Providers and Models sections.
 		} else {
 			notify('success', $i18n('llm_custom_provider_created'));
 		}
+		broadcastSettingsRefresh();
 	}
 
 	/**
@@ -203,6 +215,7 @@ Combines Providers and Models sections.
 				notify('success', $i18n('settings_model_updated', { name: model.name }));
 			}
 			modelModal.close();
+			broadcastSettingsRefresh();
 		} catch (err) {
 			notify('error', $i18n('settings_model_save_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -231,6 +244,7 @@ Combines Providers and Models sections.
 			notify('success', $i18n('settings_model_deleted', { name: deletedName }));
 			showModelDeleteConfirm = false;
 			modelToDelete = null;
+			broadcastSettingsRefresh();
 		} catch (err) {
 			notify('error', $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -259,6 +273,7 @@ Combines Providers and Models sections.
 			);
 			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
 			notify('success', $i18n('settings_model_set_default', { name: model.name }));
+			broadcastSettingsRefresh();
 		} catch (err) {
 			notify('error', $i18n('settings_model_set_default_failed', { error: getErrorMessage(err) }));
 		}

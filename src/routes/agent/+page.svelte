@@ -92,6 +92,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import { getErrorMessage } from '$lib/utils/error';
 	import { isUuid } from '$lib/utils/uuid';
 	import { ITERATIONS_LIMITS } from '$lib/utils/constants';
+	import { attachSettingsRefreshListener } from '$lib/utils/settings-refresh';
 	import type { Workflow, WorkflowFolder, PersistedTask } from '$types/workflow';
 	import type { ProviderType } from '$types/llm';
 
@@ -148,6 +149,9 @@ Uses extracted components, services, and stores for clean architecture.
 
 	/** Persisted tasks for the current workflow (read-only, only reassigned) */
 	let persistedTasks = $state.raw<TodoTaskDisplay[]>([]);
+
+	/** Teardown for the settings:refresh listener (assigned in onMount). */
+	let unsubscribeSettingsRefresh: (() => void) | null = null;
 
 	/**
 	 * Resolves a raw agent identifier (UUID or live name) to a display name.
@@ -699,6 +703,14 @@ Uses extracted components, services, and stores for clean architecture.
 		// Initialize validation and user question stores
 		await validationStore.init();
 		userQuestionStore.init();
+
+		// Reload the agent list whenever a sibling Settings page broadcasts a
+		// CRUD event. Without this, the sidebar (and the New Workflow modal,
+		// which receives `$agents` as a prop) keeps stale data until the next
+		// `selectWorkflow()` call refreshes the store indirectly.
+		unsubscribeSettingsRefresh = attachSettingsRefreshListener(() => {
+			void agentStore.loadAgents();
+		});
 	});
 
 	/**
@@ -709,6 +721,8 @@ Uses extracted components, services, and stores for clean architecture.
 		streamingStore.cleanup();
 		validationStore.cleanup();
 		userQuestionStore.cleanup();
+		unsubscribeSettingsRefresh?.();
+		unsubscribeSettingsRefresh = null;
 	});
 
 	/**
