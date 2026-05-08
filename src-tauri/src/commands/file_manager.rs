@@ -25,7 +25,6 @@
 use crate::tools::file_manager::security::validate_folder_for_authorization;
 use crate::tools::file_manager::trash::TrashEntry;
 use crate::tools::file_manager::trash_management;
-use std::path::Path;
 use tracing::{info, instrument, warn};
 
 /// Validate a folder path and return its canonical form.
@@ -67,14 +66,15 @@ pub async fn validate_agent_folder(path: String) -> Result<String, String> {
 pub async fn list_trash(folder_path: String) -> Result<Vec<TrashEntry>, String> {
     info!("Listing trash entries");
 
-    let folder = Path::new(&folder_path);
-    if !folder.is_dir() {
-        let msg = format!("Folder does not exist: {}", folder_path);
-        warn!(%msg);
-        return Err(msg);
-    }
+    // Authorize against the same allow-list `authorize_folder` uses. Without
+    // this check, list_trash exposed `<folder>/.zileo-trash/` for any folder
+    // the user could name — bypassing the agent sandbox.
+    let canonical = validate_folder_for_authorization(&folder_path).map_err(|e| {
+        warn!(error = %e, "Folder validation failed for list_trash");
+        e.to_string()
+    })?;
 
-    trash_management::list_trash_entries(folder).map_err(|e| {
+    trash_management::list_trash_entries(&canonical).map_err(|e| {
         warn!(error = %e, "Failed to list trash entries");
         e.to_string()
     })
@@ -96,16 +96,33 @@ pub async fn restore_from_trash_cmd(
 ) -> Result<String, String> {
     info!("Restoring file from trash");
 
-    let trash = Path::new(&trash_path);
-    let folder = Path::new(&folder_path);
+    // Authorize the restore destination against the agent sandbox.
+    let folder = validate_folder_for_authorization(&folder_path).map_err(|e| {
+        warn!(error = %e, "Folder validation failed for restore_from_trash_cmd");
+        e.to_string()
+    })?;
 
-    if !folder.is_dir() {
-        let msg = format!("Folder does not exist: {}", folder_path);
-        warn!(%msg);
+    // The trash path must canonicalize to a child of the authorized folder's
+    // .zileo-trash/. Without this check, an attacker controlling trash_path
+    // could name any path on disk and escape the sandbox at the cost of an
+    // overwrite (NB: restore_from_trash itself will reject obvious cases via
+    // its own checks, but the path chunking is layered defense).
+    let trash_canonical = std::fs::canonicalize(&trash_path).map_err(|e| {
+        warn!(error = %e, trash = %trash_path, "Trash path canonicalization failed");
+        format!("Invalid trash path: {}", e)
+    })?;
+    let trash_root = folder.join(".zileo-trash");
+    let trash_root_canonical = std::fs::canonicalize(&trash_root).map_err(|e| {
+        warn!(error = %e, "Trash root canonicalization failed");
+        format!("Trash directory not found: {}", e)
+    })?;
+    if !trash_canonical.starts_with(&trash_root_canonical) {
+        let msg = "Trash path is outside the authorized folder's trash directory".to_string();
+        warn!(%msg, trash = ?trash_canonical, expected_root = ?trash_root_canonical);
         return Err(msg);
     }
 
-    let restored = trash_management::restore_from_trash(trash, folder).map_err(|e| {
+    let restored = trash_management::restore_from_trash(&trash_canonical, &folder).map_err(|e| {
         warn!(error = %e, "Failed to restore from trash");
         e.to_string()
     })?;

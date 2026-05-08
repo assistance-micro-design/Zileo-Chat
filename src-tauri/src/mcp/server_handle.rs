@@ -49,6 +49,10 @@ use tracing::{debug, error, info, warn};
 /// Default timeout for MCP operations (30 seconds)
 const DEFAULT_TIMEOUT_MS: u64 = 30000;
 
+/// Maximum size of a single MCP response line (newline-terminated JSON-RPC).
+/// Prevents OOM if a misbehaving server streams unbounded data without `\n`.
+const MAX_MCP_LINE_BYTES: usize = 4 * 1024 * 1024;
+
 /// MCP Server Handle
 ///
 /// Manages a single MCP server process and provides methods for
@@ -544,6 +548,21 @@ impl MCPServerHandle {
                         context: "reading response".to_string(),
                         message: e.to_string(),
                     })?;
+                // Bound a single MCP response line. A misbehaving server that
+                // streams gigabytes without a newline would otherwise run the
+                // host out of memory. 4 MiB is well above any realistic
+                // JSON-RPC response (largest tools/list payloads observed
+                // are ~150 KiB).
+                if response_line.len() > MAX_MCP_LINE_BYTES {
+                    return Err(MCPError::IoError {
+                        context: "reading response".to_string(),
+                        message: format!(
+                            "MCP response line exceeded {} bytes (got {})",
+                            MAX_MCP_LINE_BYTES,
+                            response_line.len()
+                        ),
+                    });
+                }
                 Ok::<String, MCPError>(response_line)
             })
             .await

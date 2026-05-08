@@ -17,6 +17,7 @@
 use crate::{
     llm::pricing::{calculate_cost_with_cache, resolve_cost, CostParams},
     models::llm_models::LLMModel,
+    security::validate_uuid_field,
     AppState,
 };
 use tracing::{error, info, warn};
@@ -213,6 +214,18 @@ pub async fn update_workflow_cumulative_metrics(
     } = params;
     let cached = cached_tokens.unwrap_or(0);
     let cache_write = cache_write_tokens.unwrap_or(0);
+
+    // Defense-in-depth: validate workflow_id even though all callers already
+    // validate at their command boundary. Bail out silently on invalid input
+    // to keep the metrics path infallible (drop the update rather than panic).
+    let validated_workflow_id = match validate_uuid_field(workflow_id, "workflow_id") {
+        Ok(id) => id,
+        Err(e) => {
+            warn!(error = %e, "Skipping cumulative metrics update with invalid workflow_id");
+            return;
+        }
+    };
+
     let update_query = format!(
         "UPDATE workflow:`{}` SET \
             total_tokens_input = (total_tokens_input ?? 0) + $tokens_in, \
@@ -223,7 +236,7 @@ pub async fn update_workflow_cumulative_metrics(
             model_id = $model_id, \
             current_context_tokens = $context_tokens, \
             updated_at = time::now()",
-        workflow_id
+        validated_workflow_id
     );
 
     info!(

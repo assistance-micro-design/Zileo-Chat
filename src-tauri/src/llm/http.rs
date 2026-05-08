@@ -256,6 +256,10 @@ pub async fn send_and_read_body(
 /// Parses an error response body using the shared [`ApiErrorResponse`] format.
 ///
 /// Tries to extract a structured error message; falls back to raw body.
+///
+/// 4xx responses (except 429 which is rate-limiting and worth retrying) are
+/// returned as `LLMError::ClientError` so the retry layer skips them. 5xx and
+/// 429 stay as `RequestFailed` (retryable).
 pub fn parse_api_error(provider_name: &str, status: reqwest::StatusCode, body: &str) -> LLMError {
     let error_msg = if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(body) {
         error_response
@@ -265,10 +269,18 @@ pub fn parse_api_error(provider_name: &str, status: reqwest::StatusCode, body: &
     } else {
         body.to_string()
     };
-    LLMError::RequestFailed(format!(
-        "{} API error ({}): {}",
-        provider_name, status, error_msg
-    ))
+
+    let formatted = format!("{} API error ({}): {}", provider_name, status, error_msg);
+
+    let code = status.as_u16();
+    if (400..500).contains(&code) && code != 429 {
+        LLMError::ClientError {
+            status: code,
+            message: formatted,
+        }
+    } else {
+        LLMError::RequestFailed(formatted)
+    }
 }
 
 /// Parses a JSON response body, providing a truncated body in the error message.

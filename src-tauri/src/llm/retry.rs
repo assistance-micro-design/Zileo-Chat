@@ -88,7 +88,8 @@ impl RetryConfig {
 ///
 /// Retryable errors:
 /// - ConnectionError: Network issues, transient failures
-/// - RequestFailed: May be rate limit (429) or server error (5xx)
+/// - RequestFailed: 429 rate limits and 5xx server errors (parse_api_error
+///   routes 4xx-except-429 to ClientError so they don't end up here)
 ///
 /// Non-retryable errors:
 /// - NotConfigured: Configuration issue, won't fix itself
@@ -96,6 +97,9 @@ impl RetryConfig {
 /// - ModelNotFound: Invalid model, won't fix itself
 /// - CircuitOpen: Provider temporarily unavailable, circuit breaker handles recovery
 /// - Internal: Programming error, won't fix itself
+/// - Cancelled: User intent, never retry
+/// - ResponseTooLarge: Cap exceeded; retrying won't shrink the response
+/// - ClientError: HTTP 4xx (auth, bad request, ...) — retry won't fix
 pub fn is_retryable(error: &LLMError) -> bool {
     matches!(
         error,

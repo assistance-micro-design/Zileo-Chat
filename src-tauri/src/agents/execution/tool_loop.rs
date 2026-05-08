@@ -441,6 +441,25 @@ pub(crate) async fn execute_with_tools(
                 .unwrap_or(false)
         });
 
+    // Defense-in-depth: a sub-agent must NEVER carry is_primary_agent: true.
+    // The combination would let a delegated agent pass the
+    // `check_primary_permission` gate inside SpawnAgent / DelegateTask /
+    // ParallelTasks, opening a recursion-amplification path. The orchestrator
+    // never sets both at the same time, but a future caller might forget
+    // — in production downgrade to sub-agent privileges with a warn rather
+    // than panic (debug builds assert).
+    if is_sub_agent && is_primary_agent {
+        warn!(
+            agent_id = %ctx.config.id,
+            "is_primary_agent=true on a sub-agent task — downgrading to sub-agent privileges",
+        );
+        debug_assert!(
+            !(is_sub_agent && is_primary_agent),
+            "is_primary_agent must be false for sub-agent tasks"
+        );
+    }
+    let is_primary_agent = is_primary_agent && !is_sub_agent;
+
     let locale = task
         .context
         .get("locale")
