@@ -413,7 +413,7 @@ impl ProviderSettings {
 /// Result of a provider connection test.
 ///
 /// Contains success status, latency measurement, and any error details.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionTestResult {
     /// Provider that was tested
     pub provider: ProviderType,

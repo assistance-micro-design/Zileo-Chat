@@ -108,7 +108,8 @@ pub struct EmbeddingTestResult {
     pub provider: String,
     /// Model used
     pub model: String,
-    /// Error message if failed
+    /// Error message if failed (omitted from JSON when None)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 

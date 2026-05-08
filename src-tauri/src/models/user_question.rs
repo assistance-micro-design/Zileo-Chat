@@ -41,6 +41,7 @@ pub struct QuestionOption {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserQuestion {
     #[serde(deserialize_with = "deserialize_thing_id", default)]
     pub id: String,
@@ -99,6 +100,7 @@ pub struct UserQuestionStreamPayload {
 
 /// Response from user answering a question
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(dead_code)] // Fields read via serde deserialization, used in Tauri commands
 pub struct UserQuestionResponse {
     pub question_id: String,

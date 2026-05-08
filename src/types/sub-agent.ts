@@ -68,6 +68,12 @@ export interface SubAgentExecution {
   error_message?: string;
   /** Parent execution ID for hierarchical tracing (e.g., batch operations) */
   parent_execution_id?: string;
+  /**
+   * Parent message ID for message-level correlation.
+   * Set post-execution to link sub-agent executions to the assistant message
+   * that triggered them. Used by load_message_blocks for block display.
+   */
+  parent_message_id?: string;
   /** ISO timestamp when the execution was created */
   created_at: string;
   /** ISO timestamp when the execution completed (if completed) */
