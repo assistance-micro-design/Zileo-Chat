@@ -24,13 +24,52 @@
  * @module types/background-workflow
  */
 
-import type {
-	ActiveTool,
-	ActiveReasoningStep,
-	ActiveSubAgent,
-	ActiveTask
-} from '$lib/stores/streaming';
 import type { StreamChunk } from '$types/streaming';
+
+/**
+ * Sub-agent status during streaming. Distinct from the persisted
+ * `SubAgentStatus` (in `$types/sub-agent`) which adds `pending` and
+ * `cancelled` for DB rows; the streaming flavor only carries the values
+ * the UI sees in real time.
+ */
+export type ActiveSubAgentStatus = 'starting' | 'running' | 'completed' | 'error';
+
+/**
+ * Active sub-agent captured from streaming chunks (sub_agent_start /
+ * sub_agent_complete / sub_agent_error). Used both by the bg-workflows
+ * timeline and by `workflowExecutor` to attach `SubAgentSummary` items
+ * to assistant messages.
+ */
+export interface ActiveSubAgent {
+	/** Sub-agent ID */
+	id: string;
+	/** Sub-agent name */
+	name: string;
+	/** Parent agent ID */
+	parentAgentId: string;
+	/** Task description */
+	taskDescription: string;
+	/** Current execution status */
+	status: ActiveSubAgentStatus;
+	/** Timestamp when execution started */
+	startedAt: number;
+	/** Progress percentage (0-100) */
+	progress: number;
+	/** Status message (optional) */
+	statusMessage?: string;
+	/** Execution duration in milliseconds (when completed) */
+	duration?: number;
+	/** Report content (when completed) */
+	report?: string;
+	/** Error message (if failed) */
+	error?: string;
+	/** Execution metrics (when completed) */
+	metrics?: {
+		duration_ms: number;
+		tokens_input: number;
+		tokens_output: number;
+	};
+}
 
 /**
  * Possible statuses for a background workflow execution.
@@ -38,10 +77,13 @@ import type { StreamChunk } from '$types/streaming';
 export type BackgroundWorkflowStatus = 'running' | 'completed' | 'error' | 'cancelled';
 
 /**
- * Complete state snapshot of a workflow stream running in the background.
+ * State snapshot of a workflow stream running in the background.
  *
- * Captures all streaming data (content, tools, reasoning, sub-agents, tasks)
- * so the user can review progress without being on the active workflow view.
+ * Holds the data that survives a workflow switch and that the UI consumes
+ * after the streamingStore removal: token rollup, cost, sub-agent activity
+ * and the chunk replay buffer. Per-block UI state (tools/reasoning/tasks/
+ * content/error) is carried by `executionBlocksStore` and `tokenStore`,
+ * not duplicated here.
  */
 export interface WorkflowStreamState {
 	/** Unique workflow identifier */
@@ -52,16 +94,8 @@ export interface WorkflowStreamState {
 	workflowName: string;
 	/** Current execution status */
 	status: BackgroundWorkflowStatus;
-	/** Accumulated text content from token chunks */
-	content: string;
-	/** Active tool executions */
-	tools: ActiveTool[];
-	/** Reasoning steps captured during execution */
-	reasoning: ActiveReasoningStep[];
 	/** Sub-agent activity */
 	subAgents: ActiveSubAgent[];
-	/** Task tracking */
-	tasks: ActiveTask[];
 	/** Total output tokens received so far (response_block.tokens_output) */
 	tokensReceived: number;
 	/**
@@ -86,8 +120,6 @@ export interface WorkflowStreamState {
 	 * layer; the frontend only stores the running total.
 	 */
 	partialCostUsd: number | null;
-	/** Error message if status is 'error' */
-	error: string | null;
 	/** Timestamp (ms) when the workflow started */
 	startedAt: number;
 	/** Timestamp (ms) when the workflow completed, or null if still running */

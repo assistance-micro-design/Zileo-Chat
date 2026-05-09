@@ -41,7 +41,6 @@ import type {
 import type { ChatBlock } from "$types/chat-block";
 import { MessageService } from "./message.service";
 import { WorkflowService } from "./workflow.service";
-import { streamingStore } from "$lib/stores/streaming";
 import { generateUuid } from "$lib/utils/uuid";
 import { get } from "svelte/store";
 import { tokenStore } from "$lib/stores/tokens";
@@ -263,11 +262,10 @@ export const WorkflowExecutorService = {
         selectedWorkflow?.name ?? "Workflow",
       );
 
-      // Initialize streaming and execution block UI only for the viewed workflow
+      // Initialize execution block UI only for the viewed workflow
       if (isStillViewed()) {
         tokenStore.startStreaming();
         executionBlocksStore.start(workflowId);
-        await streamingStore.start(workflowId);
       }
 
       // Long-running IPC call - user may switch workflows during execution
@@ -370,9 +368,8 @@ export const WorkflowExecutorService = {
       // Release double-submit guard
       executingWorkflows.delete(workflowId);
 
-      // Only cleanup streaming/token UI if still viewing this workflow
+      // Only cleanup execution-block / token UI if still viewing this workflow
       if (isStillViewed()) {
-        streamingStore.reset();
         executionBlocksStore.reset();
         tokenStore.stopStreaming();
       }

@@ -16,33 +16,34 @@
 
 
 /**
- * Shared chunk processor for stream chunk state updates.
+ * Chunk processor for stream-chunk state updates consumed by
+ * `backgroundWorkflowsStore`.
  *
- * Extracts the common chunk-to-state-delta logic used by both
- * streaming.ts and backgroundWorkflows.ts into a single source of truth.
+ * After the streamingStore removal (2026-05-09), only the data actually
+ * read by other surfaces is tracked here:
+ *   - token rollup (`tokensReceived`, `tokensSent`, `cachedTokens`,
+ *     `cacheWriteTokens`)
+ *   - in-progress cost (`partialCostUsd`)
+ *   - sub-agent activity (`subAgents`) consumed by `workflowExecutor` to
+ *     attach `SubAgentSummary` items to assistant messages.
+ *
+ * Tools, reasoning steps, tasks, errors and content are owned by
+ * `executionBlocksStore` and `tokenStore`, not duplicated here.
  *
  * @module stores/utils/chunkProcessor
  */
 
 import type { StreamChunk } from '$types/streaming';
-import type { ActiveTool, ActiveReasoningStep, ActiveSubAgent, ActiveTask } from '../streaming';
+import type { ActiveSubAgent } from '$types/background-workflow';
 
 /**
  * Common state fields that can be updated by stream chunks.
- * Both StreamingState and WorkflowStreamState extend this shape.
  *
- * Includes input/cache token fields so that switching back to a still-running
- * background workflow restores the full session display from its bg state,
- * not only the output count. `partialCostUsd` accumulates the per-iteration
- * backend-computed cost so the in-progress display stays accurate without
- * the frontend multiplying tokens by prices itself.
+ * Both `WorkflowStreamState` and `RestoreFromChunksState` shapes extend this
+ * minimal contract so the processor can run against either.
  */
 export interface ChunkableState {
-	content: string;
-	tools: ActiveTool[];
-	reasoning: ActiveReasoningStep[];
 	subAgents: ActiveSubAgent[];
-	tasks: ActiveTask[];
 	tokensReceived: number;
 	tokensSent: number;
 	cachedTokens: number | null;
@@ -53,61 +54,12 @@ export interface ChunkableState {
 	 * single source of truth for these numbers.
 	 */
 	partialCostUsd: number | null;
-	error: string | null;
 }
 
 /**
  * Handler function signature for processing a chunk type.
- * Operates on ChunkableState base type; callers merge the result
- * back into their extended state to preserve extra fields.
  */
 type ChunkHandler = (state: ChunkableState, chunk: StreamChunk) => ChunkableState;
-
-/**
- * Handle tool_start chunk - add new tool with running status.
- */
-function handleToolStart(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tools: [
-			...s.tools,
-			{
-				name: c.tool ?? 'unknown',
-				status: 'running' as const,
-				startedAt: Date.now()
-			}
-		]
-	};
-}
-
-/**
- * Handle reasoning chunk - add new reasoning step.
- */
-function handleReasoning(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		reasoning: [
-			...s.reasoning,
-			{
-				content: c.content ?? '',
-				timestamp: Date.now(),
-				stepNumber: s.reasoning.length + 1
-			}
-		]
-	};
-}
-
-/**
- * Handle error chunk - set error message.
- *
- * Note: streaming.ts adds isStreaming=false on top of this.
- */
-function handleError(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		error: c.content ?? 'Unknown error'
-	};
-}
 
 /**
  * Handle sub_agent_start chunk - add new sub-agent with running status.
@@ -129,7 +81,6 @@ function handleSubAgentStart(s: ChunkableState, c: StreamChunk): ChunkableState 
 		]
 	};
 }
-
 
 /**
  * Handle sub_agent_complete chunk - mark sub-agent as completed with metrics.
@@ -172,89 +123,9 @@ function handleSubAgentError(s: ChunkableState, c: StreamChunk): ChunkableState 
 }
 
 /**
- * Handle task_create chunk - add new task.
- */
-function handleTaskCreate(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tasks: [
-			...s.tasks,
-			{
-				id: c.task_id ?? '',
-				name: c.task_name ?? '',
-				status: (c.task_status ?? 'pending') as ActiveTask['status'],
-				priority: c.task_priority ?? 3,
-				createdAt: Date.now(),
-				updatedAt: Date.now()
-			}
-		]
-	};
-}
-
-/**
- * Handle task_update chunk - update task status.
- */
-function handleTaskUpdate(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === c.task_id
-				? { ...t, status: c.task_status as ActiveTask['status'], updatedAt: Date.now() }
-				: t
-		)
-	};
-}
-
-/**
- * Handle task_complete chunk - mark task as completed.
- */
-function handleTaskComplete(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tasks: s.tasks.map((t) =>
-			t.id === c.task_id ? { ...t, status: 'completed' as const, updatedAt: Date.now() } : t
-		)
-	};
-}
-
-/**
- * Handle thinking_block chunk - add as reasoning step (backward compat).
- * The executionBlocksStore handles the full block display separately.
- */
-function handleThinkingBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		reasoning: [
-			...s.reasoning,
-			{
-				content: c.content ?? '',
-				timestamp: Date.now(),
-				stepNumber: s.reasoning.length + 1
-			}
-		]
-	};
-}
-
-/**
- * Handle tool_call_complete chunk - mark tool as completed (backward compat).
- * The executionBlocksStore handles the full block display separately.
- */
-function handleToolCallComplete(s: ChunkableState, c: StreamChunk): ChunkableState {
-	return {
-		...s,
-		tools: s.tools.map((t) =>
-			t.name === c.tool && t.status === 'running'
-				? { ...t, status: 'completed' as const, duration: c.duration }
-				: t
-		)
-	};
-}
-
-/**
- * Handle response_block chunk - set final content and token counts (backward compat).
- * The executionBlocksStore handles the full response display separately.
+ * Handle response_block chunk - update token rollup and accumulate cost.
  *
- * Also persists `tokens_input`, `cached_tokens` and `cache_write_tokens` so a
+ * Persists `tokens_input`, `cached_tokens` and `cache_write_tokens` so a
  * switch back to a still-running bg workflow can restore the full session
  * display, not just the output count.
  *
@@ -265,7 +136,6 @@ function handleToolCallComplete(s: ChunkableState, c: StreamChunk): ChunkableSta
 function handleResponseBlock(s: ChunkableState, c: StreamChunk): ChunkableState {
 	const next: ChunkableState = {
 		...s,
-		content: c.content ?? s.content,
 		tokensReceived: c.tokens_output ?? s.tokensReceived,
 		tokensSent: c.tokens_input ?? s.tokensSent,
 		cachedTokens: c.cached_tokens ?? s.cachedTokens,
@@ -310,19 +180,16 @@ function handleIterationProgress(s: ChunkableState, c: StreamChunk): ChunkableSt
 
 /**
  * Registry mapping chunk types to their handler functions.
+ *
+ * Only the chunk types whose data is consumed by other surfaces are kept.
+ * Tool start/complete, reasoning, thinking_block, error and task_* chunks
+ * are handled by `executionBlocksStore` directly and intentionally ignored
+ * here.
  */
 const chunkHandlers: Record<string, ChunkHandler> = {
-	tool_start: handleToolStart,
-	reasoning: handleReasoning,
-	error: handleError,
 	sub_agent_start: handleSubAgentStart,
 	sub_agent_complete: handleSubAgentComplete,
 	sub_agent_error: handleSubAgentError,
-	task_create: handleTaskCreate,
-	task_update: handleTaskUpdate,
-	task_complete: handleTaskComplete,
-	thinking_block: handleThinkingBlock,
-	tool_call_complete: handleToolCallComplete,
 	response_block: handleResponseBlock,
 	iteration_progress: handleIterationProgress
 };
@@ -344,6 +211,7 @@ export function applyChunkToState<T extends ChunkableState>(state: T, chunk: Str
 	const handler = chunkHandlers[chunk.chunk_type];
 	if (!handler) return state;
 	const baseResult = handler(state, chunk);
-	// Merge handler result onto original state to preserve extra fields (e.g. isStreaming, workflowId)
+	// Merge handler result onto original state to preserve extra fields
+	// (e.g. workflowId, status, chunkHistory).
 	return { ...state, ...baseResult };
 }

@@ -142,17 +142,12 @@ function createInitialExecution(
 		agentId,
 		workflowName,
 		status: 'running',
-		content: '',
-		tools: [],
-		reasoning: [],
 		subAgents: [],
-		tasks: [],
 		tokensReceived: 0,
 		tokensSent: 0,
 		cachedTokens: null,
 		cacheWriteTokens: null,
 		partialCostUsd: null,
-		error: null,
 		startedAt: Date.now(),
 		completedAt: null,
 		hasPendingQuestion: false,
@@ -264,8 +259,7 @@ function handleStreamComplete(complete: WorkflowComplete): void {
 		const updated: WorkflowStreamState = {
 			...exec,
 			status: (statusMap[complete.status] ?? 'error') as BackgroundWorkflowStatus,
-			completedAt: Date.now(),
-			error: complete.error ?? null
+			completedAt: Date.now()
 		};
 		newExecs.set(complete.workflow_id, updated);
 		return { ...s, executions: newExecs };

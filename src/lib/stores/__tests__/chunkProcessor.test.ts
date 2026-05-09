@@ -17,34 +17,33 @@
 
 /**
  * Unit tests for the shared chunk processor.
- * Tests chunk types and verifies state transformations are correct.
+ *
+ * Only the chunk types whose data is actually read by other surfaces are
+ * tested:
+ *   - sub_agent_*: drives the SubAgentSummary attachment in workflowExecutor
+ *   - response_block / iteration_progress: drives token rollup, in-progress
+ *     cost (`partialCostUsd`) and (when restored) the metrics bar.
+ *
+ * Tool/reasoning/task/error/thinking chunk types are now handled directly by
+ * `executionBlocksStore` and intentionally NOT processed here, so they are
+ * not exercised in this file.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { StreamChunk } from '$types/streaming';
 import { applyChunkToState, type ChunkableState } from '../utils/chunkProcessor';
-
-// Mock Tauri event API (required by transitive streaming import)
-vi.mock('$lib/tauri', () => ({
-	tauriListen: vi.fn().mockResolvedValue(() => {})
-}));
 
 /**
  * Creates a fresh ChunkableState for testing.
  */
 function createState(): ChunkableState {
 	return {
-		content: '',
-		tools: [],
-		reasoning: [],
 		subAgents: [],
-		tasks: [],
 		tokensReceived: 0,
 		tokensSent: 0,
 		cachedTokens: null,
 		cacheWriteTokens: null,
-		partialCostUsd: null,
-		error: null
+		partialCostUsd: null
 	};
 }
 
@@ -54,7 +53,7 @@ function createState(): ChunkableState {
 function makeChunk(overrides: Partial<StreamChunk>): StreamChunk {
 	return {
 		workflow_id: 'wf-1',
-		chunk_type: 'reasoning',
+		chunk_type: 'response_block',
 		...overrides
 	};
 }
@@ -66,544 +65,240 @@ describe('applyChunkToState', () => {
 		state = createState();
 	});
 
-	describe('tool_start', () => {
-		it('should add a running tool', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'tool_start',
-				tool: 'MemoryTool'
-			}));
-
-			expect(result.tools).toHaveLength(1);
-			expect(result.tools[0]!.name).toBe('MemoryTool');
-			expect(result.tools[0]!.status).toBe('running');
-			expect(result.tools[0]!.startedAt).toBeDefined();
-		});
-
-		it('should default to unknown when tool name missing', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'tool_start'
-			}));
-
-			expect(result.tools[0]!.name).toBe('unknown');
-		});
-	});
-
-	describe('reasoning', () => {
-		it('should add reasoning step with incrementing step number', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'reasoning',
-				content: 'Analyzing...'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'reasoning',
-				content: 'Planning...'
-			}));
-
-			expect(s.reasoning).toHaveLength(2);
-			expect(s.reasoning[0]!.content).toBe('Analyzing...');
-			expect(s.reasoning[0]!.stepNumber).toBe(1);
-			expect(s.reasoning[1]!.content).toBe('Planning...');
-			expect(s.reasoning[1]!.stepNumber).toBe(2);
-		});
-	});
-
-	describe('error', () => {
-		it('should set error message', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'error',
-				content: 'Connection failed'
-			}));
-
-			expect(result.error).toBe('Connection failed');
-		});
-
-		it('should default to Unknown error when content missing', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'error'
-			}));
-
-			expect(result.error).toBe('Unknown error');
-		});
-	});
-
 	describe('sub_agent_start', () => {
-		it('should add a running sub-agent', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-1',
-				sub_agent_name: 'Research Agent',
-				parent_agent_id: 'parent-1',
-				content: 'Researching topic'
-			}));
+		it('appends a running sub-agent', () => {
+			const result = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'sub_agent_start',
+					sub_agent_id: 'sa-1',
+					sub_agent_name: 'Researcher',
+					parent_agent_id: 'orchestrator',
+					content: 'find the docs'
+				})
+			);
 
 			expect(result.subAgents).toHaveLength(1);
 			expect(result.subAgents[0]).toMatchObject({
 				id: 'sa-1',
-				name: 'Research Agent',
-				parentAgentId: 'parent-1',
-				taskDescription: 'Researching topic',
+				name: 'Researcher',
+				parentAgentId: 'orchestrator',
+				taskDescription: 'find the docs',
 				status: 'running',
 				progress: 0
+			});
+		});
+
+		it('falls back to safe defaults when fields are missing', () => {
+			const result = applyChunkToState(
+				state,
+				makeChunk({ chunk_type: 'sub_agent_start' })
+			);
+
+			expect(result.subAgents).toHaveLength(1);
+			expect(result.subAgents[0]).toMatchObject({
+				id: 'unknown',
+				name: 'Unknown Agent',
+				parentAgentId: '',
+				taskDescription: ''
 			});
 		});
 	});
 
 	describe('sub_agent_complete', () => {
-		it('should mark sub-agent as completed with metrics', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-1',
-				sub_agent_name: 'Agent'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'sub_agent_complete',
-				sub_agent_id: 'sa-1',
-				content: 'Final report',
-				duration: 5000,
-				metrics: { duration_ms: 5000, tokens_input: 100, tokens_output: 200 }
-			}));
+		it('marks the matching sub-agent as completed with metrics', () => {
+			const startState = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'sub_agent_start',
+					sub_agent_id: 'sa-2',
+					sub_agent_name: 'Coder'
+				})
+			);
 
-			expect(s.subAgents[0]).toMatchObject({
+			const result = applyChunkToState(
+				startState,
+				makeChunk({
+					chunk_type: 'sub_agent_complete',
+					sub_agent_id: 'sa-2',
+					content: 'done',
+					duration: 1234,
+					metrics: { duration_ms: 1234, tokens_input: 50, tokens_output: 25 }
+				})
+			);
+
+			expect(result.subAgents[0]).toMatchObject({
+				id: 'sa-2',
 				status: 'completed',
 				progress: 100,
-				duration: 5000,
-				report: 'Final report',
-				metrics: { duration_ms: 5000, tokens_input: 100, tokens_output: 200 }
+				duration: 1234,
+				report: 'done',
+				metrics: { duration_ms: 1234, tokens_input: 50, tokens_output: 25 }
 			});
+		});
+
+		it('leaves other sub-agents untouched', () => {
+			let s = applyChunkToState(
+				state,
+				makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-a' })
+			);
+			s = applyChunkToState(
+				s,
+				makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-b' })
+			);
+
+			const result = applyChunkToState(
+				s,
+				makeChunk({ chunk_type: 'sub_agent_complete', sub_agent_id: 'sa-b' })
+			);
+
+			expect(result.subAgents.find((a) => a.id === 'sa-a')?.status).toBe('running');
+			expect(result.subAgents.find((a) => a.id === 'sa-b')?.status).toBe('completed');
 		});
 	});
 
 	describe('sub_agent_error', () => {
-		it('should mark sub-agent as errored', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'sub_agent_start',
-				sub_agent_id: 'sa-1',
-				sub_agent_name: 'Agent'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'sub_agent_error',
-				sub_agent_id: 'sa-1',
-				content: 'Timeout',
-				duration: 3000
-			}));
+		it('marks the matching sub-agent as errored', () => {
+			const startState = applyChunkToState(
+				state,
+				makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-x' })
+			);
 
-			expect(s.subAgents[0]).toMatchObject({
+			const result = applyChunkToState(
+				startState,
+				makeChunk({
+					chunk_type: 'sub_agent_error',
+					sub_agent_id: 'sa-x',
+					content: 'API down',
+					duration: 200
+				})
+			);
+
+			expect(result.subAgents[0]).toMatchObject({
+				id: 'sa-x',
 				status: 'error',
-				error: 'Timeout',
-				duration: 3000
+				error: 'API down',
+				duration: 200
 			});
-		});
-	});
-
-	describe('task_create', () => {
-		it('should add a new task', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'task_create',
-				task_id: 't-1',
-				task_name: 'Research',
-				task_status: 'pending',
-				task_priority: 2
-			}));
-
-			expect(result.tasks).toHaveLength(1);
-			expect(result.tasks[0]).toMatchObject({
-				id: 't-1',
-				name: 'Research',
-				status: 'pending',
-				priority: 2
-			});
-		});
-
-		it('should default priority to 3', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'task_create',
-				task_id: 't-1',
-				task_name: 'Task'
-			}));
-
-			expect(result.tasks[0]!.priority).toBe(3);
-		});
-	});
-
-	describe('task_update', () => {
-		it('should update task status', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'task_create',
-				task_id: 't-1',
-				task_name: 'Research'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'task_update',
-				task_id: 't-1',
-				task_status: 'in_progress'
-			}));
-
-			expect(s.tasks[0]!.status).toBe('in_progress');
-		});
-	});
-
-	describe('task_complete', () => {
-		it('should mark task as completed', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'task_create',
-				task_id: 't-1',
-				task_name: 'Research'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'task_complete',
-				task_id: 't-1'
-			}));
-
-			expect(s.tasks[0]!.status).toBe('completed');
-		});
-	});
-
-	describe('unknown chunk type', () => {
-		it('should return state unchanged for unrecognized types', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'user_question_start' as StreamChunk['chunk_type']
-			}));
-
-			expect(result).toEqual(state);
-		});
-	});
-
-	describe('immutability', () => {
-		it('should not mutate the input state', () => {
-			const original = createState();
-			const frozen = { ...original };
-
-			applyChunkToState(original, makeChunk({
-				chunk_type: 'reasoning',
-				content: 'test reasoning'
-			}));
-
-			expect(original.reasoning.length).toBe(frozen.reasoning.length);
-			expect(original.content).toBe(frozen.content);
-		});
-	});
-
-	describe('thinking_block', () => {
-		it('should add reasoning step from thinking_block chunk', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'thinking_block',
-				content: 'Let me analyze...'
-			}));
-
-			expect(result.reasoning).toHaveLength(1);
-			expect(result.reasoning[0]!.content).toBe('Let me analyze...');
-			expect(result.reasoning[0]!.stepNumber).toBe(1);
-		});
-	});
-
-	describe('tool_call_complete', () => {
-		it('should mark matching running tool as completed', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'tool_start',
-				tool: 'SearchTool'
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'tool_call_complete',
-				tool: 'SearchTool',
-				duration: 500,
-				tool_input: '{"q":"test"}',
-				tool_output: '{"r":[]}',
-				tool_success: true
-			}));
-
-			expect(s.tools[0]!.status).toBe('completed');
-			expect(s.tools[0]!.duration).toBe(500);
 		});
 	});
 
 	describe('response_block', () => {
-		it('should set content and token count from response_block', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				content: 'Final answer.',
-				tokens_input: 100,
-				tokens_output: 50
-			}));
+		it('updates token rollup from the chunk', () => {
+			const result = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'response_block',
+					tokens_input: 120,
+					tokens_output: 45,
+					cached_tokens: 30,
+					cache_write_tokens: 10
+				})
+			);
 
-			expect(result.content).toBe('Final answer.');
-			expect(result.tokensReceived).toBe(50);
+			expect(result.tokensSent).toBe(120);
+			expect(result.tokensReceived).toBe(45);
+			expect(result.cachedTokens).toBe(30);
+			expect(result.cacheWriteTokens).toBe(10);
 		});
 
-		// Persist input/cache tokens on the bg execution itself so a switch
-		// back to a still-running workflow restores the FULL session.
-		it('should persist tokensSent from response_block input tokens', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1234,
-				tokens_output: 50
-			}));
+		it('accumulates cost_usd into partialCostUsd', () => {
+			const first = applyChunkToState(
+				state,
+				makeChunk({ chunk_type: 'response_block', cost_usd: 0.0012 })
+			);
+			expect(first.partialCostUsd).toBeCloseTo(0.0012);
 
-			expect(result.tokensSent).toBe(1234);
-			expect(result.tokensReceived).toBe(50);
+			const second = applyChunkToState(
+				first,
+				makeChunk({ chunk_type: 'response_block', cost_usd: 0.0008 })
+			);
+			expect(second.partialCostUsd).toBeCloseTo(0.002);
 		});
 
-		it('should persist cachedTokens and cacheWriteTokens when reported', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1000,
-				tokens_output: 200,
-				cached_tokens: 800,
-				cache_write_tokens: 50
-			}));
-
-			expect(result.cachedTokens).toBe(800);
-			expect(result.cacheWriteTokens).toBe(50);
-		});
-
-		it('should preserve previous cache values when chunk omits them', () => {
-			// First chunk reports cache; later chunk omits it -> keep previous
-			// (don't clear), so the bg execution display stays stable.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1000,
-				tokens_output: 50,
-				cached_tokens: 600,
-				cache_write_tokens: 100
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1500,
-				tokens_output: 80
-			}));
-
-			expect(s.tokensSent).toBe(1500);
-			expect(s.tokensReceived).toBe(80);
-			expect(s.cachedTokens).toBe(600);
-			expect(s.cacheWriteTokens).toBe(100);
-		});
-
-		it('should leave token fields unchanged when chunk has no token info', () => {
-			// Defensive: chunk without tokens_input/output mustn't reset
-			// previously-recorded values to undefined or 0.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 200,
-				tokens_output: 100,
-				cached_tokens: 50
-			}));
-			const before = { ...s };
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'response_block',
-				content: 'partial'
-			}));
-
-			expect(s.tokensSent).toBe(before.tokensSent);
-			expect(s.tokensReceived).toBe(before.tokensReceived);
-			expect(s.cachedTokens).toBe(before.cachedTokens);
-		});
-
-		// Option A: cost_usd carried by each chunk accumulates into
-		// partialCostUsd. The frontend never multiplies tokens × prices itself;
-		// it only sums the backend-computed values.
-		it('should set partialCostUsd from the first response_block carrying cost_usd', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1000,
-				tokens_output: 500,
-				cost_usd: 0.0123
-			}));
-
-			expect(result.partialCostUsd).toBeCloseTo(0.0123, 6);
-		});
-
-		it('should accumulate cost_usd across consecutive response_block chunks', () => {
-			// Three iterations of a tool loop, each with its own cost.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				cost_usd: 0.01
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'response_block',
-				cost_usd: 0.02
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'response_block',
-				cost_usd: 0.03
-			}));
-
-			expect(s.partialCostUsd).toBeCloseTo(0.06, 6);
-		});
-
-		it('should preserve partialCostUsd when chunk omits cost_usd', () => {
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				cost_usd: 0.0123
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 500
-			}));
-
-			expect(s.partialCostUsd).toBeCloseTo(0.0123, 6);
-		});
-
-		it('should leave partialCostUsd null until first cost_usd is reported', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'response_block',
-				tokens_input: 1000,
-				tokens_output: 500
-			}));
-
-			// Defensive: chunk without cost_usd MUST NOT default to 0
-			// (would imply a free request that never happened).
-			expect(result.partialCostUsd).toBeNull();
-		});
-	});
-
-	// =========================================================================
-	// iteration_progress — emitted after every LLM call inside the tool loop
-	// so the metrics bar updates live (response_block only fires once at end).
-	// Symmetric with response_block on the token/cost shape.
-	// =========================================================================
-	describe('iteration_progress', () => {
-		it('should update tokens_input/output from cumulative iteration totals', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 1,
-				tokens_input: 1500,
-				tokens_output: 250
-			}));
-
-			expect(result.tokensSent).toBe(1500);
-			expect(result.tokensReceived).toBe(250);
-		});
-
-		it('should accumulate cumulative tokens across iterations (not delta)', () => {
-			// Backend emits cumulative totals (mstate.tokens.total_input/output).
-			// Each chunk OVERWRITES the previous value rather than summing
-			// — sums would double-count.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 1,
-				tokens_input: 100,
-				tokens_output: 50
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 2,
-				tokens_input: 220, // cumulative, includes iter 1
-				tokens_output: 110
-			}));
-
-			expect(s.tokensSent).toBe(220);
-			expect(s.tokensReceived).toBe(110);
-		});
-
-		it('should propagate cache fields when reported', () => {
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 3,
-				tokens_input: 5000,
-				tokens_output: 800,
-				cached_tokens: 4000,
-				cache_write_tokens: 200
-			}));
-
-			expect(result.cachedTokens).toBe(4000);
-			expect(result.cacheWriteTokens).toBe(200);
-		});
-
-		it('should accumulate cost_usd into partialCostUsd when present', () => {
-			// Backend may add per-iteration cost in a future revision; the
-			// handler is ready for it (mirrors response_block).
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 1,
-				cost_usd: 0.005
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 2,
-				cost_usd: 0.007
-			}));
-
-			expect(s.partialCostUsd).toBeCloseTo(0.012, 6);
-		});
-
-		it('should leave partialCostUsd null when cost_usd is absent', () => {
-			// Today the backend emits cost_usd=None per iteration (final cost
-			// arrives via response_block). Display stays neutral until then.
-			const result = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 1,
-				tokens_input: 1500,
-				tokens_output: 250
-			}));
-
-			expect(result.partialCostUsd).toBeNull();
-		});
-
-		it('should ignore iteration_progress chunks emitted by sub-agents', () => {
-			// A sub-agent has its own TokenTracker that resets to 0; if its
-			// cumulative chunk reached the orchestrator's metrics bar it would
-			// stomp the parent's running totals. The chunk is flagged
-			// is_sub_agent=true so the handler returns state unchanged.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 2,
-				tokens_input: 5000,
-				tokens_output: 800,
-				cached_tokens: 4000
-			}));
-			const orchestratorTotals = { ...s };
-
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'iteration_progress',
-				iteration: 1,
-				tokens_input: 200,
-				tokens_output: 50,
-				is_sub_agent: true
-			}));
-
-			expect(s.tokensSent).toBe(orchestratorTotals.tokensSent);
-			expect(s.tokensReceived).toBe(orchestratorTotals.tokensReceived);
-			expect(s.cachedTokens).toBe(orchestratorTotals.cachedTokens);
-		});
-
-		it('should ignore sub-agent cost_usd accumulation', () => {
-			// Sub-agent costs are aggregated server-side via
-			// aggregate_sub_agent_metrics and surfaced through `subAgentCost`,
-			// not by summing iteration_progress costs into partialCostUsd.
-			let s = applyChunkToState(state, makeChunk({
-				chunk_type: 'iteration_progress',
-				cost_usd: 0.01
-			}));
-			s = applyChunkToState(s, makeChunk({
-				chunk_type: 'iteration_progress',
-				cost_usd: 0.05,
-				is_sub_agent: true
-			}));
-
-			expect(s.partialCostUsd).toBeCloseTo(0.01, 6);
-		});
-	});
-
-	describe('extended state preservation', () => {
-		it('should preserve extra fields in extended state types', () => {
-			interface ExtendedState extends ChunkableState {
-				workflowId: string;
-				isStreaming: boolean;
-			}
-
-			const extended: ExtendedState = {
-				...createState(),
-				workflowId: 'wf-123',
-				isStreaming: true
+		it('preserves existing token counts when fields are absent', () => {
+			const seeded: ChunkableState = {
+				...state,
+				tokensReceived: 99,
+				tokensSent: 100,
+				cachedTokens: 5,
+				cacheWriteTokens: 1
 			};
 
-			const result = applyChunkToState(extended, makeChunk({
-				chunk_type: 'reasoning',
-				content: 'Analyzing...'
-			}));
+			const result = applyChunkToState(
+				seeded,
+				makeChunk({ chunk_type: 'response_block' })
+			);
+			expect(result.tokensReceived).toBe(99);
+			expect(result.tokensSent).toBe(100);
+			expect(result.cachedTokens).toBe(5);
+			expect(result.cacheWriteTokens).toBe(1);
+		});
+	});
 
-			expect(result.workflowId).toBe('wf-123');
-			expect(result.isStreaming).toBe(true);
-			expect(result.reasoning).toHaveLength(1);
+	describe('iteration_progress', () => {
+		it('updates cumulative tokens and accumulates cost', () => {
+			const result = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'iteration_progress',
+					tokens_input: 200,
+					tokens_output: 80,
+					cached_tokens: 12,
+					cache_write_tokens: 3,
+					cost_usd: 0.005
+				})
+			);
+
+			expect(result.tokensSent).toBe(200);
+			expect(result.tokensReceived).toBe(80);
+			expect(result.cachedTokens).toBe(12);
+			expect(result.cacheWriteTokens).toBe(3);
+			expect(result.partialCostUsd).toBeCloseTo(0.005);
+		});
+
+		it('ignores chunks flagged is_sub_agent', () => {
+			const seeded: ChunkableState = {
+				...state,
+				tokensSent: 50,
+				tokensReceived: 25,
+				partialCostUsd: 0.001
+			};
+
+			const result = applyChunkToState(
+				seeded,
+				makeChunk({
+					chunk_type: 'iteration_progress',
+					tokens_input: 999,
+					tokens_output: 999,
+					cost_usd: 0.999,
+					is_sub_agent: true
+				})
+			);
+
+			expect(result.tokensSent).toBe(50);
+			expect(result.tokensReceived).toBe(25);
+			expect(result.partialCostUsd).toBeCloseTo(0.001);
+		});
+	});
+
+	describe('unrecognized chunk types', () => {
+		it('returns the state unchanged when no handler matches', () => {
+			const seeded: ChunkableState = {
+				...state,
+				tokensSent: 7,
+				partialCostUsd: 0.0001
+			};
+
+			// `tool_start`, `reasoning`, `error`, `task_*`, `thinking_block`,
+			// `tool_call_complete` are intentionally unhandled in the new
+			// chunk processor — they belong to executionBlocksStore.
+			const result = applyChunkToState(
+				seeded,
+				makeChunk({ chunk_type: 'tool_start', tool: 'MemoryTool' })
+			);
+
+			expect(result).toBe(seeded);
 		});
 	});
 });

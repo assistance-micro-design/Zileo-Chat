@@ -62,7 +62,6 @@ Uses extracted components, services, and stores for clean architecture.
 		tokenDisplayData
 	} from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
-	import { streamingStore } from '$lib/stores/streaming';
 	import {
 		executionBlocksStore,
 		executionBlocks as executionBlocks$,
@@ -262,54 +261,51 @@ Uses extracted components, services, and stores for clean architecture.
 			await loadWorkflowData(workflowId);
 			if (!isStillSelected()) return;
 
-			// Update token store with workflow cumulative metrics
-			const workflow = workflowStore.getSelected();
-			if (workflow) {
-				tokenStore.updateFromWorkflow(workflow);
+		// Update token store with workflow cumulative metrics
+		const workflow = workflowStore.getSelected();
+		if (workflow) {
+			tokenStore.updateFromWorkflow(workflow);
+		}
+
+		// Fetch the metrics of the last assistant message so the session
+		// display reflects "what the last run cost" rather than zeros.
+		const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
+		if (!isStillSelected() || backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
+
+		// Check if this workflow is running in the background
+		const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
+		if (!isStillSelected()) return;
+		if (bgExecution && bgExecution.status === 'running') {
+			// Restore the per-block timeline by replaying the bg execution's
+			// buffered chunks (H3 audit 2026-05-02): without this, the chat
+			// area appears blank until the next chunk arrives because
+			// `executionBlocksStore.start()` resets state on every switch.
+			executionBlocksStore.restoreFromChunks(workflowId, bgExecution.chunkHistory);
+			tokenStore.startStreaming();
+			// Hydrate the FULL session token display, not just outputs. Inputs
+			// and cache survive workflow switches because chunkProcessor.ts
+			// keeps them on the bg execution itself (response_block updates).
+			tokenStore.setSessionTokens(
+				bgExecution.tokensSent,
+				bgExecution.tokensReceived,
+				bgExecution.cachedTokens ?? undefined,
+				bgExecution.cacheWriteTokens ?? undefined
+			);
+			// Option A: also restore the in-progress cost so a switch back to
+			// a still-running workflow shows what's accrued so far, marked as
+			// partial via the `~` prefix in MetricsBar / TokenDisplay.
+			if (bgExecution.partialCostUsd != null) {
+				tokenStore.setPartialSessionCost(bgExecution.partialCostUsd);
 			}
 
-			// Fetch the metrics of the last assistant message so the session
-			// display reflects "what the last run cost" rather than zeros.
-			const lastMetrics = await MessageService.getLastAssistantMetrics(workflowId);
-			if (!isStillSelected() || backgroundWorkflowsStore.getViewedWorkflowId() !== workflowId) return;
-
-			// Check if this workflow is running in the background
-			const bgExecution = backgroundWorkflowsStore.getExecution(workflowId);
-			if (!isStillSelected()) return;
-			if (bgExecution && bgExecution.status === 'running') {
-				// Restore streaming state from background execution
-				streamingStore.restoreFrom(bgExecution);
-				// H3 audit (2026-05-02): rebuild the execution-blocks timeline by
-				// replaying the buffered chunks of this workflow, instead of just
-				// resetting state via `start()` (which left the execution area
-				// blank until the next chunk landed).
-				executionBlocksStore.restoreFromChunks(workflowId, bgExecution.chunkHistory);
-				tokenStore.startStreaming();
-				// Hydrate the FULL session token display, not just outputs. Inputs
-				// and cache survive workflow switches because chunkProcessor.ts
-				// keeps them on the bg execution itself (response_block updates).
-				tokenStore.setSessionTokens(
-					bgExecution.tokensSent,
-					bgExecution.tokensReceived,
-					bgExecution.cachedTokens ?? undefined,
-					bgExecution.cacheWriteTokens ?? undefined
-				);
-				// Option A: also restore the in-progress cost so a switch back to
-				// a still-running workflow shows what's accrued so far, marked as
-				// partial via the `~` prefix in MetricsBar / TokenDisplay.
-				if (bgExecution.partialCostUsd != null) {
-					tokenStore.setPartialSessionCost(bgExecution.partialCostUsd);
-				}
-
-				// Open user question modal if there are pending questions for this workflow
-				userQuestionStore.openForWorkflow(workflowId);
-			} else {
-				// Not running in background — show the last assistant message's
-				// metrics so the user sees a meaningful session summary.
-				streamingStore.reset();
-				executionBlocksStore.reset();
-				tokenStore.restoreFromLastMessage(lastMetrics);
-			}
+			// Open user question modal if there are pending questions for this workflow
+			userQuestionStore.openForWorkflow(workflowId);
+		} else {
+			// Not running in background — show the last assistant message's
+			// metrics so the user sees a meaningful session summary.
+			executionBlocksStore.reset();
+			tokenStore.restoreFromLastMessage(lastMetrics);
+		}
 
 			// Auto-select agent if workflow has one.
 			//
@@ -558,23 +554,21 @@ Uses extracted components, services, and stores for clean architecture.
 		async function handleCancel(): Promise<void> {
 			if (!pageState.selectedWorkflowId) return;
 
-			const workflowId = pageState.selectedWorkflowId;
-			try {
-				await WorkflowService.cancel(workflowId);
-			} catch (err) {
-				toastStore.add({
-					type: 'error',
-					title: getErrorMessage(err),
-					message: '',
-					persistent: false,
-					duration: 5000
-				});
-			} finally {
-				if (pageState.selectedWorkflowId === workflowId) {
-					streamingStore.reset();
-					executionBlocksStore.cancel();
-					tokenStore.stopStreaming();
-				}
+		const workflowId = pageState.selectedWorkflowId;
+		try {
+			await WorkflowService.cancel(workflowId);
+		} catch (err) {
+			toastStore.add({
+				type: 'error',
+				title: getErrorMessage(err),
+				message: '',
+				persistent: false,
+				duration: 5000
+			});
+		} finally {
+			if (pageState.selectedWorkflowId === workflowId) {
+				executionBlocksStore.cancel();
+				tokenStore.stopStreaming();
 			}
 		}
 
@@ -620,7 +614,6 @@ Uses extracted components, services, and stores for clean architecture.
 		await backgroundWorkflowsStore.init();
 		backgroundWorkflowsStore.setForwardCallbacks(
 			(chunk) => {
-				streamingStore.processChunkDirect(chunk);
 				executionBlocksStore.processChunk(chunk);
 				// Mirror live token & cost updates so the metrics bar reflects
 				// each tool-loop iteration in real time. Two chunk types feed
@@ -664,8 +657,7 @@ Uses extracted components, services, and stores for clean architecture.
 					}
 				}
 			},
-			(complete) => {
-				streamingStore.processCompleteDirect(complete);
+			(_complete) => {
 				executionBlocksStore.complete();
 			},
 			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
@@ -711,7 +703,6 @@ Uses extracted components, services, and stores for clean architecture.
 	 */
 	onDestroy(() => {
 		backgroundWorkflowsStore.destroy();
-		streamingStore.cleanup();
 		validationStore.cleanup();
 		userQuestionStore.cleanup();
 		unsubscribeSettingsRefresh?.();
