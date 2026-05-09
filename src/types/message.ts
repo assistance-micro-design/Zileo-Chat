@@ -54,7 +54,7 @@ export interface Message {
   /** Message content (text) */
   content: string;
   /** Legacy token count (deprecated, use tokens_input/tokens_output) */
-  tokens: number;
+  tokens?: number;
   /** Input tokens consumed (for assistant messages) */
   tokens_input?: number;
   /** Output tokens generated (for assistant messages) */
