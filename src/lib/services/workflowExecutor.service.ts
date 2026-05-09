@@ -41,7 +41,7 @@ import type {
 import type { ChatBlock } from "$types/chat-block";
 import { MessageService } from "./message.service";
 import { WorkflowService } from "./workflow.service";
-import { streamingStore, activeSubAgents } from "$lib/stores/streaming";
+import { streamingStore } from "$lib/stores/streaming";
 import { generateUuid } from "$lib/utils/uuid";
 import { get } from "svelte/store";
 import { tokenStore } from "$lib/stores/tokens";
@@ -307,8 +307,10 @@ export const WorkflowExecutorService = {
           workflowId,
           workflowResult,
         );
-        // Capture sub-agent summaries from streaming state (transient, current session only)
-        const subAgents = get(activeSubAgents);
+        // Capture sub-agent summaries from the bg execution (same applyChunkToState
+        // writes them, but bgWorkflows survives streamingStore removal).
+        const bgExec = backgroundWorkflowsStore.getExecution(workflowId);
+        const subAgents = bgExec?.subAgents ?? [];
         const subAgentSummaries: SubAgentSummary[] = subAgents
           .filter((a) => a.status === "completed" || a.status === "error")
           .map((a) => ({
