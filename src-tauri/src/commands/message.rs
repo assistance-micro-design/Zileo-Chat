@@ -371,62 +371,6 @@ pub async fn delete_message(message_id: String, state: State<'_, AppState>) -> R
     Ok(())
 }
 
-/// Deletes all messages for a workflow.
-///
-/// # Arguments
-/// * `workflow_id` - The workflow ID to clear messages for
-///
-/// # Returns
-/// Number of messages deleted
-#[tauri::command]
-#[instrument(name = "clear_workflow_messages", skip(state), fields(workflow_id = %workflow_id))]
-pub async fn clear_workflow_messages(
-    workflow_id: String,
-    state: State<'_, AppState>,
-) -> Result<u64, String> {
-    info!("Clearing workflow messages");
-
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
-
-    // First count existing messages (bind workflow_id).
-    let count_query = "SELECT count() FROM message WHERE workflow_id = $wf_id GROUP ALL";
-    let count_result: Vec<serde_json::Value> = state
-        .db
-        .query_json_with_params(
-            count_query,
-            vec![(
-                "wf_id".to_string(),
-                serde_json::json!(validated_workflow_id),
-            )],
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to count workflow messages before delete");
-            format!("Failed to count workflow messages before delete: {}", e)
-        })?;
-
-    let count = extract_count(&count_result);
-
-    // Delete all messages for the workflow (bind workflow_id).
-    state
-        .db
-        .execute_with_params(
-            "DELETE message WHERE workflow_id = $wf_id",
-            vec![(
-                "wf_id".to_string(),
-                serde_json::json!(validated_workflow_id),
-            )],
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Failed to clear workflow messages");
-            format!("Failed to clear workflow messages: {}", e)
-        })?;
-
-    info!(count = count, "Workflow messages cleared");
-    Ok(count)
-}
-
 /// Returns lightweight metrics from the most recent assistant message of a workflow.
 ///
 /// When the user switches to a workflow that is not currently streaming, the

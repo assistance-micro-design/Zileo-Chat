@@ -205,7 +205,6 @@ async fn main() -> anyhow::Result<()> {
             commands::message::load_workflow_messages,
             commands::message::load_workflow_messages_paginated,
             commands::message::delete_message,
-            commands::message::clear_workflow_messages,
             commands::message::load_message_blocks,
             commands::message::get_workflow_last_assistant_message_metrics,
             commands::tool_execution::save_tool_execution,

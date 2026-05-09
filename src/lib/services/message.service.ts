@@ -100,21 +100,6 @@ function enrichMessagesWithSubAgents(
  */
 export const MessageService = {
 	/**
-	 * Load all messages for a workflow.
-	 *
-	 * @param workflowId - Workflow ID to load messages for
-	 * @returns Object containing messages array and optional error message
-	 */
-	async load(workflowId: string): Promise<{ messages: Message[]; error?: string }> {
-		try {
-			const messages = await invoke<Message[]>('load_workflow_messages', { workflowId });
-			return { messages };
-		} catch (e) {
-			return { messages: [], error: getErrorMessage(e) };
-		}
-	},
-
-	/**
 	 * Load messages with sub-agent data enrichment.
 	 *
 	 * Loads messages and sub-agent executions in parallel, then correlates
@@ -192,15 +177,6 @@ export const MessageService = {
 	 */
 	async saveSystem(workflowId: string, content: string): Promise<string> {
 		return this.save({ workflowId, role: 'system', content });
-	},
-
-	/**
-	 * Clear all messages for a workflow.
-	 *
-	 * @param workflowId - Workflow ID
-	 */
-	async clear(workflowId: string): Promise<void> {
-		return invoke<void>('clear_workflow_messages', { workflowId });
 	},
 
 	/**
