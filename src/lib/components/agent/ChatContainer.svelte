@@ -26,7 +26,8 @@ Main chat area with message display, execution blocks inline, and input controls
 	import { tick, untrack } from 'svelte';
 	import { ArrowDown } from '@lucide/svelte';
 	import { HelpButton } from '$lib/components/ui';
-	import MessageList from '$lib/components/chat/MessageList.svelte';
+	import MessageBubble from '$lib/components/chat/MessageBubble.svelte';
+	import MessageMetrics from '$lib/components/chat/MessageMetrics.svelte';
 	import MessageListSkeleton from '$lib/components/chat/MessageListSkeleton.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ThinkingBlock from '$lib/components/chat/ThinkingBlock.svelte';
@@ -195,11 +196,20 @@ Main chat area with message display, execution blocks inline, and input controls
 			{/snippet}
 
 			<!-- Message List with Persisted Blocks -->
-			<div class="message-list-with-blocks">
+			<div
+				class="message-list-with-blocks"
+				class:performance-mode={messages.length > 50}
+				role="log"
+				aria-live="polite"
+				aria-label={$i18n('chat_messages_arialabel')}
+			>
 				{#each messages as message (message.id)}
-					<div class="message-wrapper">
+					<div class="message-wrapper" class:optimize={messages.length > 50}>
 						<div class="message-item">
-							<MessageList messages={[message]} />
+							<MessageBubble {message} />
+							{#if message.role === 'assistant'}
+								<MessageMetrics {message} />
+							{/if}
 						</div>
 
 						<!--
@@ -298,13 +308,24 @@ Main chat area with message display, execution blocks inline, and input controls
 		gap: var(--spacing-sm);
 	}
 
+	/* Performance mode: enable CSS containment for long lists */
+	.message-list-with-blocks.performance-mode {
+		contain: layout style;
+	}
+
 	.message-wrapper {
 		animation: fadeIn 200ms ease-out;
 	}
 
-	.message-item :global(.message-list) {
-		padding: 0;
-		gap: 0;
+	/* Performance mode: use content-visibility for off-screen messages */
+	.message-wrapper.optimize {
+		content-visibility: auto;
+		contain-intrinsic-size: 0 100px;
+	}
+
+	.message-item {
+		display: flex;
+		flex-direction: column;
 	}
 
 	.persisted-blocks {
