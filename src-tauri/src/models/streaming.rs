@@ -127,6 +127,12 @@ pub struct StreamChunk {
     /// Tool execution success/failure (for tool_call_complete)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_success: Option<bool>,
+    /// Tool error message when `tool_success = Some(false)` (for tool_call_complete).
+    /// Carries the same payload that the persisted `ToolExecution` row stores in
+    /// `error_message`, so the live UI can surface failures with the same level
+    /// of detail as the post-reload view.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
     /// Input tokens count (for response_block)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens_input: Option<usize>,
@@ -209,6 +215,7 @@ impl StreamChunk {
             tool_input: None,
             tool_output: None,
             tool_success: None,
+            error_message: None,
             tokens_input: None,
             tokens_output: None,
             cached_tokens: None,
@@ -396,7 +403,9 @@ impl StreamChunk {
 
     /// Creates a tool call complete chunk with full input/output details.
     ///
-    /// Carries the enriched data for inline display.
+    /// Carries the enriched data for inline display, including the tool's
+    /// `error_message` (when present) so failures surface live with the same
+    /// detail as the persisted view.
     #[allow(clippy::too_many_arguments)]
     pub fn tool_call_complete(
         workflow_id: impl Into<String>,
@@ -407,6 +416,7 @@ impl StreamChunk {
         input: impl Into<String>,
         output: impl Into<String>,
         success: bool,
+        error_message: Option<String>,
     ) -> Self {
         Self {
             tool: Some(tool_name.into()),
@@ -416,6 +426,7 @@ impl StreamChunk {
             tool_input: Some(input.into()),
             tool_output: Some(output.into()),
             tool_success: Some(success),
+            error_message,
             ..Self::base(workflow_id, ChunkType::ToolCallComplete)
         }
     }
@@ -893,6 +904,7 @@ mod tests {
             r#"{"query": "find docs"}"#,
             r#"{"results": ["doc1", "doc2"]}"#,
             true,
+            None,
         );
         assert_eq!(chunk.chunk_type, ChunkType::ToolCallComplete);
         assert_eq!(chunk.tool, Some("MemoryTool".to_string()));
@@ -908,12 +920,14 @@ mod tests {
             Some(r#"{"results": ["doc1", "doc2"]}"#.to_string())
         );
         assert_eq!(chunk.tool_success, Some(true));
+        assert!(chunk.error_message.is_none());
         assert!(chunk.tokens_input.is_none());
 
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(json.contains("\"chunk_type\":\"tool_call_complete\""));
         assert!(json.contains("\"tool_type\":\"local\""));
         assert!(!json.contains("\"server_name\"")); // Skipped when None
+        assert!(!json.contains("\"error_message\"")); // Skipped when None
         assert!(json.contains("\"tool_input\""));
         assert!(json.contains("\"tool_output\""));
         assert!(json.contains("\"tool_success\":true"));
@@ -930,6 +944,7 @@ mod tests {
             r#"{"name": "MyClass"}"#,
             r#"{"found": true}"#,
             true,
+            None,
         );
         assert_eq!(chunk.tool_type, Some("mcp".to_string()));
         assert_eq!(chunk.server_name, Some("serena".to_string()));
@@ -950,8 +965,13 @@ mod tests {
             "{}",
             r#"{"error": "Connection refused"}"#,
             false,
+            Some("Connection refused".to_string()),
         );
         assert_eq!(chunk.tool_success, Some(false));
+        assert_eq!(chunk.error_message, Some("Connection refused".to_string()));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"error_message\":\"Connection refused\""));
     }
 
     #[test]

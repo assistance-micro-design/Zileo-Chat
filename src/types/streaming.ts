@@ -112,6 +112,12 @@ export interface StreamChunk {
   tool_output?: string;
   /** Tool execution success/failure (for tool_call_complete) */
   tool_success?: boolean;
+  /**
+   * Tool error message when `tool_success === false` (for tool_call_complete).
+   * Mirrors the persisted `ToolExecution.error_message`, so the live UI can
+   * render failures with the same level of detail as the post-reload view.
+   */
+  error_message?: string;
   /** Input tokens count (for response_block) */
   tokens_input?: number;
   /** Output tokens count (for response_block) */

@@ -360,6 +360,7 @@ pub(crate) async fn run_single_iteration(
                 input_json,
                 output_json,
                 result.success,
+                result.error.clone(),
             ),
         );
 

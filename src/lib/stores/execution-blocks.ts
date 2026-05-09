@@ -106,6 +106,7 @@ function handleToolCallComplete(state: ExecutionBlocksState, chunk: StreamChunk)
 		input_params: chunk.tool_input ?? '{}',
 		output_result: chunk.tool_output ?? '{}',
 		success: chunk.tool_success ?? false,
+		error_message: chunk.error_message,
 		duration_ms: chunk.duration ?? 0
 	};
 	const block = createBlock('tool_call', state.nextSequence, data);

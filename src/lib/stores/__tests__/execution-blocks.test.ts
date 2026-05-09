@@ -133,6 +133,43 @@ describe('executionBlocksStore', () => {
 				success: false
 			});
 		});
+
+		it('propagates error_message from chunk into the tool block', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'FailTool',
+				duration: 200,
+				tool_input: '{"x":1}',
+				tool_output: '{"error":"timeout"}',
+				tool_success: false,
+				error_message: 'Connection refused'
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks[0]!.data).toMatchObject({
+				tool_name: 'FailTool',
+				success: false,
+				error_message: 'Connection refused'
+			});
+		});
+
+		it('leaves error_message undefined on success', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'OkTool',
+				duration: 50,
+				tool_input: '{}',
+				tool_output: '{}',
+				tool_success: true
+			});
+
+			const blocks = get(executionBlocks);
+			expect((blocks[0]!.data as { error_message?: string }).error_message).toBeUndefined();
+		});
 	});
 
 	describe('processChunk - response_block', () => {
