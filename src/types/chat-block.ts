@@ -54,8 +54,6 @@ export interface ThinkingBlockData {
 	content: string;
 	/** Origin of the thinking: real model output or synthetic agent flow */
 	source: 'model_thinking' | 'agent_flow';
-	/** Duration in milliseconds */
-	duration_ms?: number;
 }
 
 /**
