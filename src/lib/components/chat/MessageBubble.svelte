@@ -47,6 +47,16 @@
 
 	let copied = $state(false);
 	let copyError = $state(false);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		return () => {
+			if (copyTimer !== null) {
+				clearTimeout(copyTimer);
+				copyTimer = null;
+			}
+		};
+	});
 
 	/**
 	 * Copy message content as markdown to clipboard.
@@ -54,16 +64,22 @@
 	 */
 	async function copyContent(): Promise<void> {
 		copyError = false;
+		if (copyTimer !== null) {
+			clearTimeout(copyTimer);
+			copyTimer = null;
+		}
 		try {
 			await navigator.clipboard.writeText(message.content);
 			copied = true;
-			setTimeout(() => {
+			copyTimer = setTimeout(() => {
 				copied = false;
+				copyTimer = null;
 			}, 2000);
 		} catch {
 			copyError = true;
-			setTimeout(() => {
+			copyTimer = setTimeout(() => {
 				copyError = false;
+				copyTimer = null;
 			}, 2000);
 		}
 	}
