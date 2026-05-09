@@ -202,7 +202,14 @@ Main chat area with message display, execution blocks inline, and input controls
 							<MessageList messages={[message]} />
 						</div>
 
-						<!-- Persisted blocks for assistant messages (reactive - no {@const}) -->
+						<!--
+							ERR_SVELTE_008: do NOT memoize getBlocksForMessage(message.id)
+							via {@const}. {@const} inside a keyed {#each} evaluates once at
+							item creation in Svelte 5 and is NOT invalidated when the source
+							SvelteMap mutates (.set/.clear), which would leave persisted
+							blocks stale after a workflow finishes streaming. Inline calls
+							re-evaluate within a tracked template scope.
+						-->
 						{#if message.role === 'assistant' && getBlocksForMessage(message.id).length > 0}
 							<div class="persisted-blocks">
 								{#each getBlocksForMessage(message.id) as block (`${block.block_type}-${block.sequence}`)}
