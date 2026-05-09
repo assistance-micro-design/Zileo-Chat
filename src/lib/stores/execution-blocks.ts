@@ -42,16 +42,6 @@ export interface ExecutionBlocksState {
 	isExecuting: boolean;
 	/** Contextual spinner text (e.g., "MemoryTool") */
 	spinnerContext: string | null;
-	/** Final response from the assistant */
-	response: {
-		content: string;
-		tokensInput: number;
-		tokensOutput: number;
-	} | null;
-	/** Error message if execution failed */
-	error: string | null;
-	/** Whether execution was cancelled */
-	cancelled: boolean;
 	/** Auto-incrementing sequence counter */
 	nextSequence: number;
 }
@@ -62,9 +52,6 @@ const initialState: ExecutionBlocksState = {
 	tasks: [],
 	isExecuting: false,
 	spinnerContext: null,
-	response: null,
-	error: null,
-	cancelled: false,
 	nextSequence: 1
 };
 
@@ -131,16 +118,14 @@ function handleToolCallComplete(state: ExecutionBlocksState, chunk: StreamChunk)
 }
 
 /**
- * Process a response_block chunk - set final response.
+ * Process a response_block chunk - clear the active spinner.
+ *
+ * The chunk content/tokens are consumed by tokenStore and bgWorkflows; this
+ * store only needs to drop the spinner so the response renders cleanly.
  */
-function handleResponseBlock(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleResponseBlock(state: ExecutionBlocksState, _chunk: StreamChunk): ExecutionBlocksState {
 	return {
 		...state,
-		response: {
-			content: chunk.content ?? '',
-			tokensInput: chunk.tokens_input ?? 0,
-			tokensOutput: chunk.tokens_output ?? 0
-		},
 		spinnerContext: null
 	};
 }
@@ -223,12 +208,14 @@ function handleReasoning(state: ExecutionBlocksState, chunk: StreamChunk): Execu
 }
 
 /**
- * Process an error chunk.
+ * Process an error chunk - terminate execution.
+ *
+ * The error content is consumed by other surfaces (toasts, bgWorkflows);
+ * this store only needs to flip out of the executing state.
  */
-function handleError(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleError(state: ExecutionBlocksState, _chunk: StreamChunk): ExecutionBlocksState {
 	return {
 		...state,
-		error: chunk.content ?? 'Unknown error',
 		isExecuting: false,
 		spinnerContext: null
 	};
@@ -358,25 +345,8 @@ export const executionBlocksStore = {
 		store.update((s) => ({
 			...s,
 			isExecuting: false,
-			cancelled: true,
 			spinnerContext: null
 		}));
-	},
-
-	/**
-	 * Restore blocks from persisted data (loaded from DB).
-	 * Used when opening a past conversation.
-	 *
-	 * @param blocks - Persisted ChatBlock array
-	 */
-	restoreFromBlocks(blocks: ChatBlock[]): void {
-		store.set({
-			...initialState,
-			blocks,
-			nextSequence: blocks.length > 0
-				? Math.max(...blocks.map((b) => b.sequence)) + 1
-				: 1
-		});
 	},
 
 	/**
@@ -422,15 +392,6 @@ export const isExecuting = derived(store, (s) => s.isExecuting);
 
 /** Current spinner context text */
 export const spinnerContext = derived(store, (s) => s.spinnerContext);
-
-/** Final execution response */
-export const executionResponse = derived(store, (s) => s.response);
-
-/** Execution error message */
-export const executionError = derived(store, (s) => s.error);
-
-/** Whether execution was cancelled */
-export const executionCancelled = derived(store, (s) => s.cancelled);
 
 /** Current workflow ID being executed */
 export const executionWorkflowId = derived(store, (s) => s.workflowId);

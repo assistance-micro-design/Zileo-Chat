@@ -12,12 +12,9 @@ import {
 	executionBlocks,
 	isExecuting,
 	spinnerContext,
-	executionResponse,
-	executionError,
 	executionTasks
 } from '../execution-blocks';
 import type { StreamChunk } from '$types/streaming';
-import type { ChatBlock } from '$types/chat-block';
 
 describe('executionBlocksStore', () => {
 	beforeEach(() => {
@@ -29,7 +26,6 @@ describe('executionBlocksStore', () => {
 			executionBlocksStore.start('wf-123');
 			expect(get(isExecuting)).toBe(true);
 			expect(get(executionBlocks)).toEqual([]);
-			expect(get(executionResponse)).toBeNull();
 		});
 	});
 
@@ -140,23 +136,24 @@ describe('executionBlocksStore', () => {
 	});
 
 	describe('processChunk - response_block', () => {
-		it('sets response with content and tokens', () => {
+		it('clears spinner context on response_block', () => {
 			executionBlocksStore.start('wf-123');
-			const chunk: StreamChunk = {
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_start',
+				tool: 'SearchTool'
+			});
+			expect(get(spinnerContext)).toBe('SearchTool');
+
+			executionBlocksStore.processChunk({
 				workflow_id: 'wf-123',
 				chunk_type: 'response_block',
 				content: 'Here is the final response.',
 				tokens_input: 150,
 				tokens_output: 42
-			};
-			executionBlocksStore.processChunk(chunk);
-
-			const response = get(executionResponse);
-			expect(response).toEqual({
-				content: 'Here is the final response.',
-				tokensInput: 150,
-				tokensOutput: 42
 			});
+
+			expect(get(spinnerContext)).toBeNull();
 		});
 	});
 
@@ -191,7 +188,7 @@ describe('executionBlocksStore', () => {
 	});
 
 	describe('processChunk - error', () => {
-		it('sets error and stops executing', () => {
+		it('stops executing on error chunk', () => {
 			executionBlocksStore.start('wf-123');
 			executionBlocksStore.processChunk({
 				workflow_id: 'wf-123',
@@ -199,8 +196,8 @@ describe('executionBlocksStore', () => {
 				content: 'API rate limit exceeded'
 			});
 
-			expect(get(executionError)).toBe('API rate limit exceeded');
 			expect(get(isExecuting)).toBe(false);
+			expect(get(spinnerContext)).toBeNull();
 		});
 	});
 
@@ -250,38 +247,6 @@ describe('executionBlocksStore', () => {
 			executionBlocksStore.start('wf-123');
 			executionBlocksStore.cancel();
 
-			expect(get(isExecuting)).toBe(false);
-		});
-	});
-
-	describe('restoreFromBlocks', () => {
-		it('restores blocks from persisted data', () => {
-			const persisted: ChatBlock[] = [
-				{
-					block_type: 'thinking',
-					sequence: 1,
-					data: { content: 'Thinking...', source: 'model_thinking' }
-				},
-				{
-					block_type: 'tool_call',
-					sequence: 2,
-					data: {
-						tool_name: 'Search',
-						tool_type: 'local',
-						input_params: '{}',
-						output_result: '{"results":[]}',
-						success: true,
-						duration_ms: 500
-					}
-				}
-			];
-
-			executionBlocksStore.restoreFromBlocks(persisted);
-
-			const blocks = get(executionBlocks);
-			expect(blocks).toHaveLength(2);
-			expect(blocks[0]!.block_type).toBe('thinking');
-			expect(blocks[1]!.block_type).toBe('tool_call');
 			expect(get(isExecuting)).toBe(false);
 		});
 	});
@@ -372,8 +337,6 @@ describe('executionBlocksStore', () => {
 			expect(get(executionBlocks)).toEqual([]);
 			expect(get(isExecuting)).toBe(false);
 			expect(get(spinnerContext)).toBeNull();
-			expect(get(executionResponse)).toBeNull();
-			expect(get(executionError)).toBeNull();
 		});
 	});
 
