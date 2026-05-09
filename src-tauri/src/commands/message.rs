@@ -30,6 +30,7 @@ use crate::{
     security::validate_uuid_field,
     AppState,
 };
+use std::collections::{HashMap, HashSet};
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
@@ -659,6 +660,223 @@ pub async fn load_message_blocks(
     Ok(blocks)
 }
 
+/// Loads ChatBlocks for every assistant message of a workflow in a single
+/// round-trip — replaces N+1 calls to `load_message_blocks`.
+///
+/// Internally executes 3 scoped queries (`tool_execution`, `thinking_step`,
+/// `sub_agent_execution`) filtered by `workflow_id`, regroups the rows by
+/// owning message id (primary message vs sub-agent internals), and merges
+/// each group into a unified `ChatBlock` stream sorted by sequence.
+///
+/// `load_message_blocks` is preserved for retry/refresh of a single message.
+///
+/// # Arguments
+/// * `workflow_id` - Workflow ID whose blocks to batch-load
+///
+/// # Returns
+/// Map of `message_id` -> sequenced `Vec<ChatBlock>`. Messages with no blocks
+/// are absent (callers should treat missing entries as empty).
+#[tauri::command]
+#[instrument(name = "load_workflow_blocks", skip(state), fields(workflow_id = %workflow_id))]
+pub async fn load_workflow_blocks(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, Vec<ChatBlock>>, String> {
+    load_workflow_blocks_core(&state.db, &workflow_id).await
+}
+
+/// Core implementation of `load_workflow_blocks`, extracted so it can be
+/// exercised by integration tests against a real SurrealDB instance.
+pub(crate) async fn load_workflow_blocks_core(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> Result<HashMap<String, Vec<ChatBlock>>, String> {
+    info!("Loading workflow blocks");
+
+    let validated_workflow_id = validate_uuid_field(workflow_id, "workflow_id")?;
+    let wf_param = vec![(
+        "wf_id".to_string(),
+        serde_json::json!(validated_workflow_id),
+    )];
+
+    // 1. Tool executions for the whole workflow (primary + sub-agent internals).
+    let tool_query = "SELECT \
+            meta::id(id) AS id, workflow_id, message_id, agent_id, \
+            tool_type, tool_name, server_name, input_params, output_result, \
+            success, error_message, duration_ms, iteration, sequence, created_at \
+        FROM tool_execution \
+        WHERE workflow_id = $wf_id \
+        ORDER BY sequence ASC, created_at ASC";
+
+    let tool_json = db
+        .query_json_with_params(tool_query, wf_param.clone())
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to batch-load tool executions");
+            format!("Failed to batch-load tool executions: {}", e)
+        })?;
+    let tool_executions: Vec<ToolExecution> = tool_json
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<ToolExecution>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize batched tool executions");
+            format!("Failed to deserialize tool executions: {}", e)
+        })?;
+
+    // 2. Thinking steps for the whole workflow.
+    let thinking_query = "SELECT \
+            meta::id(id) AS id, workflow_id, message_id, agent_id, \
+            step_number, content, duration_ms, tokens, sequence, source, created_at \
+        FROM thinking_step \
+        WHERE workflow_id = $wf_id \
+        ORDER BY sequence ASC, step_number ASC";
+
+    let thinking_json = db
+        .query_json_with_params(thinking_query, wf_param.clone())
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to batch-load thinking steps");
+            format!("Failed to batch-load thinking steps: {}", e)
+        })?;
+    let thinking_steps: Vec<ThinkingStep> = thinking_json
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<ThinkingStep>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize batched thinking steps");
+            format!("Failed to deserialize thinking steps: {}", e)
+        })?;
+
+    // 3. Sub-agent executions for the whole workflow.
+    let sub_agent_query = "SELECT \
+            meta::id(id) AS id, workflow_id, parent_agent_id, sub_agent_id, \
+            sub_agent_name, task_description, status, duration_ms, \
+            tokens_input, tokens_output, result_summary, error_message, \
+            parent_message_id, created_at, completed_at \
+        FROM sub_agent_execution \
+        WHERE workflow_id = $wf_id \
+        ORDER BY created_at ASC";
+
+    let sub_agent_json = db
+        .query_json_with_params(sub_agent_query, wf_param)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to batch-load sub-agent executions");
+            format!("Failed to batch-load sub-agent executions: {}", e)
+        })?;
+    let sub_agent_executions: Vec<SubAgentExecution> = sub_agent_json
+        .into_iter()
+        .map(serde_json::from_value)
+        .collect::<std::result::Result<Vec<SubAgentExecution>, _>>()
+        .map_err(|e| {
+            error!(error = %e, "Failed to deserialize batched sub-agent executions");
+            format!("Failed to deserialize sub-agent executions: {}", e)
+        })?;
+
+    // Bucket primary tool/thinking rows by their owning message id, separating
+    // sub-agent internals (where `message_id` matches a sub_agent_execution.id).
+    let sub_agent_ids: HashSet<String> = sub_agent_executions
+        .iter()
+        .map(|sa| sa.id.clone())
+        .collect();
+
+    let mut primary_tools: HashMap<String, Vec<ToolExecution>> = HashMap::new();
+    let mut sub_agent_tools: HashMap<String, Vec<ToolExecution>> = HashMap::new();
+    for t in tool_executions {
+        let bucket = if sub_agent_ids.contains(&t.message_id) {
+            sub_agent_tools.entry(t.message_id.clone()).or_default()
+        } else {
+            primary_tools.entry(t.message_id.clone()).or_default()
+        };
+        bucket.push(t);
+    }
+
+    let mut primary_thinking: HashMap<String, Vec<ThinkingStep>> = HashMap::new();
+    let mut sub_agent_thinking: HashMap<String, Vec<ThinkingStep>> = HashMap::new();
+    for ts in thinking_steps {
+        let bucket = if sub_agent_ids.contains(&ts.message_id) {
+            sub_agent_thinking.entry(ts.message_id.clone()).or_default()
+        } else {
+            primary_thinking.entry(ts.message_id.clone()).or_default()
+        };
+        bucket.push(ts);
+    }
+
+    let mut sub_agents_by_parent: HashMap<String, Vec<SubAgentExecution>> = HashMap::new();
+    for sa in &sub_agent_executions {
+        // A sub-agent without a parent_message_id is not yet attached to an
+        // assistant message (in-flight or unfinished); skip it so its blocks
+        // don't leak into a foreign bucket.
+        if let Some(parent_id) = sa.parent_message_id.clone() {
+            sub_agents_by_parent
+                .entry(parent_id)
+                .or_default()
+                .push(sa.clone());
+        }
+    }
+
+    // Set of every primary assistant message that owns at least one block.
+    let mut primary_message_ids: HashSet<String> = HashSet::new();
+    primary_message_ids.extend(primary_tools.keys().cloned());
+    primary_message_ids.extend(primary_thinking.keys().cloned());
+    primary_message_ids.extend(sub_agents_by_parent.keys().cloned());
+
+    let mut result: HashMap<String, Vec<ChatBlock>> = HashMap::new();
+
+    for message_id in primary_message_ids {
+        let mut all_tools = primary_tools.remove(&message_id).unwrap_or_default();
+        let mut all_thinking = primary_thinking.remove(&message_id).unwrap_or_default();
+        let owned_sub_agents = sub_agents_by_parent
+            .get(&message_id)
+            .cloned()
+            .unwrap_or_default();
+
+        let primary_max_seq = all_tools
+            .iter()
+            .map(|t| t.sequence)
+            .chain(all_thinking.iter().map(|t| t.sequence))
+            .max()
+            .unwrap_or(0);
+        let mut seq_offset = primary_max_seq + 1;
+
+        // Re-sequence each sub-agent's internal blocks so they appear after
+        // the primary blocks but before later sub-agents (matching the
+        // load_message_blocks layout).
+        for sa in &owned_sub_agents {
+            if let Some(mut sa_tools) = sub_agent_tools.remove(&sa.id) {
+                for t in &mut sa_tools {
+                    t.sequence += seq_offset;
+                }
+                let max = sa_tools.iter().map(|t| t.sequence).max().unwrap_or(0);
+                seq_offset = max + 1;
+                all_tools.extend(sa_tools);
+            }
+            if let Some(mut sa_thinking) = sub_agent_thinking.remove(&sa.id) {
+                for t in &mut sa_thinking {
+                    t.sequence += seq_offset;
+                }
+                let max = sa_thinking.iter().map(|t| t.sequence).max().unwrap_or(0);
+                seq_offset = max + 1;
+                all_thinking.extend(sa_thinking);
+            }
+        }
+
+        let blocks = merge_into_chat_blocks(&all_tools, &all_thinking, &owned_sub_agents);
+        if !blocks.is_empty() {
+            result.insert(message_id, blocks);
+        }
+    }
+
+    info!(
+        message_count = result.len(),
+        sub_agent_count = sub_agent_executions.len(),
+        "Workflow blocks loaded (batched)"
+    );
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -767,5 +985,132 @@ mod tests {
             result.is_err(),
             "invalid UUID must be rejected at validation"
         );
+    }
+
+    /// Helper: insert a tool_execution row directly with a known sequence.
+    #[allow(clippy::too_many_arguments)]
+    async fn insert_tool_execution(
+        db: &crate::db::DBClient,
+        workflow_id: &str,
+        message_id: &str,
+        agent_id: &str,
+        tool_name: &str,
+        sequence: u32,
+    ) {
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE tool_execution:`{id}` SET \
+                workflow_id = $wf_id, message_id = $msg_id, agent_id = $agent_id, \
+                tool_type = 'local', tool_name = $tool_name, \
+                input_params = '{{}}', output_result = '{{}}', success = true, \
+                duration_ms = 5, iteration = 0, sequence = $seq, created_at = time::now()"
+        );
+        db.db
+            .query(&query)
+            .bind(("wf_id", workflow_id.to_string()))
+            .bind(("msg_id", message_id.to_string()))
+            .bind(("agent_id", agent_id.to_string()))
+            .bind(("tool_name", tool_name.to_string()))
+            .bind(("seq", sequence))
+            .await
+            .expect("insert tool_execution failed")
+            .check()
+            .expect("CREATE tool_execution validation failed");
+    }
+
+    /// Helper: insert a thinking_step row directly.
+    async fn insert_thinking_step(
+        db: &crate::db::DBClient,
+        workflow_id: &str,
+        message_id: &str,
+        agent_id: &str,
+        sequence: u32,
+        step_number: u32,
+    ) {
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE thinking_step:`{id}` SET \
+                workflow_id = $wf_id, message_id = $msg_id, agent_id = $agent_id, \
+                step_number = $step, content = 'thinking...', \
+                duration_ms = 1, tokens = 1, sequence = $seq, source = 'model_thinking', \
+                created_at = time::now()"
+        );
+        db.db
+            .query(&query)
+            .bind(("wf_id", workflow_id.to_string()))
+            .bind(("msg_id", message_id.to_string()))
+            .bind(("agent_id", agent_id.to_string()))
+            .bind(("step", step_number))
+            .bind(("seq", sequence))
+            .await
+            .expect("insert thinking_step failed")
+            .check()
+            .expect("CREATE thinking_step validation failed");
+    }
+
+    #[tokio::test]
+    async fn load_workflow_blocks_returns_empty_for_workflow_without_blocks() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+
+        let result = load_workflow_blocks_core(&state.db, &workflow_id)
+            .await
+            .expect("must succeed on empty workflow");
+
+        assert!(result.is_empty(), "no blocks -> empty map");
+    }
+
+    #[tokio::test]
+    async fn load_workflow_blocks_groups_blocks_by_message() {
+        let (state, _db_guard) = setup_test_state().await;
+        let workflow_id = uuid::Uuid::new_v4().to_string();
+        let msg_a = uuid::Uuid::new_v4().to_string();
+        let msg_b = uuid::Uuid::new_v4().to_string();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // msg_a: 1 thinking step + 1 tool execution
+        insert_thinking_step(&state.db, &workflow_id, &msg_a, &agent_id, 1, 1).await;
+        insert_tool_execution(&state.db, &workflow_id, &msg_a, &agent_id, "MemoryTool", 2).await;
+
+        // msg_b: 1 tool execution only
+        insert_tool_execution(&state.db, &workflow_id, &msg_b, &agent_id, "SearchTool", 1).await;
+
+        let result = load_workflow_blocks_core(&state.db, &workflow_id)
+            .await
+            .expect("query OK");
+
+        assert_eq!(result.len(), 2, "two messages with blocks");
+        let blocks_a = result.get(&msg_a).expect("msg_a present");
+        assert_eq!(blocks_a.len(), 2);
+        let blocks_b = result.get(&msg_b).expect("msg_b present");
+        assert_eq!(blocks_b.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn load_workflow_blocks_validates_workflow_id() {
+        let (state, _db_guard) = setup_test_state().await;
+        let result = load_workflow_blocks_core(&state.db, "not-a-uuid").await;
+        assert!(result.is_err(), "invalid UUID must be rejected");
+    }
+
+    #[tokio::test]
+    async fn load_workflow_blocks_isolates_workflows() {
+        let (state, _db_guard) = setup_test_state().await;
+        let wf_keep = uuid::Uuid::new_v4().to_string();
+        let wf_other = uuid::Uuid::new_v4().to_string();
+        let msg_keep = uuid::Uuid::new_v4().to_string();
+        let msg_other = uuid::Uuid::new_v4().to_string();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        insert_tool_execution(&state.db, &wf_keep, &msg_keep, &agent_id, "Keep", 1).await;
+        insert_tool_execution(&state.db, &wf_other, &msg_other, &agent_id, "Other", 1).await;
+
+        let result = load_workflow_blocks_core(&state.db, &wf_keep)
+            .await
+            .expect("query OK");
+
+        assert_eq!(result.len(), 1);
+        assert!(result.contains_key(&msg_keep));
+        assert!(!result.contains_key(&msg_other));
     }
 }

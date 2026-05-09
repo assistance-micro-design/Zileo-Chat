@@ -32,6 +32,10 @@ export const BlockService = {
 	/**
 	 * Load execution blocks for a single message.
 	 *
+	 * Kept for retry / refresh scenarios on a specific message. The bulk
+	 * "open a conversation" path uses {@link loadForMessages} which calls the
+	 * batched `load_workflow_blocks` command instead.
+	 *
 	 * @param messageId - The message ID to load blocks for
 	 * @returns Array of ChatBlocks ordered by sequence
 	 */
@@ -40,31 +44,35 @@ export const BlockService = {
 	},
 
 	/**
-	 * Load execution blocks for all assistant messages in a list.
-	 * Returns a Map of message_id to blocks array.
+	 * Load execution blocks for every assistant message of a workflow in a
+	 * single Tauri round-trip via the batched `load_workflow_blocks` command.
 	 *
-	 * @param messages - Array of messages to load blocks for
+	 * Replaces the previous N+1 pattern (one `load_message_blocks` per
+	 * assistant message) which scaled to `O(3N)` SurrealDB queries on long
+	 * conversations. Falls back to an empty map when the workflow id cannot
+	 * be derived (no messages or invalid input).
+	 *
+	 * @param messages - Array of messages of a single workflow
 	 * @returns Map of message ID to ChatBlock array
 	 */
 	async loadForMessages(messages: Message[]): Promise<Map<string, ChatBlock[]>> {
-		const assistantMessages = messages.filter((m) => m.role === 'assistant');
 		const result = new Map<string, ChatBlock[]>();
+		if (messages.length === 0) return result;
 
-		const entries = await Promise.all(
-			assistantMessages.map(async (msg): Promise<[string, ChatBlock[]]> => {
-				try {
-					const blocks = await BlockService.loadForMessage(msg.id);
-					return [msg.id, blocks];
-				} catch {
-					return [msg.id, []];
+		const workflowId = messages[0]?.workflow_id;
+		if (!workflowId) return result;
+
+		try {
+			const grouped = await invoke<Record<string, ChatBlock[]>>('load_workflow_blocks', {
+				workflowId
+			});
+			for (const [id, blocks] of Object.entries(grouped)) {
+				if (blocks.length > 0) {
+					result.set(id, blocks);
 				}
-			})
-		);
-
-		for (const [id, blocks] of entries) {
-			if (blocks.length > 0) {
-				result.set(id, blocks);
 			}
+		} catch {
+			// Non-blocking: caller renders the conversation without prior blocks.
 		}
 
 		return result;
