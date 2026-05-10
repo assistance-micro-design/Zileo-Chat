@@ -263,12 +263,13 @@ mod sub_agent_execution_tests {
 
     #[test]
     fn test_sub_agent_execution_create() {
-        let create = SubAgentExecutionCreate::new(
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_123".to_string(),
             "parent_agent".to_string(),
             "sub_456".to_string(),
             "Test Sub-Agent".to_string(),
             "Analyze the code for bugs".to_string(),
+            None,
         );
 
         assert_eq!(create.workflow_id, "wf_123");

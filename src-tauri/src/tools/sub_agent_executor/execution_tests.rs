@@ -265,12 +265,13 @@ fn test_is_retryable_error_unknown_errors() {
 fn test_create_execution_record_with_parent_default_none() {
     use crate::models::sub_agent::SubAgentExecutionCreate;
 
-    let create = SubAgentExecutionCreate::new(
+    let create = SubAgentExecutionCreate::with_parent(
         "wf_001".to_string(),
         "parent".to_string(),
         "child".to_string(),
         "name".to_string(),
         "prompt".to_string(),
+        None,
     );
     assert!(create.parent_execution_id.is_none());
 }
@@ -312,12 +313,13 @@ fn test_correlation_id_serialization_with_parent() {
 fn test_correlation_id_serialization_without_parent() {
     use crate::models::sub_agent::SubAgentExecutionCreate;
 
-    let create = SubAgentExecutionCreate::new(
+    let create = SubAgentExecutionCreate::with_parent(
         "wf".to_string(),
         "parent".to_string(),
         "child".to_string(),
         "name".to_string(),
         "prompt".to_string(),
+        None,
     );
 
     let json = serde_json::to_string(&create).unwrap();

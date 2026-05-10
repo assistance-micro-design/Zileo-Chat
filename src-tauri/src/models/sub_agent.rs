@@ -161,43 +161,6 @@ pub struct SubAgentExecutionCreate {
 // Constructor used by commands/sub_agent_execution; lib/bin split.
 #[allow(dead_code)]
 impl SubAgentExecutionCreate {
-    /// Creates a new SubAgentExecutionCreate.
-    ///
-    /// # Arguments
-    /// * `workflow_id` - The workflow where this execution occurs
-    /// * `parent_agent_id` - The primary agent spawning/delegating
-    /// * `sub_agent_id` - The sub-agent being executed
-    /// * `sub_agent_name` - Human-readable name for the sub-agent
-    /// * `task_description` - The task/prompt for the sub-agent
-    pub fn new(
-        workflow_id: String,
-        parent_agent_id: String,
-        sub_agent_id: String,
-        sub_agent_name: String,
-        task_description: String,
-    ) -> Self {
-        Self {
-            workflow_id,
-            parent_agent_id,
-            sub_agent_id,
-            sub_agent_name,
-            task_description,
-            status: SubAgentStatus::Pending.to_string(),
-            parent_execution_id: None,
-            parent_message_id: None,
-        }
-    }
-
-    /// Sets the `parent_message_id` (assistant message_id of the spawning agent).
-    ///
-    /// Use at CREATE time so the sub-agent execution is correlated to the
-    /// right message turn from the start, instead of relying on the legacy
-    /// bulk UPDATE in `persistence_step.rs` (H2 audit 2026-05-02).
-    pub fn with_parent_message(mut self, parent_message_id: String) -> Self {
-        self.parent_message_id = Some(parent_message_id);
-        self
-    }
-
     /// Creates a new SubAgentExecutionCreate with a parent execution ID.
     ///
     /// Use this method when creating a sub-execution that should be linked
@@ -361,12 +324,13 @@ mod tests {
 
     #[test]
     fn test_sub_agent_execution_create() {
-        let create = SubAgentExecutionCreate::new(
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Analyze the database schema".to_string(),
+            None,
         );
 
         assert_eq!(create.workflow_id, "wf_001");
@@ -477,13 +441,14 @@ mod tests {
     }
 
     #[test]
-    fn test_sub_agent_execution_create_new_has_no_parent() {
-        let create = SubAgentExecutionCreate::new(
+    fn test_sub_agent_execution_create_with_parent_none_has_no_parent() {
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Analyze the database schema".to_string(),
+            None,
         );
 
         assert_eq!(create.parent_execution_id, None);
@@ -506,12 +471,13 @@ mod tests {
 
     #[test]
     fn test_sub_agent_execution_create_without_parent_serialization_skip() {
-        let create = SubAgentExecutionCreate::new(
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Task description".to_string(),
+            None,
         );
 
         let json = serde_json::to_string(&create).unwrap();
@@ -524,27 +490,14 @@ mod tests {
     // message-level correlation for sub-agent executions.
 
     #[test]
-    fn test_sub_agent_execution_create_with_parent_message() {
-        let create = SubAgentExecutionCreate::new(
-            "wf_001".to_string(),
-            "parent_agent".to_string(),
-            "sub_agent_001".to_string(),
-            "Analysis Sub-Agent".to_string(),
-            "Task description".to_string(),
-        )
-        .with_parent_message("msg_a_001".to_string());
-
-        assert_eq!(create.parent_message_id, Some("msg_a_001".to_string()));
-    }
-
-    #[test]
     fn test_sub_agent_execution_create_default_parent_message_is_none() {
-        let create = SubAgentExecutionCreate::new(
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Task description".to_string(),
+            None,
         );
 
         assert_eq!(create.parent_message_id, None);
@@ -552,12 +505,13 @@ mod tests {
 
     #[test]
     fn test_sub_agent_execution_create_parent_message_serialization_skips_none() {
-        let create = SubAgentExecutionCreate::new(
+        let create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Task description".to_string(),
+            None,
         );
 
         let json = serde_json::to_string(&create).unwrap();
@@ -566,14 +520,15 @@ mod tests {
 
     #[test]
     fn test_sub_agent_execution_create_parent_message_serialization_some() {
-        let create = SubAgentExecutionCreate::new(
+        let mut create = SubAgentExecutionCreate::with_parent(
             "wf_001".to_string(),
             "parent_agent".to_string(),
             "sub_agent_001".to_string(),
             "Analysis Sub-Agent".to_string(),
             "Task description".to_string(),
-        )
-        .with_parent_message("msg_a_001".to_string());
+            None,
+        );
+        create.parent_message_id = Some("msg_a_001".to_string());
 
         let json = serde_json::to_string(&create).unwrap();
         assert!(json.contains("\"parent_message_id\":\"msg_a_001\""));
