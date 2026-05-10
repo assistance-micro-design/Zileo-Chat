@@ -1,6 +1,6 @@
 {
   "productName": "Zileo-Chat",
-  "version": "0.23.1",
+  "version": "0.23.2",
   "identifier": "com.zileo.chat",
   "build": {
     "frontendDist": "../build",
@@ -42,7 +42,10 @@
       "nsis": {
         "installMode": "both",
         "displayLanguageSelector": true,
-        "languages": ["French", "English"],
+        "languages": [
+          "French",
+          "English"
+        ],
         "startMenuFolder": "Zileo",
         "installerIcon": "icons/icon.ico"
       }

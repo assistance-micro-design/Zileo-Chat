@@ -1,6 +1,6 @@
 # Zileo Chat
 
-[![Version](https://img.shields.io/badge/version-0.23.1-orange)](https://github.com/assistance-micro-design/zileo-chat)
+[![Version](https://img.shields.io/badge/version-0.23.2-orange)](https://github.com/assistance-micro-design/zileo-chat)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Status](https://img.shields.io/badge/status-beta-yellow)](https://github.com/assistance-micro-design/zileo-chat)
 
@@ -14,7 +14,7 @@
 
 ## Beta Warning
 
-**This software is currently in beta (v0.23.1).**
+**This software is currently in beta (v0.23.2).**
 
 Before using Zileo Chat, please be aware of the following risks:
 
@@ -115,11 +115,11 @@ Use [Docker MCP Toolkit](https://docs.docker.com/ai/mcp-catalog-and-toolkit/tool
 
 ## Build Requirements
 
-- **Node.js** 22.12+ or 24+ (Node 20 EOL April 2026)
-- **Rust** 1.80.1+
+- **Node.js** >=20.19.0, 22.12+, or 24+
+- **Rust** 1.80.1+ with Cargo
 
 ```bash
-node --version    # >= 22.12
+node --version    # >= 20.19.0
 rustc --version   # >= 1.80.1
 ```
 

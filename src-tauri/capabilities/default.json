@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Zileo Chat",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -11,22 +13,39 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://*" },
-        { "url": "http://*" },
-        { "url": "mailto:*" }
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "mailto:*"
+        }
       ],
       "deny": [
-        { "url": "file://*" },
-        { "url": "tel:*" },
-        { "url": "data:*" },
-        { "url": "javascript:*" },
-        { "url": "vbscript:*" }
+        {
+          "url": "file://*"
+        },
+        {
+          "url": "tel:*"
+        },
+        {
+          "url": "data:*"
+        },
+        {
+          "url": "javascript:*"
+        },
+        {
+          "url": "vbscript:*"
+        }
       ]
     },
     "core:window:allow-theme",
     "core:window:allow-set-theme",
     "opener:deny-open-path",
     "opener:allow-reveal-item-in-dir",
-    "dialog:default"
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

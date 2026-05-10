@@ -59,6 +59,23 @@ Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 26 atomi
 
 ---
 
+## [0.23.2] - 2026-05-10
+
+Maintenance release for dependency and Tauri configuration cleanup.
+
+### Changed
+
+- Bump safe frontend tooling/runtime dependencies while staying on the current major lines: SvelteKit 2, Svelte 5, Vite 7, ESLint 9, Vitest 4 and Tauri 2.
+- Declare the supported Node.js runtime explicitly with `engines.node >=20.19.0`.
+- Narrow Tauri dialog permissions from `dialog:default` to explicit `dialog:allow-open` and `dialog:allow-save`.
+
+### Removed
+
+- Remove unused or redundant direct dependencies: `zod`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser` and `@types/dompurify`.
+- Remove obsolete configuration/artifacts: legacy `.eslintrc.cjs` and orphaned `src-tauri/package-lock.json`.
+
+---
+
 ## [0.23.1] - 2026-05-08
 
 Audit hardening release. Backend defense-in-depth on every SurrealQL interpolation site, OOM caps on the SSE / MCP read paths, TOCTOU defense on `file_manager` recursive search, retry-storm guards on transient and 4xx LLM responses, plus the previously-unreleased `reasoning_effort` live-reload fix from PR #134. Frontend strictness ratchets up: `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, ESLint `no-console: error` + `no-explicit-any: error`. CI is hardened against tag-rewrite supply-chain attacks (SHA-pinned actions, scoped `contents:write`, `cargo audit` / `npm audit` advisory jobs).
@@ -915,7 +932,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.2...HEAD
+[0.23.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.2
 [0.23.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.1
 [0.23.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.0
 [0.22.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.2
