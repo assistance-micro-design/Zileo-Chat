@@ -276,12 +276,6 @@ impl MCPManager {
         Ok(configs)
     }
 
-    /// Gets a single server configuration from the database
-    pub async fn get_server_config(&self, id: &str) -> MCPResult<Option<MCPServerConfig>> {
-        let configs = self.get_saved_configs().await?;
-        Ok(configs.into_iter().find(|c| c.id == id))
-    }
-
     /// Logs a tool call to the database
     ///
     /// Uses execute_with_params instead of create() to avoid SurrealDB SDK 2.x

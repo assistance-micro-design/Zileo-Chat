@@ -19,7 +19,6 @@
 use super::{MCPManager, MCP_INITIAL_RETRY_DELAY_MS, MCP_MAX_RETRY_ATTEMPTS, TOOL_CACHE_TTL};
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{MCPCallLogCreate, MCPTool, MCPToolCallRequest, MCPToolCallResult};
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -259,14 +258,5 @@ impl MCPManager {
         let mut cache = self.tool_cache.write().await;
         cache.remove(server_name);
         debug!(server = %server_name, "Tool cache invalidated");
-    }
-
-    /// Lists all tools across all connected servers
-    pub async fn list_all_tools(&self) -> HashMap<String, Vec<MCPTool>> {
-        let clients = self.clients.read().await;
-        clients
-            .values()
-            .map(|client| (client.config().name.clone(), client.tools().to_vec()))
-            .collect()
     }
 }

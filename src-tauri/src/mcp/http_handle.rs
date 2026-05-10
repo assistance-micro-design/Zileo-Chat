@@ -542,25 +542,6 @@ impl MCPHttpHandle {
         &self.resources
     }
 
-    /// Refreshes the tools list from the server.
-    ///
-    /// Returns the cached (empty) list without contacting the server when
-    /// the server did not advertise the `tools` capability in `initialize`.
-    /// This avoids burning a request on a method the server has explicitly
-    /// said it does not implement (and avoids a needless 429 against
-    /// rate-limited shared hosts).
-    pub async fn refresh_tools(&mut self) -> MCPResult<Vec<MCPTool>> {
-        if self.capabilities.tools.is_none() {
-            debug!(
-                server_id = %self.config.id,
-                "refresh_tools no-op — server did not advertise tools capability"
-            );
-            return Ok(self.tools.clone());
-        }
-        self.refresh_tools_internal().await?;
-        Ok(self.tools.clone())
-    }
-
     /// Internal method to refresh tools
     async fn refresh_tools_internal(&mut self) -> MCPResult<()> {
         let request = JsonRpcRequest::new("tools/list", None, self.next_request_id());
@@ -867,28 +848,6 @@ impl MCPHttpHandle {
     /// Returns the current server status
     pub fn status(&self) -> &MCPServerStatus {
         &self.status
-    }
-
-    /// Returns the server configuration
-    pub fn config(&self) -> &MCPServerConfig {
-        &self.config
-    }
-
-    /// Returns the server info (name, version) if available
-    pub fn server_info(&self) -> Option<(&str, &str)> {
-        self.server_info
-            .as_ref()
-            .map(|(n, v)| (n.as_str(), v.as_str()))
-    }
-
-    /// Checks if the connection is active
-    pub fn is_connected(&self) -> bool {
-        self.connected
-    }
-
-    /// Sets the status to error
-    pub fn set_error_status(&mut self) {
-        self.status = MCPServerStatus::Error;
     }
 }
 

@@ -56,7 +56,7 @@
 
 use crate::mcp::http_handle::MCPHttpHandle;
 use crate::mcp::server_handle::MCPServerHandle;
-use crate::mcp::{MCPError, MCPResult, MCPToolCallResponse};
+use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{
     MCPDeploymentMethod, MCPResource, MCPServerConfig, MCPServerStatus, MCPTestResult, MCPTool,
     MCPToolCallResult,
@@ -84,8 +84,6 @@ pub struct MCPClient {
     handle: Option<TransportHandle>,
     /// Server configuration
     config: MCPServerConfig,
-    /// Whether auto-reconnect is enabled
-    auto_reconnect: bool,
 }
 
 impl MCPClient {
@@ -96,7 +94,6 @@ impl MCPClient {
         Self {
             handle: None,
             config,
-            auto_reconnect: false,
         }
     }
 
@@ -339,81 +336,6 @@ impl MCPClient {
             duration_ms,
         })
     }
-
-    /// Calls a tool and returns the raw response
-    ///
-    /// Use this when you need access to the full MCP response format.
-    pub async fn call_tool_raw(
-        &mut self,
-        tool_name: &str,
-        arguments: serde_json::Value,
-    ) -> MCPResult<MCPToolCallResponse> {
-        match self.handle.as_mut() {
-            Some(TransportHandle::Stdio(h)) => h.call_tool(tool_name, arguments).await,
-            Some(TransportHandle::Http(h)) => h.call_tool(tool_name, arguments).await,
-            None => Err(MCPError::ServerNotRunning {
-                server: self.config.name.clone(),
-                status: "disconnected".to_string(),
-            }),
-        }
-    }
-
-    /// Calls a tool and extracts text content
-    ///
-    /// Convenience method that calls a tool and returns all text content
-    /// concatenated as a single string.
-    pub async fn call_tool_text(
-        &mut self,
-        tool_name: &str,
-        arguments: serde_json::Value,
-    ) -> MCPResult<String> {
-        let response = self.call_tool_raw(tool_name, arguments).await?;
-        Ok(crate::mcp::helpers::extract_text_content(&response))
-    }
-
-    /// Enables or disables auto-reconnect
-    ///
-    /// When enabled, the client will attempt to reconnect if the
-    /// connection is lost during a tool call.
-    pub fn set_auto_reconnect(&mut self, enabled: bool) {
-        self.auto_reconnect = enabled;
-    }
-
-    /// Refreshes the tools list from the server
-    ///
-    /// Use this to update the tools list if the server's capabilities
-    /// may have changed.
-    pub async fn refresh_tools(&mut self) -> MCPResult<Vec<MCPTool>> {
-        match self.handle.as_mut() {
-            Some(TransportHandle::Stdio(h)) => h.refresh_tools().await,
-            Some(TransportHandle::Http(h)) => h.refresh_tools().await,
-            None => Err(MCPError::ServerNotRunning {
-                server: self.config.name.clone(),
-                status: "disconnected".to_string(),
-            }),
-        }
-    }
-
-    /// Checks if the underlying process/connection is still alive
-    ///
-    /// For stdio transport, checks if the process is running.
-    /// For HTTP transport, checks if the connection is active.
-    pub fn is_process_alive(&mut self) -> bool {
-        match self.handle.as_mut() {
-            Some(TransportHandle::Stdio(h)) => h.is_process_alive(),
-            Some(TransportHandle::Http(h)) => h.is_connected(),
-            None => false,
-        }
-    }
-
-    /// Returns the server info (name, version) if available
-    pub fn server_info(&self) -> Option<(&str, &str)> {
-        match &self.handle {
-            Some(TransportHandle::Stdio(h)) => h.server_info(),
-            Some(TransportHandle::Http(h)) => h.server_info(),
-            None => None,
-        }
-    }
 }
 
 impl Drop for MCPClient {
@@ -457,21 +379,6 @@ mod tests {
         assert_eq!(client.config().id, "test_client");
         assert!(client.tools().is_empty());
         assert!(client.resources().is_empty());
-    }
-
-    #[test]
-    fn test_client_auto_reconnect() {
-        let config = create_test_config();
-        let mut client = MCPClient::new(config);
-
-        // Default is false
-        assert!(!client.auto_reconnect);
-
-        client.set_auto_reconnect(true);
-        assert!(client.auto_reconnect);
-
-        client.set_auto_reconnect(false);
-        assert!(!client.auto_reconnect);
     }
 
     #[test]

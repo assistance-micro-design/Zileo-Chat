@@ -44,7 +44,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Default timeout for MCP operations (30 seconds)
 const DEFAULT_TIMEOUT_MS: u64 = 30000;
@@ -350,7 +350,6 @@ impl MCPServerHandle {
     /// # Returns
     ///
     /// Returns the cached list of tools discovered during initialization.
-    /// To refresh, call `refresh_tools()`.
     pub fn list_tools(&self) -> &[MCPTool] {
         &self.tools
     }
@@ -362,12 +361,6 @@ impl MCPServerHandle {
     /// Returns the cached list of resources discovered during initialization.
     pub fn list_resources(&self) -> &[MCPResource] {
         &self.resources
-    }
-
-    /// Refreshes the tools list from the server
-    pub async fn refresh_tools(&mut self) -> MCPResult<Vec<MCPTool>> {
-        self.tools = self.list_tools_internal().await?;
-        Ok(self.tools.clone())
     }
 
     /// Internal method to fetch tools from server
@@ -687,48 +680,6 @@ impl MCPServerHandle {
     pub fn status(&self) -> &MCPServerStatus {
         &self.status
     }
-
-    /// Returns the server configuration
-    pub fn config(&self) -> &MCPServerConfig {
-        &self.config
-    }
-
-    /// Returns the server info (name, version) if initialized
-    pub fn server_info(&self) -> Option<(&str, &str)> {
-        self.server_info
-            .as_ref()
-            .map(|(n, v)| (n.as_str(), v.as_str()))
-    }
-
-    /// Checks if the server process is still running
-    pub fn is_process_alive(&mut self) -> bool {
-        if let Some(ref mut child) = self.child {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    // Process has exited
-                    self.status = MCPServerStatus::Disconnected;
-                    false
-                }
-                Ok(None) => true, // Still running
-                Err(_) => {
-                    self.status = MCPServerStatus::Error;
-                    false
-                }
-            }
-        } else {
-            false
-        }
-    }
-
-    /// Sets the server status to error with logging
-    pub fn set_error_status(&mut self, message: &str) {
-        error!(
-            server_id = %self.config.id,
-            error = %message,
-            "MCP server entered error state"
-        );
-        self.status = MCPServerStatus::Error;
-    }
 }
 
 impl Drop for MCPServerHandle {
@@ -747,7 +698,6 @@ impl Drop for MCPServerHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::MCPContent;
     use std::collections::HashMap;
 
     fn create_test_config() -> MCPServerConfig {
@@ -817,43 +767,6 @@ mod tests {
             }
             _ => panic!("Expected InvalidConfig error"),
         }
-    }
-
-    #[test]
-    fn test_extract_text_content() {
-        let response = MCPToolCallResponse {
-            content: vec![
-                MCPContent::Text {
-                    text: "First line".to_string(),
-                },
-                MCPContent::Text {
-                    text: "Second line".to_string(),
-                },
-            ],
-            is_error: None,
-        };
-
-        let text = crate::mcp::helpers::extract_text_content(&response);
-        assert_eq!(text, "First line\nSecond line");
-    }
-
-    #[test]
-    fn test_extract_text_content_filters_non_text() {
-        let response = MCPToolCallResponse {
-            content: vec![
-                MCPContent::Text {
-                    text: "Text content".to_string(),
-                },
-                MCPContent::Image {
-                    data: "base64data".to_string(),
-                    mime_type: "image/png".to_string(),
-                },
-            ],
-            is_error: None,
-        };
-
-        let text = crate::mcp::helpers::extract_text_content(&response);
-        assert_eq!(text, "Text content");
     }
 
     #[test]

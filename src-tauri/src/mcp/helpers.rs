@@ -16,9 +16,7 @@
 //!
 //! These helpers are used to parse SurrealDB JSON values into typed MCP structures.
 
-use crate::mcp::protocol::{
-    MCPContent, MCPResourceDefinition, MCPToolCallResponse, MCPToolDefinition,
-};
+use crate::mcp::protocol::{MCPResourceDefinition, MCPToolDefinition};
 use crate::models::mcp::{MCPAuthMetadata, MCPAuthType, MCPDeploymentMethod, MCPResource, MCPTool};
 use std::collections::HashMap;
 
@@ -132,27 +130,6 @@ pub fn convert_resource_definition(def: MCPResourceDefinition) -> MCPResource {
         description: def.description,
         mime_type: def.mime_type,
     }
-}
-
-/// Extracts text content from an MCP tool call response.
-///
-/// Handles all content types:
-/// - `Text`: extracts the text directly
-/// - `Resource`: extracts the resource text (if available)
-/// - `Image`: skipped (cannot be converted to text)
-///
-/// Shared between `MCPServerHandle` and `MCPHttpHandle` to avoid duplication.
-pub fn extract_text_content(response: &MCPToolCallResponse) -> String {
-    response
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            MCPContent::Text { text } => Some(text.as_str()),
-            MCPContent::Resource { resource } => resource.text.as_deref(),
-            MCPContent::Image { .. } => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 #[cfg(test)]
