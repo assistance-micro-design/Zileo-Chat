@@ -567,6 +567,7 @@ Uses extracted components, services, and stores for clean architecture.
 				tokenStore.stopStreaming();
 			}
 		}
+	}
 
 	/**
 	 * Handle validation approval.
