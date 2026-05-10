@@ -100,11 +100,6 @@ pub struct JsonRpcResponse {
 }
 
 impl JsonRpcResponse {
-    /// Checks if the response is an error
-    pub fn is_error(&self) -> bool {
-        self.error.is_some()
-    }
-
     /// Extracts the result value, returning an error if present
     pub fn into_result(self) -> Result<Value, JsonRpcError> {
         if let Some(err) = self.error {
@@ -125,54 +120,6 @@ pub struct JsonRpcError {
     /// Optional additional error data
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
-}
-
-// Standard JSON-RPC error codes
-impl JsonRpcError {
-    /// Parse error (-32700)
-    pub fn parse_error(message: &str) -> Self {
-        Self {
-            code: -32700,
-            message: message.to_string(),
-            data: None,
-        }
-    }
-
-    /// Invalid Request (-32600)
-    pub fn invalid_request(message: &str) -> Self {
-        Self {
-            code: -32600,
-            message: message.to_string(),
-            data: None,
-        }
-    }
-
-    /// Method not found (-32601)
-    pub fn method_not_found(method: &str) -> Self {
-        Self {
-            code: -32601,
-            message: format!("Method '{}' not found", method),
-            data: None,
-        }
-    }
-
-    /// Invalid params (-32602)
-    pub fn invalid_params(message: &str) -> Self {
-        Self {
-            code: -32602,
-            message: message.to_string(),
-            data: None,
-        }
-    }
-
-    /// Internal error (-32603)
-    pub fn internal_error(message: &str) -> Self {
-        Self {
-            code: -32603,
-            message: message.to_string(),
-            data: None,
-        }
-    }
 }
 
 /// MCP Initialize request parameters
@@ -454,7 +401,7 @@ mod tests {
         }"#;
 
         let response: JsonRpcResponse = serde_json::from_str(json).unwrap();
-        assert!(!response.is_error());
+        assert!(response.error.is_none());
         assert!(response.result.is_some());
     }
 
@@ -467,21 +414,8 @@ mod tests {
         }"#;
 
         let response: JsonRpcResponse = serde_json::from_str(json).unwrap();
-        assert!(response.is_error());
+        assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32601);
-    }
-
-    #[test]
-    fn test_json_rpc_error_constructors() {
-        let parse_err = JsonRpcError::parse_error("Invalid JSON");
-        assert_eq!(parse_err.code, -32700);
-
-        let method_err = JsonRpcError::method_not_found("unknown");
-        assert_eq!(method_err.code, -32601);
-        assert!(method_err.message.contains("unknown"));
-
-        let internal_err = JsonRpcError::internal_error("Something went wrong");
-        assert_eq!(internal_err.code, -32603);
     }
 
     #[test]
