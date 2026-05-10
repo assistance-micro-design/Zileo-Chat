@@ -1,0 +1,30 @@
+# Build outputs
+.svelte-kit/
+build/
+dist/
+target/
+node_modules/
+
+# Auto-generated
+src-tauri/gen/
+src-tauri/target/
+package-lock.json
+
+# Lock files & binaries
+*.lock
+*.tar.gz
+*.AppImage
+*.appimage
+
+# Static assets
+static/
+Capture/
+Site/
+
+# Local-only assets (per repo conventions)
+docs/specs/
+docs/taches/
+
+# Internal Claude tooling (managed separately)
+.claude/
+.serena/
