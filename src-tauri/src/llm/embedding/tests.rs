@@ -182,7 +182,6 @@ fn test_mistral_response_deserialization() {
     }"#;
 
     let response: MistralEmbeddingResponse = serde_json::from_str(json).unwrap();
-    assert_eq!(response.id, "emb-123");
     assert_eq!(response.data.len(), 1);
     assert_eq!(response.data[0].embedding, vec![0.1, 0.2, 0.3]);
 }

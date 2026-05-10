@@ -32,44 +32,21 @@ pub(super) struct MistralEmbeddingRequest<'a> {
 
 /// Mistral embedding API response.
 ///
-/// Fields below are deserialized from the API but not all are read after parsing
-/// (only `data` is consumed). The remaining fields exist to validate the response
-/// shape and surface useful info in debug logs.
+/// Serde ignores unknown fields by default, so only the fields consumed
+/// downstream are declared (currently `data`). Re-add `usage` / `model` /
+/// `id` here when callers actually need them.
 #[derive(Debug, Deserialize)]
 pub(super) struct MistralEmbeddingResponse {
-    #[allow(dead_code)]
-    pub id: String,
-    #[allow(dead_code)]
-    pub object: String,
     pub data: Vec<MistralEmbeddingData>,
-    #[allow(dead_code)]
-    pub model: String,
-    #[allow(dead_code)]
-    pub usage: MistralUsage,
 }
 
 /// Mistral embedding data item.
 ///
-/// Only `embedding` is consumed downstream; `object` and `index` are kept for
-/// response-shape validation during deserialization.
+/// Only `embedding` is consumed downstream; other fields (`object`, `index`)
+/// are silently ignored by serde during deserialization.
 #[derive(Debug, Deserialize)]
 pub(super) struct MistralEmbeddingData {
-    #[allow(dead_code)]
-    pub object: String,
-    #[allow(dead_code)]
-    pub index: usize,
     pub embedding: Vec<f32>,
-}
-
-/// Mistral API usage statistics.
-///
-/// Deserialized for completeness/debug visibility; not currently surfaced to callers.
-#[derive(Debug, Deserialize)]
-pub(super) struct MistralUsage {
-    #[allow(dead_code)]
-    pub prompt_tokens: usize,
-    #[allow(dead_code)]
-    pub total_tokens: usize,
 }
 
 /// Ollama embedding API request
