@@ -16,15 +16,13 @@
 //!
 //! Server spawning, stopping, restarting, and health checks.
 
-use super::{MCPManager, DEFAULT_HEALTH_CHECK_INTERVAL};
+use super::MCPManager;
 use crate::mcp::circuit_breaker::CircuitBreaker;
 use crate::mcp::client::MCPClient;
 use crate::mcp::{MCPError, MCPResult};
 use crate::models::mcp::{MCPServer, MCPServerConfig, MCPTestResult};
 use chrono::Utc;
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 impl MCPManager {
     /// Spawns a new MCP server
@@ -244,141 +242,5 @@ impl MCPManager {
         );
 
         MCPClient::test_connection(config).await
-    }
-
-    /// Starts periodic health checks for all connected servers
-    ///
-    /// Spawns a background task that periodically checks server health
-    /// using `list_tools()` as a health probe. Unhealthy servers will have
-    /// their circuit breakers updated accordingly.
-    ///
-    /// # Arguments
-    ///
-    /// * `manager` - Arc reference to self (needed for background task)
-    /// * `interval` - How often to check health (default: 5 minutes)
-    ///
-    /// # Returns
-    ///
-    /// Returns a `JoinHandle` for the background task.
-    pub fn start_health_checks(
-        manager: Arc<Self>,
-        interval: Option<Duration>,
-    ) -> tokio::task::JoinHandle<()> {
-        let interval = interval.unwrap_or(DEFAULT_HEALTH_CHECK_INTERVAL);
-        let mut shutdown_rx = manager.health_check_shutdown.subscribe();
-
-        info!(
-            interval_secs = interval.as_secs(),
-            "Starting MCP health check task"
-        );
-
-        tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(interval);
-            // Skip the first immediate tick
-            ticker.tick().await;
-
-            loop {
-                tokio::select! {
-                    _ = ticker.tick() => {
-                        manager.check_all_servers_health().await;
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("Health check task received shutdown signal");
-                        break;
-                    }
-                }
-            }
-
-            info!("Health check task stopped");
-        })
-    }
-
-    /// Checks health of all connected servers
-    async fn check_all_servers_health(&self) {
-        let server_names: Vec<String> = {
-            let clients = self.clients.read().await;
-            clients.keys().cloned().collect()
-        };
-
-        if server_names.is_empty() {
-            debug!("No servers to health check");
-            return;
-        }
-
-        debug!(
-            server_count = server_names.len(),
-            "Running health checks for MCP servers"
-        );
-
-        for name in server_names {
-            self.check_server_health(&name).await;
-        }
-    }
-
-    /// Checks health of a single server
-    async fn check_server_health(&self, server_name: &str) {
-        let result = {
-            let mut clients = self.clients.write().await;
-            if let Some(client) = clients.get_mut(server_name) {
-                // Use refresh_tools as health probe - it makes a real network call
-                match client.refresh_tools().await {
-                    Ok(tools) => {
-                        debug!(
-                            server = %server_name,
-                            tool_count = tools.len(),
-                            "Health check passed"
-                        );
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!(
-                            server = %server_name,
-                            error = %e,
-                            "Health check failed"
-                        );
-                        Err(e)
-                    }
-                }
-            } else {
-                // Server was removed during iteration
-                return;
-            }
-        };
-
-        // Update circuit breaker based on result
-        let mut breakers = self.circuit_breakers.write().await;
-        if let Some(breaker) = breakers.get_mut(server_name) {
-            match result {
-                Ok(()) => breaker.record_success(),
-                Err(_) => breaker.record_failure(),
-            }
-        }
-    }
-
-    /// Stops the health check background task
-    pub fn stop_health_checks(&self) {
-        info!("Stopping MCP health check task");
-        // Ignore send error if no receivers (task already stopped)
-        let _ = self.health_check_shutdown.send(());
-    }
-
-    /// Gets the circuit breaker state for a server
-    pub async fn get_circuit_breaker_state(
-        &self,
-        server_name: &str,
-    ) -> Option<crate::mcp::circuit_breaker::CircuitState> {
-        let breakers = self.circuit_breakers.read().await;
-        breakers.get(server_name).map(|b| b.state())
-    }
-
-    /// Resets the circuit breaker for a server
-    pub async fn reset_circuit_breaker(&self, server_name: &str) -> bool {
-        let mut breakers = self.circuit_breakers.write().await;
-        if let Some(breaker) = breakers.get_mut(server_name) {
-            breaker.reset();
-            true
-        } else {
-            false
-        }
     }
 }
