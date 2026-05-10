@@ -68,28 +68,6 @@ impl OllamaProvider {
         }
     }
 
-    /// Creates a new Ollama provider with a custom server URL and a default HTTP client.
-    ///
-    /// Note: For production use, prefer using `new()` with a shared HTTP client
-    /// from ProviderManager to benefit from connection pooling.
-    ///
-    /// # Errors
-    /// Returns an error if the HTTP client fails to initialize.
-    #[allow(dead_code)] // Used in tests only (lib/binary split)
-    pub fn with_url(url: &str) -> Result<Self, String> {
-        let http_client = Arc::new(
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .build()
-                .map_err(|e| format!("Failed to create HTTP client: {}", e))?,
-        );
-        Ok(Self {
-            server_url: Arc::new(RwLock::new(url.to_string())),
-            configured: Arc::new(RwLock::new(false)),
-            http_client,
-        })
-    }
-
     /// Configures the provider with the given server URL.
     pub async fn configure(&self, url: Option<&str>) -> Result<(), LLMError> {
         let server_url = url.unwrap_or(DEFAULT_OLLAMA_URL);
@@ -98,19 +76,6 @@ impl OllamaProvider {
 
         info!(url = server_url, "Ollama provider configured");
         Ok(())
-    }
-
-    /// Clears the provider configuration
-    #[allow(dead_code)] // Used in tests only (lib/binary split)
-    pub async fn clear(&self) {
-        *self.configured.write().await = false;
-        info!("Ollama provider cleared");
-    }
-
-    /// Gets the current server URL
-    #[allow(dead_code)] // Used in tests only (lib/binary split)
-    pub async fn get_server_url(&self) -> String {
-        self.server_url.read().await.clone()
     }
 
     /// Tests connection to the Ollama server
@@ -471,9 +436,7 @@ mod tests {
     fn test_ollama_provider() -> OllamaProvider {
         let http_client = Arc::new(
             reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(
-                    crate::constants::llm_http::DEFAULT_TIMEOUT_SECS,
-                ))
+                .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("test HTTP client"),
         );
@@ -514,23 +477,6 @@ mod tests {
 
         // Now should be configured
         assert!(provider.is_configured());
-
-        // Check default URL
-        assert_eq!(provider.get_server_url().await, DEFAULT_OLLAMA_URL);
-
-        // Clear
-        provider.clear().await;
-        assert!(!provider.is_configured());
-    }
-
-    #[tokio::test]
-    async fn test_ollama_provider_custom_url() {
-        let provider = test_ollama_provider();
-
-        let custom_url = "http://192.168.1.100:11434";
-        provider.configure(Some(custom_url)).await.unwrap();
-
-        assert_eq!(provider.get_server_url().await, custom_url);
     }
 
     #[tokio::test]
@@ -560,13 +506,6 @@ mod tests {
             ),
             Ok(_) => panic!("Expected error"),
         }
-    }
-
-    #[test]
-    fn test_ollama_with_url() {
-        let custom_url = "http://localhost:11435";
-        let provider = OllamaProvider::with_url(custom_url).expect("test with_url");
-        assert_eq!(provider.provider_type(), ProviderType::Ollama);
     }
 
     #[test]

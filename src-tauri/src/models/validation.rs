@@ -248,38 +248,6 @@ impl Default for AuditConfig {
     }
 }
 
-/// Main validation settings configuration
-#[allow(dead_code)] // API type for validation settings creation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ValidationSettingsConfig {
-    /// Validation mode
-    pub mode: ValidationMode,
-    /// Selective config (used when mode = 'selective')
-    pub selective_config: SelectiveValidationConfig,
-    /// Risk threshold settings
-    pub risk_thresholds: RiskThresholdConfig,
-    /// Timeout in seconds (30-300)
-    pub timeout_seconds: i32,
-    /// Behavior when timeout expires
-    pub timeout_behavior: TimeoutBehavior,
-    /// Audit settings
-    pub audit: AuditConfig,
-}
-
-impl Default for ValidationSettingsConfig {
-    fn default() -> Self {
-        Self {
-            mode: ValidationMode::Selective,
-            selective_config: SelectiveValidationConfig::default(),
-            risk_thresholds: RiskThresholdConfig::default(),
-            timeout_seconds: 60,
-            timeout_behavior: TimeoutBehavior::default(),
-            audit: AuditConfig::default(),
-        }
-    }
-}
-
 /// Validation settings with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

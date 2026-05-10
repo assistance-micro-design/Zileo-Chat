@@ -54,15 +54,7 @@ pub mod audit {
 }
 
 /// LLM provider HTTP defaults.
-// Used by lib LLM providers; not reachable from binary target.
-#[allow(dead_code)]
 pub mod llm_http {
-    /// Default HTTP total timeout (seconds) for non-streaming LLM responses.
-    ///
-    /// Kept for connectivity tests and any non-tool-loop call path. Not used
-    /// for `complete_with_tools` anymore since the bascule to wire-level
-    /// streaming — see `DEFAULT_READ_TIMEOUT_SECS`.
-    pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
     /// Per-read timeout (seconds) for streaming chat completions.
     ///
     /// `reqwest::ClientBuilder::read_timeout` resets after each successful

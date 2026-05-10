@@ -25,10 +25,7 @@ pub enum ToolCategory {
 
 /// Metadata for a registered tool.
 #[derive(Debug, Clone)]
-// Some fields (e.g. `name`) are read only by lib tests; lib/bin split.
-#[allow(dead_code)]
 pub struct ToolMetadata {
-    pub name: &'static str,
     pub category: ToolCategory,
     pub requires_context: bool,
     /// Hidden tools are registered (valid for validation) but not shown in frontend UI.
@@ -50,7 +47,6 @@ impl ToolRegistry {
         tools.insert(
             "MemoryTool",
             ToolMetadata {
-                name: "MemoryTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: false,
@@ -59,7 +55,6 @@ impl ToolRegistry {
         tools.insert(
             "TodoTool",
             ToolMetadata {
-                name: "TodoTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: false,
@@ -68,7 +63,6 @@ impl ToolRegistry {
         tools.insert(
             "CalculatorTool",
             ToolMetadata {
-                name: "CalculatorTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: false,
@@ -77,7 +71,6 @@ impl ToolRegistry {
         tools.insert(
             "UserQuestionTool",
             ToolMetadata {
-                name: "UserQuestionTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: false,
@@ -87,7 +80,6 @@ impl ToolRegistry {
         tools.insert(
             "FileManagerTool",
             ToolMetadata {
-                name: "FileManagerTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: false,
@@ -98,7 +90,6 @@ impl ToolRegistry {
         tools.insert(
             "ReadSkillTool",
             ToolMetadata {
-                name: "ReadSkillTool",
                 category: ToolCategory::Basic,
                 requires_context: false,
                 hidden: true,
@@ -109,7 +100,6 @@ impl ToolRegistry {
         tools.insert(
             "SpawnAgentTool",
             ToolMetadata {
-                name: "SpawnAgentTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
                 hidden: false,
@@ -118,7 +108,6 @@ impl ToolRegistry {
         tools.insert(
             "DelegateTaskTool",
             ToolMetadata {
-                name: "DelegateTaskTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
                 hidden: false,
@@ -127,7 +116,6 @@ impl ToolRegistry {
         tools.insert(
             "ParallelTasksTool",
             ToolMetadata {
-                name: "ParallelTasksTool",
                 category: ToolCategory::SubAgent,
                 requires_context: true,
                 hidden: false,
