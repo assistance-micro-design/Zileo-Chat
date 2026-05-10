@@ -127,8 +127,6 @@ pub struct SubAgentExecution {
 ///
 /// Used when creating a new sub-agent execution record.
 /// ID is passed separately, datetime fields use database defaults.
-// Used by commands/sub_agent_execution; not constructed in the binary path (lib/bin split).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct SubAgentExecutionCreate {
     /// Workflow ID where this execution occurs
@@ -158,8 +156,6 @@ pub struct SubAgentExecutionCreate {
     pub parent_message_id: Option<String>,
 }
 
-// Constructor used by commands/sub_agent_execution; lib/bin split.
-#[allow(dead_code)]
 impl SubAgentExecutionCreate {
     /// Creates a new SubAgentExecutionCreate with a parent execution ID.
     ///

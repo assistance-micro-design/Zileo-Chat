@@ -71,8 +71,6 @@ impl Default for RetryConfig {
     }
 }
 
-// RetryConfig methods used by lib LLM providers; not all reachable from binary target.
-#[allow(dead_code)]
 impl RetryConfig {
     /// Calculates the delay for a given attempt number (0-indexed)
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {

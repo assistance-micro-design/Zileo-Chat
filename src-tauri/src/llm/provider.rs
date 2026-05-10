@@ -136,9 +136,6 @@ pub struct LLMResponse {
 
 /// LLM error types
 #[derive(Debug, Error)]
-// Variants emitted from various lib code paths; not all are constructed in
-// every test target, hence the module-level allow.
-#[allow(dead_code)]
 pub enum LLMError {
     /// Provider not configured
     #[error("Provider not configured: {0}")]

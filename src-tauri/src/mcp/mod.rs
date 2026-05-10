@@ -49,28 +49,22 @@
 //! - [`client`]: High-level MCP client interface
 //! - [`manager`]: MCPManager for server registry and coordination
 
-// MCP modules contain public API items used by the lib crate and tests,
-// but not all are reachable from the binary target. The allow(dead_code)
-// prevents false positives in `cargo clippy --all-targets`.
+// circuit_breaker + client expose test-only accessor methods (state(),
+// failure_count(), reset(), is_connected()) that observe real production
+// state mutations done by record_success/record_failure. Not reachable from
+// the binary target, hence the module-level allow.
 #[allow(dead_code)]
 pub mod circuit_breaker;
 #[allow(dead_code)]
 pub mod client;
 pub mod error;
-#[allow(dead_code)]
 pub mod helpers;
-#[allow(dead_code)]
 pub mod http_auth;
-#[allow(dead_code)]
 pub mod http_handle;
 pub mod manager;
-#[allow(dead_code)]
 pub mod protocol;
-#[allow(dead_code)]
 pub mod redact;
-#[allow(dead_code)]
 pub mod secrets;
-#[allow(dead_code)]
 pub mod server_handle;
 
 // Re-export commonly used types

@@ -42,13 +42,8 @@
 //! Server configurations are stored in the `mcp_server` table and
 //! automatically loaded on startup. Tool calls are logged to `mcp_call_log`.
 
-// Manager sub-modules contain public API items used by the lib crate,
-// but not all methods are reachable from the binary target.
-#[allow(dead_code)]
 mod db;
-#[allow(dead_code)]
 mod lifecycle;
-#[allow(dead_code)]
 mod tools;
 
 #[cfg(test)]
@@ -83,7 +78,6 @@ pub(crate) const MCP_INITIAL_RETRY_DELAY_MS: u64 = 500;
 ///
 /// The manager uses `RwLock` internally and is safe to share
 /// across threads via `Arc<MCPManager>`.
-#[allow(dead_code)] // Fields used by sub-modules (lifecycle, tools, db) not all reachable from binary
 pub struct MCPManager {
     /// Connected clients indexed by server name
     pub(crate) clients: RwLock<HashMap<String, MCPClient>>,

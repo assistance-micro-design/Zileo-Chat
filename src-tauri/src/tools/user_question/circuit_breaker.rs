@@ -49,16 +49,11 @@
 //! }
 //! ```
 
-// All public items in this module are wired through tools/user_question/* in
-// the lib crate. They are not directly reachable from the binary target, hence
-// the per-item #[allow(dead_code)] attributes below.
-
 use std::time::{Duration, Instant};
 use tracing::debug;
 
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(dead_code)]
 pub enum CircuitState {
     /// Normal operation, questions can be asked
     #[default]
@@ -74,7 +69,6 @@ pub enum CircuitState {
 /// Tracks consecutive timeouts and implements state transitions to prevent
 /// spamming questions when users are unresponsive.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct UserQuestionCircuitBreaker {
     /// Current state of the circuit
     state: CircuitState,
@@ -90,7 +84,6 @@ pub struct UserQuestionCircuitBreaker {
     workflow_id: String,
 }
 
-#[allow(dead_code)]
 impl UserQuestionCircuitBreaker {
     /// Creates a new circuit breaker with custom configuration.
     ///
@@ -219,7 +212,6 @@ impl UserQuestionCircuitBreaker {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
 impl UserQuestionCircuitBreaker {
     /// Resets the circuit breaker to closed state.
     pub fn reset(&mut self) {

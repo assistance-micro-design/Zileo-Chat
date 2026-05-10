@@ -276,9 +276,7 @@ impl CircuitBreaker {
     }
 }
 
-// Test helpers (#[cfg(test)] block); not all are called from every test target.
 #[cfg(test)]
-#[allow(dead_code)]
 impl CircuitBreaker {
     /// Gets the current state of the circuit breaker
     pub async fn state(&self) -> CircuitState {
