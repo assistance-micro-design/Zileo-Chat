@@ -280,11 +280,6 @@ impl CircuitBreaker {
 #[cfg(test)]
 #[allow(dead_code)]
 impl CircuitBreaker {
-    /// Creates a new circuit breaker with default configuration
-    pub fn with_defaults(provider_name: String) -> Self {
-        Self::new(CircuitBreakerConfig::for_llm_provider(), provider_name)
-    }
-
     /// Gets the current state of the circuit breaker
     pub async fn state(&self) -> CircuitState {
         let state = self.state.read().await;

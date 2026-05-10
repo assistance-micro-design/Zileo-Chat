@@ -195,21 +195,6 @@ impl CircuitBreaker {
         self.failure_count
     }
 
-    /// Returns the configured failure threshold
-    pub fn failure_threshold(&self) -> u32 {
-        self.failure_threshold
-    }
-
-    /// Returns the configured cooldown duration
-    pub fn cooldown(&self) -> Duration {
-        self.cooldown
-    }
-
-    /// Returns the time since last failure, if any
-    pub fn time_since_last_failure(&self) -> Option<Duration> {
-        self.last_failure.map(|t| t.elapsed())
-    }
-
     /// Returns remaining cooldown time before circuit can transition to half-open
     ///
     /// Returns `None` if circuit is not open or cooldown has elapsed.

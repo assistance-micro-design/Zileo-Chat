@@ -1,15 +1,24 @@
 use super::*;
+use crate::tools::constants::user_question as uq_const;
+
+fn new_cb_with_defaults() -> UserQuestionCircuitBreaker {
+    UserQuestionCircuitBreaker::new(
+        "test_wf".to_string(),
+        uq_const::CIRCUIT_FAILURE_THRESHOLD,
+        Duration::from_secs(uq_const::CIRCUIT_COOLDOWN_SECS),
+    )
+}
 
 #[test]
 fn test_initial_state_is_closed() {
-    let cb = UserQuestionCircuitBreaker::with_defaults("test_wf".to_string());
+    let cb = new_cb_with_defaults();
     assert_eq!(cb.state(), CircuitState::Closed);
     assert_eq!(cb.timeout_count(), 0);
 }
 
 #[test]
 fn test_allow_question_when_closed() {
-    let mut cb = UserQuestionCircuitBreaker::with_defaults("test_wf".to_string());
+    let mut cb = new_cb_with_defaults();
     assert!(cb.allow_question());
 }
 
@@ -88,7 +97,7 @@ fn test_reopens_on_timeout_in_half_open() {
 
 #[test]
 fn test_success_resets_timeout_count() {
-    let mut cb = UserQuestionCircuitBreaker::with_defaults("test_wf".to_string());
+    let mut cb = new_cb_with_defaults();
 
     cb.record_timeout();
     cb.record_timeout();
@@ -101,7 +110,7 @@ fn test_success_resets_timeout_count() {
 
 #[test]
 fn test_skip_resets_like_success() {
-    let mut cb = UserQuestionCircuitBreaker::with_defaults("test_wf".to_string());
+    let mut cb = new_cb_with_defaults();
 
     cb.record_timeout();
     cb.record_timeout();
@@ -142,6 +151,6 @@ fn test_reset() {
 
 #[test]
 fn test_default_constants() {
-    assert_eq!(DEFAULT_TIMEOUT_THRESHOLD, 3);
-    assert_eq!(DEFAULT_COOLDOWN_SECS, 60);
+    assert_eq!(uq_const::CIRCUIT_FAILURE_THRESHOLD, 3);
+    assert_eq!(uq_const::CIRCUIT_COOLDOWN_SECS, 60);
 }

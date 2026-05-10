@@ -56,14 +56,6 @@
 use std::time::{Duration, Instant};
 use tracing::debug;
 
-/// Default failure threshold before opening circuit (3 consecutive timeouts)
-#[allow(dead_code)]
-pub const DEFAULT_TIMEOUT_THRESHOLD: u32 = 3;
-
-/// Default cooldown period before half-open state (60 seconds)
-#[allow(dead_code)]
-pub const DEFAULT_COOLDOWN_SECS: u64 = 60;
-
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)]
@@ -116,18 +108,6 @@ impl UserQuestionCircuitBreaker {
             last_timeout: None,
             workflow_id,
         }
-    }
-
-    /// Creates a circuit breaker with default settings.
-    ///
-    /// - Timeout threshold: 3
-    /// - Cooldown: 60 seconds
-    pub fn with_defaults(workflow_id: String) -> Self {
-        Self::new(
-            workflow_id,
-            DEFAULT_TIMEOUT_THRESHOLD,
-            Duration::from_secs(DEFAULT_COOLDOWN_SECS),
-        )
     }
 
     /// Checks if a question is allowed to be asked.
@@ -241,11 +221,6 @@ impl UserQuestionCircuitBreaker {
 #[cfg(test)]
 #[allow(dead_code)]
 impl UserQuestionCircuitBreaker {
-    /// Returns the configured cooldown duration.
-    pub fn cooldown(&self) -> Duration {
-        self.cooldown
-    }
-
     /// Resets the circuit breaker to closed state.
     pub fn reset(&mut self) {
         self.state = CircuitState::Closed;
