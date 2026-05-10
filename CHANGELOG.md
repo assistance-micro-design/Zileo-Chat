@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 25 atomic commits totaling ~−1100 LOC net, zero functional change. Tests verts: 1388 Rust lib + 389 Vitest + svelte-check 4034 files / 0 errors / 0 warnings.
+
+### Removed
+
+- **`streamingStore`** (`src/lib/stores/streaming.ts`): entirely redundant with `backgroundWorkflowsStore`. Chunk processing now flows directly through `executionBlocksStore` + `tokenStore` via the callbacks registered by the agent page. Net −800 LOC across the chat zone.
+- **`MessageList.svelte`**: inlined into `ChatContainer.svelte` (always called with a single-message array).
+- **Barrel `src/lib/components/chat/index.ts`** (no consumers).
+- **`MessageService.load` / `clear`** + Tauri command `clear_workflow_messages` (dead code path).
+- **`load_message_blocks` Tauri command + `BlockService.loadForMessage`**: orphan single-message loader, replaced by `load_workflow_blocks` batch (1 round-trip, was N×3 SurrealDB queries).
+- **Dead `ChunkableState` / `WorkflowStreamState` fields**: reduced to the 6/6 fields actually consumed.
+- **Dead `ActiveSubAgent` fields**: `statusMessage`, `progress`, and the never-emitted `'starting'` variant of `ActiveSubAgentStatus`.
+- **Dead prop `MessageBubble.isUser?`** (no caller passed it).
+- **`ThinkingBlockData.duration_ms`** field (no consumer).
+- **Derived stores `executionResponse` / `executionError` / `executionCancelled`** + `restoreFromBlocks` (no consumers after the streaming refactor).
+
+### Changed
+
+- **`Message.tokens`** is now optional on the TypeScript side (`Option<u64>` mapping). Full removal across frontend writes + Rust `legacy_tokens` + DB column is tracked separately (requires migration).
+- **`onCompleteForViewed` callback** signature simplified from `(complete: WorkflowComplete) => void` to `() => void` (payload no longer consumed since the streamingStore removal).
+- **`load_workflow_blocks`** new batch command: 1 IPC round-trip per workflow instead of N × `load_message_blocks` calls.
+- **`MessageBubble`** copy timer is now cleared on unmount and before each click (fixes leak / race on rapid clicks).
+
+### Fixed
+
+- **Tool `error_message` propagation**: now streams live via `StreamChunk` instead of waiting for the next reload (Rust + TS).
+
 ---
 
 ## [0.23.1] - 2026-05-08
