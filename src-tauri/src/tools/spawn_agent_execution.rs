@@ -26,6 +26,7 @@ use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentSpawnResult, SubAgentStatus};
 use crate::models::{AgentConfig, LLMConfig, Lifecycle};
 use crate::tools::constants::sub_agent::TASK_DESC_TRUNCATE_CHARS;
+use crate::tools::context::AgentToolContext;
 use crate::tools::factory::ToolFactory;
 use crate::tools::sub_agent_executor::SubAgentExecutor;
 use crate::tools::utils::safe_truncate;
@@ -284,11 +285,30 @@ impl SpawnAgentTool {
             "Creating sub-agent with execution tracking"
         );
 
-        // Create LLMAgent instance for sub-agent
-        let sub_agent = LLMAgent::with_factory(
+        // Create LLMAgent instance for sub-agent.
+        //
+        // Sub-agent gets a full AgentToolContext (carrying app_handle and the
+        // workflow's cancellation_token) so its basic tools (UserQuestionTool,
+        // TodoTool, FileManagerTool, ...) can emit Tauri events back to the
+        // frontend — without it, UserQuestionTool's emit_question_event is a
+        // no-op and the modal never appears. Sub-agent tools (Spawn/Delegate/
+        // Parallel) are still filtered out at tool-creation time because the
+        // task context sets `is_sub_agent: true`, which forces
+        // `is_primary_agent && !is_sub_agent` to false in tool_loop.rs.
+        let sub_agent_context = AgentToolContext::new(
+            self.registry.clone(),
+            self.orchestrator.clone(),
+            self.llm_manager.clone(),
+            self.mcp_manager.clone(),
+            self.tool_factory.clone(),
+            self.app_handle.clone(),
+            self.cancellation_token.clone(),
+        );
+        let sub_agent = LLMAgent::with_context(
             sub_agent_config.clone(),
             self.llm_manager.clone(),
             self.tool_factory.clone(),
+            sub_agent_context,
         );
 
         // Register in registry

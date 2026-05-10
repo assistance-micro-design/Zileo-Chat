@@ -48,38 +48,24 @@ pub struct LLMAgent {
 }
 
 impl LLMAgent {
-    /// Creates a new LLM agent with a custom tool factory
+    /// Creates a new LLM agent with an AgentToolContext.
     ///
-    /// Use this when you need to provide embedding service for MemoryTool.
-    /// This constructor does NOT provide AgentToolContext, so sub-agent tools
-    /// will not be available.
-    pub fn with_factory(
-        config: AgentConfig,
-        provider_manager: Arc<ProviderManager>,
-        tool_factory: Arc<ToolFactory>,
-    ) -> Self {
-        Self {
-            config,
-            provider_manager,
-            tool_factory: Some(tool_factory),
-            agent_context: None,
-        }
-    }
-
-    /// Creates a new LLM agent with AgentToolContext for sub-agent operations.
-    ///
-    /// This constructor provides the agent with access to sub-agent tools
-    /// (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool) when used as
-    /// the primary workflow agent.
+    /// The context carries shared dependencies (registry, orchestrator,
+    /// llm_manager, mcp_manager, tool_factory, app_handle, cancellation_token)
+    /// down to the tools created on each turn. `app_handle` in particular is
+    /// what lets `UserQuestionTool::emit_question_event` reach the frontend.
     ///
     /// # Sub-Agent Tools Availability
     ///
-    /// Sub-agent tools are only available when:
+    /// Sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool)
+    /// are only created when both:
     /// 1. The agent has an AgentToolContext (this constructor provides one)
-    /// 2. The task context includes `"is_primary_agent": true`
+    /// 2. The task context does NOT set `"is_sub_agent": true`
     ///
-    /// Sub-agents created via SpawnAgentTool use `with_factory()` instead,
-    /// ensuring they cannot spawn other sub-agents (single level constraint).
+    /// Sub-agents spawned via SpawnAgentTool inject `is_sub_agent: true` in
+    /// their task context, which forces `is_primary_agent && !is_sub_agent`
+    /// to false in `tool_loop.rs`, so they only ever get basic tools — not
+    /// other sub-agent tools (single-level hierarchy).
     pub fn with_context(
         config: AgentConfig,
         provider_manager: Arc<ProviderManager>,
