@@ -20,7 +20,7 @@
   Supports markdown rendering for assistant messages, timestamps, and copy functionality.
 
   @example
-  <MessageBubble message={msg} isUser={false} />
+  <MessageBubble message={msg} />
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
@@ -34,16 +34,14 @@
 	interface Props {
 		/** Message data */
 		message: Message;
-		/** Whether this is a user message (alternative to checking role) */
-		isUser?: boolean;
 	}
 
-	let { message, isUser }: Props = $props();
+	let { message }: Props = $props();
 
 	/**
-	 * Determine if message is from user based on role or prop
+	 * Determine if message is from user based on role
 	 */
-	const isUserMessage = $derived(isUser ?? message.role === 'user');
+	const isUserMessage = $derived(message.role === 'user');
 
 	let copied = $state(false);
 	let copyError = $state(false);
