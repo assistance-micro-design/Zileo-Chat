@@ -18,8 +18,9 @@
 /**
  * Execution blocks store for managing block-by-block execution display.
  *
- * Replaces the streaming store's content accumulation with discrete blocks
- * (thinking, tool calls, sub-agents) that appear as each step completes.
+ * Accumulates discrete blocks (thinking, tool calls, sub-agents, tasks)
+ * for the currently-viewed workflow execution as each step completes,
+ * driven by `processChunk` calls forwarded from `backgroundWorkflowsStore`.
  *
  * @module stores/execution-blocks
  */
