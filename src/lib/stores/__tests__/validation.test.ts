@@ -21,11 +21,11 @@ type EventHandler<T> = (event: { payload: T }) => void;
 const handlers = new Map<string, EventHandler<unknown>>();
 
 vi.mock('$lib/tauri', () => ({
-tauriListen: vi.fn(async (eventName: string, handler: EventHandler<unknown>) => {
-handlers.set(eventName, handler);
-return () => handlers.delete(eventName);
-}),
-tauriInvoke: vi.fn()
+	tauriListen: vi.fn(async (eventName: string, handler: EventHandler<unknown>) => {
+		handlers.set(eventName, handler);
+		return () => handlers.delete(eventName);
+	}),
+	tauriInvoke: vi.fn()
 }));
 
 import { validationStore, pendingValidation } from '../validation';

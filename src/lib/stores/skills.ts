@@ -27,13 +27,7 @@ import { derived } from 'svelte/store';
 import { tauriInvoke as invoke } from '$lib/tauri';
 import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
-import type {
-	Skill,
-	SkillCreate,
-	SkillUpdate,
-	SkillSummary,
-	SkillStoreState
-} from '$types/skill';
+import type { Skill, SkillCreate, SkillUpdate, SkillSummary, SkillStoreState } from '$types/skill';
 
 // ============================================================================
 // Base CRUD Store

@@ -25,7 +25,16 @@ Displays memories with filtering, search, and action buttons.
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { tauriInvoke, saveDialog, isTauriRuntime } from '$lib/tauri';
-	import { Button, Card, Input, Select, Badge, StatusIndicator, Modal, DeleteConfirmModal } from '$lib/components/ui';
+	import {
+		Button,
+		Card,
+		Input,
+		Select,
+		Badge,
+		StatusIndicator,
+		Modal,
+		DeleteConfirmModal
+	} from '$lib/components/ui';
 	import type { Memory, MemoryType, MemorySearchResult } from '$types/memory';
 	import type { ImportResult, RegenerateResult } from '$types/embedding';
 	import MemoryForm from './MemoryForm.svelte';
@@ -87,13 +96,15 @@ Displays memories with filtering, search, and action buttons.
 	let regenerating = $state(false);
 
 	/** Memory type options (reactive to locale) */
-	const typeOptions = $derived(buildMemoryTypeOptions({
-		all: t('memory_type_all'),
-		userPref: t('memory_type_user_pref'),
-		context: t('memory_type_context'),
-		knowledge: t('memory_type_knowledge'),
-		decision: t('memory_type_decision')
-	}));
+	const typeOptions = $derived(
+		buildMemoryTypeOptions({
+			all: t('memory_type_all'),
+			userPref: t('memory_type_user_pref'),
+			context: t('memory_type_context'),
+			knowledge: t('memory_type_knowledge'),
+			decision: t('memory_type_decision')
+		})
+	);
 
 	/**
 	 * Loads memories from backend (both workflow and general scope)
@@ -103,7 +114,10 @@ Displays memories with filtering, search, and action buttons.
 		try {
 			const filter = typeFilter || undefined;
 			// Pass workflowId as null to get ALL memories (both workflow-scoped and general)
-			memories = await tauriInvoke<Memory[]>('list_memories', { typeFilter: filter, workflowId: null });
+			memories = await tauriInvoke<Memory[]>('list_memories', {
+				typeFilter: filter,
+				workflowId: null
+			});
 		} catch (err) {
 			notify('error', t('memory_failed_load').replace('{error}', getErrorMessage(err)));
 		} finally {
@@ -289,7 +303,10 @@ Displays memories with filtering, search, and action buttons.
 				}
 
 				if (result.failed > 0) {
-					notify('error', formatImportFailureMessage(t('memory_import_failed'), result.failed, result.errors));
+					notify(
+						'error',
+						formatImportFailureMessage(t('memory_import_failed'), result.failed, result.errors)
+					);
 				}
 			} catch (err) {
 				notify('error', t('memory_import_failed_generic').replace('{error}', getErrorMessage(err)));
@@ -369,12 +386,7 @@ Displays memories with filtering, search, and action buttons.
 	<!-- Header Actions -->
 	<div class="header-actions">
 		<div class="filters">
-			<Select
-				label=""
-				options={typeOptions}
-				value={typeFilter}
-				onchange={handleTypeChange}
-			/>
+			<Select label="" options={typeOptions} value={typeFilter} onchange={handleTypeChange} />
 			<Input
 				type="search"
 				placeholder={$i18n('memory_search_placeholder')}
@@ -384,11 +396,21 @@ Displays memories with filtering, search, and action buttons.
 		</div>
 
 		<div class="actions">
-			<Button variant="secondary" size="sm" onclick={() => handleExport('json')} disabled={actionLoading}>
+			<Button
+				variant="secondary"
+				size="sm"
+				onclick={() => handleExport('json')}
+				disabled={actionLoading}
+			>
 				<Download size={16} />
 				<span>{$i18n('memory_export_json')}</span>
 			</Button>
-			<Button variant="secondary" size="sm" onclick={() => handleExport('csv')} disabled={actionLoading}>
+			<Button
+				variant="secondary"
+				size="sm"
+				onclick={() => handleExport('csv')}
+				disabled={actionLoading}
+			>
 				<Download size={16} />
 				<span>{$i18n('memory_export_csv')}</span>
 			</Button>
@@ -396,7 +418,12 @@ Displays memories with filtering, search, and action buttons.
 				<Upload size={16} />
 				<span>{$i18n('memory_import')}</span>
 			</Button>
-			<Button variant="secondary" size="sm" onclick={handleRegenerateRequest} disabled={actionLoading}>
+			<Button
+				variant="secondary"
+				size="sm"
+				onclick={handleRegenerateRequest}
+				disabled={actionLoading}
+			>
 				<RefreshCw size={16} />
 				<span>{$i18n('memory_regenerate')}</span>
 			</Button>
@@ -422,9 +449,7 @@ Displays memories with filtering, search, and action buttons.
 				<div class="empty-state">
 					<h3>{$i18n('memory_no_memories')}</h3>
 					<p>
-						{searchQuery
-							? $i18n('memory_no_match')
-							: $i18n('memory_no_created')}
+						{searchQuery ? $i18n('memory_no_match') : $i18n('memory_no_created')}
 					</p>
 					{#if !searchQuery}
 						<Button variant="primary" onclick={openAddModal}>
@@ -452,7 +477,10 @@ Displays memories with filtering, search, and action buttons.
 								{memory.type}
 							</Badge>
 						</div>
-						<div class="table-cell cell-scope" title={memory.workflow_id || $i18n('memory_scope_general')}>
+						<div
+							class="table-cell cell-scope"
+							title={memory.workflow_id || $i18n('memory_scope_general')}
+						>
 							<span class="scope-badge" class:workflow={memory.workflow_id}>
 								{formatScope(memory.workflow_id, t('memory_scope_general'))}
 							</span>
@@ -513,11 +541,7 @@ Displays memories with filtering, search, and action buttons.
 </Modal>
 
 <!-- View Modal -->
-<Modal
-	open={showViewModal}
-	title={$i18n('memory_modal_view')}
-	onclose={closeViewModal}
->
+<Modal open={showViewModal} title={$i18n('memory_modal_view')} onclose={closeViewModal}>
 	{#snippet body()}
 		{#if viewingMemory}
 			<div class="view-content">
@@ -556,7 +580,7 @@ Displays memories with filtering, search, and action buttons.
 	open={showDeleteConfirm}
 	titleKey="memory_delete_title"
 	confirmMessageKey="memory_confirm_delete"
-	deleting={deleting}
+	{deleting}
 	deletingLabelKey="memory_deleting"
 	onConfirm={confirmDelete}
 	onCancel={cancelDelete}
@@ -661,7 +685,9 @@ Displays memories with filtering, search, and action buttons.
 		border-radius: var(--border-radius-sm);
 		color: var(--color-text-secondary);
 		cursor: pointer;
-		transition: color 0.2s, background 0.2s;
+		transition:
+			color 0.2s,
+			background 0.2s;
 	}
 
 	.action-btn:hover {

@@ -23,11 +23,7 @@ Browse, filter, export and purge the validation audit log (see commands/validati
 	import { onMount } from 'svelte';
 	import { saveDialog, tauriInvoke, isTauriRuntime } from '$lib/tauri';
 	import SettingsSectionHeader from '$lib/components/settings/SettingsSectionHeader.svelte';
-	import {
-		AuditLogStats,
-		AuditLogFilters,
-		AuditLogList
-	} from '$lib/components/settings/audit-log';
+	import { AuditLogStats, AuditLogFilters, AuditLogList } from '$lib/components/settings/audit-log';
 	import { ErrorBanner } from '$lib/components/ui';
 	import {
 		auditLogStore,

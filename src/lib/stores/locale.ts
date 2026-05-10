@@ -19,37 +19,37 @@
  * Manages application language with persistence.
  * Pattern: copied from theme.ts
  */
-import { writable, derived, get } from "svelte/store";
-import type { Locale } from "$types/i18n";
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES, LOCALES } from "$types/i18n";
-import { setLanguageTag, isAvailableLanguageTag } from "$lib/i18n";
+import { writable, derived, get } from 'svelte/store';
+import type { Locale } from '$types/i18n';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, LOCALES } from '$types/i18n';
+import { setLanguageTag, isAvailableLanguageTag } from '$lib/i18n';
 
-const STORAGE_KEY = "locale";
+const STORAGE_KEY = 'locale';
 
 function getSavedLocale(): string | null {
-  if (typeof window === "undefined" || !("localStorage" in window)) return null;
+	if (typeof window === 'undefined' || !('localStorage' in window)) return null;
 
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
+	try {
+		return window.localStorage.getItem(STORAGE_KEY);
+	} catch {
+		return null;
+	}
 }
 
 function persistLocale(locale: Locale): void {
-  if (typeof window === "undefined" || !("localStorage" in window)) return;
+	if (typeof window === 'undefined' || !('localStorage' in window)) return;
 
-  try {
-    window.localStorage.setItem(STORAGE_KEY, locale);
-  } catch {
-    // localStorage may fail (quota exceeded, private browsing)
-  }
+	try {
+		window.localStorage.setItem(STORAGE_KEY, locale);
+	} catch {
+		// localStorage may fail (quota exceeded, private browsing)
+	}
 }
 
 function applyDocumentLocale(locale: Locale): void {
-  if (typeof document !== "undefined") {
-    document.documentElement.setAttribute("lang", locale);
-  }
+	if (typeof document !== 'undefined') {
+		document.documentElement.setAttribute('lang', locale);
+	}
 }
 
 /**
@@ -57,65 +57,65 @@ function applyDocumentLocale(locale: Locale): void {
  * @returns Locale store with methods for locale management
  */
 function createLocaleStore() {
-  const { subscribe, set } = writable<Locale>(DEFAULT_LOCALE);
+	const { subscribe, set } = writable<Locale>(DEFAULT_LOCALE);
 
-  return {
-    subscribe,
+	return {
+		subscribe,
 
-    /**
-     * Set the locale and persist to localStorage
-     * @param locale - The locale to apply
-     */
-    setLocale: (locale: Locale): void => {
-      if (!SUPPORTED_LOCALES.includes(locale)) {
-        locale = DEFAULT_LOCALE;
-      }
+		/**
+		 * Set the locale and persist to localStorage
+		 * @param locale - The locale to apply
+		 */
+		setLocale: (locale: Locale): void => {
+			if (!SUPPORTED_LOCALES.includes(locale)) {
+				locale = DEFAULT_LOCALE;
+			}
 
-      applyDocumentLocale(locale);
-      persistLocale(locale);
+			applyDocumentLocale(locale);
+			persistLocale(locale);
 
-      // Update i18n runtime
-      setLanguageTag(locale);
-      set(locale);
-    },
+			// Update i18n runtime
+			setLanguageTag(locale);
+			set(locale);
+		},
 
-    /**
-     * Initialize locale from localStorage or system preference
-     */
-    init: (): void => {
-      if (typeof window === "undefined") return;
+		/**
+		 * Initialize locale from localStorage or system preference
+		 */
+		init: (): void => {
+			if (typeof window === 'undefined') return;
 
-      // Priority: localStorage > navigator.language > default
-      const saved = getSavedLocale();
-      let locale: Locale = DEFAULT_LOCALE;
+			// Priority: localStorage > navigator.language > default
+			const saved = getSavedLocale();
+			let locale: Locale = DEFAULT_LOCALE;
 
-      if (saved && isAvailableLanguageTag(saved)) {
-        locale = saved as Locale;
-      } else {
-        // Detect system language
-        const browserLang =
-          typeof navigator !== "undefined"
-            ? navigator.language.split("-")[0] ?? DEFAULT_LOCALE
-            : DEFAULT_LOCALE;
-        if (isAvailableLanguageTag(browserLang)) {
-          locale = browserLang as Locale;
-        }
-      }
+			if (saved && isAvailableLanguageTag(saved)) {
+				locale = saved as Locale;
+			} else {
+				// Detect system language
+				const browserLang =
+					typeof navigator !== 'undefined'
+						? (navigator.language.split('-')[0] ?? DEFAULT_LOCALE)
+						: DEFAULT_LOCALE;
+				if (isAvailableLanguageTag(browserLang)) {
+					locale = browserLang as Locale;
+				}
+			}
 
-      applyDocumentLocale(locale);
-      setLanguageTag(locale);
-      set(locale);
-    },
+			applyDocumentLocale(locale);
+			setLanguageTag(locale);
+			set(locale);
+		},
 
-    /**
-     * Get current locale info
-     * @returns LocaleInfo object for current locale
-     */
-    getInfo: (): (typeof LOCALES)[Locale] => {
-      const current = get({ subscribe });
-      return LOCALES[current];
-    },
-  };
+		/**
+		 * Get current locale info
+		 * @returns LocaleInfo object for current locale
+		 */
+		getInfo: (): (typeof LOCALES)[Locale] => {
+			const current = get({ subscribe });
+			return LOCALES[current];
+		}
+	};
 }
 
 /**

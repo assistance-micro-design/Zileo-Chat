@@ -49,7 +49,10 @@
 	}
 
 	function handleExportComplete(success: boolean): void {
-		notify(success ? 'success' : 'error', $i18n(success ? 'ie_export_success' : 'ie_export_failed'));
+		notify(
+			success ? 'success' : 'error',
+			$i18n(success ? 'ie_export_success' : 'ie_export_failed')
+		);
 	}
 
 	async function handleImportComplete(success: boolean): Promise<void> {

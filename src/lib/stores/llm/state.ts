@@ -20,12 +20,7 @@
  * @module stores/llm/state
  */
 
-import type {
-	LLMState,
-	LLMModel,
-	ProviderSettings,
-	ProviderType
-} from '$types/llm';
+import type { LLMState, LLMModel, ProviderSettings, ProviderType } from '$types/llm';
 
 // ============================================================================
 // Initial State

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Message service for encapsulating message-related Tauri IPC calls.
  *
@@ -108,7 +107,9 @@ export const MessageService = {
 	 * @param workflowId - Workflow ID to load messages for
 	 * @returns Object containing enriched messages array and optional error message
 	 */
-	async loadWithSubAgents(workflowId: string): Promise<{ messages: Message[]; executions: SubAgentExecution[]; error?: string }> {
+	async loadWithSubAgents(
+		workflowId: string
+	): Promise<{ messages: Message[]; executions: SubAgentExecution[]; error?: string }> {
 		try {
 			const [messages, executions] = await Promise.all([
 				invoke<Message[]>('load_workflow_messages', { workflowId }),
@@ -164,7 +165,12 @@ export const MessageService = {
 	 * @param metrics - Optional workflow execution metrics
 	 * @returns ID of the saved message
 	 */
-	async saveAssistant(workflowId: string, content: string, metrics?: WorkflowMetrics, messageId?: string): Promise<string> {
+	async saveAssistant(
+		workflowId: string,
+		content: string,
+		metrics?: WorkflowMetrics,
+		messageId?: string
+	): Promise<string> {
 		return this.save({ workflowId, role: 'assistant', content, metrics, messageId });
 	},
 
@@ -186,10 +192,9 @@ export const MessageService = {
 	 */
 	async getLastAssistantMetrics(workflowId: string): Promise<MessageMetrics | null> {
 		try {
-			return await invoke<MessageMetrics | null>(
-				'get_workflow_last_assistant_message_metrics',
-				{ workflowId }
-			);
+			return await invoke<MessageMetrics | null>('get_workflow_last_assistant_message_metrics', {
+				workflowId
+			});
 		} catch {
 			// Non-blocking: fall back to an empty session display. The user is
 			// not waiting on this metrics call; surfacing the error here would

@@ -33,10 +33,10 @@ export type TauriWindowTheme = 'light' | 'dark' | null;
  * @param value - Native window theme, or null to follow the OS theme
  */
 export async function setTauriWindowTheme(value: TauriWindowTheme): Promise<void> {
-if (!isTauriRuntime()) {
-return;
-}
+	if (!isTauriRuntime()) {
+		return;
+	}
 
-const { getCurrentWindow } = await import('@tauri-apps/api/window');
-await getCurrentWindow().setTheme(value);
+	const { getCurrentWindow } = await import('@tauri-apps/api/window');
+	await getCurrentWindow().setTheme(value);
 }

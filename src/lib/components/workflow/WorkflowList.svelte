@@ -112,9 +112,7 @@
 	}: Props = $props();
 
 	/** Pinned workflows (shown at top) */
-	const pinnedWorkflows = $derived(
-		workflows.filter((w) => w.pinned)
-	);
+	const pinnedWorkflows = $derived(workflows.filter((w) => w.pinned));
 
 	/** Running workflows (not pinned, shown after pinned) */
 	const runningWorkflows = $derived(
@@ -123,7 +121,9 @@
 
 	/** Recently completed workflows (not pinned) */
 	const completedWorkflows = $derived(
-		workflows.filter((w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id) && !w.pinned)
+		workflows.filter(
+			(w) => recentlyCompletedIds.has(w.id) && !runningWorkflowIds.has(w.id) && !w.pinned
+		)
 	);
 
 	/** Precomputed map of folder ID -> workflows in that folder (not pinned, not running, not recently completed) */
@@ -196,9 +196,9 @@
 	/** Whether there are any sections above the date groups */
 	const hasSectionsAbove = $derived(
 		pinnedWorkflows.length > 0 ||
-		runningWorkflows.length > 0 ||
-		completedWorkflows.length > 0 ||
-		folders.length > 0
+			runningWorkflows.length > 0 ||
+			completedWorkflows.length > 0 ||
+			folders.length > 0
 	);
 </script>
 
@@ -221,7 +221,12 @@
 	/>
 {/snippet}
 
-<div class="workflow-list" class:collapsed role="listbox" aria-label={$i18n('workflow_list_arialabel')}>
+<div
+	class="workflow-list"
+	class:collapsed
+	role="listbox"
+	aria-label={$i18n('workflow_list_arialabel')}
+>
 	{#if error && workflows.length === 0}
 		<div class="workflow-list-error" role="alert">
 			{#if collapsed}
@@ -259,11 +264,7 @@
 		</div>
 	{:else if collapsed}
 		{#each pinnedWorkflows as workflow (workflow.id)}
-			<WorkflowItemCompact
-				{workflow}
-				active={workflow.id === selectedId}
-				{onselect}
-			/>
+			<WorkflowItemCompact {workflow} active={workflow.id === selectedId} {onselect} />
 		{/each}
 		{#each runningWorkflows as workflow (workflow.id)}
 			<WorkflowItemCompact
@@ -283,11 +284,7 @@
 			/>
 		{/each}
 		{#each uncategorizedWorkflows as workflow (workflow.id)}
-			<WorkflowItemCompact
-				{workflow}
-				active={workflow.id === selectedId}
-				{onselect}
-			/>
+			<WorkflowItemCompact {workflow} active={workflow.id === selectedId} {onselect} />
 		{/each}
 	{:else}
 		<!-- Pinned section -->
@@ -455,8 +452,12 @@
 	}
 
 	@keyframes spin {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(360deg); }
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.workflow-list-empty {
@@ -521,7 +522,9 @@
 
 	.uncategorized-drop-zone {
 		border-radius: var(--border-radius-md);
-		transition: outline var(--transition-fast), background var(--transition-fast);
+		transition:
+			outline var(--transition-fast),
+			background var(--transition-fast);
 	}
 
 	.uncategorized-drop-zone.drag-over {

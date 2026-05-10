@@ -46,9 +46,7 @@ export function dispatchSettingsRefresh(): void {
  * @param handler - Callback invoked for each refresh event
  * @returns Teardown function that removes the listener
  */
-export function attachSettingsRefreshListener(
-	handler: () => void | Promise<void>
-): () => void {
+export function attachSettingsRefreshListener(handler: () => void | Promise<void>): () => void {
 	if (typeof window === 'undefined') {
 		return () => {};
 	}

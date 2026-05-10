@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Token store for managing token usage and cost tracking.
  * Provides reactive state management for streaming and cumulative token metrics.
@@ -320,14 +319,9 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 	// workflow doesn't show a blank); during a live session we wait for the
 	// backend value rather than inventing one.
 	const hasActiveSession =
-		$s.sessionCost !== null ||
-		$s.isStreaming ||
-		$s.streaming.input > 0 ||
-		$s.streaming.output > 0;
+		$s.sessionCost !== null || $s.isStreaming || $s.streaming.input > 0 || $s.streaming.output > 0;
 
-	const displayCost: number | null = hasActiveSession
-		? $s.sessionCost
-		: $s.cumulative.cost;
+	const displayCost: number | null = hasActiveSession ? $s.sessionCost : $s.cumulative.cost;
 
 	// Sub-agent cost comes from the workflow row, not a per-call
 	// approximation with the parent's pricing.
@@ -360,4 +354,3 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 				: null
 	};
 });
-

@@ -39,9 +39,7 @@
 
 	const formattedDuration = $derived(durationMs ? formatDuration(durationMs) : null);
 
-	const preview = $derived(
-		reportSummary ? truncateThinkingContent(reportSummary, 100) : null
-	);
+	const preview = $derived(reportSummary ? truncateThinkingContent(reportSummary, 100) : null);
 
 	function toggle(): void {
 		collapsed = !collapsed;
@@ -85,10 +83,7 @@
 			<span class="agent-duration">{formattedDuration}</span>
 		{/if}
 
-		<ChevronDown
-			size={14}
-			class="chevron {collapsed ? '' : 'expanded'}"
-		/>
+		<ChevronDown size={14} class="chevron {collapsed ? '' : 'expanded'}" />
 	</button>
 
 	{#if !collapsed}
@@ -96,10 +91,14 @@
 			{#if tokensInput || tokensOutput}
 				<div class="agent-tokens">
 					{#if tokensInput}
-						<span class="token-label">{$i18n('chat_tokens_in')}: {tokensInput.toLocaleString()}</span>
+						<span class="token-label"
+							>{$i18n('chat_tokens_in')}: {tokensInput.toLocaleString()}</span
+						>
 					{/if}
 					{#if tokensOutput}
-						<span class="token-label">{$i18n('chat_tokens_out')}: {tokensOutput.toLocaleString()}</span>
+						<span class="token-label"
+							>{$i18n('chat_tokens_out')}: {tokensOutput.toLocaleString()}</span
+						>
 					{/if}
 				</div>
 			{/if}

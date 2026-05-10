@@ -75,7 +75,8 @@ Uses ExportEntitySection for collapsible entity sections.
 <div class="export-preview">
 	<div class="preview-header">
 		<h3 class="preview-title">{$i18n('ie_preview_title')}</h3>
-		<Badge variant="primary">{$i18n('ie_total_items').replace('{count}', String(totalCount))}</Badge>
+		<Badge variant="primary">{$i18n('ie_total_items').replace('{count}', String(totalCount))}</Badge
+		>
 	</div>
 
 	<!-- Agents Section -->
@@ -124,7 +125,9 @@ Uses ExportEntitySection for collapsible entity sections.
 									</Badge>
 									<span class="meta-text">{server.command}</span>
 									{#if server.toolsCount > 0}
-										<span class="meta-text">{$i18n('ie_x_tools').replace('{count}', String(server.toolsCount))}</span>
+										<span class="meta-text"
+											>{$i18n('ie_x_tools').replace('{count}', String(server.toolsCount))}</span
+										>
 									{/if}
 								</div>
 							</div>

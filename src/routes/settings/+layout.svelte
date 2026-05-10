@@ -83,11 +83,26 @@ Each section is now a separate route for better performance and UX.
 		{ id: 'agents', route: '/settings/agents', labelKey: 'settings_agents', icon: Bot },
 		{ id: 'mcp', route: '/settings/mcp', labelKey: 'settings_mcp_servers', icon: Plug },
 		{ id: 'memory', route: '/settings/memory', labelKey: 'settings_memory', icon: Brain },
-		{ id: 'validation', route: '/settings/validation', labelKey: 'settings_validation', icon: ShieldCheck },
-		{ id: 'audit-log', route: '/settings/audit-log', labelKey: 'settings_audit_log', icon: ScrollText },
+		{
+			id: 'validation',
+			route: '/settings/validation',
+			labelKey: 'settings_validation',
+			icon: ShieldCheck
+		},
+		{
+			id: 'audit-log',
+			route: '/settings/audit-log',
+			labelKey: 'settings_audit_log',
+			icon: ScrollText
+		},
 		{ id: 'prompts', route: '/settings/prompts', labelKey: 'settings_prompts', icon: BookOpen },
 		{ id: 'skills', route: '/settings/skills', labelKey: 'settings_skills', icon: BookMarked },
-		{ id: 'import-export', route: '/settings/import-export', labelKey: 'settings_import_export', icon: FolderSync },
+		{
+			id: 'import-export',
+			route: '/settings/import-export',
+			labelKey: 'settings_import_export',
+			icon: FolderSync
+		},
 		{ id: 'theme', route: '/settings/theme', labelKey: 'settings_theme', icon: Palette }
 	] as const;
 
@@ -96,7 +111,7 @@ Each section is now a separate route for better performance and UX.
 	 */
 	let activeSection = $derived.by(() => {
 		const pathname = data.pathname;
-		const section = sectionDefs.find(s => pathname.startsWith(s.route));
+		const section = sectionDefs.find((s) => pathname.startsWith(s.route));
 		return section?.id ?? 'providers';
 	});
 </script>
@@ -164,11 +179,7 @@ Each section is now a separate route for better performance and UX.
 	</Sidebar>
 
 	<!-- Settings Content -->
-	<main
-		bind:this={contentAreaRef}
-		class="content-area"
-		class:is-scrolling={isScrolling}
-	>
+	<main bind:this={contentAreaRef} class="content-area" class:is-scrolling={isScrolling}>
 		{@render children()}
 	</main>
 </div>
@@ -220,7 +231,9 @@ Each section is now a separate route for better performance and UX.
 		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: background-color var(--transition-fast), color var(--transition-fast);
+		transition:
+			background-color var(--transition-fast),
+			color var(--transition-fast);
 		width: 100%;
 		text-align: left;
 		text-decoration: none;
@@ -247,7 +260,9 @@ Each section is now a separate route for better performance and UX.
 		border: none;
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: background-color var(--transition-fast), color var(--transition-fast);
+		transition:
+			background-color var(--transition-fast),
+			color var(--transition-fast);
 		text-decoration: none;
 	}
 

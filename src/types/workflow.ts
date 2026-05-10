@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 import type { Message } from './message';
 import type { ThinkingStep } from './thinking';
 import type { ToolExecution, WorkflowToolExecution } from './tool';
@@ -26,28 +25,28 @@ import type { ToolExecution, WorkflowToolExecution } from './tool';
  * Crosses IPC via: get_task, list_workflow_tasks, list_tasks_by_status, update_task.
  */
 export interface PersistedTask {
-  /** Task unique identifier */
-  id: string;
-  /** Associated workflow ID */
-  workflow_id: string;
-  /** Task name (max 128 chars) */
-  name: string;
-  /** Detailed description (max 1000 chars) */
-  description: string;
-  /** Agent responsible for this task (skip_serializing_if in Rust) */
-  agent_assigned?: string;
-  /** Priority level (1=critical, 5=low) */
-  priority: number;
-  /** Current task status */
-  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
-  /** Task dependencies (other task IDs that must complete first) */
-  dependencies: string[];
-  /** Execution duration in milliseconds (skip_serializing_if in Rust) */
-  duration_ms?: number;
-  /** Creation timestamp (ISO 8601 string) */
-  created_at: string;
-  /** Completion timestamp (skip_serializing_if in Rust) */
-  completed_at?: string;
+	/** Task unique identifier */
+	id: string;
+	/** Associated workflow ID */
+	workflow_id: string;
+	/** Task name (max 128 chars) */
+	name: string;
+	/** Detailed description (max 1000 chars) */
+	description: string;
+	/** Agent responsible for this task (skip_serializing_if in Rust) */
+	agent_assigned?: string;
+	/** Priority level (1=critical, 5=low) */
+	priority: number;
+	/** Current task status */
+	status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+	/** Task dependencies (other task IDs that must complete first) */
+	dependencies: string[];
+	/** Execution duration in milliseconds (skip_serializing_if in Rust) */
+	duration_ms?: number;
+	/** Creation timestamp (ISO 8601 string) */
+	created_at: string;
+	/** Completion timestamp (skip_serializing_if in Rust) */
+	completed_at?: string;
 }
 
 /**
@@ -59,85 +58,85 @@ export type WorkflowStatus = 'idle' | 'running' | 'completed' | 'error';
  * Workflow entity representing a user workflow
  */
 export interface Workflow {
-  /** Unique identifier */
-  id: string;
-  /** Workflow name */
-  name: string;
-  /** Associated agent ID */
-  agent_id: string;
-  /** Current status */
-  status: WorkflowStatus;
-  /** Creation timestamp */
-  created_at: Date;
-  /** Last update timestamp */
-  updated_at: Date;
-  /** Completion timestamp (if completed) */
-  completed_at?: Date;
-  /** Cumulative input tokens for this workflow */
-  total_tokens_input: number;
-  /** Cumulative output tokens for this workflow */
-  total_tokens_output: number;
-  /** Cumulative cost for this workflow (USD) */
-  total_cost_usd: number;
-  /** Model ID used (for context_window lookup) */
-  model_id: string | null;
-  /** Current context size (last API call context window usage) */
-  current_context_tokens: number;
-  /** Cumulative input tokens from sub-agents only */
-  sub_agent_tokens_input: number;
-  /** Cumulative output tokens from sub-agents only */
-  sub_agent_tokens_output: number;
-  /** Cumulative cached input tokens for this workflow */
-  total_cached_tokens: number | null;
-  /** Cumulative cache-write tokens for this workflow */
-  total_cache_write_tokens: number | null;
-  /**
-   * Cumulative USD cost from sub-agents only (computed with each sub-agent's
-   * own pricing, not the parent's). Defaults to 0 on legacy rows.
-   */
-  sub_agent_cost_usd?: number;
-  /** Folder ID for organization (absent = uncategorized) */
-  folder_id?: string;
-  /** Whether this workflow is pinned to the top of the sidebar */
-  pinned: boolean;
+	/** Unique identifier */
+	id: string;
+	/** Workflow name */
+	name: string;
+	/** Associated agent ID */
+	agent_id: string;
+	/** Current status */
+	status: WorkflowStatus;
+	/** Creation timestamp */
+	created_at: Date;
+	/** Last update timestamp */
+	updated_at: Date;
+	/** Completion timestamp (if completed) */
+	completed_at?: Date;
+	/** Cumulative input tokens for this workflow */
+	total_tokens_input: number;
+	/** Cumulative output tokens for this workflow */
+	total_tokens_output: number;
+	/** Cumulative cost for this workflow (USD) */
+	total_cost_usd: number;
+	/** Model ID used (for context_window lookup) */
+	model_id: string | null;
+	/** Current context size (last API call context window usage) */
+	current_context_tokens: number;
+	/** Cumulative input tokens from sub-agents only */
+	sub_agent_tokens_input: number;
+	/** Cumulative output tokens from sub-agents only */
+	sub_agent_tokens_output: number;
+	/** Cumulative cached input tokens for this workflow */
+	total_cached_tokens: number | null;
+	/** Cumulative cache-write tokens for this workflow */
+	total_cache_write_tokens: number | null;
+	/**
+	 * Cumulative USD cost from sub-agents only (computed with each sub-agent's
+	 * own pricing, not the parent's). Defaults to 0 on legacy rows.
+	 */
+	sub_agent_cost_usd?: number;
+	/** Folder ID for organization (absent = uncategorized) */
+	folder_id?: string;
+	/** Whether this workflow is pinned to the top of the sidebar */
+	pinned: boolean;
 }
 
 /**
  * Workflow folder for organizing workflows into named groups.
  */
 export interface WorkflowFolder {
-  /** Unique identifier */
-  id: string;
-  /** Folder display name */
-  name: string;
-  /** Hex color for the folder indicator (e.g. "#3b82f6") */
-  color: string;
-  /** Position in the folder list (lower = higher) */
-  sort_order: number;
-  /** Creation timestamp */
-  created_at: Date;
-  /** Last update timestamp */
-  updated_at: Date;
+	/** Unique identifier */
+	id: string;
+	/** Folder display name */
+	name: string;
+	/** Hex color for the folder indicator (e.g. "#3b82f6") */
+	color: string;
+	/** Position in the folder list (lower = higher) */
+	sort_order: number;
+	/** Creation timestamp */
+	created_at: Date;
+	/** Last update timestamp */
+	updated_at: Date;
 }
 
 /**
  * Result of a workflow execution
  */
 export interface WorkflowResult {
-  /** Full markdown report generated by the agent (for DB persistence/export) */
-  report: string;
-  /** Pure LLM response content only (for chat bubble display) */
-  response: string;
-  /** Execution metrics */
-  metrics: WorkflowMetrics;
-  /** List of tools used during execution */
-  tools_used: string[];
-  /** List of MCP calls made during execution */
-  mcp_calls: string[];
-  /** Detailed tool execution data for persistence and display */
-  tool_executions: WorkflowToolExecution[];
-  /** Pre-generated message ID for block association */
-  message_id: string;
+	/** Full markdown report generated by the agent (for DB persistence/export) */
+	report: string;
+	/** Pure LLM response content only (for chat bubble display) */
+	response: string;
+	/** Execution metrics */
+	metrics: WorkflowMetrics;
+	/** List of tools used during execution */
+	tools_used: string[];
+	/** List of MCP calls made during execution */
+	mcp_calls: string[];
+	/** Detailed tool execution data for persistence and display */
+	tool_executions: WorkflowToolExecution[];
+	/** Pre-generated message ID for block association */
+	message_id: string;
 }
 
 /**
@@ -147,64 +146,64 @@ export interface WorkflowResult {
  * token usage, timing, and context size at that point in the conversation.
  */
 export interface IterationMetrics {
-  /** 1-based iteration number */
-  iteration: number;
-  /** Input/prompt tokens for this call */
-  tokens_input: number;
-  /** Output/completion tokens for this call */
-  tokens_output: number;
-  /** Cached input tokens (if reported by provider) */
-  cached_tokens?: number;
-  /** Cache-write tokens (if reported by provider) */
-  cache_write_tokens?: number;
-  /** Thinking/reasoning tokens for this call (if reasoning model) */
-  thinking_tokens?: number;
-  /** Number of messages in the context at this iteration */
-  messages_count: number;
-  /** Number of tool calls made by LLM at this iteration */
-  tool_calls_count: number;
-  /** Duration of this API call in milliseconds */
-  duration_ms: number;
+	/** 1-based iteration number */
+	iteration: number;
+	/** Input/prompt tokens for this call */
+	tokens_input: number;
+	/** Output/completion tokens for this call */
+	tokens_output: number;
+	/** Cached input tokens (if reported by provider) */
+	cached_tokens?: number;
+	/** Cache-write tokens (if reported by provider) */
+	cache_write_tokens?: number;
+	/** Thinking/reasoning tokens for this call (if reasoning model) */
+	thinking_tokens?: number;
+	/** Number of messages in the context at this iteration */
+	messages_count: number;
+	/** Number of tool calls made by LLM at this iteration */
+	tool_calls_count: number;
+	/** Duration of this API call in milliseconds */
+	duration_ms: number;
 }
 
 /**
  * Metrics collected during workflow execution
  */
 export interface WorkflowMetrics {
-  /** Duration in milliseconds */
-  duration_ms: number;
-  /** Input tokens consumed */
-  tokens_input: number;
-  /** Output tokens generated */
-  tokens_output: number;
-  /** Cost in USD */
-  cost_usd: number;
-  /** LLM provider used */
-  provider: string;
-  /** Model used */
-  model: string;
-  /** Cached input tokens for this execution (if provider supports caching) */
-  cached_tokens?: number;
-  /** Cache-write tokens for this execution (if provider supports caching) */
-  cache_write_tokens?: number;
-  /** Thinking/reasoning tokens (for reasoning models) */
-  thinking_tokens?: number;
-  /** Provider-reported cost (e.g. OpenRouter `usage.cost`) when available. */
-  provider_cost_usd?: number;
-  /**
-   * `llm_model.id` of the model that generated this response. Used by Phase
-   * 13 to look up the exact pricing used at execution time.
-   */
-  model_id_used?: string;
-  /** Per-iteration token breakdown (one entry per LLM API call) */
-  iteration_metrics?: IterationMetrics[];
-  /**
-   * Status of the pricing lookup at the moment cost was computed.
-   * - `ok`: model found and prices are non-zero.
-   * - `model_not_found`: pricing row missing (cost defaults to 0).
-   * - `no_pricing_set`: model found but input/output prices are 0.
-   */
-  pricing_status?: 'ok' | 'model_not_found' | 'no_pricing_set';
+	/** Duration in milliseconds */
+	duration_ms: number;
+	/** Input tokens consumed */
+	tokens_input: number;
+	/** Output tokens generated */
+	tokens_output: number;
+	/** Cost in USD */
+	cost_usd: number;
+	/** LLM provider used */
+	provider: string;
+	/** Model used */
+	model: string;
+	/** Cached input tokens for this execution (if provider supports caching) */
+	cached_tokens?: number;
+	/** Cache-write tokens for this execution (if provider supports caching) */
+	cache_write_tokens?: number;
+	/** Thinking/reasoning tokens (for reasoning models) */
+	thinking_tokens?: number;
+	/** Provider-reported cost (e.g. OpenRouter `usage.cost`) when available. */
+	provider_cost_usd?: number;
+	/**
+	 * `llm_model.id` of the model that generated this response. Used by Phase
+	 * 13 to look up the exact pricing used at execution time.
+	 */
+	model_id_used?: string;
+	/** Per-iteration token breakdown (one entry per LLM API call) */
+	iteration_metrics?: IterationMetrics[];
+	/**
+	 * Status of the pricing lookup at the moment cost was computed.
+	 * - `ok`: model found and prices are non-zero.
+	 * - `model_not_found`: pricing row missing (cost defaults to 0).
+	 * - `no_pricing_set`: model found but input/output prices are 0.
+	 */
+	pricing_status?: 'ok' | 'model_not_found' | 'no_pricing_set';
 }
 
 /**
@@ -219,14 +218,14 @@ export interface WorkflowMetrics {
  * Used by `load_workflow_full_state` command for Complete State Recovery.
  */
 export interface WorkflowFullState {
-  /** The workflow entity with metadata */
-  workflow: Workflow;
-  /** All messages in chronological order */
-  messages: Message[];
-  /** Tool execution history */
-  tool_executions: ToolExecution[];
-  /** Thinking/reasoning steps */
-  thinking_steps: ThinkingStep[];
+	/** The workflow entity with metadata */
+	workflow: Workflow;
+	/** All messages in chronological order */
+	messages: Message[];
+	/** Tool execution history */
+	tool_executions: ToolExecution[];
+	/** Thinking/reasoning steps */
+	thinking_steps: ThinkingStep[];
 }
 
 /**
@@ -236,53 +235,53 @@ export interface WorkflowFullState {
  * token counts, cost estimation, and generation speed.
  */
 export interface TokenDisplayData {
-  /** Input tokens for current message/streaming */
-  tokens_input: number;
-  /** Output tokens for current message/streaming */
-  tokens_output: number;
-  /** Cumulative input tokens for workflow */
-  cumulative_input: number;
-  /** Cumulative output tokens for workflow */
-  cumulative_output: number;
-  /** Context window maximum from model */
-  context_max: number;
-  /**
-   * Cost for the current/last session in USD.
-   *
-   * `null` means the backend has not yet provided a cost for this session
-   * (e.g. fresh streaming where the response_block has not landed). Components
-   * MUST render a neutral placeholder (em-dash) in that case rather than
-   * displaying "Free" or "$0.00", which would be misleading.
-   */
-  cost_usd: number | null;
-  /**
-   * `true` when `cost_usd` is the running sum of per-iteration backend costs
-   * (Option A): the workflow is still progressing and the value may grow.
-   * Components prefix the figure with `~` to make the partial nature visible.
-   */
-  cost_is_partial: boolean;
-  /** Cumulative cost for workflow (USD) */
-  cumulative_cost_usd: number;
-  /** Sub-agent cumulative input tokens */
-  sub_agent_input: number;
-  /** Sub-agent cumulative output tokens */
-  sub_agent_output: number;
-  /** Total workflow cost (main agent + sub-agent estimate) */
-  workflow_total_cost: number;
-  /** Cached input tokens for current message */
-  cached_tokens?: number;
-  /** Cumulative cached input tokens for workflow */
-  cumulative_cached?: number;
-  /** Cache-write tokens for current message */
-  cache_write_tokens?: number;
-  /** Cumulative cache-write tokens for workflow */
-  cumulative_cache_write?: number;
-  /** Token generation speed (tokens/second) - only during streaming */
-  speed_tks?: number;
-  /** Whether currently streaming */
-  is_streaming: boolean;
-  /** Current context window usage (last API call input tokens) */
-  context_used: number;
-  /** Cache hit rate percentage (cached_tokens / tokens_input * 100), null if no caching */
-  cache_hit_rate: number | null;
+	/** Input tokens for current message/streaming */
+	tokens_input: number;
+	/** Output tokens for current message/streaming */
+	tokens_output: number;
+	/** Cumulative input tokens for workflow */
+	cumulative_input: number;
+	/** Cumulative output tokens for workflow */
+	cumulative_output: number;
+	/** Context window maximum from model */
+	context_max: number;
+	/**
+	 * Cost for the current/last session in USD.
+	 *
+	 * `null` means the backend has not yet provided a cost for this session
+	 * (e.g. fresh streaming where the response_block has not landed). Components
+	 * MUST render a neutral placeholder (em-dash) in that case rather than
+	 * displaying "Free" or "$0.00", which would be misleading.
+	 */
+	cost_usd: number | null;
+	/**
+	 * `true` when `cost_usd` is the running sum of per-iteration backend costs
+	 * (Option A): the workflow is still progressing and the value may grow.
+	 * Components prefix the figure with `~` to make the partial nature visible.
+	 */
+	cost_is_partial: boolean;
+	/** Cumulative cost for workflow (USD) */
+	cumulative_cost_usd: number;
+	/** Sub-agent cumulative input tokens */
+	sub_agent_input: number;
+	/** Sub-agent cumulative output tokens */
+	sub_agent_output: number;
+	/** Total workflow cost (main agent + sub-agent estimate) */
+	workflow_total_cost: number;
+	/** Cached input tokens for current message */
+	cached_tokens?: number;
+	/** Cumulative cached input tokens for workflow */
+	cumulative_cached?: number;
+	/** Cache-write tokens for current message */
+	cache_write_tokens?: number;
+	/** Cumulative cache-write tokens for workflow */
+	cumulative_cache_write?: number;
+	/** Token generation speed (tokens/second) - only during streaming */
+	speed_tks?: number;
+	/** Whether currently streaming */
+	is_streaming: boolean;
+	/** Current context window usage (last API call input tokens) */
+	context_used: number;
+	/** Cache hit rate percentage (cached_tokens / tokens_input * 100), null if no caching */
+	cache_hit_rate: number | null;
 }

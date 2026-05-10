@@ -27,7 +27,6 @@
 import type { ReasoningEffort } from './agent';
 import type { MCPAuthMetadata, MCPAuthType } from './mcp';
 
-
 // ============ EXPORT TYPES ============
 
 /**

@@ -7,21 +7,21 @@ Generated: 2026-04-29
 
 ## Summary by License Type
 
-| License | Count | Notes |
-|---------|-------|-------|
-| MIT | ~180 | Permissive |
-| Apache-2.0 | ~150 | Permissive |
-| MIT OR Apache-2.0 | ~200 | Dual-licensed (permissive) |
-| BSD-3-Clause | ~15 | Permissive |
-| BSD-2-Clause | ~5 | Permissive |
-| ISC | ~10 | Permissive |
-| MPL-2.0 | ~5 | Weak copyleft |
-| Unicode-3.0 | ~20 | Permissive (ICU data) |
-| Unlicense | ~5 | Public domain equivalent |
-| 0BSD | ~2 | Public domain equivalent |
-| CC0-1.0 | ~3 | Public domain |
-| Zlib | ~3 | Permissive |
-| BSL-1.1 | 1 | SurrealDB (see note below) |
+| License           | Count | Notes                      |
+| ----------------- | ----- | -------------------------- |
+| MIT               | ~180  | Permissive                 |
+| Apache-2.0        | ~150  | Permissive                 |
+| MIT OR Apache-2.0 | ~200  | Dual-licensed (permissive) |
+| BSD-3-Clause      | ~15   | Permissive                 |
+| BSD-2-Clause      | ~5    | Permissive                 |
+| ISC               | ~10   | Permissive                 |
+| MPL-2.0           | ~5    | Weak copyleft              |
+| Unicode-3.0       | ~20   | Permissive (ICU data)      |
+| Unlicense         | ~5    | Public domain equivalent   |
+| 0BSD              | ~2    | Public domain equivalent   |
+| CC0-1.0           | ~3    | Public domain              |
+| Zlib              | ~3    | Permissive                 |
+| BSL-1.1           | 1     | SurrealDB (see note below) |
 
 ### Special License Notes
 
@@ -34,53 +34,53 @@ Generated: 2026-04-29
 
 ### Direct Dependencies
 
-| Package | Version | License | Repository |
-|---------|---------|---------|------------|
-| @lucide/svelte | 0.563.1 | ISC | https://github.com/lucide-icons/lucide |
-| @tauri-apps/api | 2.10.1 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
-| @tauri-apps/plugin-dialog | 2.6.0 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
-| @tauri-apps/plugin-opener | 2.5.3 | MIT OR Apache-2.0 | https://github.com/tauri-apps/plugins-workspace |
-| dompurify | 3.3.1 | Apache-2.0 OR MPL-2.0 | https://github.com/cure53/DOMPurify |
-| marked | 17.0.4 | MIT | https://github.com/markedjs/marked |
-| zod | 4.3.6 | MIT | https://github.com/colinhacks/zod |
+| Package                   | Version | License               | Repository                                      |
+| ------------------------- | ------- | --------------------- | ----------------------------------------------- |
+| @lucide/svelte            | 0.563.1 | ISC                   | https://github.com/lucide-icons/lucide          |
+| @tauri-apps/api           | 2.10.1  | MIT OR Apache-2.0     | https://github.com/tauri-apps/tauri             |
+| @tauri-apps/plugin-dialog | 2.6.0   | MIT OR Apache-2.0     | https://github.com/tauri-apps/plugins-workspace |
+| @tauri-apps/plugin-opener | 2.5.3   | MIT OR Apache-2.0     | https://github.com/tauri-apps/plugins-workspace |
+| dompurify                 | 3.3.1   | Apache-2.0 OR MPL-2.0 | https://github.com/cure53/DOMPurify             |
+| marked                    | 17.0.4  | MIT                   | https://github.com/markedjs/marked              |
+| zod                       | 4.3.6   | MIT                   | https://github.com/colinhacks/zod               |
 
 ### Dev Dependencies
 
-| Package | Version | License | Repository |
-|---------|---------|---------|------------|
-| @eslint/js | 9.39.1 | MIT | https://github.com/eslint/eslint |
-| @playwright/test | 1.58.0 | Apache-2.0 | https://github.com/microsoft/playwright |
-| @sveltejs/adapter-static | 3.0.10 | MIT | https://github.com/sveltejs/kit |
-| @sveltejs/kit | 2.53.4 | MIT | https://github.com/sveltejs/kit |
-| @sveltejs/vite-plugin-svelte | 6.2.4 | MIT | https://github.com/sveltejs/vite-plugin-svelte |
-| @tauri-apps/cli | 2.10.0 | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri |
-| @types/dompurify | 3.0.5 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
-| @typescript-eslint/eslint-plugin | 8.53.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
-| @typescript-eslint/parser | 8.54.0 | MIT | https://github.com/typescript-eslint/typescript-eslint |
-| eslint | 9.39.1 | MIT | https://github.com/eslint/eslint |
-| eslint-plugin-svelte | 3.14.0 | MIT | https://github.com/sveltejs/eslint-plugin-svelte |
-| globals | 17.4.0 | MIT | https://github.com/sindresorhus/globals |
-| jsdom | 27.4.0 | MIT | https://github.com/jsdom/jsdom |
-| svelte | 5.53.6 | MIT | https://github.com/sveltejs/svelte |
-| svelte-check | 4.4.4 | MIT | https://github.com/sveltejs/language-tools |
-| typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript |
-| typescript-eslint | 8.53.1 | MIT | https://github.com/typescript-eslint/typescript-eslint |
-| vite | 7.3.1 | MIT | https://github.com/vitejs/vite |
-| vitest | 4.0.15 | MIT | https://github.com/vitest-dev/vitest |
+| Package                          | Version | License           | Repository                                             |
+| -------------------------------- | ------- | ----------------- | ------------------------------------------------------ |
+| @eslint/js                       | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
+| @playwright/test                 | 1.58.0  | Apache-2.0        | https://github.com/microsoft/playwright                |
+| @sveltejs/adapter-static         | 3.0.10  | MIT               | https://github.com/sveltejs/kit                        |
+| @sveltejs/kit                    | 2.53.4  | MIT               | https://github.com/sveltejs/kit                        |
+| @sveltejs/vite-plugin-svelte     | 6.2.4   | MIT               | https://github.com/sveltejs/vite-plugin-svelte         |
+| @tauri-apps/cli                  | 2.10.0  | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri                    |
+| @types/dompurify                 | 3.0.5   | MIT               | https://github.com/DefinitelyTyped/DefinitelyTyped     |
+| @typescript-eslint/eslint-plugin | 8.53.1  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
+| @typescript-eslint/parser        | 8.54.0  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
+| eslint                           | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
+| eslint-plugin-svelte             | 3.14.0  | MIT               | https://github.com/sveltejs/eslint-plugin-svelte       |
+| globals                          | 17.4.0  | MIT               | https://github.com/sindresorhus/globals                |
+| jsdom                            | 27.4.0  | MIT               | https://github.com/jsdom/jsdom                         |
+| svelte                           | 5.53.6  | MIT               | https://github.com/sveltejs/svelte                     |
+| svelte-check                     | 4.4.4   | MIT               | https://github.com/sveltejs/language-tools             |
+| typescript                       | 5.9.3   | Apache-2.0        | https://github.com/microsoft/TypeScript                |
+| typescript-eslint                | 8.53.1  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
+| vite                             | 7.3.1   | MIT               | https://github.com/vitejs/vite                         |
+| vitest                           | 4.0.15  | MIT               | https://github.com/vitest-dev/vitest                   |
 
 ### Transitive Dependencies (Notable)
 
-| Package | License | Notes |
-|---------|---------|-------|
-| acorn | MIT | JavaScript parser |
-| cookie | MIT | Cookie parsing |
-| debug | MIT | Debugging utility |
-| devalue | MIT | Value serialization |
-| esm-env | MIT | ESM environment detection |
-| kleur | MIT | Terminal colors |
-| magic-string | MIT | String manipulation |
-| mrmime | MIT | MIME type detection |
-| playwright-core | Apache-2.0 | Browser automation |
+| Package         | License    | Notes                     |
+| --------------- | ---------- | ------------------------- |
+| acorn           | MIT        | JavaScript parser         |
+| cookie          | MIT        | Cookie parsing            |
+| debug           | MIT        | Debugging utility         |
+| devalue         | MIT        | Value serialization       |
+| esm-env         | MIT        | ESM environment detection |
+| kleur           | MIT        | Terminal colors           |
+| magic-string    | MIT        | String manipulation       |
+| mrmime          | MIT        | MIME type detection       |
+| playwright-core | Apache-2.0 | Browser automation        |
 
 ---
 
@@ -88,43 +88,43 @@ Generated: 2026-04-29
 
 ### Direct Dependencies
 
-| Crate | Version | License | Repository |
-|-------|---------|---------|------------|
-| tauri | 2.10.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
-| tauri-plugin-opener | 2.5.3 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
-| tauri-plugin-dialog | 2.6.0 | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
-| serde | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde |
-| serde_json | 1.0.149 | MIT OR Apache-2.0 | https://github.com/serde-rs/json |
-| tokio | 1.50.0 | MIT | https://github.com/tokio-rs/tokio |
-| surrealdb | 2.6.4 | BSL-1.1 | https://github.com/surrealdb/surrealdb |
-| anyhow | 1.0.102 | MIT OR Apache-2.0 | https://github.com/dtolnay/anyhow |
-| thiserror | 2.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror |
-| tracing | 0.1.44 | MIT | https://github.com/tokio-rs/tracing |
-| tracing-subscriber | 0.3.23 | MIT | https://github.com/tokio-rs/tracing |
-| uuid | 1.22.0 | Apache-2.0 OR MIT | https://github.com/uuid-rs/uuid |
-| chrono | 0.4.44 | MIT OR Apache-2.0 | https://github.com/chronotope/chrono |
-| async-trait | 0.1.89 | MIT OR Apache-2.0 | https://github.com/dtolnay/async-trait |
-| base64 | 0.22.1 | MIT OR Apache-2.0 | https://github.com/marshallpierce/rust-base64 |
-| regex | 1.12.3 | MIT OR Apache-2.0 | https://github.com/rust-lang/regex |
-| globset | 0.4.18 | Unlicense OR MIT | https://github.com/BurntSushi/ripgrep |
-| tokio-util | 0.7.18 | MIT | https://github.com/tokio-rs/tokio |
-| rig-core | 0.32.0 | MIT | https://github.com/0xPlaygrounds/rig |
-| reqwest | 0.12.28 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest |
-| futures-util | 0.3.32 | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs |
-| keyring | 3.6.3 | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs |
-| aes-gcm | 0.10.3 | Apache-2.0 OR MIT | https://github.com/RustCrypto/AEADs |
+| Crate               | Version | License           | Repository                                      |
+| ------------------- | ------- | ----------------- | ----------------------------------------------- |
+| tauri               | 2.10.3  | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri             |
+| tauri-plugin-opener | 2.5.3   | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
+| tauri-plugin-dialog | 2.6.0   | Apache-2.0 OR MIT | https://github.com/tauri-apps/plugins-workspace |
+| serde               | 1.0.228 | MIT OR Apache-2.0 | https://github.com/serde-rs/serde               |
+| serde_json          | 1.0.149 | MIT OR Apache-2.0 | https://github.com/serde-rs/json                |
+| tokio               | 1.50.0  | MIT               | https://github.com/tokio-rs/tokio               |
+| surrealdb           | 2.6.4   | BSL-1.1           | https://github.com/surrealdb/surrealdb          |
+| anyhow              | 1.0.102 | MIT OR Apache-2.0 | https://github.com/dtolnay/anyhow               |
+| thiserror           | 2.0.18  | MIT OR Apache-2.0 | https://github.com/dtolnay/thiserror            |
+| tracing             | 0.1.44  | MIT               | https://github.com/tokio-rs/tracing             |
+| tracing-subscriber  | 0.3.23  | MIT               | https://github.com/tokio-rs/tracing             |
+| uuid                | 1.22.0  | Apache-2.0 OR MIT | https://github.com/uuid-rs/uuid                 |
+| chrono              | 0.4.44  | MIT OR Apache-2.0 | https://github.com/chronotope/chrono            |
+| async-trait         | 0.1.89  | MIT OR Apache-2.0 | https://github.com/dtolnay/async-trait          |
+| base64              | 0.22.1  | MIT OR Apache-2.0 | https://github.com/marshallpierce/rust-base64   |
+| regex               | 1.12.3  | MIT OR Apache-2.0 | https://github.com/rust-lang/regex              |
+| globset             | 0.4.18  | Unlicense OR MIT  | https://github.com/BurntSushi/ripgrep           |
+| tokio-util          | 0.7.18  | MIT               | https://github.com/tokio-rs/tokio               |
+| rig-core            | 0.32.0  | MIT               | https://github.com/0xPlaygrounds/rig            |
+| reqwest             | 0.12.28 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest          |
+| futures-util        | 0.3.32  | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs         |
+| keyring             | 3.6.3   | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs            |
+| aes-gcm             | 0.10.3  | Apache-2.0 OR MIT | https://github.com/RustCrypto/AEADs             |
 
 ### Build Dependencies
 
-| Crate | Version | License | Repository |
-|-------|---------|---------|------------|
-| tauri-build | 2.5.6 | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
+| Crate       | Version | License           | Repository                          |
+| ----------- | ------- | ----------------- | ----------------------------------- |
+| tauri-build | 2.5.6   | Apache-2.0 OR MIT | https://github.com/tauri-apps/tauri |
 
 ### Dev Dependencies
 
-| Crate | Version | License | Repository |
-|-------|---------|---------|------------|
-| tempfile | 3.27.0 | MIT OR Apache-2.0 | https://github.com/Stebalien/tempfile |
+| Crate    | Version | License           | Repository                            |
+| -------- | ------- | ----------------- | ------------------------------------- |
+| tempfile | 3.27.0  | MIT OR Apache-2.0 | https://github.com/Stebalien/tempfile |
 
 ### Transitive Dependencies by License
 
@@ -268,16 +268,16 @@ webpki-roots
 
 #### Special Licenses
 
-| Crate | License | Notes |
-|-------|---------|-------|
-| surrealdb | BSL-1.1 | Business Source License, converts to Apache-2.0 after 4 years |
-| surrealdb-core | BSL-1.1 | Same as surrealdb |
-| dlopen2 | (not specified) | Dynamic library loading |
-| dlopen2_derive | (not specified) | Proc macro for dlopen2 |
-| encoding_rs | (Apache-2.0 OR MIT) AND BSD-3-Clause | Multiple licenses combined |
-| ring | Apache-2.0 AND ISC | Combined license |
-| dpi | Apache-2.0 AND MIT | Combined license |
-| brotli | BSD-3-Clause AND MIT | Combined license |
+| Crate          | License                              | Notes                                                         |
+| -------------- | ------------------------------------ | ------------------------------------------------------------- |
+| surrealdb      | BSL-1.1                              | Business Source License, converts to Apache-2.0 after 4 years |
+| surrealdb-core | BSL-1.1                              | Same as surrealdb                                             |
+| dlopen2        | (not specified)                      | Dynamic library loading                                       |
+| dlopen2_derive | (not specified)                      | Proc macro for dlopen2                                        |
+| encoding_rs    | (Apache-2.0 OR MIT) AND BSD-3-Clause | Multiple licenses combined                                    |
+| ring           | Apache-2.0 AND ISC                   | Combined license                                              |
+| dpi            | Apache-2.0 AND MIT                   | Combined license                                              |
+| brotli         | BSD-3-Clause AND MIT                 | Combined license                                              |
 
 ---
 
@@ -360,6 +360,7 @@ ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFT
 The full text is available at: https://www.mozilla.org/en-US/MPL/2.0/
 
 Key points for Zileo Chat:
+
 - You may use, modify, and distribute MPL-2.0 licensed code
 - If you modify MPL-2.0 files, you must make those modifications available under MPL-2.0
 - MPL-2.0 is file-level copyleft, not project-level (unlike GPL)
@@ -391,6 +392,7 @@ THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 SurrealDB is licensed under the Business Source License 1.1.
 
 Key points:
+
 - You may use the software for any purpose except as a database-as-a-service
 - The license converts to Apache-2.0 after 4 years from release
 - Full license text: https://github.com/surrealdb/surrealdb/blob/main/LICENSE
@@ -423,5 +425,5 @@ npm ls --all
 
 ---
 
-*Last updated: 2026-04-29*
-*Zileo Chat version: 0.21.0*
+_Last updated: 2026-04-29_
+_Zileo Chat version: 0.21.0_

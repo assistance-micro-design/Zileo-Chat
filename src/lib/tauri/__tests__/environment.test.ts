@@ -15,34 +15,30 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-createTauriUnavailableError,
-isBrowserRuntime,
-isTauriRuntime
-} from '../environment';
+import { createTauriUnavailableError, isBrowserRuntime, isTauriRuntime } from '../environment';
 
 describe('Tauri environment helpers', () => {
-afterEach(() => {
-delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-});
+	afterEach(() => {
+		delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+	});
 
-it('detects the jsdom browser runtime', () => {
-expect(isBrowserRuntime()).toBe(true);
-});
+	it('detects the jsdom browser runtime', () => {
+		expect(isBrowserRuntime()).toBe(true);
+	});
 
-it('returns false when Tauri internals are absent', () => {
-expect(isTauriRuntime()).toBe(false);
-});
+	it('returns false when Tauri internals are absent', () => {
+		expect(isTauriRuntime()).toBe(false);
+	});
 
-it('returns true when Tauri internals are present', () => {
-(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+	it('returns true when Tauri internals are present', () => {
+		(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
 
-expect(isTauriRuntime()).toBe(true);
-});
+		expect(isTauriRuntime()).toBe(true);
+	});
 
-it('creates a clear unavailable-runtime error', () => {
-expect(createTauriUnavailableError('Tauri command test').message).toBe(
-'Tauri command test is only available in the Tauri runtime'
-);
-});
+	it('creates a clear unavailable-runtime error', () => {
+		expect(createTauriUnavailableError('Tauri command test').message).toBe(
+			'Tauri command test is only available in the Tauri runtime'
+		);
+	});
 });

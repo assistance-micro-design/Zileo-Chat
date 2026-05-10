@@ -77,7 +77,10 @@ export async function fetchModel(id: string): Promise<LLMModel> {
 /**
  * Gets a model by API name and provider.
  */
-export async function fetchModelByApiName(apiName: string, provider: ProviderType): Promise<LLMModel> {
+export async function fetchModelByApiName(
+	apiName: string,
+	provider: ProviderType
+): Promise<LLMModel> {
 	return invoke<LLMModel>('get_model_by_api_name', { apiName, provider });
 }
 
@@ -225,7 +228,7 @@ export async function loadAllLLMData(forceRefresh = false): Promise<{
 	models: LLMModel[];
 }> {
 	const now = Date.now();
-	if (!forceRefresh && llmCache.data && (now - llmCache.timestamp) < LLM_CACHE_TTL) {
+	if (!forceRefresh && llmCache.data && now - llmCache.timestamp < LLM_CACHE_TTL) {
 		return llmCache.data;
 	}
 

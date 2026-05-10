@@ -87,9 +87,7 @@ Displays in a modal with variable detection and preview.
 	let isValid = $derived(name.trim().length > 0 && content.trim().length > 0);
 
 	/** Skills available for insertion (not already referenced) */
-	let insertableSkills = $derived(
-		availableSkills.filter((s) => !detectedSkills.includes(s.name))
-	);
+	let insertableSkills = $derived(availableSkills.filter((s) => !detectedSkills.includes(s.name)));
 
 	// Category options for Select
 	let categoryOptions = $derived(
@@ -142,7 +140,6 @@ Displays in a modal with variable detection and preview.
 			content += (content.length > 0 && !content.endsWith('\n') ? '\n' : '') + ref;
 		}
 	}
-
 </script>
 
 <form class="prompt-form" onsubmit={handleSubmit}>
@@ -243,7 +240,11 @@ Displays in a modal with variable detection and preview.
 			{$i18n('common_cancel')}
 		</Button>
 		<Button type="submit" variant="primary" disabled={!isValid || saving}>
-			{saving ? $i18n('prompts_saving') : mode === 'create' ? $i18n('prompts_create') : $i18n('prompts_save_changes')}
+			{saving
+				? $i18n('prompts_saving')
+				: mode === 'create'
+					? $i18n('prompts_create')
+					: $i18n('prompts_save_changes')}
 		</Button>
 	</div>
 </form>

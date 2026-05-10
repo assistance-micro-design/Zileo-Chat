@@ -22,37 +22,41 @@ import { openExternalUrl } from '../opener';
 import { setTauriWindowTheme } from '../window';
 
 describe('Tauri adapter browser fallbacks', () => {
-afterEach(() => {
-delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-});
+	afterEach(() => {
+		delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+	});
 
-it('returns a no-op unlistener outside Tauri', async () => {
-const handler = vi.fn();
-const unlisten = await tauriListen('test-event', handler);
+	it('returns a no-op unlistener outside Tauri', async () => {
+		const handler = vi.fn();
+		const unlisten = await tauriListen('test-event', handler);
 
-expect(unlisten).toEqual(expect.any(Function));
-expect(() => unlisten()).not.toThrow();
-expect(handler).not.toHaveBeenCalled();
-});
+		expect(unlisten).toEqual(expect.any(Function));
+		expect(() => unlisten()).not.toThrow();
+		expect(handler).not.toHaveBeenCalled();
+	});
 
-it('does not throw when applying the native window theme outside Tauri', async () => {
-await expect(setTauriWindowTheme('dark')).resolves.toBeUndefined();
-});
+	it('does not throw when applying the native window theme outside Tauri', async () => {
+		await expect(setTauriWindowTheme('dark')).resolves.toBeUndefined();
+	});
 
-it('throws a controlled error for invoke outside Tauri', async () => {
-await expect(tauriInvoke('test_command')).rejects.toThrow(
-'Tauri command "test_command" is only available in the Tauri runtime'
-);
-});
+	it('throws a controlled error for invoke outside Tauri', async () => {
+		await expect(tauriInvoke('test_command')).rejects.toThrow(
+			'Tauri command "test_command" is only available in the Tauri runtime'
+		);
+	});
 
-it('throws a controlled error for dialogs outside Tauri', async () => {
-await expect(openDialog()).rejects.toThrow('Tauri open dialog is only available in the Tauri runtime');
-await expect(saveDialog()).rejects.toThrow('Tauri save dialog is only available in the Tauri runtime');
-});
+	it('throws a controlled error for dialogs outside Tauri', async () => {
+		await expect(openDialog()).rejects.toThrow(
+			'Tauri open dialog is only available in the Tauri runtime'
+		);
+		await expect(saveDialog()).rejects.toThrow(
+			'Tauri save dialog is only available in the Tauri runtime'
+		);
+	});
 
-it('throws a controlled error for external URL opening outside Tauri', async () => {
-await expect(openExternalUrl('https://example.com')).rejects.toThrow(
-'Tauri external URL opener is only available in the Tauri runtime'
-);
-});
+	it('throws a controlled error for external URL opening outside Tauri', async () => {
+		await expect(openExternalUrl('https://example.com')).rejects.toThrow(
+			'Tauri external URL opener is only available in the Tauri runtime'
+		);
+	});
 });

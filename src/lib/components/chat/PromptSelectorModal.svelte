@@ -84,8 +84,7 @@
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase();
 			result = result.filter(
-				(p) =>
-					p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
+				(p) => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
 			);
 		}
 
@@ -169,12 +168,18 @@
 	}
 </script>
 
-<Modal {open} onclose={handleClose} title={selectedPrompt ? $i18n('chat_fill_variables') : $i18n('chat_select_prompt')}>
+<Modal
+	{open}
+	onclose={handleClose}
+	title={selectedPrompt ? $i18n('chat_fill_variables') : $i18n('chat_select_prompt')}
+>
 	{#snippet body()}
 		{#if selectedPrompt}
 			<!-- Variable Input View -->
 			<div class="variable-view">
-				<button type="button" class="back-button" onclick={goBack}> &larr; {$i18n('chat_back_to_list')} </button>
+				<button type="button" class="back-button" onclick={goBack}>
+					&larr; {$i18n('chat_back_to_list')}
+				</button>
 
 				<div class="prompt-info">
 					<h4>{selectedPrompt.name}</h4>
@@ -246,11 +251,19 @@
 										{PROMPT_CATEGORY_LABELS[prompt.category]}
 									</Badge>
 								</div>
-								<p class="prompt-description">{prompt.description || $i18n('chat_no_description')}</p>
+								<p class="prompt-description">
+									{prompt.description || $i18n('chat_no_description')}
+								</p>
 								<span class="prompt-vars">
 									{prompt.variables_count !== 1
-										? $i18n('chat_variables_count_plural').replace('{count}', String(prompt.variables_count))
-										: $i18n('chat_variables_count').replace('{count}', String(prompt.variables_count))}
+										? $i18n('chat_variables_count_plural').replace(
+												'{count}',
+												String(prompt.variables_count)
+											)
+										: $i18n('chat_variables_count').replace(
+												'{count}',
+												String(prompt.variables_count)
+											)}
 								</span>
 							</button>
 						{/each}

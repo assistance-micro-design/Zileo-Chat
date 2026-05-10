@@ -125,7 +125,10 @@ Allows clearing sensitive env vars and excluding servers from export.
 		<h4 class="server-name">{serverName}</h4>
 		{#if sensitiveCount > 0}
 			<Badge variant="warning">
-				{sensitiveCount} {sensitiveCount === 1 ? $i18n('ie_sensitive').toLowerCase() : $i18n('ie_sensitive').toLowerCase() + 's'}
+				{sensitiveCount}
+				{sensitiveCount === 1
+					? $i18n('ie_sensitive').toLowerCase()
+					: $i18n('ie_sensitive').toLowerCase() + 's'}
 			</Badge>
 		{/if}
 	</div>
@@ -176,7 +179,10 @@ Allows clearing sensitive env vars and excluding servers from export.
 			{#if sanitization.clearEnvKeys.length > 0}
 				<div class="summary">
 					<span class="summary-text">
-						{$i18n('ie_x_vars_cleared').replace('{count}', String(sanitization.clearEnvKeys.length))}
+						{$i18n('ie_x_vars_cleared').replace(
+							'{count}',
+							String(sanitization.clearEnvKeys.length)
+						)}
 					</span>
 				</div>
 			{/if}

@@ -108,7 +108,6 @@
 
 		await userQuestionStore.skipQuestion($currentQuestion.id);
 	}
-
 </script>
 
 {#if $isModalOpen}
@@ -163,7 +162,8 @@
 						{#if $currentQuestion.questionType === 'text' || $currentQuestion.questionType === 'mixed'}
 							<Textarea
 								label={$i18n('user_question_text_label')}
-								placeholder={$currentQuestion.textPlaceholder ?? $i18n('user_question_text_placeholder')}
+								placeholder={$currentQuestion.textPlaceholder ??
+									$i18n('user_question_text_placeholder')}
 								value={textResponse}
 								oninput={(e) => (textResponse = e.currentTarget.value)}
 								rows={4}

@@ -71,7 +71,8 @@
 			{$i18n('audit_pagination_prev')}
 		</Button>
 		<span class="page-indicator">
-			{$i18n('audit_pagination_page')} {page + 1}
+			{$i18n('audit_pagination_page')}
+			{page + 1}
 		</span>
 		<Button variant="ghost" type="button" onclick={onnext} disabled={loading || !hasMore}>
 			{$i18n('audit_pagination_next')}

@@ -35,10 +35,10 @@ export type TauriInvokeArgs = Record<string, unknown>;
  * @returns Command result
  */
 export async function tauriInvoke<T>(command: string, args?: TauriInvokeArgs): Promise<T> {
-if (!isTauriRuntime()) {
-throw createTauriUnavailableError(`Tauri command "${command}"`);
-}
+	if (!isTauriRuntime()) {
+		throw createTauriUnavailableError(`Tauri command "${command}"`);
+	}
 
-const { invoke } = await import('@tauri-apps/api/core');
-return invoke<T>(command, args);
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke<T>(command, args);
 }

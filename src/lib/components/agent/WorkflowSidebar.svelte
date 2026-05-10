@@ -86,7 +86,13 @@ Left sidebar for workflow management with search and CRUD operations.
 		questionPendingIds?: Set<string>;
 	}
 
-	const defaultCounts: Record<StatusFilter, number> = { all: 0, idle: 0, running: 0, completed: 0, error: 0 };
+	const defaultCounts: Record<StatusFilter, number> = {
+		all: 0,
+		idle: 0,
+		running: 0,
+		completed: 0,
+		error: 0
+	};
 
 	let {
 		collapsed = $bindable(false),
@@ -201,10 +207,9 @@ Left sidebar for workflow management with search and CRUD operations.
 	const debouncedSearchChange = debounce((value: string) => {
 		onsearchchange?.(value);
 	}, 300);
-
 </script>
 
-<Sidebar bind:collapsed={collapsed}>
+<Sidebar bind:collapsed>
 	{#snippet header(isCollapsed)}
 		<div class="sidebar-header-content" class:collapsed={isCollapsed}>
 			{#if isCollapsed}
@@ -220,7 +225,12 @@ Left sidebar for workflow management with search and CRUD operations.
 			{:else}
 				<div class="title-row">
 					<h2 class="sidebar-title">{$i18n('workflow_title')}</h2>
-					<Button variant="primary" size="icon" onclick={oncreate} ariaLabel={$i18n('workflow_new')}>
+					<Button
+						variant="primary"
+						size="icon"
+						onclick={oncreate}
+						ariaLabel={$i18n('workflow_new')}
+					>
 						<Plus size={14} />
 					</Button>
 				</div>
@@ -316,11 +326,7 @@ Left sidebar for workflow management with search and CRUD operations.
 				>
 					{$i18n('sidebar_selection_delete', { count: selectedIds.size })}
 				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={toggleSelectionMode}
-				>
+				<Button variant="ghost" size="sm" onclick={toggleSelectionMode}>
 					{$i18n('sidebar_selection_cancel')}
 				</Button>
 			</div>
@@ -473,5 +479,4 @@ Left sidebar for workflow management with search and CRUD operations.
 		color: var(--color-danger);
 		text-align: center;
 	}
-
 </style>

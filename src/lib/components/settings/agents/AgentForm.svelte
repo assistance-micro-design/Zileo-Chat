@@ -24,12 +24,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 <script lang="ts">
 	import { agentStore, agents } from '$lib/stores/agents';
-	import {
-		loadServers,
-		type MCPState,
-		createInitialMCPState,
-		setServers
-	} from '$lib/stores/mcp';
+	import { loadServers, type MCPState, createInitialMCPState, setServers } from '$lib/stores/mcp';
 	import {
 		loadAllLLMData,
 		getModelsByProvider,
@@ -122,17 +117,45 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 	/** Available tools (from backend) - reactive to locale */
 	const availableTools = $derived([
-		{ value: 'MemoryTool', label: $i18n('agents_tool_memory'), description: $i18n('agents_tool_memory_desc') },
-		{ value: 'TodoTool', label: $i18n('agents_tool_todo'), description: $i18n('agents_tool_todo_desc') },
-		{ value: 'UserQuestionTool', label: $i18n('agents_tool_user_question'), description: $i18n('agents_tool_user_question_desc') },
-		{ value: 'CalculatorTool', label: $i18n('agents_tool_calculator'), description: $i18n('agents_tool_calculator_desc') },
-		{ value: 'FileManagerTool', label: $i18n('agents_tool_file_manager'), description: $i18n('agents_tool_file_manager_desc') }
+		{
+			value: 'MemoryTool',
+			label: $i18n('agents_tool_memory'),
+			description: $i18n('agents_tool_memory_desc')
+		},
+		{
+			value: 'TodoTool',
+			label: $i18n('agents_tool_todo'),
+			description: $i18n('agents_tool_todo_desc')
+		},
+		{
+			value: 'UserQuestionTool',
+			label: $i18n('agents_tool_user_question'),
+			description: $i18n('agents_tool_user_question_desc')
+		},
+		{
+			value: 'CalculatorTool',
+			label: $i18n('agents_tool_calculator'),
+			description: $i18n('agents_tool_calculator_desc')
+		},
+		{
+			value: 'FileManagerTool',
+			label: $i18n('agents_tool_file_manager'),
+			description: $i18n('agents_tool_file_manager_desc')
+		}
 	]);
 
 	/** Lifecycle options with descriptions - reactive to locale */
 	const lifecycleOptions = $derived([
-		{ value: 'permanent' as Lifecycle, label: $i18n('agents_lifecycle_permanent'), description: $i18n('agents_lifecycle_permanent_desc') },
-		{ value: 'temporary' as Lifecycle, label: $i18n('agents_lifecycle_temporary'), description: $i18n('agents_lifecycle_temporary_desc') }
+		{
+			value: 'permanent' as Lifecycle,
+			label: $i18n('agents_lifecycle_permanent'),
+			description: $i18n('agents_lifecycle_permanent_desc')
+		},
+		{
+			value: 'temporary' as Lifecycle,
+			label: $i18n('agents_lifecycle_temporary'),
+			description: $i18n('agents_lifecycle_temporary_desc')
+		}
 	]);
 
 	/** Provider options with details - reactive to locale, includes custom providers */
@@ -363,7 +386,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 <Card>
 	{#snippet body()}
-		<form class="agent-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+		<form
+			class="agent-form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSubmit();
+			}}
+		>
 			<h3 class="form-title">
 				{mode === 'create' ? $i18n('agents_create_new') : $i18n('agents_edit')}
 			</h3>
@@ -384,7 +413,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					<Input
 						label={$i18n('agents_name_label')}
 						value={name}
-						oninput={(e) => { name = e.currentTarget.value; }}
+						oninput={(e) => {
+							name = e.currentTarget.value;
+						}}
 						placeholder={$i18n('agents_name_placeholder')}
 						required
 						help={errors.name || $i18n('agents_name_help')}
@@ -400,7 +431,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 									class:selected={lifecycle === option.value}
 									class:disabled={mode === 'edit'}
 									disabled={mode === 'edit'}
-									onclick={() => { if (mode !== 'edit') lifecycle = option.value; }}
+									onclick={() => {
+										if (mode !== 'edit') lifecycle = option.value;
+									}}
 								>
 									<span class="selector-card-title">{option.label}</span>
 									<span class="selector-card-description">{option.description}</span>
@@ -425,7 +458,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 									type="button"
 									class="selector-card provider-card"
 									class:selected={provider === option.value}
-									onclick={() => { provider = option.value; }}
+									onclick={() => {
+										provider = option.value;
+									}}
 								>
 									<span class="selector-card-title">{option.label}</span>
 									<span class="selector-card-type">{option.type}</span>
@@ -448,7 +483,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 										type="button"
 										class="model-card"
 										class:selected={model === m.api_name}
-										onclick={() => { model = m.api_name; }}
+										onclick={() => {
+											model = m.api_name;
+										}}
 									>
 										<div class="model-card-header">
 											<span class="model-card-name">{m.name}</span>
@@ -463,8 +500,12 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 										</div>
 										<code class="model-card-api">{m.api_name}</code>
 										<div class="model-card-specs">
-											<span class="model-card-spec">{formatContextWindow(m.context_window)} ctx</span>
-											<span class="model-card-spec">{formatContextWindow(m.max_output_tokens)} out</span>
+											<span class="model-card-spec"
+												>{formatContextWindow(m.context_window)} ctx</span
+											>
+											<span class="model-card-spec"
+												>{formatContextWindow(m.max_output_tokens)} out</span
+											>
 											<span class="model-card-spec">T: {m.temperature_default}</span>
 										</div>
 									</button>
@@ -583,18 +624,24 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 					<AgentFolders
 						folders={selectedFolders}
-						onchange={(f) => { selectedFolders = f; }}
+						onchange={(f) => {
+							selectedFolders = f;
+						}}
 					/>
 
 					<label class="checkbox-item">
 						<input
 							type="checkbox"
 							checked={requireFileConfirmation}
-							onchange={() => { requireFileConfirmation = !requireFileConfirmation; }}
+							onchange={() => {
+								requireFileConfirmation = !requireFileConfirmation;
+							}}
 						/>
 						<div class="checkbox-content">
 							<span class="checkbox-label">{$i18n('agents_require_file_confirmation')}</span>
-							<span class="checkbox-description">{$i18n('agents_require_file_confirmation_desc')}</span>
+							<span class="checkbox-description"
+								>{$i18n('agents_require_file_confirmation_desc')}</span
+							>
 						</div>
 					</label>
 				</div>
@@ -610,7 +657,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						rows={8}
 						placeholder={$i18n('agents_system_prompt_placeholder')}
 						required
-						help={errors.systemPrompt || $i18n('agents_system_prompt_chars', { count: systemPrompt.length })}
+						help={errors.systemPrompt ||
+							$i18n('agents_system_prompt_chars', { count: systemPrompt.length })}
 					/>
 				</div>
 			</div>
@@ -620,7 +668,11 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					{$i18n('common_cancel')}
 				</Button>
 				<Button variant="primary" type="submit" disabled={saving}>
-					{saving ? $i18n('agents_saving') : mode === 'create' ? $i18n('agents_create') : $i18n('agents_save_changes')}
+					{saving
+						? $i18n('agents_saving')
+						: mode === 'create'
+							? $i18n('agents_create')
+							: $i18n('agents_save_changes')}
 				</Button>
 			</div>
 		</form>
@@ -726,7 +778,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: border-color var(--transition-fast), background-color var(--transition-fast);
+		transition:
+			border-color var(--transition-fast),
+			background-color var(--transition-fast);
 		text-align: left;
 	}
 
@@ -775,7 +829,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-md);
 		cursor: pointer;
-		transition: border-color var(--transition-fast), background-color var(--transition-fast);
+		transition:
+			border-color var(--transition-fast),
+			background-color var(--transition-fast);
 		text-align: left;
 	}
 

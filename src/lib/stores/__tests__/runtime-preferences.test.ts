@@ -14,68 +14,68 @@
  * limitations under the License.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { get } from "svelte/store";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { get } from 'svelte/store';
 
-vi.mock("$lib/tauri", () => ({
-  setTauriWindowTheme: vi.fn().mockResolvedValue(undefined),
+vi.mock('$lib/tauri', () => ({
+	setTauriWindowTheme: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("$lib/i18n", () => ({
-  setLanguageTag: vi.fn(),
-  isAvailableLanguageTag: (tag: string) => tag === "en" || tag === "fr",
+vi.mock('$lib/i18n', () => ({
+	setLanguageTag: vi.fn(),
+	isAvailableLanguageTag: (tag: string) => tag === 'en' || tag === 'fr'
 }));
 
-import { theme } from "../theme";
-import { localeStore, locale } from "../locale";
+import { theme } from '../theme';
+import { localeStore, locale } from '../locale';
 
 function mockLocalStorageFailure(): void {
-  vi.spyOn(window.localStorage.__proto__, "getItem").mockImplementation(() => {
-    throw new Error("storage unavailable");
-  });
-  vi.spyOn(window.localStorage.__proto__, "setItem").mockImplementation(() => {
-    throw new Error("storage unavailable");
-  });
+	vi.spyOn(window.localStorage.__proto__, 'getItem').mockImplementation(() => {
+		throw new Error('storage unavailable');
+	});
+	vi.spyOn(window.localStorage.__proto__, 'setItem').mockImplementation(() => {
+		throw new Error('storage unavailable');
+	});
 }
 
-describe("runtime preference stores", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    window.localStorage.clear();
-    document.documentElement.removeAttribute("data-theme");
-    document.documentElement.removeAttribute("lang");
-    theme.cleanup();
-  });
+describe('runtime preference stores', () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		window.localStorage.clear();
+		document.documentElement.removeAttribute('data-theme');
+		document.documentElement.removeAttribute('lang');
+		theme.cleanup();
+	});
 
-  it("theme.setTheme remains usable when localStorage throws", () => {
-    mockLocalStorageFailure();
+	it('theme.setTheme remains usable when localStorage throws', () => {
+		mockLocalStorageFailure();
 
-    expect(() => theme.setTheme("dark")).not.toThrow();
-    expect(get(theme)).toBe("dark");
-    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-  });
+		expect(() => theme.setTheme('dark')).not.toThrow();
+		expect(get(theme)).toBe('dark');
+		expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+	});
 
-  it("theme.init works without matchMedia support", () => {
-    const original = window.matchMedia;
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: undefined,
-    });
+	it('theme.init works without matchMedia support', () => {
+		const original = window.matchMedia;
+		Object.defineProperty(window, 'matchMedia', {
+			configurable: true,
+			value: undefined
+		});
 
-    expect(() => theme.init()).not.toThrow();
-    expect(get(theme)).toBe("light");
+		expect(() => theme.init()).not.toThrow();
+		expect(get(theme)).toBe('light');
 
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: original,
-    });
-  });
+		Object.defineProperty(window, 'matchMedia', {
+			configurable: true,
+			value: original
+		});
+	});
 
-  it("localeStore.setLocale remains usable when localStorage throws", () => {
-    mockLocalStorageFailure();
+	it('localeStore.setLocale remains usable when localStorage throws', () => {
+		mockLocalStorageFailure();
 
-    expect(() => localeStore.setLocale("fr")).not.toThrow();
-    expect(get(locale)).toBe("fr");
-    expect(document.documentElement.getAttribute("lang")).toBe("fr");
-  });
+		expect(() => localeStore.setLocale('fr')).not.toThrow();
+		expect(get(locale)).toBe('fr');
+		expect(document.documentElement.getAttribute('lang')).toBe('fr');
+	});
 });

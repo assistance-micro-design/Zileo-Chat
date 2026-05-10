@@ -42,7 +42,13 @@
 		onselect?: (workflow: Workflow) => void;
 	}
 
-	let { workflow, active = false, running = false, hasQuestion = false, onselect }: Props = $props();
+	let {
+		workflow,
+		active = false,
+		running = false,
+		hasQuestion = false,
+		onselect
+	}: Props = $props();
 
 	/**
 	 * Handle workflow selection
@@ -146,7 +152,8 @@
 	}
 
 	@keyframes pulse-ring {
-		0%, 100% {
+		0%,
+		100% {
 			box-shadow: 0 0 0 0 var(--color-success);
 		}
 		50% {

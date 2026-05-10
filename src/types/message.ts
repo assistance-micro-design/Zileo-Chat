@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Message role in the conversation
  */
@@ -26,18 +25,18 @@ export type MessageRole = 'user' | 'assistant' | 'system';
  * during the current session.
  */
 export interface SubAgentSummary {
-  /** Execution record ID for unique identification */
-  id: string;
-  /** Sub-agent name */
-  name: string;
-  /** Execution status */
-  status: 'completed' | 'error';
-  /** Duration in milliseconds */
-  duration_ms?: number;
-  /** Input tokens consumed */
-  tokens_input?: number;
-  /** Output tokens generated */
-  tokens_output?: number;
+	/** Execution record ID for unique identification */
+	id: string;
+	/** Sub-agent name */
+	name: string;
+	/** Execution status */
+	status: 'completed' | 'error';
+	/** Duration in milliseconds */
+	duration_ms?: number;
+	/** Input tokens consumed */
+	tokens_input?: number;
+	/** Output tokens generated */
+	tokens_output?: number;
 }
 
 /**
@@ -46,40 +45,40 @@ export interface SubAgentSummary {
  * Includes token counts, model info, cost, and duration for analytics and state recovery.
  */
 export interface Message {
-  /** Unique identifier (UUID) */
-  id: string;
-  /** Associated workflow ID */
-  workflow_id: string;
-  /** Message role (user, assistant, system) */
-  role: MessageRole;
-  /** Message content (text) */
-  content: string;
-  /** Legacy token count (deprecated, use tokens_input/tokens_output) */
-  tokens?: number;
-  /** Input tokens consumed (for assistant messages) */
-  tokens_input?: number;
-  /** Output tokens generated (for assistant messages) */
-  tokens_output?: number;
-  /** Model used for generation (e.g., "mistral-large-latest") */
-  model?: string;
-  /** Provider used (e.g., "Mistral", "Ollama") */
-  provider?: string;
-  /** Estimated cost in USD */
-  cost_usd?: number;
-  /** Generation duration in milliseconds */
-  duration_ms?: number;
-  /** Thinking/reasoning tokens (for reasoning models) */
-  thinking_tokens?: number;
-  /** Cached prompt tokens (cache reads) when the provider exposes them. */
-  cached_tokens?: number;
-  /** Cache-write prompt tokens (priming cost on first request). */
-  cache_write_tokens?: number;
-  /** `llm_model.id` of the model that produced the assistant response. */
-  model_id_used?: string;
-  /** Message timestamp */
-  timestamp: Date;
-  /** Sub-agent summaries (transient, captured from backgroundWorkflowsStore) */
-  sub_agents?: SubAgentSummary[];
+	/** Unique identifier (UUID) */
+	id: string;
+	/** Associated workflow ID */
+	workflow_id: string;
+	/** Message role (user, assistant, system) */
+	role: MessageRole;
+	/** Message content (text) */
+	content: string;
+	/** Legacy token count (deprecated, use tokens_input/tokens_output) */
+	tokens?: number;
+	/** Input tokens consumed (for assistant messages) */
+	tokens_input?: number;
+	/** Output tokens generated (for assistant messages) */
+	tokens_output?: number;
+	/** Model used for generation (e.g., "mistral-large-latest") */
+	model?: string;
+	/** Provider used (e.g., "Mistral", "Ollama") */
+	provider?: string;
+	/** Estimated cost in USD */
+	cost_usd?: number;
+	/** Generation duration in milliseconds */
+	duration_ms?: number;
+	/** Thinking/reasoning tokens (for reasoning models) */
+	thinking_tokens?: number;
+	/** Cached prompt tokens (cache reads) when the provider exposes them. */
+	cached_tokens?: number;
+	/** Cache-write prompt tokens (priming cost on first request). */
+	cache_write_tokens?: number;
+	/** `llm_model.id` of the model that produced the assistant response. */
+	model_id_used?: string;
+	/** Message timestamp */
+	timestamp: Date;
+	/** Sub-agent summaries (transient, captured from backgroundWorkflowsStore) */
+	sub_agents?: SubAgentSummary[];
 }
 
 /**
@@ -88,13 +87,12 @@ export interface Message {
  * workflow has no live execution running.
  */
 export interface MessageMetrics {
-  tokens_input: number | null;
-  tokens_output: number | null;
-  cached_tokens: number | null;
-  cache_write_tokens: number | null;
-  thinking_tokens: number | null;
-  cost_usd: number | null;
-  /** `llm_model.id` of the model that produced the response (for pricing lookup). */
-  model_id_used: string | null;
+	tokens_input: number | null;
+	tokens_output: number | null;
+	cached_tokens: number | null;
+	cache_write_tokens: number | null;
+	thinking_tokens: number | null;
+	cost_usd: number | null;
+	/** `llm_model.id` of the model that produced the response (for pricing lookup). */
+	model_id_used: string | null;
 }
-

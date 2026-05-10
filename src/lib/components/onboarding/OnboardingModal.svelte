@@ -135,7 +135,6 @@
 	</div>
 </div>
 
-
 <style>
 	.onboarding-modal {
 		position: fixed;

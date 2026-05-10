@@ -84,13 +84,7 @@
 		saving?: boolean;
 	}
 
-	let {
-		mode,
-		server,
-		onsave,
-		oncancel,
-		saving = false
-	}: Props = $props();
+	let { mode, server, onsave, oncancel, saving = false }: Props = $props();
 
 	/** Form state initialised from props. */
 	let formData = $state<MCPServerFormData>({
@@ -126,9 +120,7 @@
 			enabled: server?.enabled ?? true,
 			command: server?.command ?? 'docker',
 			args: server?.args?.join('\n') ?? '',
-			env: server?.env
-				? Object.entries(server.env).map(([key, value]) => ({ key, value }))
-				: [],
+			env: server?.env ? Object.entries(server.env).map(([key, value]) => ({ key, value })) : [],
 			description: server?.description ?? '',
 			authType: initialAuthType,
 			bearerToken: '',
@@ -180,8 +172,7 @@
 
 	/** Whether the legacy migration banner should be shown right now. */
 	const showLegacyMigration = $derived(
-		!migrationDismissed
-			&& (legacyApiKeyValue !== null || legacyHeaderEntries.length > 0)
+		!migrationDismissed && (legacyApiKeyValue !== null || legacyHeaderEntries.length > 0)
 	);
 
 	/** Whether the current Basic auth selection runs over plain HTTP. */
@@ -325,10 +316,7 @@
 			description: formData.description.trim() || undefined,
 			authType: isHttp ? formData.authType : undefined,
 			authMetadata: isHttp ? buildAuthMetadata() : undefined,
-			extraHeaders:
-				isHttp && Object.keys(extraHeadersMap).length > 0
-					? extraHeadersMap
-					: undefined,
+			extraHeaders: isHttp && Object.keys(extraHeadersMap).length > 0 ? extraHeadersMap : undefined,
 			authSecret: isHttp ? buildAuthSecret() : undefined
 		};
 
@@ -437,7 +425,9 @@
 		<Input
 			label={$i18n('mcp_form_name_label')}
 			value={formData.name}
-			oninput={(e) => { formData.name = e.currentTarget.value; }}
+			oninput={(e) => {
+				formData.name = e.currentTarget.value;
+			}}
 			placeholder={$i18n('mcp_form_name_placeholder')}
 			required
 			help={errors.name ?? $i18n('mcp_form_name_help')}
@@ -462,7 +452,9 @@
 		<Textarea
 			label={$i18n('mcp_form_args_label')}
 			value={formData.args}
-			oninput={(e) => { formData.args = e.currentTarget.value; }}
+			oninput={(e) => {
+				formData.args = e.currentTarget.value;
+			}}
 			placeholder={$i18n('mcp_form_args_placeholder')}
 			rows={4}
 			help={errors.args ?? $i18n('mcp_form_args_help')}
@@ -484,45 +476,29 @@
 			</div>
 
 			{#if showLegacyMigration}
-				<div class="legacy-banner" role="region" aria-label={$i18n('mcp_auth_legacy_migration_title')}>
+				<div
+					class="legacy-banner"
+					role="region"
+					aria-label={$i18n('mcp_auth_legacy_migration_title')}
+				>
 					<div class="legacy-banner-text">
 						<strong>{$i18n('mcp_auth_legacy_migration_title')}</strong>
 						<p>{$i18n('mcp_auth_legacy_migration_body')}</p>
 					</div>
 					<div class="legacy-banner-actions">
 						{#if legacyApiKeyValue !== null}
-							<Button
-								type="button"
-								variant="primary"
-								size="sm"
-								onclick={migrateLegacyAsBearer}
-							>
+							<Button type="button" variant="primary" size="sm" onclick={migrateLegacyAsBearer}>
 								{$i18n('mcp_auth_legacy_migration_use_bearer')}
 							</Button>
-							<Button
-								type="button"
-								variant="secondary"
-								size="sm"
-								onclick={migrateLegacyAsApiKey}
-							>
+							<Button type="button" variant="secondary" size="sm" onclick={migrateLegacyAsApiKey}>
 								{$i18n('mcp_auth_legacy_migration_use_apikey')}
 							</Button>
 						{:else}
-							<Button
-								type="button"
-								variant="primary"
-								size="sm"
-								onclick={migrateLegacyHeadersOnly}
-							>
+							<Button type="button" variant="primary" size="sm" onclick={migrateLegacyHeadersOnly}>
 								{$i18n('mcp_auth_legacy_migration_move_headers')}
 							</Button>
 						{/if}
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onclick={dismissLegacyMigration}
-						>
+						<Button type="button" variant="ghost" size="sm" onclick={dismissLegacyMigration}>
 							{$i18n('mcp_auth_legacy_migration_dismiss')}
 						</Button>
 					</div>
@@ -550,7 +526,9 @@
 				<Input
 					label={$i18n('mcp_auth_apikey_header_label')}
 					value={formData.apiKeyHeaderName}
-					oninput={(e) => { formData.apiKeyHeaderName = e.currentTarget.value; }}
+					oninput={(e) => {
+						formData.apiKeyHeaderName = e.currentTarget.value;
+					}}
 					placeholder="X-API-Key"
 					help={errors.authApiKeyHeader ?? $i18n('mcp_auth_apikey_header_help')}
 				/>
@@ -570,7 +548,9 @@
 				<Input
 					label={$i18n('mcp_auth_basic_user_label')}
 					value={formData.basicUser}
-					oninput={(e) => { formData.basicUser = e.currentTarget.value; }}
+					oninput={(e) => {
+						formData.basicUser = e.currentTarget.value;
+					}}
 					placeholder=""
 					help={errors.authBasic}
 				/>
@@ -724,7 +704,9 @@
 		<Textarea
 			label={$i18n('mcp_form_description_label')}
 			value={formData.description}
-			oninput={(e) => { formData.description = e.currentTarget.value; }}
+			oninput={(e) => {
+				formData.description = e.currentTarget.value;
+			}}
 			placeholder={$i18n('mcp_form_description_placeholder')}
 			rows={2}
 			help={$i18n('mcp_form_description_help')}
@@ -737,7 +719,9 @@
 				type="checkbox"
 				id="mcp-server-enabled"
 				checked={formData.enabled}
-				onchange={(e) => { formData.enabled = e.currentTarget.checked; }}
+				onchange={(e) => {
+					formData.enabled = e.currentTarget.checked;
+				}}
 			/>
 			<label for="mcp-server-enabled" class="checkbox-label">
 				{$i18n('mcp_form_enabled_label')}
@@ -746,19 +730,10 @@
 	</div>
 
 	<div class="form-actions">
-		<Button
-			type="button"
-			variant="ghost"
-			onclick={oncancel}
-			disabled={saving}
-		>
+		<Button type="button" variant="ghost" onclick={oncancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
-		<Button
-			type="submit"
-			variant="primary"
-			disabled={saving}
-		>
+		<Button type="submit" variant="primary" disabled={saving}>
 			{#if saving}
 				{mode === 'create' ? $i18n('mcp_form_creating') : $i18n('mcp_form_saving')}
 			{:else}

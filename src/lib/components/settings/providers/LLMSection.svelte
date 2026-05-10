@@ -31,7 +31,15 @@ Combines Providers and Models sections.
 		LLMState
 	} from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import { Card, Button, StatusIndicator, Modal, Select, DeleteConfirmModal, ErrorBanner } from '$lib/components/ui';
+	import {
+		Card,
+		Button,
+		StatusIndicator,
+		Modal,
+		Select,
+		DeleteConfirmModal,
+		ErrorBanner
+	} from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import { ProviderCard, ModelCard, ModelForm } from '$lib/components/llm';
 	import SettingsSectionHeader from '../SettingsSectionHeader.svelte';
@@ -75,7 +83,13 @@ Combines Providers and Models sections.
 	/** Props */
 	interface Props {
 		/** Callback when API key modal should be opened */
-		onConfigureApiKey: (provider: ProviderType, hasApiKey: boolean, providerSettings: ProviderSettings | null, displayName?: string, isCustom?: boolean) => void;
+		onConfigureApiKey: (
+			provider: ProviderType,
+			hasApiKey: boolean,
+			providerSettings: ProviderSettings | null,
+			displayName?: string,
+			isCustom?: boolean
+		) => void;
 	}
 
 	let { onConfigureApiKey }: Props = $props();
@@ -117,7 +131,10 @@ Combines Providers and Models sections.
 			}
 			llmState = setModels(llmState, data.models);
 		} catch (err) {
-			llmState = setLLMError(llmState, $i18n('settings_llm_load_failed', { error: getErrorMessage(err) }));
+			llmState = setLLMError(
+				llmState,
+				$i18n('settings_llm_load_failed', { error: getErrorMessage(err) })
+			);
 		}
 	}
 
@@ -174,7 +191,10 @@ Combines Providers and Models sections.
 	 * Handles custom provider creation success.
 	 * @param warning - Optional security warning from the backend
 	 */
-	async function handleCustomProviderCreated(newProvider: ProviderInfo, warning?: string): Promise<void> {
+	async function handleCustomProviderCreated(
+		newProvider: ProviderInfo,
+		warning?: string
+	): Promise<void> {
 		showCustomProviderForm = false;
 		// Append the provider locally to avoid a reload flicker. Provider settings
 		// for a freshly created entity are not yet in state; loadProviderSettings
@@ -281,9 +301,7 @@ Combines Providers and Models sections.
 	 * Gets filtered models for the selected provider (or all if 'all' selected).
 	 * Uses memoized selector to prevent recalculation during scroll.
 	 */
-	const filteredModels = $derived(
-		getFilteredModelsMemoized(llmState, selectedModelsProvider)
-	);
+	const filteredModels = $derived(getFilteredModelsMemoized(llmState, selectedModelsProvider));
 
 	/**
 	 * Gets the default model for a specific provider
@@ -321,7 +339,10 @@ Combines Providers and Models sections.
 	/>
 
 	{#if llmState.error}
-		<ErrorBanner message={llmState.error} onDismiss={() => (llmState = setLLMError(llmState, null))} />
+		<ErrorBanner
+			message={llmState.error}
+			onDismiss={() => (llmState = setLLMError(llmState, null))}
+		/>
 	{/if}
 
 	{#if llmState.loading}
@@ -342,7 +363,12 @@ Combines Providers and Models sections.
 					settings={llmState.providers[provInfo.id] ?? null}
 					hasApiKey={provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id)}
 					defaultModel={getProviderDefaultModel(provInfo.id)}
-					onConfigure={() => onConfigureApiKey(provInfo.id, provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id), llmState.providers[provInfo.id] ?? null)}
+					onConfigure={() =>
+						onConfigureApiKey(
+							provInfo.id,
+							provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id),
+							llmState.providers[provInfo.id] ?? null
+						)}
 				>
 					{#snippet icon()}
 						{#if provInfo.id === 'mistral'}
@@ -363,7 +389,14 @@ Combines Providers and Models sections.
 					hasApiKey={providerHasApiKey(provInfo.id)}
 					defaultModel={getProviderDefaultModel(provInfo.id)}
 					isCustom={true}
-					onConfigure={() => onConfigureApiKey(provInfo.id, providerHasApiKey(provInfo.id), llmState.providers[provInfo.id] ?? null, provInfo.displayName, true)}
+					onConfigure={() =>
+						onConfigureApiKey(
+							provInfo.id,
+							providerHasApiKey(provInfo.id),
+							llmState.providers[provInfo.id] ?? null,
+							provInfo.displayName,
+							true
+						)}
 					onDelete={() => handleDeleteProviderRequest(provInfo)}
 				>
 					{#snippet icon()}

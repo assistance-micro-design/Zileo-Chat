@@ -74,7 +74,9 @@ Extracted from MemorySettings.svelte.
 				<!-- Summary Row -->
 				<div class="summary-stats">
 					<div class="summary-item">
-						<span class="summary-value">{formatNumber(stats?.total ?? tokenStats?.total_memories ?? 0)}</span>
+						<span class="summary-value"
+							>{formatNumber(stats?.total ?? tokenStats?.total_memories ?? 0)}</span
+						>
 						<span class="summary-label">{$i18n('memory_total_memories')}</span>
 					</div>
 					<div class="summary-item">
@@ -82,7 +84,9 @@ Extracted from MemorySettings.svelte.
 						<span class="summary-label">{$i18n('memory_total_characters')}</span>
 					</div>
 					<div class="summary-item">
-						<span class="summary-value">{formatNumber(tokenStats?.total_estimated_tokens ?? 0)}</span>
+						<span class="summary-value"
+							>{formatNumber(tokenStats?.total_estimated_tokens ?? 0)}</span
+						>
 						<span class="summary-label">{$i18n('memory_est_tokens')}</span>
 					</div>
 					<div class="summary-item">
@@ -101,14 +105,22 @@ Extracted from MemorySettings.svelte.
 									<div class="category-header">
 										<Badge variant={getTypeVariant(cat.memory_type)}>{cat.memory_type}</Badge>
 										<span class="category-count">{cat.count} {$i18n('memory_memories_count')}</span>
-										<span class="embedding-status">{cat.with_embeddings}/{cat.count} {$i18n('memory_embedded')}</span>
+										<span class="embedding-status"
+											>{cat.with_embeddings}/{cat.count} {$i18n('memory_embedded')}</span
+										>
 									</div>
 									<div class="category-details">
-										<span class="token-count">{formatNumber(cat.estimated_tokens)} {$i18n('memory_tokens')}</span>
-										<span class="char-count">({formatNumber(cat.total_chars)} {$i18n('memory_chars')})</span>
+										<span class="token-count"
+											>{formatNumber(cat.estimated_tokens)} {$i18n('memory_tokens')}</span
+										>
+										<span class="char-count"
+											>({formatNumber(cat.total_chars)} {$i18n('memory_chars')})</span
+										>
 									</div>
 									<ProgressBar
-										value={tokenStats.total_chars > 0 ? (cat.total_chars / tokenStats.total_chars) * 100 : 0}
+										value={tokenStats.total_chars > 0
+											? (cat.total_chars / tokenStats.total_chars) * 100
+											: 0}
 										showLabel={false}
 									/>
 								</div>

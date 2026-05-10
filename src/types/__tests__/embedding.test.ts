@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Tests for embedding types and constants.
  *
@@ -54,26 +53,20 @@ describe('Embedding Types', () => {
 		});
 
 		it('should have mistral-embed model with 1024 dimensions', () => {
-			const mistralEmbed = EMBEDDING_MODELS.mistral.find(
-				(m) => m.value === 'mistral-embed'
-			);
+			const mistralEmbed = EMBEDDING_MODELS.mistral.find((m) => m.value === 'mistral-embed');
 			expect(mistralEmbed).toBeDefined();
 			expect(mistralEmbed?.dimension).toBe(1024);
 			expect(mistralEmbed?.label).toContain('1024D');
 		});
 
 		it('should have nomic-embed-text model with 768 dimensions', () => {
-			const nomicEmbed = EMBEDDING_MODELS.ollama.find(
-				(m) => m.value === 'nomic-embed-text'
-			);
+			const nomicEmbed = EMBEDDING_MODELS.ollama.find((m) => m.value === 'nomic-embed-text');
 			expect(nomicEmbed).toBeDefined();
 			expect(nomicEmbed?.dimension).toBe(768);
 		});
 
 		it('should have mxbai-embed-large model with 1024 dimensions', () => {
-			const mxbaiEmbed = EMBEDDING_MODELS.ollama.find(
-				(m) => m.value === 'mxbai-embed-large'
-			);
+			const mxbaiEmbed = EMBEDDING_MODELS.ollama.find((m) => m.value === 'mxbai-embed-large');
 			expect(mxbaiEmbed).toBeDefined();
 			expect(mxbaiEmbed?.dimension).toBe(1024);
 		});

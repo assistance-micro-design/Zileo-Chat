@@ -27,7 +27,8 @@ Manages agent configuration with lazy loading.
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
 	/** Lazy loaded AgentSettings component */
-	type LazyAgentSettings = typeof import('$lib/components/settings/agents/AgentSettings.svelte').default;
+	type LazyAgentSettings =
+		typeof import('$lib/components/settings/agents/AgentSettings.svelte').default;
 	let AgentSettingsComponent = $state<LazyAgentSettings | null>(null);
 	let loadError = $state<string | null>(null);
 
@@ -77,4 +78,3 @@ Manages agent configuration with lazy loading.
 		</Card>
 	{/if}
 </section>
-

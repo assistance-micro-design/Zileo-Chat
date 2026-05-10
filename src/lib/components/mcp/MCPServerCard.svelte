@@ -55,14 +55,7 @@ Displays an MCP server with status, command info, and action buttons.
 		onDelete?: () => void;
 	}
 
-	let {
-		server,
-		testing = false,
-		onEdit,
-		onTest,
-		onToggle,
-		onDelete
-	}: Props = $props();
+	let { server, testing = false, onEdit, onTest, onToggle, onDelete }: Props = $props();
 
 	/**
 	 * Maps MCPServerStatus to StatusIndicator-compatible status
@@ -101,7 +94,6 @@ Displays an MCP server with status, command info, and action buttons.
 				return t('mcp_card_status_unknown');
 		}
 	}
-
 
 	/**
 	 * Formats the command display string
@@ -197,7 +189,9 @@ Displays an MCP server with status, command info, and action buttons.
 				size="sm"
 				onclick={onToggle}
 				disabled={isStarting || !server.enabled}
-				ariaLabel={isRunning ? $i18n('mcp_card_stop_arialabel').replace('{name}', server.name) : $i18n('mcp_card_start_arialabel').replace('{name}', server.name)}
+				ariaLabel={isRunning
+					? $i18n('mcp_card_stop_arialabel').replace('{name}', server.name)
+					: $i18n('mcp_card_start_arialabel').replace('{name}', server.name)}
 			>
 				{#if isRunning}
 					<Square size={16} />

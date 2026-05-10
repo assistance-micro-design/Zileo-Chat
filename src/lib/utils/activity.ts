@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Utility functions for formatting activity-related data.
  * @module lib/utils/activity

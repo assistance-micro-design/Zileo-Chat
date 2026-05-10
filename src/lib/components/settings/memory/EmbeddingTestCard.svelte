@@ -62,7 +62,10 @@ Extracted from MemorySettings.svelte.
 		try {
 			testResult = await tauriInvoke<EmbeddingTestResult>('test_embedding', { text: testText });
 			if (testResult.success) {
-				notify('success', t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms)));
+				notify(
+					'success',
+					t('memory_embedding_generated').replace('{duration}', String(testResult.duration_ms))
+				);
 			} else {
 				notify('error', testResult.error || t('common_error'));
 			}

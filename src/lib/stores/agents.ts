@@ -20,16 +20,8 @@
  * @module stores/agents
  */
 
-import {
-	createCRUDStore,
-	createDerivedStores
-} from './factory/createCRUDStore';
-import type {
-	AgentConfig,
-	AgentSummary,
-	AgentConfigCreate,
-	AgentConfigUpdate
-} from '$types/agent';
+import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
+import type { AgentConfig, AgentSummary, AgentConfigCreate, AgentConfigUpdate } from '$types/agent';
 
 // ============================================================================
 // Store State Type (for backward compatibility)

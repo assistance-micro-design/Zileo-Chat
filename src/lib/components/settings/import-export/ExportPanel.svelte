@@ -96,8 +96,13 @@ Multi-step process: entity selection, options, preview, and export.
 
 	/** Check if any entities are selected */
 	const hasSelection = $derived(
-		selectedAgents.length + selectedMcpServers.length + selectedModels.length +
-			selectedPrompts.length + selectedSkills.length + selectedCustomProviders.length > 0
+		selectedAgents.length +
+			selectedMcpServers.length +
+			selectedModels.length +
+			selectedPrompts.length +
+			selectedSkills.length +
+			selectedCustomProviders.length >
+			0
 	);
 
 	/**
@@ -174,9 +179,7 @@ Multi-step process: entity selection, options, preview, and export.
 			// Filter out excluded servers from selection and sanitization
 			const filteredSelection: ExportSelection = {
 				...selection,
-				mcpServers: selection.mcpServers.filter(
-					(id) => !mcpSanitization[id]?.excludeFromExport
-				)
+				mcpServers: selection.mcpServers.filter((id) => !mcpSanitization[id]?.excludeFromExport)
 			};
 
 			// Remove excluded servers from sanitization config
@@ -302,7 +305,13 @@ Multi-step process: entity selection, options, preview, and export.
 				{$i18n('ie_step_select')}
 			</Badge>
 			<span class="step-arrow">→</span>
-			<Badge variant={currentStep === 'options' ? 'primary' : currentStep === 'preview' ? 'success' : 'primary'}>
+			<Badge
+				variant={currentStep === 'options'
+					? 'primary'
+					: currentStep === 'preview'
+						? 'success'
+						: 'primary'}
+			>
 				{$i18n('ie_step_options')}
 			</Badge>
 			<span class="step-arrow">→</span>

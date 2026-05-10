@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Workflow service for encapsulating workflow-related Tauri IPC calls.
  *
@@ -108,8 +107,12 @@ export const WorkflowService = {
 	 * @param workflowIds - Array of workflow IDs to delete
 	 * @returns Result with deleted count and skipped running IDs
 	 */
-	async deleteBatch(workflowIds: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
-		return invoke<{ deleted: number; skipped_running: string[] }>('delete_workflows_batch', { workflowIds });
+	async deleteBatch(
+		workflowIds: string[]
+	): Promise<{ deleted: number; skipped_running: string[] }> {
+		return invoke<{ deleted: number; skipped_running: string[] }>('delete_workflows_batch', {
+			workflowIds
+		});
 	},
 
 	/**

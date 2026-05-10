@@ -69,7 +69,7 @@ describe('getNextFocusableIndex', () => {
 		{ id: 'a', labelKey: 'a' },
 		{ id: 'b', labelKey: 'b', disabled: true },
 		{ id: 'c', labelKey: 'c' },
-		{ id: 'd', labelKey: 'd' },
+		{ id: 'd', labelKey: 'd' }
 	];
 
 	it('moves down to next enabled item', () => {
@@ -95,7 +95,7 @@ describe('getNextFocusableIndex', () => {
 	it('handles all items disabled', () => {
 		const allDisabled: ContextMenuItem[] = [
 			{ id: 'a', labelKey: 'a', disabled: true },
-			{ id: 'b', labelKey: 'b', disabled: true },
+			{ id: 'b', labelKey: 'b', disabled: true }
 		];
 		// Should not infinite loop, returns some index
 		const result = getNextFocusableIndex(allDisabled, 0, 1);
@@ -114,7 +114,7 @@ describe('getNextFocusableIndex', () => {
 			{ id: 'b', labelKey: 'b', disabled: true },
 			{ id: 'c', labelKey: 'c', disabled: true },
 			{ id: 'd', labelKey: 'd', disabled: true },
-			{ id: 'e', labelKey: 'e' },
+			{ id: 'e', labelKey: 'e' }
 		];
 		expect(getNextFocusableIndex(manyDisabled, 0, 1)).toBe(4);
 	});

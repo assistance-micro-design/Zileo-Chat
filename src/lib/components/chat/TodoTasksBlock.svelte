@@ -81,7 +81,6 @@ Visible during and after execution.
 	function priorityLabel(priority: number): string {
 		return `P${priority}`;
 	}
-
 </script>
 
 {#if tasks.length > 0}
@@ -89,7 +88,9 @@ Visible during and after execution.
 		<div class="tasks-header">
 			<ListTodo size={14} class="tasks-icon" />
 			<span class="tasks-title">{$i18n('chat_tasks_title')}</span>
-			<span class="tasks-count">{tasks.filter(t => t.status === 'completed').length}/{tasks.length}</span>
+			<span class="tasks-count"
+				>{tasks.filter((t) => t.status === 'completed').length}/{tasks.length}</span
+			>
 		</div>
 
 		<div class="tasks-body">

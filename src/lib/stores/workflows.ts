@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Workflow store for managing workflow state in the frontend.
  * Provides reactive state management for workflows using Svelte 5 runes pattern.

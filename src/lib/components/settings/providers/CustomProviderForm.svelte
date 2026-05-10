@@ -55,7 +55,10 @@
 
 	/** Form validation */
 	const isValid = $derived(
-		name.length > 0 && displayName.trim().length > 0 && baseUrl.trim().length > 0 && apiKey.trim().length > 0
+		name.length > 0 &&
+			displayName.trim().length > 0 &&
+			baseUrl.trim().length > 0 &&
+			apiKey.trim().length > 0
 	);
 
 	/**
@@ -68,7 +71,12 @@
 		error = null;
 
 		try {
-			const response = await createCustomProvider(name, displayName.trim(), baseUrl.trim(), apiKey.trim());
+			const response = await createCustomProvider(
+				name,
+				displayName.trim(),
+				baseUrl.trim(),
+				apiKey.trim()
+			);
 			oncreated(response.provider, response.warning);
 		} catch (e) {
 			error = getErrorMessage(e);
@@ -78,7 +86,13 @@
 	}
 </script>
 
-<form class="custom-provider-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+<form
+	class="custom-provider-form"
+	onsubmit={(e) => {
+		e.preventDefault();
+		handleSubmit();
+	}}
+>
 	<Input
 		label={$i18n('llm_custom_provider_display_name')}
 		placeholder="RouterLab"
@@ -121,11 +135,7 @@
 		<Button variant="ghost" onclick={oncancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
-		<Button
-			variant="primary"
-			type="submit"
-			disabled={saving || !isValid}
-		>
+		<Button variant="primary" type="submit" disabled={saving || !isValid}>
 			{saving ? $i18n('common_saving') : $i18n('common_save')}
 		</Button>
 	</div>

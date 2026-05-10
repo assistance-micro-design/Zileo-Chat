@@ -101,11 +101,15 @@
 		<div class="model-specs">
 			<div class="spec-item">
 				<span class="spec-label">{$i18n('llm_model_context_window')}</span>
-				<span class="spec-value">{formatContextWindow(model.context_window)} {$i18n('llm_model_tokens')}</span>
+				<span class="spec-value"
+					>{formatContextWindow(model.context_window)} {$i18n('llm_model_tokens')}</span
+				>
 			</div>
 			<div class="spec-item">
 				<span class="spec-label">{$i18n('llm_model_max_output')}</span>
-				<span class="spec-value">{formatNumber(model.max_output_tokens)} {$i18n('llm_model_tokens')}</span>
+				<span class="spec-value"
+					>{formatNumber(model.max_output_tokens)} {$i18n('llm_model_tokens')}</span
+				>
 			</div>
 			<div class="spec-item">
 				<span class="spec-label">{$i18n('llm_model_temperature')}</span>

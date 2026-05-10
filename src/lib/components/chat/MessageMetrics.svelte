@@ -24,7 +24,14 @@
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Cpu, ArrowDownToLine, CircleDollarSign, Users, BrainCircuit } from '@lucide/svelte';
+	import {
+		Clock,
+		Cpu,
+		ArrowDownToLine,
+		CircleDollarSign,
+		Users,
+		BrainCircuit
+	} from '@lucide/svelte';
 	import { formatTokenCount } from '$lib/utils/activity';
 	import { formatDuration } from '$lib/utils/duration';
 	import { i18n } from '$lib/i18n';
@@ -50,7 +57,10 @@
 {#if hasMetrics}
 	<div class="message-metrics">
 		{#if message.model}
-			<span class="metric" title={message.provider ? `${message.provider} / ${message.model}` : message.model}>
+			<span
+				class="metric"
+				title={message.provider ? `${message.provider} / ${message.model}` : message.model}
+			>
 				<Cpu size={12} />
 				{message.provider ? `${message.provider} / ` : ''}{message.model}
 			</span>
@@ -59,7 +69,9 @@
 		{#if (message.tokens_input ?? 0) > 0 || (message.tokens_output ?? 0) > 0}
 			<span class="metric">
 				<ArrowDownToLine size={12} />
-				{formatTokenCount(message.tokens_input ?? 0)} / {formatTokenCount(message.tokens_output ?? 0)}
+				{formatTokenCount(message.tokens_input ?? 0)} / {formatTokenCount(
+					message.tokens_output ?? 0
+				)}
 			</span>
 			{#if message.thinking_tokens && message.thinking_tokens > 0}
 				<span class="metric thinking" title={$i18n('metrics_thinking_tokens')}>
@@ -92,7 +104,9 @@
 					<span class="agent-name">{agent.name}</span>
 					{#if agent.tokens_input || agent.tokens_output}
 						<span class="agent-tokens">
-							{formatTokenCount(agent.tokens_input ?? 0)}/{formatTokenCount(agent.tokens_output ?? 0)}
+							{formatTokenCount(agent.tokens_input ?? 0)}/{formatTokenCount(
+								agent.tokens_output ?? 0
+							)}
 						</span>
 					{/if}
 					{#if agent.duration_ms}

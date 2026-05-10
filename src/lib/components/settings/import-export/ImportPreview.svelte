@@ -178,7 +178,9 @@ Uses data-driven loops for summary cards and entity lists.
 							<h4>{$i18n(def.titleKey)}</h4>
 							<Badge variant="primary">{validation.entities[def.type].length}</Badge>
 						</div>
-						<p class="summary-count">{$i18n('ie_x_selected').replace('{count}', String(selection[def.type].length))}</p>
+						<p class="summary-count">
+							{$i18n('ie_x_selected').replace('{count}', String(selection[def.type].length))}
+						</p>
 					</div>
 				{/snippet}
 			</Card>
@@ -314,7 +316,6 @@ Uses data-driven loops for summary cards and entity lists.
 		font-size: var(--font-size-xs);
 		color: var(--color-text-secondary);
 	}
-
 
 	@media (max-width: 768px) {
 		.summary-cards {

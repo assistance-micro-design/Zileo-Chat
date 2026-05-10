@@ -81,7 +81,6 @@ describe('attachSettingsRefreshListener', () => {
 			});
 		}
 	});
-
 });
 
 describe('dispatchSettingsRefresh', () => {

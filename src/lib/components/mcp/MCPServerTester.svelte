@@ -48,12 +48,7 @@ Displays MCP server connection test results including tools, resources, and late
 		error?: string | null;
 	}
 
-	let {
-		result,
-		loading = false,
-		onRetry,
-		error = null
-	}: Props = $props();
+	let { result, loading = false, onRetry, error = null }: Props = $props();
 
 	/**
 	 * Formats latency in a human-readable way
@@ -142,7 +137,9 @@ Displays MCP server connection test results including tools, resources, and late
 					<div class="detail-section">
 						<div class="section-header">
 							<FileText size={16} />
-							<span class="section-title">{$i18n('mcp_tester_resources')} ({result.resources.length})</span>
+							<span class="section-title"
+								>{$i18n('mcp_tester_resources')} ({result.resources.length})</span
+							>
 						</div>
 						{#if result.resources.length === 0}
 							<p class="empty-list">{$i18n('mcp_tester_resources_empty')}</p>

@@ -47,7 +47,10 @@ const currentLocale = writable<Locale>(DEFAULT_LOCALE);
 /**
  * Current messages store (derived from locale)
  */
-const currentMessages = derived(currentLocale, ($locale) => translations[$locale] || translations[DEFAULT_LOCALE]);
+const currentMessages = derived(
+	currentLocale,
+	($locale) => translations[$locale] || translations[DEFAULT_LOCALE]
+);
 
 /**
  * Set the current language

@@ -20,11 +20,7 @@
  * @module stores/mcp/state
  */
 
-import type {
-	MCPServer,
-	MCPServerStatus,
-	MCPTool
-} from '$types/mcp';
+import type { MCPServer, MCPServerStatus, MCPTool } from '$types/mcp';
 
 /**
  * State interface for the MCP store
@@ -98,14 +94,8 @@ export function addServer(state: MCPState, server: MCPServer): MCPState {
  * @param updates - Partial server updates
  * @returns Updated state with modified server
  */
-export function updateServer(
-	state: MCPState,
-	id: string,
-	updates: Partial<MCPServer>
-): MCPState {
-	const servers = state.servers.map((s) =>
-		s.id === id ? { ...s, ...updates } : s
-	);
+export function updateServer(state: MCPState, id: string, updates: Partial<MCPServer>): MCPState {
+	const servers = state.servers.map((s) => (s.id === id ? { ...s, ...updates } : s));
 
 	return {
 		...state,
@@ -135,11 +125,7 @@ export function removeServer(state: MCPState, id: string): MCPState {
  * @param status - New status
  * @returns Updated state with new server status
  */
-export function setServerStatus(
-	state: MCPState,
-	id: string,
-	status: MCPServerStatus
-): MCPState {
+export function setServerStatus(state: MCPState, id: string, status: MCPServerStatus): MCPState {
 	return updateServer(state, id, { status });
 }
 
@@ -150,11 +136,7 @@ export function setServerStatus(
  * @param tools - Tools discovered from server
  * @returns Updated state with server tools
  */
-export function setServerTools(
-	state: MCPState,
-	id: string,
-	tools: MCPTool[]
-): MCPState {
+export function setServerTools(state: MCPState, id: string, tools: MCPTool[]): MCPState {
 	return updateServer(state, id, { tools });
 }
 
@@ -192,10 +174,7 @@ export function setMCPError(state: MCPState, error: string | null): MCPState {
  * @param serverId - Server ID being tested (or null when done)
  * @returns Updated state with testing indicator
  */
-export function setTestingServer(
-	state: MCPState,
-	serverId: string | null
-): MCPState {
+export function setTestingServer(state: MCPState, serverId: string | null): MCPState {
 	return {
 		...state,
 		testingServerId: serverId
@@ -212,10 +191,7 @@ export function setTestingServer(
  * @param id - Server ID
  * @returns Server or undefined if not found
  */
-export function getServerById(
-	state: MCPState,
-	id: string
-): MCPServer | undefined {
+export function getServerById(state: MCPState, id: string): MCPServer | undefined {
 	return state.servers.find((s) => s.id === id);
 }
 
@@ -225,10 +201,7 @@ export function getServerById(
  * @param name - Server name
  * @returns Server or undefined if not found
  */
-export function getServerByName(
-	state: MCPState,
-	name: string
-): MCPServer | undefined {
+export function getServerByName(state: MCPState, name: string): MCPServer | undefined {
 	return state.servers.find((s) => s.name === name);
 }
 
@@ -238,10 +211,7 @@ export function getServerByName(
  * @param status - Status to filter by
  * @returns Array of servers with matching status
  */
-export function getServersByStatus(
-	state: MCPState,
-	status: MCPServerStatus
-): MCPServer[] {
+export function getServersByStatus(state: MCPState, status: MCPServerStatus): MCPServer[] {
 	return state.servers.filter((s) => s.status === status);
 }
 
@@ -286,9 +256,7 @@ export function getRunningServerCount(state: MCPState): number {
  * @param state - Current MCP state
  * @returns Array of tools with server info
  */
-export function getAllAvailableTools(
-	state: MCPState
-): Array<{ server: string; tool: MCPTool }> {
+export function getAllAvailableTools(state: MCPState): Array<{ server: string; tool: MCPTool }> {
 	const tools: Array<{ server: string; tool: MCPTool }> = [];
 
 	for (const server of getRunningServers(state)) {
@@ -317,10 +285,6 @@ export function hasServer(state: MCPState, id: string): boolean {
  * @param excludeId - Server ID to exclude from check (for updates)
  * @returns True if name is taken
  */
-export function isServerNameTaken(
-	state: MCPState,
-	name: string,
-	excludeId?: string
-): boolean {
+export function isServerNameTaken(state: MCPState, name: string, excludeId?: string): boolean {
 	return state.servers.some((s) => s.name === name && s.id !== excludeId);
 }

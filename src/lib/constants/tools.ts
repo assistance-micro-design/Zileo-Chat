@@ -11,21 +11,27 @@
  * The Rust backend has its own registry at src-tauri/src/tools/registry.rs
  */
 export const AVAILABLE_TOOLS = [
-  'MemoryTool',
-  'TodoTool',
-  'CalculatorTool',
-  'UserQuestionTool',
-  'FileManagerTool',
-  'SpawnAgentTool',
-  'DelegateTaskTool',
-  'ParallelTasksTool'
+	'MemoryTool',
+	'TodoTool',
+	'CalculatorTool',
+	'UserQuestionTool',
+	'FileManagerTool',
+	'SpawnAgentTool',
+	'DelegateTaskTool',
+	'ParallelTasksTool'
 ] as const;
 
 /**
  * Basic tools for memory and task management.
  * These tools do not require AgentToolContext.
  */
-export const BASIC_TOOLS = ['MemoryTool', 'TodoTool', 'CalculatorTool', 'UserQuestionTool', 'FileManagerTool'] as const;
+export const BASIC_TOOLS = [
+	'MemoryTool',
+	'TodoTool',
+	'CalculatorTool',
+	'UserQuestionTool',
+	'FileManagerTool'
+] as const;
 
 /**
  * Sub-agent orchestration tools.

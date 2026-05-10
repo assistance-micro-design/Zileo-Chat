@@ -19,18 +19,22 @@
  * Used as a safe non-Tauri fallback for export actions.
  */
 export function downloadBrowserFile(filename: string, content: string, mimeType: string): void {
-if (typeof document === 'undefined' || typeof URL === 'undefined' || typeof Blob === 'undefined') {
-throw new Error('Browser download API is unavailable');
-}
+	if (
+		typeof document === 'undefined' ||
+		typeof URL === 'undefined' ||
+		typeof Blob === 'undefined'
+	) {
+		throw new Error('Browser download API is unavailable');
+	}
 
-const blob = new Blob([content], { type: mimeType });
-const url = URL.createObjectURL(blob);
-const anchor = document.createElement('a');
-anchor.href = url;
-anchor.download = filename;
-anchor.style.display = 'none';
-document.body.appendChild(anchor);
-anchor.click();
-anchor.remove();
-URL.revokeObjectURL(url);
+	const blob = new Blob([content], { type: mimeType });
+	const url = URL.createObjectURL(blob);
+	const anchor = document.createElement('a');
+	anchor.href = url;
+	anchor.download = filename;
+	anchor.style.display = 'none';
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
+	URL.revokeObjectURL(url);
 }

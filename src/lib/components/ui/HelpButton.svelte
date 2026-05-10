@@ -52,9 +52,7 @@
 	/**
 	 * Parse tutorial text into steps (split by newlines)
 	 */
-	const tutorialSteps = $derived(
-		tutorialKey ? $i18n(tutorialKey).split('\n').filter(Boolean) : []
-	);
+	const tutorialSteps = $derived(tutorialKey ? $i18n(tutorialKey).split('\n').filter(Boolean) : []);
 
 	/**
 	 * Icon size based on button size
@@ -67,14 +65,14 @@
 	class="help-button"
 	class:help-button-sm={size === 'sm'}
 	class:help-button-md={size === 'md'}
-	onclick={() => showModal = true}
+	onclick={() => (showModal = true)}
 	title={$i18n('help_button_tooltip')}
 	aria-label={$i18n('help_button_label')}
 >
 	<HelpCircle size={iconSize} />
 </button>
 
-<Modal open={showModal} title={$i18n(titleKey)} onclose={() => showModal = false}>
+<Modal open={showModal} title={$i18n(titleKey)} onclose={() => (showModal = false)}>
 	{#snippet body()}
 		<div class="help-content">
 			<p class="help-description">{$i18n(descriptionKey)}</p>
@@ -95,7 +93,7 @@
 		</div>
 	{/snippet}
 	{#snippet footer()}
-		<Button variant="primary" onclick={() => showModal = false}>
+		<Button variant="primary" onclick={() => (showModal = false)}>
 			{$i18n('common_understood')}
 		</Button>
 	{/snippet}

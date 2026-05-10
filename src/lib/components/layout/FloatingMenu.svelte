@@ -91,7 +91,9 @@
 			type="button"
 			class="btn btn-ghost btn-icon"
 			onclick={toggleTheme}
-			aria-label={$theme === 'light' ? $i18n('layout_switch_to_dark_mode') : $i18n('layout_switch_to_light_mode')}
+			aria-label={$theme === 'light'
+				? $i18n('layout_switch_to_dark_mode')
+				: $i18n('layout_switch_to_light_mode')}
 		>
 			{#if $theme === 'light'}
 				<Moon size={18} />

@@ -135,17 +135,9 @@
 			onchange={(e) => (decidedBy = e.currentTarget.value as DecidedBy | '')}
 		/>
 
-		<Input
-			label={$i18n('audit_filter_since')}
-			type="datetime-local"
-			bind:value={since}
-		/>
+		<Input label={$i18n('audit_filter_since')} type="datetime-local" bind:value={since} />
 
-		<Input
-			label={$i18n('audit_filter_until')}
-			type="datetime-local"
-			bind:value={until}
-		/>
+		<Input label={$i18n('audit_filter_until')} type="datetime-local" bind:value={until} />
 	</div>
 
 	<div class="filter-actions">

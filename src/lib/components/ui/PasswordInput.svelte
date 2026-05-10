@@ -105,7 +105,7 @@
 			type="button"
 			class="reveal-toggle"
 			onclick={toggleReveal}
-			disabled={disabled}
+			{disabled}
 			aria-label={toggleLabel}
 			aria-pressed={revealed}
 		>
@@ -154,7 +154,9 @@
 		color: var(--color-text-secondary);
 		cursor: pointer;
 		border-radius: var(--border-radius-sm);
-		transition: color 0.15s, background-color 0.15s;
+		transition:
+			color 0.15s,
+			background-color 0.15s;
 	}
 
 	.reveal-toggle:hover:not(:disabled) {

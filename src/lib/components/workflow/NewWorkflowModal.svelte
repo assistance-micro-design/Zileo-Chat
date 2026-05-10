@@ -123,7 +123,12 @@
 <svelte:window onkeydown={open ? handleKeydown : undefined} />
 
 {#if open}
-	<div class="modal-backdrop" role="presentation" onclick={handleBackdropClick} onkeydown={handleKeydown}>
+	<div
+		class="modal-backdrop"
+		role="presentation"
+		onclick={handleBackdropClick}
+		onkeydown={handleKeydown}
+	>
 		<div
 			class="modal new-workflow-modal"
 			role="dialog"
@@ -137,7 +142,12 @@
 					<Workflow size={24} class="modal-icon" />
 					<h3 id="modal-title" class="modal-title">{$i18n('workflow_modal_new_title')}</h3>
 				</div>
-				<button type="button" class="close-button" onclick={onclose} aria-label={$i18n('common_close')}>
+				<button
+					type="button"
+					class="close-button"
+					onclick={onclose}
+					aria-label={$i18n('common_close')}
+				>
 					<X size={20} />
 				</button>
 			</div>
@@ -184,7 +194,7 @@
 										type="button"
 										class="agent-option"
 										class:selected={chosenAgentId === agent.id}
-										onclick={() => chosenAgentId = agent.id}
+										onclick={() => (chosenAgentId = agent.id)}
 										disabled={isSubmitting}
 									>
 										<span class="agent-avatar">{agent.name.charAt(0).toUpperCase()}</span>
@@ -235,8 +245,12 @@
 	}
 
 	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
 
 	.new-workflow-modal {

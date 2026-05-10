@@ -127,7 +127,9 @@
 		border: none;
 		border-top: 1px solid var(--color-border);
 		cursor: pointer;
-		transition: background-color var(--transition-fast), color var(--transition-fast);
+		transition:
+			background-color var(--transition-fast),
+			color var(--transition-fast);
 		color: var(--color-accent);
 		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-medium);

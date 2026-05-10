@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Memory types for RAG and context persistence.
  *
@@ -36,106 +35,106 @@ export type MemoryType = 'user_pref' | 'context' | 'knowledge' | 'decision';
  * custom fields as it maps to serde_json::Value in Rust.
  */
 export interface MemoryMetadata {
-  /** Source of the memory (e.g., agent ID, "settings", "user") */
-  source?: string;
-  /** Classification tags for filtering and organization */
-  tags?: string[];
-  /** Relevance score from vector search (0-1) */
-  relevance_score?: number;
-  /** Embedding model used for vector storage */
-  embedding_model?: string;
-  /** Allow additional custom fields */
-  [key: string]: unknown;
+	/** Source of the memory (e.g., agent ID, "settings", "user") */
+	source?: string;
+	/** Classification tags for filtering and organization */
+	tags?: string[];
+	/** Relevance score from vector search (0-1) */
+	relevance_score?: number;
+	/** Embedding model used for vector storage */
+	embedding_model?: string;
+	/** Allow additional custom fields */
+	[key: string]: unknown;
 }
 
 /**
  * Memory entity for persistent context and RAG
  */
 export interface Memory {
-  /** Unique identifier */
-  id: string;
-  /** Type of memory content */
-  type: MemoryType;
-  /** Text content of the memory */
-  content: string;
-  /** Optional workflow ID for scoped memories (absent = general) */
-  workflow_id?: string;
-  /** Additional metadata */
-  metadata: MemoryMetadata;
-  /** Importance score (0.0-1.0, higher = more important) */
-  importance: number;
-  /** Optional expiration timestamp (ISO string, absent = permanent) */
-  expires_at?: string;
-  /** Creation timestamp (ISO string from backend) */
-  created_at: string;
+	/** Unique identifier */
+	id: string;
+	/** Type of memory content */
+	type: MemoryType;
+	/** Text content of the memory */
+	content: string;
+	/** Optional workflow ID for scoped memories (absent = general) */
+	workflow_id?: string;
+	/** Additional metadata */
+	metadata: MemoryMetadata;
+	/** Importance score (0.0-1.0, higher = more important) */
+	importance: number;
+	/** Optional expiration timestamp (ISO string, absent = permanent) */
+	expires_at?: string;
+	/** Creation timestamp (ISO string from backend) */
+	created_at: string;
 }
 
 /**
  * Parameters for creating a new memory
  */
 export interface CreateMemoryParams {
-  /** Type of memory content */
-  memoryType: MemoryType;
-  /** Text content of the memory */
-  content: string;
-  /** Additional metadata */
-  metadata?: MemoryMetadata;
-  /** Optional workflow ID for scoped memories (None = general) */
-  workflowId?: string;
+	/** Type of memory content */
+	memoryType: MemoryType;
+	/** Text content of the memory */
+	content: string;
+	/** Additional metadata */
+	metadata?: MemoryMetadata;
+	/** Optional workflow ID for scoped memories (None = general) */
+	workflowId?: string;
 }
 
 /**
  * Parameters for listing memories
  */
 export interface ListMemoryParams {
-  /** Filter by memory type */
-  typeFilter?: MemoryType;
-  /** Optional workflow ID filter (None = all memories) */
-  workflowId?: string;
+	/** Filter by memory type */
+	typeFilter?: MemoryType;
+	/** Optional workflow ID filter (None = all memories) */
+	workflowId?: string;
 }
 
 /**
  * Parameters for searching memories
  */
 export interface SearchMemoryParams {
-  /** Search query text */
-  query: string;
-  /** Maximum number of results */
-  limit?: number;
-  /** Filter by memory type */
-  typeFilter?: MemoryType;
-  /** Optional workflow ID filter (None = all memories) */
-  workflowId?: string;
-  /** Similarity threshold 0-1 for vector search (default: 0.7) */
-  threshold?: number;
+	/** Search query text */
+	query: string;
+	/** Maximum number of results */
+	limit?: number;
+	/** Filter by memory type */
+	typeFilter?: MemoryType;
+	/** Optional workflow ID filter (None = all memories) */
+	workflowId?: string;
+	/** Similarity threshold 0-1 for vector search (default: 0.7) */
+	threshold?: number;
 }
 
 /**
  * Memory search result with relevance score
  */
 export interface MemorySearchResult {
-  /** Memory entity */
-  memory: Memory;
-  /** Relevance score (0-1, higher is more relevant) */
-  score: number;
+	/** Memory entity */
+	memory: Memory;
+	/** Relevance score (0-1, higher is more relevant) */
+	score: number;
 }
 
 /**
  * Result of the describe operation - statistics about memories
  */
 export interface MemoryDescribeResult {
-  /** Total number of matching memories */
-  total: number;
-  /** Count by memory type */
-  by_type: Record<string, number>;
-  /** All unique tags across matching memories */
-  tags: string[];
-  /** Number of workflow-scoped memories */
-  workflow_count: number;
-  /** Number of general (cross-workflow) memories */
-  general_count: number;
-  /** Oldest memory timestamp (ISO string) */
-  oldest?: string;
-  /** Newest memory timestamp (ISO string) */
-  newest?: string;
+	/** Total number of matching memories */
+	total: number;
+	/** Count by memory type */
+	by_type: Record<string, number>;
+	/** All unique tags across matching memories */
+	tags: string[];
+	/** Number of workflow-scoped memories */
+	workflow_count: number;
+	/** Number of general (cross-workflow) memories */
+	general_count: number;
+	/** Oldest memory timestamp (ISO string) */
+	oldest?: string;
+	/** Newest memory timestamp (ISO string) */
+	newest?: string;
 }

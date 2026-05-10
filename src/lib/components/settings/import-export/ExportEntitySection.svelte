@@ -21,87 +21,82 @@
 -->
 
 <script lang="ts">
-  import type { Snippet } from 'svelte';
-  import { Card, Badge } from '$lib/components/ui';
+	import type { Snippet } from 'svelte';
+	import { Card, Badge } from '$lib/components/ui';
 
-  /**
-   * ExportEntitySection props.
-   * @param title - Section title text
-   * @param count - Number of items (shown as badge)
-   * @param expanded - Whether the section is expanded
-   * @param onToggle - Callback to toggle expanded state
-   * @param children - Snippet for the expanded content (item list)
-   */
-  interface Props {
-    title: string;
-    count: number;
-    expanded: boolean;
-    onToggle: () => void;
-    children?: Snippet;
-  }
+	/**
+	 * ExportEntitySection props.
+	 * @param title - Section title text
+	 * @param count - Number of items (shown as badge)
+	 * @param expanded - Whether the section is expanded
+	 * @param onToggle - Callback to toggle expanded state
+	 * @param children - Snippet for the expanded content (item list)
+	 */
+	interface Props {
+		title: string;
+		count: number;
+		expanded: boolean;
+		onToggle: () => void;
+		children?: Snippet;
+	}
 
-  let { title, count, expanded, onToggle, children }: Props = $props();
+	let { title, count, expanded, onToggle, children }: Props = $props();
 </script>
 
 <Card>
-  {#snippet header()}
-    <button
-      type="button"
-      class="section-header"
-      aria-expanded={expanded}
-      onclick={onToggle}
-    >
-      <div class="section-title">
-        <span class="title-text">{title}</span>
-        <Badge variant="primary">{count}</Badge>
-      </div>
-      <span class="expand-icon" class:expanded>&#x25BC;</span>
-    </button>
-  {/snippet}
-  {#snippet body()}
-    {#if expanded && children}
-      {@render children()}
-    {/if}
-  {/snippet}
+	{#snippet header()}
+		<button type="button" class="section-header" aria-expanded={expanded} onclick={onToggle}>
+			<div class="section-title">
+				<span class="title-text">{title}</span>
+				<Badge variant="primary">{count}</Badge>
+			</div>
+			<span class="expand-icon" class:expanded>&#x25BC;</span>
+		</button>
+	{/snippet}
+	{#snippet body()}
+		{#if expanded && children}
+			{@render children()}
+		{/if}
+	{/snippet}
 </Card>
 
 <style>
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    gap: var(--spacing-md);
-    transition: opacity 0.2s;
-  }
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		padding: 0;
+		background: none;
+		border: none;
+		cursor: pointer;
+		gap: var(--spacing-md);
+		transition: opacity 0.2s;
+	}
 
-  .section-header:hover {
-    opacity: 0.8;
-  }
+	.section-header:hover {
+		opacity: 0.8;
+	}
 
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
+	.section-title {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
 
-  .title-text {
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-  }
+	.title-text {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
 
-  .expand-icon {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    transition: transform 0.2s;
-  }
+	.expand-icon {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+		transition: transform 0.2s;
+	}
 
-  .expand-icon.expanded {
-    transform: rotate(180deg);
-  }
+	.expand-icon.expanded {
+		transform: rotate(180deg);
+	}
 </style>

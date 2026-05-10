@@ -60,9 +60,7 @@ Displays in a modal with markdown content editor.
 	// Derived state
 	let contentLength = $derived(content.length);
 	let nameValid = $derived(/^[a-zA-Z0-9_-]*$/.test(name.trim()) && name.trim().length > 0);
-	let isValid = $derived(
-		nameValid && description.trim().length > 0 && content.trim().length > 0
-	);
+	let isValid = $derived(nameValid && description.trim().length > 0 && content.trim().length > 0);
 
 	// Category options for Select
 	let categoryOptions = $derived(

@@ -99,7 +99,13 @@
 
 	const contextMenuItems: ContextMenuItem[] = [
 		{ id: 'rename', labelKey: 'sidebar_folder_rename', icon: Pencil },
-		{ id: 'delete', labelKey: 'sidebar_folder_delete', icon: Trash2, variant: 'danger', separator: true }
+		{
+			id: 'delete',
+			labelKey: 'sidebar_folder_delete',
+			icon: Trash2,
+			variant: 'danger',
+			separator: true
+		}
 	];
 
 	function startEdit(event?: MouseEvent): void {

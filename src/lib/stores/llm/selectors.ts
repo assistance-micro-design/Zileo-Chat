@@ -20,12 +20,7 @@
  * @module stores/llm/selectors
  */
 
-import type {
-	LLMState,
-	LLMModel,
-	ProviderSettings,
-	ProviderType
-} from '$types/llm';
+import type { LLMState, LLMModel, ProviderSettings, ProviderType } from '$types/llm';
 
 // ============================================================================
 // Filtered Models Cache (memoization)
@@ -216,9 +211,7 @@ export function getFilteredModelsMemoized(
 		return filteredModelsCache.result;
 	}
 
-	const result = provider === 'all'
-		? getAllModels(state)
-		: getModelsByProvider(state, provider);
+	const result = provider === 'all' ? getAllModels(state) : getModelsByProvider(state, provider);
 
 	filteredModelsCache = { key: cacheKey, result };
 	return result;

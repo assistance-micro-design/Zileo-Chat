@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Unit tests for the shared chunk processor.
  *
@@ -89,10 +88,7 @@ describe('applyChunkToState', () => {
 		});
 
 		it('falls back to safe defaults when fields are missing', () => {
-			const result = applyChunkToState(
-				state,
-				makeChunk({ chunk_type: 'sub_agent_start' })
-			);
+			const result = applyChunkToState(state, makeChunk({ chunk_type: 'sub_agent_start' }));
 
 			expect(result.subAgents).toHaveLength(1);
 			expect(result.subAgents[0]).toMatchObject({
@@ -140,10 +136,7 @@ describe('applyChunkToState', () => {
 				state,
 				makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-a' })
 			);
-			s = applyChunkToState(
-				s,
-				makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-b' })
-			);
+			s = applyChunkToState(s, makeChunk({ chunk_type: 'sub_agent_start', sub_agent_id: 'sa-b' }));
 
 			const result = applyChunkToState(
 				s,
@@ -223,10 +216,7 @@ describe('applyChunkToState', () => {
 				cacheWriteTokens: 1
 			};
 
-			const result = applyChunkToState(
-				seeded,
-				makeChunk({ chunk_type: 'response_block' })
-			);
+			const result = applyChunkToState(seeded, makeChunk({ chunk_type: 'response_block' }));
 			expect(result.tokensReceived).toBe(99);
 			expect(result.tokensSent).toBe(100);
 			expect(result.cachedTokens).toBe(5);

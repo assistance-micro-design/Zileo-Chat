@@ -42,7 +42,13 @@ Manages LLM providers and models configuration.
 	/**
 	 * Opens API key configuration modal with provider state from LLMSection
 	 */
-	function handleConfigureApiKey(provider: ProviderType, hasKey: boolean, provSettings: ProviderSettings | null, displayName?: string, isCustom?: boolean): void {
+	function handleConfigureApiKey(
+		provider: ProviderType,
+		hasKey: boolean,
+		provSettings: ProviderSettings | null,
+		displayName?: string,
+		isCustom?: boolean
+	): void {
 		apiKeyProvider = provider;
 		apiKeyHasKey = hasKey;
 		apiKeyProviderSettings = provSettings;
@@ -61,10 +67,7 @@ Manages LLM providers and models configuration.
 	onSettingsRefresh(() => llmSectionRef?.reload());
 </script>
 
-<LLMSection
-	bind:this={llmSectionRef}
-	onConfigureApiKey={handleConfigureApiKey}
-/>
+<LLMSection bind:this={llmSectionRef} onConfigureApiKey={handleConfigureApiKey} />
 
 <!-- API Key Modal -->
 <APIKeysSection
@@ -74,6 +77,8 @@ Manages LLM providers and models configuration.
 	providerSettings={apiKeyProviderSettings}
 	hasApiKey={apiKeyHasKey}
 	isCustom={apiKeyIsCustom}
-	onclose={() => { showApiKeyModal = false; }}
+	onclose={() => {
+		showApiKeyModal = false;
+	}}
 	onReload={handleApiKeyReload}
 />

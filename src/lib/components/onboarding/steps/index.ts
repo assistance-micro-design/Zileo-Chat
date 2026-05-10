@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Onboarding step components exports
  * @module components/onboarding/steps

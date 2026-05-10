@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Background workflows store for managing concurrent workflow executions.
  *
@@ -121,7 +120,9 @@ let onCompleteForViewed: (() => void) | null = null;
  * Called for ALL user_question_start chunks (both viewed and non-viewed workflows).
  * Set via setForwardCallbacks to avoid circular imports.
  */
-let onUserQuestion: ((payload: UserQuestionStreamPayload, workflowId: string, isViewed: boolean) => void) | null = null;
+let onUserQuestion:
+	| ((payload: UserQuestionStreamPayload, workflowId: string, isViewed: boolean) => void)
+	| null = null;
 
 // ============================================================================
 // Internal helpers
@@ -334,12 +335,9 @@ export const backgroundWorkflowsStore = {
 		}
 
 		initPromise = (async () => {
-			const unlistenChunk = await listen<StreamChunk>(
-				STREAM_EVENTS.WORKFLOW_STREAM,
-				(event) => {
-					handleStreamChunk(event.payload);
-				}
-			);
+			const unlistenChunk = await listen<StreamChunk>(STREAM_EVENTS.WORKFLOW_STREAM, (event) => {
+				handleStreamChunk(event.payload);
+			});
 
 			const unlistenComplete = await listen<WorkflowComplete>(
 				STREAM_EVENTS.WORKFLOW_COMPLETE,
@@ -373,7 +371,11 @@ export const backgroundWorkflowsStore = {
 	setForwardCallbacks(
 		chunkCb: (chunk: StreamChunk) => void,
 		completeCb: () => void,
-		userQuestionCb: (payload: UserQuestionStreamPayload, workflowId: string, isViewed: boolean) => void
+		userQuestionCb: (
+			payload: UserQuestionStreamPayload,
+			workflowId: string,
+			isViewed: boolean
+		) => void
 	): void {
 		onChunkForViewed = chunkCb;
 		onCompleteForViewed = completeCb;
@@ -487,7 +489,7 @@ export const backgroundWorkflowsStore = {
 	 * Tear down the store by unregistering all Tauri event listeners,
 	 * stopping the cleanup timer, clearing callbacks, and resetting state.
 	 */
-		destroy(): void {
+	destroy(): void {
 		for (const unlisten of unlisteners) {
 			unlisten();
 		}
@@ -520,17 +522,15 @@ export const recentlyCompletedWorkflows = derived(store, ($s) =>
 );
 
 /** Count of currently running workflows */
-export const runningCount = derived(store, ($s) =>
-	Array.from($s.executions.values()).filter((e) => e.status === 'running').length
+export const runningCount = derived(
+	store,
+	($s) => Array.from($s.executions.values()).filter((e) => e.status === 'running').length
 );
 
 /** Whether a new workflow can be started (reactive) */
 export const canStartNew = derived([store, validationSettings], ([$s, $vs]) => {
-	const running = Array.from($s.executions.values()).filter(
-		(e) => e.status === 'running'
-	).length;
-	const maxConcurrent =
-		$vs?.mode === 'auto' ? MAX_CONCURRENT_AUTO : MAX_CONCURRENT_OTHER;
+	const running = Array.from($s.executions.values()).filter((e) => e.status === 'running').length;
+	const maxConcurrent = $vs?.mode === 'auto' ? MAX_CONCURRENT_AUTO : MAX_CONCURRENT_OTHER;
 	return running < maxConcurrent;
 });
 
@@ -540,20 +540,24 @@ export const viewedExecution = derived(store, ($s) =>
 );
 
 /** Set of workflow IDs that are currently running */
-export const runningWorkflowIds = derived(runningWorkflows, ($rw) =>
-	new Set($rw.map((e) => e.workflowId))
+export const runningWorkflowIds = derived(
+	runningWorkflows,
+	($rw) => new Set($rw.map((e) => e.workflowId))
 );
 
 /** Set of workflow IDs that have completed (any terminal status) */
-export const recentlyCompletedIds = derived(recentlyCompletedWorkflows, ($rc) =>
-	new Set($rc.map((e) => e.workflowId))
+export const recentlyCompletedIds = derived(
+	recentlyCompletedWorkflows,
+	($rc) => new Set($rc.map((e) => e.workflowId))
 );
 
 /** Set of workflow IDs that have a pending user question */
-export const questionPendingIds = derived(store, ($s) =>
-	new Set(
-		Array.from($s.executions.values())
-			.filter((e) => e.hasPendingQuestion)
-			.map((e) => e.workflowId)
-	)
+export const questionPendingIds = derived(
+	store,
+	($s) =>
+		new Set(
+			Array.from($s.executions.values())
+				.filter((e) => e.hasPendingQuestion)
+				.map((e) => e.workflowId)
+		)
 );

@@ -59,10 +59,7 @@
 		{#if collapsed}
 			<span class="thinking-preview">{preview}</span>
 		{/if}
-		<ChevronDown
-			size={14}
-			class="chevron {collapsed ? '' : 'expanded'}"
-		/>
+		<ChevronDown size={14} class="chevron {collapsed ? '' : 'expanded'}" />
 	</button>
 
 	{#if !collapsed}

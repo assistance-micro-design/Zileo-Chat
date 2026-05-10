@@ -55,7 +55,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark, #4f46e5) 100%);
+		background: linear-gradient(
+			135deg,
+			var(--color-primary) 0%,
+			var(--color-primary-dark, #4f46e5) 100%
+		);
 		border-radius: var(--border-radius-xl);
 		font-size: 2.5rem;
 		font-weight: var(--font-weight-bold);

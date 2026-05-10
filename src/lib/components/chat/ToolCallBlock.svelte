@@ -101,10 +101,7 @@
 
 		<span class="tool-duration">{formattedDuration}</span>
 
-		<ChevronDown
-			size={14}
-			class="chevron {collapsed ? '' : 'expanded'}"
-		/>
+		<ChevronDown size={14} class="chevron {collapsed ? '' : 'expanded'}" />
 	</button>
 
 	{#if !collapsed}

@@ -72,10 +72,13 @@
 	 */
 	type WarningLevel = 'normal' | 'warning' | 'critical' | 'full';
 	const warningLevel = $derived<WarningLevel>(
-		contextPercentage >= 100 ? 'full' :
-		contextPercentage >= 90 ? 'critical' :
-		contextPercentage >= 75 ? 'warning' :
-		'normal'
+		contextPercentage >= 100
+			? 'full'
+			: contextPercentage >= 90
+				? 'critical'
+				: contextPercentage >= 75
+					? 'warning'
+					: 'normal'
 	);
 
 	/**
@@ -104,7 +107,9 @@
 	/**
 	 * Whether cached tokens are reported
 	 */
-	const hasCachedTokens = $derived((data.cached_tokens ?? 0) > 0 || (data.cumulative_cached ?? 0) > 0);
+	const hasCachedTokens = $derived(
+		(data.cached_tokens ?? 0) > 0 || (data.cumulative_cached ?? 0) > 0
+	);
 
 	/**
 	 * Cache hit rate color based on percentage thresholds.
@@ -113,9 +118,11 @@
 	type CacheRateColor = 'high' | 'medium' | 'low';
 	const cacheRateColor = $derived<CacheRateColor | null>(
 		data.cache_hit_rate !== null
-			? data.cache_hit_rate > 50 ? 'high'
-				: data.cache_hit_rate >= 10 ? 'medium'
-				: 'low'
+			? data.cache_hit_rate > 50
+				? 'high'
+				: data.cache_hit_rate >= 10
+					? 'medium'
+					: 'low'
 			: null
 	);
 
@@ -149,7 +156,11 @@
 
 	<!-- Context Progress Section -->
 	<div class="metric context-metric">
-		<div class="metric-icon context-icon" class:warning={warningLevel === 'warning'} class:critical={warningLevel === 'critical' || warningLevel === 'full'}>
+		<div
+			class="metric-icon context-icon"
+			class:warning={warningLevel === 'warning'}
+			class:critical={warningLevel === 'critical' || warningLevel === 'full'}
+		>
 			<Gauge size={16} />
 			{#if warningLevel !== 'normal'}
 				<span class="warning-badge">
@@ -181,12 +192,19 @@
 						style="width: {contextPercentage}%"
 					></div>
 				</div>
-				<span class="percentage-value" class:warning={warningLevel === 'warning'} class:critical={warningLevel === 'critical' || warningLevel === 'full'}>
+				<span
+					class="percentage-value"
+					class:warning={warningLevel === 'warning'}
+					class:critical={warningLevel === 'critical' || warningLevel === 'full'}
+				>
 					{contextPercentage.toFixed(0)}%
 				</span>
 			</div>
 			{#if !compact}
-				<span class="context-label">{formatTokens(contextUsed)} / {formatTokens(data.context_max)} {$i18n('workflow_token_context')}</span>
+				<span class="context-label"
+					>{formatTokens(contextUsed)} / {formatTokens(data.context_max)}
+					{$i18n('workflow_token_context')}</span
+				>
 			{/if}
 		</div>
 	</div>
@@ -263,18 +281,24 @@
 		<span
 			class="cost-value"
 			title={data.cost_is_partial ? $i18n('tokens_cost_in_progress_help') : undefined}
-		>{
-			hasSubAgents
+			>{hasSubAgents
 				? formatCost(data.workflow_total_cost, $i18n('workflow_metrics_free'))
 				: data.cost_is_partial && data.cost_usd !== null
 					? `~ ${formatCost(data.cost_usd, $i18n('workflow_metrics_free'))}`
-					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))
-		}</span>
+					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))}</span
+		>
 		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
 		{#if !compact && hasSubAgents && data.cumulative_cost_usd > 0}
-			<span class="cost-total">({$i18n('workflow_token_agent')}: {formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span>
+			<span class="cost-total"
+				>({$i18n('workflow_token_agent')}: {formatCost(
+					data.cumulative_cost_usd,
+					$i18n('workflow_metrics_free')
+				)})</span
+			>
 		{:else if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
-			<span class="cost-total">({formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span>
+			<span class="cost-total"
+				>({formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span
+			>
 		{/if}
 	</div>
 
@@ -311,17 +335,29 @@
 	/* Warning States */
 	.token-display.warning {
 		border-left: 3px solid var(--color-warning);
-		background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning-bg) 20%, transparent), transparent 30%);
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--color-warning-bg) 20%, transparent),
+			transparent 30%
+		);
 	}
 
 	.token-display.critical {
 		border-left: 3px solid var(--color-error);
-		background: linear-gradient(90deg, color-mix(in srgb, var(--color-error-light) 25%, transparent), transparent 30%);
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--color-error-light) 25%, transparent),
+			transparent 30%
+		);
 	}
 
 	.token-display.full {
 		border-left: 3px solid var(--color-error);
-		background: linear-gradient(90deg, color-mix(in srgb, var(--color-error-light) 40%, var(--color-bg-secondary)), var(--color-bg-secondary) 50%);
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--color-error-light) 40%, var(--color-bg-secondary)),
+			var(--color-bg-secondary) 50%
+		);
 	}
 
 	/* Separator */
@@ -465,19 +501,33 @@
 
 	.progress-fill {
 		height: 100%;
-		background: linear-gradient(90deg, var(--color-success), color-mix(in srgb, var(--color-success) 80%, var(--color-accent)));
+		background: linear-gradient(
+			90deg,
+			var(--color-success),
+			color-mix(in srgb, var(--color-success) 80%, var(--color-accent))
+		);
 		border-radius: var(--border-radius-full);
-		transition: width var(--transition-base), background var(--transition-base);
+		transition:
+			width var(--transition-base),
+			background var(--transition-base);
 		box-shadow: 0 0 4px color-mix(in srgb, var(--color-success) 50%, transparent);
 	}
 
 	.progress-fill.warning {
-		background: linear-gradient(90deg, var(--color-warning), color-mix(in srgb, var(--color-warning) 80%, var(--color-secondary)));
+		background: linear-gradient(
+			90deg,
+			var(--color-warning),
+			color-mix(in srgb, var(--color-warning) 80%, var(--color-secondary))
+		);
 		box-shadow: 0 0 4px color-mix(in srgb, var(--color-warning) 50%, transparent);
 	}
 
 	.progress-fill.critical {
-		background: linear-gradient(90deg, var(--color-error), color-mix(in srgb, var(--color-error) 80%, var(--color-secondary)));
+		background: linear-gradient(
+			90deg,
+			var(--color-error),
+			color-mix(in srgb, var(--color-error) 80%, var(--color-secondary))
+		);
 		box-shadow: 0 0 6px color-mix(in srgb, var(--color-error) 60%, transparent);
 		animation: pulse-bar 1.5s ease-in-out infinite;
 	}
@@ -584,8 +634,13 @@
 	}
 
 	@keyframes cost-pulse {
-		0%, 100% { opacity: 0.85; }
-		50% { opacity: 0.55; }
+		0%,
+		100% {
+			opacity: 0.85;
+		}
+		50% {
+			opacity: 0.55;
+		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
@@ -628,7 +683,8 @@
 
 	/* Animations */
 	@keyframes pulse-icon {
-		0%, 100% {
+		0%,
+		100% {
 			opacity: 1;
 			transform: scale(1);
 		}
@@ -639,7 +695,8 @@
 	}
 
 	@keyframes pulse-badge {
-		0%, 100% {
+		0%,
+		100% {
 			transform: scale(1);
 			box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-error) 40%, transparent);
 		}
@@ -650,7 +707,8 @@
 	}
 
 	@keyframes pulse-bar {
-		0%, 100% {
+		0%,
+		100% {
 			box-shadow: 0 0 6px color-mix(in srgb, var(--color-error) 60%, transparent);
 		}
 		50% {
@@ -659,7 +717,8 @@
 	}
 
 	@keyframes pulse-text {
-		0%, 100% {
+		0%,
+		100% {
 			opacity: 1;
 		}
 		50% {

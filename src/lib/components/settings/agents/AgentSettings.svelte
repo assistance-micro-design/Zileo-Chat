@@ -25,14 +25,7 @@ Provides CRUD operations for agents with list view and form modal.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { tauriInvoke } from '$lib/tauri';
-	import {
-		agentStore,
-		agents,
-		isLoading,
-		error,
-		formMode,
-		editingAgent
-	} from '$lib/stores/agents';
+	import { agentStore, agents, isLoading, error, formMode, editingAgent } from '$lib/stores/agents';
 	import type { ProviderInfo } from '$types/custom-provider';
 	import AgentList from './AgentList.svelte';
 	import AgentForm from './AgentForm.svelte';
@@ -166,11 +159,7 @@ Provides CRUD operations for agents with list view and form modal.
 
 	<!-- Agent list or form -->
 	{#if $formMode}
-		<AgentForm
-			mode={$formMode}
-			agent={$editingAgent}
-			oncancel={handleFormClose}
-		/>
+		<AgentForm mode={$formMode} agent={$editingAgent} oncancel={handleFormClose} />
 	{:else}
 		<AgentList
 			agents={$agents}

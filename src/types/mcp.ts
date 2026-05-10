@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * MCP (Model Context Protocol) type definitions for Zileo-Chat-3.
  *
@@ -55,12 +54,7 @@ export type MCPDeploymentMethod = 'docker' | 'npx' | 'uvx' | 'http';
  * - error: Server encountered an error
  * - disconnected: Server process exists but communication failed
  */
-export type MCPServerStatus =
-	| 'stopped'
-	| 'starting'
-	| 'running'
-	| 'error'
-	| 'disconnected';
+export type MCPServerStatus = 'stopped' | 'starting' | 'running' | 'error' | 'disconnected';
 
 /**
  * HTTP authentication methods for remote MCP servers (v1.2).

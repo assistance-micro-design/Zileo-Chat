@@ -14,34 +14,28 @@
  * limitations under the License.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LocalStorage, STORAGE_KEYS } from "./localStorage.service";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { LocalStorage, STORAGE_KEYS } from './localStorage.service';
 
-describe("LocalStorage service", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    window.localStorage.clear();
-  });
+describe('LocalStorage service', () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		window.localStorage.clear();
+	});
 
-  it("returns the default value when localStorage.getItem throws", () => {
-    vi.spyOn(window.localStorage.__proto__, "getItem").mockImplementation(
-      () => {
-        throw new Error("storage unavailable");
-      },
-    );
+	it('returns the default value when localStorage.getItem throws', () => {
+		vi.spyOn(window.localStorage.__proto__, 'getItem').mockImplementation(() => {
+			throw new Error('storage unavailable');
+		});
 
-    expect(
-      LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null),
-    ).toBeNull();
-  });
+		expect(LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null)).toBeNull();
+	});
 
-  it("does not throw when localStorage.setItem throws", () => {
-    vi.spyOn(window.localStorage.__proto__, "setItem").mockImplementation(
-      () => {
-        throw new Error("storage unavailable");
-      },
-    );
+	it('does not throw when localStorage.setItem throws', () => {
+		vi.spyOn(window.localStorage.__proto__, 'setItem').mockImplementation(() => {
+			throw new Error('storage unavailable');
+		});
 
-    expect(() => LocalStorage.set("theme", "dark")).not.toThrow();
-  });
+		expect(() => LocalStorage.set('theme', 'dark')).not.toThrow();
+	});
 });

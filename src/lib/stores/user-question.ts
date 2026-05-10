@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * User question store for managing interactive question-answer sessions during workflow execution.
  * Works in coordination with backgroundWorkflowsStore, which owns all event listeners and
@@ -157,9 +156,7 @@ export const userQuestionStore = {
 	 */
 	openForWorkflow(workflowId: string): void {
 		store.update((s) => {
-			const [first, ...rest] = s.pendingQuestions.filter(
-				(q) => q.workflowId === workflowId
-			);
+			const [first, ...rest] = s.pendingQuestions.filter((q) => q.workflowId === workflowId);
 			if (!first) return s;
 			void rest; // discard, only the first question is opened
 

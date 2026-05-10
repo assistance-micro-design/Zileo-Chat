@@ -46,9 +46,7 @@ Supports bulk resolution with "Apply to all" option.
 	/**
 	 * Get badge variant for entity type
 	 */
-	function getEntityTypeBadge(
-		type: string
-	): 'primary' | 'success' | 'warning' | 'error' {
+	function getEntityTypeBadge(type: string): 'primary' | 'success' | 'warning' | 'error' {
 		const variants: Record<string, 'primary' | 'success' | 'warning' | 'error'> = {
 			agent: 'primary',
 			mcp: 'success',
@@ -121,9 +119,7 @@ Supports bulk resolution with "Apply to all" option.
 	/**
 	 * Count unresolved conflicts
 	 */
-	const unresolvedCount = $derived(
-		conflicts.filter((c) => !resolutions[getConflictKey(c)]).length
-	);
+	const unresolvedCount = $derived(conflicts.filter((c) => !resolutions[getConflictKey(c)]).length);
 
 	/**
 	 * Key for forcing re-render when resolutions change.
@@ -150,12 +146,16 @@ Supports bulk resolution with "Apply to all" option.
 	<div class="resolver-header">
 		<h3>{$i18n('ie_resolve_conflicts_title')}</h3>
 		<p class="header-info">
-			{$i18n('ie_conflicts_need_resolution').replace('{unresolved}', String(unresolvedCount)).replace('{total}', String(conflicts.length))}
+			{$i18n('ie_conflicts_need_resolution')
+				.replace('{unresolved}', String(unresolvedCount))
+				.replace('{total}', String(conflicts.length))}
 		</p>
 		{#if allResolved}
 			<Badge variant="success">{$i18n('ie_all_resolved')}</Badge>
 		{:else}
-			<Badge variant="warning">{$i18n('ie_x_unresolved').replace('{count}', String(unresolvedCount))}</Badge>
+			<Badge variant="warning"
+				>{$i18n('ie_x_unresolved').replace('{count}', String(unresolvedCount))}</Badge
+			>
 		{/if}
 	</div>
 
@@ -167,20 +167,13 @@ Supports bulk resolution with "Apply to all" option.
 					{$i18n('ie_bulk_resolution_help')}
 				</p>
 				<div class="bulk-controls">
-					<select
-						bind:value={bulkResolution}
-						class="bulk-select"
-					>
+					<select bind:value={bulkResolution} class="bulk-select">
 						<option value="">{$i18n('ie_select_resolution')}</option>
 						<option value="skip">{$i18n('ie_skip_all')}</option>
 						<option value="overwrite">{$i18n('ie_overwrite_all')}</option>
 						<option value="rename">{$i18n('ie_rename_all')}</option>
 					</select>
-					<Button
-						variant="primary"
-						disabled={!canApplyBulk}
-						onclick={applyBulkResolution}
-					>
+					<Button variant="primary" disabled={!canApplyBulk} onclick={applyBulkResolution}>
 						{$i18n('ie_apply_to_unresolved').replace('{count}', String(unresolvedCount))}
 					</Button>
 				</div>
@@ -191,87 +184,87 @@ Supports bulk resolution with "Apply to all" option.
 	<!-- Conflict List -->
 	<!-- Use {#key} to force re-render when resolutions change (fixes bulk resolution UI update) -->
 	{#key resolutionsKey}
-	<div class="conflicts-list">
-		{#each conflicts as conflict (conflict.entityName)}
-			<Card>
-				{#snippet body()}
-					<div class="conflict-item">
-						<div class="conflict-header">
-							<Badge variant={getEntityTypeBadge(conflict.entityType)}>
-								{getEntityTypeLabel(conflict.entityType)}
-							</Badge>
-							<Badge variant="warning">
-								{$i18n('ie_name_conflict')}
-							</Badge>
-						</div>
-
-						<div class="conflict-details">
-							<div class="detail-row">
-								<span class="detail-label">{$i18n('ie_import_label')}</span>
-								<span class="detail-value">{conflict.entityName}</span>
+		<div class="conflicts-list">
+			{#each conflicts as conflict (conflict.entityName)}
+				<Card>
+					{#snippet body()}
+						<div class="conflict-item">
+							<div class="conflict-header">
+								<Badge variant={getEntityTypeBadge(conflict.entityType)}>
+									{getEntityTypeLabel(conflict.entityType)}
+								</Badge>
+								<Badge variant="warning">
+									{$i18n('ie_name_conflict')}
+								</Badge>
 							</div>
-							<div class="detail-row conflict-arrow">↓</div>
-							<div class="detail-row">
-								<span class="detail-label">{$i18n('ie_existing_label')}</span>
-								<span class="detail-value">{conflict.entityName}</span>
-								<span class="detail-id">(ID: {conflict.existingId})</span>
+
+							<div class="conflict-details">
+								<div class="detail-row">
+									<span class="detail-label">{$i18n('ie_import_label')}</span>
+									<span class="detail-value">{conflict.entityName}</span>
+								</div>
+								<div class="detail-row conflict-arrow">↓</div>
+								<div class="detail-row">
+									<span class="detail-label">{$i18n('ie_existing_label')}</span>
+									<span class="detail-value">{conflict.entityName}</span>
+									<span class="detail-id">(ID: {conflict.existingId})</span>
+								</div>
+							</div>
+
+							<div class="resolution-options">
+								<label class="resolution-option">
+									<input
+										type="radio"
+										name="resolution-{conflict.entityType}-{conflict.entityName}"
+										value="skip"
+										checked={resolutions[getConflictKey(conflict)] === 'skip'}
+										onchange={() => updateResolution(conflict, 'skip')}
+									/>
+									<div class="option-content">
+										<span class="option-label">{$i18n('ie_resolution_skip')}</span>
+										<span class="option-description">
+											{$i18n('ie_resolution_skip_description')}
+										</span>
+									</div>
+								</label>
+
+								<label class="resolution-option">
+									<input
+										type="radio"
+										name="resolution-{conflict.entityType}-{conflict.entityName}"
+										value="overwrite"
+										checked={resolutions[getConflictKey(conflict)] === 'overwrite'}
+										onchange={() => updateResolution(conflict, 'overwrite')}
+									/>
+									<div class="option-content">
+										<span class="option-label">{$i18n('ie_resolution_overwrite')}</span>
+										<span class="option-description">
+											{$i18n('ie_resolution_overwrite_description')}
+										</span>
+									</div>
+								</label>
+
+								<label class="resolution-option">
+									<input
+										type="radio"
+										name="resolution-{conflict.entityType}-{conflict.entityName}"
+										value="rename"
+										checked={resolutions[getConflictKey(conflict)] === 'rename'}
+										onchange={() => updateResolution(conflict, 'rename')}
+									/>
+									<div class="option-content">
+										<span class="option-label">{$i18n('ie_resolution_rename')}</span>
+										<span class="option-description">
+											{$i18n('ie_resolution_rename_description')}
+										</span>
+									</div>
+								</label>
 							</div>
 						</div>
-
-						<div class="resolution-options">
-							<label class="resolution-option">
-								<input
-									type="radio"
-									name="resolution-{conflict.entityType}-{conflict.entityName}"
-									value="skip"
-									checked={resolutions[getConflictKey(conflict)] === 'skip'}
-									onchange={() => updateResolution(conflict, 'skip')}
-								/>
-								<div class="option-content">
-									<span class="option-label">{$i18n('ie_resolution_skip')}</span>
-									<span class="option-description">
-										{$i18n('ie_resolution_skip_description')}
-									</span>
-								</div>
-							</label>
-
-							<label class="resolution-option">
-								<input
-									type="radio"
-									name="resolution-{conflict.entityType}-{conflict.entityName}"
-									value="overwrite"
-									checked={resolutions[getConflictKey(conflict)] === 'overwrite'}
-									onchange={() => updateResolution(conflict, 'overwrite')}
-								/>
-								<div class="option-content">
-									<span class="option-label">{$i18n('ie_resolution_overwrite')}</span>
-									<span class="option-description">
-										{$i18n('ie_resolution_overwrite_description')}
-									</span>
-								</div>
-							</label>
-
-							<label class="resolution-option">
-								<input
-									type="radio"
-									name="resolution-{conflict.entityType}-{conflict.entityName}"
-									value="rename"
-									checked={resolutions[getConflictKey(conflict)] === 'rename'}
-									onchange={() => updateResolution(conflict, 'rename')}
-								/>
-								<div class="option-content">
-									<span class="option-label">{$i18n('ie_resolution_rename')}</span>
-									<span class="option-description">
-										{$i18n('ie_resolution_rename_description')}
-									</span>
-								</div>
-							</label>
-						</div>
-					</div>
-				{/snippet}
-			</Card>
-		{/each}
-	</div>
+					{/snippet}
+				</Card>
+			{/each}
+		</div>
 	{/key}
 </div>
 
@@ -402,7 +395,9 @@ Supports bulk resolution with "Apply to all" option.
 		border: 2px solid var(--color-border);
 		border-radius: var(--border-radius-sm);
 		cursor: pointer;
-		transition: border-color 0.2s, background-color 0.2s;
+		transition:
+			border-color 0.2s,
+			background-color 0.2s;
 	}
 
 	.resolution-option:hover {

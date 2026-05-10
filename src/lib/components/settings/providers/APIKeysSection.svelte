@@ -52,7 +52,16 @@ Manages API key configuration modal for LLM providers.
 		onReload: () => void;
 	}
 
-	let { open, provider, providerDisplayName, providerSettings, hasApiKey, isCustom = false, onclose, onReload }: Props = $props();
+	let {
+		open,
+		provider,
+		providerDisplayName,
+		providerSettings,
+		hasApiKey,
+		isCustom = false,
+		onclose,
+		onReload
+	}: Props = $props();
 
 	/** Whether this provider requires an API key (not ollama) */
 	const requiresApiKey = $derived(provider !== 'ollama');
@@ -158,7 +167,11 @@ Manages API key configuration modal for LLM providers.
 
 <Modal
 	{open}
-	title={provider === 'ollama' ? $i18n('api_key_modal_ollama') : (isCustom ? `${$i18n('llm_provider_configure')} ${providerDisplayName ?? provider}` : $i18n('api_key_modal_mistral'))}
+	title={provider === 'ollama'
+		? $i18n('api_key_modal_ollama')
+		: isCustom
+			? `${$i18n('llm_provider_configure')} ${providerDisplayName ?? provider}`
+			: $i18n('api_key_modal_mistral')}
 	onclose={() => onclose()}
 >
 	{#snippet body()}
@@ -210,11 +223,7 @@ Manages API key configuration modal for LLM providers.
 			</Button>
 			{#if requiresApiKey}
 				{#if hasApiKey}
-					<Button
-						variant="danger"
-						onclick={handleDeleteApiKeyRequest}
-						disabled={saving}
-					>
+					<Button variant="danger" onclick={handleDeleteApiKeyRequest} disabled={saving}>
 						{$i18n('api_key_delete')}
 					</Button>
 				{/if}

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Validation mode for human-in-the-loop
  */
@@ -39,68 +38,68 @@ export type ValidationStatus = 'pending' | 'approved' | 'rejected';
  * Details for spawn sub-agent validation
  */
 export interface SpawnValidationDetails {
-  /** Name of the sub-agent to spawn */
-  sub_agent_name: string;
-  /** Preview of the prompt (truncated to 200 chars) */
-  prompt_preview: string;
-  /** Full length of the prompt */
-  prompt_length: number;
-  /** Tools assigned to the sub-agent */
-  tools: string[];
-  /** MCP servers assigned to the sub-agent */
-  mcp_servers: string[];
-  /** Allow additional custom fields */
-  [key: string]: unknown;
+	/** Name of the sub-agent to spawn */
+	sub_agent_name: string;
+	/** Preview of the prompt (truncated to 200 chars) */
+	prompt_preview: string;
+	/** Full length of the prompt */
+	prompt_length: number;
+	/** Tools assigned to the sub-agent */
+	tools: string[];
+	/** MCP servers assigned to the sub-agent */
+	mcp_servers: string[];
+	/** Allow additional custom fields */
+	[key: string]: unknown;
 }
 
 /**
  * Details for delegate operation validation
  */
 export interface DelegateValidationDetails {
-  /** Target agent ID to delegate to */
-  target_agent_id: string;
-  /** Target agent name */
-  target_agent_name: string;
-  /** Preview of the prompt (truncated to 200 chars) */
-  prompt_preview: string;
-  /** Full length of the prompt */
-  prompt_length: number;
-  /** Allow additional custom fields */
-  [key: string]: unknown;
+	/** Target agent ID to delegate to */
+	target_agent_id: string;
+	/** Target agent name */
+	target_agent_name: string;
+	/** Preview of the prompt (truncated to 200 chars) */
+	prompt_preview: string;
+	/** Full length of the prompt */
+	prompt_length: number;
+	/** Allow additional custom fields */
+	[key: string]: unknown;
 }
 
 /**
  * Task information for parallel batch validation
  */
 export interface ParallelTaskInfo {
-  /** Agent ID for the task */
-  agent_id: string;
-  /** Preview of the prompt (truncated to 100 chars) */
-  prompt_preview: string;
+	/** Agent ID for the task */
+	agent_id: string;
+	/** Preview of the prompt (truncated to 100 chars) */
+	prompt_preview: string;
 }
 
 /**
  * Details for parallel batch operation validation
  */
 export interface ParallelValidationDetails {
-  /** Number of tasks to execute in parallel */
-  task_count: number;
-  /** List of tasks with agent IDs and prompt previews */
-  tasks: ParallelTaskInfo[];
-  /** Allow additional custom fields */
-  [key: string]: unknown;
+	/** Number of tasks to execute in parallel */
+	task_count: number;
+	/** List of tasks with agent IDs and prompt previews */
+	tasks: ParallelTaskInfo[];
+	/** Allow additional custom fields */
+	[key: string]: unknown;
 }
 
 /**
  * Generic validation details for operations without specific structure
  */
 export interface GenericValidationDetails {
-  /** Optional file path for file operations */
-  path?: string;
-  /** Rejection reason (added when status changes to rejected) */
-  rejection_reason?: string;
-  /** Allow additional custom fields */
-  [key: string]: unknown;
+	/** Optional file path for file operations */
+	path?: string;
+	/** Rejection reason (added when status changes to rejected) */
+	rejection_reason?: string;
+	/** Allow additional custom fields */
+	[key: string]: unknown;
 }
 
 /**
@@ -113,31 +112,31 @@ export interface GenericValidationDetails {
  * - Other types -> GenericValidationDetails
  */
 export type ValidationDetails =
-  | SpawnValidationDetails
-  | DelegateValidationDetails
-  | ParallelValidationDetails
-  | GenericValidationDetails;
+	| SpawnValidationDetails
+	| DelegateValidationDetails
+	| ParallelValidationDetails
+	| GenericValidationDetails;
 
 /**
  * Validation request entity
  */
 export interface ValidationRequest {
-  /** Unique identifier */
-  id: string;
-  /** Associated workflow ID */
-  workflow_id: string;
-  /** Type of validation */
-  type: ValidationType;
-  /** Operation description */
-  operation: string;
-  /** Additional details about the operation */
-  details: ValidationDetails;
-  /** Risk level assessment */
-  risk_level: RiskLevel;
-  /** Current validation status */
-  status: ValidationStatus;
-  /** Creation timestamp */
-  created_at: Date;
+	/** Unique identifier */
+	id: string;
+	/** Associated workflow ID */
+	workflow_id: string;
+	/** Type of validation */
+	type: ValidationType;
+	/** Operation description */
+	operation: string;
+	/** Additional details about the operation */
+	details: ValidationDetails;
+	/** Risk level assessment */
+	risk_level: RiskLevel;
+	/** Current validation status */
+	status: ValidationStatus;
+	/** Creation timestamp */
+	created_at: Date;
 }
 
 // =====================================================
@@ -157,110 +156,110 @@ export type TimeoutBehavior = 'reject' | 'approve' | 'skip';
  * Selective validation config - which operations require validation
  */
 export interface SelectiveValidationConfig {
-  /** Validate internal tool execution */
-  tools: boolean;
-  /** Validate sub-agent spawn */
-  subAgents: boolean;
-  /** Validate MCP server calls */
-  mcp: boolean;
-  /** Validate file write/delete operations */
-  fileOps: boolean;
-  /** Validate database write/delete operations */
-  dbOps: boolean;
+	/** Validate internal tool execution */
+	tools: boolean;
+	/** Validate sub-agent spawn */
+	subAgents: boolean;
+	/** Validate MCP server calls */
+	mcp: boolean;
+	/** Validate file write/delete operations */
+	fileOps: boolean;
+	/** Validate database write/delete operations */
+	dbOps: boolean;
 }
 
 /**
  * Risk threshold configuration
  */
 export interface RiskThresholdConfig {
-  /** Skip validation for low-risk operations */
-  autoApproveLow: boolean;
-  /** Always require validation for high-risk (even in Auto mode) */
-  alwaysConfirmHigh: boolean;
+	/** Skip validation for low-risk operations */
+	autoApproveLow: boolean;
+	/** Always require validation for high-risk (even in Auto mode) */
+	alwaysConfirmHigh: boolean;
 }
 
 /**
  * Audit/logging configuration
  */
 export interface AuditConfig {
-  /** Enable validation decision logging */
-  enableLogging: boolean;
-  /** Log retention in days (7-90) */
-  retentionDays: number;
+	/** Enable validation decision logging */
+	enableLogging: boolean;
+	/** Log retention in days (7-90) */
+	retentionDays: number;
 }
 
 /**
  * Main validation settings configuration
  */
 export interface ValidationSettingsConfig {
-  /** Validation mode */
-  mode: ValidationMode;
-  /** Selective config (used when mode = 'selective') */
-  selectiveConfig: SelectiveValidationConfig;
-  /** Risk threshold settings */
-  riskThresholds: RiskThresholdConfig;
-  /** Timeout in seconds (30-300) */
-  timeoutSeconds: number;
-  /** Behavior when timeout expires */
-  timeoutBehavior: TimeoutBehavior;
-  /** Audit settings */
-  audit: AuditConfig;
+	/** Validation mode */
+	mode: ValidationMode;
+	/** Selective config (used when mode = 'selective') */
+	selectiveConfig: SelectiveValidationConfig;
+	/** Risk threshold settings */
+	riskThresholds: RiskThresholdConfig;
+	/** Timeout in seconds (30-300) */
+	timeoutSeconds: number;
+	/** Behavior when timeout expires */
+	timeoutBehavior: TimeoutBehavior;
+	/** Audit settings */
+	audit: AuditConfig;
 }
 
 /**
  * Validation settings with metadata
  */
 export interface ValidationSettings extends ValidationSettingsConfig {
-  /** Last update timestamp (ISO 8601) */
-  updatedAt: string;
+	/** Last update timestamp (ISO 8601) */
+	updatedAt: string;
 }
 
 /**
  * Update request for partial updates
  */
 export interface UpdateValidationSettingsRequest {
-  mode?: ValidationMode;
-  selectiveConfig?: Partial<SelectiveValidationConfig>;
-  riskThresholds?: Partial<RiskThresholdConfig>;
-  timeoutSeconds?: number;
-  timeoutBehavior?: TimeoutBehavior;
-  audit?: Partial<AuditConfig>;
+	mode?: ValidationMode;
+	selectiveConfig?: Partial<SelectiveValidationConfig>;
+	riskThresholds?: Partial<RiskThresholdConfig>;
+	timeoutSeconds?: number;
+	timeoutBehavior?: TimeoutBehavior;
+	audit?: Partial<AuditConfig>;
 }
 
 /**
  * Information about an available tool for validation settings
  */
 export interface AvailableToolInfo {
-  /** Tool name/ID */
-  name: string;
-  /** Tool category (basic, sub_agent) */
-  category: 'basic' | 'sub_agent';
-  /** Whether the tool requires context */
-  requiresContext: boolean;
+	/** Tool name/ID */
+	name: string;
+	/** Tool category (basic, sub_agent) */
+	category: 'basic' | 'sub_agent';
+	/** Whether the tool requires context */
+	requiresContext: boolean;
 }
 
 /**
  * Default validation settings values
  */
 export const DEFAULT_VALIDATION_SETTINGS: ValidationSettingsConfig = {
-  mode: 'selective',
-  selectiveConfig: {
-    tools: false,
-    subAgents: true,
-    mcp: true,
-    fileOps: true,
-    dbOps: true,
-  },
-  riskThresholds: {
-    autoApproveLow: true,
-    alwaysConfirmHigh: false,
-  },
-  timeoutSeconds: 60,
-  timeoutBehavior: 'reject',
-  audit: {
-    enableLogging: true,
-    retentionDays: 30,
-  },
+	mode: 'selective',
+	selectiveConfig: {
+		tools: false,
+		subAgents: true,
+		mcp: true,
+		fileOps: true,
+		dbOps: true
+	},
+	riskThresholds: {
+		autoApproveLow: true,
+		alwaysConfirmHigh: false
+	},
+	timeoutSeconds: 60,
+	timeoutBehavior: 'reject',
+	audit: {
+		enableLogging: true,
+		retentionDays: 30
+	}
 };
 
 // =====================================================
@@ -277,57 +276,57 @@ export type DecidedBy = 'user' | 'auto' | 'timeout';
  * One row of the audit log, returned by `list_validation_audit`.
  */
 export interface ValidationAuditEntry {
-  /** Audit row identifier. */
-  id: string;
-  /** Foreign key to the originating validation_request row. */
-  validationId: string;
-  /** Tool / operation that triggered the validation. */
-  toolName: string;
-  /** Final decision. */
-  decision: AuditDecision;
-  /** When the decision was recorded (ISO 8601). */
-  decidedAt: string;
-  /** Who/what made the decision. */
-  decidedBy: DecidedBy;
-  /** Risk level evaluated at decision time. */
-  riskLevel: RiskLevel;
-  /** Workflow context, when known. */
-  workflowId?: string;
-  /** Agent context, when known. */
-  agentId?: string;
-  /** First ~200 chars of the operation prompt. */
-  promptPreview?: string;
-  /** Free-form metadata (rejection reason, timeout context, etc.). */
-  metadata?: Record<string, unknown> | null;
+	/** Audit row identifier. */
+	id: string;
+	/** Foreign key to the originating validation_request row. */
+	validationId: string;
+	/** Tool / operation that triggered the validation. */
+	toolName: string;
+	/** Final decision. */
+	decision: AuditDecision;
+	/** When the decision was recorded (ISO 8601). */
+	decidedAt: string;
+	/** Who/what made the decision. */
+	decidedBy: DecidedBy;
+	/** Risk level evaluated at decision time. */
+	riskLevel: RiskLevel;
+	/** Workflow context, when known. */
+	workflowId?: string;
+	/** Agent context, when known. */
+	agentId?: string;
+	/** First ~200 chars of the operation prompt. */
+	promptPreview?: string;
+	/** Free-form metadata (rejection reason, timeout context, etc.). */
+	metadata?: Record<string, unknown> | null;
 }
 
 /** Filter for `list_validation_audit`. */
 export interface AuditFilter {
-  toolName?: string;
-  decision?: AuditDecision;
-  decidedBy?: DecidedBy;
-  /** Lower bound (inclusive) on `decidedAt`, RFC3339. */
-  since?: string;
-  /** Upper bound (inclusive) on `decidedAt`, RFC3339. */
-  until?: string;
+	toolName?: string;
+	decision?: AuditDecision;
+	decidedBy?: DecidedBy;
+	/** Lower bound (inclusive) on `decidedAt`, RFC3339. */
+	since?: string;
+	/** Upper bound (inclusive) on `decidedAt`, RFC3339. */
+	until?: string;
 }
 
 /** One bucket in audit statistics. */
 export interface AuditBucket {
-  label: string;
-  count: number;
+	label: string;
+	count: number;
 }
 
 /** Aggregate audit log statistics. */
 export interface AuditStats {
-  total: number;
-  byDecision: AuditBucket[];
-  byTool: AuditBucket[];
+	total: number;
+	byDecision: AuditBucket[];
+	byTool: AuditBucket[];
 }
 
 /** Request envelope for `list_validation_audit`. */
 export interface ListAuditParams {
-  filter?: AuditFilter;
-  limit?: number;
-  offset?: number;
+	filter?: AuditFilter;
+	limit?: number;
+	offset?: number;
 }

@@ -122,14 +122,18 @@ Shows agent summary with actions for edit and delete.
 										<Wrench size={14} />
 										{$i18n('agents_tools')}
 									</span>
-									<span class="detail-value">{$i18n('agents_tools_enabled', { count: agent.tools_count })}</span>
+									<span class="detail-value"
+										>{$i18n('agents_tools_enabled', { count: agent.tools_count })}</span
+									>
 								</div>
 								<div class="detail-row">
 									<span class="detail-label">
 										<Plug size={14} />
 										{$i18n('agents_mcp_servers')}
 									</span>
-									<span class="detail-value">{$i18n('agents_mcp_configured', { count: agent.mcp_servers_count })}</span>
+									<span class="detail-value"
+										>{$i18n('agents_mcp_configured', { count: agent.mcp_servers_count })}</span
+									>
 								</div>
 							</div>
 

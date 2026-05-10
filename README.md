@@ -18,13 +18,13 @@
 
 Before using Zileo Chat, please be aware of the following risks:
 
-| Risk | Description |
-|------|-------------|
-| **Data Loss** | Database schema may change between versions, potentially requiring data migration or reset |
-| **API Costs** | LLM API calls incur costs based on token usage - monitor your provider usage |
-| **Instability** | Features may be incomplete, contain bugs, or change without notice |
-| **Security** | While security measures are implemented, the software has not undergone formal security audit |
-| **Breaking Changes** | Updates may introduce breaking changes to configurations or workflows |
+| Risk                 | Description                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| **Data Loss**        | Database schema may change between versions, potentially requiring data migration or reset    |
+| **API Costs**        | LLM API calls incur costs based on token usage - monitor your provider usage                  |
+| **Instability**      | Features may be incomplete, contain bugs, or change without notice                            |
+| **Security**         | While security measures are implemented, the software has not undergone formal security audit |
+| **Breaking Changes** | Updates may introduce breaking changes to configurations or workflows                         |
 
 **Recommendation**: Back up your data regularly and avoid using for critical production tasks until v1.0 release.
 
@@ -52,11 +52,11 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 
 Zileo Chat supports built-in and custom LLM providers:
 
-| Provider | Type | Link |
-|----------|------|------|
-| **Mistral AI** | Cloud API (built-in) | [https://mistral.ai](https://mistral.ai) |
-| **Ollama** | Local / Cloud (built-in) | [https://ollama.com](https://ollama.com) |
-| **Custom Providers** | OpenAI-compatible API | Any OpenAI-compatible endpoint |
+| Provider             | Type                     | Link                                     |
+| -------------------- | ------------------------ | ---------------------------------------- |
+| **Mistral AI**       | Cloud API (built-in)     | [https://mistral.ai](https://mistral.ai) |
+| **Ollama**           | Local / Cloud (built-in) | [https://ollama.com](https://ollama.com) |
+| **Custom Providers** | OpenAI-compatible API    | Any OpenAI-compatible endpoint           |
 
 ### Mistral AI (Cloud)
 
@@ -82,10 +82,10 @@ Zileo Chat supports built-in and custom LLM providers:
 
 ### Required for First Launch
 
-| Dependency | Purpose | Installation |
-|------------|---------|--------------|
-| **Docker Desktop** | MCP servers execution | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
-| **At least one LLM provider** | AI model access | See [Supported LLM Providers](#supported-llm-providers) |
+| Dependency                    | Purpose               | Installation                                                                          |
+| ----------------------------- | --------------------- | ------------------------------------------------------------------------------------- |
+| **Docker Desktop**            | MCP servers execution | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+| **At least one LLM provider** | AI model access       | See [Supported LLM Providers](#supported-llm-providers)                               |
 
 > **Mistral API vs Le Chat Pro**: The [Le Chat subscription](https://mistral.ai/pricing) ($14.99/month) is for the web chat interface only. Zileo Chat requires a **separate API key** from [La Plateforme](https://docs.mistral.ai/deployment/laplateforme/pricing/) with pay-per-token billing.
 
@@ -103,11 +103,11 @@ Use [Docker MCP Toolkit](https://docs.docker.com/ai/mcp-catalog-and-toolkit/tool
 
 ### Optional: Ollama (Local + Cloud Models)
 
-| Step | Command |
-|------|---------|
-| Install Ollama | [ollama.com/download](https://ollama.com/download) |
-| Run cloud model | `ollama run kimi-k2-thinking:cloud` |
-| List available models | `ollama list` |
+| Step                  | Command                                            |
+| --------------------- | -------------------------------------------------- |
+| Install Ollama        | [ollama.com/download](https://ollama.com/download) |
+| Run cloud model       | `ollama run kimi-k2-thinking:cloud`                |
+| List available models | `ollama list`                                      |
 
 > **Ollama Cloud**: For large models like [Kimi K2 (1T params)](https://ollama.com/library/kimi-k2:1t-cloud), use `ollama run <model>:cloud`. No local GPU required.
 
@@ -146,12 +146,12 @@ npm run tauri:build
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
+| Layer    | Technology                   |
+| -------- | ---------------------------- |
 | Frontend | SvelteKit 2.55 + Svelte 5.55 |
-| Backend | Rust + Tauri 2.11 |
-| Database | SurrealDB 2.6 (embedded) |
-| LLM | Rig.rs 0.34 + direct HTTP |
+| Backend  | Rust + Tauri 2.11            |
+| Database | SurrealDB 2.6 (embedded)     |
+| LLM      | Rig.rs 0.34 + direct HTTP    |
 
 ---
 

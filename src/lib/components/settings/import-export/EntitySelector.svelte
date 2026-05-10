@@ -129,7 +129,9 @@ Displays a list of checkboxes with select all/deselect all functionality.
 
 		<div class="footer">
 			<span class="count">
-				{$i18n('ie_x_of_y_selected').replace('{selected}', String(selected.length)).replace('{total}', String(items.length))}
+				{$i18n('ie_x_of_y_selected')
+					.replace('{selected}', String(selected.length))
+					.replace('{total}', String(items.length))}
 			</span>
 		</div>
 	{/if}

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Onboarding type definitions for first-launch wizard.
  * @module types/onboarding

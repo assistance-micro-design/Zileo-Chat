@@ -182,11 +182,11 @@ Manages theme selection (light/dark).
 	}
 
 	.color-swatch.accent {
-		background: #94EFEE;
+		background: #94efee;
 	}
 
 	.color-swatch.secondary {
-		background: #FE7254;
+		background: #fe7254;
 	}
 
 	.color-swatch.bg-light {

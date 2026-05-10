@@ -61,12 +61,10 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 	// Category options with "All" option
 	let categoryOptions = $derived([
 		{ value: '', label: t('skills_all_categories') },
-		...(Object.keys(SKILL_CATEGORY_I18N_KEYS) as SkillCategory[]).map(
-			(value) => ({
-				value,
-				label: t(SKILL_CATEGORY_I18N_KEYS[value])
-			})
-		)
+		...(Object.keys(SKILL_CATEGORY_I18N_KEYS) as SkillCategory[]).map((value) => ({
+			value,
+			label: t(SKILL_CATEGORY_I18N_KEYS[value])
+		}))
 	]);
 
 	// Filtered skills (uses debouncedQuery for performance)
@@ -76,9 +74,7 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 		if (debouncedQuery.trim()) {
 			const query = debouncedQuery.toLowerCase();
 			result = result.filter(
-				(s) =>
-					s.name.toLowerCase().includes(query) ||
-					s.description.toLowerCase().includes(query)
+				(s) => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query)
 			);
 		}
 
@@ -188,7 +184,10 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 										{$i18n('skills_content_size')}
 									</span>
 									<span class="detail-value">
-										{$i18n('skills_chars_count').replace('{count}', formatContentLength(skill.content_length))}
+										{$i18n('skills_chars_count').replace(
+											'{count}',
+											formatContentLength(skill.content_length)
+										)}
 									</span>
 								</div>
 								<div class="detail-row">
@@ -216,11 +215,7 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 									<Edit size={16} />
 									<span>{$i18n('common_edit')}</span>
 								</Button>
-								<Button
-									variant="danger"
-									size="sm"
-									onclick={() => ondelete(skill.id)}
-								>
+								<Button variant="danger" size="sm" onclick={() => ondelete(skill.id)}>
 									<Trash2 size={16} />
 									<span>{$i18n('common_delete')}</span>
 								</Button>

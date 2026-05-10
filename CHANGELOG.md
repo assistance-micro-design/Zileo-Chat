@@ -554,7 +554,7 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 ### Removed
 
 - ActivitySidebar component and related 22 files (-5585 lines)
-- 171 OPT-* traceability markers from codebase
+- 171 OPT-\* traceability markers from codebase
 - `once_cell` and `futures` crate dependencies (replaced by std)
 - Unused `Default` impls in LLM providers
 
@@ -641,7 +641,7 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
   - Auto-scoping: `user_pref`/`knowledge` memories are general, `context`/`decision` are workflow-scoped
   - Importance scoring (1-10) and TTL (time-to-live) for automatic expiry
   - `describe` operation for agents to discover memory stats before searching
-  - Composite scoring: cosine_similarity*0.7 + importance*0.15 + recency*0.15
+  - Composite scoring: cosine_similarity*0.7 + importance*0.15 + recency\*0.15
   - Compact list mode with truncated content for token efficiency
   - Shared helper functions between tool and commands (`search_memories_core`, `describe_memories_core`)
   - Stateless tool design with immutable `default_workflow_id`
@@ -854,31 +854,37 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 ## Project History
 
 ### Phase 0 - Project Setup
+
 - Initial Tauri + SvelteKit + Rust configuration
 - SurrealDB embedded integration
 - TypeScript/Rust type synchronization
 
 ### Phase 1-2 - Database Foundation
+
 - SurrealDB schema design (SCHEMAFULL tables)
 - Agent, Workflow, Memory persistence
 - Query patterns and utilities
 
 ### Phase 3 - Multi-Agent Infrastructure
+
 - Agent lifecycle management
 - Tool registry and factory patterns
 - MCP client/server architecture
 
 ### Phase 4 - Command Layer
+
 - Tauri IPC commands
 - Frontend-backend communication
 - Error handling patterns
 
 ### Phase 5 - Frontend Implementation
+
 - SvelteKit routing and stores
 - Component library (atomic design)
 - Theme system and i18n
 
 ### Phase 6-9 - Optimization Sprints
+
 - Performance profiling and fixes
 - Security hardening
 - Documentation sync

@@ -28,32 +28,32 @@ export type Locale = 'en' | 'fr';
  * Available locales with metadata
  */
 export interface LocaleInfo {
-  /** Locale identifier */
-  id: Locale;
-  /** Display name in native language */
-  nativeName: string;
-  /** Flag text representation (country code) */
-  flag: string;
-  /** ISO 3166-1 country code for flag icon */
-  countryCode: string;
+	/** Locale identifier */
+	id: Locale;
+	/** Display name in native language */
+	nativeName: string;
+	/** Flag text representation (country code) */
+	flag: string;
+	/** ISO 3166-1 country code for flag icon */
+	countryCode: string;
 }
 
 /**
  * Locale configuration
  */
 export const LOCALES: Record<Locale, LocaleInfo> = {
-  en: {
-    id: 'en',
-    nativeName: 'English',
-    flag: 'GB',
-    countryCode: 'GB'
-  },
-  fr: {
-    id: 'fr',
-    nativeName: 'Francais',
-    flag: 'FR',
-    countryCode: 'FR'
-  }
+	en: {
+		id: 'en',
+		nativeName: 'English',
+		flag: 'GB',
+		countryCode: 'GB'
+	},
+	fr: {
+		id: 'fr',
+		nativeName: 'Francais',
+		flag: 'FR',
+		countryCode: 'FR'
+	}
 } as const;
 
 /**

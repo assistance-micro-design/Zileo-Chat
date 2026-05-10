@@ -155,7 +155,9 @@
 					<div class="status-row">
 						<StatusIndicator status="completed" size="sm" />
 						<span class="status-text">
-							{provider === 'ollama' ? $i18n('llm_provider_server_available') : $i18n('llm_provider_api_key_configured')}
+							{provider === 'ollama'
+								? $i18n('llm_provider_server_available')
+								: $i18n('llm_provider_api_key_configured')}
 						</span>
 					</div>
 				{:else}

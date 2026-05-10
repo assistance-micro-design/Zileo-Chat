@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Memory settings component exports.
  * @module lib/components/settings/memory

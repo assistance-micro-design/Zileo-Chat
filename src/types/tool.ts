@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Tool execution types for persistence and display.
  *
@@ -39,16 +38,16 @@ type ToolType = 'local' | 'mcp';
  * Maps to serde_json::Value in Rust for flexibility.
  */
 interface ToolInputParams {
-  /** Operation type (e.g., "add", "get", "update", "delete", "list", "search") */
-  operation?: string;
-  /** Content or data to process */
-  content?: string;
-  /** Entity ID for get/update/delete operations */
-  id?: string;
-  /** Name or identifier for create operations */
-  name?: string;
-  /** Allow additional tool-specific fields */
-  [key: string]: unknown;
+	/** Operation type (e.g., "add", "get", "update", "delete", "list", "search") */
+	operation?: string;
+	/** Content or data to process */
+	content?: string;
+	/** Entity ID for get/update/delete operations */
+	id?: string;
+	/** Name or identifier for create operations */
+	name?: string;
+	/** Allow additional tool-specific fields */
+	[key: string]: unknown;
 }
 
 /**
@@ -58,18 +57,18 @@ interface ToolInputParams {
  * Maps to serde_json::Value in Rust for flexibility.
  */
 interface ToolOutputResult {
-  /** Whether the operation was successful */
-  success?: boolean;
-  /** Created or retrieved entity ID */
-  id?: string;
-  /** Whether an entity was found (for search operations) */
-  found?: boolean;
-  /** Line number (for code-related tools) */
-  line?: number;
-  /** Error message if operation failed */
-  error?: string;
-  /** Allow additional tool-specific fields */
-  [key: string]: unknown;
+	/** Whether the operation was successful */
+	success?: boolean;
+	/** Created or retrieved entity ID */
+	id?: string;
+	/** Whether an entity was found (for search operations) */
+	found?: boolean;
+	/** Line number (for code-related tools) */
+	line?: number;
+	/** Error message if operation failed */
+	error?: string;
+	/** Allow additional tool-specific fields */
+	[key: string]: unknown;
 }
 
 /**
@@ -132,4 +131,3 @@ export interface WorkflowToolExecution {
 	/** Iteration number in tool loop */
 	iteration: number;
 }
-

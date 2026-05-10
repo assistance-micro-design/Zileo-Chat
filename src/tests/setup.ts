@@ -22,14 +22,14 @@
 import { vi } from 'vitest';
 
 vi.mock('$lib/tauri', () => ({
-createTauriUnavailableError: (apiName: string) =>
-new Error(`${apiName} is only available in the Tauri runtime`),
-isBrowserRuntime: vi.fn(() => typeof window !== 'undefined'),
-isTauriRuntime: vi.fn(() => false),
-tauriInvoke: vi.fn().mockResolvedValue(undefined),
-tauriListen: vi.fn().mockResolvedValue(() => {}),
-setTauriWindowTheme: vi.fn().mockResolvedValue(undefined),
-openDialog: vi.fn().mockResolvedValue(null),
-saveDialog: vi.fn().mockResolvedValue(null),
-openExternalUrl: vi.fn().mockResolvedValue(undefined)
+	createTauriUnavailableError: (apiName: string) =>
+		new Error(`${apiName} is only available in the Tauri runtime`),
+	isBrowserRuntime: vi.fn(() => typeof window !== 'undefined'),
+	isTauriRuntime: vi.fn(() => false),
+	tauriInvoke: vi.fn().mockResolvedValue(undefined),
+	tauriListen: vi.fn().mockResolvedValue(() => {}),
+	setTauriWindowTheme: vi.fn().mockResolvedValue(undefined),
+	openDialog: vi.fn().mockResolvedValue(null),
+	saveDialog: vi.fn().mockResolvedValue(null),
+	openExternalUrl: vi.fn().mockResolvedValue(undefined)
 }));

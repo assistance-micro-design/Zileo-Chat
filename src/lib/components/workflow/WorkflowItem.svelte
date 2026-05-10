@@ -97,20 +97,28 @@
 			id: 'pin',
 			labelKey: workflow.pinned ? 'sidebar_context_unpin' : 'sidebar_context_pin',
 			icon: workflow.pinned ? PinOff : Pin,
-			disabled: !ontogglepin,
+			disabled: !ontogglepin
 		},
 		...(onmoveto && folders.length > 0
 			? folders
-				.filter((f) => f.id !== workflow.folder_id)
-				.map((f, idx) => ({
-					id: `move_to_${f.id}`,
-					label: f.name,
-					icon: FolderInput,
-					separator: idx === 0,
-				}))
+					.filter((f) => f.id !== workflow.folder_id)
+					.map((f, idx) => ({
+						id: `move_to_${f.id}`,
+						label: f.name,
+						icon: FolderInput,
+						separator: idx === 0
+					}))
 			: []),
-		...(workflow.folder_id && onmoveto ? [{ id: 'remove_from_folder', labelKey: 'sidebar_folder_remove_from', icon: FolderInput }] : []),
-		{ id: 'delete', labelKey: 'sidebar_context_delete', icon: Trash2, variant: 'danger' as const, separator: true },
+		...(workflow.folder_id && onmoveto
+			? [{ id: 'remove_from_folder', labelKey: 'sidebar_folder_remove_from', icon: FolderInput }]
+			: []),
+		{
+			id: 'delete',
+			labelKey: 'sidebar_context_delete',
+			icon: Trash2,
+			variant: 'danger' as const,
+			separator: true
+		}
 	]);
 
 	// Sync editName with workflow.name when workflow changes (e.g., external rename).
@@ -210,9 +218,8 @@
 
 		dragging = true;
 
-		const ids = selectionMode && selected && selectedIds.size > 0
-			? [...selectedIds]
-			: [workflow.id];
+		const ids =
+			selectionMode && selected && selectedIds.size > 0 ? [...selectedIds] : [workflow.id];
 
 		event.dataTransfer.effectAllowed = 'move';
 		event.dataTransfer.setData(WORKFLOW_DRAG_TYPE, JSON.stringify(ids));
@@ -470,7 +477,8 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% {
+		0%,
+		100% {
 			opacity: 1;
 		}
 		50% {

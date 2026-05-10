@@ -5,18 +5,20 @@ Thank you to all who contribute to Zileo-Chat-3!
 ## Organizations
 
 ### Assistance Micro Design
+
 - **GitHub**: https://github.com/assistance-micro-design
 - **Role**: Project Owner and Primary Maintainer
 
 ## Individual Contributors
 
-| Name | GitHub | Contributions |
-|------|--------|---------------|
-| *Your name here* | *@username* | *Description* |
+| Name             | GitHub      | Contributions |
+| ---------------- | ----------- | ------------- |
+| _Your name here_ | _@username_ | _Description_ |
 
 ## How to Contribute
 
 We welcome contributions! Please see:
+
 - [README.md](README.md) for project overview
 - [docs/](docs/) for development documentation
 

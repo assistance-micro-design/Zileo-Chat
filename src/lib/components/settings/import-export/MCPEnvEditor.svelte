@@ -74,17 +74,13 @@ Marks sensitive keys as required.
 	 * Check if all required sensitive keys are filled
 	 */
 	const allRequiredFilled = $derived(
-		missingKeys
-			.filter(isSensitiveKey)
-			.every((key) => additions.addEnv[key]?.trim())
+		missingKeys.filter(isSensitiveKey).every((key) => additions.addEnv[key]?.trim())
 	);
 
 	/**
 	 * Count filled vs total keys
 	 */
-	const filledCount = $derived(
-		missingKeys.filter((key) => additions.addEnv[key]?.trim()).length
-	);
+	const filledCount = $derived(missingKeys.filter((key) => additions.addEnv[key]?.trim()).length);
 </script>
 
 <div class="mcp-env-editor">
@@ -98,7 +94,9 @@ Marks sensitive keys as required.
 					</div>
 					<div class="progress-info">
 						<span class="progress-text">
-							{$i18n('ie_x_of_y_filled').replace('{filled}', String(filledCount)).replace('{total}', String(missingKeys.length))}
+							{$i18n('ie_x_of_y_filled')
+								.replace('{filled}', String(filledCount))
+								.replace('{total}', String(missingKeys.length))}
 						</span>
 						{#if allRequiredFilled}
 							<Badge variant="success">{$i18n('ie_required_filled')}</Badge>

@@ -33,22 +33,22 @@ export type SaveDialogResult = Awaited<ReturnType<DialogModule['save']>>;
  * Opens a native Tauri open-file dialog.
  */
 export async function openDialog(options?: OpenDialogOptions): Promise<OpenDialogResult> {
-if (!isTauriRuntime()) {
-throw createTauriUnavailableError('Tauri open dialog');
-}
+	if (!isTauriRuntime()) {
+		throw createTauriUnavailableError('Tauri open dialog');
+	}
 
-const { open } = await import('@tauri-apps/plugin-dialog');
-return open(options);
+	const { open } = await import('@tauri-apps/plugin-dialog');
+	return open(options);
 }
 
 /**
  * Opens a native Tauri save-file dialog.
  */
 export async function saveDialog(options?: SaveDialogOptions): Promise<SaveDialogResult> {
-if (!isTauriRuntime()) {
-throw createTauriUnavailableError('Tauri save dialog');
-}
+	if (!isTauriRuntime()) {
+		throw createTauriUnavailableError('Tauri save dialog');
+	}
 
-const { save } = await import('@tauri-apps/plugin-dialog');
-return save(options);
+	const { save } = await import('@tauri-apps/plugin-dialog');
+	return save(options);
 }

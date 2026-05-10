@@ -28,10 +28,10 @@ import { createTauriUnavailableError, isTauriRuntime } from './environment';
  * @param url - URL to open externally
  */
 export async function openExternalUrl(url: string): Promise<void> {
-if (!isTauriRuntime()) {
-throw createTauriUnavailableError('Tauri external URL opener');
-}
+	if (!isTauriRuntime()) {
+		throw createTauriUnavailableError('Tauri external URL opener');
+	}
 
-const { openUrl } = await import('@tauri-apps/plugin-opener');
-await openUrl(url);
+	const { openUrl } = await import('@tauri-apps/plugin-opener');
+	await openUrl(url);
 }

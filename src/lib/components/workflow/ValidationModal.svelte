@@ -163,7 +163,8 @@
 	{#snippet footer()}
 		<Button variant="ghost" onclick={handleClose}>{$i18n('common_cancel')}</Button>
 		<Button variant="danger" onclick={handleReject}>{$i18n('workflow_validation_reject')}</Button>
-		<Button variant="primary" onclick={handleApprove}>{$i18n('workflow_validation_approve')}</Button>
+		<Button variant="primary" onclick={handleApprove}>{$i18n('workflow_validation_approve')}</Button
+		>
 	{/snippet}
 </Modal>
 
@@ -190,8 +191,13 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.5; }
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.5;
+		}
 	}
 
 	.validation-header :global(.risk-icon.medium) {

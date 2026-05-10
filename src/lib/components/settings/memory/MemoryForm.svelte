@@ -116,7 +116,10 @@ Provides fields for memory type, content, and metadata.
 			// Build metadata
 			const metadata: Record<string, unknown> = {};
 			if (formData.tags.trim()) {
-				metadata.tags = formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
+				metadata.tags = formData.tags
+					.split(',')
+					.map((tag) => tag.trim())
+					.filter(Boolean);
 			}
 			if (formData.priority !== 0.5) {
 				metadata.priority = formData.priority;
@@ -154,7 +157,13 @@ Provides fields for memory type, content, and metadata.
 	}
 </script>
 
-<form class="memory-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+<form
+	class="memory-form"
+	onsubmit={(e) => {
+		e.preventDefault();
+		handleSubmit();
+	}}
+>
 	{#if error}
 		<div class="error-message">
 			{error}
@@ -173,7 +182,8 @@ Provides fields for memory type, content, and metadata.
 		label={$i18n('memory_form_content_label')}
 		placeholder={$i18n('memory_form_content_placeholder')}
 		value={formData.content}
-		oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => formData.content = e.currentTarget.value}
+		oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) =>
+			(formData.content = e.currentTarget.value)}
 		rows={6}
 		help={$i18n('memory_form_content_help')}
 	/>
@@ -183,7 +193,8 @@ Provides fields for memory type, content, and metadata.
 		label={$i18n('memory_form_tags_label')}
 		placeholder={$i18n('memory_form_tags_placeholder')}
 		value={formData.tags}
-		oninput={(e: Event & { currentTarget: HTMLInputElement }) => formData.tags = e.currentTarget.value}
+		oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+			(formData.tags = e.currentTarget.value)}
 		help={$i18n('memory_form_tags_help')}
 	/>
 
@@ -204,20 +215,15 @@ Provides fields for memory type, content, and metadata.
 	</div>
 
 	<div class="form-actions">
-		<Button
-			type="button"
-			variant="ghost"
-			onclick={handleCancel}
-			disabled={saving}
-		>
+		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
-		<Button
-			type="submit"
-			variant="primary"
-			disabled={saving || !formData.content.trim()}
-		>
-			{saving ? $i18n('common_saving') : mode === 'add' ? $i18n('memory_modal_add') : $i18n('memory_form_save_changes')}
+		<Button type="submit" variant="primary" disabled={saving || !formData.content.trim()}>
+			{saving
+				? $i18n('common_saving')
+				: mode === 'add'
+					? $i18n('memory_modal_add')
+					: $i18n('memory_form_save_changes')}
 		</Button>
 	</div>
 </form>

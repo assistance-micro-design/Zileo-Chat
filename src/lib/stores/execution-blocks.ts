@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Execution blocks store for managing block-by-block execution display.
  *
@@ -27,7 +26,14 @@
 
 import { writable, derived } from 'svelte/store';
 import type { StreamChunk } from '$types/streaming';
-import type { ChatBlock, ChatBlockType, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
+import type {
+	ChatBlock,
+	ChatBlockType,
+	ThinkingBlockData,
+	ToolCallBlockData,
+	SubAgentBlockData,
+	TodoTaskDisplay
+} from '$types/chat-block';
 
 /**
  * State interface for the execution blocks store.
@@ -72,7 +78,10 @@ function createBlock(
 /**
  * Process a thinking_block chunk into a ThinkingBlock.
  */
-function handleThinkingBlock(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleThinkingBlock(
+	state: ExecutionBlocksState,
+	chunk: StreamChunk
+): ExecutionBlocksState {
 	const data: ThinkingBlockData = {
 		content: chunk.content ?? '',
 		source: 'model_thinking'
@@ -99,7 +108,10 @@ function handleToolStart(state: ExecutionBlocksState, chunk: StreamChunk): Execu
 /**
  * Process a tool_call_complete chunk into a ToolCallBlock.
  */
-function handleToolCallComplete(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleToolCallComplete(
+	state: ExecutionBlocksState,
+	chunk: StreamChunk
+): ExecutionBlocksState {
 	const data: ToolCallBlockData = {
 		tool_name: chunk.tool ?? 'unknown',
 		tool_type: chunk.tool_type ?? 'local',
@@ -125,7 +137,10 @@ function handleToolCallComplete(state: ExecutionBlocksState, chunk: StreamChunk)
  * The chunk content/tokens are consumed by tokenStore and bgWorkflows; this
  * store only needs to drop the spinner so the response renders cleanly.
  */
-function handleResponseBlock(state: ExecutionBlocksState, _chunk: StreamChunk): ExecutionBlocksState {
+function handleResponseBlock(
+	state: ExecutionBlocksState,
+	_chunk: StreamChunk
+): ExecutionBlocksState {
 	return {
 		...state,
 		spinnerContext: null
@@ -135,12 +150,16 @@ function handleResponseBlock(state: ExecutionBlocksState, _chunk: StreamChunk): 
 /**
  * Process a sub_agent_complete chunk into a SubAgentBlock.
  */
-function handleSubAgentComplete(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleSubAgentComplete(
+	state: ExecutionBlocksState,
+	chunk: StreamChunk
+): ExecutionBlocksState {
 	// Dedup: skip if a sub_agent block with the same sub_agent_id already exists
 	const subAgentId = chunk.sub_agent_id;
 	if (subAgentId) {
 		const alreadyExists = state.blocks.some(
-			(b) => b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
+			(b) =>
+				b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
 		);
 		if (alreadyExists) return { ...state, spinnerContext: null };
 	}
@@ -166,12 +185,16 @@ function handleSubAgentComplete(state: ExecutionBlocksState, chunk: StreamChunk)
 /**
  * Process a sub_agent_error chunk into a SubAgentBlock with error status.
  */
-function handleSubAgentError(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
+function handleSubAgentError(
+	state: ExecutionBlocksState,
+	chunk: StreamChunk
+): ExecutionBlocksState {
 	// Dedup: skip if a sub_agent block with the same sub_agent_id already exists
 	const subAgentId = chunk.sub_agent_id;
 	if (subAgentId) {
 		const alreadyExists = state.blocks.some(
-			(b) => b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
+			(b) =>
+				b.block_type === 'sub_agent' && (b.data as SubAgentBlockData)._sub_agent_id === subAgentId
 		);
 		if (alreadyExists) return { ...state, spinnerContext: null };
 	}
@@ -279,7 +302,9 @@ function handleTaskComplete(state: ExecutionBlocksState, chunk: StreamChunk): Ex
 /**
  * Chunk type to handler mapping for the execution blocks store.
  */
-const chunkHandlers: Partial<Record<string, (state: ExecutionBlocksState, chunk: StreamChunk) => ExecutionBlocksState>> = {
+const chunkHandlers: Partial<
+	Record<string, (state: ExecutionBlocksState, chunk: StreamChunk) => ExecutionBlocksState>
+> = {
 	thinking_block: handleThinkingBlock,
 	reasoning: handleReasoning,
 	tool_start: handleToolStart,

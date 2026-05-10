@@ -37,7 +37,13 @@ Main chat area with message display, execution blocks inline, and input controls
 	import TodoTasksBlock from '$lib/components/chat/TodoTasksBlock.svelte';
 	import { i18n } from '$lib/i18n';
 	import type { Message } from '$types/message';
-	import type { ChatBlock, ThinkingBlockData, ToolCallBlockData, SubAgentBlockData, TodoTaskDisplay } from '$types/chat-block';
+	import type {
+		ChatBlock,
+		ThinkingBlockData,
+		ToolCallBlockData,
+		SubAgentBlockData,
+		TodoTaskDisplay
+	} from '$types/chat-block';
 
 	interface Props {
 		messages: Message[];
@@ -80,9 +86,7 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	// Content signal: uses addition to force Svelte 5 to track ALL dependencies
 	// (avoids short-circuit with || where only the first truthy stops evaluation)
-	let contentSignal = $derived(
-		messages.length + executionBlocks.length + executionTasks.length
-	);
+	let contentSignal = $derived(messages.length + executionBlocks.length + executionTasks.length);
 
 	function isNearBottom(container: HTMLElement): boolean {
 		const { scrollTop, scrollHeight, clientHeight } = container;
@@ -163,11 +167,7 @@ Main chat area with message display, execution blocks inline, and input controls
 			{#snippet renderBlock(block: ChatBlock)}
 				{#if block.block_type === 'thinking'}
 					{@const data = block.data as ThinkingBlockData}
-					<ThinkingBlock
-						content={data.content}
-						source={data.source}
-						sequence={block.sequence}
-					/>
+					<ThinkingBlock content={data.content} source={data.source} sequence={block.sequence} />
 				{:else if block.block_type === 'tool_call'}
 					{@const data = block.data as ToolCallBlockData}
 					<ToolCallBlock

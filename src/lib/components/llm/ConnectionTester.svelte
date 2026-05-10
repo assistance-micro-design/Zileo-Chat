@@ -94,7 +94,12 @@
 		<div class="test-result" class:success={result.success} class:error={!result.success}>
 			<StatusIndicator status={result.success ? 'completed' : 'error'} size="sm" />
 			{#if result.success}
-				<span class="result-text">{$i18n('llm_connection_connected').replace('{latency}', formatLatency(result.latency_ms))}</span>
+				<span class="result-text"
+					>{$i18n('llm_connection_connected').replace(
+						'{latency}',
+						formatLatency(result.latency_ms)
+					)}</span
+				>
 			{:else}
 				<span class="result-text">{result.error_message || $i18n('llm_connection_failed')}</span>
 			{/if}

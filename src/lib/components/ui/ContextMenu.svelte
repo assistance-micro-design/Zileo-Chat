@@ -55,7 +55,12 @@
 		if (menuRef) {
 			const rect = menuRef.getBoundingClientRect();
 			const pos = adjustMenuPosition(
-				x, y, rect.width, rect.height, window.innerWidth, window.innerHeight
+				x,
+				y,
+				rect.width,
+				rect.height,
+				window.innerWidth,
+				window.innerHeight
 			);
 			adjustedX = pos.x;
 			adjustedY = pos.y;

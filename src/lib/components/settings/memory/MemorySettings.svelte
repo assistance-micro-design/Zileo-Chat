@@ -26,7 +26,15 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { tauriInvoke } from '$lib/tauri';
-	import { Button, Select, Card, StatusIndicator, Modal, ErrorBanner, DeleteConfirmModal } from '$lib/components/ui';
+	import {
+		Button,
+		Select,
+		Card,
+		StatusIndicator,
+		Modal,
+		ErrorBanner,
+		DeleteConfirmModal
+	} from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type {
 		EmbeddingConfig,
@@ -285,11 +293,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 </div>
 
 <!-- Configuration Modal -->
-<Modal
-	open={showConfigModal}
-	title={$i18n('memory_embedding_config')}
-	onclose={closeConfigModal}
->
+<Modal open={showConfigModal} title={$i18n('memory_embedding_config')} onclose={closeConfigModal}>
 	{#snippet body()}
 		<div class="modal-form">
 			<!-- Embedding Model Section -->

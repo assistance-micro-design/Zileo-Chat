@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Thinking step types for persistence and display.
  *
@@ -70,4 +69,3 @@ export function truncateThinkingContent(content: string, maxLength: number = 150
 	}
 	return content.slice(0, maxLength - 3) + '...';
 }
-

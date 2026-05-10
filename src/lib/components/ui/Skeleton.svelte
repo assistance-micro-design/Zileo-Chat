@@ -79,7 +79,7 @@
 <div
 	class="skeleton skeleton-{variant} {className}"
 	class:skeleton-animate={animate}
-	style={style}
+	{style}
 	aria-hidden="true"
 	role="presentation"
 ></div>

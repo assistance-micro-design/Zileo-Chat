@@ -52,10 +52,7 @@
 		<div class="toast-title">{toast.title}</div>
 		<div class="toast-message">{toast.message}</div>
 		{#if toast.workflowId && toast.type === 'user-question'}
-			<button
-				class="toast-action"
-				onclick={() => onnavigate?.(toast.workflowId!)}
-			>
+			<button class="toast-action" onclick={() => onnavigate?.(toast.workflowId!)}>
 				{$i18n('toast_go_to_workflow')}
 			</button>
 		{/if}

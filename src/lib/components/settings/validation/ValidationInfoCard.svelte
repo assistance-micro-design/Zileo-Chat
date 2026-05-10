@@ -21,89 +21,89 @@
 -->
 
 <script lang="ts">
-  import type { Snippet } from 'svelte';
-  import { i18n } from '$lib/i18n';
+	import type { Snippet } from 'svelte';
+	import { i18n } from '$lib/i18n';
 
-  /**
-   * ValidationInfoCard props.
-   * @param variant - Visual style: 'approved' (green) or 'validation-required' (orange)
-   * @param icon - Icon character displayed in the header
-   * @param titleKey - i18n key for the card title
-   * @param statusKey - i18n key for the status text
-   * @param children - Snippet for the item list content
-   */
-  interface Props {
-    variant: 'approved' | 'validation-required';
-    icon: string;
-    titleKey: string;
-    statusKey: string;
-    children?: Snippet;
-  }
+	/**
+	 * ValidationInfoCard props.
+	 * @param variant - Visual style: 'approved' (green) or 'validation-required' (orange)
+	 * @param icon - Icon character displayed in the header
+	 * @param titleKey - i18n key for the card title
+	 * @param statusKey - i18n key for the status text
+	 * @param children - Snippet for the item list content
+	 */
+	interface Props {
+		variant: 'approved' | 'validation-required';
+		icon: string;
+		titleKey: string;
+		statusKey: string;
+		children?: Snippet;
+	}
 
-  let { variant, icon, titleKey, statusKey, children }: Props = $props();
+	let { variant, icon, titleKey, statusKey, children }: Props = $props();
 </script>
 
 <div
-  class="info-card"
-  class:approved={variant === 'approved'}
-  class:validation-required={variant === 'validation-required'}
+	class="info-card"
+	class:approved={variant === 'approved'}
+	class:validation-required={variant === 'validation-required'}
 >
-  <div class="info-card-header">
-    <span class="info-card-icon">{icon}</span>
-    <span class="info-card-title">{$i18n(titleKey)}</span>
-  </div>
-  <span class="info-card-status">{$i18n(statusKey)}</span>
-  {#if children}
-    {@render children()}
-  {/if}
+	<div class="info-card-header">
+		<span class="info-card-icon">{icon}</span>
+		<span class="info-card-title">{$i18n(titleKey)}</span>
+	</div>
+	<span class="info-card-status">{$i18n(statusKey)}</span>
+	{#if children}
+		{@render children()}
+	{/if}
 </div>
 
 <style>
-  .info-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
-    border-radius: var(--border-radius-md);
-    border: 1px solid var(--color-border);
-    background: var(--color-bg-secondary);
-  }
+	.info-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-md);
+		border-radius: var(--border-radius-md);
+		border: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
+	}
 
-  .info-card.approved {
-    border-color: var(--color-success);
-    background: color-mix(in srgb, var(--color-success) 5%, var(--color-bg-secondary));
-  }
+	.info-card.approved {
+		border-color: var(--color-success);
+		background: color-mix(in srgb, var(--color-success) 5%, var(--color-bg-secondary));
+	}
 
-  .info-card.validation-required {
-    border-color: var(--color-warning);
-    background: color-mix(in srgb, var(--color-warning) 5%, var(--color-bg-secondary));
-  }
+	.info-card.validation-required {
+		border-color: var(--color-warning);
+		background: color-mix(in srgb, var(--color-warning) 5%, var(--color-bg-secondary));
+	}
 
-  .info-card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-  }
+	.info-card-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
 
-  .info-card-icon {
-    font-size: var(--font-size-base);
-  }
+	.info-card-icon {
+		font-size: var(--font-size-base);
+	}
 
-  .info-card.approved .info-card-icon {
-    color: var(--color-success);
-  }
+	.info-card.approved .info-card-icon {
+		color: var(--color-success);
+	}
 
-  .info-card.validation-required .info-card-icon {
-    color: var(--color-warning);
-  }
+	.info-card.validation-required .info-card-icon {
+		color: var(--color-warning);
+	}
 
-  .info-card-title {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-  }
+	.info-card-title {
+		font-weight: var(--font-weight-semibold);
+		color: var(--color-text-primary);
+	}
 
-  .info-card-status {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-  }
+	.info-card-status {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
 </style>

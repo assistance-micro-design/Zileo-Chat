@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Chunk processor for stream-chunk state updates consumed by
  * `backgroundWorkflowsStore`.

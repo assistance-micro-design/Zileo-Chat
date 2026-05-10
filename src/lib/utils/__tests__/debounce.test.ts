@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { debounce, throttle } from '../debounce';
 

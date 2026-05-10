@@ -25,26 +25,26 @@
  */
 
 interface TauriWindow extends Window {
-__TAURI_INTERNALS__?: unknown;
+	__TAURI_INTERNALS__?: unknown;
 }
 
 /**
  * Returns true when the current module is running in a browser-like runtime.
  */
 export function isBrowserRuntime(): boolean {
-return typeof window !== 'undefined';
+	return typeof window !== 'undefined';
 }
 
 /**
  * Returns true when the current browser runtime exposes Tauri internals.
  */
 export function isTauriRuntime(): boolean {
-return isBrowserRuntime() && '__TAURI_INTERNALS__' in (window as TauriWindow);
+	return isBrowserRuntime() && '__TAURI_INTERNALS__' in (window as TauriWindow);
 }
 
 /**
  * Error used when a required Tauri API is called outside the Tauri runtime.
  */
 export function createTauriUnavailableError(apiName: string): Error {
-return new Error(`${apiName} is only available in the Tauri runtime`);
+	return new Error(`${apiName} is only available in the Tauri runtime`);
 }

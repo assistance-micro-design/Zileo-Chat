@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Sub-agent execution service for loading execution data.
  *
@@ -38,7 +37,9 @@ export const SubAgentExecutionService = {
 	 */
 	async loadSubAgentExecutions(workflowId: string): Promise<SubAgentExecution[]> {
 		try {
-			return await invoke<SubAgentExecution[]>('load_workflow_sub_agent_executions', { workflowId });
+			return await invoke<SubAgentExecution[]>('load_workflow_sub_agent_executions', {
+				workflowId
+			});
 		} catch {
 			return [];
 		}

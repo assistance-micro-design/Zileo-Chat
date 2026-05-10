@@ -306,7 +306,10 @@ export function createDerivedStores<TFull, TCreate, TUpdate, TSummary extends { 
 
 	return {
 		items: derived(internalStore, ($s) => $s.items),
-		selected: derived(internalStore, ($s) => $s.items.find((item) => item.id === $s.selectedId) ?? null),
+		selected: derived(
+			internalStore,
+			($s) => $s.items.find((item) => item.id === $s.selectedId) ?? null
+		),
 		isLoading: derived(internalStore, ($s) => $s.loading),
 		error: derived(internalStore, ($s) => $s.error),
 		formMode: derived(internalStore, ($s) => $s.formMode),

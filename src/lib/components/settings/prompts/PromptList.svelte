@@ -75,9 +75,7 @@ Shows prompt summary with actions for edit and delete.
 		if (debouncedQuery.trim()) {
 			const query = debouncedQuery.toLowerCase();
 			result = result.filter(
-				(p) =>
-					p.name.toLowerCase().includes(query) ||
-					p.description.toLowerCase().includes(query)
+				(p) => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
 			);
 		}
 
@@ -177,7 +175,15 @@ Shows prompt summary with actions for edit and delete.
 										{$i18n('prompts_variables')}
 									</span>
 									<span class="detail-value">
-										{prompt.variables_count !== 1 ? $i18n('prompts_placeholder_count_plural').replace('{count}', String(prompt.variables_count)) : $i18n('prompts_placeholder_count').replace('{count}', String(prompt.variables_count))}
+										{prompt.variables_count !== 1
+											? $i18n('prompts_placeholder_count_plural').replace(
+													'{count}',
+													String(prompt.variables_count)
+												)
+											: $i18n('prompts_placeholder_count').replace(
+													'{count}',
+													String(prompt.variables_count)
+												)}
 									</span>
 								</div>
 								<div class="detail-row">

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Block service for loading persisted execution blocks from the backend.
  *

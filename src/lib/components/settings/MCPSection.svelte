@@ -28,7 +28,14 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 		MCPServerConfigWithSecret,
 		MCPTestResult
 	} from '$types/mcp';
-	import { Card, Button, StatusIndicator, Modal, DeleteConfirmModal, ErrorBanner } from '$lib/components/ui';
+	import {
+		Card,
+		Button,
+		StatusIndicator,
+		Modal,
+		DeleteConfirmModal,
+		ErrorBanner
+	} from '$lib/components/ui';
 	import { MCPServerCard, MCPServerForm, MCPServerTester } from '$lib/components/mcp';
 	import SettingsSectionHeader from './SettingsSectionHeader.svelte';
 	import {
@@ -85,7 +92,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			const servers = await loadServers();
 			mcpState = setServers(mcpState, servers);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, $i18n('settings_mcp_load_failed', { error: getErrorMessage(err) }));
+			mcpState = setMCPError(
+				mcpState,
+				$i18n('settings_mcp_load_failed', { error: getErrorMessage(err) })
+			);
 		}
 	}
 
@@ -132,7 +142,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			refreshLegacyAuthWarnings();
 			dispatchSettingsRefresh();
 		} catch (err) {
-			mcpState = setMCPError(mcpState, $i18n('settings_mcp_save_failed', { error: getErrorMessage(err) }));
+			mcpState = setMCPError(
+				mcpState,
+				$i18n('settings_mcp_save_failed', { error: getErrorMessage(err) })
+			);
 		} finally {
 			mcpSaving = false;
 		}
@@ -192,7 +205,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			serverToDelete = null;
 			dispatchSettingsRefresh();
 		} catch (err) {
-			mcpState = setMCPError(mcpState, $i18n('settings_mcp_delete_failed', { error: getErrorMessage(err) }));
+			mcpState = setMCPError(
+				mcpState,
+				$i18n('settings_mcp_delete_failed', { error: getErrorMessage(err) })
+			);
 		} finally {
 			serverDeleting = false;
 		}
@@ -280,7 +296,10 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			}
 			mcpState = updateServer(mcpState, server.id, updatedServer);
 		} catch (err) {
-			mcpState = setMCPError(mcpState, $i18n('settings_mcp_toggle_failed', { error: getErrorMessage(err) }));
+			mcpState = setMCPError(
+				mcpState,
+				$i18n('settings_mcp_toggle_failed', { error: getErrorMessage(err) })
+			);
 		}
 	}
 
@@ -312,11 +331,18 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 	{/if}
 
 	{#if mcpState.error}
-		<ErrorBanner message={mcpState.error} onDismiss={() => (mcpState = setMCPError(mcpState, null))} />
+		<ErrorBanner
+			message={mcpState.error}
+			onDismiss={() => (mcpState = setMCPError(mcpState, null))}
+		/>
 	{/if}
 
 	{#if !legacyBannerDismissed && legacyAuthWarnings.length > 0}
-		<div class="legacy-auth-banner" role="region" aria-label={$i18n('mcp_auth_legacy_banner_title')}>
+		<div
+			class="legacy-auth-banner"
+			role="region"
+			aria-label={$i18n('mcp_auth_legacy_banner_title')}
+		>
 			<div class="legacy-auth-text">
 				<strong>{$i18n('mcp_auth_legacy_banner_title')}</strong>
 				<p>{$i18n('mcp_auth_legacy_banner_body')}</p>

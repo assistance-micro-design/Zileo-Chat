@@ -89,7 +89,9 @@ Displays workflow title, agent selector, iteration controls, and context informa
 					label=""
 				/>
 				<div class="iterations-control">
-					<label for="max-iterations" class="iterations-label">{$i18n('agent_header_iterations')}</label>
+					<label for="max-iterations" class="iterations-label"
+						>{$i18n('agent_header_iterations')}</label
+					>
 					<input
 						type="number"
 						id="max-iterations"

@@ -75,7 +75,15 @@
 		saving?: boolean;
 	}
 
-	let { mode, model, provider, providerList = [], onsubmit, oncancel, saving = false }: Props = $props();
+	let {
+		mode,
+		model,
+		provider,
+		providerList = [],
+		onsubmit,
+		oncancel,
+		saving = false
+	}: Props = $props();
 
 	/** Provider options for the select dropdown (dynamic from providerList) */
 	const providerOptions: SelectOption[] = $derived(
@@ -279,12 +287,25 @@
 	 * Handles number input change with proper conversion
 	 */
 	function handleNumberInput(
-		field: 'context_window' | 'max_output_tokens' | 'temperature_default' | 'input_price_per_mtok' | 'output_price_per_mtok' | 'cache_read_price_per_mtok' | 'cache_write_price_per_mtok',
+		field:
+			| 'context_window'
+			| 'max_output_tokens'
+			| 'temperature_default'
+			| 'input_price_per_mtok'
+			| 'output_price_per_mtok'
+			| 'cache_read_price_per_mtok'
+			| 'cache_write_price_per_mtok',
 		event: Event & { currentTarget: HTMLInputElement }
 	): void {
 		const value = parseFloat(event.currentTarget.value);
 		if (!isNaN(value)) {
-			if (field === 'temperature_default' || field === 'input_price_per_mtok' || field === 'output_price_per_mtok' || field === 'cache_read_price_per_mtok' || field === 'cache_write_price_per_mtok') {
+			if (
+				field === 'temperature_default' ||
+				field === 'input_price_per_mtok' ||
+				field === 'output_price_per_mtok' ||
+				field === 'cache_read_price_per_mtok' ||
+				field === 'cache_write_price_per_mtok'
+			) {
 				formData[field] = value;
 			} else {
 				formData[field] = Math.floor(value);
@@ -296,13 +317,27 @@
 	const isBuiltin = $derived(model?.is_builtin ?? false);
 
 	/** Form title based on mode */
-	const formTitle = $derived(mode === 'create' ? $i18n('llm_form_create_title') : $i18n('llm_form_edit_title'));
+	const formTitle = $derived(
+		mode === 'create' ? $i18n('llm_form_create_title') : $i18n('llm_form_edit_title')
+	);
 
 	/** Submit button text */
-	const submitText = $derived(saving ? $i18n('llm_form_saving') : mode === 'create' ? $i18n('llm_form_create_button') : $i18n('llm_form_save_changes'));
+	const submitText = $derived(
+		saving
+			? $i18n('llm_form_saving')
+			: mode === 'create'
+				? $i18n('llm_form_create_button')
+				: $i18n('llm_form_save_changes')
+	);
 </script>
 
-<form class="model-form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+<form
+	class="model-form"
+	onsubmit={(e) => {
+		e.preventDefault();
+		handleSubmit();
+	}}
+>
 	<h3 class="form-title">{formTitle}</h3>
 
 	{#if isBuiltin}
@@ -396,7 +431,10 @@
 			<h4 class="pricing-title">{$i18n('llm_form_pricing_title')}</h4>
 			<p class="pricing-help">
 				{$i18n('llm_form_pricing_help')}
-				<a href="https://mistral.ai/technology/#pricing" onclick={(e) => openExternal(e, 'https://mistral.ai/technology/#pricing')}>
+				<a
+					href="https://mistral.ai/technology/#pricing"
+					onclick={(e) => openExternal(e, 'https://mistral.ai/technology/#pricing')}
+				>
 					{$i18n('llm_form_pricing_link')}
 				</a>
 			</p>
@@ -477,11 +515,7 @@
 
 	<div class="checkbox-field">
 		<label class="checkbox-label">
-			<input
-				type="checkbox"
-				bind:checked={formData.is_reasoning}
-				disabled={saving}
-			/>
+			<input type="checkbox" bind:checked={formData.is_reasoning} disabled={saving} />
 			<span class="checkbox-text">{$i18n('llm_form_reasoning_label')}</span>
 		</label>
 		<p class="checkbox-help">{$i18n('llm_form_reasoning_help')}</p>
@@ -564,7 +598,7 @@
 		cursor: pointer;
 	}
 
-	.checkbox-label input[type="checkbox"] {
+	.checkbox-label input[type='checkbox'] {
 		width: 18px;
 		height: 18px;
 		accent-color: var(--color-primary);

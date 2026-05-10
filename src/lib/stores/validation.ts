@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Validation store for managing human-in-the-loop validation requests.
  * Handles sub-agent operation validation (spawn, delegate, parallel).
@@ -23,7 +22,11 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import { tauriInvoke as invoke, tauriListen as listen, type TauriUnlistenFn as UnlistenFn } from '$lib/tauri';
+import {
+	tauriInvoke as invoke,
+	tauriListen as listen,
+	type TauriUnlistenFn as UnlistenFn
+} from '$lib/tauri';
 import type { ValidationRequest, RiskLevel, ValidationType } from '$types/validation';
 import { getErrorMessage } from '$lib/utils/error';
 import type { ValidationRequiredEvent } from '$types/sub-agent';

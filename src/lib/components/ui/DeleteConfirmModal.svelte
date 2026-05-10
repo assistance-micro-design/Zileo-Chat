@@ -65,18 +65,21 @@ Extracted from AgentSettings and PromptSettings.
 		onCancel
 	}: Props = $props();
 
-	const defaultConfirmKey = $derived(confirmLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm'));
-	const defaultDeletingKey = $derived(deletingLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm'));
+	const defaultConfirmKey = $derived(
+		confirmLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm')
+	);
+	const defaultDeletingKey = $derived(
+		deletingLabelKey ?? (variant === 'danger' ? 'common_delete' : 'common_confirm')
+	);
 </script>
 
-<Modal
-	{open}
-	title={$i18n(titleKey)}
-	onclose={onCancel}
->
+<Modal {open} title={$i18n(titleKey)} onclose={onCancel}>
 	{#snippet body()}
 		<p class="confirm-text">
-			{$i18n(confirmMessageKey)}{#if itemName} <strong class="item-name" class:item-name-primary={variant === 'primary'}>"{itemName}"</strong>?{/if}
+			{$i18n(confirmMessageKey)}{#if itemName}
+				<strong class="item-name" class:item-name-primary={variant === 'primary'}
+					>"{itemName}"</strong
+				>?{/if}
 		</p>
 		{#if warningMessageKey}
 			<p class="delete-warning" class:warning-primary={variant === 'primary'}>

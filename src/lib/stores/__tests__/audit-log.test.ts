@@ -138,9 +138,7 @@ describe('auditLogStore', () => {
 		});
 
 		it('surfaces export errors via the store error state', async () => {
-			vi.mocked(invoke)
-				.mockResolvedValueOnce([])
-				.mockRejectedValueOnce(new Error('disk full'));
+			vi.mocked(invoke).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('disk full'));
 
 			await auditLogStore.reload();
 

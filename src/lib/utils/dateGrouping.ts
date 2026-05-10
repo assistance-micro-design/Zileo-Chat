@@ -57,7 +57,8 @@ export function groupByDate<T>(items: T[], dateField: keyof T, now?: Date): Date
 	}
 
 	// Sort each bucket by date descending (most recent first)
-	const toTime = (val: T[keyof T]) => (val instanceof Date ? val : new Date(val as string)).getTime();
+	const toTime = (val: T[keyof T]) =>
+		(val instanceof Date ? val : new Date(val as string)).getTime();
 	const sortDesc = (a: T, b: T) => toTime(b[dateField]) - toTime(a[dateField]);
 
 	const labels: DateGroupLabel[] = ['today', 'yesterday', 'last_7_days', 'older'];

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Toast notification store for surfacing background workflow events.
  *
@@ -93,7 +92,11 @@ export const toastStore = {
 	 * @param workflowName - Human-readable workflow name
 	 * @param status - Whether the workflow completed successfully or with error
 	 */
-	addWorkflowComplete(workflowId: string, workflowName: string, status: 'completed' | 'error'): void {
+	addWorkflowComplete(
+		workflowId: string,
+		workflowName: string,
+		status: 'completed' | 'error'
+	): void {
 		const isError = status === 'error';
 		toastStore.add({
 			type: isError ? 'error' : 'success',

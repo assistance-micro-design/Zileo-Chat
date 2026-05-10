@@ -24,9 +24,9 @@ import { isTauriRuntime } from './environment';
 
 export type TauriUnlistenFn = () => void;
 export type TauriEvent<T> = {
-event: string;
-id: number;
-payload: T;
+	event: string;
+	id: number;
+	payload: T;
 };
 
 /**
@@ -40,13 +40,13 @@ payload: T;
  * @returns Unlisten function
  */
 export async function tauriListen<T>(
-event: string,
-handler: (event: TauriEvent<T>) => void
+	event: string,
+	handler: (event: TauriEvent<T>) => void
 ): Promise<TauriUnlistenFn> {
-if (!isTauriRuntime()) {
-return () => {};
-}
+	if (!isTauriRuntime()) {
+		return () => {};
+	}
 
-const { listen } = await import('@tauri-apps/api/event');
-return listen<T>(event, handler);
+	const { listen } = await import('@tauri-apps/api/event');
+	return listen<T>(event, handler);
 }

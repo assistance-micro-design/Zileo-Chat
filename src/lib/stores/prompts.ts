@@ -25,10 +25,7 @@
 
 import { derived } from 'svelte/store';
 import { tauriInvoke as invoke } from '$lib/tauri';
-import {
-	createCRUDStore,
-	createDerivedStores
-} from './factory/createCRUDStore';
+import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
 import { getErrorMessage } from '$lib/utils/error';
 import type {
 	Prompt,
@@ -241,7 +238,10 @@ export function extractVariables(content: string): string[] {
  * Mirrors backend Prompt::interpolate
  */
 export function interpolateVariables(content: string, values: Record<string, string>): string {
-	return content.replace(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (match, name) => values[name] ?? match);
+	return content.replace(
+		/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g,
+		(match, name) => values[name] ?? match
+	);
 }
 
 /**

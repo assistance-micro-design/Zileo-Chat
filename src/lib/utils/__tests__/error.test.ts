@@ -44,4 +44,3 @@ describe('getErrorMessage', () => {
 		expect(getErrorMessage(404)).toBe('404');
 	});
 });
-

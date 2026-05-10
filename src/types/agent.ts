@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /** Reasoning effort level for thinking models */
 export type ReasoningEffort = 'low' | 'medium' | 'high';
 
@@ -27,134 +26,134 @@ export type Lifecycle = 'permanent' | 'temporary';
  * Agent configuration
  */
 export interface AgentConfig {
-  /** Unique identifier */
-  id: string;
-  /** Agent name */
-  name: string;
-  /** Lifecycle type */
-  lifecycle: Lifecycle;
-  /** LLM configuration */
-  llm: LLMConfig;
-  /** List of available tools */
-  tools: string[];
-  /** MCP server NAMES (not IDs) that the agent can use */
-  mcp_servers: string[];
-  /** Skill names assigned to this agent */
-  skills: string[];
-  /** Authorized directory paths for FileManagerTool */
-  folders: string[];
-  /** Require user confirmation for destructive file operations (default: true) */
-  require_file_confirmation: boolean;
-  /** System prompt */
-  system_prompt: string;
-  /** Maximum number of tool execution iterations (1-200, default: 50) */
-  max_tool_iterations: number;
-  /** Reasoning effort for thinking models (absent = disabled) */
-  reasoning_effort?: ReasoningEffort;
+	/** Unique identifier */
+	id: string;
+	/** Agent name */
+	name: string;
+	/** Lifecycle type */
+	lifecycle: Lifecycle;
+	/** LLM configuration */
+	llm: LLMConfig;
+	/** List of available tools */
+	tools: string[];
+	/** MCP server NAMES (not IDs) that the agent can use */
+	mcp_servers: string[];
+	/** Skill names assigned to this agent */
+	skills: string[];
+	/** Authorized directory paths for FileManagerTool */
+	folders: string[];
+	/** Require user confirmation for destructive file operations (default: true) */
+	require_file_confirmation: boolean;
+	/** System prompt */
+	system_prompt: string;
+	/** Maximum number of tool execution iterations (1-200, default: 50) */
+	max_tool_iterations: number;
+	/** Reasoning effort for thinking models (absent = disabled) */
+	reasoning_effort?: ReasoningEffort;
 }
 
 /**
  * LLM provider configuration
  */
 export interface LLMConfig {
-  /** Provider name (e.g., "Mistral", "Ollama") */
-  provider: string;
-  /** Model name */
-  model: string;
-  /** Sampling temperature */
-  temperature: number;
-  /** Maximum tokens to generate */
-  max_tokens: number;
-  /** Whether the model is a reasoning/thinking model (from DB) */
-  is_reasoning: boolean;
-  /** Context window size in tokens (from model config, passed to providers like Ollama as num_ctx) */
-  context_window?: number;
+	/** Provider name (e.g., "Mistral", "Ollama") */
+	provider: string;
+	/** Model name */
+	model: string;
+	/** Sampling temperature */
+	temperature: number;
+	/** Maximum tokens to generate */
+	max_tokens: number;
+	/** Whether the model is a reasoning/thinking model (from DB) */
+	is_reasoning: boolean;
+	/** Context window size in tokens (from model config, passed to providers like Ollama as num_ctx) */
+	context_window?: number;
 }
 
 /**
  * Agent configuration for creation (without ID, timestamps)
  */
 export interface AgentConfigCreate {
-  /** Agent name (1-64 chars) */
-  name: string;
-  /** Lifecycle type */
-  lifecycle: Lifecycle;
-  /** LLM configuration */
-  llm: LLMConfig;
-  /** List of available tools */
-  tools: string[];
-  /** List of MCP servers */
-  mcp_servers: string[];
-  /** Skill names assigned to this agent */
-  skills: string[];
-  /** Authorized directory paths for FileManagerTool */
-  folders: string[];
-  /** Require user confirmation for destructive file operations (default: true) */
-  require_file_confirmation: boolean;
-  /** System prompt (1-10000 chars) */
-  system_prompt: string;
-  /** Maximum number of tool execution iterations (1-200, default: 50) */
-  max_tool_iterations: number;
-  /** Reasoning effort for thinking models (absent = disabled) */
-  reasoning_effort?: ReasoningEffort;
+	/** Agent name (1-64 chars) */
+	name: string;
+	/** Lifecycle type */
+	lifecycle: Lifecycle;
+	/** LLM configuration */
+	llm: LLMConfig;
+	/** List of available tools */
+	tools: string[];
+	/** List of MCP servers */
+	mcp_servers: string[];
+	/** Skill names assigned to this agent */
+	skills: string[];
+	/** Authorized directory paths for FileManagerTool */
+	folders: string[];
+	/** Require user confirmation for destructive file operations (default: true) */
+	require_file_confirmation: boolean;
+	/** System prompt (1-10000 chars) */
+	system_prompt: string;
+	/** Maximum number of tool execution iterations (1-200, default: 50) */
+	max_tool_iterations: number;
+	/** Reasoning effort for thinking models (absent = disabled) */
+	reasoning_effort?: ReasoningEffort;
 }
 
 /**
  * Agent configuration for updates (all fields optional except lifecycle which cannot change)
  */
 export interface AgentConfigUpdate {
-  /** Agent name (1-64 chars) */
-  name?: string;
-  /** LLM configuration */
-  llm?: LLMConfig;
-  /** List of available tools */
-  tools?: string[];
-  /** List of MCP servers */
-  mcp_servers?: string[];
-  /** Skill names assigned to this agent */
-  skills?: string[];
-  /** Authorized directory paths for FileManagerTool */
-  folders?: string[];
-  /** Require user confirmation for destructive file operations */
-  require_file_confirmation?: boolean;
-  /** System prompt (1-10000 chars) */
-  system_prompt?: string;
-  /** Maximum number of tool execution iterations (1-200) */
-  max_tool_iterations?: number;
-  /** Reasoning effort for thinking models */
-  reasoning_effort?: ReasoningEffort | null;
+	/** Agent name (1-64 chars) */
+	name?: string;
+	/** LLM configuration */
+	llm?: LLMConfig;
+	/** List of available tools */
+	tools?: string[];
+	/** List of MCP servers */
+	mcp_servers?: string[];
+	/** Skill names assigned to this agent */
+	skills?: string[];
+	/** Authorized directory paths for FileManagerTool */
+	folders?: string[];
+	/** Require user confirmation for destructive file operations */
+	require_file_confirmation?: boolean;
+	/** System prompt (1-10000 chars) */
+	system_prompt?: string;
+	/** Maximum number of tool execution iterations (1-200) */
+	max_tool_iterations?: number;
+	/** Reasoning effort for thinking models */
+	reasoning_effort?: ReasoningEffort | null;
 }
 
 /**
  * Agent summary for listing (lightweight representation)
  */
 export interface AgentSummary {
-  /** Unique identifier */
-  id: string;
-  /** Agent name */
-  name: string;
-  /** Lifecycle type */
-  lifecycle: Lifecycle;
-  /** LLM provider name */
-  provider: string;
-  /** LLM model name */
-  model: string;
-  /** Number of enabled tools */
-  tools_count: number;
-  /** Number of configured MCP servers */
-  mcp_servers_count: number;
-  /** Number of assigned skills */
-  skills_count: number;
-  /** Number of authorized folders */
-  folders_count: number;
+	/** Unique identifier */
+	id: string;
+	/** Agent name */
+	name: string;
+	/** Lifecycle type */
+	lifecycle: Lifecycle;
+	/** LLM provider name */
+	provider: string;
+	/** LLM model name */
+	model: string;
+	/** Number of enabled tools */
+	tools_count: number;
+	/** Number of configured MCP servers */
+	mcp_servers_count: number;
+	/** Number of assigned skills */
+	skills_count: number;
+	/** Number of authorized folders */
+	folders_count: number;
 }
 
 // Re-export tool constants from centralized location
 export {
-  AVAILABLE_TOOLS,
-  BASIC_TOOLS,
-  SUB_AGENT_TOOLS,
-  type AvailableTool,
-  type BasicToolName,
-  type SubAgentToolName
+	AVAILABLE_TOOLS,
+	BASIC_TOOLS,
+	SUB_AGENT_TOOLS,
+	type AvailableTool,
+	type BasicToolName,
+	type SubAgentToolName
 } from '$lib/constants/tools';

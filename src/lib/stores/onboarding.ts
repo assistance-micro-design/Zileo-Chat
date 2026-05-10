@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * @fileoverview Onboarding store for first-launch wizard state management.
  * Uses localStorage for persistence (no backend required).
@@ -23,11 +22,7 @@
 
 import { writable, derived } from 'svelte/store';
 import type { OnboardingState } from '$types/onboarding';
-import {
-	TOTAL_STEPS,
-	INITIAL_ONBOARDING_STATE,
-	ONBOARDING_STORAGE_KEY
-} from '$types/onboarding';
+import { TOTAL_STEPS, INITIAL_ONBOARDING_STATE, ONBOARDING_STORAGE_KEY } from '$types/onboarding';
 
 function isLocalStorageAvailable(): boolean {
 	return typeof localStorage !== 'undefined';

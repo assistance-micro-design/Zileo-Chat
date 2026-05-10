@@ -67,6 +67,14 @@
 	);
 </script>
 
-<button {type} {disabled} class={classes} {onclick} aria-label={ariaLabel} aria-disabled={disabled} {title}>
+<button
+	{type}
+	{disabled}
+	class={classes}
+	{onclick}
+	aria-label={ariaLabel}
+	aria-disabled={disabled}
+	{title}
+>
 	{@render children()}
 </button>

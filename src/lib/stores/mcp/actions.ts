@@ -64,7 +64,7 @@ export function invalidateMCPCache(): void {
  */
 export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
 	const now = Date.now();
-	if (!forceRefresh && mcpCache.servers && (now - mcpCache.timestamp) < MCP_CACHE_TTL) {
+	if (!forceRefresh && mcpCache.servers && now - mcpCache.timestamp < MCP_CACHE_TTL) {
 		return mcpCache.servers;
 	}
 
@@ -88,9 +88,7 @@ export async function loadServers(forceRefresh = false): Promise<MCPServer[]> {
  * @param config - Server configuration (with optional auth secret)
  * @returns Promise resolving to server response with optional warning
  */
-export async function createServer(
-	config: MCPServerConfigWithSecret
-): Promise<MCPServerResponse> {
+export async function createServer(config: MCPServerConfigWithSecret): Promise<MCPServerResponse> {
 	const response = await invoke<MCPServerResponse>('create_mcp_server', { config });
 	invalidateMCPCache();
 	return response;

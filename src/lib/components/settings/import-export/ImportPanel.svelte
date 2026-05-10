@@ -116,7 +116,10 @@ Orchestrates the multi-step import process:
 
 			// Validate file size
 			if (file.size > MAX_IMPORT_FILE_SIZE) {
-				error = $i18n('ie_file_too_large').replace('{size}', String(MAX_IMPORT_FILE_SIZE / (1024 * 1024)));
+				error = $i18n('ie_file_too_large').replace(
+					'{size}',
+					String(MAX_IMPORT_FILE_SIZE / (1024 * 1024))
+				);
 				return;
 			}
 
@@ -269,13 +272,19 @@ Orchestrates the multi-step import process:
 	 */
 	function getWarningDetail(warning: ImportWarning): string {
 		const keyMap: Record<string, string> = {
-			missing_dependency: warning.detail.includes('model') ? 'ie_warn_missing_model'
-				: warning.detail.includes('MCP') ? 'ie_warn_missing_mcp'
-				: warning.detail.includes('skill') ? 'ie_warn_missing_skill'
-				: warning.detail.includes('provider') ? 'ie_warn_missing_provider'
-				: '',
+			missing_dependency: warning.detail.includes('model')
+				? 'ie_warn_missing_model'
+				: warning.detail.includes('MCP')
+					? 'ie_warn_missing_mcp'
+					: warning.detail.includes('skill')
+						? 'ie_warn_missing_skill'
+						: warning.detail.includes('provider')
+							? 'ie_warn_missing_provider'
+							: '',
 			machine_specific: 'ie_warn_folders',
-			default_applied: warning.detail.includes('API key') ? 'ie_warn_api_keys' : 'ie_warn_defaults_applied',
+			default_applied: warning.detail.includes('API key')
+				? 'ie_warn_api_keys'
+				: 'ie_warn_defaults_applied',
 			builtin_model: 'ie_warn_builtin_model'
 		};
 		const key = keyMap[warning.warningType] || '';
@@ -292,13 +301,19 @@ Orchestrates the multi-step import process:
 
 	function getWarningAction(warning: ImportWarning): string {
 		const keyMap: Record<string, string> = {
-			missing_dependency: warning.detail.includes('model') ? 'ie_warn_missing_model_action'
-				: warning.detail.includes('MCP') ? 'ie_warn_missing_mcp_action'
-				: warning.detail.includes('skill') ? 'ie_warn_missing_skill_action'
-				: warning.detail.includes('provider') ? 'ie_warn_missing_provider_action'
-				: '',
+			missing_dependency: warning.detail.includes('model')
+				? 'ie_warn_missing_model_action'
+				: warning.detail.includes('MCP')
+					? 'ie_warn_missing_mcp_action'
+					: warning.detail.includes('skill')
+						? 'ie_warn_missing_skill_action'
+						: warning.detail.includes('provider')
+							? 'ie_warn_missing_provider_action'
+							: '',
 			machine_specific: 'ie_warn_folders_action',
-			default_applied: warning.detail.includes('API key') ? 'ie_warn_api_keys_action' : 'ie_warn_defaults_applied_action',
+			default_applied: warning.detail.includes('API key')
+				? 'ie_warn_api_keys_action'
+				: 'ie_warn_defaults_applied_action',
 			builtin_model: 'ie_warn_builtin_model_action'
 		};
 		const key = keyMap[warning.warningType] || '';
@@ -329,13 +344,16 @@ Orchestrates the multi-step import process:
 
 		return false;
 	});
-
 </script>
 
 <div class="import-panel">
 	<!-- Step Indicator -->
 	<div class="step-indicator">
-		<div class="step" class:active={currentStep === 'upload'} class:completed={currentStep !== 'upload'}>
+		<div
+			class="step"
+			class:active={currentStep === 'upload'}
+			class:completed={currentStep !== 'upload'}
+		>
 			<div class="step-number">1</div>
 			<div class="step-label">{$i18n('ie_step_upload')}</div>
 		</div>
@@ -365,7 +383,12 @@ Orchestrates the multi-step import process:
 			class:active={currentStep === 'executing'}
 			class:completed={currentStep === 'complete'}
 		>
-			<div class="step-number">{validation && (filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0) ? '4' : '3'}</div>
+			<div class="step-number">
+				{validation &&
+				(filteredConflicts().length > 0 || Object.keys(filteredMissingMcpEnv()).length > 0)
+					? '4'
+					: '3'}
+			</div>
 			<div class="step-label">{$i18n('ie_step_import_label')}</div>
 		</div>
 	</div>
@@ -396,7 +419,10 @@ Orchestrates the multi-step import process:
 							<span>{loading ? $i18n('common_loading') : $i18n('ie_select_file')}</span>
 						</Button>
 						<p class="upload-help">
-							{$i18n('ie_max_file_size').replace('{size}', String(MAX_IMPORT_FILE_SIZE / (1024 * 1024)))}
+							{$i18n('ie_max_file_size').replace(
+								'{size}',
+								String(MAX_IMPORT_FILE_SIZE / (1024 * 1024))
+							)}
 						</p>
 					</div>
 				{/snippet}
@@ -414,9 +440,20 @@ Orchestrates the multi-step import process:
 								</div>
 								<div class="warning-list">
 									{#each previewValidation.warnings as warning, i (i)}
-										<div class="warning-item" class:warning-high={warning.severity === 'high'} class:warning-medium={warning.severity === 'medium'} class:warning-info={warning.severity === 'info'}>
+										<div
+											class="warning-item"
+											class:warning-high={warning.severity === 'high'}
+											class:warning-medium={warning.severity === 'medium'}
+											class:warning-info={warning.severity === 'info'}
+										>
 											<div class="warning-header">
-												<Badge variant={warning.severity === 'high' ? 'error' : warning.severity === 'medium' ? 'warning' : 'primary'}>
+												<Badge
+													variant={warning.severity === 'high'
+														? 'error'
+														: warning.severity === 'medium'
+															? 'warning'
+															: 'primary'}
+												>
 													{warning.severity}
 												</Badge>
 												<span class="warning-entity">{warning.entity}</span>
@@ -480,22 +517,36 @@ Orchestrates the multi-step import process:
 									<span class="result-label">{$i18n('ie_imported')}</span>
 									<div class="result-counts">
 										{#if completeResult.imported.agents > 0}
-											<Badge variant="success">{completeResult.imported.agents} {$i18n('ie_entity_agents')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.agents} {$i18n('ie_entity_agents')}</Badge
+											>
 										{/if}
 										{#if completeResult.imported.mcpServers > 0}
-											<Badge variant="success">{completeResult.imported.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.mcpServers}
+												{$i18n('ie_entity_mcp_servers')}</Badge
+											>
 										{/if}
 										{#if completeResult.imported.models > 0}
-											<Badge variant="success">{completeResult.imported.models} {$i18n('ie_entity_models')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.models} {$i18n('ie_entity_models')}</Badge
+											>
 										{/if}
 										{#if completeResult.imported.prompts > 0}
-											<Badge variant="success">{completeResult.imported.prompts} {$i18n('ie_entity_prompts')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.prompts} {$i18n('ie_entity_prompts')}</Badge
+											>
 										{/if}
 										{#if completeResult.imported.skills > 0}
-											<Badge variant="success">{completeResult.imported.skills} {$i18n('ie_entity_skills')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.skills} {$i18n('ie_entity_skills')}</Badge
+											>
 										{/if}
 										{#if completeResult.imported.customProviders > 0}
-											<Badge variant="success">{completeResult.imported.customProviders} {$i18n('ie_entity_custom_providers')}</Badge>
+											<Badge variant="success"
+												>{completeResult.imported.customProviders}
+												{$i18n('ie_entity_custom_providers')}</Badge
+											>
 										{/if}
 									</div>
 								</div>
@@ -504,22 +555,36 @@ Orchestrates the multi-step import process:
 										<span class="result-label">{$i18n('ie_skipped')}</span>
 										<div class="result-counts">
 											{#if completeResult.skipped.agents > 0}
-												<Badge variant="warning">{completeResult.skipped.agents} {$i18n('ie_entity_agents')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.agents} {$i18n('ie_entity_agents')}</Badge
+												>
 											{/if}
 											{#if completeResult.skipped.mcpServers > 0}
-												<Badge variant="warning">{completeResult.skipped.mcpServers} {$i18n('ie_entity_mcp_servers')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.mcpServers}
+													{$i18n('ie_entity_mcp_servers')}</Badge
+												>
 											{/if}
 											{#if completeResult.skipped.models > 0}
-												<Badge variant="warning">{completeResult.skipped.models} {$i18n('ie_entity_models')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.models} {$i18n('ie_entity_models')}</Badge
+												>
 											{/if}
 											{#if completeResult.skipped.prompts > 0}
-												<Badge variant="warning">{completeResult.skipped.prompts} {$i18n('ie_entity_prompts')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.prompts} {$i18n('ie_entity_prompts')}</Badge
+												>
 											{/if}
 											{#if completeResult.skipped.skills > 0}
-												<Badge variant="warning">{completeResult.skipped.skills} {$i18n('ie_entity_skills')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.skills} {$i18n('ie_entity_skills')}</Badge
+												>
 											{/if}
 											{#if completeResult.skipped.customProviders > 0}
-												<Badge variant="warning">{completeResult.skipped.customProviders} {$i18n('ie_entity_custom_providers')}</Badge>
+												<Badge variant="warning"
+													>{completeResult.skipped.customProviders}
+													{$i18n('ie_entity_custom_providers')}</Badge
+												>
 											{/if}
 										</div>
 									</div>

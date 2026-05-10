@@ -28,7 +28,8 @@ Manages memory configuration and memory list with lazy loading.
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
 	/** Lazy loaded components */
-	type LazyMemorySettings = typeof import('$lib/components/settings/memory/MemorySettings.svelte').default;
+	type LazyMemorySettings =
+		typeof import('$lib/components/settings/memory/MemorySettings.svelte').default;
 	type LazyMemoryList = typeof import('$lib/components/settings/memory/MemoryList.svelte').default;
 
 	let MemorySettingsComponent = $state<LazyMemorySettings | null>(null);
@@ -115,5 +116,4 @@ Manages memory configuration and memory list with lazy loading.
 		padding-bottom: var(--spacing-sm);
 		border-bottom: 1px solid var(--color-border);
 	}
-
 </style>

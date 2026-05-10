@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 /**
  * Folder store for managing workflow folder state in the frontend.
  * @module stores/folders

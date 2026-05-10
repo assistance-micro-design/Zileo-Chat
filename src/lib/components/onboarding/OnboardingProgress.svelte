@@ -33,18 +33,16 @@
 
 <div class="onboarding-progress">
 	<div class="progress-text">
-		{$i18n('onboarding_progress').replace('{current}', String(currentStep + 1)).replace('{total}', String(TOTAL_STEPS))}
+		{$i18n('onboarding_progress')
+			.replace('{current}', String(currentStep + 1))
+			.replace('{total}', String(TOTAL_STEPS))}
 	</div>
 	<div class="progress-bar">
 		<div class="progress-fill" style="width: {progressPercent}%"></div>
 	</div>
 	<div class="progress-dots">
 		{#each Array(TOTAL_STEPS) as _, i (i)}
-			<div
-				class="dot"
-				class:active={i <= currentStep}
-				class:current={i === currentStep}
-			></div>
+			<div class="dot" class:active={i <= currentStep} class:current={i === currentStep}></div>
 		{/each}
 	</div>
 </div>
@@ -99,6 +97,8 @@
 
 	.dot.current {
 		transform: scale(1.25);
-		box-shadow: 0 0 0 2px var(--color-bg-primary), 0 0 0 4px var(--color-primary);
+		box-shadow:
+			0 0 0 2px var(--color-bg-primary),
+			0 0 0 4px var(--color-primary);
 	}
 </style>

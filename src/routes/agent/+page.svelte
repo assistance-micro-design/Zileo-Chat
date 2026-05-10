@@ -30,11 +30,7 @@ Uses extracted components, services, and stores for clean architecture.
 	import type { ValidationRequest } from '$types/validation';
 
 	// Component imports
-	import {
-		AgentHeader,
-		WorkflowSidebar,
-		ChatContainer
-	} from '$lib/components/agent';
+	import { AgentHeader, WorkflowSidebar, ChatContainer } from '$lib/components/agent';
 	import { TokenDisplay, UserQuestionModal } from '$lib/components/workflow';
 	import { Button } from '$lib/components/ui';
 	import { MessageSquare, Settings, Bot } from '@lucide/svelte';
@@ -42,7 +38,14 @@ Uses extracted components, services, and stores for clean architecture.
 
 	// Service imports
 	import { tauriInvoke } from '$lib/tauri';
-	import { WorkflowService, MessageService, BlockService, LocalStorage, STORAGE_KEYS, WorkflowExecutorService } from '$lib/services';
+	import {
+		WorkflowService,
+		MessageService,
+		BlockService,
+		LocalStorage,
+		STORAGE_KEYS,
+		WorkflowExecutorService
+	} from '$lib/services';
 	import type { ChatBlock, TodoTaskDisplay } from '$types/chat-block';
 
 	// Store imports
@@ -57,10 +60,7 @@ Uses extracted components, services, and stores for clean architecture.
 		statusFilter as statusFilter$,
 		statusCounts as statusCounts$
 	} from '$lib/stores/workflows';
-	import {
-		tokenStore,
-		tokenDisplayData
-	} from '$lib/stores/tokens';
+	import { tokenStore, tokenDisplayData } from '$lib/stores/tokens';
 	import { agentStore, agents, isLoading as agentsLoading } from '$lib/stores/agents';
 	import {
 		executionBlocksStore,
@@ -178,9 +178,9 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Load workflow data (messages and persisted blocks).
 	 */
-		async function loadWorkflowData(workflowId: string): Promise<void> {
-			const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
-			pageState.messagesLoading = true;
+	async function loadWorkflowData(workflowId: string): Promise<void> {
+		const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
+		pageState.messagesLoading = true;
 
 		try {
 			// Load messages
@@ -205,21 +205,21 @@ Uses extracted components, services, and stores for clean architecture.
 				messageBlocks.set(id, b);
 			}
 
-				// Load persisted tasks for this workflow
-				persistedTasks = [];
-				try {
-					const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
-					if (!isStillSelected()) return;
-					persistedTasks = mapPersistedTasksToDisplay(tasks);
-				} catch {
-					// Non-blocking: render the page without persisted tasks.
-				}
-			} finally {
-				if (isStillSelected()) {
-					pageState.messagesLoading = false;
-				}
+			// Load persisted tasks for this workflow
+			persistedTasks = [];
+			try {
+				const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', { workflowId });
+				if (!isStillSelected()) return;
+				persistedTasks = mapPersistedTasksToDisplay(tasks);
+			} catch {
+				// Non-blocking: render the page without persisted tasks.
+			}
+		} finally {
+			if (isStillSelected()) {
+				pageState.messagesLoading = false;
 			}
 		}
+	}
 
 	/**
 	 * Create a new workflow.
@@ -239,23 +239,23 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Select a workflow and load its data.
 	 * Handles workflow switching for background workflows by restoring streaming state.
 	 */
-		async function selectWorkflow(workflowId: string): Promise<void> {
-			const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
+	async function selectWorkflow(workflowId: string): Promise<void> {
+		const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
 
-			// Clear "zombie" values from the previous workflow IMMEDIATELY so the
-			// user never sees a flash of the wrong session metrics.
-			tokenStore.reset();
+		// Clear "zombie" values from the previous workflow IMMEDIATELY so the
+		// user never sees a flash of the wrong session metrics.
+		tokenStore.reset();
 
-			pageState.selectedWorkflowId = workflowId;
-			workflowStore.select(workflowId);
-			LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
+		pageState.selectedWorkflowId = workflowId;
+		workflowStore.select(workflowId);
+		LocalStorage.set(STORAGE_KEYS.SELECTED_WORKFLOW_ID, workflowId);
 
-			// Notify background store which workflow is being viewed
-			backgroundWorkflowsStore.setViewed(workflowId);
+		// Notify background store which workflow is being viewed
+		backgroundWorkflowsStore.setViewed(workflowId);
 
-			// Load workflow data (messages and historical activities)
-			await loadWorkflowData(workflowId);
-			if (!isStillSelected()) return;
+		// Load workflow data (messages and historical activities)
+		await loadWorkflowData(workflowId);
+		if (!isStillSelected()) return;
 
 		// Update token store with workflow cumulative metrics
 		const workflow = workflowStore.getSelected();
@@ -303,26 +303,26 @@ Uses extracted components, services, and stores for clean architecture.
 			tokenStore.restoreFromLastMessage(lastMetrics);
 		}
 
-			// Auto-select agent if workflow has one.
-			//
-			// We must reload the agent's model context window every time, even
-			// when the agent did not change: `tokenStore.reset()` at the top of
-			// this function zeroes `contextMax`, so the gauge would otherwise
-			// stay stuck at "X / 0 contexte" until the user manually picks
-			// another agent. The fast path (agent unchanged) only refreshes
-			// the model row instead of running the full `handleAgentChange`
-			// pipeline (which also resets max-iterations and other UI state).
-			const agentId = workflow?.agent_id;
-			if (agentId) {
-				if (agentId !== pageState.selectedAgentId) {
-					await handleAgentChange(agentId);
-					if (!isStillSelected()) return;
-				} else {
-					await loadAgentConfig(agentId);
-					if (!isStillSelected()) return;
-				}
+		// Auto-select agent if workflow has one.
+		//
+		// We must reload the agent's model context window every time, even
+		// when the agent did not change: `tokenStore.reset()` at the top of
+		// this function zeroes `contextMax`, so the gauge would otherwise
+		// stay stuck at "X / 0 contexte" until the user manually picks
+		// another agent. The fast path (agent unchanged) only refreshes
+		// the model row instead of running the full `handleAgentChange`
+		// pipeline (which also resets max-iterations and other UI state).
+		const agentId = workflow?.agent_id;
+		if (agentId) {
+			if (agentId !== pageState.selectedAgentId) {
+				await handleAgentChange(agentId);
+				if (!isStillSelected()) return;
+			} else {
+				await loadAgentConfig(agentId);
+				if (!isStillSelected()) return;
 			}
 		}
+	}
 
 	/**
 	 * Delete a workflow.
@@ -358,7 +358,9 @@ Uses extracted components, services, and stores for clean architecture.
 	 * @param ids - Array of workflow IDs to delete
 	 * @returns Result with deleted count and skipped running IDs
 	 */
-	async function handleBatchDelete(ids: string[]): Promise<{ deleted: number; skipped_running: string[] }> {
+	async function handleBatchDelete(
+		ids: string[]
+	): Promise<{ deleted: number; skipped_running: string[] }> {
 		const result = await workflowStore.deleteBatch(ids);
 
 		if (result.skipped_running.length > 0) {
@@ -372,7 +374,11 @@ Uses extracted components, services, and stores for clean architecture.
 		}
 
 		// Clear selection if current workflow was deleted
-		if (pageState.selectedWorkflowId && ids.includes(pageState.selectedWorkflowId) && !result.skipped_running.includes(pageState.selectedWorkflowId)) {
+		if (
+			pageState.selectedWorkflowId &&
+			ids.includes(pageState.selectedWorkflowId) &&
+			!result.skipped_running.includes(pageState.selectedWorkflowId)
+		) {
 			pageState.selectedWorkflowId = null;
 			messages = [];
 		}
@@ -427,13 +433,15 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Move multiple workflows to a folder via drag & drop.
 	 */
-	const handleWorkflowMove = withToastError(async (workflowIds: string[], folderId: string | null) => {
-		if (workflowIds.length === 1) {
-			await workflowStore.moveToFolder(workflowIds[0]!, folderId);
-		} else {
-			await workflowStore.moveBatchToFolder(workflowIds, folderId);
+	const handleWorkflowMove = withToastError(
+		async (workflowIds: string[], folderId: string | null) => {
+			if (workflowIds.length === 1) {
+				await workflowStore.moveToFolder(workflowIds[0]!, folderId);
+			} else {
+				await workflowStore.moveBatchToFolder(workflowIds, folderId);
+			}
 		}
-	});
+	);
 
 	/**
 	 * Handle agent selection change.
@@ -486,69 +494,69 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle sending a message with streaming.
 	 * Delegates orchestration to WorkflowExecutorService.
 	 */
-		async function handleSend(message: string): Promise<void> {
-			if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
+	async function handleSend(message: string): Promise<void> {
+		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
 
-			const executionWorkflowId = pageState.selectedWorkflowId;
-			const isStillSelected = () => pageState.selectedWorkflowId === executionWorkflowId;
+		const executionWorkflowId = pageState.selectedWorkflowId;
+		const isStillSelected = () => pageState.selectedWorkflowId === executionWorkflowId;
 
-			const result = await WorkflowExecutorService.execute(
-				{
-					workflowId: executionWorkflowId,
-					message,
-					agentId: pageState.selectedAgentId,
-					locale: $locale
+		const result = await WorkflowExecutorService.execute(
+			{
+				workflowId: executionWorkflowId,
+				message,
+				agentId: pageState.selectedAgentId,
+				locale: $locale
+			},
+			{
+				onUserMessage: (msg) => {
+					if (isStillSelected()) messages = [...messages, msg];
 				},
-				{
-					onUserMessage: (msg) => {
-						if (isStillSelected()) messages = [...messages, msg];
-					},
-					onAssistantMessage: (msg) => {
-						if (isStillSelected()) messages = [...messages, msg];
-					},
-					onError: (msg) => {
-						if (isStillSelected()) messages = [...messages, msg];
-					}
+				onAssistantMessage: (msg) => {
+					if (isStillSelected()) messages = [...messages, msg];
+				},
+				onError: (msg) => {
+					if (isStillSelected()) messages = [...messages, msg];
 				}
-			);
-
-			// Transfer execution blocks to persisted messageBlocks
-			// Blocks snapshot is captured in execute() before the store reset.
-			// No ID patching needed: createAssistantMessage uses result.message_id directly.
-			if (
-				isStillSelected() &&
-				result.success &&
-				result.assistantMessageId &&
-				result.blocks &&
-				result.blocks.length > 0
-			) {
-				messageBlocks.set(result.assistantMessageId, result.blocks);
 			}
+		);
 
-			// Reload persisted tasks from DB after execution completes
-			// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
-			// switches to persistedTasks which must be fresh from DB.
-			if (isStillSelected()) {
-				try {
-					const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', {
-						workflowId: executionWorkflowId
-					});
-					if (isStillSelected()) {
-						persistedTasks = mapPersistedTasksToDisplay(tasks);
-					}
-				} catch {
-					// Non-blocking: the page already shows the live tasks from
-					// the execution stream; missing the post-execution reload
-					// just means the persisted-task panel may be slightly stale.
+		// Transfer execution blocks to persisted messageBlocks
+		// Blocks snapshot is captured in execute() before the store reset.
+		// No ID patching needed: createAssistantMessage uses result.message_id directly.
+		if (
+			isStillSelected() &&
+			result.success &&
+			result.assistantMessageId &&
+			result.blocks &&
+			result.blocks.length > 0
+		) {
+			messageBlocks.set(result.assistantMessageId, result.blocks);
+		}
+
+		// Reload persisted tasks from DB after execution completes
+		// executionBlocksStore.reset() clears real-time tasks, so resolvedTasks
+		// switches to persistedTasks which must be fresh from DB.
+		if (isStillSelected()) {
+			try {
+				const tasks = await tauriInvoke<PersistedTask[]>('list_workflow_tasks', {
+					workflowId: executionWorkflowId
+				});
+				if (isStillSelected()) {
+					persistedTasks = mapPersistedTasksToDisplay(tasks);
 				}
+			} catch {
+				// Non-blocking: the page already shows the live tasks from
+				// the execution stream; missing the post-execution reload
+				// just means the persisted-task panel may be slightly stale.
 			}
 		}
+	}
 
 	/**
 	 * Handle canceling streaming workflow.
 	 */
-		async function handleCancel(): Promise<void> {
-			if (!pageState.selectedWorkflowId) return;
+	async function handleCancel(): Promise<void> {
+		if (!pageState.selectedWorkflowId) return;
 
 		const workflowId = pageState.selectedWorkflowId;
 		try {
@@ -580,7 +588,10 @@ Uses extracted components, services, and stores for clean architecture.
 	/**
 	 * Handle validation rejection.
 	 */
-	async function handleRejectValidation(_request: ValidationRequest, reason?: string): Promise<void> {
+	async function handleRejectValidation(
+		_request: ValidationRequest,
+		reason?: string
+	): Promise<void> {
 		await validationStore.reject(reason);
 		modalState = { type: 'none' };
 	}
@@ -623,8 +634,7 @@ Uses extracted components, services, and stores for clean architecture.
 				// running totals if mirrored here. Sub-agent rollup happens
 				// server-side via aggregate_sub_agent_metrics.
 				if (
-					(chunk.chunk_type === 'iteration_progress' ||
-						chunk.chunk_type === 'response_block') &&
+					(chunk.chunk_type === 'iteration_progress' || chunk.chunk_type === 'response_block') &&
 					!chunk.is_sub_agent
 				) {
 					const tIn = chunk.tokens_input;
@@ -632,12 +642,7 @@ Uses extracted components, services, and stores for clean architecture.
 					if (typeof tIn === 'number' && typeof tOut === 'number') {
 						// Drives the ENTREE/SORTIE display + speed (t/s) live.
 						// `tokens_input` is the cumulative sum across iterations.
-						tokenStore.setSessionTokens(
-							tIn,
-							tOut,
-							chunk.cached_tokens,
-							chunk.cache_write_tokens
-						);
+						tokenStore.setSessionTokens(tIn, tOut, chunk.cached_tokens, chunk.cache_write_tokens);
 						// `iter_input` is the LATEST call's input alone — the
 						// correct ceiling for the context-window gauge so it
 						// tracks the current call instead of saturating after
@@ -657,7 +662,8 @@ Uses extracted components, services, and stores for clean architecture.
 			() => {
 				executionBlocksStore.complete();
 			},
-			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
+			(payload, workflowId, isViewed) =>
+				userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
 		);
 
 		// Restore status filter from localStorage
@@ -768,8 +774,8 @@ Uses extracted components, services, and stores for clean architecture.
 		onsearchchange={(v) => workflowStore.setSearchFilter(v)}
 		onstatusfilterchange={(f) => workflowStore.setStatusFilter(f)}
 		onselect={(w) => selectWorkflow(w.id)}
-		oncreate={() => modalState = { type: 'new-workflow' }}
-		ondelete={(w) => modalState = { type: 'delete-workflow', workflowId: w.id }}
+		oncreate={() => (modalState = { type: 'new-workflow' })}
+		ondelete={(w) => (modalState = { type: 'delete-workflow', workflowId: w.id })}
 		onrename={(w, name) => handleRename(w.id, name)}
 		onretry={() => workflowStore.loadWorkflows()}
 		onbatchdelete={handleBatchDelete}
@@ -799,7 +805,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 			<!-- Chat Container -->
 			<ChatContainer
-				messages={messages}
+				{messages}
 				messagesLoading={pageState.messagesLoading}
 				{messageBlocks}
 				executionBlocks={$executionBlocks$}
@@ -840,7 +846,7 @@ Uses extracted components, services, and stores for clean architecture.
 					<p class="empty-description">
 						{$i18n('agent_select_description')}
 					</p>
-					<Button variant="primary" onclick={() => modalState = { type: 'new-workflow' }}>
+					<Button variant="primary" onclick={() => (modalState = { type: 'new-workflow' })}>
 						{$i18n('agent_new_workflow')}
 					</Button>
 				{/if}
@@ -856,12 +862,12 @@ Uses extracted components, services, and stores for clean architecture.
 				agents={$agents}
 				selectedAgentId={pageState.selectedAgentId}
 				oncreate={handleCreateWorkflow}
-				onclose={() => modalState = { type: 'none' }}
+				onclose={() => (modalState = { type: 'none' })}
 			/>
 		{/await}
 	{:else if modalState.type === 'delete-workflow'}
 		{@const workflowId = modalState.workflowId}
-		{@const workflow = $workflows.find(w => w.id === workflowId)}
+		{@const workflow = $workflows.find((w) => w.id === workflowId)}
 		{#await import('$lib/components/ui/DeleteConfirmModal.svelte') then { default: DeleteConfirmModal }}
 			<DeleteConfirmModal
 				open={true}
@@ -872,7 +878,7 @@ Uses extracted components, services, and stores for clean architecture.
 				deleting={deletingWorkflow}
 				deletingLabelKey="workflow_deleting"
 				onConfirm={() => handleDeleteWorkflow(workflowId)}
-				onCancel={() => modalState = { type: 'none' }}
+				onCancel={() => (modalState = { type: 'none' })}
 			/>
 		{/await}
 	{:else if modalState.type === 'validation'}
@@ -882,7 +888,7 @@ Uses extracted components, services, and stores for clean architecture.
 				open={true}
 				onapprove={handleApproveValidation}
 				onreject={handleRejectValidation}
-				onclose={() => modalState = { type: 'none' }}
+				onclose={() => (modalState = { type: 'none' })}
 			/>
 		{/await}
 	{/if}

@@ -74,10 +74,22 @@ Extracted from MemorySettings.svelte.
 			<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
 			{#if configExists}
 				<div class="header-actions">
-					<button type="button" class="icon-btn" onclick={onOpenConfigModal} title={$i18n('common_edit')} aria-label={$i18n('common_edit')}>
+					<button
+						type="button"
+						class="icon-btn"
+						onclick={onOpenConfigModal}
+						title={$i18n('common_edit')}
+						aria-label={$i18n('common_edit')}
+					>
 						<Pencil size={16} />
 					</button>
-					<button type="button" class="icon-btn danger" onclick={onDelete} title={$i18n('common_delete')} aria-label={$i18n('common_delete')}>
+					<button
+						type="button"
+						class="icon-btn danger"
+						onclick={onDelete}
+						title={$i18n('common_delete')}
+						aria-label={$i18n('common_delete')}
+					>
 						<Trash2 size={16} />
 					</button>
 				</div>
@@ -157,7 +169,9 @@ Extracted from MemorySettings.svelte.
 		border-radius: var(--border-radius-sm);
 		color: var(--color-text-secondary);
 		cursor: pointer;
-		transition: color 0.2s, background 0.2s;
+		transition:
+			color 0.2s,
+			background 0.2s;
 	}
 
 	.icon-btn:hover {
