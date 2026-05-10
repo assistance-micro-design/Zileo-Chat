@@ -74,16 +74,6 @@ impl Default for RetryConfig {
 // RetryConfig methods used by lib LLM providers; not all reachable from binary target.
 #[allow(dead_code)]
 impl RetryConfig {
-    /// Creates a new RetryConfig with custom values
-    pub fn new(max_retries: u32, initial_delay_ms: u64, max_delay_ms: u64) -> Self {
-        Self {
-            max_retries,
-            initial_delay_ms,
-            max_delay_ms,
-            backoff_multiplier: 2.0,
-        }
-    }
-
     /// Calculates the delay for a given attempt number (0-indexed)
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         let delay_ms =
@@ -330,7 +320,12 @@ mod tests {
 
     #[test]
     fn test_delay_capped_at_max() {
-        let config = RetryConfig::new(10, 1000, 5000);
+        let config = RetryConfig {
+            max_retries: 10,
+            initial_delay_ms: 1000,
+            max_delay_ms: 5000,
+            ..Default::default()
+        };
 
         // After several attempts, should be capped at 5000ms
         assert_eq!(config.delay_for_attempt(10), Duration::from_millis(5000));
@@ -383,7 +378,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_success_after_failures() {
-        let config = RetryConfig::new(3, 10, 100); // Short delays for test
+        let config = RetryConfig {
+            max_retries: 3,
+            initial_delay_ms: 10,
+            max_delay_ms: 100,
+            ..Default::default()
+        }; // Short delays for test
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
@@ -411,7 +411,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_max_exceeded() {
-        let config = RetryConfig::new(2, 10, 100); // Short delays, max 2 retries
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_delay_ms: 10,
+            max_delay_ms: 100,
+            ..Default::default()
+        }; // Short delays, max 2 retries
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
@@ -434,7 +439,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_non_retryable_error_fails_immediately() {
-        let config = RetryConfig::new(3, 10, 100);
+        let config = RetryConfig {
+            max_retries: 3,
+            initial_delay_ms: 10,
+            max_delay_ms: 100,
+            ..Default::default()
+        };
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = call_count.clone();
 
@@ -463,7 +473,12 @@ mod tests {
     async fn cancellation_interrupts_mock_provider_within_one_second() {
         // Mock provider that "hangs" for 30s. We cancel after 50ms; the
         // call must return Cancelled in < 1s.
-        let config = RetryConfig::new(0, 10, 100);
+        let config = RetryConfig {
+            max_retries: 0,
+            initial_delay_ms: 10,
+            max_delay_ms: 100,
+            ..Default::default()
+        };
         let token = tokio_util::sync::CancellationToken::new();
         let token_clone = token.clone();
 
@@ -496,7 +511,12 @@ mod tests {
     async fn cancellation_skips_remaining_retries_during_backoff() {
         // Mock provider that always errors retryably, with a long backoff.
         // Cancel during the first backoff so retries 2..N never run.
-        let config = RetryConfig::new(5, 1000, 5000);
+        let config = RetryConfig {
+            max_retries: 5,
+            initial_delay_ms: 1000,
+            max_delay_ms: 5000,
+            ..Default::default()
+        };
         let call_count = Arc::new(AtomicU32::new(0));
         let cc = call_count.clone();
         let token = tokio_util::sync::CancellationToken::new();
@@ -528,7 +548,12 @@ mod tests {
     #[tokio::test]
     async fn cancellation_with_none_token_behaves_like_with_retry() {
         // Sanity: None token must not change anything.
-        let config = RetryConfig::new(2, 10, 50);
+        let config = RetryConfig {
+            max_retries: 2,
+            initial_delay_ms: 10,
+            max_delay_ms: 50,
+            ..Default::default()
+        };
         let call_count = Arc::new(AtomicU32::new(0));
         let cc = call_count.clone();
 
