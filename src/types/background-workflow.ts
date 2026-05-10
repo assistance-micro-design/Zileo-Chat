@@ -55,8 +55,6 @@ export interface ActiveSubAgent {
 	startedAt: number;
 	/** Progress percentage (0-100) */
 	progress: number;
-	/** Status message (optional) */
-	statusMessage?: string;
 	/** Execution duration in milliseconds (when completed) */
 	duration?: number;
 	/** Report content (when completed) */
