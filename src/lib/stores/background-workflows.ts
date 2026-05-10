@@ -21,7 +21,8 @@
  * This store is the CENTRAL event dispatch point for all workflow streaming events.
  * It owns the global Tauri event listeners, routes chunks to the correct workflow
  * in its internal map, forwards chunks for the currently-viewed workflow to the
- * streaming store, and fires toast notifications on completion and user questions.
+ * `executionBlocksStore` + `tokenStore` chain (via callbacks registered by the
+ * agent page), and fires toast notifications on completion and user questions.
  *
  * @module stores/background-workflows
  */
@@ -102,14 +103,16 @@ let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 let initPromise: Promise<void> | null = null;
 
 /**
- * Callback for forwarding chunks to the streaming store when the
- * chunk belongs to the currently-viewed workflow. Set via setForwardCallbacks.
+ * Callback for forwarding chunks to `executionBlocksStore.processChunk()` and
+ * the `tokenStore` when the chunk belongs to the currently-viewed workflow.
+ * Set via setForwardCallbacks.
  */
 let onChunkForViewed: ((chunk: StreamChunk) => void) | null = null;
 
 /**
- * Callback for forwarding completion events to the streaming store when the
- * completion belongs to the currently-viewed workflow. Set via setForwardCallbacks.
+ * Callback fired when the currently-viewed workflow completes (terminal status),
+ * used to flip `executionBlocksStore` out of the executing state.
+ * Set via setForwardCallbacks.
  */
 let onCompleteForViewed: ((complete: WorkflowComplete) => void) | null = null;
 
@@ -192,9 +195,10 @@ function updateExecutionFromChunk(
 
 /**
  * Handles an incoming stream chunk from the Tauri event listener.
- * Updates the background state, forwards to the streaming store if the
- * chunk belongs to the viewed workflow, and fires toast notifications
- * for user questions on non-viewed workflows.
+ * Updates the background state, forwards to `executionBlocksStore` +
+ * `tokenStore` (via the registered callback) if the chunk belongs to the
+ * viewed workflow, and fires toast notifications for user questions on
+ * non-viewed workflows.
  *
  * @param chunk - Incoming stream chunk
  */
@@ -211,7 +215,7 @@ function handleStreamChunk(chunk: StreamChunk): void {
 		return { ...s, executions: newExecs };
 	});
 
-	// Forward to streaming store if this is the viewed workflow
+	// Forward to executionBlocksStore + tokenStore if this is the viewed workflow
 	if (chunk.workflow_id === state.viewedWorkflowId && onChunkForViewed) {
 		onChunkForViewed(chunk);
 	}
@@ -238,8 +242,9 @@ function handleStreamChunk(chunk: StreamChunk): void {
 
 /**
  * Handles a workflow completion event from the Tauri event listener.
- * Updates the execution status, forwards to the streaming store if viewed,
- * fires toast notifications, and dismisses any pending user-question toasts.
+ * Updates the execution status, forwards to `executionBlocksStore` (via the
+ * registered callback) if the workflow is currently viewed, fires toast
+ * notifications, and dismisses any pending user-question toasts.
  *
  * @param complete - Workflow completion event
  */
@@ -265,7 +270,7 @@ function handleStreamComplete(complete: WorkflowComplete): void {
 		return { ...s, executions: newExecs };
 	});
 
-	// Forward to streaming store if viewed
+	// Forward to executionBlocksStore if viewed (flips out of executing state)
 	if (complete.workflow_id === state.viewedWorkflowId && onCompleteForViewed) {
 		onCompleteForViewed(complete);
 	}
@@ -304,8 +309,9 @@ function cleanupOldExecutions(): void {
  * Background workflows store.
  *
  * Central dispatch point for all workflow streaming events. Manages concurrent
- * workflow executions, routes events to the streaming store for the viewed
- * workflow, and triggers toast notifications for background events.
+ * workflow executions, routes events for the viewed workflow to the
+ * `executionBlocksStore` + `tokenStore` chain (via registered callbacks), and
+ * triggers toast notifications for background events.
  */
 export const backgroundWorkflowsStore = {
 	subscribe: store.subscribe,
@@ -356,9 +362,9 @@ export const backgroundWorkflowsStore = {
 	},
 
 	/**
-	 * Set callbacks for forwarding stream events to the streaming store
-	 * and user question events to the userQuestionStore.
-	 * Called by the agent page when it initializes.
+	 * Set callbacks for forwarding stream events to the `executionBlocksStore`
+	 * and `tokenStore` (chunk + complete) and user question events to the
+	 * `userQuestionStore`. Called by the agent page when it initializes.
 	 *
 	 * @param chunkCb - Callback to forward StreamChunk events for the viewed workflow
 	 * @param completeCb - Callback to forward WorkflowComplete events for the viewed workflow
@@ -428,8 +434,9 @@ export const backgroundWorkflowsStore = {
 	},
 
 	/**
-	 * Set the currently-viewed workflow ID. Chunks for this workflow will
-	 * be forwarded to the streaming store via the registered callbacks.
+	 * Set the currently-viewed workflow ID. Chunks for this workflow will be
+	 * forwarded to `executionBlocksStore` + `tokenStore` via the registered
+	 * callbacks.
 	 *
 	 * @param workflowId - Workflow ID to mark as viewed, or null to clear
 	 */
