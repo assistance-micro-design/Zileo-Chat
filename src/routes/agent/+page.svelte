@@ -182,32 +182,28 @@ Uses extracted components, services, and stores for clean architecture.
 			const isStillSelected = () => pageState.selectedWorkflowId === workflowId;
 			pageState.messagesLoading = true;
 
-			try {
-				// Load messages
-				const result = await MessageService.loadWithSubAgents(workflowId);
-				if (!isStillSelected()) return;
-				messages = result.messages;
-				if (result.error) {
-					toastStore.add({
-						type: 'error',
-						title: result.error,
-						message: '',
-						persistent: false,
-						duration: 5000
-					});
-				}
+		try {
+			// Load messages
+			const result = await MessageService.loadWithSubAgents(workflowId);
+			if (!isStillSelected()) return;
+			messages = result.messages;
+			if (result.error) {
+				toastStore.add({
+					type: 'error',
+					title: result.error,
+					message: '',
+					persistent: false,
+					duration: 5000
+				});
+			}
 
-				// Load persisted execution blocks for all messages
-				messageBlocks.clear();
-				try {
-					const blocks = await BlockService.loadForMessages(result.messages);
-					if (!isStillSelected()) return;
-					for (const [id, b] of blocks) {
-						messageBlocks.set(id, b);
-					}
-				} catch {
-					// Non-blocking: render the page without prior message blocks.
-				}
+			// Load persisted execution blocks for all messages
+			messageBlocks.clear();
+			const blocks = await BlockService.loadForMessages(result.messages);
+			if (!isStillSelected()) return;
+			for (const [id, b] of blocks) {
+				messageBlocks.set(id, b);
+			}
 
 				// Load persisted tasks for this workflow
 				persistedTasks = [];
