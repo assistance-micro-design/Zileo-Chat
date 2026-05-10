@@ -1,0 +1,5 @@
+# Project-wide Prettier reformatting (no functional changes)
+# Use with: git blame --ignore-revs-file .git-blame-ignore-revs <file>
+# GitHub honors this file natively in the blame view.
+
+8f0363ccb016a0b4f7beabeedfad5daefa74b37a
