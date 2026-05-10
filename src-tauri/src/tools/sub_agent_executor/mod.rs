@@ -26,7 +26,7 @@
 //!
 //! The module is split into focused submodules:
 //! - [`activity_monitor`] - Heartbeat-based inactivity detection
-//! - [`execution`] - Execution engine with retry, circuit breaker, cancellation
+//! - [`execution`] - Execution engine with retry and cancellation
 //! - [`records`] - DB record persistence and event emission
 //!
 //! # Usage
@@ -62,7 +62,6 @@ mod records;
 
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -71,7 +70,6 @@ use crate::agents::core::orchestrator::AgentOrchestrator;
 use crate::db::DBClient;
 use crate::mcp::manager::MCPManager;
 use crate::models::sub_agent::{constants::MAX_SUB_AGENTS, SubAgentMetrics};
-use crate::tools::sub_agent_circuit_breaker::SubAgentCircuitBreaker;
 use crate::tools::{ToolError, ToolResult};
 
 // Re-exports for external consumers
@@ -123,14 +121,6 @@ impl Default for ExecutionResult {
 ///
 /// The executor supports graceful cancellation via `CancellationToken`. When a token
 /// is provided and cancelled, execution aborts immediately with a "cancelled" result.
-///
-/// # Circuit Breaker Support
-///
-/// The executor supports circuit breaker protection via `SubAgentCircuitBreaker`.
-/// When provided, the executor will:
-/// - Check if circuit is open before execution (fail-fast if unhealthy)
-/// - Record success on successful execution (reset failure count)
-/// - Record failure on failed execution (increment failure count, may open circuit)
 pub struct SubAgentExecutor {
     /// Database client for execution record management
     pub(crate) db: Arc<DBClient>,
@@ -146,8 +136,6 @@ pub struct SubAgentExecutor {
     pub(crate) parent_agent_id: String,
     /// Optional cancellation token for graceful shutdown
     pub(crate) cancellation_token: Option<CancellationToken>,
-    /// Optional circuit breaker for execution resilience
-    pub(crate) circuit_breaker: Option<Arc<Mutex<SubAgentCircuitBreaker>>>,
     /// Assistant message_id of the spawning agent.
     ///
     /// Persisted on the new `sub_agent_execution` record's `parent_message_id`
@@ -184,7 +172,6 @@ impl SubAgentExecutor {
             workflow_id,
             parent_agent_id,
             cancellation_token,
-            circuit_breaker: None,
             parent_message_id: None,
         }
     }

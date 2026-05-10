@@ -68,7 +68,6 @@ pub mod registry;
 pub mod response;
 pub mod spawn_agent;
 mod spawn_agent_execution;
-pub mod sub_agent_circuit_breaker;
 pub mod sub_agent_executor;
 pub mod task_bridge;
 pub mod todo;

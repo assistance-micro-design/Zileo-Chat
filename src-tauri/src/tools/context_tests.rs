@@ -4,7 +4,6 @@ use crate::state::AppState;
 use crate::test_utils::test_tempdir;
 use crate::tools::ToolFactory;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
 async fn create_test_state() -> AppState {
     let temp_dir = test_tempdir();
@@ -85,32 +84,6 @@ async fn test_context_new() {
     assert!(Arc::ptr_eq(&context.tool_factory, &tool_factory));
     assert!(context.app_handle.is_none());
     assert!(context.cancellation_token.is_none());
-    assert!(context.circuit_breaker.is_none());
-}
-
-#[tokio::test]
-async fn test_context_with_cancellation_token() {
-    let state = create_test_state().await;
-    let token = CancellationToken::new();
-
-    let context = AgentToolContext::from_app_state_with_cancellation(
-        &state,
-        Some(state.mcp_manager.clone()),
-        None,
-        Some(token.clone()),
-    );
-
-    // Verify cancellation token is set
-    assert!(context.cancellation_token.is_some());
-
-    // Verify token is not cancelled initially
-    assert!(!context.cancellation_token.as_ref().unwrap().is_cancelled());
-
-    // Cancel the original token
-    token.cancel();
-
-    // Verify the context's token is also cancelled (same token)
-    assert!(context.cancellation_token.as_ref().unwrap().is_cancelled());
 }
 
 #[tokio::test]
@@ -124,79 +97,4 @@ async fn test_context_without_cancellation_token() {
     // from_app_state does not include cancellation token
     let context2 = AgentToolContext::from_app_state(&state, None, None);
     assert!(context2.cancellation_token.is_none());
-}
-
-#[tokio::test]
-async fn test_context_with_circuit_breaker() {
-    let state = create_test_state().await;
-    let token = CancellationToken::new();
-    let circuit_breaker = Arc::new(Mutex::new(SubAgentCircuitBreaker::with_defaults()));
-
-    let context = AgentToolContext::from_app_state_with_resilience(
-        &state,
-        Some(state.mcp_manager.clone()),
-        None,
-        Some(token.clone()),
-        Some(circuit_breaker.clone()),
-    );
-
-    // Verify circuit breaker is set
-    assert!(context.circuit_breaker.is_some());
-
-    // Verify circuit breaker is closed initially
-    let cb = context.circuit_breaker.as_ref().unwrap();
-    let guard = cb.lock().await;
-    assert_eq!(
-        guard.state(),
-        crate::tools::sub_agent_circuit_breaker::CircuitState::Closed
-    );
-    assert_eq!(guard.failure_count(), 0);
-}
-
-#[tokio::test]
-async fn test_context_circuit_breaker_shared_state() {
-    let state = create_test_state().await;
-    let circuit_breaker = Arc::new(Mutex::new(SubAgentCircuitBreaker::with_defaults()));
-
-    let context = AgentToolContext::from_app_state_with_resilience(
-        &state,
-        Some(state.mcp_manager.clone()),
-        None,
-        None,
-        Some(circuit_breaker.clone()),
-    );
-
-    // Record failures via the original reference
-    {
-        let mut guard = circuit_breaker.lock().await;
-        guard.record_failure();
-        guard.record_failure();
-    }
-
-    // Verify context sees the same state
-    let cb = context.circuit_breaker.as_ref().unwrap();
-    let guard = cb.lock().await;
-    assert_eq!(guard.failure_count(), 2);
-}
-
-#[tokio::test]
-async fn test_context_without_circuit_breaker() {
-    let state = create_test_state().await;
-
-    // from_app_state_full does not include circuit breaker
-    let context = AgentToolContext::from_app_state_full(&state);
-    assert!(context.circuit_breaker.is_none());
-
-    // from_app_state does not include circuit breaker
-    let context2 = AgentToolContext::from_app_state(&state, None, None);
-    assert!(context2.circuit_breaker.is_none());
-
-    // from_app_state_with_cancellation does not include circuit breaker
-    let context3 = AgentToolContext::from_app_state_with_cancellation(
-        &state,
-        None,
-        None,
-        Some(CancellationToken::new()),
-    );
-    assert!(context3.circuit_breaker.is_none());
 }

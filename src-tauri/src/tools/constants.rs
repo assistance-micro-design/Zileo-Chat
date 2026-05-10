@@ -106,15 +106,6 @@ pub mod sub_agent {
     /// Polling interval for checking validation status (milliseconds).
     pub const VALIDATION_POLL_MS: u64 = 500;
 
-    // Circuit Breaker for Sub-Agent Execution
-    /// Number of consecutive failures before opening the circuit breaker.
-    /// When reached, sub-agent executions are rejected until cooldown expires.
-    pub const CIRCUIT_FAILURE_THRESHOLD: u32 = 3;
-
-    /// Cooldown period (seconds) before circuit breaker transitions to half-open.
-    /// After this period, one execution is allowed to test if the system recovered.
-    pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
-
     // Retry with Exponential Backoff
     /// Maximum number of retry attempts for transient errors.
     /// Set to 2 for a total of 3 attempts (initial + 2 retries).

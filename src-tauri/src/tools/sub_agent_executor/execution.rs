@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Execution engine for sub-agents with heartbeat monitoring and circuit breaker.
+//! Execution engine for sub-agents with heartbeat monitoring.
 //!
 //! Provides:
 //! - Heartbeat-based inactivity timeout detection
 //! - Cancellation support via `CancellationToken`
-//! - Circuit breaker protection against cascade failures
 //!
 //! Retry logic is in `execution_retry.rs`.
 
@@ -30,57 +29,13 @@ use tracing::{debug, error, info, warn};
 use crate::agents::core::agent::{Report, Task};
 use crate::models::sub_agent::SubAgentMetrics;
 use crate::tools::constants::sub_agent::{ACTIVITY_CHECK_INTERVAL_SECS, INACTIVITY_TIMEOUT_SECS};
-use crate::tools::ToolResult;
 
 use super::activity_monitor::ActivityCallback;
 use super::activity_monitor::ActivityMonitor;
 use super::{ExecutionResult, SubAgentExecutor};
 
 impl SubAgentExecutor {
-    /// Checks if the circuit breaker allows execution.
-    ///
-    /// If a circuit breaker is configured and the circuit is open (system unhealthy),
-    /// returns an error with remaining cooldown time. Otherwise returns Ok.
-    ///
-    /// # Returns
-    /// * `Ok(())` - Execution is allowed (circuit closed/half-open or no circuit breaker)
-    /// * `Err(ToolError)` - Execution blocked (circuit open)
-    pub(crate) async fn check_circuit(&self) -> ToolResult<()> {
-        if let Some(ref cb) = self.circuit_breaker {
-            let mut guard = cb.lock().await;
-            if !guard.allow_request() {
-                let remaining = guard.remaining_cooldown_secs();
-                return Err(crate::tools::ToolError::ExecutionFailed(format!(
-                    "Sub-agent circuit breaker is open due to consecutive failures. \
-                     System is unhealthy. Retry after {} seconds cooldown.",
-                    remaining
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    /// Records successful execution with the circuit breaker.
-    ///
-    /// Resets failure count and ensures circuit is closed.
-    pub(crate) async fn record_success(&self) {
-        if let Some(ref cb) = self.circuit_breaker {
-            let mut guard = cb.lock().await;
-            guard.record_success();
-        }
-    }
-
-    /// Records failed execution with the circuit breaker.
-    ///
-    /// Increments failure count and may open circuit if threshold is reached.
-    pub(crate) async fn record_failure(&self) {
-        if let Some(ref cb) = self.circuit_breaker {
-            let mut guard = cb.lock().await;
-            guard.record_failure();
-        }
-    }
-
-    /// Executes an agent with inactivity timeout monitoring, cancellation, and circuit breaker.
+    /// Executes an agent with inactivity timeout monitoring and cancellation.
     ///
     /// Runs agent execution with a monitoring loop that
     /// detects genuine hangs by tracking activity. Unlike simple timeouts,
@@ -122,36 +77,6 @@ impl SubAgentExecutor {
         task: Task,
         on_activity: Option<ActivityCallback>,
     ) -> ExecutionResult {
-        // Check circuit breaker before execution
-        if let Err(e) = self.check_circuit().await {
-            warn!(
-                agent_id = %agent_id,
-                error = %e,
-                "Sub-agent execution blocked by circuit breaker"
-            );
-            return ExecutionResult {
-                success: false,
-                report: format!(
-                    "# Sub-Agent Blocked\n\n\
-                     Circuit breaker is open - sub-agent system is unhealthy.\n\n\
-                     {}",
-                    e
-                ),
-                metrics: SubAgentMetrics {
-                    duration_ms: 0,
-                    tokens_input: 0,
-                    tokens_output: 0,
-                    cached_tokens: None,
-                    cache_write_tokens: None,
-                    thinking_tokens: None,
-                    cost_usd: None,
-                },
-                error_message: Some(e.to_string()),
-                tool_executions: Vec::new(),
-                reasoning_steps: Vec::new(),
-            };
-        }
-
         let monitor = Arc::new(ActivityMonitor::new());
         let start_time = Instant::now();
 
@@ -230,7 +155,6 @@ impl SubAgentExecutor {
                     let inactive_secs = monitor.seconds_since_last_activity();
 
                     if inactive_secs > INACTIVITY_TIMEOUT_SECS {
-                        self.record_failure().await;
                         let duration_ms = start_time.elapsed().as_millis() as u64;
                         // Same drop-on-return semantics as cancellation.
                         return Self::build_timeout_result(agent_id, inactive_secs, duration_ms);
@@ -256,7 +180,6 @@ impl SubAgentExecutor {
     ) -> ExecutionResult {
         match result {
             Ok(report) => {
-                self.record_success().await;
                 info!(
                     agent_id = %agent_id,
                     duration_ms = duration_ms,
@@ -298,7 +221,6 @@ impl SubAgentExecutor {
                 }
             }
             Err(e) => {
-                self.record_failure().await;
                 let error_msg = e.to_string();
                 error!(
                     agent_id = %agent_id,
