@@ -75,8 +75,7 @@ function handleSubAgentStart(s: ChunkableState, c: StreamChunk): ChunkableState 
 				parentAgentId: c.parent_agent_id ?? '',
 				taskDescription: c.content ?? '',
 				status: 'running' as const,
-				startedAt: Date.now(),
-				progress: 0
+				startedAt: Date.now()
 			}
 		]
 	};
@@ -93,7 +92,6 @@ function handleSubAgentComplete(s: ChunkableState, c: StreamChunk): ChunkableSta
 				? {
 						...a,
 						status: 'completed' as const,
-						progress: 100,
 						duration: c.duration,
 						report: c.content,
 						metrics: c.metrics

@@ -84,8 +84,7 @@ describe('applyChunkToState', () => {
 				name: 'Researcher',
 				parentAgentId: 'orchestrator',
 				taskDescription: 'find the docs',
-				status: 'running',
-				progress: 0
+				status: 'running'
 			});
 		});
 
@@ -130,7 +129,6 @@ describe('applyChunkToState', () => {
 			expect(result.subAgents[0]).toMatchObject({
 				id: 'sa-2',
 				status: 'completed',
-				progress: 100,
 				duration: 1234,
 				report: 'done',
 				metrics: { duration_ms: 1234, tokens_input: 50, tokens_output: 25 }

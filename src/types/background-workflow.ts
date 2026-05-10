@@ -53,8 +53,6 @@ export interface ActiveSubAgent {
 	status: ActiveSubAgentStatus;
 	/** Timestamp when execution started */
 	startedAt: number;
-	/** Progress percentage (0-100) */
-	progress: number;
 	/** Execution duration in milliseconds (when completed) */
 	duration?: number;
 	/** Report content (when completed) */
