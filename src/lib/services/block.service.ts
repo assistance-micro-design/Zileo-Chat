@@ -30,27 +30,11 @@ import type { Message } from '$types/message';
  */
 export const BlockService = {
 	/**
-	 * Load execution blocks for a single message.
-	 *
-	 * Kept for retry / refresh scenarios on a specific message. The bulk
-	 * "open a conversation" path uses {@link loadForMessages} which calls the
-	 * batched `load_workflow_blocks` command instead.
-	 *
-	 * @param messageId - The message ID to load blocks for
-	 * @returns Array of ChatBlocks ordered by sequence
-	 */
-	async loadForMessage(messageId: string): Promise<ChatBlock[]> {
-		return invoke('load_message_blocks', { messageId });
-	},
-
-	/**
 	 * Load execution blocks for every assistant message of a workflow in a
 	 * single Tauri round-trip via the batched `load_workflow_blocks` command.
 	 *
-	 * Replaces the previous N+1 pattern (one `load_message_blocks` per
-	 * assistant message) which scaled to `O(3N)` SurrealDB queries on long
-	 * conversations. Falls back to an empty map when the workflow id cannot
-	 * be derived (no messages or invalid input).
+	 * Falls back to an empty map when the workflow id cannot be derived (no
+	 * messages or invalid input).
 	 *
 	 * @param messages - Array of messages of a single workflow
 	 * @returns Map of message ID to ChatBlock array

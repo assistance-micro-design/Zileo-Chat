@@ -72,7 +72,6 @@
 //! - `load_workflow_messages` - Load all messages for a workflow
 //! - `load_workflow_messages_paginated` - Load messages with pagination
 //! - `delete_message` - Delete a single message
-//! - `load_message_blocks` - Load chat blocks for a single message (retry path)
 //! - `load_workflow_blocks` - Batch-load chat blocks for every message of a workflow
 //!
 //! ### Tool Execution Commands ([`tool_execution`])

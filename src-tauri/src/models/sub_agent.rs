@@ -112,7 +112,7 @@ pub struct SubAgentExecution {
     pub parent_execution_id: Option<String>,
     /// Parent message ID for message-level correlation.
     /// Set post-execution to link sub-agent executions to the assistant message
-    /// that triggered them. Used by load_message_blocks for block display.
+    /// that triggered them. Used by `load_workflow_blocks` for block display.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_message_id: Option<String>,
     /// When the execution was created
@@ -152,7 +152,7 @@ pub struct SubAgentExecutionCreate {
     /// Set at CREATE time to the assistant message_id of the agent that
     /// spawned this sub-agent (the primary's message_id for top-level
     /// sub-agents, the spawning sub-agent's pre-allocated message_id for
-    /// nested chains). Used by `load_message_blocks` to attach the
+    /// nested chains). Used by `load_workflow_blocks` to attach the
     /// sub-agent block to the right assistant turn (H2 audit 2026-05-02).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_message_id: Option<String>,
