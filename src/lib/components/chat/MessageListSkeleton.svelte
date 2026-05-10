@@ -16,7 +16,7 @@
 
 <!--
   MessageListSkeleton Component
-  A skeleton loading state for the MessageList component.
+  A skeleton loading state used by ChatContainer while messages are loading.
   Shows placeholder message bubbles during loading.
 
   @example
