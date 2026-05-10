@@ -90,8 +90,8 @@ See `src-tauri/src/models/workflow.rs` and `src-tauri/src/models/streaming.rs` f
 | Store | Purpose | Key Exports |
 |-------|---------|-------------|
 | `workflowStore` | Workflow CRUD + selection | workflows, selectedWorkflow, filteredWorkflows |
-| `streamingStore` | Real-time streaming state | isStreaming, streamContent, activeTools, reasoningSteps, activeSubAgents, activeTasks |
-| `backgroundWorkflowsStore` | Concurrent background execution (central dispatch) | runningWorkflows, recentlyCompletedWorkflows, canStartNew, questionPendingIds |
+| `backgroundWorkflowsStore` | Concurrent background execution (central dispatch, owns per-workflow `WorkflowStreamState`) | runningWorkflows, recentlyCompletedWorkflows, canStartNew, questionPendingIds, getExecution, setViewed |
+| `executionBlocksStore` | Per-workflow display blocks (replay buffer for the viewed workflow) | restoreFromChunks |
 | `toastStore` | Toast notifications | toasts, visibleToasts, navigationTarget |
 
 See `src/lib/stores/` for store implementations.
@@ -247,7 +247,7 @@ The `toastStore` provides `addWorkflowComplete()` (success/error toast with 5s a
 
 1. `setViewed(workflowId)` updates view tracking
 2. `getExecution(workflowId)` retrieves WorkflowStreamState
-3. `streamingStore.restoreFrom(execution)` populates UI
+3. `executionBlocksStore.restoreFromChunks(workflowId, chunkHistory)` rebuilds the block UI from the replay buffer
 4. If `hasPendingQuestion`, opens UserQuestionModal
 
 ### Cleanup
@@ -287,7 +287,7 @@ Completed executions auto-removed after 10 minutes (`CLEANUP_INTERVAL_MS = 60000
 | Orchestrator | `src-tauri/src/agents/core/orchestrator.rs` |
 | Constants | `src-tauri/src/constants.rs` (workflow module) |
 | Models | `src-tauri/src/models/workflow.rs`, `models/streaming.rs` |
-| Frontend Stores | `src/lib/stores/workflows.ts`, `streaming.ts`, `background-workflows.ts`, `toast.ts` |
+| Frontend Stores | `src/lib/stores/workflows.ts`, `background-workflows.ts`, `execution-blocks.ts`, `toast.ts` |
 | Frontend Types | `src/types/workflow.ts`, `streaming.ts`, `background-workflow.ts` |
 | Frontend Services | `src/lib/services/workflow.service.ts`, `workflowExecutor.service.ts` |
 | Components | `src/lib/components/workflow/`, `components/agent/`, `components/ui/` |

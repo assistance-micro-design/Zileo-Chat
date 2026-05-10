@@ -144,14 +144,14 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 5. Component Library
 
-101 total components organized under `src/lib/components/`:
+100 total components organized under `src/lib/components/`:
 
 | Directory | Count | Description |
 |-----------|-------|-------------|
 | `ui/` | 20 | Atomic UI: Badge, Button, Card, ContextMenu, DeleteConfirmModal, ErrorBanner, HelpButton, Input, LanguageSelector, MarkdownRenderer, Modal, PasswordInput, ProgressBar, Select, Skeleton, Spinner, StatusIndicator, Textarea, ToastContainer, ToastItem |
 | `layout/` | 3 | AppContainer, FloatingMenu, Sidebar |
 | `agent/` | 3 | AgentHeader, ChatContainer, WorkflowSidebar |
-| `chat/` | 11 | ChatInput, ExecutionSpinner, MessageBubble, MessageList, MessageListSkeleton, MessageMetrics, PromptSelectorModal, SubAgentBlock, ThinkingBlock, TodoTasksBlock, ToolCallBlock |
+| `chat/` | 10 | ChatInput, ExecutionSpinner, MessageBubble, MessageListSkeleton, MessageMetrics, PromptSelectorModal, SubAgentBlock, ThinkingBlock, TodoTasksBlock, ToolCallBlock |
 | `workflow/` | 10 | AgentSelector, FolderItem, NewWorkflowModal, StatusFilters, TokenDisplay, UserQuestionModal, ValidationModal, WorkflowItem, WorkflowItemCompact, WorkflowList |
 | `legal/` | 1 | LegalModal |
 | `mcp/` | 3 | MCPServerCard, MCPServerForm, MCPServerTester |
@@ -174,7 +174,6 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `onboarding` | First-launch wizard state | `src/lib/stores/onboarding.ts` |
 | `prompts` | Prompt library management | `src/lib/stores/prompts.ts` |
 | `skills` | Skill CRUD via createCRUDStore factory | `src/lib/stores/skills.ts` |
-| `streaming` | Real-time workflow execution (isStreaming, streamContent, activeTools, reasoningSteps) | `src/lib/stores/streaming.ts` |
 | `theme` | Light/dark mode with localStorage persistence | `src/lib/stores/theme.ts` |
 | `toast` | Toast notifications for background workflow events | `src/lib/stores/toast.ts` |
 | `tokens` | Token usage/cost tracking (streaming + cumulative) | `src/lib/stores/tokens.ts` |
@@ -215,7 +214,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 17 modules)
+### Utilities (`src/lib/utils/`, 18 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -234,6 +233,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `settings-refresh.ts` | `onSettingsRefresh()`, `attachSettingsRefreshListener()`, `SETTINGS_REFRESH_EVENT` | Subscribe to the global `settings:refresh` event after import/export |
 | `mcp-auth-validation.ts` | MCP HTTP auth validators | Validates `MCPAuthMetadata`/`MCPAuthSecret` symmetrically with the Rust backend |
 | `agent-reasoning.ts` | `getReasoningOptions()`, `getReasoningHelp()`, `normalizeReasoningEffortForProvider()` | Provider-aware reasoning_effort selector helpers (Mistral exposes Off/High only; other providers expose Off/Low/Medium/High) |
+| `browser-download.ts` | `triggerBrowserDownload()` | Programmatic file download via anchor click (used by ExportPanel) |
 | `index.ts` | Re-exports | Barrel file |
 
 ### Actions (`src/lib/actions/`, 1 module)
@@ -247,7 +247,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
 | `block.service.ts` | Block parsing helpers | Chat block parsing (tool calls, thinking, sub-agents) |
-| `message.service.ts` | `MessageService.load()`, `.save()` | Message CRUD with error handling |
+| `message.service.ts` | `MessageService.save()` | Message persistence with error handling (load is performed via `block.service.ts` batched query) |
 | `sub-agent-execution.service.ts` | Sub-agent execution helpers | Sub-agent invocation and lifecycle |
 | `workflow.service.ts` | `WorkflowService.execute()`, `.cancel()` | Workflow execution management |
 | `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration with concurrency check |
@@ -270,8 +270,9 @@ Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `
 ### Key Patterns
 
 - **PageState**: Aggregate page state into a single `$state<PageState>()` reactive object instead of many individual state variables
-- **Streaming store**: `$state`-backed `streamingStore` exposes the live execution snapshot directly; only one `derived` (`activeSubAgents`) remains for legacy consumers
+- **Background workflows as single source of truth**: Live execution state lives on `backgroundWorkflowsStore` (`WorkflowStreamState` per workflow); the viewed workflow's UI is rebuilt from its `chunkHistory` via `executionBlocksStore.restoreFromChunks`
 - **Props**: Use `$props()` with typed `Props` interface (Svelte 5 pattern)
+- **Component helpers split**: Heavy form components (`MCPServerForm`, `AgentForm`, `ImportPanel`, `MemoryList`, `ValidationSettings`) and the `agent/+page.svelte` route extract pure logic into a sibling `*.helpers.ts` (with dedicated `__tests__/*.helpers.test.ts`) so the `.svelte` file stays focused on template + reactive state
 
 ## 10. Accessibility (WCAG AA)
 
@@ -300,7 +301,7 @@ Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `
 |-------------|--------|----------|
 | Conditional animations | 60% GPU reduction (green/warning) | `TokenDisplay.svelte` |
 | Virtual scroll ActivityFeed | 90% DOM reduction for 100+ items | `ActivityFeed.svelte` |
-| CSS containment on message lists | Layout isolation for long conversations | `MessageList.svelte` |
+| CSS containment on message lists | Layout isolation for long conversations | `ChatContainer.svelte` |
 | `content-visibility: auto` | Off-screen messages skip rendering | Message wrappers |
 | Debounced token counting | Reduces IPC calls | ChatInput |
 

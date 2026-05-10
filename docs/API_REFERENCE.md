@@ -165,8 +165,7 @@ Chat message persistence and retrieval.
 | `load_workflow_messages` | Load all messages for a workflow |
 | `load_workflow_messages_paginated` | Load messages with pagination |
 | `delete_message` | Delete a single message |
-| `clear_workflow_messages` | Delete all messages for a workflow |
-| `load_message_blocks` | Load structured display blocks for a message |
+| `load_workflow_blocks` | Load all structured display blocks for a workflow grouped by message |
 
 ### Tool Execution (`commands/tool_execution.rs`)
 
