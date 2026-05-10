@@ -114,7 +114,7 @@ let onChunkForViewed: ((chunk: StreamChunk) => void) | null = null;
  * used to flip `executionBlocksStore` out of the executing state.
  * Set via setForwardCallbacks.
  */
-let onCompleteForViewed: ((complete: WorkflowComplete) => void) | null = null;
+let onCompleteForViewed: (() => void) | null = null;
 
 /**
  * Callback for dispatching user question events to the userQuestionStore.
@@ -272,7 +272,7 @@ function handleStreamComplete(complete: WorkflowComplete): void {
 
 	// Forward to executionBlocksStore if viewed (flips out of executing state)
 	if (complete.workflow_id === state.viewedWorkflowId && onCompleteForViewed) {
-		onCompleteForViewed(complete);
+		onCompleteForViewed();
 	}
 
 	// Dismiss any user-question toasts for this workflow BEFORE adding completion toast
@@ -367,12 +367,12 @@ export const backgroundWorkflowsStore = {
 	 * `userQuestionStore`. Called by the agent page when it initializes.
 	 *
 	 * @param chunkCb - Callback to forward StreamChunk events for the viewed workflow
-	 * @param completeCb - Callback to forward WorkflowComplete events for the viewed workflow
+	 * @param completeCb - Callback fired when the viewed workflow completes
 	 * @param userQuestionCb - Callback to handle user_question_start chunks for all workflows
 	 */
 	setForwardCallbacks(
 		chunkCb: (chunk: StreamChunk) => void,
-		completeCb: (complete: WorkflowComplete) => void,
+		completeCb: () => void,
 		userQuestionCb: (payload: UserQuestionStreamPayload, workflowId: string, isViewed: boolean) => void
 	): void {
 		onChunkForViewed = chunkCb;

@@ -657,7 +657,7 @@ Uses extracted components, services, and stores for clean architecture.
 					}
 				}
 			},
-			(_complete) => {
+			() => {
 				executionBlocksStore.complete();
 			},
 			(payload, workflowId, isViewed) => userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
