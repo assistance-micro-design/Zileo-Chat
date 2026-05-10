@@ -19,10 +19,11 @@
 //!
 //! ## Architecture
 //!
-//! - [`LLMProvider`] - Trait defining the common interface for all providers
-//! - [`ProviderManager`] - Manages provider instances and configuration
-//! - [`MistralProvider`] - Mistral AI cloud API integration
-//! - [`OllamaProvider`] - Local Ollama server integration
+//! - [`ProviderManager`] - Manages provider instances and configuration via
+//!   `enum ProviderType + match` dispatch (no trait-object dispatch)
+//! - `MistralProvider` - Mistral AI cloud API integration
+//! - `OllamaProvider` - Local Ollama server integration
+//! - [`openai_compatible::OpenAiCompatibleProvider`] - Custom OpenAI-compatible providers
 //!
 //! ## Usage
 //!

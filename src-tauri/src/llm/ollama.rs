@@ -16,10 +16,9 @@
 
 use super::http;
 use super::provider::{
-    CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
+    CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
 use crate::models::agent::ReasoningEffort;
-use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
@@ -297,21 +296,9 @@ impl OllamaProvider {
     }
 }
 
-#[async_trait]
-impl LLMProvider for OllamaProvider {
-    fn provider_type(&self) -> ProviderType {
-        ProviderType::Ollama
-    }
-
-    fn available_models(&self) -> Vec<String> {
-        Vec::new()
-    }
-
-    fn default_model(&self) -> String {
-        String::new()
-    }
-
-    fn is_configured(&self) -> bool {
+impl OllamaProvider {
+    /// Returns true if the provider has been configured via `configure()`.
+    pub fn is_configured(&self) -> bool {
         // Use try_read to avoid blocking - returns false if lock unavailable
         self.configured
             .try_read()
@@ -319,7 +306,8 @@ impl LLMProvider for OllamaProvider {
             .unwrap_or(false)
     }
 
-    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
+    /// Generates a completion for the given prompt.
+    pub async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
         let model_name = params.model.as_deref().unwrap_or("llama3.2");
         let system_text = params
             .system_prompt
@@ -441,27 +429,6 @@ mod tests {
                 .expect("test HTTP client"),
         );
         OllamaProvider::new(http_client)
-    }
-
-    #[test]
-    fn test_ollama_provider_new() {
-        let provider = test_ollama_provider();
-        assert_eq!(provider.provider_type(), ProviderType::Ollama);
-    }
-
-    #[test]
-    fn test_ollama_available_models_empty() {
-        // Models are now managed in DB, not hardcoded
-        let provider = test_ollama_provider();
-        let models = provider.available_models();
-        assert!(models.is_empty());
-    }
-
-    #[test]
-    fn test_ollama_default_model_empty() {
-        // Default model is now managed in DB, not hardcoded
-        let provider = test_ollama_provider();
-        assert!(provider.default_model().is_empty());
     }
 
     #[tokio::test]

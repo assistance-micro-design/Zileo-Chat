@@ -20,12 +20,11 @@
 
 use super::http::{self, ParsedContent};
 use super::provider::{
-    CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
+    CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
 use super::sse::ProviderWireFormat;
 use super::tool_format::{send_tool_completion, ToolChatRequest};
 use crate::models::agent::ReasoningEffort;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -314,21 +313,9 @@ fn build_mistral_tool_request(params: &ToolCompletionParams) -> ToolChatRequest 
     body
 }
 
-#[async_trait]
-impl LLMProvider for MistralProvider {
-    fn provider_type(&self) -> ProviderType {
-        ProviderType::Mistral
-    }
-
-    fn available_models(&self) -> Vec<String> {
-        Vec::new()
-    }
-
-    fn default_model(&self) -> String {
-        String::new()
-    }
-
-    fn is_configured(&self) -> bool {
+impl MistralProvider {
+    /// Returns true if the provider has a configured API key.
+    pub fn is_configured(&self) -> bool {
         // Use try_read to avoid blocking - returns false if lock unavailable
         self.api_key
             .try_read()
@@ -336,13 +323,15 @@ impl LLMProvider for MistralProvider {
             .unwrap_or(false)
     }
 
+    /// Generates a completion for the given prompt.
+    ///
     /// All Mistral chat completions go through `custom_complete` (direct HTTP)
     /// so that real `usage.prompt_tokens` / `usage.completion_tokens` reach
     /// `LLMResponse`. The previous rig path returned only the assistant text
     /// (Mistral's rig `Prompt::prompt()` impl exposes a `String`), which forced
     /// us to estimate token counts heuristically and diverge from the API
     /// invoice.
-    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
+    pub async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError> {
         let model_name = params.model.as_deref().unwrap_or("mistral-large-latest");
 
         debug!(
@@ -380,27 +369,6 @@ mod tests {
                 .expect("test HTTP client"),
         );
         MistralProvider::new(http_client)
-    }
-
-    #[test]
-    fn test_mistral_provider_new() {
-        let provider = test_mistral_provider();
-        assert_eq!(provider.provider_type(), ProviderType::Mistral);
-    }
-
-    #[test]
-    fn test_mistral_available_models_empty() {
-        // Models are now managed in DB, not hardcoded
-        let provider = test_mistral_provider();
-        let models = provider.available_models();
-        assert!(models.is_empty());
-    }
-
-    #[test]
-    fn test_mistral_default_model_empty() {
-        // Default model is now managed in DB, not hardcoded
-        let provider = test_mistral_provider();
-        assert!(provider.default_model().is_empty());
     }
 
     #[tokio::test]

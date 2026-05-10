@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! LLM Provider trait and common types
+//! LLM Provider common types
 
 use crate::models::agent::ReasoningEffort;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -204,7 +203,7 @@ impl From<anyhow::Error> for LLMError {
 
 /// Parameters for a completion request.
 ///
-/// Groups all parameters passed to `LLMProvider::complete()` to avoid
+/// Groups all parameters passed to provider `complete()` methods to avoid
 /// long positional argument lists.
 #[derive(Debug, Clone)]
 pub struct CompletionParams {
@@ -243,27 +242,6 @@ pub struct ToolCompletionParams {
     pub context_window: Option<usize>,
     /// Reasoning effort level for thinking models (e.g. Mistral reasoning_effort)
     pub reasoning_effort: Option<ReasoningEffort>,
-}
-
-/// Common trait for all LLM providers
-#[async_trait]
-// Trait used via dyn dispatch by the LLM layer; reachable from lib code only.
-#[allow(dead_code)]
-pub trait LLMProvider: Send + Sync {
-    /// Returns the provider type
-    fn provider_type(&self) -> ProviderType;
-
-    /// Returns available model names
-    fn available_models(&self) -> Vec<String>;
-
-    /// Returns the default model name
-    fn default_model(&self) -> String;
-
-    /// Checks if the provider is properly configured
-    fn is_configured(&self) -> bool;
-
-    /// Generates a completion for the given prompt
-    async fn complete(&self, params: CompletionParams) -> Result<LLMResponse, LLMError>;
 }
 
 #[cfg(test)]

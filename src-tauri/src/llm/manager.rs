@@ -19,7 +19,7 @@ use super::mistral::MistralProvider;
 use super::ollama::OllamaProvider;
 use super::openai_compatible::OpenAiCompatibleProvider;
 use super::provider::{
-    CompletionParams, LLMError, LLMProvider, LLMResponse, ProviderType, ToolCompletionParams,
+    CompletionParams, LLMError, LLMResponse, ProviderType, ToolCompletionParams,
 };
 use super::retry::{with_retry, with_retry_cancellable, RetryConfig};
 use crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS;
@@ -284,16 +284,6 @@ impl ProviderManager {
             }
         }
         debug!(?provider, model, "Default model updated");
-    }
-
-    /// Gets available models for a provider
-    #[cfg(test)]
-    pub fn get_available_models(&self, provider: ProviderType) -> Vec<String> {
-        match provider {
-            ProviderType::Mistral => self.mistral.available_models(),
-            ProviderType::Ollama => self.ollama.available_models(),
-            ProviderType::Custom(_) => Vec::new(), // Custom providers list models from DB
-        }
     }
 
     /// Checks if a provider is configured
@@ -707,18 +697,6 @@ mod tests {
 
         // Default to Ollama (local)
         assert_eq!(config.active_provider, ProviderType::Ollama);
-    }
-
-    #[tokio::test]
-    async fn test_get_available_models_empty() {
-        // Models are now managed in DB, not hardcoded in providers
-        let manager = ProviderManager::new().expect("test provider manager");
-
-        let mistral_models = manager.get_available_models(ProviderType::Mistral);
-        assert!(mistral_models.is_empty());
-
-        let ollama_models = manager.get_available_models(ProviderType::Ollama);
-        assert!(ollama_models.is_empty());
     }
 
     #[tokio::test]
