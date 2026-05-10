@@ -22,7 +22,8 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
  * Summary of a sub-agent execution (frontend-only, not persisted in message).
- * Captured from StreamingState during current session.
+ * Captured from `backgroundWorkflowsStore.getExecution(workflowId).subAgents`
+ * during the current session.
  */
 export interface SubAgentSummary {
   /** Execution record ID for unique identification */
@@ -77,7 +78,7 @@ export interface Message {
   model_id_used?: string;
   /** Message timestamp */
   timestamp: Date;
-  /** Sub-agent summaries (transient, captured from StreamingState) */
+  /** Sub-agent summaries (transient, captured from backgroundWorkflowsStore) */
   sub_agents?: SubAgentSummary[];
 }
 
