@@ -33,6 +33,12 @@ Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 26 atomi
 
 - **Tool `error_message` propagation**: now streams live via `StreamChunk` instead of waiting for the next reload (Rust + TS).
 
+### Tooling
+
+- **Prettier + `prettier-plugin-svelte`** wired in (`chore/prettier-plugin-svelte`). New devDependencies (`prettier@3.8.3`, `prettier-plugin-svelte@3.5.1`), config files (`.prettierrc.json`, `.prettierignore`), and npm scripts (`format`, `format:check`). First project-wide run reformatted 193 files (tabs, single quotes, no trailing comma, 100-char width) — 100% cosmetic, lint + svelte-check + 435 Vitest stay green. `.git-blame-ignore-revs` registers the reformatting commit so `git blame` keeps crediting the original logic authors. CI integration into `validate.yml` is intentionally deferred to a follow-up PR.
+- **`src/routes/agent/+page.svelte`** mosaic indent (4 functions broken by the `refactor/cleanup-zone-chat` rebase over PR #140) is now fixed via Prettier instead of a manual sed pass.
+- **`src/lib/tauri/*.ts`** zero-indent legacy from PR #130 is normalized — this subsumes the formatting follow-up that was tracked in `docs/specs/eslint-tauri-import-restriction.md`.
+
 ---
 
 ## [0.23.1] - 2026-05-08
