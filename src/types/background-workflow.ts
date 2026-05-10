@@ -32,7 +32,7 @@ import type { StreamChunk } from '$types/streaming';
  * `cancelled` for DB rows; the streaming flavor only carries the values
  * the UI sees in real time.
  */
-export type ActiveSubAgentStatus = 'starting' | 'running' | 'completed' | 'error';
+export type ActiveSubAgentStatus = 'running' | 'completed' | 'error';
 
 /**
  * Active sub-agent captured from streaming chunks (sub_agent_start /
