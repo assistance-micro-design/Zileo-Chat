@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 25 atomic commits totaling ~−1100 LOC net, zero functional change. Tests verts: 1388 Rust lib + 389 Vitest + svelte-check 4034 files / 0 errors / 0 warnings.
+Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 26 atomic cleanup commits + PR #140 (large frontend components helpers extraction) merged into the branch. The cleanup itself trims ~−1118 LOC (`+1002 / −2120` post-#140); branch-vs-main delta is `+151 LOC` because the helpers extraction adds companion files. Zero functional change. Tests verts: 1388 Rust lib + 435 Vitest + svelte-check 4050 files / 0 errors / 0 warnings.
 
 ### Removed
 
