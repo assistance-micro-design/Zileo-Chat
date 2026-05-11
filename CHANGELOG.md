@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Backend dead-code cleanup (`refactor/backend-deadcode-cleanup`). 13 commits, ~−1300 LOC of unreachable code removed plus one latent runtime bug surfaced during the audit. `#[allow(dead_code)]` annotations dropped from 27 to 2 (last two are documented module-level lib/bin-split allows on `mcp::circuit_breaker` and `mcp::client`, where test-only accessors observe production state but are not reachable from the binary target). Production constructors are now the single source of truth: test-only `_with_*` ctors removed, tests rewritten to exercise the production path. Tests verts: 1388 Rust lib + clippy --all-targets clean.
+
+### Removed (backend)
+
+- **`LLMProvider` trait** (`llm/provider.rs`): `ProviderManager` already dispatched via `enum ProviderType` + match; `is_configured()` / `complete()` are now inherent methods on `MistralProvider` / `OllamaProvider`. `OpenAiCompatibleProvider` never implemented the trait in the first place.
+- **`tools::sub_agent_circuit_breaker` module + tests** (~480 LOC): never wired — every `AgentToolContext.circuit_breaker` init site passed `None`. Call-time MCP `CircuitBreaker` untouched.
+- **MCP background health-check architecture** in `mcp::manager` (~140 LOC): `start_health_checks` / `stop_health_checks`, `check_*_health`, `get_circuit_breaker` / `reset_circuit_breaker`, `health_check_shutdown` broadcast field, `DEFAULT_HEALTH_CHECK_INTERVAL`. The private on-demand `refresh_tools_internal` used during `initialize` is kept.
+- **MCP client methods cascade**: `MCPClient::{auto_reconnect, call_tool_raw, call_tool_text, refresh_tools (public), is_process_alive, server_info}`, `MCPServerHandle` / `MCPHttpHandle::{refresh_tools (public), is_connected, set_error_status, config, server_info}`, `helpers::extract_text_content`, `manager/db::get_server_config`, `manager/tools::list_all_tools`.
+- **Server-only `JsonRpcError` constructors** (`mcp/protocol.rs`): `parse_error`, `invalid_request`, `method_not_found`, `invalid_params`, `internal_error`, `is_error`. Zileo is a JSON-RPC client; production uses `response.error.is_some()`.
+- **Test-only `_with_*` constructors**: `OllamaProvider::{with_url, clear, get_server_url}`, `RetryConfig::new`, `CircuitBreaker::with_defaults` (llm + user_question), `SubAgentExecutionCreate::{new, with_parent_message}`, `AgentToolContext::{from_app_state_with_cancellation, _with_resilience, _with_handle}`, **`LLMAgent::with_factory`**. Tests rewritten with struct literal + `..Default::default()` so they go through the production constructors.
+- **Orphan structs / fields**: `UserQuestionResponse` (Rust-side), `ValidationSettingsConfig` + its `Default`, dead `MistralUsage`-related embedding response fields (serde silently ignores unknown fields), `ToolMetadata.name` + 9 init sites, `DEFAULT_TIMEOUT_SECS` + duplicate `DEFAULT_TIMEOUT_THRESHOLD` / `DEFAULT_COOLDOWN_SECS` (single source of truth in `tools::constants::user_question::CIRCUIT_*`).
+
+### Fixed (backend)
+
+- **`SpawnAgentTool` sub-agent context propagation** (ERR_AGENT_008, latent since v0.19.0): `SpawnAgentTool` built sub-agents via `LLMAgent::with_factory(...)`, which left `agent_context: None`. When a sub-agent fired `UserQuestion` mid-task, `UserQuestionTool::emit_question_event` silently early-returned (no `app_handle`); the DB row was created but the frontend modal never opened, so the question timed out after 5 minutes. Surface effect: any sub-agent asking a question would silently hang. Fix: `SpawnAgentTool` now builds sub-agents via `LLMAgent::with_context(...)` carrying `app_handle.clone()` + the workflow's `cancellation_token`. Sub-agent tool filtering (`is_sub_agent: true`) is unchanged.
+
+---
+
 Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 26 atomic cleanup commits + PR #140 (large frontend components helpers extraction) merged into the branch. The cleanup itself trims ~−1118 LOC (`+1002 / −2120` post-#140); branch-vs-main delta is `+151 LOC` because the helpers extraction adds companion files. Zero functional change. Tests verts: 1388 Rust lib + 435 Vitest + svelte-check 4050 files / 0 errors / 0 warnings.
 
 ### Removed
