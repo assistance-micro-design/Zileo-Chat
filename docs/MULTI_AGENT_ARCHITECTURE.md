@@ -76,7 +76,7 @@ See `src/lib/stores/agents.ts` for frontend store implementation.
 | `Report` | Output | task_id, status (Success/Failed), content (markdown), metrics |
 | `ReportMetrics` | Metrics | duration_ms, tokens, tools_used, mcp_calls, tool_executions |
 
-**LLMAgent constructors**: `with_factory` (custom factory, used by sub-agents), `with_context` (primary agent with sub-agent tools).
+**LLMAgent constructor**: `with_context(config, provider_manager, tool_factory, agent_context)`. The `AgentToolContext` is propagated to spawned sub-agents (via `SpawnAgentTool`) with the same shared dependencies; sub-agents inject `is_sub_agent: true` in their task context, which restricts their tool set to basic tools only (single-level hierarchy).
 
 See `src-tauri/src/agents/` for implementation.
 
@@ -196,7 +196,6 @@ The system detects generic reports ("Task completed after N iteration(s)") and f
 |---------|---------------|-------------|
 | **Inactivity Timeout** | 300s, heartbeat 30s | Monitoring without cutting legitimate long executions |
 | **Retry + Backoff** | 3 attempts, 500ms initial | Retryable errors: timeout, network, rate limit, 502/503/429 |
-| **Circuit Breaker** | 3 failures -> 60s cooldown | States: Closed -> Open -> HalfOpen -> Closed |
 | **Graceful Cancellation** | CancellationToken propagation | Immediate response, resource cleanup |
 | **Hierarchical Tracing** | parent_execution_id | Batch -> task correlation |
 
@@ -254,9 +253,9 @@ See `src-tauri/src/tools/validation_helper.rs` and `src-tauri/src/commands/valid
 | Tool registry | `src-tauri/src/tools/registry.rs` |
 | Basic tools | `src-tauri/src/tools/` (memory, todo, calculator, user_question, file_manager) |
 | Hidden tools | `src-tauri/src/tools/read_skill.rs` |
-| Sub-agent tools | `src-tauri/src/tools/` (spawn_agent, delegate_task, parallel_tasks, sub_agent_executor, sub_agent_circuit_breaker) |
+| Sub-agent tools | `src-tauri/src/tools/` (spawn_agent, delegate_task, parallel_tasks, sub_agent_executor) |
 | Validation | `src-tauri/src/tools/validation_helper.rs` |
-| Commands | `src-tauri/src/commands/` (23 modules, 143 commands) |
+| Commands | `src-tauri/src/commands/` (23 modules, 140 commands) |
 | Models | `src-tauri/src/models/` |
 | LLM providers | `src-tauri/src/llm/` |
 | Frontend store | `src/lib/stores/agents.ts` |

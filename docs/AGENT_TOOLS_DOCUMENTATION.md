@@ -33,7 +33,6 @@ Technical documentation for the native tools available to agents in the multi-ag
 
 - Inactivity timeout with heartbeat (300s timeout, 30s check interval)
 - Retry with exponential backoff (3 attempts, 500ms-2000ms)
-- Circuit breaker (3 failures to open, 60s cooldown)
 - CancellationToken for graceful shutdown
 - Hierarchical correlation IDs for batch tracing
 
@@ -277,10 +276,9 @@ See `src-tauri/src/tools/file_manager/` for implementation.
 5. Format results and feed back to LLM
 6. Repeat until no tool calls or max iterations reached (default: 50)
 
-### Constructors
+### Constructor
 
-- `LLMAgent::with_factory(config, provider_manager, tool_factory)` -- Local tools only
-- `LLMAgent::with_context(config, provider_manager, tool_factory, agent_context)` -- With sub-agent tools
+`LLMAgent::with_context(config, provider_manager, tool_factory, agent_context)` -- Single constructor. The `AgentToolContext` carries shared dependencies (registry, orchestrator, llm_manager, mcp_manager, tool_factory, app_handle, cancellation_token) down to the tools created on each turn. Sub-agent tools (SpawnAgentTool, DelegateTaskTool, ParallelTasksTool) are only created when the task context does NOT set `is_sub_agent: true`, enforcing the single-level hierarchy.
 
 ### Key Methods
 

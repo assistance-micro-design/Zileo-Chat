@@ -215,10 +215,10 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 
 ### Q25: MCP Resilience and Monitoring
 
-**Decision**: Circuit breaker + health checks + latency metrics.
+**Decision**: Circuit breaker + latency metrics + on-demand tool refresh.
 
 - Circuit breaker: 3 failures -> 60s cooldown, per-server state
-- Health checks: background task every 5min using refresh_tools() as probe
+- Tool refresh: on-demand via `refresh_tools()`, no background health probe
 - Latency metrics: P50/P95/P99 from mcp_call_log table (last 1h window)
 - Tool caching: 1h TTL, invalidated on errors
 - ID lookup table: O(1) server operations via id_to_name HashMap
@@ -367,7 +367,7 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 | Security | Production-ready v1, OS keystore + AES-256, tracing, anyhow + thiserror |
 | Providers | Mistral + Ollama + Custom (OpenAI-compatible), user choice, multi-layer resilience |
 | Tools | Built-in (9 tools) + MCP, ToolDefinition summary/description split, TaskBridge scoping |
-| MCP | User-configured, no pre-integrated servers, circuit breaker + health checks |
+| MCP | User-configured, no pre-integrated servers, circuit breaker + on-demand tool refresh |
 | Testing | Critical paths, 1000+ tests, GitHub Actions CI |
 | Deployment | Linux first, manual updates v1, auto-updates v1.5 |
 | Frontend | CRUD factory stores, Svelte 5 runes (completed), route-based settings |
