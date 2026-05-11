@@ -21,10 +21,8 @@
   @example
   <ModelCard
     model={model}
-    isDefault={model.id === defaultModelId}
     onEdit={() => openEditModal(model)}
     onDelete={() => handleDelete(model.id)}
-    onSetDefault={() => setDefaultModel(model.id)}
   />
 -->
 <script lang="ts">
@@ -38,17 +36,13 @@
 	interface Props {
 		/** The LLM model to display */
 		model: LLMModel;
-		/** Whether this model is the default for its provider */
-		isDefault: boolean;
 		/** Callback when edit button is clicked (only for custom models) */
 		onEdit?: () => void;
 		/** Callback when delete button is clicked (only for custom models) */
 		onDelete?: () => void;
-		/** Callback when set default button is clicked */
-		onSetDefault?: () => void;
 	}
 
-	let { model, isDefault, onEdit, onDelete, onSetDefault }: Props = $props();
+	let { model, onEdit, onDelete }: Props = $props();
 
 	/**
 	 * Formats a number with locale-specific thousand separators
@@ -89,9 +83,6 @@
 				{#if model.is_builtin}
 					<Badge variant="primary">{$i18n('llm_model_builtin')}</Badge>
 				{/if}
-				{#if isDefault}
-					<Badge variant="warning">{$i18n('llm_model_default')}</Badge>
-				{/if}
 				<span class="provider-name">{formatProvider(model.provider)}</span>
 			</div>
 		</div>
@@ -120,11 +111,6 @@
 
 	{#snippet footer()}
 		<div class="model-actions">
-			{#if !isDefault && onSetDefault}
-				<Button variant="ghost" size="sm" onclick={onSetDefault}>
-					{$i18n('llm_model_set_default')}
-				</Button>
-			{/if}
 			{#if !model.is_builtin}
 				{#if onEdit}
 					<Button variant="ghost" size="sm" onclick={onEdit}>

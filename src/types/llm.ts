@@ -156,7 +156,7 @@ export interface UpdateModelRequest {
 /**
  * Configuration settings for a provider.
  *
- * Stores per-provider settings including enabled state, default model,
+ * Stores per-provider settings including enabled state
  * and optional base URL (primarily for Ollama).
  */
 export interface ProviderSettings {
@@ -164,8 +164,6 @@ export interface ProviderSettings {
 	provider: ProviderType;
 	/** Whether this provider is enabled */
 	enabled: boolean;
-	/** ID of the default model for this provider */
-	default_model_id: string | null;
 	/** Whether an API key is configured (for Mistral) */
 	api_key_configured: boolean;
 	/** Custom base URL (primarily for Ollama) */

@@ -113,17 +113,6 @@ export function getModelByApiName(
 }
 
 /**
- * Gets the default model for a provider.
- */
-export function getDefaultModel(state: LLMState, provider: ProviderType): LLMModel | undefined {
-	const settings = state.providers[provider];
-	if (!settings?.default_model_id) {
-		return undefined;
-	}
-	return getModelById(state, settings.default_model_id);
-}
-
-/**
  * Gets settings for a specific provider.
  */
 export function getProviderSettingsFromState(

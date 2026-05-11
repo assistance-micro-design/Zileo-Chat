@@ -16,7 +16,7 @@
 
 <!--
 LLM Section - Extracted from Settings page
-Manages LLM providers and models: list, create, edit, delete, set default.
+Manages LLM providers and models: list, create, edit, delete.
 Combines Providers and Models sections.
 -->
 
@@ -54,13 +54,11 @@ Combines Providers and Models sections.
 		updateModelInState,
 		removeModel,
 		getFilteredModelsMemoized,
-		getDefaultModel,
 		hasApiKey as hasApiKeyInState,
 		loadAllLLMData,
 		createModel,
 		updateModel,
 		deleteModel,
-		updateProviderSettings,
 		deleteCustomProvider
 	} from '$lib/stores/llm';
 	import { Plus, Cpu, Sparkles, Server, Globe } from '@lucide/svelte';
@@ -272,25 +270,6 @@ Combines Providers and Models sections.
 	}
 
 	/**
-	 * Handles setting a model as the default for its provider
-	 */
-	async function handleSetDefaultModel(model: LLMModel): Promise<void> {
-		try {
-			const updatedSettings = await updateProviderSettings(
-				model.provider,
-				undefined,
-				model.id,
-				undefined
-			);
-			llmState = setProviderSettings(llmState, model.provider, updatedSettings);
-			notify('success', $i18n('settings_model_set_default', { name: model.name }));
-			dispatchSettingsRefresh();
-		} catch (err) {
-			notify('error', $i18n('settings_model_set_default_failed', { error: getErrorMessage(err) }));
-		}
-	}
-
-	/**
 	 * Handles provider models filter change
 	 */
 	function handleModelsProviderChange(event: Event & { currentTarget: HTMLSelectElement }): void {
@@ -302,13 +281,6 @@ Combines Providers and Models sections.
 	 * Uses memoized selector to prevent recalculation during scroll.
 	 */
 	const filteredModels = $derived(getFilteredModelsMemoized(llmState, selectedModelsProvider));
-
-	/**
-	 * Gets the default model for a specific provider
-	 */
-	function getProviderDefaultModel(provider: ProviderType): LLMModel | undefined {
-		return getDefaultModel(llmState, provider);
-	}
 
 	/**
 	 * Checks if a provider has an API key configured
@@ -362,7 +334,6 @@ Combines Providers and Models sections.
 					provider={provInfo.id}
 					settings={llmState.providers[provInfo.id] ?? null}
 					hasApiKey={provInfo.id === 'ollama' ? true : providerHasApiKey(provInfo.id)}
-					defaultModel={getProviderDefaultModel(provInfo.id)}
 					onConfigure={() =>
 						onConfigureApiKey(
 							provInfo.id,
@@ -387,7 +358,6 @@ Combines Providers and Models sections.
 					displayName={provInfo.displayName}
 					settings={llmState.providers[provInfo.id] ?? null}
 					hasApiKey={providerHasApiKey(provInfo.id)}
-					defaultModel={getProviderDefaultModel(provInfo.id)}
 					isCustom={true}
 					onConfigure={() =>
 						onConfigureApiKey(
@@ -472,10 +442,8 @@ Combines Providers and Models sections.
 			{#each filteredModels as model (model.id)}
 				<ModelCard
 					{model}
-					isDefault={llmState.providers[model.provider]?.default_model_id === model.id}
 					onEdit={() => modelModal.openEdit(model)}
 					onDelete={() => handleDeleteModelRequest(model)}
-					onSetDefault={() => handleSetDefaultModel(model)}
 				/>
 			{/each}
 		</div>

@@ -17,7 +17,6 @@
 use tauri::State;
 use tracing::{error, info, instrument};
 
-use super::crud::get_model;
 use super::validate_provider_string;
 use crate::commands::security::SecureKeyStore;
 use crate::llm::ProviderType;
@@ -39,7 +38,7 @@ pub async fn get_provider_settings(
     info!("Getting provider settings");
 
     let query = format!(
-        "SELECT provider, enabled, default_model_id, base_url, updated_at \
+        "SELECT provider, enabled, base_url, updated_at \
          FROM provider_settings:`{}`",
         provider_type
     );
@@ -88,7 +87,6 @@ pub async fn get_provider_settings(
 pub async fn update_provider_settings(
     provider: String,
     enabled: Option<bool>,
-    default_model_id: Option<String>,
     base_url: Option<String>,
     state: State<'_, AppState>,
     keystore: State<'_, SecureKeyStore>,
@@ -97,21 +95,9 @@ pub async fn update_provider_settings(
 
     info!(
         enabled = ?enabled,
-        default_model_id = ?default_model_id,
         base_url = ?base_url,
         "Updating provider settings - received params"
     );
-
-    // Validate default_model_id exists if provided
-    if let Some(ref model_id) = default_model_id {
-        let model = get_model(model_id.clone(), state.clone()).await?;
-        if model.provider != provider_type {
-            return Err(format!(
-                "Model {} belongs to provider {}, not {}",
-                model_id, model.provider, provider_type
-            ));
-        }
-    }
 
     let mut set_parts: Vec<String> = vec![
         "provider = $p_provider".to_string(),
@@ -126,13 +112,6 @@ pub async fn update_provider_settings(
         set_parts.push(format!("enabled = {}", en));
     } else {
         set_parts.push("enabled = enabled ?? true".to_string());
-    }
-
-    if let Some(ref model_id) = default_model_id {
-        set_parts.push("default_model_id = $p_model_id".to_string());
-        params.push(("p_model_id".to_string(), serde_json::json!(model_id)));
-    } else {
-        set_parts.push("default_model_id = default_model_id".to_string());
     }
 
     if let Some(ref url) = base_url {

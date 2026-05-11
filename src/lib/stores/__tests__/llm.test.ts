@@ -33,7 +33,6 @@ import {
 	getCustomModelsByProvider,
 	getModelById,
 	getModelByApiName,
-	getDefaultModel,
 	getProviderSettingsFromState,
 	isProviderEnabled,
 	hasApiKey,
@@ -81,7 +80,6 @@ describe('LLM Store', () => {
 	): ProviderSettings => ({
 		provider,
 		enabled: true,
-		default_model_id: null,
 		api_key_configured: false,
 		base_url: provider === 'ollama' ? 'http://localhost:11434' : null,
 		updated_at: new Date().toISOString(),
@@ -285,12 +283,14 @@ describe('LLM Store', () => {
 		});
 
 		it('should set ollama settings', () => {
-			const settings = createMockProviderSettings('ollama', { default_model_id: 'llama3' });
+			const settings = createMockProviderSettings('ollama', {
+				base_url: 'http://example:11434'
+			});
 
 			const state = setProviderSettings(initialState, 'ollama', settings);
 
 			expect(state.providers.ollama).toBeDefined();
-			expect(state.providers.ollama?.default_model_id).toBe('llama3');
+			expect(state.providers.ollama?.base_url).toBe('http://example:11434');
 			expect(state.providers.mistral).toBeUndefined();
 		});
 	});
@@ -444,27 +444,6 @@ describe('LLM Store', () => {
 
 			const found = getModelByApiName(state, 'model-m1', 'ollama');
 			expect(found).toBeUndefined();
-		});
-	});
-
-	describe('getDefaultModel', () => {
-		it('should return default model when set', () => {
-			const model = createMockModel('m1', 'mistral');
-			const settings = createMockProviderSettings('mistral', { default_model_id: 'm1' });
-
-			let state = addModel(initialState, model);
-			state = setProviderSettings(state, 'mistral', settings);
-
-			const defaultModel = getDefaultModel(state, 'mistral');
-			expect(defaultModel?.id).toBe('m1');
-		});
-
-		it('should return undefined when no default set', () => {
-			const settings = createMockProviderSettings('mistral');
-			const state = setProviderSettings(initialState, 'mistral', settings);
-
-			const defaultModel = getDefaultModel(state, 'mistral');
-			expect(defaultModel).toBeUndefined();
 		});
 	});
 

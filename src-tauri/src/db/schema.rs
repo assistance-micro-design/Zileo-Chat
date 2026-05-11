@@ -258,9 +258,10 @@ DEFINE TABLE OVERWRITE provider_settings SCHEMAFULL;
 DEFINE FIELD OVERWRITE provider ON provider_settings TYPE string
     ASSERT string::len($value) > 0 AND string::len($value) <= 64;
 DEFINE FIELD OVERWRITE enabled ON provider_settings TYPE bool DEFAULT true;
-DEFINE FIELD OVERWRITE default_model_id ON provider_settings TYPE option<string>;
 DEFINE FIELD OVERWRITE base_url ON provider_settings TYPE option<string>;
 DEFINE FIELD OVERWRITE updated_at ON provider_settings TYPE datetime DEFAULT time::now();
+-- Drop legacy decorative column on existing installs (refactor/cleanup-default-model-id).
+REMOVE FIELD IF EXISTS default_model_id ON TABLE provider_settings;
 
 DEFINE INDEX OVERWRITE unique_provider ON provider_settings FIELDS provider UNIQUE;
 

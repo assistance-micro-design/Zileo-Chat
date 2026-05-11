@@ -1002,12 +1002,10 @@
 	"llm_connection_failed": "Connection failed",
 
 	"llm_model_builtin": "Builtin",
-	"llm_model_default": "Default",
 	"llm_model_context_window": "Context Window",
 	"llm_model_tokens": "tokens",
 	"llm_model_max_output": "Max Output",
 	"llm_model_temperature": "Temperature",
-	"llm_model_set_default": "Set Default",
 	"llm_model_edit": "Edit",
 	"llm_model_delete": "Delete",
 
@@ -1020,7 +1018,6 @@
 	"llm_provider_not_configured": "Not Configured",
 	"llm_provider_api_key_configured": "API Key Configured",
 	"llm_provider_server_available": "Server Available",
-	"llm_provider_default_model": "Default Model:",
 	"llm_provider_server_url": "Server URL:",
 	"llm_provider_configure": "Configure",
 	"llm_custom_providers": "Custom Providers",
@@ -1102,8 +1099,6 @@
 	"settings_model_delete_confirm": "Are you sure you want to delete \"{name}\"?",
 	"settings_model_deleted": "Model \"{name}\" deleted successfully",
 	"settings_model_delete_failed": "Failed to delete model: {error}",
-	"settings_model_set_default": "\"{name}\" set as default",
-	"settings_model_set_default_failed": "Failed to set default model: {error}",
 
 	"settings_mcp_load_failed": "Failed to load MCP servers: {error}",
 	"settings_mcp_save_failed": "Failed to save server: {error}",
@@ -1185,7 +1180,7 @@
 
 	"help_models_title": "AI Models",
 	"help_models_description": "Models are the specific AI engines available from each provider. Each model has different capabilities, context sizes, and pricing. You can add custom models or use the built-in ones.",
-	"help_models_tutorial": "Use the dropdown to filter by provider\nClick 'Add Model' to create a custom model\nClick the star icon to set a model as default\nEdit models to adjust temperature and other settings",
+	"help_models_tutorial": "Use the dropdown to filter by provider\nClick 'Add Model' to create a custom model\nEdit models to adjust temperature and other settings",
 
 	"help_agents_title": "AI Agents",
 	"help_agents_description": "Agents are AI assistants configured with specific models, tools, and system prompts. Create specialized agents for different tasks like coding, analysis, or creative writing.",

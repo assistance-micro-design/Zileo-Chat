@@ -364,7 +364,7 @@ impl UpdateModelRequest {
 
 /// Configuration settings for a provider.
 ///
-/// Stores per-provider settings including enabled state, default model,
+/// Stores per-provider settings including enabled state
 /// and optional base URL (primarily for Ollama).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderSettings {
@@ -373,9 +373,6 @@ pub struct ProviderSettings {
     /// Whether this provider is enabled
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// ID of the default model for this provider
-    #[serde(default)]
-    pub default_model_id: Option<String>,
     /// Whether an API key is configured (for Mistral)
     #[serde(default)]
     pub api_key_configured: bool,
@@ -402,7 +399,6 @@ impl ProviderSettings {
         Self {
             provider,
             enabled: true,
-            default_model_id: None,
             api_key_configured: false,
             base_url,
             updated_at: Utc::now(),

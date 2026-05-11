@@ -128,13 +128,11 @@ export async function loadProviderSettings(provider: ProviderType): Promise<Prov
 export async function updateProviderSettings(
 	provider: ProviderType,
 	enabled?: boolean,
-	defaultModelId?: string,
 	baseUrl?: string
 ): Promise<ProviderSettings> {
 	const settings = await invoke<ProviderSettings>('update_provider_settings', {
 		provider,
 		enabled: enabled ?? null,
-		defaultModelId: defaultModelId ?? null,
 		baseUrl: baseUrl ?? null
 	});
 	invalidateLLMCache();

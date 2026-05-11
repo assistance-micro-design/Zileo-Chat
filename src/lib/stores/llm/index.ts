@@ -42,7 +42,6 @@ export {
 	getCustomModelsByProvider,
 	getModelById,
 	getModelByApiName,
-	getDefaultModel,
 	getProviderSettingsFromState,
 	isProviderEnabled,
 	hasApiKey,

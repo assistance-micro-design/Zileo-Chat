@@ -36,7 +36,7 @@
 	import { Card, Badge, Button, StatusIndicator } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
 	import ConnectionTester from './ConnectionTester.svelte';
-	import type { ProviderSettings, ProviderType, LLMModel } from '$types/llm';
+	import type { ProviderSettings, ProviderType } from '$types/llm';
 
 	/**
 	 * ProviderCard props
@@ -50,8 +50,6 @@
 		settings: ProviderSettings | null;
 		/** Whether the provider has an API key configured */
 		hasApiKey: boolean;
-		/** Default model for this provider (if set) */
-		defaultModel?: LLMModel | null;
 		/** Whether this is a custom (non-builtin) provider */
 		isCustom?: boolean;
 		/** Icon snippet to render */
@@ -67,7 +65,6 @@
 		displayName,
 		settings,
 		hasApiKey,
-		defaultModel = null,
 		isCustom = false,
 		icon,
 		onConfigure,
@@ -164,13 +161,6 @@
 					<div class="status-row">
 						<StatusIndicator status="error" size="sm" />
 						<span class="status-text">{$i18n('llm_provider_not_configured')}</span>
-					</div>
-				{/if}
-
-				{#if defaultModel}
-					<div class="info-row">
-						<span class="info-label">{$i18n('llm_provider_default_model')}</span>
-						<span class="info-value">{defaultModel.name}</span>
 					</div>
 				{/if}
 

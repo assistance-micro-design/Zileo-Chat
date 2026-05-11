@@ -1003,12 +1003,10 @@
 	"llm_connection_failed": "Echec de la connexion",
 
 	"llm_model_builtin": "Integre",
-	"llm_model_default": "Par defaut",
 	"llm_model_context_window": "Fenetre de contexte",
 	"llm_model_tokens": "jetons",
 	"llm_model_max_output": "Sortie max.",
 	"llm_model_temperature": "Temperature",
-	"llm_model_set_default": "Definir par defaut",
 	"llm_model_edit": "Modifier",
 	"llm_model_delete": "Supprimer",
 
@@ -1021,7 +1019,6 @@
 	"llm_provider_not_configured": "Non configure",
 	"llm_provider_api_key_configured": "Cle d'API configuree",
 	"llm_provider_server_available": "Serveur disponible",
-	"llm_provider_default_model": "Modele par defaut :",
 	"llm_provider_server_url": "Adresse du serveur :",
 	"llm_provider_configure": "Configurer",
 	"llm_custom_providers": "Fournisseurs personnalises",
@@ -1103,8 +1100,6 @@
 	"settings_model_delete_confirm": "Voulez-vous vraiment supprimer \"{name}\" ?",
 	"settings_model_deleted": "Modele \"{name}\" supprime avec succes",
 	"settings_model_delete_failed": "Echec de la suppression du modele : {error}",
-	"settings_model_set_default": "\"{name}\" defini comme modele par defaut",
-	"settings_model_set_default_failed": "Echec de la definition du modele par defaut : {error}",
 
 	"settings_mcp_load_failed": "Echec du chargement des serveurs MCP : {error}",
 	"settings_mcp_save_failed": "Echec de l'enregistrement du serveur : {error}",
@@ -1186,7 +1181,7 @@
 
 	"help_models_title": "Modeles d'IA",
 	"help_models_description": "Les modeles sont les moteurs d'IA specifiques disponibles chez chaque fournisseur. Chaque modele a des capacites, des tailles de contexte et des tarifs differents. Vous pouvez ajouter des modeles personnalises ou utiliser ceux integres.",
-	"help_models_tutorial": "Utilisez le menu deroulant pour filtrer par fournisseur\nCliquez sur 'Ajouter un modele' pour creer un modele personnalise\nCliquez sur l'icone etoile pour definir un modele par defaut\nModifiez les modeles pour ajuster la temperature et autres parametres",
+	"help_models_tutorial": "Utilisez le menu deroulant pour filtrer par fournisseur\nCliquez sur 'Ajouter un modele' pour creer un modele personnalise\nModifiez les modeles pour ajuster la temperature et autres parametres",
 
 	"help_agents_title": "Agents IA",
 	"help_agents_description": "Les agents sont des assistants IA configures avec des modeles, outils et instructions systeme specifiques. Creez des agents specialises pour differentes taches comme le codage, l'analyse ou la redaction creative.",

@@ -35,10 +35,6 @@ use tracing::{debug, info, warn};
 pub struct ProviderConfig {
     /// Currently active provider
     pub active_provider: ProviderType,
-    /// Default model for Mistral
-    pub mistral_model: String,
-    /// Default model for Ollama
-    pub ollama_model: String,
     /// Ollama server URL
     pub ollama_url: String,
 }
@@ -47,8 +43,6 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             active_provider: ProviderType::Ollama, // Default to local
-            mistral_model: String::new(),
-            ollama_model: String::new(),
             ollama_url: super::ollama::DEFAULT_OLLAMA_URL.to_string(),
         }
     }
@@ -269,21 +263,6 @@ impl ProviderManager {
 
         info!("Ollama provider configured via manager");
         Ok(())
-    }
-
-    /// Sets the default model for a provider
-    #[cfg(test)]
-    pub async fn set_default_model(&self, provider: ProviderType, model: &str) {
-        let mut config = self.config.write().await;
-        match provider {
-            ProviderType::Mistral => config.mistral_model = model.to_string(),
-            ProviderType::Ollama => config.ollama_model = model.to_string(),
-            ProviderType::Custom(_) => {
-                // Custom providers don't have a config-level default model;
-                // their default model is managed via provider_settings in the DB
-            }
-        }
-        debug!(?provider, model, "Default model updated");
     }
 
     /// Checks if a provider is configured
@@ -656,16 +635,6 @@ impl ProviderManager {
         self.config.read().await.active_provider.clone()
     }
 
-    /// Gets the default model for a provider (test-only).
-    pub async fn get_default_model(&self, provider: ProviderType) -> String {
-        let config = self.config.read().await;
-        match provider {
-            ProviderType::Mistral => config.mistral_model.clone(),
-            ProviderType::Ollama => config.ollama_model.clone(),
-            ProviderType::Custom(_) => String::new(),
-        }
-    }
-
     /// Gets all configured providers (test-only).
     pub fn get_configured_providers(&self) -> Vec<ProviderType> {
         let mut providers = Vec::new();
@@ -697,27 +666,6 @@ mod tests {
 
         // Default to Ollama (local)
         assert_eq!(config.active_provider, ProviderType::Ollama);
-    }
-
-    #[tokio::test]
-    async fn test_set_default_model() {
-        let manager = ProviderManager::new().expect("test provider manager");
-
-        manager
-            .set_default_model(ProviderType::Mistral, "mistral-small-latest")
-            .await;
-        assert_eq!(
-            manager.get_default_model(ProviderType::Mistral).await,
-            "mistral-small-latest"
-        );
-
-        manager
-            .set_default_model(ProviderType::Ollama, "llama3")
-            .await;
-        assert_eq!(
-            manager.get_default_model(ProviderType::Ollama).await,
-            "llama3"
-        );
     }
 
     #[tokio::test]
