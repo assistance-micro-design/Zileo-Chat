@@ -3,7 +3,7 @@
 This file lists all third-party dependencies used by Zileo Chat and their respective licenses,
 as required by the Apache License 2.0.
 
-Generated: 2026-04-29
+Generated: 2026-05-11
 
 ## Summary by License Type
 
@@ -426,4 +426,4 @@ npm ls --all
 ---
 
 _Last updated: 2026-04-29_
-_Zileo Chat version: 0.21.0_
+_Zileo Chat version: 0.23.1_
