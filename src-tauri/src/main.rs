@@ -199,6 +199,7 @@ async fn main() -> anyhow::Result<()> {
             commands::memory::delete_memory,
             commands::memory::search_memories,
             commands::memory::clear_memories_by_type,
+            commands::memory::purge_expired_memories,
             commands::streaming::execution::execute_workflow_streaming,
             commands::streaming::execution::cancel_workflow_streaming,
             commands::message::save_message,

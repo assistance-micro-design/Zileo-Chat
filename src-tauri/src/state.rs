@@ -81,6 +81,18 @@ impl AppState {
             );
         }
 
+        // Best-effort cleanup of memories past their TTL (and their chunks).
+        // Non-fatal — search-time filtering already hides them, but purging
+        // keeps the HNSW index lean and frees DB space.
+        let purge = crate::db::queries::cleanup::purge_expired_memories(&db).await;
+        if purge.memories_purged > 0 {
+            tracing::info!(
+                memories_purged = purge.memories_purged,
+                chunks_purged = purge.chunks_purged,
+                "Expired memories purged at startup"
+            );
+        }
+
         // Initialize agent registry and orchestrator
         let registry = Arc::new(AgentRegistry::new());
         let orchestrator = Arc::new(AgentOrchestrator::new(registry.clone()));

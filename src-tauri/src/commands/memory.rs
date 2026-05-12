@@ -23,14 +23,26 @@
 use crate::{
     constants::query_limits,
     db::extract_count,
+    db::queries::cleanup,
     models::{ChunkSearchResult, Memory, MemoryType},
     security::{serialize_for_query, validate_uuid_field},
     tools::constants::memory as memory_constants,
     tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
     AppState,
 };
+use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{debug, error, info, instrument, warn};
+
+/// Result returned by `purge_expired_memories` to the frontend.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurgeExpiredResult {
+    /// Number of parent `memory` rows removed.
+    pub memories_purged: usize,
+    /// Number of `memory_chunk` rows removed alongside their parents.
+    pub chunks_purged: usize,
+}
 
 /// Adds a new memory entry with automatic embedding generation.
 ///
@@ -460,6 +472,24 @@ pub async fn clear_memories_by_type(
 
     info!(count = count, "Memories cleared successfully");
     Ok(count)
+}
+
+/// Removes memories whose `expires_at` is in the past plus their chunks.
+///
+/// Memories without `expires_at` or with a future TTL are left untouched.
+/// Exposed for UI-triggered cleanup; the same helper is also called at
+/// startup from `AppState::new` so this is just a manual top-up.
+#[tauri::command]
+#[instrument(name = "purge_expired_memories", skip(state))]
+pub async fn purge_expired_memories(
+    state: State<'_, AppState>,
+) -> Result<PurgeExpiredResult, String> {
+    info!("Purging expired memories on user request");
+    let stats = cleanup::purge_expired_memories(&state.db).await;
+    Ok(PurgeExpiredResult {
+        memories_purged: stats.memories_purged,
+        chunks_purged: stats.chunks_purged,
+    })
 }
 
 #[cfg(test)]
