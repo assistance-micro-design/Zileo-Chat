@@ -130,11 +130,38 @@ pub mod cascade {
         }
     }
 
+    /// Deletes `memory_chunk` rows whose parent memory belongs to the given
+    /// workflow. Reached via the record link `memory_id.workflow_id`.
+    ///
+    /// MUST run BEFORE deleting the parent `memory` rows — once the parent is
+    /// gone, the traversal `memory_id.workflow_id` yields NONE and the WHERE
+    /// clause never matches, which would leave the chunks orphan in the
+    /// HNSW index forever.
+    pub async fn delete_memory_chunks_by_workflow_id(db: &Arc<DBClient>, workflow_id: &str) {
+        let query = "DELETE memory_chunk WHERE memory_id.workflow_id = $wf_id";
+        match db
+            .execute_with_params(
+                query,
+                vec![(
+                    "wf_id".to_string(),
+                    serde_json::Value::String(workflow_id.to_string()),
+                )],
+            )
+            .await
+        {
+            Ok(_) => info!(workflow_id = %workflow_id, "Cascade deleted memory_chunk rows"),
+            Err(e) => {
+                warn!(error = %e, workflow_id = %workflow_id, "memory_chunk cascade delete failed")
+            }
+        }
+    }
+
     /// Performs cascade delete on all related tables for a workflow.
     ///
-    /// Uses `tokio::join!` to execute all deletes in parallel for efficiency.
-    /// This eliminates the need for 8 Arc clones + 8 ID clones by using a single
-    /// helper function.
+    /// `memory_chunk` is deleted SEQUENTIALLY FIRST because its parent link
+    /// `memory_id.workflow_id` must still be reachable. The remaining tables
+    /// in `CASCADE_DELETE_TABLES` are independent of each other and run in
+    /// parallel.
     ///
     /// # Arguments
     /// * `db` - Database client Arc reference
@@ -142,7 +169,10 @@ pub mod cascade {
     pub async fn delete_workflow_related(db: &Arc<DBClient>, workflow_id: &str) {
         use super::workflow::CASCADE_DELETE_TABLES;
 
-        // Create futures for all cascade deletes
+        // Step 1: drop chunks before their parents.
+        delete_memory_chunks_by_workflow_id(db, workflow_id).await;
+
+        // Step 2: independent tables in parallel (includes `memory` itself).
         let futures: Vec<_> = CASCADE_DELETE_TABLES
             .iter()
             .map(|table| {
@@ -155,9 +185,123 @@ pub mod cascade {
             })
             .collect();
 
-        // Execute all in parallel using join_all
         join_all(futures).await;
 
         info!(workflow_id = %workflow_id, "Cascade delete completed for all related tables");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cascade::delete_workflow_related;
+    use crate::test_utils::setup_test_state;
+    use std::sync::Arc;
+
+    /// Inserts a parent `memory` row with `workflow_id = $wf_id` and one
+    /// `memory_chunk` linked to it. Used to assert cascade behaviour without
+    /// dragging in the full embedding service.
+    async fn seed_memory_with_chunk_in_workflow(
+        db: &Arc<crate::db::DBClient>,
+        workflow_id: &str,
+    ) -> String {
+        let mem_id = uuid::Uuid::new_v4().to_string();
+        let chunk_id = uuid::Uuid::new_v4().to_string();
+
+        db.db
+            .query(format!(
+                "CREATE memory:`{}` SET \
+                    type = 'context', \
+                    content = 'parent', \
+                    workflow_id = $wf_id, \
+                    metadata = {{}}, \
+                    importance = 0.5",
+                mem_id
+            ))
+            .bind(("wf_id", workflow_id.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        db.db
+            .query(format!(
+                "CREATE memory_chunk:`{chunk_id}` SET \
+                    memory_id = memory:`{mem_id}`, \
+                    chunk_index = 0, \
+                    chunk_count = 1, \
+                    content = 'chunk content', \
+                    embedding = NONE"
+            ))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        mem_id
+    }
+
+    async fn count(db: &Arc<crate::db::DBClient>, query: &str) -> u64 {
+        let rows: Vec<serde_json::Value> = db.query_json(query).await.unwrap();
+        rows.first()
+            .and_then(|r| r.get("c"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+    }
+
+    #[tokio::test]
+    async fn cascade_drops_memory_chunks_when_workflow_is_deleted() {
+        // Resumability + bug regression: a previous version of the cascade
+        // dropped only `memory` rows and left `memory_chunk` rows pointing at
+        // a now-vanished parent, bloating the HNSW index. The fix
+        // pre-deletes chunks via the `memory_id.workflow_id` traversal.
+        let (state, _db_guard) = setup_test_state().await;
+        let wf_id = uuid::Uuid::new_v4().to_string();
+        let mem_id = seed_memory_with_chunk_in_workflow(&state.db, &wf_id).await;
+
+        let chunks_before = count(
+            &state.db,
+            &format!(
+                "SELECT count() AS c FROM memory_chunk \
+                 WHERE memory_id = memory:`{}` GROUP ALL",
+                mem_id
+            ),
+        )
+        .await;
+        assert_eq!(chunks_before, 1, "fixture must seed exactly 1 chunk");
+
+        delete_workflow_related(&state.db, &wf_id).await;
+
+        let chunks_after =
+            count(&state.db, "SELECT count() AS c FROM memory_chunk GROUP ALL").await;
+        let mems_after = count(
+            &state.db,
+            &format!(
+                "SELECT count() AS c FROM memory WHERE workflow_id = '{}' GROUP ALL",
+                wf_id
+            ),
+        )
+        .await;
+        assert_eq!(
+            chunks_after, 0,
+            "cascade must leave zero orphan memory_chunk rows"
+        );
+        assert_eq!(
+            mems_after, 0,
+            "cascade must also drop the parent memory rows (sanity)"
+        );
+    }
+
+    #[tokio::test]
+    async fn cascade_leaves_other_workflows_chunks_untouched() {
+        let (state, _db_guard) = setup_test_state().await;
+        let wf_a = uuid::Uuid::new_v4().to_string();
+        let wf_b = uuid::Uuid::new_v4().to_string();
+        seed_memory_with_chunk_in_workflow(&state.db, &wf_a).await;
+        seed_memory_with_chunk_in_workflow(&state.db, &wf_b).await;
+
+        delete_workflow_related(&state.db, &wf_a).await;
+
+        let remaining = count(&state.db, "SELECT count() AS c FROM memory_chunk GROUP ALL").await;
+        assert_eq!(remaining, 1, "only workflow A's chunks must be removed");
     }
 }
