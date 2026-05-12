@@ -188,6 +188,13 @@
 	"memory_operations_title": "Operations",
 	"memory_test_subtitle": "Verifier la connectivite au fournisseur d'incorporation",
 	"memory_reindex_subtitle": "Regenerer les vecteurs de toutes les memoires en base",
+	"memory_purge_title": "Purger les memoires expirees",
+	"memory_purge_subtitle": "Supprimer les memoires dont le TTL est depasse et leurs chunks",
+	"memory_purge_button": "Purger maintenant",
+	"memory_purge_running": "Purge en cours...",
+	"memory_purge_done": "{memories} memoires et {chunks} chunks supprimes",
+	"memory_purge_empty": "Aucune memoire expiree a supprimer",
+	"memory_purge_error": "Echec de la purge : {error}",
 	"memory_management": "Gestion de la memoire",
 
 	"memory_loading_config": "Chargement de la configuration...",

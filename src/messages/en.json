@@ -188,6 +188,13 @@
 	"memory_operations_title": "Operations",
 	"memory_test_subtitle": "Check connectivity to the embedding provider",
 	"memory_reindex_subtitle": "Regenerate vectors for every memory in the database",
+	"memory_purge_title": "Purge expired memories",
+	"memory_purge_subtitle": "Delete memories past their TTL along with their chunks",
+	"memory_purge_button": "Purge now",
+	"memory_purge_running": "Purging...",
+	"memory_purge_done": "{memories} memories and {chunks} chunks removed",
+	"memory_purge_empty": "No expired memory to purge",
+	"memory_purge_error": "Purge failed: {error}",
 	"memory_management": "Memory Management",
 
 	"memory_loading_config": "Loading configuration...",

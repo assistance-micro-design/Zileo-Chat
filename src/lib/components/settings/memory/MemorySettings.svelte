@@ -51,7 +51,7 @@ HNSW index schema.
 	import { getErrorMessage } from '$lib/utils/error';
 	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 	import { toastStore } from '$lib/stores/toast';
-	import { RefreshCw, DatabaseZap } from '@lucide/svelte';
+	import { RefreshCw, DatabaseZap, Trash2 } from '@lucide/svelte';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
 	import EmbeddingTestCard from './EmbeddingTestCard.svelte';
 	import MemoryStatsCard from './MemoryStatsCard.svelte';
@@ -90,6 +90,14 @@ HNSW index schema.
 	let reindexJobId = $state<string | null>(null);
 	let reindexStarting = $state(false);
 	let reindexProgress = $state<ReindexJobStatus | null>(null);
+
+	/** Purge state */
+	let purging = $state(false);
+
+	interface PurgeResult {
+		memoriesPurged: number;
+		chunksPurged: number;
+	}
 	const reindexRunning = $derived(reindexProgress?.status === 'running');
 	const reindexPct = $derived(
 		reindexProgress && reindexProgress.total > 0
@@ -367,6 +375,32 @@ HNSW index schema.
 		}
 	}
 
+	/**
+	 * Drops every memory whose `expires_at` is in the past plus its chunks.
+	 * Idempotent — already-purged or unexpiring memories are left alone.
+	 */
+	async function handlePurgeExpired(): Promise<void> {
+		purging = true;
+		try {
+			const result = await tauriInvoke<PurgeResult>('purge_expired_memories');
+			if (result.memoriesPurged === 0) {
+				notifyToast('info', t('memory_purge_empty'));
+			} else {
+				notifyToast(
+					'success',
+					t('memory_purge_done')
+						.replace('{memories}', String(result.memoriesPurged))
+						.replace('{chunks}', String(result.chunksPurged))
+				);
+				await reload();
+			}
+		} catch (err) {
+			notifyToast('error', t('memory_purge_error').replace('{error}', getErrorMessage(err)));
+		} finally {
+			purging = false;
+		}
+	}
+
 	// Mount: load config + stats, then restore any in-flight reindex.
 	onMount(() => {
 		loadConfig();
@@ -423,6 +457,29 @@ HNSW index schema.
 				</header>
 				<div class="operations-grid">
 					<EmbeddingTestCard {configExists} />
+
+					<!-- Purge Expired Card -->
+					<Card>
+						{#snippet header()}
+							<div class="card-header-text">
+								<div class="title-row">
+									<Trash2 size={18} aria-hidden="true" />
+									<h3 class="card-title">{$i18n('memory_purge_title')}</h3>
+								</div>
+								<p class="card-subtitle">{$i18n('memory_purge_subtitle')}</p>
+							</div>
+						{/snippet}
+						{#snippet body()}
+							<div class="reindex-body">
+								<Button variant="secondary" onclick={handlePurgeExpired} disabled={purging}>
+									<Trash2 size={16} />
+									<span>
+										{purging ? $i18n('memory_purge_running') : $i18n('memory_purge_button')}
+									</span>
+								</Button>
+							</div>
+						{/snippet}
+					</Card>
 
 					<!-- Reindex Card -->
 					<Card>
@@ -628,7 +685,7 @@ HNSW index schema.
 
 	.operations-grid {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 		gap: var(--spacing-lg);
 		align-items: start;
 	}
