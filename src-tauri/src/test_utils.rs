@@ -89,6 +89,8 @@ pub async fn setup_test_state() -> (AppState, TempDir) {
         )),
         embedding_service,
         streaming_cancellations: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        reindex_cancellations: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        reindex_jobs: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
         audit_cleanup_handle: Arc::new(tokio::sync::Mutex::new(None)),
     };
@@ -170,36 +172,37 @@ pub async fn seed_test_memory(db: &DBClient) -> String {
     id
 }
 
-/// Seeds a test memory WITH a 1024-dimension embedding vector.
-///
-/// Used for testing migration guards to verify
-/// that embeddings survive when migrations are re-run.
-pub async fn seed_test_memory_with_embedding(db: &DBClient) -> String {
-    let id = uuid::Uuid::new_v4().to_string();
-    // Create a 1024-dimension embedding (matching HNSW index)
+/// Seeds a parent `memory` row plus one `memory_chunk` carrying a
+/// 1024-dimension embedding vector — the post-refactor equivalent of the
+/// old "memory with embedding" fixture. Used by tests that need a
+/// chunked, indexable memory in place.
+pub async fn seed_test_memory_with_chunk(db: &DBClient) -> String {
+    let memory_id = seed_test_memory(db).await;
+    let chunk_id = uuid::Uuid::new_v4().to_string();
+    // 1024D embedding matching memory_chunk_vec_idx HNSW DIMENSION 1024.
     let embedding: Vec<f64> = (0..1024).map(|i| (i as f64) * 0.001).collect();
     let data = serde_json::json!({
-        "type": "knowledge",
-        "content": "Memory with embedding for migration guard test.",
-        "metadata": {
-            "tags": ["test", "embedding"],
-            "priority": null,
-            "agent_source": null
-        },
-        "importance": 0.7,
+        "chunk_index": 0,
+        "chunk_count": 1,
+        "content": "Chunk with embedding for tests",
         "embedding": embedding,
-        "workflow_id": null
     });
-    let response = db
-        .db
-        .query(format!("CREATE memory:`{}` CONTENT $data", id))
+    let query = format!(
+        "CREATE memory_chunk:`{}` SET memory_id = memory:`{}`, \
+         chunk_index = $data.chunk_index, \
+         chunk_count = $data.chunk_count, \
+         content = $data.content, \
+         embedding = $data.embedding",
+        chunk_id, memory_id
+    );
+    db.db
+        .query(query)
         .bind(("data", data))
         .await
-        .expect("Query execution failed");
-    response
+        .expect("Query execution failed")
         .check()
-        .expect("CREATE memory with embedding failed validation");
-    id
+        .expect("CREATE memory_chunk failed validation");
+    memory_id
 }
 
 // ============================================================================

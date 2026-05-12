@@ -77,6 +77,8 @@ async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
         streaming_cancellations: Arc::new(
             tokio::sync::Mutex::new(std::collections::HashMap::new()),
         ),
+        reindex_cancellations: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+        reindex_jobs: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
         audit_cleanup_handle: Arc::new(tokio::sync::Mutex::new(None)),
     };

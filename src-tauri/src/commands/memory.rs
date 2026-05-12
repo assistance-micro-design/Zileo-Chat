@@ -23,7 +23,7 @@
 use crate::{
     constants::query_limits,
     db::extract_count,
-    models::{Memory, MemorySearchResult, MemoryType},
+    models::{ChunkSearchResult, Memory, MemoryType},
     security::{serialize_for_query, validate_uuid_field},
     tools::constants::memory as memory_constants,
     tools::memory::{add_memory_core, search_memories_core, AddMemoryParams, SearchParams},
@@ -223,18 +223,31 @@ pub async fn get_memory(memory_id: String, state: State<'_, AppState>) -> Result
     })
 }
 
-/// Deletes a memory entry.
+/// Deletes a memory entry along with its child chunks (cascade).
+///
+/// Order matters: chunks are deleted first so no orphan rows remain if the
+/// second DELETE fails. The DELETE on `memory` is idempotent (no-op when the
+/// row is already gone) and matches the prior contract.
 ///
 /// # Arguments
 /// * `memory_id` - The memory ID to delete
 #[tauri::command]
 #[instrument(name = "delete_memory", skip(state), fields(memory_id = %memory_id))]
 pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    info!("Deleting memory entry");
+    info!("Deleting memory entry (with cascade on memory_chunk)");
 
     let validated_id = validate_uuid_field(&memory_id, "memory_id")?;
 
-    // Use execute() with DELETE query to avoid SurrealDB SDK issues with delete() method
+    // Cascade: drop the chunks first.
+    let cascade_query = format!(
+        "DELETE FROM memory_chunk WHERE memory_id = memory:`{}`",
+        validated_id
+    );
+    state.db.execute(&cascade_query).await.map_err(|e| {
+        error!(error = %e, "Failed to cascade-delete memory_chunk rows");
+        format!("Failed to delete memory chunks: {}", e)
+    })?;
+
     let delete_query = format!("DELETE memory:`{}`", validated_id);
     state.db.execute(&delete_query).await.map_err(|e| {
         error!(error = %e, "Failed to delete memory");
@@ -245,9 +258,12 @@ pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Res
     Ok(())
 }
 
-/// Searches memories using semantic similarity (vector search) with text search fallback.
+/// Searches memories using semantic similarity (vector) with a text fallback.
 ///
-/// Delegates to shared `search_memories_core` helper (deduplicates logic with tool.rs).
+/// Returns one row per matching chunk. `parent_memory_id` is the UUID an
+/// agent passes to `operation=get` to read the full parent content. Several
+/// chunks may share the same `parent_memory_id` (deduplication is left to
+/// the agent — keeps the V1 contract simple).
 ///
 /// # Arguments
 /// * `query` - Search query text
@@ -255,14 +271,13 @@ pub async fn delete_memory(memory_id: String, state: State<'_, AppState>) -> Res
 /// * `type_filter` - Optional filter by memory type
 /// * `workflow_id` - Optional workflow ID filter
 /// * `threshold` - Similarity threshold 0-1 for vector search (default: 0.7)
-///
-/// # Returns
-/// Vector of matching memories with relevance scores
+/// * `tags_filter` - When set, only return results whose parent memory has
+///   at least ONE of these tags (CONTAINSANY semantics)
 #[tauri::command]
 #[instrument(
     name = "search_memories",
     skip(state, query),
-    fields(query_len = query.len(), limit = ?limit, type_filter = ?type_filter, workflow_id = ?workflow_id)
+    fields(query_len = query.len(), limit = ?limit, type_filter = ?type_filter, workflow_id = ?workflow_id, tags_filter = ?tags_filter)
 )]
 pub async fn search_memories(
     query: String,
@@ -270,11 +285,11 @@ pub async fn search_memories(
     type_filter: Option<MemoryType>,
     workflow_id: Option<String>,
     threshold: Option<f64>,
+    tags_filter: Option<Vec<String>>,
     state: State<'_, AppState>,
-) -> Result<Vec<MemorySearchResult>, String> {
+) -> Result<Vec<ChunkSearchResult>, String> {
     info!("Searching memories");
 
-    // Validate query
     let trimmed_query = query.trim();
     if trimmed_query.is_empty() {
         return Err("Search query cannot be empty".to_string());
@@ -283,12 +298,10 @@ pub async fn search_memories(
     let result_limit = limit.unwrap_or(10).min(100);
     let similarity_threshold = threshold.unwrap_or(0.7).clamp(0.0, 1.0);
 
-    // Get embedding service
     let service_guard = state.embedding_service.read().await;
     let embedding_service = service_guard.as_ref().cloned();
     drop(service_guard);
 
-    // Convert type_filter to string for shared helper
     let type_filter_str = type_filter.as_ref().map(|t| {
         serde_json::to_string(t)
             .unwrap_or_default()
@@ -296,8 +309,8 @@ pub async fn search_memories(
             .to_string()
     });
 
-    // Build scope: use "both" if no workflow_id, "workflow" if workflow_id provided
-    // (preserves backward compatibility - commands filter by specific workflow_id)
+    // "workflow" when caller pinned an id, "both" otherwise (matches the
+    // backward-compatible behavior of the previous command shape).
     let scope = if workflow_id.is_some() {
         "workflow".to_string()
     } else {
@@ -311,49 +324,15 @@ pub async fn search_memories(
         workflow_id,
         scope,
         threshold: similarity_threshold,
+        tags_filter,
     };
 
     let (results, search_type) =
         search_memories_core(params, &state.db, embedding_service.as_ref()).await?;
 
-    // Convert JSON results to MemorySearchResult for the command's return type
-    let search_results: Vec<MemorySearchResult> = results
+    let search_results: Vec<ChunkSearchResult> = results
         .into_iter()
-        .map(|v| {
-            let score = v.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
-            let memory = Memory {
-                id: v
-                    .get("id")
-                    .and_then(|i| i.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                memory_type: serde_json::from_value(v.get("type").cloned().unwrap_or_default())
-                    .unwrap_or(MemoryType::Knowledge),
-                content: v
-                    .get("content")
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                workflow_id: v
-                    .get("workflow_id")
-                    .and_then(|w| w.as_str())
-                    .map(String::from),
-                metadata: v.get("metadata").cloned().unwrap_or(serde_json::json!({})),
-                importance: v.get("importance").and_then(|i| i.as_f64()).unwrap_or(0.5),
-                expires_at: v
-                    .get("expires_at")
-                    .and_then(|e| e.as_str())
-                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                    .map(|dt| dt.with_timezone(&chrono::Utc)),
-                created_at: v
-                    .get("created_at")
-                    .and_then(|c| c.as_str())
-                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(chrono::Utc::now),
-            };
-            MemorySearchResult { memory, score }
-        })
+        .map(|v| chunk_result_from_json(&v, &search_type))
         .collect();
 
     debug!(
@@ -362,6 +341,57 @@ pub async fn search_memories(
         "Search completed"
     );
     Ok(search_results)
+}
+
+/// Deserializes one row from the search core into a typed
+/// [`ChunkSearchResult`]. Missing fields fall back to sane defaults so a
+/// shape-shift in either text or vector path stays survivable.
+fn chunk_result_from_json(v: &serde_json::Value, default_search_type: &str) -> ChunkSearchResult {
+    let parse_dt = |key: &str| {
+        v.get(key)
+            .and_then(|x| x.as_str())
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+    };
+    ChunkSearchResult {
+        chunk_id: v
+            .get("chunk_id")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string(),
+        parent_memory_id: v
+            .get("parent_memory_id")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string(),
+        chunk_index: v.get("chunk_index").and_then(|x| x.as_u64()).unwrap_or(0) as usize,
+        chunk_count: v.get("chunk_count").and_then(|x| x.as_u64()).unwrap_or(1) as usize,
+        content: v
+            .get("content")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string(),
+        memory_type: serde_json::from_value(v.get("memory_type").cloned().unwrap_or_default())
+            .unwrap_or(MemoryType::Knowledge),
+        workflow_id: v
+            .get("workflow_id")
+            .and_then(|x| x.as_str())
+            .map(String::from),
+        metadata: v.get("metadata").cloned().unwrap_or(serde_json::json!({})),
+        importance: v.get("importance").and_then(|x| x.as_f64()).unwrap_or(0.5),
+        expires_at: parse_dt("expires_at"),
+        created_at: parse_dt("created_at").unwrap_or_else(chrono::Utc::now),
+        score: v.get("score").and_then(|x| x.as_f64()).unwrap_or(0.0),
+        cosine_score: v
+            .get("cosine_score")
+            .and_then(|x| x.as_f64())
+            .unwrap_or(0.0),
+        search_type: v
+            .get("search_type")
+            .and_then(|x| x.as_str())
+            .unwrap_or(default_search_type)
+            .to_string(),
+    }
 }
 
 /// Clears all memories of a specific type.
@@ -398,6 +428,22 @@ pub async fn clear_memories_by_type(
         })?;
 
     let count = extract_count(&count_result) as usize;
+
+    // Cascade: drop chunks whose parent matches the type filter BEFORE the
+    // parent rows themselves, to prevent orphan rows on partial failure.
+    // `SELECT VALUE id` returns the raw record values, not `{id: ...}` wrappers.
+    state
+        .db
+        .execute_with_params(
+            "DELETE FROM memory_chunk WHERE memory_id IN \
+             (SELECT VALUE id FROM memory WHERE type = $type)",
+            vec![("type".to_string(), serde_json::json!(type_str))],
+        )
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to cascade-clear memory_chunk");
+            format!("Failed to clear memory chunks: {}", e)
+        })?;
 
     // Delete all memories of the specified type using parameterized query
     state

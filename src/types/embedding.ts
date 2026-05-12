@@ -106,26 +106,6 @@ export interface ImportResult {
 }
 
 /**
- * Parameters for regenerating embeddings
- */
-export interface RegenerateEmbeddingsParams {
-	/** Optional type filter (regenerate only this type) */
-	type_filter?: string;
-}
-
-/**
- * Result of embedding regeneration
- */
-export interface RegenerateResult {
-	/** Number of memories processed */
-	processed: number;
-	/** Number of embeddings successfully generated */
-	success: number;
-	/** Number of failures */
-	failed: number;
-}
-
-/**
  * Result of embedding test operation
  */
 export interface EmbeddingTestResult {
@@ -175,6 +155,25 @@ export interface MemoryTokenStats {
 	total_estimated_tokens: number;
 	/** Total memories counted */
 	total_memories: number;
+}
+
+/**
+ * Status snapshot of a `reindex_memory_chunks` background job.
+ *
+ * Mirrors the Rust `ReindexJobStatus` struct (camelCase via serde rename).
+ * `status` transitions: "running" → ("completed" | "cancelled" | "error").
+ * `currentMemoryId` is populated only between two processed parents.
+ */
+export interface ReindexJobStatus {
+	jobId: string;
+	status: 'running' | 'completed' | 'cancelled' | 'error';
+	processed: number;
+	total: number;
+	chunksCreated: number;
+	currentMemoryId?: string;
+	errorMessage?: string;
+	startedAt: string;
+	finishedAt?: string;
 }
 
 /**

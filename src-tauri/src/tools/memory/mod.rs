@@ -59,8 +59,9 @@
 //! })).await?;
 //! ```
 
+pub(crate) mod chunker;
 mod definition;
-mod helpers;
+pub(crate) mod helpers;
 mod helpers_search;
 mod input;
 mod operations;

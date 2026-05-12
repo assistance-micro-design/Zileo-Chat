@@ -14,8 +14,11 @@
 
 //! Search and describe operations for memory helpers.
 //!
-//! Contains vector search, text search fallback, and describe (statistics)
-//! operations shared between MemoryTool and memory Tauri commands.
+//! The vector and text search paths target `memory_chunk` rows and traverse
+//! the parent `memory` via the typed record link (`memory_id.field`). When
+//! no chunks exist yet (fresh install or pre-reindex state), both paths fall
+//! back to scanning `memory.content` directly so an agent never sees an
+//! empty index unjustifiably.
 
 use super::helpers::{build_scope_condition, expiration_filter, SearchParams};
 use crate::db::DBClient;
@@ -31,31 +34,32 @@ use tracing::{debug, error, warn};
 
 /// Searches memories using semantic similarity with text search fallback.
 ///
-/// If an EmbeddingService is available, attempts vector search first.
-/// Falls back to text search on embedding failure or unavailability.
+/// Vector path runs when an `EmbeddingService` is available AND the query
+/// embedding generation succeeds. Otherwise (or if vector returns 0 rows
+/// and the chunk table is empty) the text fallback runs on `memory.content`
+/// directly to cover the pre-reindex gap.
 pub async fn search_memories_core(
     params: SearchParams,
     db: &DBClient,
     embedding_service: Option<&Arc<EmbeddingService>>,
 ) -> Result<(Vec<serde_json::Value>, String), String> {
-    let limit = params.limit.min(mem_constants::MAX_LIMIT);
-    let threshold = params.threshold.clamp(0.0, 1.0);
+    let mut params = params;
+    params.limit = params.limit.min(mem_constants::MAX_LIMIT);
+    params.threshold = params.threshold.clamp(0.0, 1.0);
 
     // Try vector search if embedding service is available
     if let Some(embed_svc) = embedding_service {
         match embed_svc.embed(&params.query_text).await {
             Ok(query_embedding) => {
-                let results = vector_search_core(
-                    &query_embedding,
-                    limit,
-                    params.type_filter.as_deref(),
-                    threshold,
-                    &params.workflow_id,
-                    &params.scope,
-                    db,
-                )
-                .await?;
-                return Ok((results, "vector".to_string()));
+                let results = vector_search_core(&query_embedding, &params, db).await?;
+                if !results.is_empty() {
+                    return Ok((results, "vector".to_string()));
+                }
+                // Empty vector results may mean: (a) no semantic match in
+                // chunks, or (b) the chunk table is empty pre-reindex.
+                // Fall through to text-on-memory.content so an agent still
+                // gets results in the pre-reindex window.
+                debug!("Vector search returned 0 rows; falling back to text on memory.content");
             }
             Err(e) => {
                 warn!(error = %e, "Query embedding failed, falling back to text search");
@@ -63,48 +67,69 @@ pub async fn search_memories_core(
         }
     }
 
-    // Fallback to text search
-    let results = text_search_core(
-        &params.query_text,
-        limit,
-        params.type_filter.as_deref(),
-        &params.workflow_id,
-        &params.scope,
-        db,
-    )
-    .await?;
+    let results = text_search_core(&params, db).await?;
     Ok((results, "text".to_string()))
 }
 
-/// Performs vector similarity search using HNSW index with composite scoring.
+/// Builds a `CONTAINSANY` filter clause + bind tuple from a tags list.
 ///
-/// Scoring formula:
-///   final_score = cosine_similarity * 0.7 + importance * 0.15 + recency_score * 0.15
+/// Returns `None` when the input is `None` or an empty slice — the caller
+/// then skips appending anything to the WHERE clause. This keeps tagless
+/// searches free of an empty array bind that some SurrealDB versions
+/// short-circuit to "no match".
+pub(crate) fn build_tags_filter_clause(
+    tags: Option<&[String]>,
+    field_prefix: &str,
+) -> Option<(String, (String, serde_json::Value))> {
+    let tags = tags?;
+    if tags.is_empty() {
+        return None;
+    }
+    let clause = format!("{}.metadata.tags CONTAINSANY $tags_filter", field_prefix);
+    let bind = ("tags_filter".to_string(), serde_json::json!(tags));
+    Some((clause, bind))
+}
+
+/// Performs vector similarity search on `memory_chunk` rows, traversing the
+/// `memory_id` record link to filter by parent attributes (type, scope,
+/// expiration, tags).
+///
+/// Scoring formula on the parent's `importance` and `created_at`:
+///   final_score = cosine * 0.7 + importance * 0.15 + recency * 0.15
 pub async fn vector_search_core(
     query_embedding: &[f32],
-    limit: usize,
-    type_filter: Option<&str>,
-    threshold: f64,
-    workflow_id: &Option<String>,
-    scope: &str,
+    search: &SearchParams,
     db: &DBClient,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let mut conditions = vec!["embedding IS NOT NONE".to_string(), expiration_filter()];
+    let mut conditions = vec![
+        "embedding IS NOT NONE".to_string(),
+        "(memory_id.expires_at IS NONE OR memory_id.expires_at > time::now())".to_string(),
+    ];
     let mut params: Vec<(String, serde_json::Value)> = Vec::new();
 
-    if let Some(scope_cond) = build_scope_condition(scope, workflow_id, &mut params) {
+    if let Some(scope_cond) =
+        build_scope_condition_for_parent(&search.scope, &search.workflow_id, &mut params)
+    {
         conditions.push(scope_cond);
     }
 
-    if let Some(mem_type) = type_filter {
-        conditions.push("type = $type_filter".to_string());
+    if let Some(ref mem_type) = search.type_filter {
+        conditions.push("memory_id.type = $type_filter".to_string());
         params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
     }
 
-    let where_clause = conditions.join(" AND ");
-    let similarity_threshold = threshold;
+    if let Some((clause, bind)) =
+        build_tags_filter_clause(search.tags_filter.as_deref(), "memory_id")
+    {
+        conditions.push(clause);
+        params.push(bind);
+    }
 
-    // Pre-allocate embedding string
+    let where_clause = conditions.join(" AND ");
+
+    // Embedding inlined as a SurrealQL array literal — binding `Vec<f32>` as
+    // JSON loses precision in the v2.x SDK path. This is internal data, not
+    // user input, so format!() is safe here.
     let mut embedding_str = String::with_capacity(query_embedding.len() * 12);
     for (i, v) in query_embedding.iter().enumerate() {
         if i > 0 {
@@ -114,29 +139,32 @@ pub async fn vector_search_core(
         let _ = write!(embedding_str, "{}", v);
     }
 
-    // Composite scoring: cosine * 0.7 + importance * 0.15 + recency * 0.15
     let query = format!(
         r#"SELECT
-            meta::id(id) AS id,
-            type,
+            meta::id(id) AS chunk_id,
+            meta::id(memory_id) AS parent_memory_id,
+            chunk_index,
+            chunk_count,
             content,
-            workflow_id,
-            metadata,
-            importance,
-            expires_at,
-            created_at,
+            memory_id.type AS memory_type,
+            memory_id.workflow_id AS workflow_id,
+            memory_id.metadata AS metadata,
+            memory_id.importance AS importance,
+            memory_id.expires_at AS expires_at,
+            memory_id.created_at AS created_at,
             vector::similarity::cosine(embedding, [{embedding}]) AS cosine_score,
             (vector::similarity::cosine(embedding, [{embedding}]) * {w_cosine}
-             + importance * {w_importance}
+             + memory_id.importance * {w_importance}
              + (1.0 - math::clamp(
-                 duration::secs(time::now() - created_at) / ({decay_days} * 24.0 * 3600.0),
+                 duration::secs(time::now() - memory_id.created_at) / ({decay_days} * 24.0 * 3600.0),
                  0.0,
                  1.0
                )) * {w_recency}
-            ) AS score
-        FROM memory
+            ) AS score,
+            'vector' AS search_type
+        FROM memory_chunk
         WHERE {where_clause}
-          AND vector::similarity::cosine(embedding, [{embedding}]) > {similarity}
+          AND vector::similarity::cosine(embedding, [{embedding}]) > {threshold}
         ORDER BY score DESC
         LIMIT {limit}"#,
         embedding = embedding_str,
@@ -145,8 +173,8 @@ pub async fn vector_search_core(
         w_recency = mem_constants::SCORE_WEIGHT_RECENCY,
         decay_days = mem_constants::RECENCY_DECAY_DAYS,
         where_clause = where_clause,
-        similarity = similarity_threshold,
-        limit = limit
+        threshold = search.threshold,
+        limit = search.limit
     );
 
     let results: Vec<serde_json::Value> =
@@ -159,21 +187,139 @@ pub async fn vector_search_core(
 
     debug!(
         count = results.len(),
-        threshold = threshold,
-        scope = %scope,
-        "Vector search completed"
+        threshold = search.threshold,
+        scope = %search.scope,
+        "Vector search completed (memory_chunk)"
     );
 
     Ok(results)
 }
 
-/// Performs text-based search as fallback when embeddings are unavailable.
+/// Performs text-based search.
+///
+/// Primary path: scans `memory_chunk.content` and traverses the parent
+/// for filters. When `memory_chunk` is empty globally (pre-reindex), falls
+/// back to scanning `memory.content` directly so the agent still gets text
+/// hits while waiting for reindex.
 pub async fn text_search_core(
-    query_text: &str,
-    limit: usize,
-    type_filter: Option<&str>,
-    workflow_id: &Option<String>,
-    scope: &str,
+    search: &SearchParams,
+    db: &DBClient,
+) -> Result<Vec<serde_json::Value>, String> {
+    if memory_chunk_table_is_empty(db).await? {
+        return legacy_text_search(search, db).await;
+    }
+
+    let mut conditions = Vec::new();
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
+
+    conditions
+        .push("string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string());
+    params.push((
+        "query_text".to_string(),
+        serde_json::json!(&search.query_text),
+    ));
+
+    conditions
+        .push("(memory_id.expires_at IS NONE OR memory_id.expires_at > time::now())".to_string());
+
+    if let Some(scope_cond) =
+        build_scope_condition_for_parent(&search.scope, &search.workflow_id, &mut params)
+    {
+        conditions.push(scope_cond);
+    }
+
+    if let Some(ref mem_type) = search.type_filter {
+        conditions.push("memory_id.type = $type_filter".to_string());
+        params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
+    }
+
+    if let Some((clause, bind)) =
+        build_tags_filter_clause(search.tags_filter.as_deref(), "memory_id")
+    {
+        conditions.push(clause);
+        params.push(bind);
+    }
+
+    let where_clause = conditions.join(" AND ");
+
+    let query = format!(
+        r#"SELECT
+            meta::id(id) AS chunk_id,
+            meta::id(memory_id) AS parent_memory_id,
+            chunk_index,
+            chunk_count,
+            content,
+            memory_id.type AS memory_type,
+            memory_id.workflow_id AS workflow_id,
+            memory_id.metadata AS metadata,
+            memory_id.importance AS importance,
+            memory_id.expires_at AS expires_at,
+            memory_id.created_at AS created_at,
+            0.0 AS cosine_score,
+            0.0 AS score,
+            'text' AS search_type
+        FROM memory_chunk
+        WHERE {}
+        ORDER BY memory_id.created_at DESC
+        LIMIT {}"#,
+        where_clause, search.limit
+    );
+
+    let results: Vec<serde_json::Value> =
+        db.query_json_with_params(&query, params)
+            .await
+            .map_err(|e| {
+                error!(error = %e, "Text search on memory_chunk failed");
+                format!("Failed to search memories: {}", e)
+            })?;
+
+    // Refine the score with a simple occurrence-based heuristic (same shape
+    // as the previous text path) so the API contract stays stable.
+    let query_lower = search.query_text.to_lowercase();
+    let mut enriched: Vec<serde_json::Value> = results
+        .into_iter()
+        .map(|mut row| {
+            if let Some(content) = row.get("content").and_then(|c| c.as_str()) {
+                let content_lower = content.to_lowercase();
+                let occurrences = content_lower.matches(&query_lower).count();
+                let score = if content.is_empty() {
+                    0.0
+                } else {
+                    ((occurrences as f64 * query_lower.len() as f64) / content.len() as f64)
+                        .min(1.0)
+                };
+                if let Some(obj) = row.as_object_mut() {
+                    obj.insert(
+                        "score".to_string(),
+                        serde_json::Number::from_f64(score)
+                            .map(serde_json::Value::Number)
+                            .unwrap_or(serde_json::Value::Null),
+                    );
+                }
+            }
+            row
+        })
+        .collect();
+
+    enriched.sort_by(|a, b| {
+        let sa = a.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let sb = b.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    debug!(
+        count = enriched.len(),
+        scope = %search.scope,
+        "Text search completed (memory_chunk)"
+    );
+    Ok(enriched)
+}
+
+/// Pre-reindex fallback: scan `memory.content` directly so an agent
+/// still gets text hits before the user clicks Reindex. The output shape
+/// is the same as the chunked path so callers don't branch.
+async fn legacy_text_search(
+    search: &SearchParams,
     db: &DBClient,
 ) -> Result<Vec<serde_json::Value>, String> {
     let mut conditions = Vec::new();
@@ -181,17 +327,29 @@ pub async fn text_search_core(
 
     conditions
         .push("string::lowercase(content) CONTAINS string::lowercase($query_text)".to_string());
-    params.push(("query_text".to_string(), serde_json::json!(query_text)));
+    params.push((
+        "query_text".to_string(),
+        serde_json::json!(&search.query_text),
+    ));
 
     conditions.push(expiration_filter());
 
-    if let Some(scope_cond) = build_scope_condition(scope, workflow_id, &mut params) {
+    if let Some(scope_cond) = build_scope_condition(&search.scope, &search.workflow_id, &mut params)
+    {
         conditions.push(scope_cond);
     }
 
-    if let Some(mem_type) = type_filter {
+    if let Some(ref mem_type) = search.type_filter {
         conditions.push("type = $type_filter".to_string());
         params.push(("type_filter".to_string(), serde_json::json!(mem_type)));
+    }
+
+    if let Some((clause, bind)) = build_tags_filter_clause(search.tags_filter.as_deref(), "memory")
+    {
+        // legacy path scans `memory` directly, so strip the `memory.` prefix
+        // we just embedded — `metadata.tags` is a bare column on the parent.
+        conditions.push(clause.replace("memory.metadata.tags", "metadata.tags"));
+        params.push(bind);
     }
 
     let where_clause = conditions.join(" AND ");
@@ -210,16 +368,15 @@ pub async fn text_search_core(
         WHERE {}
         ORDER BY created_at DESC
         LIMIT {}"#,
-        where_clause, limit
+        where_clause, search.limit
     );
 
     let memories: Vec<Memory> = db.query_with_params(&query, params).await.map_err(|e| {
-        error!(error = %e, "Text search failed");
+        error!(error = %e, "Legacy text search on memory.content failed");
         format!("Failed to search memories: {}", e)
     })?;
 
-    // Convert to JSON values with simple relevance scoring
-    let query_lower = query_text.to_lowercase();
+    let query_lower = search.query_text.to_lowercase();
     let results: Vec<serde_json::Value> = memories
         .into_iter()
         .map(|m| {
@@ -231,23 +388,69 @@ pub async fn text_search_core(
                 ((occurrences as f64 * query_lower.len() as f64) / m.content.len() as f64).min(1.0)
             };
 
+            // Surface this row in the same shape as a chunk result: chunk_id
+            // = parent id (no real chunk to point at), chunk_index = 0,
+            // chunk_count = 1. Agents reading `parent_memory_id` + get() will
+            // work transparently.
             serde_json::json!({
-                "id": m.id,
-                "type": m.memory_type,
+                "chunk_id": m.id,
+                "parent_memory_id": m.id,
+                "chunk_index": 0,
+                "chunk_count": 1,
                 "content": m.content,
+                "memory_type": m.memory_type,
                 "workflow_id": m.workflow_id,
                 "metadata": m.metadata,
                 "importance": m.importance,
                 "expires_at": m.expires_at,
                 "created_at": m.created_at,
-                "score": score
+                "cosine_score": 0.0,
+                "score": score,
+                "search_type": "text",
             })
         })
         .collect();
 
-    debug!(count = results.len(), scope = %scope, "Text search completed");
-
+    debug!(
+        count = results.len(),
+        scope = %search.scope,
+        "Legacy text search completed (memory.content pre-reindex fallback)"
+    );
     Ok(results)
+}
+
+/// `true` when `memory_chunk` has zero rows (fresh install or pre-reindex).
+async fn memory_chunk_table_is_empty(db: &DBClient) -> Result<bool, String> {
+    let rows: Vec<serde_json::Value> = db
+        .query_json("SELECT count() AS cnt FROM memory_chunk GROUP ALL")
+        .await
+        .map_err(|e| format!("Failed to count memory_chunk: {}", e))?;
+    let cnt = rows
+        .first()
+        .and_then(|r| r.get("cnt"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    Ok(cnt == 0)
+}
+
+/// Same as [`build_scope_condition`] but prefixed for the parent reached
+/// through the `memory_id` record link on `memory_chunk` rows.
+fn build_scope_condition_for_parent(
+    scope: &str,
+    workflow_id: &Option<String>,
+    params: &mut Vec<(String, serde_json::Value)>,
+) -> Option<String> {
+    match scope {
+        "workflow" => workflow_id.as_ref().map(|wf_id| {
+            params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
+            "memory_id.workflow_id = $workflow_id".to_string()
+        }),
+        "general" => Some("memory_id.workflow_id IS NONE".to_string()),
+        _ => workflow_id.as_ref().map(|wf_id| {
+            params.push(("workflow_id".to_string(), serde_json::json!(wf_id)));
+            "(memory_id.workflow_id = $workflow_id OR memory_id.workflow_id IS NONE)".to_string()
+        }),
+    }
 }
 
 /// Retrieves statistics about memories (for the describe operation).
@@ -392,3 +595,7 @@ pub async fn describe_memories_core(
         newest,
     })
 }
+
+#[cfg(test)]
+#[path = "helpers_search_tests.rs"]
+mod tests;

@@ -29,7 +29,7 @@ import type {
 	Memory,
 	CreateMemoryParams,
 	SearchMemoryParams,
-	MemorySearchResult
+	ChunkSearchResult
 } from '../memory';
 
 describe('Memory Types', () => {
@@ -228,80 +228,92 @@ describe('Memory Types', () => {
 	});
 
 	// =========================================================================
-	// MemorySearchResult tests
+	// ChunkSearchResult tests
 	// =========================================================================
 
-	describe('MemorySearchResult', () => {
-		it('should create valid search result', () => {
-			const result: MemorySearchResult = {
-				memory: {
-					id: 'mem_001',
-					type: 'knowledge',
-					content: 'SurrealDB is a multi-model database',
-					metadata: {},
-					importance: 0.6,
-					created_at: '2025-11-26T10:30:00Z'
-				},
-				score: 0.92
+	describe('ChunkSearchResult', () => {
+		it('should create a valid chunk-level result', () => {
+			const result: ChunkSearchResult = {
+				chunkId: 'chunk_001',
+				parentMemoryId: 'mem_001',
+				chunkIndex: 0,
+				chunkCount: 3,
+				content: 'SurrealDB is a multi-model database',
+				memoryType: 'knowledge',
+				workflowId: null,
+				metadata: {},
+				importance: 0.6,
+				expiresAt: null,
+				createdAt: '2025-11-26T10:30:00Z',
+				score: 0.92,
+				cosineScore: 0.95,
+				searchType: 'vector'
 			};
 
-			expect(result.memory).toBeDefined();
-			expect(result.score).toBe(0.92);
+			expect(result.chunkId).not.toBe(result.parentMemoryId);
+			expect(result.chunkIndex).toBeLessThan(result.chunkCount);
 			expect(result.score).toBeGreaterThan(0);
 			expect(result.score).toBeLessThanOrEqual(1);
 		});
 
-		it('should handle score range 0-1', () => {
-			const highScore: MemorySearchResult = {
-				memory: {
-					id: 'mem_001',
-					type: 'knowledge',
-					content: 'Exact match',
-					metadata: {},
-					importance: 0.6,
-					created_at: '2025-11-26T10:30:00Z'
-				},
-				score: 1.0
+		it('should expose the search_type discriminator', () => {
+			const vector: ChunkSearchResult = {
+				chunkId: 'c1',
+				parentMemoryId: 'm1',
+				chunkIndex: 0,
+				chunkCount: 1,
+				content: '...',
+				memoryType: 'context',
+				workflowId: null,
+				metadata: {},
+				importance: 0.5,
+				expiresAt: null,
+				createdAt: '2025-11-26T10:30:00Z',
+				score: 0.5,
+				cosineScore: 0.5,
+				searchType: 'vector'
 			};
-
-			const lowScore: MemorySearchResult = {
-				memory: {
-					id: 'mem_002',
-					type: 'knowledge',
-					content: 'Barely relevant',
-					metadata: {},
-					importance: 0.6,
-					created_at: '2025-11-26T10:30:00Z'
-				},
-				score: 0.7
-			};
-
-			expect(highScore.score).toBe(1.0);
-			expect(lowScore.score).toBe(0.7);
-			expect(highScore.score).toBeGreaterThan(lowScore.score);
+			const text: ChunkSearchResult = { ...vector, searchType: 'text' };
+			expect(vector.searchType).toBe('vector');
+			expect(text.searchType).toBe('text');
 		});
 
-		it('should maintain memory structure in results', () => {
-			const result: MemorySearchResult = {
-				memory: {
-					id: 'mem_full',
-					type: 'decision',
-					content: 'Architecture decision with full details',
-					metadata: {
-						agent_source: 'architect_agent',
-						priority: 0.9,
-						tags: ['architecture', 'design']
-					},
-					importance: 0.7,
-					created_at: '2025-11-26T10:30:00Z'
-				},
-				score: 0.85
+		it('allows several rows to share the same parent_memory_id', () => {
+			// Multiple matching chunks of one parent — agent dedupes via get().
+			const a: ChunkSearchResult = {
+				chunkId: 'c1',
+				parentMemoryId: 'shared',
+				chunkIndex: 0,
+				chunkCount: 4,
+				content: '...',
+				memoryType: 'knowledge',
+				workflowId: null,
+				metadata: {},
+				importance: 0.5,
+				expiresAt: null,
+				createdAt: '2025-11-26T10:30:00Z',
+				score: 0.9,
+				cosineScore: 0.9,
+				searchType: 'vector'
 			};
+			const b: ChunkSearchResult = { ...a, chunkId: 'c2', chunkIndex: 2, score: 0.8 };
+			expect(a.parentMemoryId).toBe(b.parentMemoryId);
+			expect(a.chunkId).not.toBe(b.chunkId);
+		});
+	});
 
-			expect(result.memory.id).toBe('mem_full');
-			expect(result.memory.type).toBe('decision');
-			expect(result.memory.metadata.agent_source).toBe('architect_agent');
-			expect(result.score).toBe(0.85);
+	describe('SearchMemoryParams tagsFilter', () => {
+		it('should accept an optional tagsFilter array', () => {
+			const params: SearchMemoryParams = {
+				query: 'auth bug',
+				tagsFilter: ['backend', 'security']
+			};
+			expect(params.tagsFilter).toEqual(['backend', 'security']);
+		});
+
+		it('should allow tagsFilter to be omitted', () => {
+			const params: SearchMemoryParams = { query: 'hello' };
+			expect(params.tagsFilter).toBeUndefined();
 		});
 	});
 

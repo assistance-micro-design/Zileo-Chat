@@ -27,6 +27,7 @@ HNSW index schema.
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { tauriInvoke } from '$lib/tauri';
 	import {
 		Button,
@@ -42,11 +43,15 @@ HNSW index schema.
 		EmbeddingConfig,
 		EmbeddingProviderType,
 		MemoryStats,
-		MemoryTokenStats
+		MemoryTokenStats,
+		ReindexJobStatus
 	} from '$types/embedding';
 	import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_CONFIG } from '$types/embedding';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
+	import { toastStore } from '$lib/stores/toast';
+	import { RefreshCw } from '@lucide/svelte';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
 	import EmbeddingTestCard from './EmbeddingTestCard.svelte';
 	import MemoryStatsCard from './MemoryStatsCard.svelte';
@@ -80,6 +85,17 @@ HNSW index schema.
 	/** Delete confirmation state */
 	let showDeleteConfirm = $state(false);
 	let deleteDeleting = $state(false);
+
+	/** Reindex job state — driven by `reindex-progress` Tauri events. */
+	let reindexJobId = $state<string | null>(null);
+	let reindexStarting = $state(false);
+	let reindexProgress = $state<ReindexJobStatus | null>(null);
+	const reindexRunning = $derived(reindexProgress?.status === 'running');
+	const reindexPct = $derived(
+		reindexProgress && reindexProgress.total > 0
+			? Math.round((reindexProgress.processed / reindexProgress.total) * 100)
+			: 0
+	);
 
 	/** Provider options (reactive to locale) */
 	const providerOptions = $derived<SelectOption[]>([
@@ -237,9 +253,141 @@ HNSW index schema.
 		editConfig.model = event.currentTarget.value;
 	}
 
-	// Load config on mount
+	function notifyToast(type: 'success' | 'error' | 'info', title: string, message = ''): void {
+		toastStore.add({ type, title, message, persistent: false, duration: 5000 });
+	}
+
+	/**
+	 * Maps backend statuses to user-facing toasts and clears the persisted
+	 * job id when the job is terminal.
+	 */
+	function handleTerminalStatus(status: ReindexJobStatus): void {
+		LocalStorage.remove(STORAGE_KEYS.REINDEX_JOB_ID);
+		reindexJobId = null;
+		if (status.status === 'completed') {
+			notifyToast(
+				'success',
+				t('memory_reindex_complete')
+					.replace('{chunks}', String(status.chunksCreated))
+					.replace('{memories}', String(status.processed))
+			);
+		} else if (status.status === 'cancelled') {
+			notifyToast(
+				'info',
+				t('memory_reindex_cancelled')
+					.replace('{processed}', String(status.processed))
+					.replace('{total}', String(status.total))
+			);
+		} else if (status.status === 'error') {
+			notifyToast(
+				'error',
+				t('memory_reindex_error').replace('{error}', status.errorMessage ?? 'unknown')
+			);
+		}
+		// Refresh stats so the dashboard reflects the new chunk indexing.
+		reload().catch(() => undefined);
+	}
+
+	/**
+	 * Restores reindex UI state from localStorage on mount.
+	 *
+	 * Three outcomes: (a) backend reports a still-running job → reattach
+	 * the listener and show live progress; (b) backend reports a terminal
+	 * status that wasn't read yet → surface a retroactive toast; (c)
+	 * backend returns null (unknown — purged or app restart) → cleanup.
+	 */
+	async function restoreReindexFromStorage(): Promise<void> {
+		const persisted = LocalStorage.get<string | null>(STORAGE_KEYS.REINDEX_JOB_ID, null);
+		if (!persisted) return;
+		try {
+			const status = await tauriInvoke<ReindexJobStatus | null>('get_reindex_job_status', {
+				jobId: persisted
+			});
+			if (!status) {
+				// App restart or 10-min retention purge: nothing to show.
+				LocalStorage.remove(STORAGE_KEYS.REINDEX_JOB_ID);
+				return;
+			}
+			reindexJobId = persisted;
+			reindexProgress = status;
+			if (status.status !== 'running') {
+				// Job finished while we were away — emit the retroactive toast.
+				if (status.status === 'completed') {
+					notifyToast('success', t('memory_reindex_restored'));
+				} else {
+					handleTerminalStatus(status);
+				}
+				LocalStorage.remove(STORAGE_KEYS.REINDEX_JOB_ID);
+				reindexJobId = null;
+			}
+		} catch (err) {
+			notifyToast('error', t('memory_reindex_error').replace('{error}', getErrorMessage(err)));
+			LocalStorage.remove(STORAGE_KEYS.REINDEX_JOB_ID);
+		}
+	}
+
+	/**
+	 * Starts a new reindex job. The backend spawns a background task and
+	 * returns the job_id; persists it so the user can leave the page
+	 * without losing the progress thread.
+	 */
+	async function handleReindex(): Promise<void> {
+		reindexStarting = true;
+		try {
+			const jobId = await tauriInvoke<string>('reindex_memory_chunks', { force: false });
+			reindexJobId = jobId;
+			LocalStorage.set(STORAGE_KEYS.REINDEX_JOB_ID, jobId);
+			// Reset visible progress; the first `reindex-progress` event will
+			// replace this with the real totals.
+			reindexProgress = {
+				jobId,
+				status: 'running',
+				processed: 0,
+				total: 0,
+				chunksCreated: 0,
+				startedAt: new Date().toISOString()
+			};
+		} catch (err) {
+			notifyToast('error', t('memory_reindex_error').replace('{error}', getErrorMessage(err)));
+		} finally {
+			reindexStarting = false;
+		}
+	}
+
+	/**
+	 * Triggers cancellation of the running job. The backend acknowledges
+	 * via a final `reindex-progress` event with status="cancelled".
+	 */
+	async function handleCancelReindex(): Promise<void> {
+		if (!reindexJobId) return;
+		try {
+			await tauriInvoke('cancel_reindex_job', { jobId: reindexJobId });
+		} catch (err) {
+			notifyToast('error', t('memory_reindex_error').replace('{error}', getErrorMessage(err)));
+		}
+	}
+
+	// Mount: load config + stats, then restore any in-flight reindex.
 	onMount(() => {
 		loadConfig();
+		void restoreReindexFromStorage();
+
+		let unlistenFn: UnlistenFn | undefined;
+		void listen<ReindexJobStatus>('reindex-progress', (event) => {
+			// Strict filter: events from other jobs (rare but possible if the
+			// user re-runs before the previous purge) are ignored.
+			if (!reindexJobId || event.payload.jobId !== reindexJobId) return;
+			reindexProgress = event.payload;
+			if (event.payload.status !== 'running') {
+				handleTerminalStatus(event.payload);
+			}
+		}).then((fn) => {
+			unlistenFn = fn;
+		});
+
+		return () => {
+			unlistenFn?.();
+		};
 	});
 </script>
 
@@ -269,6 +417,51 @@ HNSW index schema.
 
 		<!-- Embedding Test Card -->
 		<EmbeddingTestCard {configExists} />
+
+		<!-- Reindex Card -->
+		<Card>
+			{#snippet header()}
+				<h3 class="card-title">{$i18n('memory_reindex_button')}</h3>
+			{/snippet}
+			{#snippet body()}
+				<div class="reindex-body">
+					{#if reindexRunning && reindexProgress}
+						<p class="reindex-status">
+							{$i18n('memory_reindex_progress')
+								.replace('{current}', String(reindexProgress.processed))
+								.replace('{total}', String(reindexProgress.total))}
+						</p>
+						<progress
+							class="reindex-progress"
+							value={reindexProgress.processed}
+							max={Math.max(reindexProgress.total, 1)}
+							aria-valuenow={reindexProgress.processed}
+							aria-valuemax={reindexProgress.total}
+							aria-label={$i18n('memory_reindex_button')}
+						></progress>
+						<p class="reindex-meta">
+							{reindexPct}% · {reindexProgress.chunksCreated} chunks
+						</p>
+						<Button variant="ghost" onclick={handleCancelReindex} disabled={!reindexJobId}>
+							{$i18n('memory_reindex_cancel_button')}
+						</Button>
+					{:else}
+						<Button
+							variant="secondary"
+							onclick={handleReindex}
+							disabled={!configExists || reindexStarting}
+						>
+							<RefreshCw size={16} />
+							<span>
+								{reindexStarting
+									? $i18n('memory_reindex_starting')
+									: $i18n('memory_reindex_button')}
+							</span>
+						</Button>
+					{/if}
+				</div>
+			{/snippet}
+		</Card>
 
 		<!-- Memory Statistics Card -->
 		<MemoryStatsCard {stats} {tokenStats} />
@@ -372,6 +565,55 @@ HNSW index schema.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
+	}
+
+	.card-title {
+		font-size: var(--font-size-lg);
+		font-weight: var(--font-weight-semibold);
+		margin: 0;
+	}
+
+	.reindex-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+
+	.reindex-status {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
+
+	.reindex-progress {
+		width: 100%;
+		height: 8px;
+		appearance: none;
+		border: none;
+		border-radius: 4px;
+		overflow: hidden;
+		background: var(--color-bg-tertiary);
+	}
+
+	.reindex-progress::-webkit-progress-bar {
+		background: var(--color-bg-tertiary);
+		border-radius: 4px;
+	}
+
+	.reindex-progress::-webkit-progress-value {
+		background: var(--color-accent);
+		border-radius: 4px;
+	}
+
+	.reindex-progress::-moz-progress-bar {
+		background: var(--color-accent);
+		border-radius: 4px;
+	}
+
+	.reindex-meta {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
 	}
 
 	.modal-actions {

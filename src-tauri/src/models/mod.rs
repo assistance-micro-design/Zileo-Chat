@@ -51,9 +51,9 @@ pub use agent::{
 pub use chat_block::{merge_into_chat_blocks, ChatBlock};
 pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,
-    MemoryStats, MemoryTokenStats, RegenerateResult,
+    MemoryStats, MemoryTokenStats, ReindexJobStatus,
 };
-pub use memory::{Memory, MemoryCreate, MemoryCreateWithEmbedding, MemorySearchResult, MemoryType};
+pub use memory::{ChunkSearchResult, Memory, MemoryCreate, MemoryType};
 pub use message::{Message, MessageCreate, MessageMetrics, PaginatedMessages};
 pub use prompt::Prompt;
 pub use streaming::{StreamChunk, WorkflowComplete};

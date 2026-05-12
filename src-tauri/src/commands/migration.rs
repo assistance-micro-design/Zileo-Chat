@@ -18,10 +18,18 @@
 //! particularly for the Memory Tool vector search schema.
 
 use crate::db::{extract_count, DBClient};
+#[cfg(test)]
+use crate::llm::embedding::EmbeddingService;
+#[cfg(test)]
+use crate::tools::memory::chunker::{split_recursive, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::sync::Arc;
 use tauri::State;
-use tracing::{error, info, instrument, warn};
+#[cfg(test)]
+use tracing::warn;
+use tracing::{error, info, instrument};
 
 /// Result of a migration operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,13 +43,18 @@ pub struct MigrationResult {
 }
 
 /// Migration name constants
-const MIGRATION_MEMORY_SCHEMA_V1: &str = "memory_schema_v1";
 const MIGRATION_MEMORY_V2_SCHEMA: &str = "memory_v2_schema";
 const MIGRATION_MCP_HTTP_SCHEMA: &str = "mcp_http_schema";
 const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
 const MIGRATION_MCP_AUTH_V1: &str = "mcp_auth_v1";
 const MIGRATION_TOKEN_COST_ACCURACY_V1: &str = "token_cost_accuracy_v1";
+/// Migration log key used by the test-only `run_memory_chunk_v1` helper to
+/// assert the idempotency contract. The production reindex path
+/// (`reindex_memory_chunks`) does not rely on this guard — it is naturally
+/// idempotent through `WHERE id NOT IN (SELECT VALUE memory_id ...)`.
+#[cfg(test)]
+const MIGRATION_MEMORY_CHUNK_V1: &str = "memory_chunk_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -78,119 +91,12 @@ async fn record_migration_applied(db: &DBClient, migration_name: &str) -> Result
     Ok(())
 }
 
-/// SQL for migrating memory table to new schema
-///
-/// Changes:
-/// - HNSW dimension: 1536 -> 1024 (Mistral/Ollama compatibility)
-/// - Add workflow_id field for workflow scoping
-/// - Add workflow_id index for efficient filtering
-/// - Set embedding to NONE for existing records (to be regenerated)
-const MEMORY_SCHEMA_MIGRATION: &str = r#"
--- Step 1: Remove the old HNSW index (must be dropped before dimension change)
-REMOVE INDEX IF EXISTS memory_vec_idx ON TABLE memory;
-
--- Step 2: Define the optional embedding field (allows null for migration)
-DEFINE FIELD OVERWRITE embedding ON memory TYPE option<array<float>>;
-
--- Step 3: Add workflow_id field for workflow scoping
-DEFINE FIELD IF NOT EXISTS workflow_id ON memory TYPE option<string>;
-
--- Step 4: Create new HNSW index with 1024 dimensions
-DEFINE INDEX memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
-
--- Step 5: Create workflow_id index for efficient filtering
-DEFINE INDEX IF NOT EXISTS memory_workflow_idx ON memory FIELDS workflow_id;
-
--- Step 6: Clear existing embeddings (they have wrong dimensions)
-UPDATE memory SET embedding = NONE WHERE embedding IS NOT NONE;
-"#;
-
-/// Migrates the memory table schema for vector search.
-///
-/// This migration:
-/// - Drops and recreates the HNSW index with 1024 dimensions
-/// - Adds workflow_id field for workflow scoping
-/// - Adds index on workflow_id for efficient queries
-/// - Clears existing embeddings (wrong dimension) for regeneration
-///
-/// # Returns
-/// Migration result with affected record count
-///
-/// # Safety
-/// Guarded by migration_log to prevent re-execution.
-/// First run clears embeddings; subsequent runs are no-ops.
-#[tauri::command]
-#[instrument(name = "migrate_memory_schema", skip(state))]
-pub async fn migrate_memory_schema(state: State<'_, AppState>) -> Result<MigrationResult, String> {
-    info!("Starting memory schema migration");
-
-    if check_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1).await? {
-        info!("Memory schema migration already applied, skipping");
-        return Ok(MigrationResult {
-            success: true,
-            message: "Already applied: memory_schema_v1".to_string(),
-            records_affected: 0,
-        });
-    }
-
-    // Count memories before migration
-    let count_query = "SELECT count() FROM memory GROUP ALL";
-    let count_before: Vec<serde_json::Value> = state.db.query(count_query).await.map_err(|e| {
-        error!(error = %e, "Failed to count memories");
-        format!("Failed to count memories: {}", e)
-    })?;
-
-    let total_memories = extract_count(&count_before) as usize;
-
-    info!(
-        total_memories = total_memories,
-        "Memories found before migration"
-    );
-
-    // Run migration queries
-    let _: Vec<serde_json::Value> = state.db.query(MEMORY_SCHEMA_MIGRATION).await.map_err(|e| {
-        error!(error = %e, "Memory schema migration failed");
-        format!("Memory schema migration failed: {}", e)
-    })?;
-
-    // Verify migration success by checking field exists
-    let verify_query = "INFO FOR TABLE memory";
-    let _: Vec<serde_json::Value> = state.db.query(verify_query).await.map_err(|e| {
-        warn!(error = %e, "Could not verify migration");
-        format!("Could not verify migration: {}", e)
-    })?;
-
-    // Record migration as applied
-    record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1).await?;
-
-    let message = if total_memories > 0 {
-        format!(
-            "Migration complete. {} memories updated. Embeddings cleared for regeneration.",
-            total_memories
-        )
-    } else {
-        "Migration complete. Schema updated. No existing memories to migrate.".to_string()
-    };
-
-    info!(
-        records_affected = total_memories,
-        "Memory schema migration completed successfully"
-    );
-
-    Ok(MigrationResult {
-        success: true,
-        message,
-        records_affected: total_memories,
-    })
-}
-
 /// Gets the current memory schema status.
 ///
-/// Returns information about the memory table schema including:
-/// - Whether workflow_id field exists
-/// - HNSW index configuration
-/// - Total memory count
-/// - Memories with/without embeddings
+/// After the multi-chunk refactor, "with embeddings" tracks parent memories
+/// that have at least one `memory_chunk` row indexed (regardless of whether
+/// each chunk's embedding succeeded). `without_embeddings` therefore counts
+/// parents waiting for reindex.
 #[tauri::command]
 #[instrument(name = "get_memory_schema_status", skip(state))]
 pub async fn get_memory_schema_status(
@@ -198,7 +104,6 @@ pub async fn get_memory_schema_status(
 ) -> Result<MemorySchemaStatus, String> {
     info!("Getting memory schema status");
 
-    // Get total memory count
     let count_query = "SELECT count() FROM memory GROUP ALL";
     let count_result: Vec<serde_json::Value> = state.db.query(count_query).await.map_err(|e| {
         error!(error = %e, "Failed to count memories");
@@ -207,15 +112,18 @@ pub async fn get_memory_schema_status(
 
     let total_memories = extract_count(&count_result) as usize;
 
-    // Count memories with embeddings
-    let with_embedding_query = "SELECT count() FROM memory WHERE embedding IS NOT NONE GROUP ALL";
-    let with_result: Vec<serde_json::Value> =
-        state.db.query(with_embedding_query).await.map_err(|e| {
-            error!(error = %e, "Failed to count memories with embeddings");
-            format!("Failed to count memories with embeddings: {}", e)
+    // Parents that have at least one chunk row (chunked = "indexed" from
+    // the UI's perspective). DISTINCT memory_id collapses N chunks per
+    // parent to one row.
+    let with_chunks_query =
+        "SELECT count() FROM (SELECT memory_id FROM memory_chunk GROUP BY memory_id) GROUP ALL";
+    let with_chunks_result: Vec<serde_json::Value> =
+        state.db.query(with_chunks_query).await.map_err(|e| {
+            error!(error = %e, "Failed to count memories with chunks");
+            format!("Failed to count memories with chunks: {}", e)
         })?;
 
-    let with_embeddings = extract_count(&with_result) as usize;
+    let with_embeddings = extract_count(&with_chunks_result) as usize;
 
     // Count memories with workflow_id
     let with_workflow_query = "SELECT count() FROM memory WHERE workflow_id IS NOT NONE GROUP ALL";
@@ -239,7 +147,7 @@ pub async fn get_memory_schema_status(
         with_embeddings,
         without_embeddings: total_memories.saturating_sub(with_embeddings),
         with_workflow_id,
-        hnsw_dimension: 1024, // Current schema dimension
+        hnsw_dimension: 1024, // memory_chunk HNSW DIMENSION
     })
 }
 
@@ -693,10 +601,91 @@ pub struct MemorySchemaStatus {
     pub hnsw_dimension: usize,
 }
 
+/// Test-only synchronous reindex used by the migration test-suite.
+///
+/// The production code path (`commands::embedding::operations::reindex_memory_chunks`)
+/// is asynchronous with progress events + cancellation, which is harder to
+/// exercise in a unit test. This helper keeps the simple "list pending,
+/// chunk-and-create" contract that the test cases assert on; it shares the
+/// same WHERE clause and create path so a behavior drift between the two
+/// would still be caught by integration testing.
+#[cfg(test)]
+pub async fn run_memory_chunk_v1(
+    db: &DBClient,
+    embed: Option<&Arc<EmbeddingService>>,
+    force: bool,
+) -> Result<MigrationResult, String> {
+    if !force && check_migration_applied(db, MIGRATION_MEMORY_CHUNK_V1).await? {
+        info!("memory_chunk_v1 already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: format!("Already applied: {}", MIGRATION_MEMORY_CHUNK_V1),
+            records_affected: 0,
+        });
+    }
+
+    // `SELECT VALUE memory_id FROM memory_chunk` unwraps the record link to
+    // its raw form so `id NOT IN (...)` compares against record literals,
+    // not against `{memory_id: ...}` objects which would never match.
+    let pending: Vec<serde_json::Value> = db
+        .query_json(
+            "SELECT meta::id(id) AS id, content FROM memory \
+             WHERE id NOT IN (SELECT VALUE memory_id FROM memory_chunk)",
+        )
+        .await
+        .map_err(|e| format!("Failed to query pending memories: {}", e))?;
+
+    let mut processed: usize = 0;
+    for row in &pending {
+        let Some(mem_id) = row.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(content) = row.get("content").and_then(|v| v.as_str()) else {
+            continue;
+        };
+
+        let chunks = split_recursive(content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
+        let chunk_count = chunks.len();
+        for (idx, chunk_text) in chunks.iter().enumerate() {
+            let embedding = match embed {
+                Some(svc) => match svc.embed(chunk_text).await {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warn!(memory_id = %mem_id, chunk_index = idx, error = %e, "Embedding failed during reindex; chunk stored without embedding");
+                        None
+                    }
+                },
+                None => None,
+            };
+            crate::tools::memory::helpers::create_memory_chunk(
+                db,
+                mem_id,
+                idx,
+                chunk_count,
+                chunk_text,
+                embedding,
+            )
+            .await?;
+        }
+        processed += 1;
+    }
+
+    if !force {
+        record_migration_applied(db, MIGRATION_MEMORY_CHUNK_V1).await?;
+    }
+
+    info!(processed = processed, "memory_chunk_v1 reindex finished");
+    Ok(MigrationResult {
+        success: true,
+        message: format!("{} memories reindexed into memory_chunk rows", processed),
+        records_affected: processed,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{seed_test_memory, seed_test_memory_with_embedding, setup_test_state};
+    use crate::test_utils::{seed_test_memory, setup_test_state};
 
     #[test]
     fn test_migration_result_serialization() {
@@ -728,17 +717,6 @@ mod tests {
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("\"total_memories\":100"));
         assert!(json.contains("\"hnsw_dimension\":1024"));
-    }
-
-    #[test]
-    fn test_migration_sql_contains_required_changes() {
-        // Verify migration SQL contains all required changes
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("REMOVE INDEX"));
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("memory_vec_idx"));
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("DIMENSION 1024"));
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("workflow_id"));
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("memory_workflow_idx"));
-        assert!(MEMORY_SCHEMA_MIGRATION.contains("embedding = NONE"));
     }
 
     #[tokio::test]
@@ -814,81 +792,101 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_memory_migration_first_run_clears_embeddings() {
+    async fn memory_chunk_v1_skips_already_chunked_parents() {
+        // Resumability contract: a parent that already has a chunk row must
+        // NOT be reprocessed by the migration loop.
         let (state, _db_guard) = setup_test_state().await;
 
-        // Seed a memory with an embedding
-        seed_test_memory_with_embedding(&state.db).await;
-
-        // Verify embedding exists before migration
-        let before: Vec<serde_json::Value> = state
+        let parent = crate::test_utils::seed_test_memory_with_chunk(&state.db).await;
+        let chunks_before: Vec<serde_json::Value> = state
             .db
-            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .query_json(&format!(
+                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
+                parent
+            ))
             .await
             .unwrap();
-        assert!(
-            !before.is_empty(),
-            "Should have a memory with embedding before migration"
+        let cnt_before = chunks_before
+            .first()
+            .and_then(|r| r.get("cnt"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        assert_eq!(cnt_before, 1, "seed must create exactly 1 chunk");
+
+        // Run with no embedding service (still creates chunks with NONE).
+        let result = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
+        assert!(result.success);
+        // Parent already had a chunk row -> migration must skip it entirely.
+        assert_eq!(
+            result.records_affected, 0,
+            "expected 0 parents processed, got {}",
+            result.records_affected
         );
 
-        // Run the migration SQL directly (bypassing Tauri State)
-        let _: Vec<serde_json::Value> = state.db.query(MEMORY_SCHEMA_MIGRATION).await.unwrap();
-        record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
-            .await
-            .unwrap();
-
-        // Verify embeddings are cleared
-        let after: Vec<serde_json::Value> = state
+        let chunks_after: Vec<serde_json::Value> = state
             .db
-            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
+            .query_json(&format!(
+                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
+                parent
+            ))
             .await
             .unwrap();
+        let cnt_after = chunks_after
+            .first()
+            .and_then(|r| r.get("cnt"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        assert_eq!(cnt_after, 1, "chunks count must be unchanged");
+    }
+
+    #[tokio::test]
+    async fn memory_chunk_v1_chunks_pending_parent_memory() {
+        // A parent with no chunks must be processed and at least one
+        // memory_chunk row created (embedding NONE since no service).
+        let (state, _db_guard) = setup_test_state().await;
+
+        let parent = seed_test_memory(&state.db).await;
+        let result = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
+        assert!(result.success);
         assert!(
-            after.is_empty(),
-            "Embeddings should be cleared after first migration"
+            result.records_affected >= 1,
+            "expected at least 1 parent processed, got {}",
+            result.records_affected
+        );
+
+        let chunks: Vec<serde_json::Value> = state
+            .db
+            .query_json(&format!(
+                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
+                parent
+            ))
+            .await
+            .unwrap();
+        let cnt = chunks
+            .first()
+            .and_then(|r| r.get("cnt"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        assert!(
+            cnt >= 1,
+            "parent must have at least 1 chunk after migration"
         );
     }
 
     #[tokio::test]
-    async fn test_memory_migration_second_run_preserves_embeddings() {
+    async fn memory_chunk_v1_is_idempotent_via_migration_log() {
         let (state, _db_guard) = setup_test_state().await;
-
-        // First migration: seed, run, record
         seed_test_memory(&state.db).await;
-        let _: Vec<serde_json::Value> = state.db.query(MEMORY_SCHEMA_MIGRATION).await.unwrap();
-        record_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
-            .await
-            .unwrap();
 
-        // Now seed a NEW memory with embedding (simulating regeneration)
-        seed_test_memory_with_embedding(&state.db).await;
+        let first = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
+        let second = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
 
-        // Verify embedding exists
-        let before: Vec<serde_json::Value> = state
-            .db
-            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
-            .await
-            .unwrap();
+        assert!(first.success);
+        assert!(second.success);
         assert!(
-            !before.is_empty(),
-            "Should have a memory with embedding after regeneration"
-        );
-
-        // Second migration attempt: guard should prevent it
-        let already_applied = check_migration_applied(&state.db, MIGRATION_MEMORY_SCHEMA_V1)
-            .await
-            .unwrap();
-        assert!(already_applied, "Migration should be marked as applied");
-
-        // Embeddings should still be intact
-        let after: Vec<serde_json::Value> = state
-            .db
-            .query_json("SELECT embedding FROM memory WHERE embedding IS NOT NONE")
-            .await
-            .unwrap();
-        assert!(
-            !after.is_empty(),
-            "Embeddings should survive when migration guard prevents re-run"
+            second.message.contains("Already applied"),
+            "second run must short-circuit, got: {}",
+            second.message
         );
     }
 

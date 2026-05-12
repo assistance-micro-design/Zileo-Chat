@@ -50,8 +50,19 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
     ])
     .examples(&[
         serde_json::json!({"operation": "search", "query": "vector database indexing", "limit": 5}),
+        serde_json::json!({"operation": "search", "query": "auth bug", "tags_filter": ["backend", "security"]}),
         serde_json::json!({"operation": "add", "type": "knowledge", "content": "SurrealDB supports HNSW vector indexing"}),
+        serde_json::json!({"operation": "get", "memory_id": "<parent_memory_id from a search result>"}),
     ])
+    .note(
+        "SEARCH RESULTS FORMAT: search returns memory CHUNKS, not full memories. \
+         Each result has chunk_id (the chunk that matched — NOT a memory_id), \
+         parent_memory_id (use this with operation=get for the full content), \
+         and chunk_index/chunk_count for position within the parent. \
+         Several rows may share the same parent_memory_id when multiple chunks \
+         of the same memory matched — call {\"operation\": \"get\", \
+         \"memory_id\": \"<parent_memory_id>\"} to read the full parent content."
+    )
     .build(),
     input_schema: serde_json::json!({
             "type": "object",
@@ -121,6 +132,12 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Similarity threshold 0-1 (for search)"
+                },
+                "tags_filter": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 20,
+                    "description": "Filter search results to memories tagged with at least ONE of these tags (OR semantics). Use describe operation first to discover the tags available in the agent's scope."
                 }
             },
             "required": ["operation"]

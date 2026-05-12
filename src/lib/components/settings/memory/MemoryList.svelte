@@ -35,10 +35,10 @@ Displays memories with filtering, search, and action buttons.
 		Modal,
 		DeleteConfirmModal
 	} from '$lib/components/ui';
-	import type { Memory, MemoryType, MemorySearchResult } from '$types/memory';
-	import type { ImportResult, RegenerateResult } from '$types/embedding';
+	import type { Memory, MemoryType, ChunkSearchResult } from '$types/memory';
+	import type { ImportResult } from '$types/embedding';
 	import MemoryForm from './MemoryForm.svelte';
-	import { Trash2, Edit, Eye, Download, Upload, RefreshCw } from '@lucide/svelte';
+	import { Trash2, Edit, Eye, Download, Upload } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { downloadBrowserFile } from '$lib/utils/browser-download';
@@ -48,7 +48,6 @@ Displays memories with filtering, search, and action buttons.
 		buildMemoryTypeOptions,
 		formatDate,
 		formatImportFailureMessage,
-		formatRegenerateResultMessage,
 		formatScope,
 		getExportMetadata,
 		getTypeVariant,
@@ -91,10 +90,6 @@ Displays memories with filtering, search, and action buttons.
 	let memoryToDelete = $state<Memory | null>(null);
 	let deleting = $state(false);
 
-	/** Regenerate confirmation state */
-	let showRegenerateConfirm = $state(false);
-	let regenerating = $state(false);
-
 	/** Memory type options (reactive to locale) */
 	const typeOptions = $derived(
 		buildMemoryTypeOptions({
@@ -126,7 +121,13 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Searches memories semantically using vector search with text fallback
+	 * Searches memories semantically using vector search with text fallback.
+	 *
+	 * `search_memories` returns one row per matching chunk; the dashboard
+	 * shows whole memories, so we dedupe by `parentMemoryId` (keeping the
+	 * first occurrence which carries the highest score thanks to the
+	 * ORDER BY score DESC on the backend) and synthesize a `Memory` shape
+	 * from each chunk's parent fields. The chunk text is used as a preview.
 	 */
 	async function handleSearch(): Promise<void> {
 		if (!searchQuery.trim()) {
@@ -136,16 +137,30 @@ Displays memories with filtering, search, and action buttons.
 
 		searching = true;
 		try {
-			// Search all memories (both workflow-scoped and general)
-			// Vector search will be used if embedding service is configured
-			const results = await tauriInvoke<MemorySearchResult[]>('search_memories', {
+			const results = await tauriInvoke<ChunkSearchResult[]>('search_memories', {
 				query: searchQuery,
 				limit: 50,
 				typeFilter: typeFilter || undefined,
-				workflowId: null, // Search all scopes
-				threshold: 0.7 // Similarity threshold for vector search
+				workflowId: null,
+				threshold: 0.7
 			});
-			memories = results.map((r) => r.memory);
+			const seen: Record<string, true> = {};
+			memories = results
+				.filter((r) => {
+					if (seen[r.parentMemoryId]) return false;
+					seen[r.parentMemoryId] = true;
+					return true;
+				})
+				.map<Memory>((r) => ({
+					id: r.parentMemoryId,
+					type: r.memoryType,
+					content: r.content,
+					workflow_id: r.workflowId ?? undefined,
+					metadata: r.metadata,
+					importance: r.importance,
+					expires_at: r.expiresAt ?? undefined,
+					created_at: r.createdAt
+				}));
 		} catch (err) {
 			notify('error', t('memory_search_failed').replace('{error}', getErrorMessage(err)));
 		} finally {
@@ -319,39 +334,6 @@ Displays memories with filtering, search, and action buttons.
 	}
 
 	/**
-	 * Requests regeneration confirmation
-	 */
-	function handleRegenerateRequest(): void {
-		showRegenerateConfirm = true;
-	}
-
-	/**
-	 * Confirms and executes embedding regeneration
-	 */
-	async function confirmRegenerate(): Promise<void> {
-		regenerating = true;
-		try {
-			const result = await tauriInvoke<RegenerateResult>('regenerate_embeddings', {
-				typeFilter: typeFilter || undefined
-			});
-			notify('success', formatRegenerateResultMessage(t('memory_regenerate_result'), result));
-			showRegenerateConfirm = false;
-			onchange?.();
-		} catch (err) {
-			notify('error', t('memory_regenerate_failed').replace('{error}', getErrorMessage(err)));
-		} finally {
-			regenerating = false;
-		}
-	}
-
-	/**
-	 * Cancels regeneration confirmation
-	 */
-	function cancelRegenerate(): void {
-		showRegenerateConfirm = false;
-	}
-
-	/**
 	 * Handle type filter change
 	 */
 	function handleTypeChange(event: Event & { currentTarget: HTMLSelectElement }): void {
@@ -417,15 +399,6 @@ Displays memories with filtering, search, and action buttons.
 			<Button variant="secondary" size="sm" onclick={handleImport} disabled={actionLoading}>
 				<Upload size={16} />
 				<span>{$i18n('memory_import')}</span>
-			</Button>
-			<Button
-				variant="secondary"
-				size="sm"
-				onclick={handleRegenerateRequest}
-				disabled={actionLoading}
-			>
-				<RefreshCw size={16} />
-				<span>{$i18n('memory_regenerate')}</span>
 			</Button>
 			<Button variant="primary" size="sm" onclick={openAddModal}>
 				{$i18n('memory_add')}
@@ -586,18 +559,7 @@ Displays memories with filtering, search, and action buttons.
 	onCancel={cancelDelete}
 />
 
-<!-- Regenerate Confirmation Modal -->
-<DeleteConfirmModal
-	open={showRegenerateConfirm}
-	titleKey="memory_regenerate_title"
-	confirmMessageKey="memory_confirm_regenerate"
-	deleting={regenerating}
-	deletingLabelKey="memory_regenerating"
-	variant="primary"
-	confirmLabelKey="memory_regenerate_confirm_label"
-	onConfirm={confirmRegenerate}
-	onCancel={cancelRegenerate}
-/>
+<!-- Reindex moved to Settings -> Memory (see MemorySettings.svelte) -->
 
 <style>
 	.memory-list {

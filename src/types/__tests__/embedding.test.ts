@@ -31,7 +31,6 @@ import {
 	type EmbeddingProviderType,
 	type MemoryStats,
 	type ImportResult,
-	type RegenerateResult,
 	type ExportFormat
 } from '../embedding';
 
@@ -157,17 +156,6 @@ describe('Embedding Types', () => {
 			expect(result.imported).toBe(95);
 			expect(result.failed).toBe(5);
 			expect(result.errors.length).toBe(2);
-		});
-
-		it('should create valid RegenerateResult structure', () => {
-			const result: RegenerateResult = {
-				processed: 100,
-				success: 98,
-				failed: 2
-			};
-
-			expect(result.processed).toBe(100);
-			expect(result.success + result.failed).toBe(result.processed);
 		});
 	});
 

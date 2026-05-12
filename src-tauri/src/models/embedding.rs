@@ -17,6 +17,7 @@
 //! These types are synchronized with TypeScript types (src/types/embedding.ts)
 //! for IPC communication via Tauri commands.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -71,17 +72,6 @@ pub struct ImportResult {
     pub errors: Vec<String>,
 }
 
-/// Result of embedding regeneration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegenerateResult {
-    /// Number of memories processed
-    pub processed: usize,
-    /// Number of embeddings successfully generated
-    pub success: usize,
-    /// Number of failures
-    pub failed: usize,
-}
-
 /// Result of embedding test operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingTestResult {
@@ -130,6 +120,38 @@ pub struct CategoryTokenStats {
     pub avg_chars: usize,
     /// Number with embeddings
     pub with_embeddings: usize,
+}
+
+/// Snapshot of a running or recently-finished reindex job.
+///
+/// Mirrored verbatim by the frontend `ReindexJobStatus` interface so the
+/// in-memory job map (`AppState.reindex_jobs`) can be queried by the UI on
+/// remount. `serde(rename_all = "camelCase")` keeps the IPC contract aligned
+/// with TS conventions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReindexJobStatus {
+    /// Job identifier returned by `reindex_memory_chunks` at spawn time.
+    pub job_id: String,
+    /// One of "running" | "completed" | "cancelled" | "error".
+    pub status: String,
+    /// Number of parent memories processed so far.
+    pub processed: usize,
+    /// Total number of pending parents at job start (`0` until first emit).
+    pub total: usize,
+    /// Cumulative count of chunks created across all processed parents.
+    pub chunks_created: usize,
+    /// UUID of the memory currently being processed (`None` between rows).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_memory_id: Option<String>,
+    /// Error message when `status == "error"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Job spawn timestamp.
+    pub started_at: DateTime<Utc>,
+    /// Terminal timestamp (`None` while running).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<DateTime<Utc>>,
 }
 
 /// Memory export format

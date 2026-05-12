@@ -120,56 +120,43 @@ impl MemoryCreate {
     }
 }
 
-/// Memory creation payload with embedding vector
-/// Used by MemoryTool for creating memories with vector embeddings.
+/// Search result returned by [`search_memories`](crate::commands::memory::search_memories).
 ///
-/// Same `expires_at` caveat as `MemoryCreate`.
-#[derive(Debug, Clone, Serialize)]
-pub struct MemoryCreateWithEmbedding {
-    /// Type of memory content (as string for SurrealDB)
-    #[serde(rename = "type")]
-    pub memory_type: String,
-    /// Text content of the memory
+/// One row per matching chunk: `chunk_id != parent_memory_id`. The agent uses
+/// `parent_memory_id` with `operation=get` to read the full parent content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChunkSearchResult {
+    /// UUID of the chunk that matched (NOT the parent memory)
+    pub chunk_id: String,
+    /// UUID of the parent memory — use with `operation=get` to read full content
+    pub parent_memory_id: String,
+    /// 0-based index of this chunk within its parent
+    pub chunk_index: usize,
+    /// Total number of chunks for this parent memory
+    pub chunk_count: usize,
+    /// Chunk text (≤ DEFAULT_CHUNK_SIZE chars)
     pub content: String,
-    /// Vector embedding for semantic search
-    pub embedding: Vec<f32>,
-    /// Optional workflow ID for scoped memories
+    /// Memory type of the parent (resolved via record link traversal)
+    pub memory_type: MemoryType,
+    /// Workflow scope of the parent
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
-    /// Additional metadata
+    /// Metadata of the parent (tags, priority, agent_source)
     pub metadata: serde_json::Value,
-    /// Importance score (0.0-1.0)
+    /// Importance of the parent
     pub importance: f64,
-}
-
-impl MemoryCreateWithEmbedding {
-    /// Unified builder accepting optional workflow_id and importance.
-    pub fn build(
-        memory_type: MemoryType,
-        content: String,
-        embedding: Vec<f32>,
-        metadata: serde_json::Value,
-        workflow_id: Option<String>,
-        importance: f64,
-    ) -> Self {
-        Self {
-            memory_type: memory_type.to_string(),
-            content,
-            embedding,
-            workflow_id,
-            metadata,
-            importance,
-        }
-    }
-}
-
-/// Memory search result with relevance score
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemorySearchResult {
-    /// Memory entity
-    pub memory: Memory,
-    /// Relevance score (0-1, higher is more relevant)
+    /// Expiration of the parent (TTL)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Creation timestamp of the parent
+    pub created_at: DateTime<Utc>,
+    /// Composite score: cosine * 0.7 + importance * 0.15 + recency * 0.15
     pub score: f64,
+    /// Raw cosine similarity between query and chunk embedding (0..1)
+    pub cosine_score: f64,
+    /// "vector" or "text" — which path produced this row
+    pub search_type: String,
 }
 
 /// Result of the describe operation - statistics about memories
@@ -273,25 +260,29 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_search_result() {
-        let memory = Memory {
-            id: "mem_003".to_string(),
-            memory_type: MemoryType::Decision,
-            content: "Chose SurrealDB for embedded database".to_string(),
+    fn test_chunk_search_result_uses_camel_case_for_ipc() {
+        // The IPC contract requires camelCase field names — pin them here
+        // so a future drop of `#[serde(rename_all)]` is loud.
+        let result = ChunkSearchResult {
+            chunk_id: "c1".to_string(),
+            parent_memory_id: "m1".to_string(),
+            chunk_index: 0,
+            chunk_count: 2,
+            content: "hello".to_string(),
+            memory_type: MemoryType::Knowledge,
             workflow_id: None,
             metadata: serde_json::json!({}),
-            importance: 0.7,
+            importance: 0.5,
             expires_at: None,
             created_at: Utc::now(),
+            score: 0.42,
+            cosine_score: 0.55,
+            search_type: "vector".to_string(),
         };
-
-        let result = MemorySearchResult {
-            memory,
-            score: 0.95,
-        };
-
         let json = serde_json::to_string(&result).unwrap();
-        assert!(json.contains("\"score\":0.95"));
-        assert!(json.contains("\"type\":\"decision\""));
+        assert!(json.contains("\"chunkId\":\"c1\""));
+        assert!(json.contains("\"parentMemoryId\":\"m1\""));
+        assert!(json.contains("\"searchType\":\"vector\""));
+        assert!(json.contains("\"cosineScore\":0.55"));
     }
 }

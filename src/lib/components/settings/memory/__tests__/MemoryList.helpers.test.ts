@@ -3,7 +3,6 @@ import type { MemoryType } from '$types/memory';
 import {
 	buildMemoryTypeOptions,
 	formatImportFailureMessage,
-	formatRegenerateResultMessage,
 	formatScope,
 	getExportMetadata,
 	getTypeVariant,
@@ -76,15 +75,5 @@ describe('MemoryList helpers', () => {
 		expect(formatImportFailureMessage('{count} failed: {errors}', 4, ['a', 'b', 'c', 'd'])).toBe(
 			'4 failed: a, b, c'
 		);
-	});
-
-	it('formats regenerate result messages', () => {
-		expect(
-			formatRegenerateResultMessage('{processed}/{success}/{failed}', {
-				processed: 7,
-				success: 5,
-				failed: 2
-			})
-		).toBe('7/5/2');
 	});
 });

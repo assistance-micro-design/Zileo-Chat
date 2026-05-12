@@ -23,9 +23,10 @@
 //! - `helpers.rs` - Add memory logic, parameters, scope/expiration builders
 //! - `helpers_search.rs` - Search (vector + text) and describe operations
 
-use crate::db::DBClient;
+use super::chunker::{split_recursive, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE};
+use crate::db::{sanitize_for_surrealdb, DBClient};
 use crate::llm::embedding::EmbeddingService;
-use crate::models::{MemoryCreate, MemoryCreateWithEmbedding, MemoryType};
+use crate::models::{MemoryCreate, MemoryType};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -77,24 +78,22 @@ pub struct SearchParams {
     pub scope: String,
     /// Similarity threshold (0-1)
     pub threshold: f64,
+    /// Optional tag filter (CONTAINSANY semantics on parent `metadata.tags`)
+    pub tags_filter: Option<Vec<String>>,
 }
 
-/// Core logic for adding a memory with optional embedding.
+/// Core logic for adding a memory: 1 parent `memory` row + N `memory_chunk`
+/// rows, each chunk linked back to the parent via a typed `record<memory>`.
 ///
-/// This function handles the common pattern of:
-/// 1. Generating UUID
-/// 2. Attempting embedding generation (if service available)
-/// 3. Falling back to text-only storage on embedding failure
-/// 4. Creating the database record
-///
-/// # Arguments
-/// * `params` - Pre-validated memory parameters
-/// * `db` - Database client
-/// * `embedding_service` - Optional embedding service
+/// 1. Generate parent memory UUID and create the `memory` row (no embedding)
+/// 2. Run [`split_recursive`] over `params.content`
+/// 3. For each chunk: attempt embedding, then `CREATE memory_chunk` with the
+///    `memory_id` record link (embedding `NONE` on failure or when no service)
 ///
 /// # Returns
-/// * `Ok(AddMemoryResult)` with memory_id and embedding status
-/// * `Err(String)` with error message on database failure
+/// * `Ok(AddMemoryResult)` with the parent memory_id and whether at least
+///   one chunk got an embedding (`embedding_generated`)
+/// * `Err(String)` on database failure
 pub async fn add_memory_core(
     params: AddMemoryParams,
     db: &DBClient,
@@ -102,58 +101,48 @@ pub async fn add_memory_core(
 ) -> Result<AddMemoryResult, String> {
     let memory_id = Uuid::new_v4().to_string();
 
-    let embedding_generated = if let Some(embed_svc) = embedding_service {
-        match embed_svc.embed(&params.content).await {
-            Ok(embedding) => {
-                // Create memory with embedding using unified builder
-                let memory = MemoryCreateWithEmbedding::build(
-                    params.memory_type.clone(),
-                    params.content.clone(),
-                    embedding,
-                    params.metadata.clone(),
-                    params.workflow_id.clone(),
-                    params.importance,
-                );
+    // Always create the parent row first — chunks reference it by record link.
+    create_memory_parent(db, &memory_id, &params).await?;
 
-                db.create("memory", &memory_id, memory)
-                    .await
-                    .map_err(|e| format!("Failed to create memory with embedding: {}", e))?;
+    let chunks = split_recursive(&params.content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
+    let chunk_count = chunks.len();
+    let mut any_embedding = false;
 
-                // Set expires_at separately (SurrealDB datetime cast)
-                set_expires_at_if_present(db, &memory_id, params.expires_at).await?;
-
-                true
-            }
-            Err(e) => {
-                // Fallback to text-only storage
-                warn!(error = %e, "Embedding generation failed, storing without embedding");
-
-                create_memory_without_embedding(db, &memory_id, &params).await?;
-                false
-            }
-        }
-    } else {
-        // No embedding service, store text only
-        create_memory_without_embedding(db, &memory_id, &params).await?;
-        false
-    };
+    for (idx, chunk_text) in chunks.iter().enumerate() {
+        let embedding = match embedding_service {
+            Some(svc) => match svc.embed(chunk_text).await {
+                Ok(v) => {
+                    any_embedding = true;
+                    Some(v)
+                }
+                Err(e) => {
+                    warn!(error = %e, chunk_index = idx, "Embedding failed; storing chunk without embedding");
+                    None
+                }
+            },
+            None => None,
+        };
+        create_memory_chunk(db, &memory_id, idx, chunk_count, chunk_text, embedding).await?;
+    }
 
     info!(
         memory_id = %memory_id,
         memory_type = %params.memory_type,
-        embedding = embedding_generated,
+        chunks = chunk_count,
+        embedded_any = any_embedding,
         workflow_id = ?params.workflow_id,
-        "Memory created via helper"
+        "Memory created via helper (parent + N chunks)"
     );
 
     Ok(AddMemoryResult {
         memory_id,
-        embedding_generated,
+        embedding_generated: any_embedding,
     })
 }
 
-/// Helper to create a memory record without embedding.
-async fn create_memory_without_embedding(
+/// Inserts the parent `memory` row (no embedding) and sets `expires_at`
+/// separately when present.
+async fn create_memory_parent(
     db: &DBClient,
     memory_id: &str,
     params: &AddMemoryParams,
@@ -173,6 +162,44 @@ async fn create_memory_without_embedding(
     // Set expires_at separately using datetime cast (SurrealDB rejects ISO strings for datetime fields)
     set_expires_at_if_present(db, memory_id, params.expires_at).await?;
 
+    Ok(())
+}
+
+/// Creates a single `memory_chunk` row linked to the given parent. The
+/// `memory_id` field is a typed `record<memory>` — we use a SurrealQL
+/// record-id literal in the CREATE so the schema's type check passes.
+pub(crate) async fn create_memory_chunk(
+    db: &DBClient,
+    parent_memory_id: &str,
+    chunk_index: usize,
+    chunk_count: usize,
+    content: &str,
+    embedding: Option<Vec<f32>>,
+) -> Result<(), String> {
+    let chunk_id = Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "chunk_index": chunk_index,
+        "chunk_count": chunk_count,
+        "content": content,
+        "embedding": embedding,
+    });
+    let payload = sanitize_for_surrealdb(payload);
+
+    // Inject the record link via a SurrealQL literal (`memory:`<id>``). Using
+    // CONTENT $data here would try to coerce the string to a record at type-
+    // check time which SurrealDB rejects — the SET form lets us write the
+    // record-id literal directly and bind the rest as JSON.
+    let query = format!(
+        "CREATE memory_chunk:`{}` SET memory_id = memory:`{}`, \
+         chunk_index = $data.chunk_index, \
+         chunk_count = $data.chunk_count, \
+         content = $data.content, \
+         embedding = $data.embedding",
+        chunk_id, parent_memory_id
+    );
+    db.execute_with_params(&query, vec![("data".to_string(), payload)])
+        .await
+        .map_err(|e| format!("Failed to create memory_chunk: {}", e))?;
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-import type { ExportFormat, RegenerateResult } from '$types/embedding';
+import type { ExportFormat } from '$types/embedding';
 import type { MemoryType } from '$types/memory';
 
 export type BadgeVariant = 'primary' | 'success' | 'warning' | 'error';
@@ -83,11 +83,4 @@ export function formatImportFailureMessage(
 	return template
 		.replace('{count}', String(failed))
 		.replace('{errors}', errors.slice(0, 3).join(', '));
-}
-
-export function formatRegenerateResultMessage(template: string, result: RegenerateResult): string {
-	return template
-		.replace('{processed}', String(result.processed))
-		.replace('{success}', String(result.success))
-		.replace('{failed}', String(result.failed));
 }

@@ -107,16 +107,51 @@ export interface SearchMemoryParams {
 	workflowId?: string;
 	/** Similarity threshold 0-1 for vector search (default: 0.7) */
 	threshold?: number;
+	/**
+	 * When set, only return results whose parent memory has at least ONE of
+	 * these tags (CONTAINSANY semantics — OR across the list).
+	 */
+	tagsFilter?: string[];
 }
 
 /**
- * Memory search result with relevance score
+ * A single search result row produced by `search_memories`.
+ *
+ * After the multi-chunk refactor, one row corresponds to one matching
+ * chunk, NOT a whole memory. `parentMemoryId` is the UUID that an agent
+ * passes back to `operation=get` to read the complete parent content;
+ * `chunkId` is the chunk that produced the match. Several rows may share
+ * the same `parentMemoryId` when multiple chunks of a memory matched.
  */
-export interface MemorySearchResult {
-	/** Memory entity */
-	memory: Memory;
-	/** Relevance score (0-1, higher is more relevant) */
+export interface ChunkSearchResult {
+	/** UUID of the chunk that matched (NOT the parent memory). */
+	chunkId: string;
+	/** UUID of the parent memory — use with `operation=get` for full content. */
+	parentMemoryId: string;
+	/** 0-based index of this chunk within its parent. */
+	chunkIndex: number;
+	/** Total number of chunks for this parent memory. */
+	chunkCount: number;
+	/** Chunk text (≤ chunker DEFAULT_CHUNK_SIZE chars). */
+	content: string;
+	/** Memory type of the parent. */
+	memoryType: MemoryType;
+	/** Workflow scope of the parent (null when general). */
+	workflowId: string | null;
+	/** Metadata of the parent (tags, priority, agent_source, …). */
+	metadata: MemoryMetadata;
+	/** Importance of the parent (0-1). */
+	importance: number;
+	/** Expiration of the parent (TTL), null when permanent. */
+	expiresAt: string | null;
+	/** Creation timestamp of the parent (ISO string). */
+	createdAt: string;
+	/** Composite score: cosine * 0.7 + importance * 0.15 + recency * 0.15. */
 	score: number;
+	/** Raw cosine similarity between query and chunk embedding (0-1). */
+	cosineScore: number;
+	/** Which path produced this row. */
+	searchType: 'vector' | 'text';
 }
 
 /**

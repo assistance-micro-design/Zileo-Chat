@@ -31,26 +31,32 @@ fn test_memory_structure() {
 }
 
 #[test]
-fn test_memory_search_result_structure() {
-    let memory = Memory {
-        id: "mem_002".to_string(),
-        memory_type: MemoryType::Decision,
+fn test_chunk_search_result_structure() {
+    // Verifies the shape returned by `search_memories` after the chunk
+    // refactor: chunk_id, parent_memory_id and search_type are required.
+    let result = ChunkSearchResult {
+        chunk_id: "chunk_001".to_string(),
+        parent_memory_id: "mem_002".to_string(),
+        chunk_index: 0,
+        chunk_count: 1,
         content: "Chose Rust for backend".to_string(),
+        memory_type: MemoryType::Decision,
         workflow_id: None,
         metadata: serde_json::json!({}),
         importance: 0.7,
         expires_at: None,
         created_at: Utc::now(),
-    };
-
-    let result = MemorySearchResult {
-        memory,
         score: 0.85,
+        cosine_score: 0.91,
+        search_type: "vector".to_string(),
     };
 
     let json = serde_json::to_string(&result).unwrap();
+    // Field names are serialized camelCase per #[serde(rename_all)].
     assert!(json.contains("\"score\":0.85"));
-    assert!(json.contains("\"type\":\"decision\""));
+    assert!(json.contains("\"chunkId\":\"chunk_001\""));
+    assert!(json.contains("\"parentMemoryId\":\"mem_002\""));
+    assert!(json.contains("\"searchType\":\"vector\""));
 }
 
 #[test]

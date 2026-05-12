@@ -16,13 +16,20 @@
 
 use crate::{
     db::sanitize_for_surrealdb,
-    models::{ExportFormat, ImportResult, Memory, RegenerateResult},
+    models::{ExportFormat, ImportResult, Memory, ReindexJobStatus},
     security::{serialize_for_query, validate_uuid_field},
+    tools::memory::chunker::{split_recursive, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE},
+    tools::memory::helpers::create_memory_chunk,
     AppState,
 };
+use chrono::Utc;
 use serde_json::json;
-use tauri::State;
+use std::sync::Arc;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, instrument, warn};
+use uuid::Uuid;
 
 /// Updates an existing memory entry.
 ///
@@ -235,115 +242,318 @@ pub async fn import_memories(
     })
 }
 
-/// Regenerates embeddings for existing memories.
+/// Tauri event name emitted by the reindex background task.
+const REINDEX_PROGRESS_EVENT: &str = "reindex-progress";
+
+/// Number of seconds to keep a terminal job in `AppState.reindex_jobs`
+/// before the auto-cleanup task removes it. 10 minutes gives the UI plenty
+/// of time to remount and read the terminal status retroactively.
+const REINDEX_JOB_RETENTION_SECS: u64 = 600;
+
+/// Spawns a background reindex of all unindexed memories and returns
+/// immediately with a `job_id`.
+///
+/// The task creates one `memory_chunk` row per chunk per pending parent,
+/// emitting a `reindex-progress` event after each parent (granularity:
+/// one memory = N chunks atomic). The job can be cancelled via
+/// `cancel_reindex_job`; its live status can be polled via
+/// `get_reindex_job_status` (useful on UI remount).
 ///
 /// # Arguments
-/// * `type_filter` - Optional filter to only regenerate for specific type
+/// * `force` - reserved for parity with the previous sync API; the
+///   migration_log guard is not consulted on the background path since
+///   every run starts from "parents without chunks" anyway.
 #[tauri::command]
-#[instrument(name = "regenerate_embeddings", skip(state))]
-pub async fn regenerate_embeddings(
-    type_filter: Option<String>,
+#[instrument(name = "reindex_memory_chunks", skip(state, app_handle))]
+pub async fn reindex_memory_chunks(
+    force: bool,
+    app_handle: AppHandle,
     state: State<'_, AppState>,
-) -> Result<RegenerateResult, String> {
-    info!(type_filter = ?type_filter, "Regenerating embeddings");
+) -> Result<String, String> {
+    info!(force = force, "Spawning memory chunk reindex job");
 
     let service_guard = state.embedding_service.read().await;
-    let service = match service_guard.as_ref() {
-        Some(s) => s.clone(),
-        None => {
-            return Err(
-                "Embedding service not configured. Please save embedding settings first."
-                    .to_string(),
-            );
-        }
-    };
+    let service = service_guard.as_ref().cloned();
     drop(service_guard);
 
-    let memories: Vec<serde_json::Value> = match type_filter {
-        Some(ref mtype) => {
-            state
-                .db
-                .query_json_with_params(
-                    "SELECT meta::id(id) AS id, content FROM memory WHERE type = $mtype",
-                    vec![("mtype".to_string(), serde_json::json!(mtype))],
-                )
-                .await
-        }
-        None => {
-            state
-                .db
-                .query_json("SELECT meta::id(id) AS id, content FROM memory")
-                .await
-        }
-    }
-    .map_err(|e| {
-        error!(error = %e, "Failed to load memories for regeneration");
-        format!("Failed to load memories: {}", e)
-    })?;
-
-    let mut processed = 0;
-    let mut success = 0;
-    let mut failed = 0;
-
-    for mem in &memories {
-        processed += 1;
-
-        let id_raw = match mem.get("id").and_then(|i| i.as_str()) {
-            Some(i) => i,
-            None => {
-                failed += 1;
-                continue;
-            }
-        };
-
-        // Defense-in-depth: validate the id even though it comes from our DB.
-        // Skips rather than aborts the whole batch on malformed rows.
-        let id = match validate_uuid_field(id_raw, "memory_id") {
-            Ok(v) => v,
-            Err(e) => {
-                warn!(memory_id = %id_raw, error = %e, "Skipping memory with invalid id");
-                failed += 1;
-                continue;
-            }
-        };
-
-        let content = match mem.get("content").and_then(|c| c.as_str()) {
-            Some(c) => c,
-            None => {
-                failed += 1;
-                continue;
-            }
-        };
-
-        match service.embed(content).await {
-            Ok(embedding) => {
-                let embedding_json = serde_json::to_string(&embedding).unwrap_or_default();
-                let update_query =
-                    format!("UPDATE memory:`{}` SET embedding = {}", id, embedding_json);
-
-                match state.db.execute(&update_query).await {
-                    Ok(_) => success += 1,
-                    Err(e) => {
-                        warn!(memory_id = %id, error = %e, "Failed to update embedding");
-                        failed += 1;
-                    }
-                }
-            }
-            Err(e) => {
-                warn!(memory_id = %id, error = %e, "Failed to generate embedding");
-                failed += 1;
-            }
-        }
+    if service.is_none() {
+        // Refuse the spawn so the UI surfaces the missing-config state
+        // instead of silently producing chunks with embedding = NONE.
+        return Err(
+            "Embedding service not configured. Please save embedding settings first.".to_string(),
+        );
     }
 
-    info!(
-        processed,
-        success, failed, "Embedding regeneration completed"
-    );
+    let job_id = Uuid::new_v4().to_string();
+    let token = CancellationToken::new();
+    state
+        .reindex_cancellations
+        .lock()
+        .await
+        .insert(job_id.clone(), token.clone());
 
-    Ok(RegenerateResult {
-        processed,
-        success,
-        failed,
+    let initial = ReindexJobStatus {
+        job_id: job_id.clone(),
+        status: "running".to_string(),
+        processed: 0,
+        total: 0,
+        chunks_created: 0,
+        current_memory_id: None,
+        error_message: None,
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    state
+        .reindex_jobs
+        .lock()
+        .await
+        .insert(job_id.clone(), initial);
+
+    let db = state.db.clone();
+    let cancellations = state.reindex_cancellations.clone();
+    let jobs = state.reindex_jobs.clone();
+    let job_id_task = job_id.clone();
+    let service = service.expect("service Some checked above");
+
+    tokio::spawn(async move {
+        run_reindex_with_progress(
+            db,
+            service,
+            app_handle,
+            job_id_task,
+            token,
+            cancellations,
+            jobs,
+        )
+        .await;
+    });
+
+    Ok(job_id)
+}
+
+/// Cancels a running reindex job. Idempotent — unknown ids are a no-op.
+#[tauri::command]
+#[instrument(name = "cancel_reindex_job", skip(state))]
+pub async fn cancel_reindex_job(job_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    info!(job_id = %job_id, "Cancel reindex job requested");
+    if let Some(token) = state.reindex_cancellations.lock().await.get(&job_id) {
+        token.cancel();
+    }
+    Ok(())
+}
+
+/// Returns the live status of a reindex job, or `None` when unknown.
+///
+/// Terminal entries are auto-purged from the map after being read, so the
+/// UI can rely on a single round-trip to consume a "retroactive toast"
+/// without leaving stale state in the map.
+#[tauri::command]
+#[instrument(name = "get_reindex_job_status", skip(state))]
+pub async fn get_reindex_job_status(
+    job_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<ReindexJobStatus>, String> {
+    let mut jobs = state.reindex_jobs.lock().await;
+    let Some(status) = jobs.get(&job_id).cloned() else {
+        return Ok(None);
+    };
+    if status.status != "running" {
+        jobs.remove(&job_id);
+    }
+    Ok(Some(status))
+}
+
+/// Background task body — owned, no `&State` references survive the spawn.
+#[allow(clippy::too_many_arguments)]
+async fn run_reindex_with_progress(
+    db: Arc<crate::db::DBClient>,
+    embed: Arc<crate::llm::embedding::EmbeddingService>,
+    app_handle: AppHandle,
+    job_id: String,
+    token: CancellationToken,
+    cancellations: Arc<tokio::sync::Mutex<std::collections::HashMap<String, CancellationToken>>>,
+    jobs: Arc<tokio::sync::Mutex<std::collections::HashMap<String, ReindexJobStatus>>>,
+) {
+    // 1. List pending parents (resumable: skip already-chunked).
+    let pending: Vec<serde_json::Value> = match db
+        .query_json(
+            "SELECT meta::id(id) AS id, content FROM memory \
+             WHERE id NOT IN (SELECT VALUE memory_id FROM memory_chunk)",
+        )
+        .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            finalize_job(
+                &jobs,
+                &cancellations,
+                &app_handle,
+                &job_id,
+                "error",
+                0,
+                0,
+                0,
+                Some(e.to_string()),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let total = pending.len();
+    update_job(&jobs, &job_id, |s| {
+        s.total = total;
     })
+    .await;
+    emit_progress(&app_handle, &jobs, &job_id).await;
+
+    let mut processed: usize = 0;
+    let mut chunks_created: usize = 0;
+
+    for row in &pending {
+        if token.is_cancelled() {
+            finalize_job(
+                &jobs,
+                &cancellations,
+                &app_handle,
+                &job_id,
+                "cancelled",
+                processed,
+                total,
+                chunks_created,
+                None,
+            )
+            .await;
+            schedule_purge(jobs.clone(), job_id.clone());
+            return;
+        }
+
+        let Some(mem_id) = row.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(content) = row.get("content").and_then(|v| v.as_str()) else {
+            continue;
+        };
+
+        let chunks = split_recursive(content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
+        let chunk_count = chunks.len();
+
+        for (idx, chunk_text) in chunks.iter().enumerate() {
+            let embedding = match embed.embed(chunk_text).await {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    warn!(memory_id = %mem_id, chunk_index = idx, error = %e, "Embedding failed; chunk stored without embedding");
+                    None
+                }
+            };
+            if let Err(e) =
+                create_memory_chunk(&db, mem_id, idx, chunk_count, chunk_text, embedding).await
+            {
+                finalize_job(
+                    &jobs,
+                    &cancellations,
+                    &app_handle,
+                    &job_id,
+                    "error",
+                    processed,
+                    total,
+                    chunks_created,
+                    Some(e),
+                )
+                .await;
+                schedule_purge(jobs.clone(), job_id.clone());
+                return;
+            }
+            chunks_created += 1;
+        }
+        processed += 1;
+        update_job(&jobs, &job_id, |s| {
+            s.processed = processed;
+            s.chunks_created = chunks_created;
+            s.current_memory_id = Some(mem_id.to_string());
+        })
+        .await;
+        emit_progress(&app_handle, &jobs, &job_id).await;
+    }
+
+    finalize_job(
+        &jobs,
+        &cancellations,
+        &app_handle,
+        &job_id,
+        "completed",
+        processed,
+        total,
+        chunks_created,
+        None,
+    )
+    .await;
+    schedule_purge(jobs, job_id);
+}
+
+/// Updates a job entry under the shared lock.
+async fn update_job(
+    jobs: &Arc<tokio::sync::Mutex<std::collections::HashMap<String, ReindexJobStatus>>>,
+    job_id: &str,
+    mutator: impl FnOnce(&mut ReindexJobStatus),
+) {
+    let mut map = jobs.lock().await;
+    if let Some(entry) = map.get_mut(job_id) {
+        mutator(entry);
+    }
+}
+
+/// Emits the current job snapshot as a `reindex-progress` event.
+async fn emit_progress(
+    app_handle: &AppHandle,
+    jobs: &Arc<tokio::sync::Mutex<std::collections::HashMap<String, ReindexJobStatus>>>,
+    job_id: &str,
+) {
+    let snapshot = jobs.lock().await.get(job_id).cloned();
+    if let Some(s) = snapshot {
+        if let Err(e) = app_handle.emit(REINDEX_PROGRESS_EVENT, &s) {
+            warn!(error = %e, "Failed to emit reindex-progress event");
+        }
+    }
+}
+
+/// Marks a job terminal: updates the status, emits the final event, removes
+/// the cancellation token from the map.
+#[allow(clippy::too_many_arguments)]
+async fn finalize_job(
+    jobs: &Arc<tokio::sync::Mutex<std::collections::HashMap<String, ReindexJobStatus>>>,
+    cancellations: &Arc<tokio::sync::Mutex<std::collections::HashMap<String, CancellationToken>>>,
+    app_handle: &AppHandle,
+    job_id: &str,
+    status: &str,
+    processed: usize,
+    total: usize,
+    chunks_created: usize,
+    error_message: Option<String>,
+) {
+    update_job(jobs, job_id, |s| {
+        s.status = status.to_string();
+        s.processed = processed;
+        s.total = total;
+        s.chunks_created = chunks_created;
+        s.error_message = error_message.clone();
+        s.finished_at = Some(Utc::now());
+        s.current_memory_id = None;
+    })
+    .await;
+    emit_progress(app_handle, jobs, job_id).await;
+    cancellations.lock().await.remove(job_id);
+    info!(job_id = %job_id, status = %status, processed, total, chunks_created, "Reindex job terminal");
+}
+
+/// Schedules purge of a terminal job entry from the map after a delay so
+/// late readers can still see the final state via `get_reindex_job_status`.
+fn schedule_purge(
+    jobs: Arc<tokio::sync::Mutex<std::collections::HashMap<String, ReindexJobStatus>>>,
+    job_id: String,
+) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(REINDEX_JOB_RETENTION_SECS)).await;
+        jobs.lock().await.remove(&job_id);
+    });
 }

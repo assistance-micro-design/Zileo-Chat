@@ -242,7 +242,6 @@ async fn main() -> anyhow::Result<()> {
             commands::mcp::tools::list_mcp_tools,
             commands::mcp::tools::call_mcp_tool,
             commands::mcp::tools::get_mcp_latency_metrics,
-            commands::migration::migrate_memory_schema,
             commands::migration::get_memory_schema_status,
             commands::migration::migrate_mcp_http_schema,
             commands::migration::migrate_memory_v2_schema,
@@ -258,7 +257,9 @@ async fn main() -> anyhow::Result<()> {
             commands::embedding::operations::update_memory,
             commands::embedding::operations::export_memories,
             commands::embedding::operations::import_memories,
-            commands::embedding::operations::regenerate_embeddings,
+            commands::embedding::operations::reindex_memory_chunks,
+            commands::embedding::operations::cancel_reindex_job,
+            commands::embedding::operations::get_reindex_job_status,
             commands::embedding::stats::get_memory_stats,
             commands::embedding::stats::get_memory_token_stats,
             // Prompt commands (Prompt Library)

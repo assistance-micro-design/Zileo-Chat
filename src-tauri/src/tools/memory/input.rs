@@ -18,6 +18,21 @@ use crate::tools::constants::memory::VALID_TYPES;
 use crate::tools::{ToolError, ToolResult};
 use serde_json::Value;
 
+/// Max number of items accepted in a `tags`/`tags_filter` array.
+const MAX_TAGS: usize = 20;
+/// Max char length of a single tag (matches typical "label" UX).
+const MAX_TAG_LEN: usize = 64;
+
+/// Parses a JSON value into `Option<Vec<String>>`, accepting only array
+/// inputs whose elements are strings. Non-array values become `None`.
+fn parse_string_array(v: &Value) -> Option<Vec<String>> {
+    v.as_array().map(|arr| {
+        arr.iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect()
+    })
+}
+
 /// Parsed and typed memory operation input.
 ///
 /// This struct reduces the cyclomatic complexity of `validate_input()` and `execute()` by:
@@ -39,6 +54,9 @@ pub struct MemoryInput {
     pub mode: Option<String>,
     pub metadata: Option<Value>,
     pub tags: Option<Vec<String>>,
+    /// Filter `search` results to memories tagged with at least ONE of these
+    /// tags (CONTAINSANY semantics).
+    pub tags_filter: Option<Vec<String>>,
 }
 
 impl MemoryInput {
@@ -56,11 +74,8 @@ impl MemoryInput {
             .to_string();
 
         // Parse tags array if present
-        let tags = input["tags"].as_array().map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        });
+        let tags = parse_string_array(&input["tags"]);
+        let tags_filter = parse_string_array(&input["tags_filter"]);
 
         Ok(Self {
             operation,
@@ -76,6 +91,7 @@ impl MemoryInput {
             mode: input["mode"].as_str().map(String::from),
             metadata: input.get("metadata").cloned(),
             tags,
+            tags_filter,
         })
     }
 
@@ -159,6 +175,28 @@ impl MemoryInput {
                     "Threshold {} must be between 0 and 1",
                     threshold
                 )));
+            }
+        }
+        if let Some(ref tags) = self.tags_filter {
+            if tags.len() > MAX_TAGS {
+                return Err(ToolError::ValidationFailed(format!(
+                    "tags_filter has {} entries, max is {}",
+                    tags.len(),
+                    MAX_TAGS
+                )));
+            }
+            for tag in tags {
+                if tag.is_empty() {
+                    return Err(ToolError::ValidationFailed(
+                        "tags_filter entries cannot be empty".to_string(),
+                    ));
+                }
+                if tag.chars().count() > MAX_TAG_LEN {
+                    return Err(ToolError::ValidationFailed(format!(
+                        "tags_filter entry '{}' exceeds max length of {} chars",
+                        tag, MAX_TAG_LEN
+                    )));
+                }
             }
         }
         Ok(())

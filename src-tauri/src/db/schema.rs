@@ -77,12 +77,11 @@ DEFINE FIELD OVERWRITE timestamp ON message TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE message_workflow_idx ON message FIELDS workflow_id;
 DEFINE INDEX OVERWRITE message_timestamp_idx ON message FIELDS timestamp;
 
--- Table: memory (vectoriel)
+-- Table: memory (parent unit, no embedding — embeddings live in memory_chunk)
 DEFINE TABLE OVERWRITE memory SCHEMAFULL;
 DEFINE FIELD OVERWRITE id ON memory TYPE string;
 DEFINE FIELD OVERWRITE type ON memory TYPE string ASSERT $value IN ['user_pref', 'context', 'knowledge', 'decision'];
 DEFINE FIELD OVERWRITE content ON memory TYPE string;
-DEFINE FIELD OVERWRITE embedding ON memory TYPE option<array<float>>;
 DEFINE FIELD OVERWRITE workflow_id ON memory TYPE option<string>;
 DEFINE FIELD OVERWRITE metadata ON memory TYPE object;
 -- Explicit metadata sub-fields (required for SCHEMAFULL to persist dynamic keys)
@@ -93,14 +92,32 @@ DEFINE FIELD OVERWRITE importance ON memory TYPE float DEFAULT 0.5;
 DEFINE FIELD OVERWRITE expires_at ON memory TYPE option<datetime>;
 DEFINE FIELD OVERWRITE created_at ON memory TYPE datetime DEFAULT time::now();
 
--- Index HNSW pour vector search (1024D Mistral/Ollama embeddings)
-DEFINE INDEX OVERWRITE memory_vec_idx ON memory FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
+-- Drop legacy embedding column + HNSW index on `memory` (memory_chunk_v1 refactor).
+-- Pattern PAT_DB_006: inline REMOVE IF EXISTS is replay-safe on every boot.
+REMOVE INDEX IF EXISTS memory_vec_idx ON TABLE memory;
+REMOVE FIELD IF EXISTS embedding ON TABLE memory;
+
 -- Index for workflow scoping
 DEFINE INDEX OVERWRITE memory_workflow_idx ON memory FIELDS workflow_id;
 -- Composite index for search_memories() with type + workflow_id
 DEFINE INDEX OVERWRITE memory_type_workflow_idx ON memory FIELDS type, workflow_id;
 -- Composite index for TTL cleanup preparation (type + created_at)
 DEFINE INDEX OVERWRITE memory_type_created_idx ON memory FIELDS type, created_at;
+
+-- Table: memory_chunk (search-only unit, N chunks per parent memory)
+-- Each chunk has its own vector embedding and links back to its parent memory
+-- via a typed record link, so traversal `memory_id.field` is native SurrealDB.
+DEFINE TABLE OVERWRITE memory_chunk SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON memory_chunk TYPE string;
+DEFINE FIELD OVERWRITE memory_id ON memory_chunk TYPE record<memory>;
+DEFINE FIELD OVERWRITE chunk_index ON memory_chunk TYPE int ASSERT $value >= 0;
+DEFINE FIELD OVERWRITE chunk_count ON memory_chunk TYPE int ASSERT $value >= 1;
+DEFINE FIELD OVERWRITE content ON memory_chunk TYPE string;
+DEFINE FIELD OVERWRITE embedding ON memory_chunk TYPE option<array<float>>;
+DEFINE FIELD OVERWRITE created_at ON memory_chunk TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE memory_chunk_vec_idx ON memory_chunk FIELDS embedding HNSW DIMENSION 1024 DIST COSINE;
+DEFINE INDEX OVERWRITE memory_chunk_parent_idx ON memory_chunk FIELDS memory_id;
 
 -- Table: validation_request
 DEFINE TABLE OVERWRITE validation_request SCHEMAFULL;

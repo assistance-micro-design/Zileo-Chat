@@ -193,6 +193,7 @@ pub async fn search_memories(
         workflow_id: workflow_id.clone(),
         scope: scope.to_string(),
         threshold,
+        tags_filter: input.tags_filter.clone(),
     };
 
     let (results, search_type) =
@@ -243,16 +244,29 @@ pub async fn describe_memories(
     }))
 }
 
-/// Deletes a memory by ID.
+/// Deletes a memory by ID along with its child chunks (cascade).
+///
+/// `delete_with_check` already validates `memory_id` as a strict UUID v4
+/// before the parent is dropped — we reuse that validation for the cascade
+/// DELETE on `memory_chunk` (the UUID is reused as a record-id literal).
 ///
 /// # Arguments
 /// * `memory_id` - Memory ID to delete
 /// * `ctx` - Shared tool context
 #[instrument(skip(ctx), fields(memory_id = %memory_id))]
 pub async fn delete_memory(memory_id: &str, ctx: &MemoryContext<'_>) -> ToolResult<Value> {
+    // Cascade BEFORE the parent so chunks don't dangle on partial failure.
+    // delete_with_check below revalidates the UUID — we accept the redundant
+    // check rather than expose a bypass.
+    let cascade_query = format!(
+        "DELETE FROM memory_chunk WHERE memory_id = memory:`{}`",
+        memory_id
+    );
+    ctx.db.execute(&cascade_query).await.map_err(db_error)?;
+
     delete_with_check(ctx.db, "memory", memory_id, "Memory").await?;
 
-    info!(memory_id = %memory_id, "Memory deleted");
+    info!(memory_id = %memory_id, "Memory deleted (with cascade)");
 
     Ok(ResponseBuilder::ok(
         "memory_id",
@@ -278,22 +292,38 @@ pub async fn clear_by_type(
 
     let workflow_id = resolve_query_workflow_id(input, ctx.default_workflow_id);
 
-    // Use execute_with_params() for parameterized DELETE
-    let (delete_query, params) = if let Some(ref wf_id) = workflow_id {
+    // Cascade: drop chunks whose parent matches the same filter BEFORE the
+    // parent rows themselves, so partial failure cannot leave orphans.
+    // `SELECT VALUE id` unwraps the record link so `memory_id IN (...)`
+    // compares against record literals, not `{id: ...}` objects.
+    let (cascade_query, delete_query, params) = if let Some(ref wf_id) = workflow_id {
+        let p = vec![
+            ("memory_type".to_string(), serde_json::json!(memory_type)),
+            ("workflow_id".to_string(), serde_json::json!(wf_id)),
+        ];
         (
+            "DELETE FROM memory_chunk WHERE memory_id IN \
+             (SELECT VALUE id FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id)"
+                .to_string(),
             "DELETE FROM memory WHERE type = $memory_type AND workflow_id = $workflow_id"
                 .to_string(),
-            vec![
-                ("memory_type".to_string(), serde_json::json!(memory_type)),
-                ("workflow_id".to_string(), serde_json::json!(wf_id)),
-            ],
+            p,
         )
     } else {
+        let p = vec![("memory_type".to_string(), serde_json::json!(memory_type))];
         (
+            "DELETE FROM memory_chunk WHERE memory_id IN \
+             (SELECT VALUE id FROM memory WHERE type = $memory_type)"
+                .to_string(),
             "DELETE FROM memory WHERE type = $memory_type".to_string(),
-            vec![("memory_type".to_string(), serde_json::json!(memory_type))],
+            p,
         )
     };
+
+    ctx.db
+        .execute_with_params(&cascade_query, params.clone())
+        .await
+        .map_err(db_error)?;
 
     ctx.db
         .execute_with_params(&delete_query, params)
