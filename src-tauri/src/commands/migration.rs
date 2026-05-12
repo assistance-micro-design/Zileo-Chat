@@ -18,17 +18,9 @@
 //! particularly for the Memory Tool vector search schema.
 
 use crate::db::{extract_count, DBClient};
-#[cfg(test)]
-use crate::llm::embedding::EmbeddingService;
-#[cfg(test)]
-use crate::tools::memory::chunker::{split_recursive, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
-use std::sync::Arc;
 use tauri::State;
-#[cfg(test)]
-use tracing::warn;
 use tracing::{error, info, instrument};
 
 /// Result of a migration operation
@@ -49,12 +41,6 @@ const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
 const MIGRATION_MCP_AUTH_V1: &str = "mcp_auth_v1";
 const MIGRATION_TOKEN_COST_ACCURACY_V1: &str = "token_cost_accuracy_v1";
-/// Migration log key used by the test-only `run_memory_chunk_v1` helper to
-/// assert the idempotency contract. The production reindex path
-/// (`reindex_memory_chunks`) does not rely on this guard — it is naturally
-/// idempotent through `WHERE id NOT IN (SELECT VALUE memory_id ...)`.
-#[cfg(test)]
-const MIGRATION_MEMORY_CHUNK_V1: &str = "memory_chunk_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -601,91 +587,10 @@ pub struct MemorySchemaStatus {
     pub hnsw_dimension: usize,
 }
 
-/// Test-only synchronous reindex used by the migration test-suite.
-///
-/// The production code path (`commands::embedding::operations::reindex_memory_chunks`)
-/// is asynchronous with progress events + cancellation, which is harder to
-/// exercise in a unit test. This helper keeps the simple "list pending,
-/// chunk-and-create" contract that the test cases assert on; it shares the
-/// same WHERE clause and create path so a behavior drift between the two
-/// would still be caught by integration testing.
-#[cfg(test)]
-pub async fn run_memory_chunk_v1(
-    db: &DBClient,
-    embed: Option<&Arc<EmbeddingService>>,
-    force: bool,
-) -> Result<MigrationResult, String> {
-    if !force && check_migration_applied(db, MIGRATION_MEMORY_CHUNK_V1).await? {
-        info!("memory_chunk_v1 already applied, skipping");
-        return Ok(MigrationResult {
-            success: true,
-            message: format!("Already applied: {}", MIGRATION_MEMORY_CHUNK_V1),
-            records_affected: 0,
-        });
-    }
-
-    // `SELECT VALUE memory_id FROM memory_chunk` unwraps the record link to
-    // its raw form so `id NOT IN (...)` compares against record literals,
-    // not against `{memory_id: ...}` objects which would never match.
-    let pending: Vec<serde_json::Value> = db
-        .query_json(
-            "SELECT meta::id(id) AS id, content FROM memory \
-             WHERE id NOT IN (SELECT VALUE memory_id FROM memory_chunk)",
-        )
-        .await
-        .map_err(|e| format!("Failed to query pending memories: {}", e))?;
-
-    let mut processed: usize = 0;
-    for row in &pending {
-        let Some(mem_id) = row.get("id").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let Some(content) = row.get("content").and_then(|v| v.as_str()) else {
-            continue;
-        };
-
-        let chunks = split_recursive(content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
-        let chunk_count = chunks.len();
-        for (idx, chunk_text) in chunks.iter().enumerate() {
-            let embedding = match embed {
-                Some(svc) => match svc.embed(chunk_text).await {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        warn!(memory_id = %mem_id, chunk_index = idx, error = %e, "Embedding failed during reindex; chunk stored without embedding");
-                        None
-                    }
-                },
-                None => None,
-            };
-            crate::tools::memory::helpers::create_memory_chunk(
-                db,
-                mem_id,
-                idx,
-                chunk_count,
-                chunk_text,
-                embedding,
-            )
-            .await?;
-        }
-        processed += 1;
-    }
-
-    if !force {
-        record_migration_applied(db, MIGRATION_MEMORY_CHUNK_V1).await?;
-    }
-
-    info!(processed = processed, "memory_chunk_v1 reindex finished");
-    Ok(MigrationResult {
-        success: true,
-        message: format!("{} memories reindexed into memory_chunk rows", processed),
-        records_affected: processed,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{seed_test_memory, setup_test_state};
+    use crate::test_utils::setup_test_state;
 
     #[test]
     fn test_migration_result_serialization() {
@@ -789,105 +694,6 @@ mod tests {
 
         assert!(applied_a, "migration_a should be applied");
         assert!(!applied_b, "migration_b should NOT be applied");
-    }
-
-    #[tokio::test]
-    async fn memory_chunk_v1_skips_already_chunked_parents() {
-        // Resumability contract: a parent that already has a chunk row must
-        // NOT be reprocessed by the migration loop.
-        let (state, _db_guard) = setup_test_state().await;
-
-        let parent = crate::test_utils::seed_test_memory_with_chunk(&state.db).await;
-        let chunks_before: Vec<serde_json::Value> = state
-            .db
-            .query_json(&format!(
-                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
-                parent
-            ))
-            .await
-            .unwrap();
-        let cnt_before = chunks_before
-            .first()
-            .and_then(|r| r.get("cnt"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        assert_eq!(cnt_before, 1, "seed must create exactly 1 chunk");
-
-        // Run with no embedding service (still creates chunks with NONE).
-        let result = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
-        assert!(result.success);
-        // Parent already had a chunk row -> migration must skip it entirely.
-        assert_eq!(
-            result.records_affected, 0,
-            "expected 0 parents processed, got {}",
-            result.records_affected
-        );
-
-        let chunks_after: Vec<serde_json::Value> = state
-            .db
-            .query_json(&format!(
-                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
-                parent
-            ))
-            .await
-            .unwrap();
-        let cnt_after = chunks_after
-            .first()
-            .and_then(|r| r.get("cnt"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        assert_eq!(cnt_after, 1, "chunks count must be unchanged");
-    }
-
-    #[tokio::test]
-    async fn memory_chunk_v1_chunks_pending_parent_memory() {
-        // A parent with no chunks must be processed and at least one
-        // memory_chunk row created (embedding NONE since no service).
-        let (state, _db_guard) = setup_test_state().await;
-
-        let parent = seed_test_memory(&state.db).await;
-        let result = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
-        assert!(result.success);
-        assert!(
-            result.records_affected >= 1,
-            "expected at least 1 parent processed, got {}",
-            result.records_affected
-        );
-
-        let chunks: Vec<serde_json::Value> = state
-            .db
-            .query_json(&format!(
-                "SELECT count() AS cnt FROM memory_chunk WHERE memory_id = memory:`{}` GROUP ALL",
-                parent
-            ))
-            .await
-            .unwrap();
-        let cnt = chunks
-            .first()
-            .and_then(|r| r.get("cnt"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        assert!(
-            cnt >= 1,
-            "parent must have at least 1 chunk after migration"
-        );
-    }
-
-    #[tokio::test]
-    async fn memory_chunk_v1_is_idempotent_via_migration_log() {
-        let (state, _db_guard) = setup_test_state().await;
-        seed_test_memory(&state.db).await;
-
-        let first = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
-        let second = run_memory_chunk_v1(&state.db, None, false).await.unwrap();
-
-        assert!(first.success);
-        assert!(second.success);
-        assert!(
-            second.message.contains("Already applied"),
-            "second run must short-circuit, got: {}",
-            second.message
-        );
     }
 
     #[tokio::test]
