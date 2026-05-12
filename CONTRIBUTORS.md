@@ -5,13 +5,14 @@ Thank you to all who contribute to Zileo-Chat-3!
 ## Organizations
 
 ### Assistance Micro Design
+
 - **GitHub**: https://github.com/assistance-micro-design
 - **Role**: Project Owner and Primary Maintainer
 
 ## Individual Contributors
 
-| Name | GitHub | Contributions |
-|------|--------|---------------|
+| Name    | GitHub                                 | Contributions                                                                                                                                |
+| ------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | ScioNos | [@ScioNos](https://github.com/ScioNos) | Frontend, workflow, streaming, MCP, Tauri integration, dependency maintenance and audit-driven hardening — [RouterLab](https://routerlab.ch) |
 
 ### ScioNos / RouterLab contributions
@@ -28,6 +29,7 @@ ScioNos contributions include several audit-driven fixes and frontend maintenanc
 ## How to Contribute
 
 We welcome contributions! Please see:
+
 - [README.md](README.md) for project overview
 - [docs/](docs/) for development documentation
 

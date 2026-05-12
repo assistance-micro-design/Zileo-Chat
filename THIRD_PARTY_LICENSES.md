@@ -42,31 +42,27 @@ Generated: 2026-05-11
 | @tauri-apps/plugin-opener | 2.5.3   | MIT OR Apache-2.0     | https://github.com/tauri-apps/plugins-workspace |
 | dompurify                 | 3.3.1   | Apache-2.0 OR MPL-2.0 | https://github.com/cure53/DOMPurify             |
 | marked                    | 17.0.4  | MIT                   | https://github.com/markedjs/marked              |
-| zod                       | 4.3.6   | MIT                   | https://github.com/colinhacks/zod               |
 
 ### Dev Dependencies
 
-| Package                          | Version | License           | Repository                                             |
-| -------------------------------- | ------- | ----------------- | ------------------------------------------------------ |
-| @eslint/js                       | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
-| @playwright/test                 | 1.58.0  | Apache-2.0        | https://github.com/microsoft/playwright                |
-| @sveltejs/adapter-static         | 3.0.10  | MIT               | https://github.com/sveltejs/kit                        |
-| @sveltejs/kit                    | 2.53.4  | MIT               | https://github.com/sveltejs/kit                        |
-| @sveltejs/vite-plugin-svelte     | 6.2.4   | MIT               | https://github.com/sveltejs/vite-plugin-svelte         |
-| @tauri-apps/cli                  | 2.10.0  | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri                    |
-| @types/dompurify                 | 3.0.5   | MIT               | https://github.com/DefinitelyTyped/DefinitelyTyped     |
-| @typescript-eslint/eslint-plugin | 8.53.1  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
-| @typescript-eslint/parser        | 8.54.0  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
-| eslint                           | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
-| eslint-plugin-svelte             | 3.14.0  | MIT               | https://github.com/sveltejs/eslint-plugin-svelte       |
-| globals                          | 17.4.0  | MIT               | https://github.com/sindresorhus/globals                |
-| jsdom                            | 27.4.0  | MIT               | https://github.com/jsdom/jsdom                         |
-| svelte                           | 5.53.6  | MIT               | https://github.com/sveltejs/svelte                     |
-| svelte-check                     | 4.4.4   | MIT               | https://github.com/sveltejs/language-tools             |
-| typescript                       | 5.9.3   | Apache-2.0        | https://github.com/microsoft/TypeScript                |
-| typescript-eslint                | 8.53.1  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
-| vite                             | 7.3.1   | MIT               | https://github.com/vitejs/vite                         |
-| vitest                           | 4.0.15  | MIT               | https://github.com/vitest-dev/vitest                   |
+| Package                      | Version | License           | Repository                                             |
+| ---------------------------- | ------- | ----------------- | ------------------------------------------------------ |
+| @eslint/js                   | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
+| @playwright/test             | 1.58.0  | Apache-2.0        | https://github.com/microsoft/playwright                |
+| @sveltejs/adapter-static     | 3.0.10  | MIT               | https://github.com/sveltejs/kit                        |
+| @sveltejs/kit                | 2.53.4  | MIT               | https://github.com/sveltejs/kit                        |
+| @sveltejs/vite-plugin-svelte | 6.2.4   | MIT               | https://github.com/sveltejs/vite-plugin-svelte         |
+| @tauri-apps/cli              | 2.10.0  | MIT OR Apache-2.0 | https://github.com/tauri-apps/tauri                    |
+| eslint                       | 9.39.1  | MIT               | https://github.com/eslint/eslint                       |
+| eslint-plugin-svelte         | 3.14.0  | MIT               | https://github.com/sveltejs/eslint-plugin-svelte       |
+| globals                      | 17.4.0  | MIT               | https://github.com/sindresorhus/globals                |
+| jsdom                        | 27.4.0  | MIT               | https://github.com/jsdom/jsdom                         |
+| svelte                       | 5.53.6  | MIT               | https://github.com/sveltejs/svelte                     |
+| svelte-check                 | 4.4.4   | MIT               | https://github.com/sveltejs/language-tools             |
+| typescript                   | 5.9.3   | Apache-2.0        | https://github.com/microsoft/TypeScript                |
+| typescript-eslint            | 8.53.1  | MIT               | https://github.com/typescript-eslint/typescript-eslint |
+| vite                         | 7.3.1   | MIT               | https://github.com/vitejs/vite                         |
+| vitest                       | 4.0.15  | MIT               | https://github.com/vitest-dev/vitest                   |
 
 ### Transitive Dependencies (Notable)
 

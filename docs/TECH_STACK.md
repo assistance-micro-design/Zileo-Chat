@@ -18,6 +18,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 ### Frontend (package.json)
 
 **Core Framework**:
+
 - **svelte**: 5.55.1
 - **@sveltejs/kit**: ^2.55.0
 - **@sveltejs/adapter-static**: ^3.0.0
@@ -25,35 +26,38 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **vite**: ^7.3.2
 
 **TypeScript**:
+
 - **typescript**: ^5.9.3
 - **svelte-check**: ^4.4.4
 - Strict-mode flags enabled in `tsconfig.json`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`
 
 **Tauri Integration**:
+
 - **@tauri-apps/api**: ^2.11.0
 - **@tauri-apps/cli**: ^2.10.1
 - **@tauri-apps/plugin-dialog**: ^2.7.0
 - **@tauri-apps/plugin-opener**: ^2.5.3
 
 **UI Components**:
+
 - **@lucide/svelte**: ^0.563.1 (official Lucide icon library)
 
 **Content Processing**:
+
 - **dompurify**: ^3.4.1 (HTML sanitization)
 - **marked**: ^17.0.5 (Markdown rendering)
-- **zod**: ^4.3.6 (schema validation)
 
 **Testing**:
+
 - **vitest**: ^4.0.15 (unit tests)
 - **@playwright/test**: ^1.58.0 (E2E tests)
 - **jsdom**: ^27.4.0 (DOM testing)
 
 **Linting**:
+
 - **eslint**: ^9.0.0
 - **eslint-plugin-svelte**: ^3.14.0
 - **@eslint/js**: ^9.39.1
-- **@typescript-eslint/eslint-plugin**: ^8.0.0
-- **@typescript-eslint/parser**: ^8.54.0
 - **typescript-eslint**: ^8.53.1
 - **globals**: ^17.4.0
 - ESLint enforces `no-console: error` and `@typescript-eslint/no-explicit-any: error` (build-breaking)
@@ -61,6 +65,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 ### Backend (Cargo.toml)
 
 **Core Framework**:
+
 - **Rust**: 1.93.0 (stable, edition 2021)
 - **tauri**: 2 (framework)
 - **tauri-build**: 2 (build dependency, version range)
@@ -68,31 +73,38 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **tauri-plugin-dialog**: 2 (version range)
 
 **LLM & Multi-Agent**:
+
 - **rig-core**: 0.34.0 (LLM abstraction framework)
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures-util**: 0.3.31 (stream utilities for SSE)
 - Providers: Mistral (native), Ollama (native), OpenAI-compatible (custom providers)
 
 **Database**:
+
 - **surrealdb**: ~2.6 (features: kv-rocksdb, default-features: false)
 
 **Serialization**:
+
 - **serde**: 1.0.228 (features: derive)
 - **serde_json**: 1.0.149
 
 **Async Runtime**:
+
 - **tokio**: 1.51.1 (features: rt, rt-multi-thread, macros, sync, time, fs, io-util, net, process)
 - **tokio-util**: 0.7 (features: rt)
 
 **Error Handling**:
+
 - **anyhow**: 1.0
 - **thiserror**: 2.0
 
 **Logging**:
+
 - **tracing**: 0.1
 - **tracing-subscriber**: 0.3 (features: json, env-filter)
 
 **Utilities**:
+
 - **uuid**: 1.20 (features: v4, serde)
 - **chrono**: 0.4.43 (features: serde)
 - **regex**: 1.10
@@ -101,13 +113,16 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **rand**: 0.8 (jittered retry backoff in `llm/retry.rs`)
 
 **HTTP & Network**:
+
 - **reqwest**: 0.12 (features: rustls-tls, json, stream)
 
 **Security**:
+
 - **keyring**: 3.6 (OS keychain: apple-native, windows-native, sync-secret-service)
 - **aes-gcm**: 0.10 (AES-256 encryption)
 
 **Dev Dependencies**:
+
 - **tempfile**: 3.24
 
 ### Database
@@ -144,17 +159,20 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 ## Key Integrations
 
 ### Tauri IPC (Frontend <-> Backend)
+
 - Communication via `invoke()` (frontend) to `#[tauri::command]` (backend)
 - Type-safe with TypeScript + Rust types (camelCase auto-converted to snake_case)
 - Async/await on both sides
 - Vite build target: `es2022` / `chrome105` / `safari15` (matches Tauri 2 WebView baselines)
 
 ### Rust <-> SurrealDB
+
 - Native embedded Rust client (surrealdb.rs)
 - Type-safe queries with serde
 - Parameterized queries for SQL injection prevention
 
 ### SvelteKit <-> Tauri
+
 - Adapter-static for SPA mode (single `index.html` fallback)
 - Asset protocol for local files
 
@@ -162,17 +180,18 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 Three provider types with unified interface:
 
-| Provider | Type | Features |
-|----------|------|----------|
-| Mistral | Native API | Thinking/reasoning, vision, tool calling, streaming |
-| Ollama | Native API | Local models, thinking, vision, tool calling, streaming |
-| Custom | OpenAI-compatible | OpenRouter, RouterLab, etc. via `/v1/chat/completions` |
+| Provider | Type              | Features                                                |
+| -------- | ----------------- | ------------------------------------------------------- |
+| Mistral  | Native API        | Thinking/reasoning, vision, tool calling, streaming     |
+| Ollama   | Native API        | Local models, thinking, vision, tool calling, streaming |
+| Custom   | OpenAI-compatible | OpenRouter, RouterLab, etc. via `/v1/chat/completions`  |
 
 **Resilience patterns**: rate limiting (1 req/s), exponential backoff retry (3 max, 1-30s), circuit breaker (3 failures, 60s cooldown), connection pooling (5 idle/host, 300s timeout).
 
 ## Security
 
 **Features**:
+
 - **CSP**: Strict Content Security Policy (frame-ancestors 'none', object-src 'none')
 - **API Key Storage**: OS keychain via `keyring` crate + AES-256 encryption
 - **API Key Validation**: Rejects newlines (HTTP header injection prevention)
@@ -183,13 +202,13 @@ Three provider types with unified interface:
 
 **Query limits** (defined in `src-tauri/src/constants.rs`):
 
-| Constant | Value | Scope |
-|----------|-------|-------|
-| DEFAULT_LIST_LIMIT | 1000 | agents, memories, tasks |
-| DEFAULT_MODELS_LIMIT | 100 | LLM models |
-| DEFAULT_MCP_LOGS_LIMIT | 500 | MCP call logs |
-| DEFAULT_MESSAGES_LIMIT | 500 | message history |
-| MAX_LIST_LIMIT | 10000 | maximum allowed |
+| Constant               | Value | Scope                   |
+| ---------------------- | ----- | ----------------------- |
+| DEFAULT_LIST_LIMIT     | 1000  | agents, memories, tasks |
+| DEFAULT_MODELS_LIMIT   | 100   | LLM models              |
+| DEFAULT_MCP_LOGS_LIMIT | 500   | MCP call logs           |
+| DEFAULT_MESSAGES_LIMIT | 500   | message history         |
+| MAX_LIST_LIMIT         | 10000 | maximum allowed         |
 
 ## Testing
 
@@ -201,6 +220,7 @@ Three provider types with unified interface:
 ## Build & Release
 
 **Build outputs**:
+
 ```
 src-tauri/target/release/bundle/
   appimage/   (Linux)
@@ -213,27 +233,30 @@ src-tauri/target/release/bundle/
 
 ## Version Requirements
 
-| Requirement | Minimum Version | Notes |
-|-------------|-----------------|-------|
-| Node.js | 20.19+ or 22.12+ | Node 18 not supported by Vite 7 |
-| Rust | 1.93.0+ | Required by SurrealDB SDK |
-| npm/pnpm/yarn | Latest stable | |
+| Requirement   | Minimum Version  | Notes                           |
+| ------------- | ---------------- | ------------------------------- |
+| Node.js       | 20.19+ or 22.12+ | Node 18 not supported by Vite 7 |
+| Rust          | 1.93.0+          | Required by SurrealDB SDK       |
+| npm/pnpm/yarn | Latest stable    |                                 |
 
 ## Key Migration Notes
 
 **Svelte 5** (from Svelte 4):
+
 - `{#snippet}` + `{@render}` replaces `<slot>`
 - `{@attach}` replaces `use:action`
 - `$props()` replaces `export let`
 - `onclick` replaces `on:click`
 
 **Zod 4** (from Zod 3):
+
 - `{ error: "..." }` replaces `{ message: "..." }`
 - `z.email()` / `z.uuid()` / `z.url()` replaces `z.string().email()` etc.
 - `z.record(keySchema, valueSchema)` requires 2 args
 - `z.treeifyError()` replaces `.format()` / `.flatten()`
 
 **Vitest 4** (from Vitest 2):
+
 - `maxWorkers` replaces `maxThreads` / `maxForks`
 - `projects` replaces `workspace`
 

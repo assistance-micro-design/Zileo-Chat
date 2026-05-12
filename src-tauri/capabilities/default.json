@@ -1,51 +1,49 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Default capabilities for Zileo Chat",
-  "windows": [
-    "main"
-  ],
-  "permissions": [
-    "core:default",
-    "core:event:default",
-    "core:event:allow-listen",
-    "core:event:allow-emit",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        {
-          "url": "https://*"
-        },
-        {
-          "url": "http://*"
-        },
-        {
-          "url": "mailto:*"
-        }
-      ],
-      "deny": [
-        {
-          "url": "file://*"
-        },
-        {
-          "url": "tel:*"
-        },
-        {
-          "url": "data:*"
-        },
-        {
-          "url": "javascript:*"
-        },
-        {
-          "url": "vbscript:*"
-        }
-      ]
-    },
-    "core:window:allow-theme",
-    "core:window:allow-set-theme",
-    "opener:deny-open-path",
-    "opener:allow-reveal-item-in-dir",
-    "dialog:allow-open",
-    "dialog:allow-save"
-  ]
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "Default capabilities for Zileo Chat",
+	"windows": ["main"],
+	"permissions": [
+		"core:default",
+		"core:event:default",
+		"core:event:allow-listen",
+		"core:event:allow-emit",
+		{
+			"identifier": "opener:allow-open-url",
+			"allow": [
+				{
+					"url": "https://*"
+				},
+				{
+					"url": "http://*"
+				},
+				{
+					"url": "mailto:*"
+				}
+			],
+			"deny": [
+				{
+					"url": "file://*"
+				},
+				{
+					"url": "tel:*"
+				},
+				{
+					"url": "data:*"
+				},
+				{
+					"url": "javascript:*"
+				},
+				{
+					"url": "vbscript:*"
+				}
+			]
+		},
+		"core:window:allow-theme",
+		"core:window:allow-set-theme",
+		"opener:deny-open-path",
+		"opener:allow-reveal-item-in-dir",
+		"dialog:allow-open",
+		"dialog:allow-save"
+	]
 }
