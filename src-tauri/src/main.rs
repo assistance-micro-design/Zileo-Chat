@@ -500,7 +500,6 @@ async fn main() -> anyhow::Result<()> {
             api.prevent_exit();
 
             let mcp_manager = app_handle.state::<AppState>().mcp_manager.clone();
-            let app_handle = app_handle.clone();
             let shutdown_done = shutdown_done.clone();
 
             tauri::async_runtime::spawn(async move {
@@ -517,7 +516,19 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 shutdown_done.store(true, std::sync::atomic::Ordering::SeqCst);
-                app_handle.exit(0);
+
+                // `app_handle.exit(0)` lets Tauri unwind the drop chain
+                // (AppState -> Arc<DBClient> -> Surreal<RocksDb> -> RocksDB
+                // C++ destructors) while the tokio runtime is still
+                // tearing down. RocksDB 2.6 systematically aborts with
+                // `free(): corrupted unsorted chunks` on this path. We
+                // sidestep the race with std::process::exit(0): MCP
+                // children are already terminated (logged above), MCP
+                // HTTP clients are disconnected, and the RocksDB
+                // write-ahead log handles crash recovery on the next
+                // startup so data integrity is preserved.
+                tracing::info!("Exiting process after MCP cleanup");
+                std::process::exit(0);
             });
         }
     });
