@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Maintenance: dependency and Tauri configuration cleanup (`chore/maintenance-0.23.2-pr`, PR #143 by external contributor [@ScioNos](https://github.com/ScioNos)).
+
+### Changed
+
+- Bump safe frontend tooling/runtime dependencies while staying on the current major lines: SvelteKit 2, Svelte 5, Vite 7, ESLint 9, Vitest 4 and Tauri 2.
+- Declare the supported Node.js runtime explicitly with `engines.node >=20.19.0`.
+- Narrow Tauri dialog permissions from `dialog:default` to explicit `dialog:allow-open` and `dialog:allow-save`.
+
+### Removed
+
+- Remove unused or redundant direct dependencies: `zod`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser` and `@types/dompurify`.
+- Remove obsolete configuration/artifacts: legacy `.eslintrc.cjs` and orphaned `src-tauri/package-lock.json`.
+
+---
+
 Backend dead-code cleanup (`refactor/backend-deadcode-cleanup`). 13 commits, ~−1300 LOC of unreachable code removed plus one latent runtime bug surfaced during the audit. `#[allow(dead_code)]` annotations dropped from 27 to 2 (last two are documented module-level lib/bin-split allows on `mcp::circuit_breaker` and `mcp::client`, where test-only accessors observe production state but are not reachable from the binary target). Production constructors are now the single source of truth: test-only `_with_*` ctors removed, tests rewritten to exercise the production path. Tests verts: 1388 Rust lib + clippy --all-targets clean.
 
 ### Removed (backend)
@@ -56,23 +71,6 @@ Cleanup of the chat zone and agent page (`refactor/cleanup-zone-chat`). 26 atomi
 - **Prettier + `prettier-plugin-svelte`** wired in (`chore/prettier-plugin-svelte`). New devDependencies (`prettier@3.8.3`, `prettier-plugin-svelte@3.5.1`), config files (`.prettierrc.json`, `.prettierignore`), and npm scripts (`format`, `format:check`). First project-wide run reformatted 193 files (tabs, single quotes, no trailing comma, 100-char width) — 100% cosmetic, lint + svelte-check + 435 Vitest stay green. `.git-blame-ignore-revs` registers the reformatting commit so `git blame` keeps crediting the original logic authors. CI integration into `validate.yml` is intentionally deferred to a follow-up PR.
 - **`src/routes/agent/+page.svelte`** mosaic indent (4 functions broken by the `refactor/cleanup-zone-chat` rebase over PR #140) is now fixed via Prettier instead of a manual sed pass.
 - **`src/lib/tauri/*.ts`** zero-indent legacy from PR #130 is normalized — this subsumes the formatting follow-up that was tracked in `docs/specs/eslint-tauri-import-restriction.md`.
-
----
-
-## [0.23.2] - 2026-05-10
-
-Maintenance release for dependency and Tauri configuration cleanup.
-
-### Changed
-
-- Bump safe frontend tooling/runtime dependencies while staying on the current major lines: SvelteKit 2, Svelte 5, Vite 7, ESLint 9, Vitest 4 and Tauri 2.
-- Declare the supported Node.js runtime explicitly with `engines.node >=20.19.0`.
-- Narrow Tauri dialog permissions from `dialog:default` to explicit `dialog:allow-open` and `dialog:allow-save`.
-
-### Removed
-
-- Remove unused or redundant direct dependencies: `zod`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser` and `@types/dompurify`.
-- Remove obsolete configuration/artifacts: legacy `.eslintrc.cjs` and orphaned `src-tauri/package-lock.json`.
 
 ---
 
@@ -932,8 +930,7 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.2...HEAD
-[0.23.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.2
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.1...HEAD
 [0.23.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.1
 [0.23.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.0
 [0.22.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.2
