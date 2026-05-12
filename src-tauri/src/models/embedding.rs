@@ -24,22 +24,16 @@ use std::collections::HashMap;
 ///
 /// This struct mirrors `EmbeddingConfig` from `llm/embedding.rs`
 /// but is designed for frontend serialization.
+///
+/// Chunking parameters live in `tools/memory/chunker.rs` (constants) and the
+/// vector dimension is fixed by the HNSW schema (1024D) — neither is user
+/// configurable and both have been removed from this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingConfigSettings {
     /// Embedding provider: "mistral" or "ollama"
     pub provider: String,
-    /// Embedding model name (e.g., "mistral-embed", "nomic-embed-text")
+    /// Embedding model name (e.g., "mistral-embed", "mxbai-embed-large")
     pub model: String,
-    /// Vector dimension (auto-set based on model)
-    pub dimension: usize,
-    /// Maximum tokens per input (provider-specific)
-    pub max_tokens: usize,
-    /// Characters per chunk for long texts
-    pub chunk_size: usize,
-    /// Overlap between chunks in characters
-    pub chunk_overlap: usize,
-    /// Chunking strategy: "fixed", "semantic", or "recursive"
-    pub strategy: Option<String>,
 }
 
 impl Default for EmbeddingConfigSettings {
@@ -47,11 +41,6 @@ impl Default for EmbeddingConfigSettings {
         Self {
             provider: "mistral".to_string(),
             model: "mistral-embed".to_string(),
-            dimension: 1024,
-            max_tokens: 8192,
-            chunk_size: 512,
-            chunk_overlap: 50,
-            strategy: Some("fixed".to_string()),
         }
     }
 }
@@ -163,9 +152,6 @@ mod tests {
         let config = EmbeddingConfigSettings::default();
         assert_eq!(config.provider, "mistral");
         assert_eq!(config.model, "mistral-embed");
-        assert_eq!(config.dimension, 1024);
-        assert_eq!(config.chunk_size, 512);
-        assert_eq!(config.chunk_overlap, 50);
     }
 
     #[test]
@@ -174,7 +160,26 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("\"provider\":\"mistral\""));
         assert!(json.contains("\"model\":\"mistral-embed\""));
-        assert!(json.contains("\"dimension\":1024"));
+    }
+
+    #[test]
+    fn test_embedding_config_tolerates_legacy_fields_in_db() {
+        // Existing installs may still have rows that include the legacy
+        // decorative fields (dimension/max_tokens/chunk_size/chunk_overlap/
+        // strategy). serde_json must accept and ignore them so users do not
+        // hit a deserialization failure after upgrading.
+        let legacy_json = r#"{
+            "provider": "mistral",
+            "model": "mistral-embed",
+            "dimension": 1024,
+            "max_tokens": 8192,
+            "chunk_size": 512,
+            "chunk_overlap": 50,
+            "strategy": "fixed"
+        }"#;
+        let config: EmbeddingConfigSettings = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(config.provider, "mistral");
+        assert_eq!(config.model, "mistral-embed");
     }
 
     #[test]

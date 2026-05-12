@@ -29,7 +29,6 @@ import {
 	DEFAULT_EMBEDDING_CONFIG,
 	type EmbeddingConfig,
 	type EmbeddingProviderType,
-	type ChunkingStrategy,
 	type MemoryStats,
 	type ImportResult,
 	type RegenerateResult,
@@ -59,16 +58,22 @@ describe('Embedding Types', () => {
 			expect(mistralEmbed?.label).toContain('1024D');
 		});
 
-		it('should have nomic-embed-text model with 768 dimensions', () => {
-			const nomicEmbed = EMBEDDING_MODELS.ollama.find((m) => m.value === 'nomic-embed-text');
-			expect(nomicEmbed).toBeDefined();
-			expect(nomicEmbed?.dimension).toBe(768);
-		});
-
 		it('should have mxbai-embed-large model with 1024 dimensions', () => {
 			const mxbaiEmbed = EMBEDDING_MODELS.ollama.find((m) => m.value === 'mxbai-embed-large');
 			expect(mxbaiEmbed).toBeDefined();
 			expect(mxbaiEmbed?.dimension).toBe(1024);
+		});
+
+		it('should exclude nomic-embed-text (incompatible with HNSW 1024D index)', () => {
+			const nomic = EMBEDDING_MODELS.ollama.find((m) => m.value === 'nomic-embed-text');
+			expect(nomic).toBeUndefined();
+		});
+
+		it('should only list models compatible with HNSW 1024D index', () => {
+			const allModels = [...EMBEDDING_MODELS.mistral, ...EMBEDDING_MODELS.ollama];
+			for (const model of allModels) {
+				expect(model.dimension).toBe(1024);
+			}
 		});
 
 		it('should have valid model structure for all providers', () => {
@@ -103,38 +108,11 @@ describe('Embedding Types', () => {
 			expect(DEFAULT_EMBEDDING_CONFIG.model).toBe('mistral-embed');
 		});
 
-		it('should have 1024 as default dimension', () => {
-			expect(DEFAULT_EMBEDDING_CONFIG.dimension).toBe(1024);
-		});
-
-		it('should have reasonable max_tokens value', () => {
-			expect(DEFAULT_EMBEDDING_CONFIG.max_tokens).toBeGreaterThan(0);
-			expect(DEFAULT_EMBEDDING_CONFIG.max_tokens).toBe(8192);
-		});
-
-		it('should have valid chunk_size between 100 and 2000', () => {
-			expect(DEFAULT_EMBEDDING_CONFIG.chunk_size).toBeGreaterThanOrEqual(100);
-			expect(DEFAULT_EMBEDDING_CONFIG.chunk_size).toBeLessThanOrEqual(2000);
-		});
-
-		it('should have valid chunk_overlap between 0 and 500', () => {
-			expect(DEFAULT_EMBEDDING_CONFIG.chunk_overlap).toBeGreaterThanOrEqual(0);
-			expect(DEFAULT_EMBEDDING_CONFIG.chunk_overlap).toBeLessThanOrEqual(500);
-		});
-
-		it('should have fixed as default strategy', () => {
-			expect(DEFAULT_EMBEDDING_CONFIG.strategy).toBe('fixed');
-		});
-
 		it('should be a valid EmbeddingConfig type', () => {
 			const config: EmbeddingConfig = DEFAULT_EMBEDDING_CONFIG;
 
 			expect(config.provider).toBeDefined();
 			expect(config.model).toBeDefined();
-			expect(config.dimension).toBeDefined();
-			expect(config.max_tokens).toBeDefined();
-			expect(config.chunk_size).toBeDefined();
-			expect(config.chunk_overlap).toBeDefined();
 		});
 	});
 
@@ -147,13 +125,6 @@ describe('Embedding Types', () => {
 			const providers: EmbeddingProviderType[] = ['mistral', 'ollama'];
 			expect(providers).toContain('mistral');
 			expect(providers).toContain('ollama');
-		});
-
-		it('should accept valid ChunkingStrategy values', () => {
-			const strategies: ChunkingStrategy[] = ['fixed', 'semantic', 'recursive'];
-			expect(strategies).toContain('fixed');
-			expect(strategies).toContain('semantic');
-			expect(strategies).toContain('recursive');
 		});
 
 		it('should accept valid ExportFormat values', () => {
@@ -205,23 +176,11 @@ describe('Embedding Types', () => {
 	// =========================================================================
 
 	describe('Configuration Validation', () => {
-		it('should validate chunk_overlap is less than chunk_size', () => {
-			const config = DEFAULT_EMBEDDING_CONFIG;
-			expect(config.chunk_overlap).toBeLessThan(config.chunk_size);
-		});
-
 		it('should ensure default model matches default provider', () => {
 			const defaultModel = EMBEDDING_MODELS[DEFAULT_EMBEDDING_CONFIG.provider].find(
 				(m) => m.value === DEFAULT_EMBEDDING_CONFIG.model
 			);
 			expect(defaultModel).toBeDefined();
-		});
-
-		it('should ensure default dimension matches default model', () => {
-			const defaultModel = EMBEDDING_MODELS[DEFAULT_EMBEDDING_CONFIG.provider].find(
-				(m) => m.value === DEFAULT_EMBEDDING_CONFIG.model
-			);
-			expect(defaultModel?.dimension).toBe(DEFAULT_EMBEDDING_CONFIG.dimension);
 		});
 
 		it('should have all embedding models with positive dimensions', () => {

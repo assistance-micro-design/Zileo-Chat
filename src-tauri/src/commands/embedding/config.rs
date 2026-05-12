@@ -19,7 +19,9 @@
 
 use crate::{
     commands::SecureKeyStore,
+    db::DBClient,
     llm::embedding::{EmbeddingProvider, EmbeddingService},
+    llm::DEFAULT_OLLAMA_URL,
     models::{EmbeddingConfigSettings, EmbeddingTestResult},
     security::serialize_for_query,
     AppState,
@@ -32,14 +34,43 @@ use tracing::{error, info, instrument, warn};
 /// Storage key for embedding configuration in the database
 pub const EMBEDDING_CONFIG_KEY: &str = "settings:embedding_config";
 
+/// Loads the Ollama base URL from `provider_settings:ollama`, falling back to
+/// `DEFAULT_OLLAMA_URL` when the row is missing, the field is `NONE`, or the
+/// query itself fails (the embedding service can still work on default URL).
+///
+/// Centralized here so both [`update_embedding_service_internal`] and
+/// `AppState::initialize_embedding_from_config` resolve the URL the same way
+/// and the previous hardcoded `"http://localhost:11434"` is replaced.
+pub async fn load_ollama_base_url(db: &DBClient) -> String {
+    let query = "SELECT base_url FROM provider_settings:ollama";
+    match db.query_json(query).await {
+        Ok(rows) => rows
+            .first()
+            .and_then(|r| r.get("base_url"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string()),
+        Err(e) => {
+            warn!(
+                error = %e,
+                "Failed to load Ollama base_url from provider_settings, falling back to default"
+            );
+            DEFAULT_OLLAMA_URL.to_string()
+        }
+    }
+}
+
 /// Gets the current embedding configuration.
 ///
-/// Returns the stored configuration or default values if not configured.
+/// Returns the stored configuration, or `None` when the row is absent. The
+/// previous behavior of silently returning defaults masked the "no config"
+/// state from the frontend (`configExists` was always true). Returning
+/// `Option` lets the UI distinguish unconfigured from configured.
 #[tauri::command]
 #[instrument(name = "get_embedding_config", skip(state))]
 pub async fn get_embedding_config(
     state: State<'_, AppState>,
-) -> Result<EmbeddingConfigSettings, String> {
+) -> Result<Option<EmbeddingConfigSettings>, String> {
     info!("Getting embedding configuration");
 
     let query = format!("SELECT config FROM settings:`{}`", EMBEDDING_CONFIG_KEY);
@@ -55,13 +86,13 @@ pub async fn get_embedding_config(
                 serde_json::from_value::<EmbeddingConfigSettings>(config_value.clone())
             {
                 info!("Loaded embedding config from database");
-                return Ok(config);
+                return Ok(Some(config));
             }
         }
     }
 
-    info!("No stored config found, returning default");
-    Ok(EmbeddingConfigSettings::default())
+    info!("No stored config found");
+    Ok(None)
 }
 
 /// Saves the embedding configuration.
@@ -78,7 +109,6 @@ pub async fn save_embedding_config(
     info!(
         provider = %config.provider,
         model = %config.model,
-        dimension = config.dimension,
         "Saving embedding configuration"
     );
 
@@ -88,12 +118,6 @@ pub async fn save_embedding_config(
     }
     if config.model.is_empty() {
         return Err("Model cannot be empty".to_string());
-    }
-    if config.chunk_size < 100 || config.chunk_size > 10000 {
-        return Err("Chunk size must be between 100 and 10000".to_string());
-    }
-    if config.chunk_overlap >= config.chunk_size {
-        return Err("Chunk overlap must be less than chunk size".to_string());
     }
 
     let config_json_str = serialize_for_query(&config, "config")?;
@@ -115,6 +139,30 @@ pub async fn save_embedding_config(
     Ok(())
 }
 
+/// Deletes the embedding configuration row and clears the in-memory service.
+///
+/// After this call, [`get_embedding_config`] returns `None` and any future
+/// search falls back to text mode. Idempotent: deleting an absent row is a
+/// no-op. The Mistral API key in the OS keychain is left untouched — it is
+/// owned by the provider settings UI, not the memory settings.
+#[tauri::command]
+#[instrument(name = "delete_embedding_config", skip(state))]
+pub async fn delete_embedding_config(state: State<'_, AppState>) -> Result<(), String> {
+    info!("Deleting embedding configuration");
+
+    let delete_query = format!("DELETE settings:`{}`", EMBEDDING_CONFIG_KEY);
+    state.db.execute(&delete_query).await.map_err(|e| {
+        error!(error = %e, "Failed to delete embedding config row");
+        format!("Failed to delete config: {}", e)
+    })?;
+
+    // Reset the in-memory service so subsequent searches fall back to text.
+    *state.embedding_service.write().await = None;
+
+    info!("Embedding configuration deleted successfully");
+    Ok(())
+}
+
 /// Updates the EmbeddingService in AppState based on config.
 /// Note: For Mistral, requires API key to be pre-configured in Provider settings (OS keychain).
 async fn update_embedding_service_internal(
@@ -123,10 +171,13 @@ async fn update_embedding_service_internal(
     keystore: &State<'_, SecureKeyStore>,
 ) {
     let provider = match config.provider.as_str() {
-        "ollama" => Some(EmbeddingProvider::ollama_with_config(
-            "http://localhost:11434",
-            &config.model,
-        )),
+        "ollama" => {
+            let base_url = load_ollama_base_url(&state.db).await;
+            Some(EmbeddingProvider::ollama_with_config(
+                &base_url,
+                &config.model,
+            ))
+        }
         "mistral" => {
             if let Some(api_key) = keystore.get_key("Mistral") {
                 Some(EmbeddingProvider::mistral_with_model(
@@ -160,10 +211,13 @@ async fn update_embedding_service_internal(
     }
 }
 
-/// Helper function to get config internally
+/// Helper function to get config internally.
+///
+/// Returns `Ok(None)` when no row exists (no implicit default) — callers
+/// decide whether to fall back or surface the missing-config state.
 pub async fn get_embedding_config_internal(
     state: &State<'_, AppState>,
-) -> Result<EmbeddingConfigSettings, String> {
+) -> Result<Option<EmbeddingConfigSettings>, String> {
     let query = format!("SELECT config FROM settings:`{}`", EMBEDDING_CONFIG_KEY);
 
     let results: Vec<serde_json::Value> = state
@@ -174,12 +228,13 @@ pub async fn get_embedding_config_internal(
 
     if let Some(row) = results.first() {
         if let Some(config) = row.get("config") {
-            return serde_json::from_value(config.clone())
-                .map_err(|e| format!("Failed to parse config: {}", e));
+            let parsed = serde_json::from_value(config.clone())
+                .map_err(|e| format!("Failed to parse config: {}", e))?;
+            return Ok(Some(parsed));
         }
     }
 
-    Ok(EmbeddingConfigSettings::default())
+    Ok(None)
 }
 
 /// Reinitializes the embedding service with current config
@@ -190,8 +245,15 @@ pub async fn reinit_embedding_service(
     keystore: State<'_, SecureKeyStore>,
 ) -> Result<(), String> {
     info!("Reinitializing embedding service");
-    let config = get_embedding_config_internal(&state).await?;
-    update_embedding_service_internal(&config, &state, &keystore).await;
+    match get_embedding_config_internal(&state).await? {
+        Some(config) => {
+            update_embedding_service_internal(&config, &state, &keystore).await;
+        }
+        None => {
+            *state.embedding_service.write().await = None;
+            info!("No embedding config stored, embedding service cleared");
+        }
+    }
     Ok(())
 }
 
@@ -225,11 +287,7 @@ pub async fn test_embedding(
             let dimension = embedding.len();
             let preview: Vec<f32> = embedding.iter().take(5).cloned().collect();
 
-            let config = get_embedding_config_internal(&state).await;
-            let (provider, model) = match config {
-                Ok(c) => (c.provider, c.model),
-                Err(_) => ("unknown".to_string(), "unknown".to_string()),
-            };
+            let (provider, model) = config_or_unknown(&state).await;
 
             info!(
                 dimension = dimension,
@@ -248,11 +306,7 @@ pub async fn test_embedding(
             })
         }
         Err(e) => {
-            let config = get_embedding_config_internal(&state).await;
-            let (provider, model) = match config {
-                Ok(c) => (c.provider, c.model),
-                Err(_) => ("unknown".to_string(), "unknown".to_string()),
-            };
+            let (provider, model) = config_or_unknown(&state).await;
 
             warn!(error = %e, "Embedding test failed");
 
@@ -266,5 +320,15 @@ pub async fn test_embedding(
                 error: Some(e.to_string()),
             })
         }
+    }
+}
+
+/// Returns the current provider/model pair from the stored config or
+/// `("unknown", "unknown")` when no row exists or it fails to parse.
+/// Used only to enrich [`EmbeddingTestResult`] for the UI.
+async fn config_or_unknown(state: &State<'_, AppState>) -> (String, String) {
+    match get_embedding_config_internal(state).await {
+        Ok(Some(c)) => (c.provider, c.model),
+        _ => ("unknown".to_string(), "unknown".to_string()),
     }
 }

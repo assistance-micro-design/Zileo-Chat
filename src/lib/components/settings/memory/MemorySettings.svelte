@@ -19,8 +19,10 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 MemorySettings - Embedding configuration for Memory Tool.
-Allows users to configure embedding provider, model, and chunking settings via modal.
 Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
+Chunking parameters are no longer exposed: they are fixed constants in
+`tools/memory/chunker.rs` (512/50). The dimension is locked at 1024 by the
+HNSW index schema.
 -->
 
 <script lang="ts">
@@ -42,7 +44,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		MemoryStats,
 		MemoryTokenStats
 	} from '$types/embedding';
-	import { EMBEDDING_MODELS } from '$types/embedding';
+	import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_CONFIG } from '$types/embedding';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
@@ -57,20 +59,9 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 
 	let { onsave }: Props = $props();
 
-	/** Default config values */
-	const defaultConfig: EmbeddingConfig = {
-		provider: 'mistral',
-		model: 'mistral-embed',
-		dimension: 1024,
-		max_tokens: 8192,
-		chunk_size: 512,
-		chunk_overlap: 50,
-		strategy: 'fixed'
-	};
-
 	/** Config state */
-	let config = $state<EmbeddingConfig>({ ...defaultConfig });
-	let editConfig = $state<EmbeddingConfig>({ ...defaultConfig });
+	let config = $state<EmbeddingConfig>({ ...DEFAULT_EMBEDDING_CONFIG });
+	let editConfig = $state<EmbeddingConfig>({ ...DEFAULT_EMBEDDING_CONFIG });
 
 	/** Stats state */
 	let stats = $state<MemoryStats | null>(null);
@@ -96,34 +87,37 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		{ value: 'ollama', label: t('memory_provider_ollama') }
 	]);
 
-	/** Strategy options (reactive to locale) */
-	const strategyOptions = $derived<SelectOption[]>([
-		{ value: 'fixed', label: t('memory_strategy_fixed') },
-		{ value: 'semantic', label: t('memory_strategy_semantic') },
-		{ value: 'recursive', label: t('memory_strategy_recursive') }
-	]);
-
 	/** Model options based on selected provider */
 	const modelOptions = $derived(
 		EMBEDDING_MODELS[editConfig.provider as EmbeddingProviderType] || []
 	);
 
 	/**
-	 * Loads the current embedding configuration
+	 * Loads the current embedding configuration.
+	 *
+	 * `get_embedding_config` returns `null` when no row exists; in that case
+	 * we keep `config = defaults` for the modal and flag `configExists = false`
+	 * so the UI shows the "no config" empty state instead of editable fields.
 	 */
 	async function loadConfig(): Promise<void> {
 		loading = true;
 		try {
 			const [loadedConfig, loadedStats, loadedTokenStats] = await Promise.all([
-				tauriInvoke<EmbeddingConfig>('get_embedding_config'),
+				tauriInvoke<EmbeddingConfig | null>('get_embedding_config'),
 				tauriInvoke<MemoryStats>('get_memory_stats'),
 				tauriInvoke<MemoryTokenStats>('get_memory_token_stats', { typeFilter: null })
 			]);
-			config = loadedConfig;
-			editConfig = { ...loadedConfig };
+			if (loadedConfig) {
+				config = loadedConfig;
+				editConfig = { ...loadedConfig };
+				configExists = true;
+			} else {
+				config = { ...DEFAULT_EMBEDDING_CONFIG };
+				editConfig = { ...DEFAULT_EMBEDDING_CONFIG };
+				configExists = false;
+			}
 			stats = loadedStats;
 			tokenStats = loadedTokenStats;
-			configExists = Boolean(loadedConfig.provider && loadedConfig.model);
 		} catch (err) {
 			errorMessage = t('memory_failed_load').replace('{error}', getErrorMessage(err));
 			configExists = false;
@@ -193,14 +187,18 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	}
 
 	/**
-	 * Confirms and executes configuration deletion (resets to defaults)
+	 * Confirms and executes configuration deletion.
+	 *
+	 * Calls `delete_embedding_config` (drops the DB row and clears the
+	 * in-memory embedding service) instead of saving defaults — saving
+	 * defaults left `configExists = true` and never released the service.
 	 */
 	async function confirmDelete(): Promise<void> {
 		deleteDeleting = true;
 		try {
-			await tauriInvoke('save_embedding_config', { config: defaultConfig });
-			config = { ...defaultConfig };
-			editConfig = { ...defaultConfig };
+			await tauriInvoke('delete_embedding_config');
+			config = { ...DEFAULT_EMBEDDING_CONFIG };
+			editConfig = { ...DEFAULT_EMBEDDING_CONFIG };
 			configExists = false;
 			errorMessage = null;
 			showDeleteConfirm = false;
@@ -229,7 +227,6 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		const firstModel = providerModels[0];
 		if (firstModel) {
 			editConfig.model = firstModel.value;
-			editConfig.dimension = firstModel.dimension;
 		}
 	}
 
@@ -237,20 +234,7 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 	 * Handle model change in modal
 	 */
 	function handleModelChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		const model = event.currentTarget.value;
-		editConfig.model = model;
-
-		const selectedModel = modelOptions.find((m) => m.value === model);
-		if (selectedModel) {
-			editConfig.dimension = selectedModel.dimension;
-		}
-	}
-
-	/**
-	 * Handle strategy change in modal
-	 */
-	function handleStrategyChange(event: Event & { currentTarget: HTMLSelectElement }): void {
-		editConfig.strategy = event.currentTarget.value as 'fixed' | 'semantic' | 'recursive';
+		editConfig.model = event.currentTarget.value;
 	}
 
 	// Load config on mount
@@ -279,7 +263,6 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 			{config}
 			{configExists}
 			{providerOptions}
-			{strategyOptions}
 			onOpenConfigModal={openConfigModal}
 			onDelete={handleDeleteRequest}
 		/>
@@ -318,56 +301,6 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 							: $i18n('memory_ollama_help')}
 					/>
 				</div>
-				<div class="dimension-info">
-					<span class="dimension-label">{$i18n('memory_vector_dimensions')}</span>
-					<span class="dimension-value">{editConfig.dimension}D</span>
-				</div>
-			</div>
-
-			<!-- Chunking Settings Section -->
-			<div class="modal-section">
-				<h4 class="modal-section-title">{$i18n('memory_chunking_settings')}</h4>
-				<div class="form-row">
-					<div class="slider-input">
-						<span class="slider-label">
-							{$i18n('memory_chunk_size_label').replace('{size}', String(editConfig.chunk_size))}
-						</span>
-						<input
-							type="range"
-							min="100"
-							max="2000"
-							step="50"
-							bind:value={editConfig.chunk_size}
-							class="slider"
-							aria-label={$i18n('memory_chunk_size')}
-						/>
-						<span class="slider-help">{$i18n('memory_chunk_size_help')}</span>
-					</div>
-
-					<div class="slider-input">
-						<span class="slider-label">
-							{$i18n('memory_overlap_label').replace('{size}', String(editConfig.chunk_overlap))}
-						</span>
-						<input
-							type="range"
-							min="0"
-							max="500"
-							step="10"
-							bind:value={editConfig.chunk_overlap}
-							class="slider"
-							aria-label={$i18n('memory_overlap')}
-						/>
-						<span class="slider-help">{$i18n('memory_overlap_help')}</span>
-					</div>
-				</div>
-
-				<Select
-					label={$i18n('memory_strategy')}
-					options={strategyOptions}
-					value={editConfig.strategy || 'fixed'}
-					onchange={handleStrategyChange}
-					help={$i18n('memory_strategy_help')}
-				/>
 			</div>
 
 			{#if modalError}
@@ -439,71 +372,6 @@ Decomposed into EmbeddingConfigCard, EmbeddingTestCard, MemoryStatsCard.
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
 		gap: var(--spacing-lg);
-	}
-
-	.dimension-info {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border-radius: var(--border-radius-sm);
-	}
-
-	.dimension-label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-secondary);
-	}
-
-	.dimension-value {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-semibold);
-		color: var(--color-accent);
-	}
-
-	.slider-input {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.slider-label {
-		font-size: var(--font-size-sm);
-		font-weight: var(--font-weight-medium);
-		color: var(--color-text-primary);
-	}
-
-	.slider {
-		width: 100%;
-		height: 8px;
-		border-radius: 4px;
-		background: var(--color-bg-tertiary);
-		outline: none;
-		cursor: pointer;
-	}
-
-	.slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: var(--color-accent);
-		cursor: pointer;
-	}
-
-	.slider::-moz-range-thumb {
-		width: 20px;
-		height: 20px;
-		border-radius: 50%;
-		background: var(--color-accent);
-		cursor: pointer;
-		border: none;
-	}
-
-	.slider-help {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-secondary);
 	}
 
 	.modal-actions {

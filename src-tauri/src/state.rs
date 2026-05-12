@@ -272,10 +272,13 @@ impl AppState {
 
         // Create embedding provider based on config
         let provider = match config.provider.as_str() {
-            "ollama" => Some(EmbeddingProvider::ollama_with_config(
-                "http://localhost:11434",
-                &config.model,
-            )),
+            "ollama" => {
+                let base_url = crate::commands::embedding::config::load_ollama_base_url(&self.db).await;
+                Some(EmbeddingProvider::ollama_with_config(
+                    &base_url,
+                    &config.model,
+                ))
+            }
             "mistral" => {
                 // Get API key from SecureKeyStore
                 if let Some(api_key) = keystore.get_key("Mistral") {

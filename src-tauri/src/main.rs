@@ -252,6 +252,7 @@ async fn main() -> anyhow::Result<()> {
             commands::migration::migrate_token_cost_accuracy_v1,
             commands::embedding::config::get_embedding_config,
             commands::embedding::config::save_embedding_config,
+            commands::embedding::config::delete_embedding_config,
             commands::embedding::config::reinit_embedding_service,
             commands::embedding::config::test_embedding,
             commands::embedding::operations::update_memory,

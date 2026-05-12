@@ -36,35 +36,19 @@ Extracted from MemorySettings.svelte.
 		configExists: boolean;
 		/** Provider options for label lookup */
 		providerOptions: SelectOption[];
-		/** Strategy options for label lookup */
-		strategyOptions: SelectOption[];
 		/** Callback to open the config edit modal */
 		onOpenConfigModal: () => void;
 		/** Callback to delete the config */
 		onDelete: () => void;
 	}
 
-	let {
-		config,
-		configExists,
-		providerOptions,
-		strategyOptions,
-		onOpenConfigModal,
-		onDelete
-	}: Props = $props();
+	let { config, configExists, providerOptions, onOpenConfigModal, onDelete }: Props = $props();
 
 	/**
 	 * Get provider display name
 	 */
 	function getProviderLabel(provider: string): string {
 		return providerOptions.find((p) => p.value === provider)?.label || provider;
-	}
-
-	/**
-	 * Get strategy display name
-	 */
-	function getStrategyLabel(strategy: string): string {
-		return strategyOptions.find((s) => s.value === strategy)?.label || strategy;
 	}
 </script>
 
@@ -107,22 +91,6 @@ Extracted from MemorySettings.svelte.
 					<div class="config-item">
 						<span class="config-label">{$i18n('memory_model')}</span>
 						<span class="config-value">{config.model}</span>
-					</div>
-					<div class="config-item">
-						<span class="config-label">{$i18n('memory_dimensions')}</span>
-						<span class="config-value">{config.dimension}D</span>
-					</div>
-					<div class="config-item">
-						<span class="config-label">{$i18n('memory_strategy')}</span>
-						<span class="config-value">{getStrategyLabel(config.strategy || 'fixed')}</span>
-					</div>
-					<div class="config-item">
-						<span class="config-label">{$i18n('memory_chunk_size')}</span>
-						<span class="config-value">{config.chunk_size} {$i18n('memory_chars')}</span>
-					</div>
-					<div class="config-item">
-						<span class="config-label">{$i18n('memory_overlap')}</span>
-						<span class="config-value">{config.chunk_overlap} {$i18n('memory_chars')}</span>
 					</div>
 				</div>
 			</div>

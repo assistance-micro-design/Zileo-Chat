@@ -42,7 +42,6 @@ mod tests {
         let config = EmbeddingConfigSettings::default();
         assert_eq!(config.provider, "mistral");
         assert_eq!(config.model, "mistral-embed");
-        assert_eq!(config.dimension, 1024);
     }
 
     #[test]
