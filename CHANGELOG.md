@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Memory multi-chunk + tags filter + streaming reindex + cascade/purge/exit hardening (`feature/memory-multi-chunk-tags-filter`). 8 commits, ~+2700 / −1200 LOC across 40 files. Refonte of the memory schema into one parent row + N indexed chunks under HNSW 1024D, tags filter (`CONTAINSANY`), cancellable streaming reindex, plus two latent runtime hazards surfaced and fixed during the audit (orphan chunks on workflow delete, RocksDB heap abort on shutdown). Embedding configuration UI rewritten around a status badge + Operations card (Test / Reindex / Purge). Tests verts: 1371 Rust lib + clippy `--all-targets` clean + svelte-check 4050 OK + 426 Vitest + ESLint/Prettier clean.
+
+### Added
+
+- **`memory_chunk` table + per-chunk HNSW index**: each parent `memory` row now owns N chunks linked by `memory_id: record<memory>`, each carrying its own embedding and parent indexes. HNSW + parent indexes are defined per chunk. UTF-8-safe recursive chunker (`FN_RUST_019 split_recursive`): paragraph → line → sentence → hard cut on code-point boundary. 12 TDD tests cover ASCII / French / emoji / boundary cases.
+- **Tags filter on memory search**: `CONTAINSANY` clause built by `FN_RUST_018 build_tags_filter_clause`. 5 TDD tests lock the contract.
+- **Streaming reindex with cancellation**: `reindex_memory_chunks(force)` spawns a tokio task, emits `reindex-progress` per parent, is cancellable via `cancel_reindex_job`. Job status is auto-purged on consultation + 10-minute sweep. Frontend: `ChunkSearchResult` / `ReindexJobStatus` types, `MemoryList` dedupes by parent, `MemorySettings` reindex card with progress bar + `LocalStorage` persistence + listener filtered by `jobId` + retroactive toast on remount.
+- **Operations card** in `MemorySettings`: Test + Reindex + Purge grid (auto-fit `minmax(280px, 1fr)`). Test/Reindex hidden (not disabled) when embedding is not configured — the empty Configuration card is the single entry point. Status badge "Configured / Not configured" + Settings icon on the Configuration card.
+- **`purge_expired_memories` (FN_RUST_020)** in `cleanup.rs`: SELECT expired ids → DELETE chunks `WHERE memory_id IN ($expired)` → DELETE parents. Wired in `AppState::new` as a best-effort boot purge + exposed as a Tauri command for the on-demand Purge card.
+- **DB primitive `delete_memory_chunks_by_workflow_id`**: sequential chunks-first cascade step before the parallel block in `cascade::delete_workflow_related`. 2 TDD tests lock the contract (orphan chunks must not survive a workflow delete).
+
+### Changed
+
+- **`EmbeddingConfigSettings` no longer carries decorative fields** (`dimension` / `max_tokens` / `chunk_size` / `chunk_overlap` / `strategy`): none were honored at runtime — HNSW dimension is fixed at 1024D and chunking is owned by the new recursive chunker. The "Chunking Settings" section of the Configuration card is removed, along with the `dimension-info` block and the `nomic-embed-text` (768D) preset (incompatible with the 1024D index).
+- **Ollama base URL is now read from `embedding_config.endpoint`** via `FN_RUST_017 load_ollama_base_url(db)` (no more hardcode of `http://localhost:11434`).
+- **`get_embedding_config` returns `Option<EmbeddingConfigSettings>` instead of silently materializing defaults**; the UI distinguishes "Configured" from "Not configured" instead of showing fake values.
+- **`MemoryList` deduplicates by parent**: search results are scored per chunk but the UI shows one row per parent (best chunk wins).
+- **Schema cleanup inline**: `REMOVE FIELD/INDEX IF EXISTS memory.embedding` next to the new `DEFINE FIELD` lines in `schema.rs` (`PAT_DB_006`: replay-on-boot, no `migration_log` needed for a decorative field).
+- **Documentation sync**: `docs/DATABASE_SCHEMA.md`, `docs/API_REFERENCE.md`, `docs/AGENT_TOOLS_DOCUMENTATION.md` rewritten to reflect the multi-chunk architecture (parent / chunk tables, per-chunk HNSW, tags filter shape, reindex / purge / cancel commands).
+
+### Fixed
+
+- **Cascade-delete leaked `memory_chunk` rows when a workflow was removed** (`ERR_SURREAL_013`): `cascade::delete_workflow_related` ignored `memory_chunk`, leaving orphan rows with broken `memory_id` record links — HNSW entries stayed live (silent memory leak) and any future search on those vectors hit `NONE` parents. Fix: chunks are deleted sequentially **before** the parallel cleanup block (the record-link traversal needs the parent still alive). DELETE traversal-in-WHERE silently matches zero rows in SurrealDB 2.6, so the new code uses `IN (SELECT VALUE id FROM ...)` subqueries (`PAT_DB_007`).
+- **`context` memories were never garbage-collected**: they carried a 7-day TTL via `expires_at` but nothing actually deleted them. `purge_expired_memories` now runs at boot (best-effort) and on demand (Purge card).
+- **RocksDB heap abort on app shutdown** (`ERR_TAURI_005`, superset of `ERR_TAURI_003`): the app aborted systematically with `free(): corrupted unsorted chunks` after MCP shutdown — RocksDB FFI `Drop` ran during tokio teardown. The SurrealDB Rust SDK 2.6 exposes **no** `close()` / `shutdown()` / `flush()` API (verified against upstream source + docs; only the Java + JavaScript SDKs offer `db.close()`). Pragmatic fix: after MCP terminate, the shutdown path now calls `std::process::exit(0)` directly, skipping the entire `Drop` chain. RocksDB's WAL preserves integrity across the hard exit. Bonus: removes the `exit(0) → ExitRequested` recursion (the `AtomicBool` guard is kept as defense-in-depth).
+
+### Removed
+
+- **`run_memory_chunk_v1` helper + 3 tests + fixtures** (−227 LOC): test-only function gated `#[cfg(test)]` exercised only by its own tests — violates the "production constructors are the single source of truth" rule. The production path (`reindex_memory_chunks` in `commands/embedding/operations.rs`) is unchanged.
+
+#### New learning entries (cross-referenced in MEMORY.md)
+
+- `ERR_SURREAL_013`: DELETE with record-link traversal in `WHERE` silently matches 0 rows in SurrealDB 2.6 — use `IN (SELECT VALUE id FROM ...)` subqueries.
+- `ERR_SURREAL_014`: `query_json` does not surface the rows returned by `DELETE ... RETURN BEFORE` — pre-`SELECT` is required for counts.
+- `ERR_TAURI_005`: `app_handle.exit(0)` triggers the `Drop` chain, which corrupts the heap under tokio teardown (RocksDB FFI). Use `std::process::exit(0)` after async essentials are flushed. SurrealDB SDK 2.6 has no `close()`.
+- `PAT_DB_006`: `REMOVE FIELD IF EXISTS <field> ON TABLE <table>` next to the `DEFINE FIELD` lines (replay-on-boot, no `migration_log` for decorative drops). Symmetric complement to `PAT_DB_003`.
+- `PAT_DB_007`: cascade-delete with record-link traversal — chunks-first, parent-second; use `IN (SELECT VALUE id FROM ...)` subqueries.
+- `PAT_RUST_014`: shutdown hardening — `std::process::exit(0)` skips Drop when the runtime cannot safely tear down FFI handles (RocksDB-via-SurrealDB SDK 2.6).
+- `FN_RUST_017 load_ollama_base_url(db)`, `FN_RUST_018 build_tags_filter_clause`, `FN_RUST_019 split_recursive`, `FN_RUST_020 purge_expired_memories`.
+
+---
+
 Maintenance: dependency and Tauri configuration cleanup (`chore/maintenance-0.23.2-pr`, PR #143 by external contributor [@ScioNos](https://github.com/ScioNos)).
 
 ### Changed
