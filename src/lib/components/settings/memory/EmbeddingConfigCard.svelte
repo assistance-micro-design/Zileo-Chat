@@ -23,7 +23,7 @@ Extracted from MemorySettings.svelte.
 -->
 
 <script lang="ts">
-	import { Card, Button } from '$lib/components/ui';
+	import { Card, Button, Badge } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui/Select.svelte';
 	import type { EmbeddingConfig } from '$types/embedding';
 	import { Settings, Pencil, Trash2, Plus } from '@lucide/svelte';
@@ -55,7 +55,18 @@ Extracted from MemorySettings.svelte.
 <Card>
 	{#snippet header()}
 		<div class="card-header-row">
-			<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
+			<div class="card-header-text">
+				<div class="title-row">
+					<Settings size={18} aria-hidden="true" />
+					<h3 class="card-title">{$i18n('memory_embedding_config')}</h3>
+					<Badge variant={configExists ? 'success' : 'warning'}>
+						{configExists
+							? $i18n('memory_status_configured')
+							: $i18n('memory_status_not_configured')}
+					</Badge>
+				</div>
+				<p class="card-subtitle">{$i18n('memory_config_subtitle')}</p>
+			</div>
 			{#if configExists}
 				<div class="header-actions">
 					<button
@@ -117,9 +128,31 @@ Extracted from MemorySettings.svelte.
 
 	.card-header-row {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
+		gap: var(--spacing-md);
 		width: 100%;
+	}
+
+	.card-header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xs);
+		min-width: 0;
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		color: var(--color-text-primary);
+		flex-wrap: wrap;
+	}
+
+	.card-subtitle {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
 	}
 
 	.header-actions {

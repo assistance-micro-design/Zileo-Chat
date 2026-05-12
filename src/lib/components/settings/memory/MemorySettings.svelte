@@ -51,7 +51,7 @@ HNSW index schema.
 	import { getErrorMessage } from '$lib/utils/error';
 	import { LocalStorage, STORAGE_KEYS } from '$lib/services/localStorage.service';
 	import { toastStore } from '$lib/stores/toast';
-	import { RefreshCw } from '@lucide/svelte';
+	import { RefreshCw, DatabaseZap } from '@lucide/svelte';
 	import EmbeddingConfigCard from './EmbeddingConfigCard.svelte';
 	import EmbeddingTestCard from './EmbeddingTestCard.svelte';
 	import MemoryStatsCard from './MemoryStatsCard.svelte';
@@ -415,56 +415,67 @@ HNSW index schema.
 			onDelete={handleDeleteRequest}
 		/>
 
-		<!-- Embedding Test Card -->
-		<EmbeddingTestCard {configExists} />
+		<!-- Operations section: Test + Reindex (only when config exists) -->
+		{#if configExists}
+			<section class="operations-section" aria-label={$i18n('memory_operations_title')}>
+				<header class="section-header">
+					<h2 class="section-title">{$i18n('memory_operations_title')}</h2>
+				</header>
+				<div class="operations-grid">
+					<EmbeddingTestCard {configExists} />
 
-		<!-- Reindex Card -->
-		<Card>
-			{#snippet header()}
-				<h3 class="card-title">{$i18n('memory_reindex_button')}</h3>
-			{/snippet}
-			{#snippet body()}
-				<div class="reindex-body">
-					{#if reindexRunning && reindexProgress}
-						<p class="reindex-status">
-							{$i18n('memory_reindex_progress')
-								.replace('{current}', String(reindexProgress.processed))
-								.replace('{total}', String(reindexProgress.total))}
-						</p>
-						<progress
-							class="reindex-progress"
-							value={reindexProgress.processed}
-							max={Math.max(reindexProgress.total, 1)}
-							aria-valuenow={reindexProgress.processed}
-							aria-valuemax={reindexProgress.total}
-							aria-label={$i18n('memory_reindex_button')}
-						></progress>
-						<p class="reindex-meta">
-							{reindexPct}% · {reindexProgress.chunksCreated} chunks
-						</p>
-						<Button variant="ghost" onclick={handleCancelReindex} disabled={!reindexJobId}>
-							{$i18n('memory_reindex_cancel_button')}
-						</Button>
-					{:else}
-						<Button
-							variant="secondary"
-							onclick={handleReindex}
-							disabled={!configExists || reindexStarting}
-						>
-							<RefreshCw size={16} />
-							<span>
-								{reindexStarting
-									? $i18n('memory_reindex_starting')
-									: $i18n('memory_reindex_button')}
-							</span>
-						</Button>
-					{/if}
+					<!-- Reindex Card -->
+					<Card>
+						{#snippet header()}
+							<div class="card-header-text">
+								<div class="title-row">
+									<DatabaseZap size={18} aria-hidden="true" />
+									<h3 class="card-title">{$i18n('memory_reindex_button')}</h3>
+								</div>
+								<p class="card-subtitle">{$i18n('memory_reindex_subtitle')}</p>
+							</div>
+						{/snippet}
+						{#snippet body()}
+							<div class="reindex-body">
+								{#if reindexRunning && reindexProgress}
+									<p class="reindex-status">
+										{$i18n('memory_reindex_progress')
+											.replace('{current}', String(reindexProgress.processed))
+											.replace('{total}', String(reindexProgress.total))}
+									</p>
+									<progress
+										class="reindex-progress"
+										value={reindexProgress.processed}
+										max={Math.max(reindexProgress.total, 1)}
+										aria-valuenow={reindexProgress.processed}
+										aria-valuemax={reindexProgress.total}
+										aria-label={$i18n('memory_reindex_button')}
+									></progress>
+									<p class="reindex-meta">
+										{reindexPct}% · {reindexProgress.chunksCreated} chunks
+									</p>
+									<Button variant="ghost" onclick={handleCancelReindex} disabled={!reindexJobId}>
+										{$i18n('memory_reindex_cancel_button')}
+									</Button>
+								{:else}
+									<Button variant="secondary" onclick={handleReindex} disabled={reindexStarting}>
+										<RefreshCw size={16} />
+										<span>
+											{reindexStarting
+												? $i18n('memory_reindex_starting')
+												: $i18n('memory_reindex_button')}
+										</span>
+									</Button>
+								{/if}
+							</div>
+						{/snippet}
+					</Card>
 				</div>
-			{/snippet}
-		</Card>
+			</section>
 
-		<!-- Memory Statistics Card -->
-		<MemoryStatsCard {stats} {tokenStats} />
+			<!-- Memory Statistics Card -->
+			<MemoryStatsCard {stats} {tokenStats} />
+		{/if}
 	{/if}
 </div>
 
@@ -573,6 +584,55 @@ HNSW index schema.
 		margin: 0;
 	}
 
+	.card-header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xs);
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		color: var(--color-text-primary);
+	}
+
+	.card-subtitle {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
+
+	.operations-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.section-header {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		padding-bottom: var(--spacing-2xs);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.section-title {
+		font-size: var(--font-size-base);
+		font-weight: var(--font-weight-semibold);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-secondary);
+		margin: 0;
+	}
+
+	.operations-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-lg);
+		align-items: start;
+	}
+
 	.reindex-body {
 		display: flex;
 		flex-direction: column;
@@ -633,6 +693,10 @@ HNSW index schema.
 
 	@media (max-width: 768px) {
 		.form-row {
+			grid-template-columns: 1fr;
+		}
+
+		.operations-grid {
 			grid-template-columns: 1fr;
 		}
 	}

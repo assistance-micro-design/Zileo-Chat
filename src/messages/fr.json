@@ -182,6 +182,12 @@
 	"mcp_card_delete_arialabel": "Supprimer le serveur {name}",
 
 	"memory_embedding_config": "Configuration des incorporations",
+	"memory_config_subtitle": "Fournisseur et modele utilises pour generer les vecteurs",
+	"memory_status_configured": "Configuree",
+	"memory_status_not_configured": "Non configuree",
+	"memory_operations_title": "Operations",
+	"memory_test_subtitle": "Verifier la connectivite au fournisseur d'incorporation",
+	"memory_reindex_subtitle": "Regenerer les vecteurs de toutes les memoires en base",
 	"memory_management": "Gestion de la memoire",
 
 	"memory_loading_config": "Chargement de la configuration...",
@@ -193,7 +199,6 @@
 	"memory_test_text_placeholder": "Saisissez un texte pour tester la generation d'incorporation...",
 	"memory_testing": "Test en cours...",
 	"memory_test_button": "Tester l'incorporation",
-	"memory_configure_first": "Configurez d'abord l'incorporation",
 	"memory_dimension": "Dimension :",
 	"memory_duration": "Duree :",
 	"memory_preview": "Apercu :",

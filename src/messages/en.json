@@ -182,6 +182,12 @@
 	"mcp_card_delete_arialabel": "Delete server {name}",
 
 	"memory_embedding_config": "Embedding Configuration",
+	"memory_config_subtitle": "Provider and model used to generate vectors",
+	"memory_status_configured": "Configured",
+	"memory_status_not_configured": "Not configured",
+	"memory_operations_title": "Operations",
+	"memory_test_subtitle": "Check connectivity to the embedding provider",
+	"memory_reindex_subtitle": "Regenerate vectors for every memory in the database",
 	"memory_management": "Memory Management",
 
 	"memory_loading_config": "Loading configuration...",
@@ -193,7 +199,6 @@
 	"memory_test_text_placeholder": "Enter text to test embedding generation...",
 	"memory_testing": "Testing...",
 	"memory_test_button": "Test Embedding",
-	"memory_configure_first": "Configure embedding first",
 	"memory_dimension": "Dimension:",
 	"memory_duration": "Duration:",
 	"memory_preview": "Preview:",

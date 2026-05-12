@@ -26,6 +26,7 @@ Extracted from MemorySettings.svelte.
 	import { tauriInvoke } from '$lib/tauri';
 	import { Card, Button, Textarea } from '$lib/components/ui';
 	import type { EmbeddingTestResult } from '$types/embedding';
+	import { FlaskConical } from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { toastStore } from '$lib/stores/toast';
@@ -79,7 +80,13 @@ Extracted from MemorySettings.svelte.
 
 <Card>
 	{#snippet header()}
-		<h3 class="card-title">{$i18n('memory_test_title')}</h3>
+		<div class="card-header-text">
+			<div class="title-row">
+				<FlaskConical size={18} aria-hidden="true" />
+				<h3 class="card-title">{$i18n('memory_test_title')}</h3>
+			</div>
+			<p class="card-subtitle">{$i18n('memory_test_subtitle')}</p>
+		</div>
 	{/snippet}
 	{#snippet body()}
 		<div class="test-section">
@@ -98,9 +105,6 @@ Extracted from MemorySettings.svelte.
 				>
 					{testingEmbedding ? $i18n('memory_testing') : $i18n('memory_test_button')}
 				</Button>
-				{#if !configExists}
-					<span class="test-hint">{$i18n('memory_configure_first')}</span>
-				{/if}
 			</div>
 
 			{#if testResult}
@@ -151,6 +155,25 @@ Extracted from MemorySettings.svelte.
 		margin: 0;
 	}
 
+	.card-header-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2xs);
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		color: var(--color-text-primary);
+	}
+
+	.card-subtitle {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-secondary);
+	}
+
 	.test-section {
 		display: flex;
 		flex-direction: column;
@@ -161,12 +184,6 @@ Extracted from MemorySettings.svelte.
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-md);
-	}
-
-	.test-hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-tertiary);
-		font-style: italic;
 	}
 
 	.test-result {
