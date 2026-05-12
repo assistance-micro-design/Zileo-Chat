@@ -1,6 +1,6 @@
 # API Reference - Tauri Commands
 
-> Technical reference for Frontend-Backend IPC communication. **140 commands** across 23 modules.
+> Technical reference for Frontend-Backend IPC communication. **143 commands** across 23 modules.
 
 ## IPC Architecture
 
@@ -118,16 +118,17 @@ Append-only audit log for validation decisions (decided_by user / auto / timeout
 
 ### Memory (`commands/memory.rs`)
 
-Vector memory with semantic search.
+Vector memory with semantic search (multi-chunk: 1 parent `memory` row + N indexed `memory_chunk` rows since 2026-05-12).
 
 | Command | Description |
 |---------|-------------|
-| `add_memory` | Add memory with auto-generated embedding |
-| `search_memories` | Semantic search with similarity scoring |
-| `list_memories` | List memories with pagination and filters |
-| `get_memory` | Get a single memory by ID |
-| `delete_memory` | Delete a memory entry |
-| `clear_memories_by_type` | Clear all memories of a given type |
+| `add_memory` | Writes 1 parent + N chunks via the UTF-8-safe recursive chunker (FN_RUST_019) |
+| `search_memories` | Semantic search over `memory_chunk` with optional `tags_filter` (CONTAINSANY on parent tags). Returns `ChunkSearchResult` carrying both `chunk_id` and `parent_memory_id`. |
+| `list_memories` | List memories (parents) with pagination and filters |
+| `get_memory` | Get a single memory parent by ID |
+| `delete_memory` | Delete a memory entry + cascade-delete its chunks (PAT_DB_007) |
+| `clear_memories_by_type` | Clear all memories of a given type + cascade-delete their chunks |
+| `purge_expired_memories` | On-demand purge of `context` memories whose `expires_at` is past (parent + chunks). Returns `{ memoriesPurged, chunksPurged }`. The same helper runs best-effort at boot via `AppState::new` (FN_RUST_020). |
 
 ### Embedding (`commands/embedding/`)
 
@@ -135,8 +136,9 @@ Embedding configuration, stats, and memory management tools.
 
 | Command | Description |
 |---------|-------------|
-| `get_embedding_config` | Get current embedding configuration |
+| `get_embedding_config` | Get current embedding configuration. Returns `Option<EmbeddingConfigSettings>` (`null` when no row) so `configExists` reflects reality. |
 | `save_embedding_config` | Save embedding configuration |
+| `delete_embedding_config` | Drop the config row and clear the in-memory embedding service |
 | `reinit_embedding_service` | Reinitialize the embedding service |
 | `test_embedding` | Test embedding generation with a sample |
 | `get_memory_stats` | Get memory statistics for dashboard |
@@ -144,7 +146,9 @@ Embedding configuration, stats, and memory management tools.
 | `update_memory` | Update an existing memory entry |
 | `export_memories` | Export memories to JSON/CSV |
 | `import_memories` | Import memories from JSON |
-| `regenerate_embeddings` | Regenerate embeddings for existing memories |
+| `reindex_memory_chunks` | Spawn a streaming reindex job (recursive chunker -> `memory_chunk` + embeddings). Emits `reindex-progress` events per processed parent. Optional `force` flag re-chunks everything. Returns `ReindexJobStatus { jobId, ... }`. |
+| `cancel_reindex_job` | Cancel a running reindex job by `jobId` |
+| `get_reindex_job_status` | Read current status for a `jobId` — auto-purges terminal entries on consultation; a background timer also sweeps after 10 minutes |
 
 ### Streaming (`commands/streaming/`)
 
@@ -342,8 +346,9 @@ Types are manually synchronized between frontend and backend.
 | `AgentSummary` | `$types/agent` | Lightweight agent summary (no system_prompt) |
 | `Skill` / `SkillSummary` | `$types/skill` | Skill with content / summary without |
 | `LLMModel` | `$types/llm` | Model definition (builtin or custom) |
-| `Memory` | `$types/memory` | Memory entry with type, tags, embedding |
-| `MemorySearchResult` | `$types/memory` | Search result with similarity score |
+| `Memory` | `$types/memory` | Parent memory entry with type, tags, content (no embedding — moved to MemoryChunk) |
+| `ChunkSearchResult` | `$types/memory` | Search result (one row per chunk): `chunkId`, `parentMemoryId`, `chunkIndex`, `score`, plus parent fields surfaced via traversal |
+| `ReindexJobStatus` | `$types/embedding` | Streaming reindex job state (`jobId`, `state`, `processed`, `total`, `errorMessage?`) |
 | `Task` | `$types/workflow` | Task with priority, status, dependencies |
 | `Prompt` | `$types/prompt` | Prompt template with category |
 
@@ -351,7 +356,7 @@ Types are manually synchronized between frontend and backend.
 
 | Type | Location | Description |
 |------|----------|-------------|
-| `ProviderSettings` | `$types/llm` | Provider config (enabled, default model, base URL) |
+| `ProviderSettings` | `$types/llm` | Provider config (enabled, base URL — `default_model_id` removed in PR #145) |
 | `ProviderInfo` | `$types/custom-provider` | Unified provider info (builtin + custom) |
 | `ConnectionTestResult` | `$types/llm` | Provider connectivity test result |
 
@@ -416,6 +421,11 @@ Agent availability changes. Payload: `{ agent_id, status }` where status is
 
 Human-in-the-loop validation request for sub-agent operations. Payload includes
 `validation_id`, `operation_type`, `risk_level`, and `details`.
+
+### `reindex-progress`
+
+Per-parent progress for the streaming `reindex_memory_chunks` job. Payload:
+`{ jobId, state: 'running' | 'done' | 'cancelled' | 'error', processed, total, errorMessage? }`. Filter listeners by `jobId` — the frontend stores the running `jobId` in `LocalStorage` so a navigation/reload can resume the progress UI and surface a retroactive toast on remount.
 
 ---
 

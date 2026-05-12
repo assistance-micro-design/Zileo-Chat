@@ -82,19 +82,21 @@ Fields: `id` (uuid), `workflow_id`, `name` (max 128), `description` (max 1000), 
 
 ### Architecture
 
-- **Database**: SurrealDB with HNSW vector indexing (1024D)
-- **Search**: Composite scoring -- `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`
-- **Embedding**: Multi-provider abstraction (`src-tauri/src/llm/embedding/`) -- Mistral (1024D), Ollama (768D/1024D)
+- **Database**: SurrealDB with HNSW vector indexing (1024D, fixed by schema)
+- **Schema**: 1 parent `memory` row + N indexed `memory_chunk` rows linked via `memory_id: record<memory>` (multi-chunk refactor 2026-05-12)
+- **Chunker**: `tools/memory/chunker.rs` recursive UTF-8-safe split (paragraph -> line -> sentence -> hard cut on code-point boundary) — FN_RUST_019
+- **Search**: composite scoring `cosine_similarity * 0.7 + importance * 0.15 + recency * 0.15`, run against `memory_chunk` with parent traversal via `memory_id.<field>` for filter clauses
+- **Embedding providers** (must produce 1024D vectors): Mistral `mistral-embed`, Ollama `mxbai-embed-large` / `bge-large` / any 1024D model. `nomic-embed-text` (768D) is incompatible with the fixed HNSW index and is filtered out of the model picker.
 
 ### Operations
 
 - `describe` -- Discovery: memory stats by type/scope
-- `add` -- Add memory with embedding + auto-scoping (`type`, `content`)
-- `get` -- Read by ID (`memory_id`)
+- `add` -- Add memory with auto-scoping (`type`, `content`). Writes 1 parent + N chunks; embeddings are generated per chunk.
+- `get` -- Read by ID (`memory_id` — the parent id)
 - `list` -- List with filters (mode `compact` or `full`)
-- `search` -- Semantic search (`query`, optional `limit`, `threshold`)
-- `delete` -- Delete by ID (`memory_id`)
-- `clear_by_type` -- Bulk delete by type (`type`)
+- `search` -- Semantic search (`query`, optional `limit`, `threshold`, `tags_filter`). Each hit is a chunk; `chunk_id` is distinct from `parent_memory_id` (call `operation=get` with the parent id for full content).
+- `delete` -- Delete by ID (`memory_id`). Cascade-deletes chunks first via SELECT VALUE id subquery (PAT_DB_007 — record-link traversal in DELETE WHERE silently matches zero rows, ERR_SURREAL_013).
+- `clear_by_type` -- Bulk delete by type (`type`); same cascade semantics.
 
 ### Auto-Scoping
 
@@ -106,15 +108,17 @@ Scope is determined automatically by memory type:
 ### Example
 
 ```json
-{ "operation": "search", "query": "vector database indexing", "limit": 5 }
+{ "operation": "search", "query": "vector database indexing", "limit": 5, "tags_filter": ["rag", "indexing"] }
 ```
 
 ### Key Details
 
 - **Default importance**: user_pref=0.8, decision=0.7, knowledge=0.6, context=0.3
-- **Auto TTL**: `context` memories expire after 7 days
-- **Embedding optional**: If no embedding service, memories are stored without vectors (text search only)
-- **Security**: All DB queries use bind parameters. See `src-tauri/src/tools/memory/` for implementation.
+- **Auto TTL**: `context` memories expire after 7 days. Expired rows + their chunks are purged at boot (best-effort via `AppState::new`) and on-demand via the `purge_expired_memories` Tauri command surfaced in the Memory Operations card (FN_RUST_020).
+- **Tags filter**: `tags_filter` is matched against `metadata.tags` on the parent via CONTAINSANY (FN_RUST_018). Empty/missing filter = no filter.
+- **Search result shape**: `chunkId`, `parentMemoryId`, `chunkIndex`, `score`, plus parent fields surfaced via traversal (`content`, `metadata.tags`, `type`, `workflow_id`, `expires_at`). The same content may surface multiple times with different `chunk_id` values — the frontend dashboard dedupes by `parentMemoryId`.
+- **Reindex**: backfill / re-chunk via the `reindex_memory_chunks` Tauri command (streaming, cancellable, persisted via LocalStorage). Pre-reindex gap: text search falls back to scanning `memory.content` when the chunk table is globally empty.
+- **Security**: all DB queries use bind parameters. See `src-tauri/src/tools/memory/` for implementation.
 
 ---
 

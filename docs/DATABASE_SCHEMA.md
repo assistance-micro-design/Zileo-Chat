@@ -1,8 +1,8 @@
 # Database Schema - SurrealDB
 
-> **Version**: 1.4
+> **Version**: 1.5
 > **SurrealDB**: ~2.6 (SCHEMAFULL)
-> **Tables**: 19
+> **Tables**: 20
 
 ## Design Notes
 
@@ -20,7 +20,7 @@ workflow ─────────────┐
                       ├──> task
                       ├──> validation_request ──> validation_audit (append-only)
                       ├──> user_question
-                      ├──> memory (vector)
+                      ├──> memory ──> memory_chunk (vector, 1 parent : N chunks)
                       ├──> tool_execution
                       ├──> thinking_step
                       └──> sub_agent_execution
@@ -93,24 +93,44 @@ Conversation messages (user, assistant, system) with per-message metrics.
 
 ### memory
 
-Vector storage for RAG and agent context. Supports auto-scoping, importance, and TTL.
+Parent memory record for RAG and agent context. Stores content + metadata only — embeddings live in `memory_chunk` since the multi-chunk refactor (2026-05-12). Supports auto-scoping, importance, and TTL.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | id | string | | UUID |
 | type | string ASSERT IN [user_pref, context, knowledge, decision] | | Memory category |
-| content | string | | Indexed text |
-| embedding | option\<array\<float\>\> | | Vector (768-3072D) |
+| content | string | | Indexed text (raw, full content) |
 | workflow_id | option\<string\> | | Scope (auto-set) |
 | metadata | object | | Container for sub-fields |
-| metadata.tags | option\<array\<string\>\> | | |
+| metadata.tags | option\<array\<string\>\> | | Free-text labels (filterable via `tags_filter`) |
 | metadata.priority | option\<float\> | | 0.0-1.0 |
 | metadata.agent_source | option\<string\> | | |
 | importance | float | 0.5 | Composite scoring weight |
-| expires_at | option\<datetime\> | | TTL (auto 7d for context) |
+| expires_at | option\<datetime\> | | TTL (auto 7d for `context`); purged at boot + on-demand via `purge_expired_memories` |
 | created_at | datetime | time::now() | |
 
-**Indexes**: `memory_vec_idx` (embedding, HNSW 1024D COSINE), `memory_workflow_idx` (workflow_id), `memory_type_workflow_idx` (type, workflow_id), `memory_type_created_idx` (type, created_at)
+**Indexes**: `memory_workflow_idx` (workflow_id), `memory_type_workflow_idx` (type, workflow_id), `memory_type_created_idx` (type, created_at)
+
+**Schema cleanup**: `schema.rs` runs `REMOVE FIELD IF EXISTS embedding ON TABLE memory` and `REMOVE INDEX IF EXISTS memory_vec_idx ON TABLE memory` on boot (PAT_DB_006) — legacy single-vector rows are stripped silently on replay.
+
+---
+
+### memory_chunk
+
+Vector chunks linked to a parent `memory` via record link. Created by the recursive UTF-8-safe chunker (`tools/memory/chunker.rs`, FN_RUST_019: paragraph -> line -> sentence -> hard cut on code-point boundary). One HNSW 1024D entry per chunk; parent traversal via `memory_id.<field>` is used for filter clauses (workflow_id, type, expires_at, tags).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| memory_id | record\<memory\> | | Parent link (cascade-delete via children-first SELECT VALUE id IN subquery — PAT_DB_007 / ERR_SURREAL_013) |
+| chunk_index | int | | 0-based position inside parent content |
+| content | string | | Chunk text |
+| embedding | array\<float\> | | Vector (HNSW 1024D, COSINE) |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `memory_chunk_vec_idx` (embedding, HNSW 1024D COSINE), `memory_chunk_parent_idx` (memory_id)
+
+**Cascade semantics**: chunks MUST be deleted before their parent. The chunk DELETE WHERE clause must use a subquery (`memory_id IN (SELECT VALUE id FROM memory WHERE ...)`) — a record-link traversal (`memory_id.expires_at < ...`) silently matches zero rows in SurrealDB 2.6 (ERR_SURREAL_013).
 
 ---
 
@@ -304,11 +324,12 @@ Per-provider LLM configuration.
 |-------|------|---------|-------------|
 | provider | string (1-64 chars) | | Provider name (UNIQUE key) |
 | enabled | bool | true | |
-| default_model_id | option\<string\> | | Default model |
-| base_url | option\<string\> | | Custom API endpoint |
+| base_url | option\<string\> | | Custom API endpoint (read by `load_ollama_base_url` for embedding init — FN_RUST_017) |
 | updated_at | datetime | time::now() | |
 
 **Indexes**: `unique_provider` (provider, UNIQUE)
+
+**Schema cleanup**: `schema.rs` runs `REMOVE FIELD IF EXISTS default_model_id ON TABLE provider_settings` on boot (PR #145, decorative field removal — PAT_DB_006).
 
 ---
 
@@ -470,15 +491,19 @@ The `prompt` table (prompt library) is created on demand via `CREATE prompt:...`
 
 | Property | Value |
 |----------|-------|
-| Table | memory |
+| Table | memory_chunk |
 | Field | embedding |
 | Algorithm | HNSW (Hierarchical Navigable Small World) |
 | Distance | Cosine similarity |
-| Dimensions | 1024 (configurable via migration) |
+| Dimensions | 1024 (fixed by schema; non-configurable since multi-chunk refactor) |
 
-Supports KNN search returning top_k results with cosine similarity score.
+Supports KNN search returning top_k chunks with cosine similarity score. The search result type (`ChunkSearchResult`) exposes BOTH `chunk_id` (the row matched) and `parent_memory_id` (used by the agent's `operation=get` to retrieve the full parent content).
 
-Embedding dimensions by provider: OpenAI 1536D/3072D, Mistral 1024D, Ollama 768D/1024D.
+**Compatible embedding models (1024D required)**: Mistral `mistral-embed`, Ollama `mxbai-embed-large` / `bge-large` / any 1024D model. `nomic-embed-text` (768D) is incompatible with the fixed HNSW index and has been removed from the model picker.
+
+**Search filter clauses** (parent-side, via `memory_id.<field>` traversal in SELECT only — NOT in DELETE WHERE, see ERR_SURREAL_013):
+- `tags_filter` (CONTAINSANY) — optional list of tags the parent must carry (FN_RUST_018)
+- `workflow_id`, `type`, `expires_at` — standard scope/TTL gates
 
 ---
 
