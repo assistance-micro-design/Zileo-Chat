@@ -17,13 +17,35 @@
 		collapsed?: boolean;
 		/** Stable block sequence used to derive a deterministic DOM id */
 		sequence?: number;
+		/** ID of the agent that produced this block (orchestrator or sub-agent) */
+		agentId?: string;
+		/** Display name of the agent that produced this block (best-effort) */
+		agentName?: string;
+		/** Workflow's primary agent id — used to compute `isSubAgent` */
+		primaryAgentId?: string;
 	}
 
-	let { content, source, collapsed = true, sequence }: Props = $props();
+	let {
+		content,
+		source,
+		collapsed = true,
+		sequence,
+		agentId,
+		agentName,
+		primaryAgentId
+	}: Props = $props();
 
 	const blockId = $derived(`thinking-${sequence ?? 'tmp'}`);
 
 	const preview = $derived(truncateThinkingContent(content, 80));
+
+	// A block is "sub-agent" when its agent_id is present AND different from
+	// the workflow's primary agent. Falsy primaryAgentId collapses to false
+	// (legacy/replay without registry hit) so layout stays unchanged.
+	const isSubAgent = $derived(
+		!!agentId && !!primaryAgentId && agentId !== primaryAgentId
+	);
+	const agentLabel = $derived(agentName ?? agentId?.slice(0, 8) ?? '');
 
 	function toggle(): void {
 		collapsed = !collapsed;
@@ -41,8 +63,11 @@
 	class="thinking-block"
 	class:model-thinking={source === 'model_thinking'}
 	class:agent-flow={source === 'agent_flow'}
+	class:sub-agent={isSubAgent}
 	role="region"
-	aria-label={$i18n('chat_thinking_block_label')}
+	aria-label={isSubAgent
+		? `${$i18n('block_thinking_sub_agent_label')}: ${agentLabel}`
+		: $i18n('chat_thinking_block_label')}
 >
 	<button
 		class="thinking-header"
@@ -53,6 +78,9 @@
 		type="button"
 	>
 		<Brain size={source === 'model_thinking' ? 16 : 14} class="thinking-icon" />
+		{#if isSubAgent}
+			<span class="agent-tag" title={agentLabel}>{agentLabel}</span>
+		{/if}
 		<span class="thinking-title">
 			{source === 'model_thinking' ? $i18n('chat_thinking_model') : $i18n('chat_thinking_agent')}
 		</span>
@@ -84,6 +112,32 @@
 	.thinking-block.agent-flow {
 		background: transparent;
 		border-left: 2px solid var(--color-border);
+	}
+
+	/* Sub-agent visual treatment (spec 2026-05-12 section 'Décisions validées') */
+	.thinking-block.sub-agent {
+		margin-left: 16px;
+		border-left-style: dashed;
+		border-left-color: var(--color-info);
+	}
+
+	.agent-tag {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px 6px;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
+		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		border-radius: 4px;
+		flex-shrink: 0;
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.thinking-header:hover .agent-tag {
+		background: color-mix(in srgb, var(--color-info) 16%, transparent);
 	}
 
 	.thinking-header {

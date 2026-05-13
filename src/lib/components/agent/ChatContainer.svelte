@@ -58,6 +58,12 @@ Main chat area with message display, execution blocks inline, and input controls
 		spinnerContext?: string | null;
 		/** Active tasks from TodoTool (displayed after spinner) */
 		executionTasks?: TodoTaskDisplay[];
+		/**
+		 * Workflow's primary agent id (orchestrator). Forwarded to ToolCallBlock
+		 * and ThinkingBlock so they can apply the sub-agent visual treatment
+		 * when a block's `agent_id` differs from this value.
+		 */
+		primaryAgentId?: string;
 		disabled: boolean;
 		onsend: (message: string) => void;
 		oncancel?: () => void;
@@ -71,6 +77,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		isExecuting = false,
 		spinnerContext = null,
 		executionTasks = [],
+		primaryAgentId,
 		disabled,
 		onsend,
 		oncancel
@@ -167,7 +174,14 @@ Main chat area with message display, execution blocks inline, and input controls
 			{#snippet renderBlock(block: ChatBlock)}
 				{#if block.block_type === 'thinking'}
 					{@const data = block.data as ThinkingBlockData}
-					<ThinkingBlock content={data.content} source={data.source} sequence={block.sequence} />
+					<ThinkingBlock
+						content={data.content}
+						source={data.source}
+						sequence={block.sequence}
+						agentId={data.agent_id}
+						agentName={data.agent_name}
+						{primaryAgentId}
+					/>
 				{:else if block.block_type === 'tool_call'}
 					{@const data = block.data as ToolCallBlockData}
 					<ToolCallBlock
@@ -180,6 +194,9 @@ Main chat area with message display, execution blocks inline, and input controls
 						errorMessage={data.error_message}
 						durationMs={data.duration_ms}
 						sequence={block.sequence}
+						agentId={data.agent_id}
+						agentName={data.agent_name}
+						{primaryAgentId}
 					/>
 				{:else if block.block_type === 'sub_agent'}
 					{@const data = block.data as SubAgentBlockData}

@@ -812,6 +812,7 @@ Uses extracted components, services, and stores for clean architecture.
 				isExecuting={$isExecuting$}
 				spinnerContext={$spinnerContext$}
 				executionTasks={resolvedTasks}
+				primaryAgentId={pageState.selectedAgentId ?? undefined}
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
 				oncancel={handleCancel}

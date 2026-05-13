@@ -23,6 +23,12 @@
 		collapsed?: boolean;
 		/** Stable block sequence used to derive a deterministic DOM id */
 		sequence?: number;
+		/** ID of the agent that produced this block (orchestrator or sub-agent) */
+		agentId?: string;
+		/** Display name of the agent that produced this block (best-effort) */
+		agentName?: string;
+		/** Workflow's primary agent id — used to compute `isSubAgent` */
+		primaryAgentId?: string;
 	}
 
 	let {
@@ -35,10 +41,22 @@
 		errorMessage,
 		durationMs,
 		collapsed = true,
-		sequence
+		sequence,
+		agentId,
+		agentName,
+		primaryAgentId
 	}: Props = $props();
 
 	const blockId = $derived(`tool-${sequence ?? 'tmp'}`);
+
+	// A block is "sub-agent" when its agent_id is present AND different from
+	// the workflow's primary agent. Missing primaryAgentId (legacy/replay
+	// without registry hit) collapses to false so the block renders identical
+	// to a primary one (no false-positive indentation).
+	const isSubAgent = $derived(
+		!!agentId && !!primaryAgentId && agentId !== primaryAgentId
+	);
+	const agentLabel = $derived(agentName ?? agentId?.slice(0, 8) ?? '');
 
 	const formattedDuration = $derived(formatDuration(durationMs));
 
@@ -70,8 +88,11 @@
 	class="tool-call-block"
 	class:success
 	class:error={!success}
+	class:sub-agent={isSubAgent}
 	role="region"
-	aria-label="{toolName} - {success ? $i18n('chat_tool_success') : $i18n('chat_tool_error')}"
+	aria-label={isSubAgent
+		? `${$i18n('block_tool_call_sub_agent_label')}: ${agentLabel} — ${toolName} — ${success ? $i18n('chat_tool_success') : $i18n('chat_tool_error')}`
+		: `${toolName} - ${success ? $i18n('chat_tool_success') : $i18n('chat_tool_error')}`}
 >
 	<button
 		class="tool-header"
@@ -82,6 +103,9 @@
 		type="button"
 	>
 		<Wrench size={14} class="tool-icon" />
+		{#if isSubAgent}
+			<span class="agent-tag" title={agentLabel}>{agentLabel}</span>
+		{/if}
 		<span class="tool-name">{toolName}</span>
 
 		{#if toolType === 'mcp' && serverName}
@@ -139,6 +163,32 @@
 
 	.tool-call-block.error {
 		border-left: 3px solid var(--color-danger);
+	}
+
+	/* Sub-agent visual treatment (spec 2026-05-12 section 'Décisions validées') */
+	.tool-call-block.sub-agent {
+		margin-left: 16px;
+		border-left-style: dashed;
+		border-left-color: var(--color-info);
+	}
+
+	.agent-tag {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px 6px;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
+		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		border-radius: 4px;
+		flex-shrink: 0;
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.tool-header:hover .agent-tag {
+		background: color-mix(in srgb, var(--color-info) 16%, transparent);
 	}
 
 	.tool-header {
