@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-05-12
+
 Agent page UX overhaul (`feature/ui-ux-agent-page`). 8 sequential commits, +1334 / −325 LOC across 26 files. Three goals: (1) attribute every streamed block to the agent that emitted it (primary vs sub-agent), (2) make the visual hierarchy of an agent run readable at a glance (collapsed sub-agents, discreet header, three-level token display), (3) keep the chat input usable during execution. Tests verts: 1381 Rust lib + clippy `--all-targets` clean + svelte-check OK + 431 Vitest (+9 TDD streaming/chat_block + 5 attribution + 5 chat-container-helpers) + ESLint/Prettier clean.
 
 ### Added
@@ -996,7 +998,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.24.0
 [0.23.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.1
 [0.23.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.0
 [0.22.2]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.22.2
