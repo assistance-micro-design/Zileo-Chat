@@ -804,11 +804,12 @@
 	"agent_header_default_title": "Agent",
 	"agent_header_loading": "Chargement...",
 	"agent_header_add_agent": "Ajouter un agent",
-	"agent_header_iterations": "Iterations :",
-	"agent_header_iterations_label": "Iterations max",
-	"agent_header_iterations_tooltip": "Iterations maximales des outils (1-200)",
-	"agent_header_iterations_popover_aria": "Ouvrir les reglages d'iterations",
-	"agent_header_iterations_popover_close": "Fermer",
+	"agent_header_agent_label": "Agent :",
+	"agent_header_unknown_agent": "Inconnu",
+	"agent_header_iterations_label": "Iterations max :",
+	"agent_header_iterations_tooltip": "Iterations maximales des outils configurees pour cet agent",
+	"agent_header_edit_link": "Modifier",
+	"agent_header_edit_aria": "Modifier l'agent dans les parametres",
 
 	"activity_title": "Activite",
 
@@ -1230,9 +1231,9 @@
 	"help_workflow_sidebar_description": "Les flux de travail sont des sessions de conversation avec un agent selectionne. Chaque flux de travail conserve son propre historique de messages et son contexte.",
 	"help_workflow_sidebar_tutorial": "Cliquez sur '+' pour creer un nouveau flux de travail\nSelectionnez un flux existant pour le continuer\nUtilisez la barre de recherche pour filtrer les flux\nFaites un clic droit ou utilisez les icones pour renommer ou supprimer\nLes flux de travail sont enregistres automatiquement",
 
-	"help_agent_header_title": "Selection de l'agent",
-	"help_agent_header_description": "Selectionnez quel agent traite vos messages dans ce flux de travail. Vous pouvez egalement configurer le nombre maximal d'iterations d'outils.",
-	"help_agent_header_tutorial": "Utilisez le menu deroulant pour selectionner un agent\nAjustez les iterations maximales si l'agent a besoin de plus d'appels d'outils\nLe modele et le fournisseur de l'agent sont affiches ci-dessous\nAllez dans les Parametres pour creer de nouveaux agents",
+	"help_agent_header_title": "Agent assigne au flux",
+	"help_agent_header_description": "Cet entete affiche en lecture seule l'agent assigne a ce flux de travail et son nombre maximal d'iterations d'outils. L'agent est fige a la creation du flux et sa configuration se modifie dans les parametres.",
+	"help_agent_header_tutorial": "Le nom de l'agent provient du flux de travail courant\nLe nombre d'iterations max provient de la fiche de l'agent\nCliquez sur 'Modifier' pour ouvrir Parametres > Agents et ajuster la configuration\nPour utiliser un autre agent, creez un nouveau flux de travail",
 
 	"help_chat_title": "Zone de discussion",
 	"help_chat_description": "C'est ici que vous communiquez avec votre agent IA. Saisissez des messages, consultez les reponses et suivez le raisonnement et l'utilisation des outils de l'agent.",

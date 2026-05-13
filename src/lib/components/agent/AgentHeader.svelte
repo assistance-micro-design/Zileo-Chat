@@ -19,16 +19,14 @@ Copyright 2025 Zileo-Chat-3 Contributors
 SPDX-License-Identifier: Apache-2.0
 
 AgentHeader Component
-Discreet workflow header (workflow title + agent selector + iterations popover).
+Read-only single-line header: workflow title + assigned agent + max iterations + link to Settings.
+Agent and iterations are configured in Settings > Agents (source of truth).
 -->
 
 <script lang="ts">
-	import { SlidersHorizontal } from '@lucide/svelte';
-	import AgentSelector from '$lib/components/workflow/AgentSelector.svelte';
+	import { ExternalLink } from '@lucide/svelte';
 	import { HelpButton } from '$lib/components/ui';
-	import { focusTrap } from '$lib/actions/focusTrap';
 	import { i18n } from '$lib/i18n';
-	import { ITERATIONS_LIMITS } from '$lib/utils/constants';
 	import type { AgentSummary } from '$types/agent';
 	import type { Workflow } from '$types/workflow';
 
@@ -39,8 +37,6 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		maxIterations: number;
 		agentsLoading?: boolean;
 		messagesLoading?: boolean;
-		onagentchange: (agentId: string) => void;
-		oniterationschange: (value: number) => void;
 	}
 
 	let {
@@ -49,52 +45,10 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		selectedAgentId,
 		maxIterations,
 		agentsLoading = false,
-		messagesLoading = false,
-		onagentchange,
-		oniterationschange
+		messagesLoading = false
 	}: Props = $props();
 
-	let iterationsPopoverOpen = $state(false);
-	let popoverEl: HTMLDivElement | null = $state(null);
-
-	function handleIterationsInput(e: Event) {
-		const target = e.target as HTMLInputElement;
-		const value = Math.max(
-			ITERATIONS_LIMITS.MIN,
-			Math.min(ITERATIONS_LIMITS.MAX, parseInt(target.value) || ITERATIONS_LIMITS.DEFAULT)
-		);
-		oniterationschange(value);
-	}
-
-	function toggleIterationsPopover(): void {
-		iterationsPopoverOpen = !iterationsPopoverOpen;
-	}
-
-	function closeIterationsPopover(): void {
-		iterationsPopoverOpen = false;
-	}
-
-	function handlePopoverKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			closeIterationsPopover();
-		}
-	}
-
-	function handleDocumentClick(event: MouseEvent): void {
-		if (!iterationsPopoverOpen) return;
-		const target = event.target as Node | null;
-		if (popoverEl && target && !popoverEl.contains(target)) {
-			closeIterationsPopover();
-		}
-	}
-
-	$effect(() => {
-		if (iterationsPopoverOpen) {
-			document.addEventListener('mousedown', handleDocumentClick);
-			return () => document.removeEventListener('mousedown', handleDocumentClick);
-		}
-	});
+	let selectedAgentName = $derived(agents.find((a) => a.id === selectedAgentId)?.name ?? null);
 </script>
 
 <header class="agent-header">
@@ -107,66 +61,31 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		/>
 
 		{#if agentsLoading}
-			<span class="agents-loading">{$i18n('agent_header_loading')}</span>
+			<span class="meta-text">{$i18n('agent_header_loading')}</span>
 		{:else if agents.length === 0}
-			<span class="no-agents">
-				<a href="/settings" class="settings-link">{$i18n('agent_header_add_agent')}</a>
+			<span class="meta-text">
+				<a href="/settings/agents" class="settings-link">{$i18n('agent_header_add_agent')}</a>
 			</span>
 		{:else}
-			<div class="agent-controls">
-				<AgentSelector
-					{agents}
-					selected={selectedAgentId ?? agents[0]?.id ?? ''}
-					onselect={onagentchange}
-					label=""
-				/>
-				<div class="iterations-popover-anchor" bind:this={popoverEl}>
-					<button
-						type="button"
-						class="iterations-toggle"
-						class:open={iterationsPopoverOpen}
-						onclick={toggleIterationsPopover}
-						aria-haspopup="dialog"
-						aria-expanded={iterationsPopoverOpen}
-						aria-label={$i18n('agent_header_iterations_popover_aria')}
-						title={`${$i18n('agent_header_iterations_tooltip')} (${maxIterations})`}
-					>
-						<SlidersHorizontal size={14} />
-					</button>
-
-					{#if iterationsPopoverOpen}
-						<div
-							class="iterations-popover"
-							role="dialog"
-							tabindex="-1"
-							aria-modal="true"
-							aria-label={$i18n('agent_header_iterations_label')}
-							onkeydown={handlePopoverKeydown}
-							{@attach focusTrap}
-						>
-							<label for="max-iterations" class="iterations-label">
-								{$i18n('agent_header_iterations_label')}
-							</label>
-							<input
-								type="number"
-								id="max-iterations"
-								class="iterations-input"
-								min={ITERATIONS_LIMITS.MIN}
-								max={ITERATIONS_LIMITS.MAX}
-								value={maxIterations}
-								oninput={handleIterationsInput}
-							/>
-							<button
-								type="button"
-								class="popover-close"
-								onclick={closeIterationsPopover}
-							>
-								{$i18n('agent_header_iterations_popover_close')}
-							</button>
-						</div>
-					{/if}
-				</div>
-			</div>
+			<span class="separator" aria-hidden="true">·</span>
+			<span class="meta-text">
+				<span class="meta-label">{$i18n('agent_header_agent_label')}</span>
+				<span class="meta-value">{selectedAgentName ?? $i18n('agent_header_unknown_agent')}</span>
+			</span>
+			<span class="separator" aria-hidden="true">·</span>
+			<span class="meta-text" title={$i18n('agent_header_iterations_tooltip')}>
+				<span class="meta-label">{$i18n('agent_header_iterations_label')}</span>
+				<span class="meta-value">{maxIterations}</span>
+			</span>
+			<a
+				href="/settings/agents"
+				class="settings-link edit-link"
+				aria-label={$i18n('agent_header_edit_aria')}
+				title={$i18n('agent_header_edit_aria')}
+			>
+				{$i18n('agent_header_edit_link')}
+				<ExternalLink size={12} aria-hidden="true" />
+			</a>
 		{/if}
 
 		{#if messagesLoading}
@@ -185,7 +104,7 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		min-height: 44px;
+		min-height: 36px;
 	}
 
 	.header-content {
@@ -193,131 +112,82 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		align-items: center;
 		justify-content: center;
 		gap: var(--spacing-sm);
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		max-width: 100%;
+		min-width: 0;
+		overflow: hidden;
 	}
 
 	.agent-title {
-		font-size: var(--font-size-base);
+		font-size: var(--font-size-sm);
 		font-weight: var(--font-weight-semibold);
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: clamp(80px, 18vw, 200px);
+		flex-shrink: 1;
 	}
 
-	.agent-controls {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
+	.separator {
+		color: var(--color-text-tertiary);
+		font-size: var(--font-size-sm);
 		flex-shrink: 0;
 	}
 
-	.iterations-popover-anchor {
-		position: relative;
+	.meta-text {
 		display: inline-flex;
-	}
-
-	.iterations-toggle {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		padding: 0;
-		background: transparent;
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		color: var(--color-text-secondary);
-		cursor: pointer;
-		transition:
-			background-color 0.15s ease,
-			color 0.15s ease,
-			border-color 0.15s ease;
-	}
-
-	.iterations-toggle:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-		border-color: var(--color-text-tertiary);
-	}
-
-	.iterations-toggle.open {
-		background: var(--color-bg-hover);
-		color: var(--color-accent);
-		border-color: var(--color-accent);
-	}
-
-	.iterations-toggle:focus-visible {
-		outline: 2px solid var(--color-accent);
-		outline-offset: 2px;
-	}
-
-	.iterations-popover {
-		position: absolute;
-		top: calc(100% + 8px);
-		right: 0;
-		z-index: 10;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-sm);
-		min-width: 180px;
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-	}
-
-	.iterations-label {
-		font-size: var(--font-size-xs);
+		align-items: baseline;
+		gap: 4px;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-secondary);
 		white-space: nowrap;
+		min-width: 0;
+		flex-shrink: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
-	.iterations-input {
-		width: 100%;
-		padding: var(--spacing-xs);
+	.meta-label {
+		color: var(--color-text-tertiary);
+	}
+
+	.meta-value {
+		color: var(--color-text-primary);
+		font-weight: var(--font-weight-medium);
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.settings-link {
+		color: var(--color-accent);
+		text-decoration: none;
 		font-size: var(--font-size-sm);
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		background: var(--color-bg-primary);
-		color: var(--color-text-primary);
-		text-align: center;
 	}
 
-	.iterations-input:focus {
-		outline: none;
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 2px var(--color-accent-light);
+	.settings-link:hover {
+		color: var(--color-accent-hover);
+		text-decoration: underline;
 	}
 
-	.iterations-input::-webkit-inner-spin-button,
-	.iterations-input::-webkit-outer-spin-button {
-		opacity: 1;
+	.settings-link:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+		border-radius: var(--border-radius-sm);
 	}
 
-	.popover-close {
-		margin-top: var(--spacing-xs);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: var(--font-size-xs);
-		background: transparent;
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-md);
-		color: var(--color-text-secondary);
-		cursor: pointer;
-	}
-
-	.popover-close:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
+	.edit-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		flex-shrink: 0;
 	}
 
 	.loading-indicator {
 		display: flex;
 		align-items: center;
 		margin-left: var(--spacing-sm);
+		flex-shrink: 0;
 	}
 
 	.loading-spinner {
@@ -338,22 +208,7 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 		}
 	}
 
-	.agents-loading,
-	.no-agents {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-tertiary);
-	}
-
-	.settings-link {
-		color: var(--color-accent);
-		text-decoration: underline;
-	}
-
-	.settings-link:hover {
-		color: var(--color-accent-hover);
-	}
-
-	/* Responsive: Medium screens - tighter spacing */
+	/* Responsive: Medium screens — tighter spacing, hide labels */
 	@media (max-width: 900px) {
 		.agent-header {
 			padding: var(--spacing-xs) var(--spacing-md);
@@ -365,39 +220,21 @@ Discreet workflow header (workflow title + agent selector + iterations popover).
 
 		.agent-title {
 			max-width: clamp(60px, 12vw, 120px);
-			font-size: var(--font-size-sm);
-		}
-
-		.agent-controls {
-			gap: var(--spacing-xs);
 		}
 	}
 
-	/* Responsive: Small screens - stack vertically */
+	/* Responsive: Small screens — drop iterations + label prefixes */
 	@media (max-width: 550px) {
 		.agent-header {
 			padding: var(--spacing-xs);
-			min-height: auto;
-		}
-
-		.header-content {
-			flex-direction: column;
-			gap: var(--spacing-xs);
 		}
 
 		.agent-title {
-			max-width: 180px;
+			max-width: 140px;
 		}
 
-		.agent-controls {
-			flex-wrap: wrap;
-			justify-content: center;
-		}
-
-		.iterations-popover {
-			right: auto;
-			left: 50%;
-			transform: translateX(-50%);
+		.meta-label {
+			display: none;
 		}
 	}
 </style>

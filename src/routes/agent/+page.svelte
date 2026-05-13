@@ -484,13 +484,6 @@ Uses extracted components, services, and stores for clean architecture.
 	}
 
 	/**
-	 * Handle max iterations change.
-	 */
-	function handleIterationsChange(value: number): void {
-		pageState.currentMaxIterations = value;
-	}
-
-	/**
 	 * Handle sending a message with streaming.
 	 * Delegates orchestration to WorkflowExecutorService.
 	 */
@@ -799,8 +792,6 @@ Uses extracted components, services, and stores for clean architecture.
 				maxIterations={pageState.currentMaxIterations}
 				agentsLoading={$agentsLoading}
 				messagesLoading={pageState.messagesLoading}
-				onagentchange={handleAgentChange}
-				oniterationschange={handleIterationsChange}
 			/>
 
 			<!-- Chat Container -->

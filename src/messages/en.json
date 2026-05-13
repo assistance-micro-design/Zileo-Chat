@@ -803,11 +803,12 @@
 	"agent_header_default_title": "Agent",
 	"agent_header_loading": "Loading...",
 	"agent_header_add_agent": "Add agent",
-	"agent_header_iterations": "Iterations:",
-	"agent_header_iterations_label": "Max iterations",
-	"agent_header_iterations_tooltip": "Max tool iterations (1-200)",
-	"agent_header_iterations_popover_aria": "Open iteration settings",
-	"agent_header_iterations_popover_close": "Close",
+	"agent_header_agent_label": "Agent:",
+	"agent_header_unknown_agent": "Unknown",
+	"agent_header_iterations_label": "Max iterations:",
+	"agent_header_iterations_tooltip": "Max tool iterations configured for this agent",
+	"agent_header_edit_link": "Edit",
+	"agent_header_edit_aria": "Edit agent in settings",
 
 	"activity_title": "Activity",
 
@@ -1229,9 +1230,9 @@
 	"help_workflow_sidebar_description": "Workflows are conversation sessions with a selected agent. Each workflow maintains its own message history and context.",
 	"help_workflow_sidebar_tutorial": "Click '+' to create a new workflow\nSelect an existing workflow to continue it\nUse the search bar to filter workflows\nRight-click or use icons to rename or delete\nWorkflows are saved automatically",
 
-	"help_agent_header_title": "Agent Selection",
-	"help_agent_header_description": "Select which agent handles your messages in this workflow. You can also configure the maximum number of tool iterations.",
-	"help_agent_header_tutorial": "Use the dropdown to select an agent\nAdjust max iterations if the agent needs more tool calls\nThe agent's model and provider are shown below\nGo to Settings to create new agents",
+	"help_agent_header_title": "Workflow's assigned agent",
+	"help_agent_header_description": "This header shows, read-only, the agent assigned to this workflow and its maximum tool iterations. The agent is fixed when the workflow is created and its configuration is edited in Settings.",
+	"help_agent_header_tutorial": "The agent name comes from the current workflow\nMax iterations come from the agent's profile\nClick 'Edit' to open Settings > Agents and tweak the configuration\nTo use a different agent, create a new workflow",
 
 	"help_chat_title": "Chat Area",
 	"help_chat_description": "This is where you communicate with your AI agent. Type messages, view responses, and track the agent's reasoning and tool usage.",
