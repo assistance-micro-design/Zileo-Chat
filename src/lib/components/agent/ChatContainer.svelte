@@ -44,6 +44,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		SubAgentBlockData,
 		TodoTaskDisplay
 	} from '$types/chat-block';
+	import { countInternalBlocks } from './chat-container-helpers';
 
 	interface Props {
 		messages: Message[];
@@ -171,7 +172,7 @@ Main chat area with message display, execution blocks inline, and input controls
 		{#if messagesLoading}
 			<MessageListSkeleton count={3} />
 		{:else}
-			{#snippet renderBlock(block: ChatBlock)}
+			{#snippet renderBlock(block: ChatBlock, allBlocks: ChatBlock[])}
 				{#if block.block_type === 'thinking'}
 					{@const data = block.data as ThinkingBlockData}
 					<ThinkingBlock
@@ -208,6 +209,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						tokensOutput={data.tokens_output}
 						reportSummary={data.report_summary}
 						sequence={block.sequence}
+						internalBlockCount={countInternalBlocks(allBlocks, data._sub_agent_id)}
 					/>
 				{/if}
 			{/snippet}
@@ -240,7 +242,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						{#if message.role === 'assistant' && getBlocksForMessage(message.id).length > 0}
 							<div class="persisted-blocks">
 								{#each getBlocksForMessage(message.id) as block (`${block.block_type}-${block.sequence}`)}
-									{@render renderBlock(block)}
+									{@render renderBlock(block, getBlocksForMessage(message.id))}
 								{/each}
 							</div>
 						{/if}
@@ -252,7 +254,7 @@ Main chat area with message display, execution blocks inline, and input controls
 			{#if isExecuting || executionBlocks.length > 0}
 				<div class="execution-blocks">
 					{#each executionBlocks as block (`${block.block_type}-${block.sequence}`)}
-						{@render renderBlock(block)}
+						{@render renderBlock(block, executionBlocks)}
 					{/each}
 
 					{#if isExecuting}

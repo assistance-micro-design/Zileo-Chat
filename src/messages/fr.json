@@ -865,6 +865,8 @@
 	"chat_tool_error": "Erreur",
 	"block_tool_call_sub_agent_label": "Appel d'outil par sous-agent",
 	"block_thinking_sub_agent_label": "Reflexion par sous-agent",
+	"sub_agent_block_internal_actions_count_one": "{count} action interne",
+	"sub_agent_block_internal_actions_count_other": "{count} actions internes",
 	"chat_tool_input": "Entree",
 	"chat_tool_output": "Sortie",
 	"chat_tokens_in": "Entree",

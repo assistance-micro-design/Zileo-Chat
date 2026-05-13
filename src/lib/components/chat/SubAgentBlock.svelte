@@ -22,6 +22,12 @@
 		collapsed?: boolean;
 		/** Stable block sequence used to derive a deterministic DOM id */
 		sequence?: number;
+		/**
+		 * Number of internal blocks (tool_call/thinking) attributable to this
+		 * sub-agent. Displayed as a count in the collapsed header so the user
+		 * can preview the sub-agent's activity without expanding the block.
+		 */
+		internalBlockCount?: number;
 	}
 
 	let {
@@ -32,7 +38,8 @@
 		tokensOutput,
 		reportSummary,
 		collapsed = true,
-		sequence
+		sequence,
+		internalBlockCount = 0
 	}: Props = $props();
 
 	const blockId = $derived(`subagent-${sequence ?? 'tmp'}`);
@@ -70,6 +77,17 @@
 	>
 		<Users size={14} class="agent-icon" />
 		<span class="agent-name">{agentName}</span>
+
+		{#if collapsed && internalBlockCount > 0}
+			<span class="internal-count">
+				{internalBlockCount === 1
+					? $i18n('sub_agent_block_internal_actions_count_one').replace('{count}', '1')
+					: $i18n('sub_agent_block_internal_actions_count_other').replace(
+							'{count}',
+							String(internalBlockCount)
+						)}
+			</span>
+		{/if}
 
 		<span class="agent-status">
 			{#if status === 'completed'}
@@ -158,6 +176,15 @@
 
 	.agent-name {
 		font-weight: var(--font-weight-medium);
+		flex-shrink: 0;
+	}
+
+	.internal-count {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		padding: 2px 6px;
+		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		border-radius: 4px;
 		flex-shrink: 0;
 	}
 
