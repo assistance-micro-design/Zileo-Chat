@@ -1000,6 +1000,9 @@
 	"workflow_metrics_cached_tokens": "Jetons en cache",
 	"workflow_cache_hit_rate": "taux cache",
 	"workflow_cost_estimate": "(estimatif)",
+	"token_display_last_turn_label": "Dernier tour",
+	"token_display_show_details": "Afficher les details",
+	"token_display_workflow_total": "Total workflow",
 
 	"workflow_agent_select": "Selectionnez un agent...",
 	"workflow_agent_tool": "outil",

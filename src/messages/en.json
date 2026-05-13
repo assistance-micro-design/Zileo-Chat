@@ -999,6 +999,9 @@
 	"workflow_metrics_cached_tokens": "Cached tokens",
 	"workflow_cache_hit_rate": "cache hit",
 	"workflow_cost_estimate": "(estimate)",
+	"token_display_last_turn_label": "Last turn",
+	"token_display_show_details": "Show details",
+	"token_display_workflow_total": "Workflow total",
 
 	"workflow_agent_select": "Select an agent...",
 	"workflow_agent_tool": "tool",

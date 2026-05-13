@@ -16,17 +16,13 @@
 
 <!--
   TokenDisplay Component
-  Displays real-time token usage with context window progress,
-  cost estimation, and token generation speed.
 
-  Design: Follows MetricsBar pattern with enhanced visual indicators.
-
-  Features:
-  - Context window progress bar with gradient colors (green -> yellow -> red)
-  - Warning states at 75%, 90%, 100% with animated indicators
-  - Token counts with input/output color differentiation
-  - Cost display with accent color
-  - Speed indicator during streaming with pulse animation
+  Three-level information hierarchy:
+   - Level 1 (always visible): context gauge + cost + speed (during stream).
+   - Level 2 (tooltips on Level 1 metrics via aria-describedby and title):
+     last turn tokens in/out, cached tokens, cache hit rate.
+   - Level 3 (expand panel via ChevronDown button): cumulative agent
+     tokens, sub-agent tokens, workflow total cost breakdown.
 
   @example
   <TokenDisplay data={tokenData} />
@@ -37,10 +33,9 @@
 	import {
 		AlertTriangle,
 		Gauge,
-		ArrowDownToLine,
-		TrendingUp,
 		CircleDollarSign,
-		Activity
+		Activity,
+		ChevronDown
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { HelpButton } from '$lib/components/ui';
@@ -57,6 +52,8 @@
 	}
 
 	let { data, compact = false }: Props = $props();
+
+	let detailsOpen = $state(false);
 
 	/**
 	 * Calculate context usage percentage.
@@ -94,8 +91,6 @@
 		return count.toLocaleString();
 	}
 
-	// formatCost is imported from $lib/utils/currency (single source of truth).
-
 	/**
 	 * Format speed in tokens per second
 	 */
@@ -113,7 +108,6 @@
 
 	/**
 	 * Cache hit rate color based on percentage thresholds.
-	 * Green (>50%): excellent, Yellow (10-50%): moderate, Gray (<10%): low.
 	 */
 	type CacheRateColor = 'high' | 'medium' | 'low';
 	const cacheRateColor = $derived<CacheRateColor | null>(
@@ -136,6 +130,30 @@
 	 */
 	const workflowTotalInput = $derived(data.cumulative_input + data.sub_agent_input);
 	const workflowTotalOutput = $derived(data.cumulative_output + data.sub_agent_output);
+
+	/**
+	 * Level 2 tooltip text for the context metric: last turn tokens + cached.
+	 * Multi-line via newline so the native tooltip wraps nicely.
+	 */
+	const contextTooltip = $derived(
+		`${$i18n('workflow_token_in_out')}: ${formatTokens(data.tokens_input)} / ${formatTokens(data.tokens_output)}` +
+			(hasCachedTokens
+				? `\n${$i18n('workflow_token_cached')}: ${formatTokens(data.cached_tokens ?? 0)}` +
+					(data.cache_hit_rate !== null ? ` (${data.cache_hit_rate}%)` : '')
+				: '')
+	);
+
+	const costTooltip = $derived(
+		data.cost_is_partial
+			? $i18n('tokens_cost_in_progress_help')
+			: hasSubAgents
+				? `${$i18n('workflow_token_agent')}: ${formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))}`
+				: $i18n('token_display_last_turn_label')
+	);
+
+	function toggleDetails(): void {
+		detailsOpen = !detailsOpen;
+	}
 </script>
 
 <div
@@ -154,8 +172,8 @@
 		tutorialKey="help_token_display_tutorial"
 	/>
 
-	<!-- Context Progress Section -->
-	<div class="metric context-metric">
+	<!-- Level 1: Context Progress -->
+	<div class="metric context-metric" title={contextTooltip}>
 		<div
 			class="metric-icon context-icon"
 			class:warning={warningLevel === 'warning'}
@@ -212,97 +230,24 @@
 	<!-- Separator -->
 	<div class="separator"></div>
 
-	<!-- Current Tokens -->
-	<div class="metric tokens-metric">
-		<div class="metric-icon input-icon">
-			<ArrowDownToLine size={14} />
-		</div>
-		<div class="token-pair">
-			<span class="token-value input-value">{formatTokens(data.tokens_input)}</span>
-			<span class="token-separator">/</span>
-			<span class="token-value output-value">{formatTokens(data.tokens_output)}</span>
-		</div>
-		{#if !compact}
-			<span class="metric-label">{$i18n('workflow_token_in_out')}</span>
-		{/if}
-	</div>
-
-	<!-- Cached Tokens + Cache Hit Rate (only shown when provider reports caching) -->
-	{#if !compact && hasCachedTokens}
-		<div class="metric tokens-metric cached" title={$i18n('workflow_metrics_cached_tokens')}>
-			<span class="token-value cached-value">{formatTokens(data.cached_tokens ?? 0)}</span>
-			<span class="metric-label">{$i18n('workflow_token_cached')}</span>
-			{#if data.cache_hit_rate !== null && cacheRateColor}
-				<span class="cache-rate cache-rate-{cacheRateColor}">{data.cache_hit_rate}%</span>
-			{/if}
-		</div>
-	{/if}
-
-	<!-- Agent Cumulative Tokens (main agent only) -->
-	{#if !compact}
-		<div class="metric tokens-metric cumulative">
-			<div class="metric-icon total-icon">
-				<TrendingUp size={14} />
-			</div>
-			<div class="token-pair">
-				<span class="token-value input-value">{formatTokens(data.cumulative_input)}</span>
-				<span class="token-separator">/</span>
-				<span class="token-value output-value">{formatTokens(data.cumulative_output)}</span>
-			</div>
-			<span class="metric-label">{$i18n('workflow_token_agent')}</span>
-		</div>
-	{/if}
-
-	<!-- Workflow Total (agent + sub-agents) - only shown when sub-agents exist -->
-	{#if !compact && hasSubAgents}
-		<div class="metric tokens-metric workflow-total">
-			<div class="metric-icon workflow-total-icon">
-				<TrendingUp size={14} />
-			</div>
-			<div class="token-pair">
-				<span class="token-value input-value">{formatTokens(workflowTotalInput)}</span>
-				<span class="token-separator">/</span>
-				<span class="token-value output-value">{formatTokens(workflowTotalOutput)}</span>
-			</div>
-			<span class="metric-label">{$i18n('workflow_token_total')}</span>
-		</div>
-	{/if}
-
-	<!-- Separator -->
-	<div class="separator"></div>
-
-	<!-- Cost -->
-	<div class="metric cost-metric" class:cost-partial={data.cost_is_partial}>
+	<!-- Level 1: Cost -->
+	<div class="metric cost-metric" class:cost-partial={data.cost_is_partial} title={costTooltip}>
 		<div class="metric-icon cost-icon">
 			<CircleDollarSign size={14} />
 		</div>
 		<!-- Option A: prefix with `~` when the cost is the running sum of
 		     per-iteration backend values (workflow still progressing). -->
-		<span
-			class="cost-value"
-			title={data.cost_is_partial ? $i18n('tokens_cost_in_progress_help') : undefined}
+		<span class="cost-value"
 			>{hasSubAgents
 				? formatCost(data.workflow_total_cost, $i18n('workflow_metrics_free'))
 				: data.cost_is_partial && data.cost_usd !== null
 					? `~ ${formatCost(data.cost_usd, $i18n('workflow_metrics_free'))}`
 					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))}</span
 		>
-		<span class="cost-estimate">{$i18n('workflow_cost_estimate')}</span>
-		{#if !compact && hasSubAgents && data.cumulative_cost_usd > 0}
-			<span class="cost-total"
-				>({$i18n('workflow_token_agent')}: {formatCost(
-					data.cumulative_cost_usd,
-					$i18n('workflow_metrics_free')
-				)})</span
-			>
-		{:else if !compact && data.cumulative_cost_usd > 0 && data.cumulative_cost_usd !== data.cost_usd}
-			<span class="cost-total"
-				>({formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))})</span
-			>
-		{/if}
+		<span class="cost-estimate">{$i18n('token_display_last_turn_label')}</span>
 	</div>
 
-	<!-- Speed (only during streaming) -->
+	<!-- Level 1: Speed (only during streaming) -->
 	{#if data.is_streaming}
 		<div class="metric speed-metric">
 			<div class="metric-icon speed-icon">
@@ -310,6 +255,63 @@
 			</div>
 			<span class="speed-value">{formatSpeed(data.speed_tks)}</span>
 			<span class="speed-unit">{$i18n('workflow_token_speed')}</span>
+		</div>
+	{/if}
+
+	<!-- Level 3 toggle (visible only when there's something meaningful to expand) -->
+	{#if !compact && (hasSubAgents || data.cumulative_input > 0 || data.cumulative_output > 0)}
+		<button
+			type="button"
+			class="details-toggle"
+			class:open={detailsOpen}
+			onclick={toggleDetails}
+			aria-expanded={detailsOpen}
+			aria-controls="token-display-details"
+			aria-label={$i18n('token_display_show_details')}
+			title={$i18n('token_display_show_details')}
+		>
+			<ChevronDown size={14} />
+		</button>
+	{/if}
+
+	<!-- Level 3: expanded details panel -->
+	{#if detailsOpen && !compact}
+		<div id="token-display-details" class="details-panel" role="region">
+			<div class="details-row">
+				<span class="details-label">{$i18n('workflow_token_agent')}</span>
+				<span class="details-value"
+					>{formatTokens(data.cumulative_input)} / {formatTokens(data.cumulative_output)}</span
+				>
+				<span class="details-cost">{formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))}</span>
+			</div>
+			{#if hasSubAgents}
+				<div class="details-row">
+					<span class="details-label">{$i18n('chat_metrics_agents')}</span>
+					<span class="details-value"
+						>{formatTokens(data.sub_agent_input)} / {formatTokens(data.sub_agent_output)}</span
+					>
+				</div>
+				<div class="details-row total">
+					<span class="details-label">{$i18n('token_display_workflow_total')}</span>
+					<span class="details-value"
+						>{formatTokens(workflowTotalInput)} / {formatTokens(workflowTotalOutput)}</span
+					>
+					<span class="details-cost"
+						>{formatCost(data.workflow_total_cost, $i18n('workflow_metrics_free'))}</span
+					>
+				</div>
+			{/if}
+			{#if hasCachedTokens}
+				<div class="details-row">
+					<span class="details-label">{$i18n('workflow_token_cached')}</span>
+					<span class="details-value">{formatTokens(data.cached_tokens ?? 0)}</span>
+					{#if data.cache_hit_rate !== null && cacheRateColor}
+						<span class="details-cost cache-rate cache-rate-{cacheRateColor}"
+							>{data.cache_hit_rate}%</span
+						>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -394,22 +396,6 @@
 		animation: pulse-icon 1.5s ease-in-out infinite;
 	}
 
-	.input-icon {
-		color: var(--color-accent);
-	}
-
-	.total-icon {
-		color: var(--color-text-tertiary);
-	}
-
-	.workflow-total-icon {
-		color: var(--color-secondary);
-	}
-
-	.tokens-metric.workflow-total {
-		opacity: 0.9;
-	}
-
 	.cost-icon {
 		color: var(--color-secondary);
 	}
@@ -448,13 +434,6 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-	}
-
-	.metric-label {
-		color: var(--color-text-tertiary);
-		font-size: 10px;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
 	}
 
 	/* Context Progress Section */
@@ -550,70 +529,6 @@
 		animation: pulse-text 1.5s ease-in-out infinite;
 	}
 
-	/* Token Values */
-	.tokens-metric {
-		gap: var(--spacing-xs);
-	}
-
-	.tokens-metric.cached {
-		opacity: 0.8;
-	}
-
-	.cached-value {
-		color: var(--color-success);
-	}
-
-	.cache-rate {
-		font-family: var(--font-mono);
-		font-size: 10px;
-		font-weight: var(--font-weight-semibold);
-		padding: 1px 4px;
-		border-radius: var(--border-radius-sm);
-	}
-
-	.cache-rate-high {
-		color: var(--color-success);
-		background: color-mix(in srgb, var(--color-success) 15%, transparent);
-	}
-
-	.cache-rate-medium {
-		color: var(--color-warning);
-		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-	}
-
-	.cache-rate-low {
-		color: var(--color-text-tertiary);
-		background: color-mix(in srgb, var(--color-text-tertiary) 10%, transparent);
-	}
-
-	.tokens-metric.cumulative {
-		opacity: 0.8;
-	}
-
-	.token-pair {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		font-family: var(--font-mono);
-	}
-
-	.token-value {
-		font-weight: var(--font-weight-medium);
-	}
-
-	.input-value {
-		color: var(--color-accent);
-	}
-
-	.output-value {
-		color: var(--color-secondary);
-	}
-
-	.token-separator {
-		color: var(--color-text-tertiary);
-		font-weight: var(--font-weight-normal);
-	}
-
 	/* Cost */
 	.cost-metric {
 		gap: var(--spacing-xs);
@@ -655,12 +570,6 @@
 		font-style: italic;
 	}
 
-	.cost-total {
-		font-family: var(--font-mono);
-		font-size: 10px;
-		color: var(--color-text-tertiary);
-	}
-
 	/* Speed */
 	.speed-metric {
 		gap: 2px;
@@ -679,6 +588,108 @@
 		font-size: 10px;
 		color: var(--color-status-running);
 		opacity: 0.8;
+	}
+
+	/* Level 3 toggle + panel */
+	.details-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		margin-left: auto;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: transparent;
+		color: var(--color-text-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-sm);
+		cursor: pointer;
+		transition:
+			background-color 0.15s ease,
+			color 0.15s ease,
+			transform 0.2s ease;
+	}
+
+	.details-toggle:hover {
+		background: var(--color-bg-hover);
+		color: var(--color-text-primary);
+	}
+
+	.details-toggle.open {
+		color: var(--color-accent);
+		transform: rotate(180deg);
+	}
+
+	.details-toggle:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+
+	.details-panel {
+		flex-basis: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: var(--spacing-xs);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg-primary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-md);
+		font-family: var(--font-mono);
+	}
+
+	.details-row {
+		display: grid;
+		grid-template-columns: 1fr auto auto;
+		gap: var(--spacing-md);
+		align-items: center;
+		padding: 2px 0;
+		font-size: var(--font-size-xs);
+	}
+
+	.details-row.total {
+		border-top: 1px solid var(--color-border);
+		padding-top: 4px;
+		margin-top: 2px;
+		font-weight: var(--font-weight-semibold);
+	}
+
+	.details-label {
+		color: var(--color-text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		font-size: 10px;
+		font-family: var(--font-base, inherit);
+	}
+
+	.details-value {
+		color: var(--color-text-primary);
+	}
+
+	.details-cost {
+		color: var(--color-secondary);
+	}
+
+	.cache-rate {
+		font-size: 10px;
+		font-weight: var(--font-weight-semibold);
+		padding: 1px 4px;
+		border-radius: var(--border-radius-sm);
+	}
+
+	.cache-rate-high {
+		color: var(--color-success);
+		background: color-mix(in srgb, var(--color-success) 15%, transparent);
+	}
+
+	.cache-rate-medium {
+		color: var(--color-warning);
+		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+	}
+
+	.cache-rate-low {
+		color: var(--color-text-tertiary);
+		background: color-mix(in srgb, var(--color-text-tertiary) 10%, transparent);
 	}
 
 	/* Animations */
@@ -740,17 +751,8 @@
 			min-width: 100px;
 		}
 
-		.metric-label {
-			display: none;
-		}
-
-		.tokens-metric.cumulative,
-		.tokens-metric.workflow-total {
-			display: none;
-		}
-
-		.cost-total {
-			display: none;
+		.details-panel {
+			padding: var(--spacing-xs);
 		}
 	}
 
@@ -761,6 +763,15 @@
 
 		.speed-metric {
 			padding: var(--spacing-xs);
+		}
+
+		.details-row {
+			grid-template-columns: 1fr auto;
+		}
+
+		.details-row .details-cost {
+			grid-column: 1 / -1;
+			text-align: right;
 		}
 	}
 </style>
