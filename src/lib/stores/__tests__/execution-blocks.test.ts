@@ -172,6 +172,113 @@ describe('executionBlocksStore', () => {
 		});
 	});
 
+	describe('processChunk - agent attribution', () => {
+		it('handleToolStart propagates spinner only (no block created)', () => {
+			// tool_start updates the spinner context only; the agent attribution
+			// fields live on the upcoming tool_call_complete chunk, so there is
+			// nothing block-shaped to assert here. This guard ensures the handler
+			// stays consistent with that contract.
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_start',
+				tool: 'Calc',
+				agent_id: 'agent_sub_001',
+				agent_name: 'Marie',
+				is_sub_agent: true
+			});
+			expect(get(spinnerContext)).toBe('Calc');
+			expect(get(executionBlocks)).toHaveLength(0);
+		});
+
+		it('handleToolCallComplete propagates agent_id and agent_name', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'tool_call_complete',
+				tool: 'Calc',
+				duration: 50,
+				tool_input: '{}',
+				tool_output: '{}',
+				tool_success: true,
+				agent_id: 'agent_sub_001',
+				agent_name: 'Marie'
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks[0]!.data).toMatchObject({
+				agent_id: 'agent_sub_001',
+				agent_name: 'Marie'
+			});
+		});
+
+		it('handleThinkingBlock propagates agent_id and agent_name', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'thinking_block',
+				content: 'Thinking...',
+				agent_id: 'agent_sub_002',
+				agent_name: 'Pierre'
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks[0]!.data).toMatchObject({
+				content: 'Thinking...',
+				source: 'model_thinking',
+				agent_id: 'agent_sub_002',
+				agent_name: 'Pierre'
+			});
+		});
+
+		it('handleReasoning propagates agent_id and agent_name', () => {
+			executionBlocksStore.start('wf-123');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-123',
+				chunk_type: 'reasoning',
+				content: 'Reasoning step',
+				agent_id: 'agent_primary',
+				agent_name: 'Orchestrator'
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks[0]!.data).toMatchObject({
+				content: 'Reasoning step',
+				source: 'agent_flow',
+				agent_id: 'agent_primary',
+				agent_name: 'Orchestrator'
+			});
+		});
+
+		it('restoreFromChunks is idempotent with attribution fields', () => {
+			// Re-applying the same buffered chunks must produce the same blocks
+			// (overwrite, not append) — otherwise switching back to a workflow
+			// would duplicate every block.
+			const chunks: StreamChunk[] = [
+				{
+					workflow_id: 'wf-123',
+					chunk_type: 'tool_call_complete',
+					tool: 'Calc',
+					duration: 10,
+					tool_input: '{}',
+					tool_output: '{}',
+					tool_success: true,
+					agent_id: 'agent_xyz',
+					agent_name: 'Marie'
+				}
+			];
+			executionBlocksStore.restoreFromChunks('wf-123', chunks);
+			const firstPass = get(executionBlocks);
+			executionBlocksStore.restoreFromChunks('wf-123', chunks);
+			const secondPass = get(executionBlocks);
+			expect(secondPass.length).toBe(firstPass.length);
+			expect(secondPass[0]!.data).toMatchObject({
+				agent_id: 'agent_xyz',
+				agent_name: 'Marie'
+			});
+		});
+	});
+
 	describe('processChunk - response_block', () => {
 		it('clears spinner context on response_block', () => {
 			executionBlocksStore.start('wf-123');

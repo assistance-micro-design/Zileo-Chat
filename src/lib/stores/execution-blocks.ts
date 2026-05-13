@@ -84,7 +84,9 @@ function handleThinkingBlock(
 ): ExecutionBlocksState {
 	const data: ThinkingBlockData = {
 		content: chunk.content ?? '',
-		source: 'model_thinking'
+		source: 'model_thinking',
+		agent_id: chunk.agent_id,
+		agent_name: chunk.agent_name
 	};
 	const block = createBlock('thinking', state.nextSequence, data);
 	return {
@@ -120,7 +122,9 @@ function handleToolCallComplete(
 		output_result: chunk.tool_output ?? '{}',
 		success: chunk.tool_success ?? false,
 		error_message: chunk.error_message,
-		duration_ms: chunk.duration ?? 0
+		duration_ms: chunk.duration ?? 0,
+		agent_id: chunk.agent_id,
+		agent_name: chunk.agent_name
 	};
 	const block = createBlock('tool_call', state.nextSequence, data);
 	return {
@@ -221,7 +225,9 @@ function handleSubAgentError(
 function handleReasoning(state: ExecutionBlocksState, chunk: StreamChunk): ExecutionBlocksState {
 	const data: ThinkingBlockData = {
 		content: chunk.content ?? '',
-		source: 'agent_flow'
+		source: 'agent_flow',
+		agent_id: chunk.agent_id,
+		agent_name: chunk.agent_name
 	};
 	const block = createBlock('thinking', state.nextSequence, data);
 	return {

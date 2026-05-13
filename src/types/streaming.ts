@@ -154,6 +154,19 @@ export interface StreamChunk {
 	 * stomp the parent's running totals.
 	 */
 	is_sub_agent?: boolean;
+	/**
+	 * ID of the agent that emitted this chunk. Carried so the frontend can
+	 * map a stream block back to its originating agent and apply the
+	 * sub-agent visual treatment (indent + dashed border + label) when the
+	 * id differs from the workflow's primary agent.
+	 */
+	agent_id?: string;
+	/**
+	 * Display name of the agent that emitted this chunk (best-effort).
+	 * Frontend prefers this for the small label tag; falls back to a
+	 * truncated `agent_id` when missing.
+	 */
+	agent_name?: string;
 }
 
 /**

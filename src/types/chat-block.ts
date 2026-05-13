@@ -53,6 +53,17 @@ export interface ThinkingBlockData {
 	content: string;
 	/** Origin of the thinking: real model output or synthetic agent flow */
 	source: 'model_thinking' | 'agent_flow';
+	/**
+	 * ID of the agent that produced this block. When present and distinct
+	 * from the workflow's primary agent, the renderer applies the
+	 * sub-agent visual treatment (indent + dashed border + label).
+	 */
+	agent_id?: string;
+	/**
+	 * Display name of the agent that produced this block. Used for the
+	 * label chip; falls back to a truncated `agent_id` when missing.
+	 */
+	agent_name?: string;
 }
 
 /**
@@ -75,6 +86,17 @@ export interface ToolCallBlockData {
 	error_message?: string;
 	/** Execution duration in milliseconds */
 	duration_ms: number;
+	/**
+	 * ID of the agent that produced this block. When present and distinct
+	 * from the workflow's primary agent, the renderer applies the
+	 * sub-agent visual treatment (indent + dashed border + label).
+	 */
+	agent_id?: string;
+	/**
+	 * Display name of the agent that produced this block. Used for the
+	 * label chip; falls back to a truncated `agent_id` when missing.
+	 */
+	agent_name?: string;
 }
 
 /**
