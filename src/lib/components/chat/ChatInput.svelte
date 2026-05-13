@@ -19,6 +19,11 @@
   A message input area with send button and keyboard shortcuts.
   Supports Ctrl+Enter to send and auto-resize.
 
+  The textarea is only disabled when the parent passes `disabled` (e.g. no
+  agent selected). During execution (`loading`), the textarea stays editable
+  so the user can pre-type the next turn; a hint surfaces when text is
+  present to clarify that nothing is queued yet.
+
   @example
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
@@ -36,9 +41,13 @@
 		value?: string;
 		/** Placeholder text */
 		placeholder?: string;
-		/** Whether input is disabled */
+		/**
+		 * Hard-disable the textarea (e.g. when no agent is selected). When
+		 * `loading` is true the textarea still accepts input — only the send
+		 * action is gated — so the user can pre-type while the agent runs.
+		 */
 		disabled?: boolean;
-		/** Whether currently sending */
+		/** Whether a workflow is currently executing */
 		loading?: boolean;
 		/** Send handler */
 		onsend?: (message: string) => void;
@@ -59,6 +68,13 @@
 	 * Get effective placeholder (prop or i18n)
 	 */
 	const effectivePlaceholder = $derived(placeholder || $i18n('chat_input_placeholder'));
+
+	/**
+	 * True when the user has pre-typed content while a workflow is still
+	 * executing. Drives the "Message en attente" hint so the user knows the
+	 * text is not auto-queued.
+	 */
+	const showPendingHint = $derived(loading && value.trim().length > 0);
 
 	let textareaRef: HTMLTextAreaElement;
 	let showPromptSelector = $state(false);
@@ -119,17 +135,6 @@
 </script>
 
 <div class="chat-input-container">
-	<textarea
-		bind:this={textareaRef}
-		bind:value
-		placeholder={effectivePlaceholder}
-		disabled={disabled || loading}
-		class="chat-input"
-		rows="1"
-		oninput={handleInput}
-		onkeydown={handleKeydown}
-		aria-label={$i18n('chat_input_arialabel')}
-	></textarea>
 	<button
 		type="button"
 		class="prompt-button"
@@ -140,6 +145,30 @@
 	>
 		<BookOpen size={18} />
 	</button>
+	<div class="textarea-wrapper">
+		<textarea
+			bind:this={textareaRef}
+			bind:value
+			placeholder={effectivePlaceholder}
+			disabled={disabled}
+			class="chat-input"
+			rows="1"
+			oninput={handleInput}
+			onkeydown={handleKeydown}
+			aria-label={$i18n('chat_input_arialabel')}
+			aria-describedby={showPendingHint ? 'chat-input-pending-hint' : undefined}
+		></textarea>
+		{#if showPendingHint}
+			<span
+				id="chat-input-pending-hint"
+				class="pending-hint"
+				role="status"
+				aria-live="polite"
+			>
+				{$i18n('chat_input_workflow_in_progress_hint')}
+			</span>
+		{/if}
+	</div>
 	{#if oncancel}
 		<button
 			type="button"
@@ -155,6 +184,8 @@
 			class="send-button"
 			onclick={handleSend}
 			disabled={disabled || loading || !value.trim()}
+			aria-disabled={disabled || loading || !value.trim()}
+			title={loading ? $i18n('chat_input_send_disabled_tooltip') : undefined}
 			aria-label={$i18n('chat_send_arialabel')}
 		>
 			{#if loading}
@@ -164,7 +195,7 @@
 			{/if}
 		</button>
 	{/if}
-	{#if value.trim()}
+	{#if value.trim() && !loading}
 		<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
 	{/if}
 </div>
@@ -184,6 +215,13 @@
 		background: var(--color-bg-secondary);
 		border-top: 1px solid var(--color-border);
 		position: relative;
+	}
+
+	.textarea-wrapper {
+		position: relative;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.chat-input {
@@ -211,6 +249,13 @@
 	.chat-input:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.pending-hint {
+		margin-top: 2px;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
+		font-style: italic;
 	}
 
 	.prompt-button {

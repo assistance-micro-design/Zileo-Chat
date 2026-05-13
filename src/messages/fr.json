@@ -819,6 +819,8 @@
 	"chat_tasks_title": "Taches",
 	"chat_tasks_arialabel": "Taches du workflow",
 	"chat_input_placeholder": "Saisissez votre message...",
+	"chat_input_workflow_in_progress_hint": "Message en attente — envoye apres la fin du workflow",
+	"chat_input_send_disabled_tooltip": "Workflow en cours — patientez avant d'envoyer",
 	"chat_input_arialabel": "Champ de saisie du message",
 	"chat_send_arialabel": "Envoyer le message",
 	"chat_prompt_library_title": "Selectionner depuis la bibliotheque d'instructions (Ctrl+K)",

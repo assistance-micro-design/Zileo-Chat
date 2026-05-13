@@ -818,6 +818,8 @@
 	"chat_tasks_title": "Tasks",
 	"chat_tasks_arialabel": "Workflow tasks",
 	"chat_input_placeholder": "Type your message...",
+	"chat_input_workflow_in_progress_hint": "Message pending — send after the current run finishes",
+	"chat_input_send_disabled_tooltip": "Workflow in progress — wait before sending",
 	"chat_input_arialabel": "Message input",
 	"chat_send_arialabel": "Send message",
 	"chat_prompt_library_title": "Select from prompt library (Ctrl+K)",

@@ -287,7 +287,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	<!-- Chat Input with Cancel Button -->
 	<div class="input-area">
 		<ChatInput
-			disabled={isExecuting || disabled}
+			{disabled}
 			loading={isExecuting}
 			onsend={isExecuting ? undefined : onsend}
 			oncancel={isExecuting ? oncancel : undefined}
