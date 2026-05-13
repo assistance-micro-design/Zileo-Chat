@@ -804,7 +804,10 @@
 	"agent_header_loading": "Loading...",
 	"agent_header_add_agent": "Add agent",
 	"agent_header_iterations": "Iterations:",
+	"agent_header_iterations_label": "Max iterations",
 	"agent_header_iterations_tooltip": "Max tool iterations (1-200)",
+	"agent_header_iterations_popover_aria": "Open iteration settings",
+	"agent_header_iterations_popover_close": "Close",
 
 	"activity_title": "Activity",
 

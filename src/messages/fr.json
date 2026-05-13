@@ -805,7 +805,10 @@
 	"agent_header_loading": "Chargement...",
 	"agent_header_add_agent": "Ajouter un agent",
 	"agent_header_iterations": "Iterations :",
+	"agent_header_iterations_label": "Iterations max",
 	"agent_header_iterations_tooltip": "Iterations maximales des outils (1-200)",
+	"agent_header_iterations_popover_aria": "Ouvrir les reglages d'iterations",
+	"agent_header_iterations_popover_close": "Fermer",
 
 	"activity_title": "Activite",
 
