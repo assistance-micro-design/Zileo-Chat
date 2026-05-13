@@ -172,7 +172,13 @@ pub(crate) async fn run_single_iteration(
             *mstate.global_sequence += 1;
             emit_progress(
                 ctx.agent_context,
-                StreamChunk::thinking_block(inputs.event_workflow_id.to_string(), thinking.clone()),
+                StreamChunk::thinking_block(
+                    inputs.event_workflow_id.to_string(),
+                    thinking.clone(),
+                    Some(ctx.config.id.clone()),
+                    Some(ctx.config.name.clone()),
+                    inputs.is_sub_agent,
+                ),
             );
             mstate.reasoning_steps_data.push(ReasoningStepData {
                 content: thinking,
@@ -269,6 +275,9 @@ pub(crate) async fn run_single_iteration(
         *mstate.global_sequence,
         ReasoningSource::AgentFlow,
         mstate.reasoning_steps_data,
+        Some(ctx.config.id.clone()),
+        Some(ctx.config.name.clone()),
+        inputs.is_sub_agent,
     );
 
     // Add assistant message with tool calls.
@@ -311,7 +320,13 @@ pub(crate) async fn run_single_iteration(
 
         emit_progress(
             ctx.agent_context,
-            StreamChunk::tool_start(inputs.event_workflow_id.to_string(), call.name.clone()),
+            StreamChunk::tool_start(
+                inputs.event_workflow_id.to_string(),
+                call.name.clone(),
+                Some(ctx.config.id.clone()),
+                Some(ctx.config.name.clone()),
+                inputs.is_sub_agent,
+            ),
         );
 
         let result = tools::execute_function_call(
@@ -361,6 +376,9 @@ pub(crate) async fn run_single_iteration(
                 output_json,
                 result.success,
                 result.error.clone(),
+                Some(ctx.config.id.clone()),
+                Some(ctx.config.name.clone()),
+                inputs.is_sub_agent,
             ),
         );
 

@@ -223,6 +223,18 @@ pub(crate) async fn execute_simple(
 
     let user_prompt = prompt::build_prompt(&task);
 
+    // Same defense-in-depth as execute_with_tools: a task carrying any of
+    // the three delegation flags is treated as a sub-agent run so chunks
+    // emitted from here are attributed correctly to the delegated agent.
+    let is_sub_agent = ["is_sub_agent", "is_delegation", "is_parallel_task"]
+        .iter()
+        .any(|key| {
+            task.context
+                .get(*key)
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        });
+
     let provider_type = match config.llm.provider.parse::<ProviderType>() {
         Ok(pt) => pt,
         Err(e) => {
@@ -292,7 +304,13 @@ pub(crate) async fn execute_simple(
                 if !thinking.trim().is_empty() {
                     emit_progress(
                         agent_context,
-                        StreamChunk::thinking_block(event_workflow_id.clone(), thinking.clone()),
+                        StreamChunk::thinking_block(
+                            event_workflow_id.clone(),
+                            thinking.clone(),
+                            Some(config.id.clone()),
+                            Some(config.name.clone()),
+                            is_sub_agent,
+                        ),
                     );
                     reasoning_steps.push(ReasoningStepData {
                         content: thinking.clone(),
@@ -597,6 +615,9 @@ pub(crate) async fn execute_with_tools(
                 global_sequence,
                 ReasoningSource::AgentFlow,
                 &mut reasoning_steps_data,
+                Some(ctx.config.id.clone()),
+                Some(ctx.config.name.clone()),
+                is_sub_agent,
             );
             break;
         }
@@ -639,6 +660,9 @@ pub(crate) async fn execute_with_tools(
                 global_sequence,
                 ReasoningSource::AgentFlow,
                 &mut reasoning_steps_data,
+                Some(ctx.config.id.clone()),
+                Some(ctx.config.name.clone()),
+                is_sub_agent,
             );
         }
 
@@ -718,6 +742,7 @@ pub(crate) async fn execute_with_tools(
                 start.elapsed().as_millis() as u64,
                 iteration,
                 cancellation_token.clone(),
+                is_sub_agent,
             )
             .await
             {

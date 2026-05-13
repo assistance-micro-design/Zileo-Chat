@@ -94,11 +94,23 @@ pub async fn execute_workflow_streaming(
     let sequence_tracker = Arc::new(SequenceTracker::new(0));
     let initial_sequence = sequence_tracker.allocate();
 
+    // Look up the orchestrator's display name for the spinner (M4 audit
+    // 2026-05-02) and for chunk attribution on the initial reasoning step
+    // / completion reasoning. Falls back to agent_id inside the bridge when
+    // the agent is not registered yet.
+    let agent_name = state
+        .orchestrator
+        .registry()
+        .get(&agent_id)
+        .await
+        .map(|agent| agent.config().name.clone());
+
     thinking_step_number = persist_initial_reasoning(
         &state,
         &window,
         &workflow_id,
         &agent_id,
+        agent_name.as_deref(),
         &message_id,
         initial_sequence,
         thinking_step_number,
@@ -114,16 +126,6 @@ pub async fn execute_workflow_streaming(
                 return Err(err);
             }
         };
-
-    // Look up the orchestrator's display name for the spinner (M4 audit
-    // 2026-05-02). Falls back to agent_id inside `run_orchestrator_with_cancel`
-    // when the agent is not registered yet.
-    let agent_name = state
-        .orchestrator
-        .registry()
-        .get(&agent_id)
-        .await
-        .map(|agent| agent.config().name.clone());
 
     let (report, duration_ms) = match run_orchestrator_with_cancel(
         &window,
@@ -152,6 +154,7 @@ pub async fn execute_workflow_streaming(
             window: &window,
             workflow_id: &workflow_id,
             agent_id: &agent_id,
+            agent_name: agent_name.as_deref(),
             message_id: &message_id,
             report,
             duration_ms,

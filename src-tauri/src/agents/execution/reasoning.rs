@@ -78,6 +78,11 @@ pub(crate) fn emit_progress(agent_context: Option<&AgentToolContext>, chunk: Str
 }
 
 /// Emits a reasoning step and records it in the in-memory trace.
+///
+/// `agent_id` / `agent_name` / `is_sub_agent` are propagated to the
+/// `StreamChunk` so the frontend can apply the sub-agent visual treatment
+/// when the emitting agent is a delegated one rather than the orchestrator.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_reasoning(
     agent_context: Option<&AgentToolContext>,
     event_workflow_id: &str,
@@ -86,10 +91,19 @@ pub(crate) fn emit_reasoning(
     sequence: u32,
     source: ReasoningSource,
     steps: &mut Vec<ReasoningStepData>,
+    agent_id: Option<String>,
+    agent_name: Option<String>,
+    is_sub_agent: bool,
 ) {
     emit_progress(
         agent_context,
-        StreamChunk::reasoning(event_workflow_id.to_string(), content.clone()),
+        StreamChunk::reasoning(
+            event_workflow_id.to_string(),
+            content.clone(),
+            agent_id,
+            agent_name,
+            is_sub_agent,
+        ),
     );
     steps.push(ReasoningStepData {
         content,

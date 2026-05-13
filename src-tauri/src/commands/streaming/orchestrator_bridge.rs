@@ -167,7 +167,13 @@ pub async fn run_orchestrator_with_cancel(
     let spinner_label = resolve_orchestrator_label(agent_name, agent_id);
     emit_chunk(
         window,
-        StreamChunk::tool_start(workflow_id.to_string(), spinner_label),
+        StreamChunk::tool_start(
+            workflow_id.to_string(),
+            spinner_label,
+            Some(agent_id.to_string()),
+            agent_name.map(str::to_string),
+            false,
+        ),
     );
 
     let task_id = task.id.clone();

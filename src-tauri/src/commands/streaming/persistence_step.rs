@@ -43,6 +43,10 @@ pub struct CompletionContext<'a> {
     pub window: &'a Window,
     pub workflow_id: &'a str,
     pub agent_id: &'a str,
+    /// Display name of the orchestrator agent, used for chunk attribution
+    /// so the frontend can render the primary-agent label on completion
+    /// chunks. `None` when the agent is not (yet) registered.
+    pub agent_name: Option<&'a str>,
     pub message_id: &'a str,
     pub report: Report,
     pub duration_ms: u64,
@@ -54,11 +58,17 @@ pub struct CompletionContext<'a> {
 /// Persist the initial "Analyzing..." reasoning step and emit it.
 ///
 /// Returns the next thinking step number to use.
+///
+/// `agent_name` (when known) is propagated to the emitted reasoning chunk
+/// so the frontend can attribute the block to the orchestrator from the
+/// very first event of the workflow.
+#[allow(clippy::too_many_arguments)]
 pub async fn persist_initial_reasoning(
     state: &State<'_, AppState>,
     window: &Window,
     workflow_id: &str,
     agent_id: &str,
+    agent_name: Option<&str>,
     message_id: &str,
     initial_sequence: u32,
     thinking_step_number: u32,
@@ -66,7 +76,13 @@ pub async fn persist_initial_reasoning(
     let initial_reasoning = "Analyzing request and preparing response...".to_string();
     emit_chunk(
         window,
-        StreamChunk::reasoning(workflow_id.to_string(), initial_reasoning.clone()),
+        StreamChunk::reasoning(
+            workflow_id.to_string(),
+            initial_reasoning.clone(),
+            Some(agent_id.to_string()),
+            agent_name.map(str::to_string),
+            false,
+        ),
     );
 
     let initial_step = ThinkingStepCreate {
@@ -113,6 +129,7 @@ pub async fn finalize_completion(
         window,
         workflow_id,
         agent_id,
+        agent_name,
         message_id,
         report,
         duration_ms,
@@ -148,7 +165,13 @@ pub async fn finalize_completion(
     );
     emit_chunk(
         window,
-        StreamChunk::reasoning(workflow_id.to_string(), completion_reasoning.clone()),
+        StreamChunk::reasoning(
+            workflow_id.to_string(),
+            completion_reasoning.clone(),
+            Some(agent_id.to_string()),
+            agent_name.map(str::to_string),
+            false,
+        ),
     );
 
     let completion_step = ThinkingStepCreate {

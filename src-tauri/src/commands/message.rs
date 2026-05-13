@@ -604,6 +604,51 @@ pub(crate) async fn load_workflow_blocks_core(
     primary_message_ids.extend(primary_thinking.keys().cloned());
     primary_message_ids.extend(sub_agents_by_parent.keys().cloned());
 
+    // Build agent_id -> agent_name lookup so merge_into_chat_blocks can
+    // project a human-readable label onto each Tool/Thinking block. Issued
+    // as a single bulk query (the workflow rarely contains more than a
+    // handful of distinct agent_ids). A miss leaves agent_name null on the
+    // block; the frontend falls back on a truncated agent_id (e.g. sub-agent
+    // garbage-collected from the registry before replay).
+    let mut agent_ids_seen: HashSet<String> = HashSet::new();
+    for tools in primary_tools.values().chain(sub_agent_tools.values()) {
+        for t in tools {
+            if !t.agent_id.is_empty() {
+                agent_ids_seen.insert(t.agent_id.clone());
+            }
+        }
+    }
+    for thinks in primary_thinking.values().chain(sub_agent_thinking.values()) {
+        for ts in thinks {
+            if !ts.agent_id.is_empty() {
+                agent_ids_seen.insert(ts.agent_id.clone());
+            }
+        }
+    }
+
+    let agent_name_lookup: HashMap<String, String> = if agent_ids_seen.is_empty() {
+        HashMap::new()
+    } else {
+        let ids_vec: Vec<String> = agent_ids_seen.into_iter().collect();
+        let lookup_query = "SELECT meta::id(id) AS id, name FROM agent \
+                            WHERE meta::id(id) IN $ids";
+        let lookup_param = vec![("ids".to_string(), serde_json::json!(ids_vec))];
+        match db.query_json_with_params(lookup_query, lookup_param).await {
+            Ok(rows) => rows
+                .into_iter()
+                .filter_map(|row| {
+                    let id = row.get("id").and_then(|v| v.as_str())?.to_string();
+                    let name = row.get("name").and_then(|v| v.as_str())?.to_string();
+                    Some((id, name))
+                })
+                .collect(),
+            Err(e) => {
+                warn!(error = %e, "Failed to bulk-load agent names; replay falls back to agent_id");
+                HashMap::new()
+            }
+        }
+    };
+
     let mut result: HashMap<String, Vec<ChatBlock>> = HashMap::new();
 
     for message_id in primary_message_ids {
@@ -643,7 +688,12 @@ pub(crate) async fn load_workflow_blocks_core(
             }
         }
 
-        let blocks = merge_into_chat_blocks(&all_tools, &all_thinking, &owned_sub_agents);
+        let blocks = merge_into_chat_blocks(
+            &all_tools,
+            &all_thinking,
+            &owned_sub_agents,
+            &agent_name_lookup,
+        );
         if !blocks.is_empty() {
             result.insert(message_id, blocks);
         }

@@ -174,6 +174,18 @@ pub struct StreamChunk {
     /// own TokenTracker that resets `total_input` to 0).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_sub_agent: Option<bool>,
+    /// ID of the agent that produced this chunk. Carried so the frontend
+    /// can map a stream block back to its originating agent and apply the
+    /// sub-agent visual treatment (indent + dashed border + label) when
+    /// the id differs from the workflow's primary agent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    /// Display name of the agent that produced this chunk (best-effort).
+    /// Frontend prefers this for the small label tag; falls back to a
+    /// truncated `agent_id` when missing (e.g. sub-agent garbage-collected
+    /// from the registry before replay).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_name: Option<String>,
 }
 
 /// Metrics included in sub-agent complete events
@@ -225,21 +237,49 @@ impl StreamChunk {
             iteration: None,
             iter_input: None,
             is_sub_agent: None,
+            agent_id: None,
+            agent_name: None,
         }
     }
 
     /// Creates a new tool start chunk.
-    pub fn tool_start(workflow_id: String, tool: String) -> Self {
+    ///
+    /// `agent_id` / `agent_name` / `is_sub_agent` carry the emitting agent's
+    /// attribution so the frontend can apply the sub-agent visual treatment
+    /// when the chunk originates from a delegated agent rather than the
+    /// orchestrator. Pass `None` / `None` / `false` from call-sites that do
+    /// not yet have agent context (e.g. legacy bridge paths).
+    pub fn tool_start(
+        workflow_id: String,
+        tool: String,
+        agent_id: Option<String>,
+        agent_name: Option<String>,
+        is_sub_agent: bool,
+    ) -> Self {
         Self {
             tool: Some(tool),
+            agent_id,
+            agent_name,
+            is_sub_agent: if is_sub_agent { Some(true) } else { None },
             ..Self::base(workflow_id, ChunkType::ToolStart)
         }
     }
 
     /// Creates a new reasoning chunk.
-    pub fn reasoning(workflow_id: String, content: String) -> Self {
+    ///
+    /// See [`Self::tool_start`] for the attribution fields contract.
+    pub fn reasoning(
+        workflow_id: String,
+        content: String,
+        agent_id: Option<String>,
+        agent_name: Option<String>,
+        is_sub_agent: bool,
+    ) -> Self {
         Self {
             content: Some(content),
+            agent_id,
+            agent_name,
+            is_sub_agent: if is_sub_agent { Some(true) } else { None },
             ..Self::base(workflow_id, ChunkType::Reasoning)
         }
     }
@@ -394,9 +434,19 @@ impl StreamChunk {
     /// Creates a thinking block chunk from reasoning model output.
     ///
     /// Emitted when a reasoning model returns thinking content.
-    pub fn thinking_block(workflow_id: impl Into<String>, content: impl Into<String>) -> Self {
+    /// See [`Self::tool_start`] for the attribution fields contract.
+    pub fn thinking_block(
+        workflow_id: impl Into<String>,
+        content: impl Into<String>,
+        agent_id: Option<String>,
+        agent_name: Option<String>,
+        is_sub_agent: bool,
+    ) -> Self {
         Self {
             content: Some(content.into()),
+            agent_id,
+            agent_name,
+            is_sub_agent: if is_sub_agent { Some(true) } else { None },
             ..Self::base(workflow_id, ChunkType::ThinkingBlock)
         }
     }
@@ -406,6 +456,7 @@ impl StreamChunk {
     /// Carries the enriched data for inline display, including the tool's
     /// `error_message` (when present) so failures surface live with the same
     /// detail as the persisted view.
+    /// See [`Self::tool_start`] for the attribution fields contract.
     #[allow(clippy::too_many_arguments)]
     pub fn tool_call_complete(
         workflow_id: impl Into<String>,
@@ -417,6 +468,9 @@ impl StreamChunk {
         output: impl Into<String>,
         success: bool,
         error_message: Option<String>,
+        agent_id: Option<String>,
+        agent_name: Option<String>,
+        is_sub_agent: bool,
     ) -> Self {
         Self {
             tool: Some(tool_name.into()),
@@ -427,6 +481,9 @@ impl StreamChunk {
             tool_output: Some(output.into()),
             tool_success: Some(success),
             error_message,
+            agent_id,
+            agent_name,
+            is_sub_agent: if is_sub_agent { Some(true) } else { None },
             ..Self::base(workflow_id, ChunkType::ToolCallComplete)
         }
     }
@@ -649,10 +706,19 @@ mod tests {
 
     #[test]
     fn test_stream_chunk_tool() {
-        let chunk = StreamChunk::tool_start("wf_001".to_string(), "search".to_string());
+        let chunk = StreamChunk::tool_start(
+            "wf_001".to_string(),
+            "search".to_string(),
+            None,
+            None,
+            false,
+        );
         assert_eq!(chunk.chunk_type, ChunkType::ToolStart);
         assert_eq!(chunk.tool, Some("search".to_string()));
         assert!(chunk.content.is_none());
+        assert!(chunk.agent_id.is_none());
+        assert!(chunk.agent_name.is_none());
+        assert!(chunk.is_sub_agent.is_none());
     }
 
     #[test]
@@ -861,7 +927,13 @@ mod tests {
 
     #[test]
     fn test_optional_fields_skipped_when_none() {
-        let chunk = StreamChunk::reasoning("wf_001".to_string(), "Analyzing...".to_string());
+        let chunk = StreamChunk::reasoning(
+            "wf_001".to_string(),
+            "Analyzing...".to_string(),
+            None,
+            None,
+            false,
+        );
         let json = serde_json::to_string(&chunk).unwrap();
         assert!(!json.contains("user_question"));
         assert!(!json.contains("question_id"));
@@ -872,11 +944,15 @@ mod tests {
         assert!(!json.contains("tool_success"));
         assert!(!json.contains("tokens_input"));
         assert!(!json.contains("tokens_output"));
+        assert!(!json.contains("agent_id"));
+        assert!(!json.contains("agent_name"));
+        assert!(!json.contains("is_sub_agent"));
     }
 
     #[test]
     fn test_stream_chunk_thinking_block() {
-        let chunk = StreamChunk::thinking_block("wf_001", "Let me reason about this...");
+        let chunk =
+            StreamChunk::thinking_block("wf_001", "Let me reason about this...", None, None, false);
         assert_eq!(chunk.chunk_type, ChunkType::ThinkingBlock);
         assert_eq!(
             chunk.content,
@@ -905,6 +981,9 @@ mod tests {
             r#"{"results": ["doc1", "doc2"]}"#,
             true,
             None,
+            None,
+            None,
+            false,
         );
         assert_eq!(chunk.chunk_type, ChunkType::ToolCallComplete);
         assert_eq!(chunk.tool, Some("MemoryTool".to_string()));
@@ -945,6 +1024,9 @@ mod tests {
             r#"{"found": true}"#,
             true,
             None,
+            None,
+            None,
+            false,
         );
         assert_eq!(chunk.tool_type, Some("mcp".to_string()));
         assert_eq!(chunk.server_name, Some("serena".to_string()));
@@ -966,6 +1048,9 @@ mod tests {
             r#"{"error": "Connection refused"}"#,
             false,
             Some("Connection refused".to_string()),
+            None,
+            None,
+            false,
         );
         assert_eq!(chunk.tool_success, Some(false));
         assert_eq!(chunk.error_message, Some("Connection refused".to_string()));
@@ -1069,6 +1154,100 @@ mod tests {
         // None cost MUST be omitted from the wire payload.
         assert!(!json.contains("\"cost_usd\""));
         // is_sub_agent absent when emitter is the orchestrator.
+        assert!(!json.contains("\"is_sub_agent\""));
+    }
+
+    #[test]
+    fn test_thinking_block_carries_agent_attribution_from_sub_agent() {
+        // Sub-agent chunks must carry the originating agent's id, name and
+        // is_sub_agent flag so the frontend can apply the indent + dashed
+        // border + label visual treatment in the timeline.
+        let chunk = StreamChunk::thinking_block(
+            "wf_001",
+            "Sub-agent reasoning",
+            Some("agent_sub_001".to_string()),
+            Some("Marie".to_string()),
+            true,
+        );
+        assert_eq!(chunk.agent_id, Some("agent_sub_001".to_string()));
+        assert_eq!(chunk.agent_name, Some("Marie".to_string()));
+        assert_eq!(chunk.is_sub_agent, Some(true));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"agent_id\":\"agent_sub_001\""));
+        assert!(json.contains("\"agent_name\":\"Marie\""));
+        assert!(json.contains("\"is_sub_agent\":true"));
+    }
+
+    #[test]
+    fn test_reasoning_carries_agent_attribution_primary() {
+        // Primary-agent chunks carry the orchestrator's id/name but omit
+        // is_sub_agent (so it serializes as absent, not false).
+        let chunk = StreamChunk::reasoning(
+            "wf_001".to_string(),
+            "Primary reasoning".to_string(),
+            Some("agent_primary".to_string()),
+            Some("Orchestrator".to_string()),
+            false,
+        );
+        assert_eq!(chunk.agent_id, Some("agent_primary".to_string()));
+        assert_eq!(chunk.agent_name, Some("Orchestrator".to_string()));
+        assert!(chunk.is_sub_agent.is_none());
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"agent_id\":\"agent_primary\""));
+        assert!(!json.contains("\"is_sub_agent\""));
+    }
+
+    #[test]
+    fn test_tool_start_carries_agent_attribution() {
+        let chunk = StreamChunk::tool_start(
+            "wf_001".to_string(),
+            "MemoryTool".to_string(),
+            Some("agent_xyz".to_string()),
+            Some("Researcher".to_string()),
+            true,
+        );
+        assert_eq!(chunk.agent_id, Some("agent_xyz".to_string()));
+        assert_eq!(chunk.agent_name, Some("Researcher".to_string()));
+        assert_eq!(chunk.is_sub_agent, Some(true));
+    }
+
+    #[test]
+    fn test_tool_call_complete_carries_agent_attribution() {
+        let chunk = StreamChunk::tool_call_complete(
+            "wf_001",
+            "Calculator",
+            "local",
+            None,
+            50,
+            "{}",
+            "{}",
+            true,
+            None,
+            Some("agent_calc".to_string()),
+            Some("Solver".to_string()),
+            true,
+        );
+        assert_eq!(chunk.agent_id, Some("agent_calc".to_string()));
+        assert_eq!(chunk.agent_name, Some("Solver".to_string()));
+        assert_eq!(chunk.is_sub_agent, Some(true));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"agent_id\":\"agent_calc\""));
+        assert!(json.contains("\"agent_name\":\"Solver\""));
+        assert!(json.contains("\"is_sub_agent\":true"));
+    }
+
+    #[test]
+    fn test_attribution_fields_skipped_when_none() {
+        // None / None / false MUST omit the three attribution fields from
+        // the wire payload (backward-compatible with older consumers).
+        let chunk =
+            StreamChunk::tool_start("wf_001".to_string(), "Tool".to_string(), None, None, false);
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(!json.contains("\"agent_id\""));
+        assert!(!json.contains("\"agent_name\""));
         assert!(!json.contains("\"is_sub_agent\""));
     }
 

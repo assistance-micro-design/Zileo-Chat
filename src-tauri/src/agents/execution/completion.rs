@@ -125,6 +125,7 @@ pub(crate) async fn enforce_report(
     elapsed_ms: u64,
     iteration: usize,
     cancellation_token: Option<CancellationToken>,
+    is_sub_agent: bool,
 ) -> Option<String> {
     *state.global_sequence += 1;
     emit_reasoning(
@@ -135,6 +136,9 @@ pub(crate) async fn enforce_report(
         *state.global_sequence,
         ReasoningSource::AgentFlow,
         state.reasoning_steps,
+        Some(ctx.config.id.clone()),
+        Some(ctx.config.name.clone()),
+        is_sub_agent,
     );
 
     state.messages.push(serde_json::json!({

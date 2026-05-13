@@ -23,6 +23,7 @@
 use crate::models::sub_agent::SubAgentExecution;
 use crate::models::{ThinkingStep, ToolExecution};
 use serde::Serialize;
+use std::collections::HashMap;
 
 /// Block type indicating what kind of execution block this is.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -74,6 +75,10 @@ pub struct ChatBlock {
 /// * `tool_executions` - Tool execution records for a message
 /// * `thinking_steps` - Thinking step records for a message
 /// * `sub_agent_executions` - Sub-agent execution records for a message
+/// * `agent_name_lookup` - Map agent_id -> agent_name to project the originating
+///   agent's display name onto Tool and Thinking blocks. Missing entries leave
+///   `agent_name` absent in the projected JSON (frontend falls back on
+///   `agent_id`). Pass `&HashMap::new()` when the caller has no registry access.
 ///
 /// # Returns
 /// A vector of ChatBlocks ordered chronologically with re-indexed sequence numbers
@@ -81,6 +86,7 @@ pub fn merge_into_chat_blocks(
     tool_executions: &[ToolExecution],
     thinking_steps: &[ThinkingStep],
     sub_agent_executions: &[SubAgentExecution],
+    agent_name_lookup: &HashMap<String, String>,
 ) -> Vec<ChatBlock> {
     enum SourceItem<'a> {
         Tool(&'a ToolExecution),
@@ -115,6 +121,7 @@ pub fn merge_into_chat_blocks(
                     // Frontend expects JSON strings for input/output, not nested objects
                     let input_str = serde_json::to_string(&te.input_params).unwrap_or_default();
                     let output_str = serde_json::to_string(&te.output_result).unwrap_or_default();
+                    let agent_name = agent_name_lookup.get(&te.agent_id).cloned();
 
                     let data = serde_json::json!({
                         "tool_name": te.tool_name,
@@ -125,6 +132,8 @@ pub fn merge_into_chat_blocks(
                         "success": te.success,
                         "error_message": te.error_message,
                         "duration_ms": te.duration_ms,
+                        "agent_id": te.agent_id,
+                        "agent_name": agent_name,
                     });
 
                     ChatBlock {
@@ -134,10 +143,13 @@ pub fn merge_into_chat_blocks(
                     }
                 }
                 SourceItem::Thinking(ts) => {
+                    let agent_name = agent_name_lookup.get(&ts.agent_id).cloned();
                     let data = serde_json::json!({
                         "content": ts.content,
                         "source": ts.source,
                         "duration_ms": ts.duration_ms,
+                        "agent_id": ts.agent_id,
+                        "agent_name": agent_name,
                     });
 
                     ChatBlock {
@@ -282,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_merge_empty_inputs() {
-        let blocks = merge_into_chat_blocks(&[], &[], &[]);
+        let blocks = merge_into_chat_blocks(&[], &[], &[], &HashMap::new());
         assert!(blocks.is_empty());
     }
 
@@ -294,7 +306,7 @@ mod tests {
             make_tool_execution("TodoTool", 3, true, t + chrono::Duration::milliseconds(10)),
         ];
 
-        let blocks = merge_into_chat_blocks(&tools, &[], &[]);
+        let blocks = merge_into_chat_blocks(&tools, &[], &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].block_type, ChatBlockType::ToolCall);
@@ -318,7 +330,7 @@ mod tests {
             ),
         ];
 
-        let blocks = merge_into_chat_blocks(&[], &steps, &[]);
+        let blocks = merge_into_chat_blocks(&[], &steps, &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
@@ -344,7 +356,7 @@ mod tests {
             make_thinking_step("Summarizing...", 5, "agent_flow", ms(50)),
         ];
 
-        let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
+        let blocks = merge_into_chat_blocks(&tools, &steps, &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 5);
         // Sequences are now dense 0..n indices
@@ -376,7 +388,7 @@ mod tests {
             ms(20),
         )];
 
-        let blocks = merge_into_chat_blocks(&tools, &[], &sub_agents);
+        let blocks = merge_into_chat_blocks(&tools, &[], &sub_agents, &HashMap::new());
 
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].block_type, ChatBlockType::ToolCall);
@@ -400,7 +412,7 @@ mod tests {
         let tools = vec![make_tool_execution("MemoryTool", 5, true, t)];
         let steps = vec![make_thinking_step("Same time step", 2, "agent_flow", t)];
 
-        let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
+        let blocks = merge_into_chat_blocks(&tools, &steps, &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 2);
         // Lower original sequence (thinking=2) sorts before higher (tool=5)
@@ -414,7 +426,7 @@ mod tests {
     #[test]
     fn test_tool_call_block_data_contains_expected_fields() {
         let tools = vec![make_tool_execution("MemoryTool", 1, true, base_time())];
-        let blocks = merge_into_chat_blocks(&tools, &[], &[]);
+        let blocks = merge_into_chat_blocks(&tools, &[], &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 1);
         let data = &blocks[0].data;
@@ -433,7 +445,7 @@ mod tests {
         te.tool_type = ToolType::Mcp;
         te.server_name = Some("serena".to_string());
 
-        let blocks = merge_into_chat_blocks(&[te], &[], &[]);
+        let blocks = merge_into_chat_blocks(&[te], &[], &[], &HashMap::new());
 
         let data = &blocks[0].data;
         assert_eq!(data["tool_type"], "mcp");
@@ -445,7 +457,7 @@ mod tests {
         let mut te = make_tool_execution("TodoTool", 1, false, base_time());
         te.error_message = Some("Task not found".to_string());
 
-        let blocks = merge_into_chat_blocks(&[te], &[], &[]);
+        let blocks = merge_into_chat_blocks(&[te], &[], &[], &HashMap::new());
 
         let data = &blocks[0].data;
         assert_eq!(data["success"], false);
@@ -460,7 +472,7 @@ mod tests {
             "model_thinking",
             base_time(),
         )];
-        let blocks = merge_into_chat_blocks(&[], &steps, &[]);
+        let blocks = merge_into_chat_blocks(&[], &steps, &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 1);
         let data = &blocks[0].data;
@@ -478,7 +490,7 @@ mod tests {
             "agent_flow",
             base_time(),
         )];
-        let blocks = merge_into_chat_blocks(&[], &steps, &[]);
+        let blocks = merge_into_chat_blocks(&[], &steps, &[], &HashMap::new());
 
         assert_eq!(blocks[0].data["source"], "agent_flow");
     }
@@ -501,6 +513,61 @@ mod tests {
     }
 
     #[test]
+    fn test_merge_projects_agent_id_for_tool_blocks() {
+        // Each ToolCall block must surface its originating agent_id so the
+        // frontend can apply the sub-agent visual treatment at replay.
+        let tools = vec![make_tool_execution("Tool", 1, true, base_time())];
+        let blocks = merge_into_chat_blocks(&tools, &[], &[], &HashMap::new());
+
+        let data = &blocks[0].data;
+        assert_eq!(data["agent_id"], "agent_001");
+    }
+
+    #[test]
+    fn test_merge_projects_agent_id_for_thinking_blocks() {
+        let steps = vec![make_thinking_step(
+            "Reasoning",
+            1,
+            "agent_flow",
+            base_time(),
+        )];
+        let blocks = merge_into_chat_blocks(&[], &steps, &[], &HashMap::new());
+
+        let data = &blocks[0].data;
+        assert_eq!(data["agent_id"], "agent_001");
+    }
+
+    #[test]
+    fn test_merge_projects_agent_name_when_lookup_hit() {
+        let tools = vec![make_tool_execution("Tool", 1, true, base_time())];
+        let steps = vec![make_thinking_step("R", 2, "agent_flow", base_time())];
+        let mut lookup = HashMap::new();
+        lookup.insert("agent_001".to_string(), "Marie".to_string());
+
+        let blocks = merge_into_chat_blocks(&tools, &steps, &[], &lookup);
+
+        assert_eq!(blocks[0].data["agent_name"], "Marie");
+        assert_eq!(blocks[1].data["agent_name"], "Marie");
+    }
+
+    #[test]
+    fn test_merge_omits_agent_name_when_lookup_miss() {
+        // When the lookup map has no entry for the agent_id, the projected
+        // agent_name MUST be null so the frontend can fall back on the id.
+        let tools = vec![make_tool_execution("Tool", 1, true, base_time())];
+        let blocks = merge_into_chat_blocks(&tools, &[], &[], &HashMap::new());
+
+        let data = &blocks[0].data;
+        assert!(
+            data["agent_name"].is_null(),
+            "agent_name must be null when lookup misses, got {:?}",
+            data["agent_name"]
+        );
+        // agent_id is still present so frontend has something to render
+        assert_eq!(data["agent_id"], "agent_001");
+    }
+
+    #[test]
     fn test_merge_reindexes_sequences_densely() {
         // Original sequences (50, 100) are replaced by dense 0..n indices
         // after sorting by created_at.
@@ -513,7 +580,7 @@ mod tests {
         )];
         let steps = vec![make_thinking_step("Step", 50, "agent_flow", t)];
 
-        let blocks = merge_into_chat_blocks(&tools, &steps, &[]);
+        let blocks = merge_into_chat_blocks(&tools, &steps, &[], &HashMap::new());
 
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].block_type, ChatBlockType::Thinking);
