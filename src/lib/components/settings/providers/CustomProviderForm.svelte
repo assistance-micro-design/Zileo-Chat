@@ -41,6 +41,13 @@
 	let displayName = $state('');
 	let baseUrl = $state('');
 	let apiKey = $state('');
+	/**
+	 * Strict-mode toggles. Default `true` preserves OpenRouter behaviour
+	 * (cache_control + reasoning top-level object injected). Uncheck both
+	 * for Fireworks, Groq, Together, Cerebras.
+	 */
+	let supportsCacheControl = $state(true);
+	let supportsReasoningParam = $state(true);
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 
@@ -75,7 +82,9 @@
 				name,
 				displayName.trim(),
 				baseUrl.trim(),
-				apiKey.trim()
+				apiKey.trim(),
+				supportsCacheControl,
+				supportsReasoningParam
 			);
 			oncreated(response.provider, response.warning);
 		} catch (e) {
@@ -126,6 +135,26 @@
 		disabled={saving}
 		required
 	/>
+
+	<div class="checkbox-field">
+		<label class="checkbox-label">
+			<input type="checkbox" bind:checked={supportsCacheControl} disabled={saving} />
+			<span class="checkbox-text">{$i18n('llm_custom_provider_supports_cache_control')}</span>
+		</label>
+		<p class="checkbox-help">
+			{$i18n('llm_custom_provider_supports_cache_control_help')}
+		</p>
+	</div>
+
+	<div class="checkbox-field">
+		<label class="checkbox-label">
+			<input type="checkbox" bind:checked={supportsReasoningParam} disabled={saving} />
+			<span class="checkbox-text">{$i18n('llm_custom_provider_supports_reasoning_param')}</span>
+		</label>
+		<p class="checkbox-help">
+			{$i18n('llm_custom_provider_supports_reasoning_param_help')}
+		</p>
+	</div>
 
 	{#if error}
 		<div class="form-error">{error}</div>
@@ -181,5 +210,38 @@
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
 		margin-top: var(--spacing-sm);
+	}
+
+	.checkbox-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		cursor: pointer;
+	}
+
+	.checkbox-label input[type='checkbox'] {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--color-primary);
+		cursor: pointer;
+	}
+
+	.checkbox-text {
+		font-size: var(--font-size-sm);
+		font-weight: var(--font-weight-medium);
+		color: var(--color-text-primary);
+	}
+
+	.checkbox-help {
+		margin: 0;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-secondary);
+		padding-left: calc(18px + var(--spacing-sm));
 	}
 </style>

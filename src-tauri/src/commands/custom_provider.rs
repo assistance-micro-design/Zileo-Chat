@@ -54,7 +54,9 @@ fn validate_provider_name(name: &str) -> Result<(), String> {
 pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderInfo>, String> {
     let db = &state.db;
 
-    // Builtin providers
+    // Builtin providers (Mistral and Ollama have native code paths that do
+    // not go through `apply_prompt_cache_control` or the OpenRouter-style
+    // `reasoning` top-level object, so the toggles are not applicable).
     let mut providers = vec![
         ProviderInfo {
             id: "mistral".to_string(),
@@ -65,6 +67,8 @@ pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
             has_base_url: false,
             base_url: None,
             enabled: true,
+            supports_cache_control: None,
+            supports_reasoning_param: None,
         },
         ProviderInfo {
             id: "ollama".to_string(),
@@ -75,11 +79,14 @@ pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
             has_base_url: true,
             base_url: Some("http://localhost:11434".to_string()),
             enabled: true,
+            supports_cache_control: None,
+            supports_reasoning_param: None,
         },
     ];
 
     // Custom providers from DB
     let query = "SELECT name, display_name, base_url, enabled, \
+                 supports_cache_control, supports_reasoning_param, \
                  time::format(created_at, '%Y-%m-%dT%H:%M:%SZ') AS created_at \
                  FROM custom_provider ORDER BY name";
     let custom_providers: Vec<CustomProvider> = db
@@ -100,6 +107,8 @@ pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
             has_base_url: true,
             base_url: Some(cp.base_url),
             enabled: cp.enabled,
+            supports_cache_control: cp.supports_cache_control,
+            supports_reasoning_param: cp.supports_reasoning_param,
         });
     }
 
@@ -116,11 +125,14 @@ pub async fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
 /// and an optional security warning (e.g., HTTP without TLS).
 #[tauri::command]
 #[instrument(name = "create_custom_provider", skip(state, keystore, api_key))]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_custom_provider(
     name: String,
     display_name: String,
     base_url: String,
     api_key: String,
+    supports_cache_control: Option<bool>,
+    supports_reasoning_param: Option<bool>,
     state: State<'_, AppState>,
     keystore: State<'_, SecureKeyStore>,
 ) -> Result<CustomProviderResponse, String> {
@@ -154,14 +166,23 @@ pub async fn create_custom_provider(
     // Normalize base URL
     let normalized_url = base_url.trim_end_matches('/').to_string();
 
-    // Insert into DB
+    // Insert into DB. The two strict-mode flags are persisted only when the
+    // caller explicitly opts in or out — leaving them unset keeps the row
+    // NONE in SurrealDB, which the wire path treats as OpenRouter-style
+    // (cache_control + reasoning injected).
     let insert_query = format!("CREATE custom_provider:`{}` CONTENT $data", name);
-    let data = serde_json::json!({
+    let mut data = serde_json::json!({
         "name": name,
         "display_name": display_name,
         "base_url": normalized_url,
         "enabled": true
     });
+    if let Some(value) = supports_cache_control {
+        data["supports_cache_control"] = serde_json::Value::Bool(value);
+    }
+    if let Some(value) = supports_reasoning_param {
+        data["supports_reasoning_param"] = serde_json::Value::Bool(value);
+    }
     db.execute_with_params(&insert_query, vec![("data".to_string(), data)])
         .await
         .map_err(|e| format!("Failed to create custom provider: {}", e))?;
@@ -179,6 +200,9 @@ pub async fn create_custom_provider(
     if let Err(e) = provider.configure(&api_key, &normalized_url).await {
         warn!(name = %name, error = %e, "Failed to configure new custom provider");
     }
+    provider
+        .set_strict_compat(supports_cache_control, supports_reasoning_param)
+        .await;
     state
         .llm_manager
         .register_custom_provider(&name, provider)
@@ -206,6 +230,8 @@ pub async fn create_custom_provider(
             has_base_url: true,
             base_url: Some(normalized_url),
             enabled: true,
+            supports_cache_control,
+            supports_reasoning_param,
         },
         warning,
     })
@@ -216,6 +242,8 @@ fn build_provider_update_clauses(
     display_name: &Option<String>,
     base_url: &Option<String>,
     enabled: Option<bool>,
+    supports_cache_control: Option<bool>,
+    supports_reasoning_param: Option<bool>,
 ) -> Result<Vec<String>, String> {
     let mut set_parts: Vec<String> = Vec::new();
 
@@ -240,6 +268,12 @@ fn build_provider_update_clauses(
     }
     if let Some(en) = enabled {
         set_parts.push(format!("enabled = {}", en));
+    }
+    if let Some(value) = supports_cache_control {
+        set_parts.push(format!("supports_cache_control = {}", value));
+    }
+    if let Some(value) = supports_reasoning_param {
+        set_parts.push(format!("supports_reasoning_param = {}", value));
     }
 
     if !set_parts.is_empty() {
@@ -278,12 +312,15 @@ async fn reconfigure_provider_runtime(
 /// and an optional security warning (e.g., HTTP without TLS).
 #[tauri::command]
 #[instrument(name = "update_custom_provider", skip(state, keystore, api_key))]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_custom_provider(
     name: String,
     display_name: Option<String>,
     base_url: Option<String>,
     api_key: Option<String>,
     enabled: Option<bool>,
+    supports_cache_control: Option<bool>,
+    supports_reasoning_param: Option<bool>,
     state: State<'_, AppState>,
     keystore: State<'_, SecureKeyStore>,
 ) -> Result<CustomProviderResponse, String> {
@@ -292,7 +329,13 @@ pub async fn update_custom_provider(
     let db = &state.db;
 
     // Build and execute SET clauses
-    let set_parts = build_provider_update_clauses(&display_name, &base_url, enabled)?;
+    let set_parts = build_provider_update_clauses(
+        &display_name,
+        &base_url,
+        enabled,
+        supports_cache_control,
+        supports_reasoning_param,
+    )?;
     if !set_parts.is_empty() {
         let update_query = format!(
             "UPDATE custom_provider:`{}` SET {}",
@@ -323,7 +366,9 @@ pub async fn update_custom_provider(
 
     // Read back updated provider
     let read_query = format!(
-        "SELECT name, display_name, base_url, enabled FROM custom_provider:`{}`",
+        "SELECT name, display_name, base_url, enabled, \
+         supports_cache_control, supports_reasoning_param \
+         FROM custom_provider:`{}`",
         name
     );
     let results: Vec<serde_json::Value> = db
@@ -335,6 +380,15 @@ pub async fn update_custom_provider(
         .next()
         .and_then(|v| serde_json::from_value(v).ok())
         .ok_or_else(|| format!("Provider '{}' not found after update", name))?;
+
+    // Sync the live provider's strict-mode flags with the canonical DB value.
+    // Cheap RwLock write; safe to run even if the toggles were not modified
+    // because the read-back yields the current persisted state.
+    if let Some(provider) = state.llm_manager.get_custom_provider(&name).await {
+        provider
+            .set_strict_compat(cp.supports_cache_control, cp.supports_reasoning_param)
+            .await;
+    }
 
     // Check for HTTP security warning on the current base URL
     let warning = check_http_warning(&cp.base_url);
@@ -358,6 +412,8 @@ pub async fn update_custom_provider(
             has_base_url: true,
             base_url: Some(cp.base_url),
             enabled: cp.enabled,
+            supports_cache_control: cp.supports_cache_control,
+            supports_reasoning_param: cp.supports_reasoning_param,
         },
         warning,
     })

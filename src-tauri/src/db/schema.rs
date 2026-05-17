@@ -296,6 +296,12 @@ DEFINE FIELD OVERWRITE base_url ON custom_provider TYPE string
 DEFINE FIELD OVERWRITE enabled ON custom_provider TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at ON custom_provider TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON custom_provider TYPE datetime DEFAULT time::now();
+-- Strict-mode toggles for OpenAI-compat providers that reject Anthropic-style
+-- `cache_control` (Fireworks, Groq, Together, Cerebras) or the OpenRouter-style
+-- top-level `reasoning` object. NONE preserves the OpenRouter/RouterLab default
+-- so existing rows continue to behave unchanged (no backfill needed).
+DEFINE FIELD OVERWRITE supports_cache_control ON custom_provider TYPE option<bool>;
+DEFINE FIELD OVERWRITE supports_reasoning_param ON custom_provider TYPE option<bool>;
 
 DEFINE INDEX OVERWRITE unique_custom_provider_name ON custom_provider FIELDS name UNIQUE;
 

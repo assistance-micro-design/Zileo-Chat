@@ -79,14 +79,16 @@ Model CRUD (builtin + custom) and provider settings.
 
 ### Custom Providers (`commands/custom_provider.rs`)
 
-OpenAI-compatible provider management (OpenRouter, RouterLab, etc.).
+OpenAI-compatible provider management (OpenRouter, RouterLab, Fireworks, Groq, Together AI, Cerebras, etc.).
 
 | Command | Description |
 |---------|-------------|
-| `list_providers` | List all providers (builtin + custom) |
-| `create_custom_provider` | Create OpenAI-compatible provider |
-| `update_custom_provider` | Update custom provider settings |
+| `list_providers` | List all providers (builtin + custom). `ProviderInfo` carries the two `supports_*` toggles for custom rows. |
+| `create_custom_provider` | Create OpenAI-compatible provider. Accepts trailing optional `supports_cache_control: Option<bool>` + `supports_reasoning_param: Option<bool>` (camelCase from TS). Persisted on the row and applied to the running provider via `set_strict_compat`. |
+| `update_custom_provider` | Update custom provider settings (name kept). Same two optional toggles available; canonical DB value is synced back to the runtime after the SET clause runs. |
 | `delete_custom_provider` | Delete custom provider and its API key |
+
+**Strict-mode toggles** (ERR_LLM_020, PAT_LLM_005): the two `supports_*` parameters default to `null` from the frontend (mapped to `None` in Rust) which preserves the OpenRouter behaviour on the wire (cache_control + top-level `reasoning` injected). Pass `false` for Fireworks / Groq / Together / Cerebras — Pydantic-strict gateways that reject those extension fields with HTTP 400.
 
 ### Validation (`commands/validation.rs`)
 

@@ -191,7 +191,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `agent.ts` | Agent, AgentConfig, AgentConfigCreate, AgentSummary, LLMConfig | Agent configuration |
 | `background-workflow.ts` | BackgroundWorkflowStatus, WorkflowStreamState, Toast, ToastType | Background workflows and toasts |
 | `chat-block.ts` | Chat message block types | Chat message block parsing |
-| `custom-provider.ts` | ProviderInfo, CreateCustomProviderRequest | Custom OpenAI-compatible providers |
+| `custom-provider.ts` | ProviderInfo, CreateCustomProviderRequest | Custom OpenAI-compatible providers. `ProviderInfo` + `CreateCustomProviderRequest` carry optional `supportsCacheControl?: boolean` + `supportsReasoningParam?: boolean` for strict providers (Fireworks, Groq, Together, Cerebras) — see DATABASE_SCHEMA `custom_provider` + ERR_LLM_020. |
 | `embedding.ts` | Embedding config types | Vector embeddings |
 | `i18n.ts` | Locale, LocaleInfo, LOCALES | Internationalization |
 | `import-export.ts` | Import/export structures | Backup/restore |

@@ -166,18 +166,25 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 
 /**
  * Creates a new custom provider.
+ *
+ * @param supportsCacheControl Disable to skip Anthropic-style `cache_control` parts (Fireworks, Groq, ...).
+ * @param supportsReasoningParam Disable to skip OpenRouter-style top-level `reasoning` object.
  */
 export async function createCustomProvider(
 	name: string,
 	displayName: string,
 	baseUrl: string,
-	apiKey: string
+	apiKey: string,
+	supportsCacheControl?: boolean,
+	supportsReasoningParam?: boolean
 ): Promise<CustomProviderResponse> {
 	const result = await invoke<CustomProviderResponse>('create_custom_provider', {
 		name,
 		displayName,
 		baseUrl,
-		apiKey
+		apiKey,
+		supportsCacheControl: supportsCacheControl ?? null,
+		supportsReasoningParam: supportsReasoningParam ?? null
 	});
 	invalidateLLMCache();
 	return result;
@@ -191,14 +198,18 @@ export async function updateCustomProvider(
 	displayName?: string,
 	baseUrl?: string,
 	apiKey?: string,
-	enabled?: boolean
+	enabled?: boolean,
+	supportsCacheControl?: boolean,
+	supportsReasoningParam?: boolean
 ): Promise<CustomProviderResponse> {
 	const result = await invoke<CustomProviderResponse>('update_custom_provider', {
 		name,
 		displayName: displayName ?? null,
 		baseUrl: baseUrl ?? null,
 		apiKey: apiKey ?? null,
-		enabled: enabled ?? null
+		enabled: enabled ?? null,
+		supportsCacheControl: supportsCacheControl ?? null,
+		supportsReasoningParam: supportsReasoningParam ?? null
 	});
 	invalidateLLMCache();
 	return result;

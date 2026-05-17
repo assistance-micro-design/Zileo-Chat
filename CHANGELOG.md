@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Custom provider strict-mode toggles (`feature/custom-strict-toggles`). +Option<bool> × 2 fields persisted on `custom_provider`, runtime-wired through `OpenAiCompatibleProvider`, surfaced in `CustomProviderForm` as two checkboxes. Unlocks Fireworks / Groq / Together / Cerebras integration without a new provider type. Defaults (`None`) preserve OpenRouter behaviour bit-for-bit — no migration of existing rows. Tests verts: 1390 Rust lib (+9) + clippy `--all-targets` clean + svelte-check 4162 / 0 errors + 436 Vitest + ESLint/Prettier clean.
+
+### Added
+
+- **`supportsCacheControl` and `supportsReasoningParam` toggles on every custom provider**. Two `Option<bool>` columns on the `custom_provider` table (`DEFINE FIELD OVERWRITE … TYPE option<bool>`, no `DEFAULT` — existing rows stay `NONE`). When `Some(false)`, the OpenAI-compat wire path skips Anthropic-style `cache_control` content parts (`apply_prompt_cache_control` shortcut), clears the OpenRouter-style top-level `reasoning: { effort, max_tokens }` object, **and strips `reasoning` / `reasoning_content` / `reasoning_details` / `provider_specific_fields` from echoed assistant messages on multi-turn tool loops** (`OpenAiToolAdapter::build_assistant_message` re-injects the previous turn's message verbatim — strict providers reject those fields on iteration 2+ with `HTTP 400: Extra inputs are not permitted, field: 'messages[i].reasoning'`). Empirically validated against `accounts/fireworks/models/deepseek-v4-pro`: Fireworks returns HTTP 400 on cache_control + top-level reasoning, and HTTP 400 on echoed `messages[i].reasoning` after a first thinking turn. `None` / `Some(true)` keep the current OpenRouter Anthropic + RouterLab behaviour (ERR_LLM_012 + ERR_LLM_016 régression locked by 7 dedicated unit tests; `reasoning_details` is preserved when the flag is None so signed Anthropic thinking blocks still survive).
+- **`build_openai_compat_tool_request` pure helper** (`src-tauri/src/llm/openai_compatible.rs`). Mirror of `build_mistral_tool_request` (`ERR_LLM_014`), parameterised for runtime-configured custom providers. Honoured by `OpenAiCompatibleProvider::complete_with_tools` after reading the two `Arc<RwLock<Option<bool>>>` flags from `self`. 5 TDD tests assert skip behaviour AND non-regression on the `None` default.
+- **Form UI** — two `<input type="checkbox">` rows on `CustomProviderForm.svelte`, each with an inline help paragraph. Default `true` on creation = preserve OpenRouter behaviour. Uncheck both for Fireworks / Groq / Together / Cerebras.
+
+### Changed
+
+- **`llm_form_cache_read_price_help` enriched** in EN + FR to list the provider-specific synonyms (`Cached input` on Fireworks and OpenAI, `Cache read` on Anthropic, `Cache hit` on DeepSeek). Helps users locate the value on each provider's pricing page when entering a new model manually. Label and other helper texts unchanged.
+- **`create_custom_provider` / `update_custom_provider` Tauri command signatures** gain two trailing `Option<bool>` parameters (`#[allow(clippy::too_many_arguments)]`). Frontend store actions and `ProviderInfo` (serde `rename_all = "camelCase"`) propagate the new fields to TypeScript transparently. `list_providers` SELECT widened to include the two new columns; the boot path in `state.rs` reads them and calls `OpenAiCompatibleProvider::set_strict_compat` so live providers reflect the persisted state from the first request.
+
+### Notes
+
+- **No backfill needed**: `DEFINE FIELD OVERWRITE … option<bool>` without `DEFAULT` leaves existing rows at `NONE`, which the wire path treats as the OpenRouter-preserving default (`unwrap_or(true)` semantics). Toggling the checkbox writes `Some(true)` or `Some(false)`; the inverse is `None` and only reachable on legacy rows, never after a UI write.
+- **Pattern frozen — `PAT_LLM_005`** (mirror of `build_mistral_tool_request`): for any OpenAI-compat custom provider, extract a pure `build_…_tool_request(params, …flags)` helper above `complete_with_tools`, gate the Anthropic / OpenRouter extensions behind explicit `Some(false)` checks, and unit-test the helper directly. Avoids HTTP mocking and keeps the wire-shape decisions reviewable in isolation.
+
 ## [0.24.0] - 2026-05-12
 
 Agent page UX overhaul (`feature/ui-ux-agent-page`). 8 sequential commits, +1334 / −325 LOC across 26 files. Three goals: (1) attribute every streamed block to the agent that emitted it (primary vs sub-agent), (2) make the visual hierarchy of an agent run readable at a glance (collapsed sub-agents, discreet header, three-level token display), (3) keep the chat input usable during execution. Tests verts: 1381 Rust lib + clippy `--all-targets` clean + svelte-check OK + 431 Vitest (+9 TDD streaming/chat_block + 5 attribution + 5 chat-container-helpers) + ESLint/Prettier clean.

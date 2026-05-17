@@ -124,6 +124,69 @@ fn select_thinking_tokens(api_reasoning: Option<usize>, thinking: Option<&str>) 
     api_reasoning.or_else(|| thinking.map(crate::llm::utils::estimate_tokens))
 }
 
+/// Builds the OpenAI-compat tool chat request body, honouring per-provider
+/// strict-mode flags.
+///
+/// Mirrors [`crate::llm::mistral::build_mistral_tool_request`] but parameterised
+/// for runtime-configured custom providers:
+///
+/// - `supports_cache_control`: when `Some(false)`, skips the Anthropic-style
+///   `apply_prompt_cache_control` rewrite that turns marked messages into
+///   multipart `content[]` arrays with `cache_control: {type:"ephemeral"}`.
+///   Strict providers (Fireworks, Groq, Together, Cerebras) reject those
+///   fields with HTTP 400. `None` or `Some(true)` preserve the rewrite, which
+///   OpenRouter Anthropic requires.
+/// - `supports_reasoning_param`: when `Some(false)`, clears the OpenRouter-
+///   style top-level `reasoning: { effort, max_tokens }` object that the same
+///   strict providers reject. `None` or `Some(true)` keep it for RouterLab and
+///   OpenRouter gateways (ERR_LLM_016).
+fn build_openai_compat_tool_request(
+    params: &ToolCompletionParams,
+    supports_cache_control: Option<bool>,
+    supports_reasoning_param: Option<bool>,
+) -> ToolChatRequest {
+    let mut messages = if supports_cache_control == Some(false) {
+        params.messages.clone()
+    } else {
+        apply_prompt_cache_control(&params.messages)
+    };
+    if supports_reasoning_param == Some(false) {
+        strip_reasoning_fields_from_messages(&mut messages);
+    }
+    let mut body = ToolChatRequest::from_params_streaming(params, messages);
+    if supports_reasoning_param == Some(false) {
+        body.reasoning = None;
+    }
+    body
+}
+
+/// Strips reasoning-related fields that strict OpenAI-compat providers
+/// (Fireworks Pydantic, Groq, Together, Cerebras) reject when echoed back
+/// inside `messages[i]` on multi-turn tool loops.
+///
+/// `OpenAiToolAdapter::build_assistant_message` re-injects the previous
+/// turn's assistant message verbatim, including any thinking metadata the
+/// gateway returned (`reasoning` string for OpenRouter, `reasoning_content`
+/// for Fireworks / DeepSeek, `reasoning_details` array for Anthropic via
+/// OpenRouter, `provider_specific_fields` for DeepSeek / RouterLab). Strict
+/// providers respond with HTTP 400 "Extra inputs are not permitted, field:
+/// 'messages[i].reasoning'" on the very next tool-loop iteration.
+///
+/// Only invoked when `supports_reasoning_param == Some(false)` — the same
+/// gate that clears the top-level `reasoning` object — because the
+/// underlying constraint is identical: the provider's Pydantic schema
+/// rejects unknown keys, wherever they appear.
+fn strip_reasoning_fields_from_messages(messages: &mut [serde_json::Value]) {
+    for msg in messages.iter_mut() {
+        if let Some(obj) = msg.as_object_mut() {
+            obj.remove("reasoning");
+            obj.remove("reasoning_content");
+            obj.remove("reasoning_details");
+            obj.remove("provider_specific_fields");
+        }
+    }
+}
+
 /// Generic provider for any OpenAI-compatible API.
 ///
 /// Supports configurable base URL and API key. Used for custom providers
@@ -137,6 +200,13 @@ pub struct OpenAiCompatibleProvider {
     provider_name: String,
     /// Shared HTTP client (connection pooling)
     http_client: Arc<reqwest::Client>,
+    /// Whether to inject Anthropic-style `cache_control` content parts.
+    /// `None`/`Some(true)` preserve current OpenRouter behaviour; `Some(false)`
+    /// skips the rewrite for strict providers (Fireworks, Groq, ...).
+    supports_cache_control: Arc<RwLock<Option<bool>>>,
+    /// Whether to inject the OpenRouter-style top-level `reasoning` object.
+    /// `None`/`Some(true)` keep it; `Some(false)` clears it for strict providers.
+    supports_reasoning_param: Arc<RwLock<Option<bool>>>,
 }
 
 impl OpenAiCompatibleProvider {
@@ -147,7 +217,25 @@ impl OpenAiCompatibleProvider {
             base_url: Arc::new(RwLock::new(None)),
             provider_name: name.to_string(),
             http_client,
+            supports_cache_control: Arc::new(RwLock::new(None)),
+            supports_reasoning_param: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Updates the strict-mode flags at runtime.
+    ///
+    /// Mirrors the [`configure`](Self::configure) pattern (Arc<RwLock> for
+    /// hot-swap without recreating the provider). Either argument can be
+    /// `None` to fall back to the OpenRouter-preserving default, `Some(true)`
+    /// to opt in explicitly, or `Some(false)` to opt out (Fireworks/Groq/
+    /// Together/Cerebras).
+    pub async fn set_strict_compat(
+        &self,
+        supports_cache_control: Option<bool>,
+        supports_reasoning_param: Option<bool>,
+    ) {
+        *self.supports_cache_control.write().await = supports_cache_control;
+        *self.supports_reasoning_param.write().await = supports_reasoning_param;
     }
 
     /// Configures the provider with API key and base URL.
@@ -347,11 +435,9 @@ impl OpenAiCompatibleProvider {
             LLMError::NotConfigured(format!("Base URL not set for {}", self.provider_name))
         })?;
 
-        // Apply prompt cache control to system message for providers that support it
-        // (required for Anthropic Claude, harmlessly ignored by others).
-        let cached_messages = apply_prompt_cache_control(&params.messages);
-
-        let body = ToolChatRequest::from_params_streaming(params, cached_messages);
+        let supports_cc = *self.supports_cache_control.read().await;
+        let supports_rp = *self.supports_reasoning_param.read().await;
+        let body = build_openai_compat_tool_request(params, supports_cc, supports_rp);
         let url = format!("{}/chat/completions", base_url);
         send_tool_completion(
             &self.http_client,
@@ -594,5 +680,208 @@ mod tests {
         let details = usage.prompt_tokens_details.expect("details present");
         assert_eq!(details.cached_tokens, Some(8));
         assert_eq!(details.cache_write_tokens, None);
+    }
+
+    /// Builds a multi-turn `ToolCompletionParams` that triggers all 3 cache
+    /// breakpoints (BP1 system, BP2 last assistant, BP3 last tool). Only
+    /// applicable when `apply_prompt_cache_control` runs.
+    fn build_test_params_with_history(
+        effort: Option<crate::models::agent::ReasoningEffort>,
+    ) -> crate::llm::provider::ToolCompletionParams {
+        crate::llm::provider::ToolCompletionParams {
+            messages: vec![
+                serde_json::json!({"role": "system", "content": "You are a helpful assistant."}),
+                serde_json::json!({"role": "user", "content": "First question"}),
+                serde_json::json!({"role": "assistant", "content": "Calling tool", "tool_calls": [
+                    {"id": "call_1", "type": "function", "function": {"name": "noop", "arguments": "{}"}}
+                ]}),
+                serde_json::json!({"role": "tool", "tool_call_id": "call_1", "name": "noop", "content": "ok"}),
+                serde_json::json!({"role": "assistant", "content": "Got the answer."}),
+                serde_json::json!({"role": "user", "content": "Second question"}),
+            ],
+            tools: vec![],
+            tool_choice: None,
+            model: "test-model".to_string(),
+            temperature: 0.7,
+            max_tokens: 1024,
+            context_window: None,
+            reasoning_effort: effort,
+        }
+    }
+
+    /// Returns true iff any message in `messages` is a multipart array whose
+    /// first item carries an Anthropic-style `cache_control` field.
+    fn has_cache_control_marker(messages: &[serde_json::Value]) -> bool {
+        messages.iter().any(|msg| {
+            msg.get("content")
+                .and_then(|c| c.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|first| first.get("cache_control"))
+                .is_some()
+        })
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_skips_cache_control_when_disabled() {
+        let params = build_test_params_with_history(None);
+        let body = build_openai_compat_tool_request(&params, Some(false), None);
+        assert!(
+            !has_cache_control_marker(&body.messages),
+            "supports_cache_control == Some(false) must skip the Anthropic-style \
+             cache_control rewrite — Fireworks and other strict providers reject it"
+        );
+        // The original string-form content must survive unchanged.
+        let system = body.messages.first().expect("system message present");
+        assert_eq!(
+            system.get("content").and_then(|c| c.as_str()),
+            Some("You are a helpful assistant.")
+        );
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_applies_cache_control_when_none() {
+        let params = build_test_params_with_history(None);
+        let body = build_openai_compat_tool_request(&params, None, None);
+        assert!(
+            has_cache_control_marker(&body.messages),
+            "supports_cache_control == None must preserve current OpenRouter \
+             Anthropic behaviour (ERR_LLM_012 régression lock)"
+        );
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_applies_cache_control_when_some_true() {
+        let params = build_test_params_with_history(None);
+        let body = build_openai_compat_tool_request(&params, Some(true), None);
+        assert!(
+            has_cache_control_marker(&body.messages),
+            "supports_cache_control == Some(true) must apply the rewrite \
+             (explicit opt-in equivalent to default)"
+        );
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_strips_reasoning_when_disabled() {
+        let params =
+            build_test_params_with_history(Some(crate::models::agent::ReasoningEffort::High));
+        let body = build_openai_compat_tool_request(&params, None, Some(false));
+        assert!(
+            body.reasoning.is_none(),
+            "supports_reasoning_param == Some(false) must clear the top-level \
+             `reasoning: {{effort, max_tokens}}` object — Fireworks (Pydantic strict) \
+             returns HTTP 400 on this unknown field"
+        );
+        // The OpenAI-standard `reasoning_effort` field must survive — gateways
+        // that honour the standard path (OpenAI, Mistral cloud, Fireworks itself)
+        // still need it.
+        assert_eq!(body.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_keeps_reasoning_when_none() {
+        let params =
+            build_test_params_with_history(Some(crate::models::agent::ReasoningEffort::Medium));
+        let body = build_openai_compat_tool_request(&params, None, None);
+        let reasoning = body
+            .reasoning
+            .as_ref()
+            .expect("supports_reasoning_param == None must preserve current OpenRouter/RouterLab behaviour (ERR_LLM_016)");
+        assert_eq!(reasoning.effort.as_deref(), Some("medium"));
+        assert_eq!(reasoning.max_tokens, Some(4096));
+    }
+
+    /// Builds params with an assistant message carrying the four reasoning
+    /// metadata fields that strict providers (Fireworks Pydantic) reject when
+    /// `OpenAiToolAdapter::build_assistant_message` echoes them on the next
+    /// tool-loop turn.
+    fn build_test_params_with_assistant_reasoning_echo(
+    ) -> crate::llm::provider::ToolCompletionParams {
+        crate::llm::provider::ToolCompletionParams {
+            messages: vec![
+                serde_json::json!({"role": "system", "content": "You are a helpful assistant."}),
+                serde_json::json!({"role": "user", "content": "Pick a tool"}),
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": "Calling tool",
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "noop", "arguments": "{}"}}
+                    ],
+                    "reasoning": "I am thinking out loud (OpenRouter dialect)",
+                    "reasoning_content": "I am thinking out loud (Fireworks / DeepSeek dialect)",
+                    "reasoning_details": [{"text": "signed block"}],
+                    "provider_specific_fields": {"refusal": null}
+                }),
+                serde_json::json!({"role": "tool", "tool_call_id": "call_1", "name": "noop", "content": "ok"}),
+                serde_json::json!({"role": "user", "content": "Continue"}),
+            ],
+            tools: vec![],
+            tool_choice: None,
+            model: "test-model".to_string(),
+            temperature: 0.7,
+            max_tokens: 1024,
+            context_window: None,
+            reasoning_effort: None,
+        }
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_strips_message_reasoning_when_disabled() {
+        let params = build_test_params_with_assistant_reasoning_echo();
+        let body = build_openai_compat_tool_request(&params, Some(false), Some(false));
+        let assistant = body
+            .messages
+            .iter()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("assistant"))
+            .expect("assistant message present");
+
+        for field in [
+            "reasoning",
+            "reasoning_content",
+            "reasoning_details",
+            "provider_specific_fields",
+        ] {
+            assert!(
+                assistant.get(field).is_none(),
+                "supports_reasoning_param == Some(false) must strip `{}` from echoed assistant \
+                 messages — Fireworks Pydantic rejects unknown keys with HTTP 400",
+                field
+            );
+        }
+        // The functional payload survives the strip.
+        assert_eq!(
+            assistant.get("content").and_then(|c| c.as_str()),
+            Some("Calling tool")
+        );
+        assert!(
+            assistant.get("tool_calls").is_some(),
+            "tool_calls must be preserved (ERR_LLM_012-style regression)"
+        );
+    }
+
+    #[test]
+    fn build_openai_compat_tool_request_keeps_reasoning_details_when_none() {
+        // When the flag is None, `apply_prompt_cache_control` runs and rewrites
+        // the marked assistant message: it keeps `tool_calls` and
+        // `reasoning_details` (ERR_LLM_012 fix) but drops the other
+        // provider-specific keys as part of the multipart rewrite. We only
+        // lock the contract that strictly matters for OpenRouter Anthropic:
+        // `reasoning_details` survives.
+        let params = build_test_params_with_assistant_reasoning_echo();
+        let body = build_openai_compat_tool_request(&params, None, None);
+        let assistant = body
+            .messages
+            .iter()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("assistant"))
+            .expect("assistant message present");
+
+        assert!(
+            assistant.get("reasoning_details").is_some(),
+            "ERR_LLM_012 regression lock: `reasoning_details` must survive when flag is None \
+             (Anthropic thinking continuity via OpenRouter)"
+        );
+        assert!(
+            assistant.get("tool_calls").is_some(),
+            "ERR_LLM_012 regression lock: `tool_calls` must survive when flag is None"
+        );
     }
 }

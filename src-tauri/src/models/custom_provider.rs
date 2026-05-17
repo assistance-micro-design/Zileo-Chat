@@ -31,6 +31,20 @@ pub struct CustomProvider {
     /// Whether this provider is enabled
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Whether to inject Anthropic-style `cache_control` content parts.
+    ///
+    /// `None` or `Some(true)` preserves the OpenRouter Anthropic behaviour.
+    /// `Some(false)` skips the rewrite for strict providers (Fireworks, Groq,
+    /// Together, Cerebras) that reject the field with HTTP 400.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_cache_control: Option<bool>,
+    /// Whether to inject the OpenRouter-style top-level `reasoning` object.
+    ///
+    /// `None` or `Some(true)` preserves OpenRouter and RouterLab behaviour
+    /// (RouterLab proxies via Anthropic and only honours `reasoning.max_tokens`).
+    /// `Some(false)` clears the object for strict providers that reject it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning_param: Option<bool>,
     /// Creation timestamp
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -60,6 +74,17 @@ pub struct ProviderInfo {
     pub base_url: Option<String>,
     /// Whether this provider is enabled
     pub enabled: bool,
+    /// Whether the provider accepts Anthropic-style `cache_control` content
+    /// parts. Omitted for builtins (managed natively) and absent on custom
+    /// providers that haven't explicitly opted out (= preserved current
+    /// OpenRouter behaviour).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_cache_control: Option<bool>,
+    /// Whether the provider accepts the OpenRouter-style top-level
+    /// `reasoning` object. Same defaulting semantics as
+    /// `supports_cache_control`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning_param: Option<bool>,
 }
 
 /// Response from create/update custom provider commands.
@@ -190,5 +215,81 @@ mod tests {
         assert!(check_http_warning("ftp://example.com").is_none());
         assert!(check_http_warning("ws://example.com").is_none());
         assert!(check_http_warning("").is_none());
+    }
+
+    #[test]
+    fn custom_provider_deserializes_supports_flags_when_present() {
+        let json = r#"{
+            "name": "fireworks",
+            "display_name": "Fireworks",
+            "base_url": "https://api.fireworks.ai/inference/v1",
+            "enabled": true,
+            "supports_cache_control": false,
+            "supports_reasoning_param": false
+        }"#;
+        let cp: CustomProvider = serde_json::from_str(json).expect("parses");
+        assert_eq!(cp.supports_cache_control, Some(false));
+        assert_eq!(cp.supports_reasoning_param, Some(false));
+    }
+
+    #[test]
+    fn custom_provider_deserializes_legacy_rows_without_supports_flags() {
+        // Existing rows in the database predate the new fields. They must
+        // continue to deserialize cleanly with the flags absent (= None),
+        // which the wire logic treats as the OpenRouter-preserving default.
+        let json = r#"{
+            "name": "openrouter",
+            "display_name": "OpenRouter",
+            "base_url": "https://openrouter.ai/api/v1",
+            "enabled": true
+        }"#;
+        let cp: CustomProvider = serde_json::from_str(json).expect("parses");
+        assert_eq!(cp.supports_cache_control, None);
+        assert_eq!(cp.supports_reasoning_param, None);
+    }
+
+    #[test]
+    fn provider_info_serializes_supports_flags_in_camel_case() {
+        let info = ProviderInfo {
+            id: "fireworks".to_string(),
+            display_name: "Fireworks".to_string(),
+            is_builtin: false,
+            is_cloud: true,
+            requires_api_key: true,
+            has_base_url: true,
+            base_url: Some("https://api.fireworks.ai/inference/v1".to_string()),
+            enabled: true,
+            supports_cache_control: Some(false),
+            supports_reasoning_param: Some(false),
+        };
+        let json = serde_json::to_value(&info).expect("serialises");
+        // serde rename_all = "camelCase" must apply to the new fields.
+        assert_eq!(json["supportsCacheControl"], serde_json::Value::Bool(false));
+        assert_eq!(
+            json["supportsReasoningParam"],
+            serde_json::Value::Bool(false)
+        );
+    }
+
+    #[test]
+    fn provider_info_omits_supports_flags_when_none() {
+        let info = ProviderInfo {
+            id: "openrouter".to_string(),
+            display_name: "OpenRouter".to_string(),
+            is_builtin: false,
+            is_cloud: true,
+            requires_api_key: true,
+            has_base_url: true,
+            base_url: Some("https://openrouter.ai/api/v1".to_string()),
+            enabled: true,
+            supports_cache_control: None,
+            supports_reasoning_param: None,
+        };
+        let json = serde_json::to_value(&info).expect("serialises");
+        assert!(
+            json.get("supportsCacheControl").is_none(),
+            "None must be skipped to keep the TS contract `field?: boolean`"
+        );
+        assert!(json.get("supportsReasoningParam").is_none());
     }
 }

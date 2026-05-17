@@ -343,10 +343,14 @@ User-created OpenAI-compatible provider metadata.
 | display_name | string (1-128 chars) | | Human-readable name |
 | base_url | string (1-512 chars) | | API endpoint |
 | enabled | bool | true | |
+| supports_cache_control | option\<bool\> | NONE | Strict-mode toggle: when `false`, skip Anthropic-style `cache_control` content parts (Fireworks, Groq, Together, Cerebras reject them with HTTP 400). `NONE` / `true` preserves OpenRouter Anthropic behaviour. |
+| supports_reasoning_param | option\<bool\> | NONE | Strict-mode toggle: when `false`, clear the OpenRouter-style top-level `reasoning: {effort, max_tokens}` object AND strip `reasoning` / `reasoning_content` / `reasoning_details` / `provider_specific_fields` from echoed assistant messages on multi-turn tool loops. `NONE` / `true` preserves OpenRouter and RouterLab behaviour. |
 | created_at | datetime | time::now() | |
 | updated_at | datetime | time::now() | |
 
 **Indexes**: `unique_custom_provider_name` (name, UNIQUE)
+
+**Strict-mode defaults**: both `supports_*` columns are defined as `option<bool>` **without** `DEFAULT`. Legacy rows (created before 2026-05-17) keep `NONE` semantics, which the wire path treats as the OpenRouter-preserving default — no backfill required (ERR_LLM_020, PAT_LLM_005).
 
 API keys are stored in SecureKeyStore (OS keyring), never in the database.
 

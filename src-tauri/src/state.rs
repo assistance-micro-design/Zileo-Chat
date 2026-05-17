@@ -205,7 +205,8 @@ impl AppState {
         }
 
         // Initialize custom providers from database
-        let query = "SELECT name, base_url FROM custom_provider WHERE enabled = true";
+        let query = "SELECT name, base_url, supports_cache_control, supports_reasoning_param \
+                     FROM custom_provider WHERE enabled = true";
         match self.db.query_json(query).await {
             Ok(results) => {
                 for row in results {
@@ -217,6 +218,11 @@ impl AppState {
                         Some(u) => u.to_string(),
                         None => continue,
                     };
+                    let supports_cache_control =
+                        row.get("supports_cache_control").and_then(|v| v.as_bool());
+                    let supports_reasoning_param = row
+                        .get("supports_reasoning_param")
+                        .and_then(|v| v.as_bool());
 
                     let provider = std::sync::Arc::new(
                         crate::llm::openai_compatible::OpenAiCompatibleProvider::new(
@@ -237,6 +243,13 @@ impl AppState {
                             }
                         }
                     }
+
+                    // Restore strict-mode toggles persisted on the row. Absent
+                    // (NONE) means OpenRouter-preserving default — no-op write
+                    // since `new()` already starts with `None`.
+                    provider
+                        .set_strict_compat(supports_cache_control, supports_reasoning_param)
+                        .await;
 
                     self.llm_manager
                         .register_custom_provider(&name, provider)

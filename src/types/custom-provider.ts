@@ -44,6 +44,18 @@ export interface ProviderInfo {
 	baseUrl: string | null;
 	/** Whether the provider is enabled */
 	enabled: boolean;
+	/**
+	 * Whether the provider accepts Anthropic-style `cache_control` content parts.
+	 * Absent for builtins and for custom providers that haven't opted out
+	 * (= OpenRouter-preserving default). `false` disables the rewrite for
+	 * strict providers (Fireworks, Groq, Together, Cerebras).
+	 */
+	supportsCacheControl?: boolean;
+	/**
+	 * Whether the provider accepts the OpenRouter-style top-level `reasoning`
+	 * object. Same defaulting semantics as `supportsCacheControl`.
+	 */
+	supportsReasoningParam?: boolean;
 }
 
 /**
@@ -71,4 +83,8 @@ export interface CreateCustomProviderRequest {
 	baseUrl: string;
 	/** API key for authentication */
 	apiKey: string;
+	/** Strict-mode toggle: disable to skip Anthropic-style cache_control parts (Fireworks, Groq, ...). */
+	supportsCacheControl?: boolean;
+	/** Strict-mode toggle: disable to skip OpenRouter-style top-level reasoning object. */
+	supportsReasoningParam?: boolean;
 }
