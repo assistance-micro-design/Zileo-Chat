@@ -128,7 +128,7 @@
 //! - `update_memory` - Update an existing memory entry
 //! - `export_memories` - Export memories to JSON/CSV
 //! - `import_memories` - Import memories from JSON
-//! - `regenerate_embeddings` - Regenerate embeddings for existing memories
+//! - `reindex_memory_chunks` - Background reindex of unindexed memories (multi-chunk)
 //!
 //! ### Prompt Commands ([`prompt`])
 //! - `list_prompts` - List all prompt templates

@@ -24,12 +24,14 @@
 //! ## Memory Commands
 //! - `update_memory` - Update a memory entry
 //! - `export_memories` / `import_memories` - Bulk operations
-//! - `regenerate_embeddings` - Regenerate all embeddings
+//! - `reindex_memory_chunks` / `cancel_reindex_job` / `get_reindex_job_status` -
+//!   Background reindex of unindexed memories (post PR #147 multi-chunk schema)
 //!
 //! ## Stats Commands
 //! - `get_memory_stats` / `get_memory_token_stats` - Dashboard statistics
 
 pub mod config;
+pub(super) mod helpers;
 pub mod operations;
 pub mod stats;
 

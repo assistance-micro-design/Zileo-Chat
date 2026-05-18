@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Memory Settings — statistics + export/import round-trip + update_memory chunk sync post PR #147 (`fix/memory-settings-bugs`). Five Tauri commands (`get_memory_stats`, `get_memory_token_stats`, `export_memories`, `import_memories`, `update_memory`) were still operating against the legacy `memory.embedding` field / pre-multi-chunk assumptions that PR #147 removed in favour of `memory_chunk`. Stats returned `with_embeddings = 0` regardless of state, export omitted `importance` + `expires_at`, import dropped `workflow_id` + `importance` + `expires_at` + `created_at` AND never produced any `memory_chunk` rows, and `update_memory` left the chunk index pointing at the old text (silent semantic-search drift) while echoing back the wrong `importance` / `expires_at` on the IPC response. 18 TDD tests lock the contracts (4 helpers + 2 stats + 2 export + 6 import + 1 helpers cast + 3 update_memory). No TypeScript / schema / frontend changes — the IPC contract was already correct, only the SQL had drifted.
+
+### Fixed
+
+- **`get_memory_stats.with_embeddings` and `get_memory_token_stats.categories[].with_embeddings`** now reflect the number of parent memories that have at least one `memory_chunk` row (post-PR #147 schema), via a `DISTINCT memory_id` subquery on `memory_chunk`. Previously both fields queried the dropped `memory.embedding` field and returned 0 for every install — Settings → Mémoire displayed `0/N Avec incorporations` regardless of actual state.
+- **`export_memories` (JSON + CSV) now includes `importance` and `expires_at`**. The two SELECT clauses widen to also pull these columns, and the CSV header becomes `id,type,content,workflow_id,metadata,importance,expires_at,created_at`. Round-trip preservation is now lossless for the four optional/scoring columns.
+- **`import_memories` preserves `workflow_id`, `importance`, `expires_at`, `created_at` AND creates `memory_chunk` rows for every imported memory**. The command now delegates to `add_memory_core` (the same helper the live `MemoryTool` uses), so parent + N chunks (+ embeddings if the service is configured) are produced atomically. Imports are once again visible to semantic search.
+- **`import_memories` no longer silently coerces unknown / missing `type` to `knowledge`** — invalid items are counted in `failed` with an explicit error in `ImportResult.errors` (symmetric with the existing `content` validation). The previous `unwrap_or("knowledge")` fallback masked broken exports as successful imports.
+- **`update_memory` keeps the `memory_chunk` index in sync with the new `content`**. When `content` changes, the existing chunks (still indexed against the OLD text and embeddings) are dropped and re-created from the new content via the new `replace_memory_chunks` helper. Without this fix the parent row carried the new content while semantic search kept matching the old one — silent drift across every UI edit since PR #147. Metadata-only updates skip the re-chunkification round-trip (the chunk ids are preserved verbatim).
+- **`update_memory` SELECT widened to include `importance` and `expires_at`**. The previous query omitted both, which silently coerced `importance` to the serde `default = 0.5` and `expires_at` to `None` in the IPC response — the DB row was correct but the frontend rendered the wrong values until the next `list_memories`.
+
+### Removed
+
+- **Decorative `force: bool` parameter on `reindex_memory_chunks`**. The parameter was received and logged but never consumed (carried over from the pre-PR #147 sync API). Frontend `MemorySettings.svelte` always passed `false`; the call site now invokes the command with no arguments. Pure dead-code removal — no behavioural change.
+
+### Added
+
+- **`count_parents_with_chunks` + `count_parents_with_chunks_by_type` helpers** (`src-tauri/src/commands/embedding/helpers.rs`). Factor out the `SELECT count() FROM (SELECT memory_id FROM memory_chunk GROUP BY memory_id) GROUP …` subquery. The per-type variant uses the record-link traversal `memory_id.type` in SELECT context (safe — ERR_SURREAL_013 only affects WHERE / DELETE).
+- **`set_created_at` helper** (same file). Overrides `created_at` on an existing memory row with the `<datetime>` cast pattern (ERR_SURREAL_007) — mirror of `set_expires_at_if_present` in `tools/memory/helpers.rs`. Used by `import_memories` to preserve the original creation date on round-trip.
+- **`replace_memory_chunks` helper** (`src-tauri/src/tools/memory/helpers.rs`). Drops every `memory_chunk` row tied to a given parent (direct equality on the `record<memory>` link — not a traversal, so ERR_SURREAL_013 doesn't apply) and re-creates the chunks from the new content, optionally embedding each one. Called by `update_memory` whenever `content` changes.
+
+---
+
 Custom provider strict-mode toggles (`feature/custom-strict-toggles`). +Option<bool> × 2 fields persisted on `custom_provider`, runtime-wired through `OpenAiCompatibleProvider`, surfaced in `CustomProviderForm` as two checkboxes. Unlocks Fireworks / Groq / Together / Cerebras integration without a new provider type. Defaults (`None`) preserve OpenRouter behaviour bit-for-bit — no migration of existing rows. Tests verts: 1390 Rust lib (+9) + clippy `--all-targets` clean + svelte-check 4162 / 0 errors + 436 Vitest + ESLint/Prettier clean.
 
 ### Added

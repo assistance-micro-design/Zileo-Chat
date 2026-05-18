@@ -342,7 +342,7 @@ HNSW index schema.
 	async function handleReindex(): Promise<void> {
 		reindexStarting = true;
 		try {
-			const jobId = await tauriInvoke<string>('reindex_memory_chunks', { force: false });
+			const jobId = await tauriInvoke<string>('reindex_memory_chunks');
 			reindexJobId = jobId;
 			LocalStorage.set(STORAGE_KEYS.REINDEX_JOB_ID, jobId);
 			// Reset visible progress; the first `reindex-progress` event will

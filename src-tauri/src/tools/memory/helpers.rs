@@ -165,6 +165,71 @@ async fn create_memory_parent(
     Ok(())
 }
 
+/// Replaces all chunks for a memory: drops the existing `memory_chunk` rows
+/// then re-creates them from the new content (with embeddings when a
+/// service is configured).
+///
+/// Used by `update_memory` when a memory's `content` changes so the
+/// semantic-search index reflects the new text — without this, the parent
+/// row would carry the new content while the chunks (and their embeddings)
+/// kept matching the old one.
+///
+/// The DELETE uses a direct equality on the `record<memory>` link
+/// (`memory_id = memory:<id>`), not a traversal — ERR_SURREAL_013 only
+/// affects path traversals like `memory_id.workflow_id`.
+pub(crate) async fn replace_memory_chunks(
+    db: &DBClient,
+    embedding_service: Option<&Arc<EmbeddingService>>,
+    parent_memory_id: &str,
+    new_content: &str,
+) -> Result<(), String> {
+    let delete_query = format!(
+        "DELETE memory_chunk WHERE memory_id = memory:`{}`",
+        parent_memory_id
+    );
+    db.execute(&delete_query)
+        .await
+        .map_err(|e| format!("Failed to delete existing chunks: {}", e))?;
+
+    let chunks = split_recursive(new_content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
+    let chunk_count = chunks.len();
+    let mut any_embedding = false;
+
+    for (idx, chunk_text) in chunks.iter().enumerate() {
+        let embedding = match embedding_service {
+            Some(svc) => match svc.embed(chunk_text).await {
+                Ok(v) => {
+                    any_embedding = true;
+                    Some(v)
+                }
+                Err(e) => {
+                    warn!(error = %e, chunk_index = idx, "Embedding failed during chunk replacement; storing chunk without embedding");
+                    None
+                }
+            },
+            None => None,
+        };
+        create_memory_chunk(
+            db,
+            parent_memory_id,
+            idx,
+            chunk_count,
+            chunk_text,
+            embedding,
+        )
+        .await?;
+    }
+
+    info!(
+        memory_id = %parent_memory_id,
+        chunks = chunk_count,
+        embedded_any = any_embedding,
+        "Memory chunks replaced after content update"
+    );
+
+    Ok(())
+}
+
 /// Creates a single `memory_chunk` row linked to the given parent. The
 /// `memory_id` field is a typed `record<memory>` — we use a SurrealQL
 /// record-id literal in the CREATE so the schema's type check passes.
