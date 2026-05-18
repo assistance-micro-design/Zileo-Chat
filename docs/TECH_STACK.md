@@ -1,6 +1,6 @@
 # Tech Stack: Svelte + Rust + SurrealDB
 
-> **Current project versions: 5 May 2026**
+> **Current project versions: 18 May 2026**
 > Production versions used in the project (tested compatibility).
 
 ## Stack Overview

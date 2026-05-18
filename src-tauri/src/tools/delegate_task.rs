@@ -94,6 +94,14 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
         "Note: Delegated agents receive the prompt + any assigned tasks in context. \
          Use TodoTool to create tasks first, then pass their IDs via task_ids.",
     )
+    .note(
+        "Note: list_agents includes per-agent 'folders' (absolute paths the agent is \
+         authorized to read/write via FileManagerTool) and 'has_file_manager' (bool). \
+         An empty folders array means the agent has no filesystem perimeter usable for \
+         file-bound tasks. Before delegating a task that touches a file path, check the \
+         target path is inside one of the listed folders to avoid PathOutsideAuthorized \
+         errors on the sub-agent side.",
+    )
     .examples(&[
         serde_json::json!({
             "operation": "delegate",
@@ -127,7 +135,22 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
                 }
             },
             "count": {"type": "integer"},
-            "agents": {"type": "array"},
+            "agents": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "lifecycle": {"type": "string"},
+                        "tools": {"type": "array", "items": {"type": "string"}},
+                        "mcp_servers": {"type": "array", "items": {"type": "string"}},
+                        "capabilities": {"type": "array", "items": {"type": "string"}},
+                        "folders": {"type": "array", "items": {"type": "string"}},
+                        "has_file_manager": {"type": "boolean"}
+                    }
+                }
+            },
             "remaining_slots": {"type": "integer"}
         }
     }),

@@ -148,7 +148,7 @@ Embedding configuration, stats, and memory management tools.
 | `update_memory` | Update an existing memory entry |
 | `export_memories` | Export memories to JSON/CSV |
 | `import_memories` | Import memories from JSON |
-| `reindex_memory_chunks` | Spawn a streaming reindex job (recursive chunker -> `memory_chunk` + embeddings). Emits `reindex-progress` events per processed parent. Optional `force` flag re-chunks everything. Returns `ReindexJobStatus { jobId, ... }`. |
+| `reindex_memory_chunks` | Spawn a streaming reindex job (recursive chunker -> `memory_chunk` + embeddings). Emits `reindex-progress` events per processed parent. Returns `ReindexJobStatus { jobId, ... }`. |
 | `cancel_reindex_job` | Cancel a running reindex job by `jobId` |
 | `get_reindex_job_status` | Read current status for a `jobId` — auto-purges terminal entries on consultation; a background timer also sweeps after 10 minutes |
 

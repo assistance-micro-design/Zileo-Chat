@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+DelegateTaskTool — per-agent FileManager perimeter visibility (`feature/delegate-folders-visibility`). The `list_agents` operation now exposes each permanent agent's `folders` (authorized paths) and a derived `has_file_manager` boolean, so the primary LLM can route file-bound tasks to an agent whose perimeter covers the target path — or skip an agent whose perimeter does not — instead of delegating blindly and burning a turn on the eventual `PathOutsideAuthorized` error. Backend-only change, +30 LOC + 3 TDD tests, zero TypeScript / schema / frontend impact. Tests verts: 1413 Rust lib (+3) + clippy `--all-targets` clean + svelte-check 4162 / 0 errors + 436 Vitest + ESLint/Prettier clean.
+
+### Added
+
+- **`folders: string[]` and `has_file_manager: boolean` on every entry returned by `DelegateTaskTool::list_agents`**. The primary LLM that orchestrates a delegation now sees, per permanent agent, the absolute paths the agent is authorized to read/write via FileManagerTool plus a boolean flag. `folders` is force-cleared to `[]` when the agent does not have `FileManagerTool` in its `tools` (even if `config.folders` still carries residual values from an older configuration) — preserves the principle of not advertising a capability the agent cannot exercise. Mirrors the symmetric pattern in `FileManagerTool::build_definition` which already injects the agent's own folders into its tool description; here we propagate the same information to the _caller_ via the dynamic payload rather than the static description, to preserve `PAT_TOOL_DEF_CACHE` (the `LazyLock<ToolDefinition>` stays byte-identical across calls so prompt-cache hit rate is unaffected).
+- **`build_agent_listing_entry` pure helper** (`src-tauri/src/tools/delegate_task_execution.rs`). Projects `(id, &AgentConfig, capabilities)` into the JSON entry, extracted from the body of `list_agents()` to enable direct unit testing without instantiating the full `DelegateTaskTool` (which would require an `AgentRegistry`, `AgentOrchestrator`, `DBClient`, etc.). Follows `PAT_RUST_015` (extract pure logic for testability without test-only constructors).
+- **3 TDD tests** in `delegate_task_tests.rs` lock the three contractual cases: (1) FileManagerTool present + folders set → folders projected verbatim, (2) FileManagerTool absent + folders set in config → folders forced to `[]` and `has_file_manager: false`, (3) FileManagerTool present + folders unconfigured → folders empty and `has_file_manager: true` (LLM sees the tool flag but knows the agent has no usable perimeter).
+
+### Changed
+
+- **`DelegateTaskTool` description grows a third `.note(...)`** documenting the new contract (still inside the same `LazyLock<ToolDefinition>` — no migration to per-instance `OnceLock`). The static description tells the LLM that `list_agents` now carries the per-agent folder perimeter and how to read the two new fields.
+- **`DelegateTaskTool` `output_schema` extended** to declare `agents[].folders` (string array) and `agents[].has_file_manager` (boolean). Informational — the LLM does not read the schema at execution time, but the documentation surface stays in sync.
+
+### Notes
+
+- **No frontend changes**: the `list_agents` payload of `DelegateTaskTool` is internal to the backend and consumed only by the LLM via `Tool::execute()` dispatch. Distinct from the Tauri command `commands::agent::list_agents` (returns `AgentSummary[]`), which is unchanged and still consumed by `agents.ts` / `ExportPanel.svelte`.
+- **No canonicalisation of paths in `list_agents`**: the listed `folders` are the raw values persisted on `AgentConfig` (what the user typed in the agent form). Canonicalisation stays isolated to `ToolFactory::resolve_agent_folders` at the moment the sub-agent's `FileManagerTool` is instantiated — avoids unnecessary disk I/O on every listing and keeps the LLM's view aligned with the user-facing configuration.
+
+---
+
 Memory Settings — statistics + export/import round-trip + update_memory chunk sync post PR #147 (`fix/memory-settings-bugs`). Five Tauri commands (`get_memory_stats`, `get_memory_token_stats`, `export_memories`, `import_memories`, `update_memory`) were still operating against the legacy `memory.embedding` field / pre-multi-chunk assumptions that PR #147 removed in favour of `memory_chunk`. Stats returned `with_embeddings = 0` regardless of state, export omitted `importance` + `expires_at`, import dropped `workflow_id` + `importance` + `expires_at` + `created_at` AND never produced any `memory_chunk` rows, and `update_memory` left the chunk index pointing at the old text (silent semantic-search drift) while echoing back the wrong `importance` / `expires_at` on the IPC response. 18 TDD tests lock the contracts (4 helpers + 2 stats + 2 export + 6 import + 1 helpers cast + 3 update_memory). No TypeScript / schema / frontend changes — the IPC contract was already correct, only the SQL had drifted.
 
 ### Fixed

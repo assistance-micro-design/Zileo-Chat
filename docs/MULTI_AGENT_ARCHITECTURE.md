@@ -96,6 +96,8 @@ The primary agent decomposes complex tasks and delegates them. It analyzes depen
 | **DelegateTaskTool** | Sequential delegation to an existing agent (by ID or name) | delegate, list_agents |
 | **ParallelTasksTool** | Parallel execution of multiple tasks (by ID or name) | execute_batch |
 
+**`DelegateTaskTool::list_agents` payload**: each permanent agent in the response carries `folders: string[]` (absolute paths authorized via `FileManagerTool`) and `has_file_manager: boolean` so the primary LLM can verify the target perimeter before delegating a file-bound task. `folders` is forced to `[]` when `FileManagerTool` is not in the agent's `tools` (even if `config.folders` holds residual values from a historical configuration). The dynamic payload route is intentional: the `DelegateTaskTool` description stays static (`LazyLock<ToolDefinition>`) so the LLM provider's prompt cache stays warm across callers (PAT_TOOL_CALLEE_INFO, complement to PAT_TOOL_DYNAMIC_DESC).
+
 **Constraints**:
 - Maximum 15 cumulative sub-agent operations per workflow across spawn/delegate/parallel (`MAX_SUB_AGENTS`)
 - Maximum 3 tasks in a single ParallelTasks batch (`MAX_PARALLEL_TASKS_PER_BATCH`)

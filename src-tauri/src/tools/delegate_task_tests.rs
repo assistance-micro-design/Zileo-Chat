@@ -1,5 +1,7 @@
 use super::*;
 use crate::models::sub_agent::{DelegateResult, SubAgentMetrics};
+use crate::models::AgentConfig;
+use crate::tools::delegate_task_execution::build_agent_listing_entry;
 
 #[test]
 fn test_active_delegation_serialization() {
@@ -136,4 +138,75 @@ fn test_validate_delegate_without_task_ids_ok() {
         result.is_ok(),
         "delegate without task_ids should still work"
     );
+}
+
+/// Builds an AgentConfig from a JSON literal using #[serde(default)] for
+/// fields not specified. Keeps the test fixtures minimal.
+fn make_agent_config(value: serde_json::Value) -> AgentConfig {
+    serde_json::from_value(value).expect("test AgentConfig must be valid")
+}
+
+#[test]
+fn test_list_agents_includes_folders_when_file_manager_present() {
+    let config = make_agent_config(serde_json::json!({
+        "id": "fs_agent",
+        "name": "FS Agent",
+        "lifecycle": "permanent",
+        "tools": ["FileManagerTool"],
+        "folders": ["/home/test/proj-a", "/home/test/proj-b"]
+    }));
+
+    let entry = build_agent_listing_entry("fs_agent", &config, vec!["filesystem".to_string()]);
+
+    assert_eq!(entry["id"], serde_json::json!("fs_agent"));
+    assert_eq!(entry["name"], serde_json::json!("FS Agent"));
+    assert_eq!(entry["lifecycle"], serde_json::json!("permanent"));
+    assert_eq!(entry["tools"], serde_json::json!(["FileManagerTool"]));
+    assert_eq!(entry["has_file_manager"], serde_json::json!(true));
+    assert_eq!(
+        entry["folders"],
+        serde_json::json!(["/home/test/proj-a", "/home/test/proj-b"])
+    );
+}
+
+#[test]
+fn test_list_agents_returns_empty_folders_when_no_file_manager() {
+    // Degenerate config: folders were saved but FileManagerTool is not active.
+    // The listing must hide the folders so the LLM does not see a misleading
+    // capability contract.
+    let config = make_agent_config(serde_json::json!({
+        "id": "mem_agent",
+        "name": "Memory-only Agent",
+        "lifecycle": "permanent",
+        "tools": ["MemoryTool"],
+        "folders": ["/home/test/proj-a"]
+    }));
+
+    let entry = build_agent_listing_entry("mem_agent", &config, vec![]);
+
+    assert_eq!(entry["has_file_manager"], serde_json::json!(false));
+    assert_eq!(
+        entry["folders"],
+        serde_json::json!([]),
+        "folders must be forced to [] when FileManagerTool is not in tools"
+    );
+}
+
+#[test]
+fn test_list_agents_returns_empty_folders_when_folders_unconfigured() {
+    // FileManagerTool is present but the agent has no authorized folder.
+    // The LLM must see the tool flag = true but folders empty, so it knows
+    // the agent cannot perform file-bound tasks despite the tool being enabled.
+    let config = make_agent_config(serde_json::json!({
+        "id": "fs_empty",
+        "name": "FS Agent (empty)",
+        "lifecycle": "permanent",
+        "tools": ["FileManagerTool"],
+        "folders": []
+    }));
+
+    let entry = build_agent_listing_entry("fs_empty", &config, vec![]);
+
+    assert_eq!(entry["has_file_manager"], serde_json::json!(true));
+    assert_eq!(entry["folders"], serde_json::json!([]));
 }
