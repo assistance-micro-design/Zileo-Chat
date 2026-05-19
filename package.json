@@ -41,7 +41,7 @@
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.39.4",
-		"@playwright/test": "^1.59.1",
+		"@playwright/test": "^1.60.0",
 		"@sveltejs/adapter-static": "^3.0.0",
 		"@sveltejs/kit": "^2.59.1",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
@@ -53,7 +53,7 @@
 		"jsdom": "^27.4.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^3.5.2",
-		"svelte": "^5.55.5",
+		"svelte": "^5.55.7",
 		"svelte-check": "^4.4.8",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.59.2",
