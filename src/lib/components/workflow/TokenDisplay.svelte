@@ -238,7 +238,11 @@
 					? `~ ${formatCost(data.cost_usd, $i18n('workflow_metrics_free'))}`
 					: formatCostOrPlaceholder(data.cost_usd, $i18n('workflow_metrics_free'))}</span
 		>
-		<span class="cost-estimate">{$i18n('token_display_last_turn_label')}</span>
+		<span class="cost-estimate"
+			>{hasSubAgents
+				? $i18n('token_display_workflow_total')
+				: $i18n('token_display_last_turn_label')}</span
+		>
 	</div>
 
 	<!-- Level 1: Speed (only during streaming) -->
@@ -285,6 +289,9 @@
 					<span class="details-label">{$i18n('chat_metrics_agents')}</span>
 					<span class="details-value"
 						>{formatTokens(data.sub_agent_input)} / {formatTokens(data.sub_agent_output)}</span
+					>
+					<span class="details-cost"
+						>{formatCost(data.sub_agent_cost_usd, $i18n('workflow_metrics_free'))}</span
 					>
 				</div>
 				<div class="details-row total">

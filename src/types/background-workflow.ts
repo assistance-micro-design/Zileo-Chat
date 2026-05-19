@@ -63,6 +63,12 @@ export interface ActiveSubAgent {
 		duration_ms: number;
 		tokens_input: number;
 		tokens_output: number;
+		/**
+		 * USD cost computed with the sub-agent's OWN pricing (not the parent's).
+		 * Absent when the sub-agent's `(provider, model)` has no pricing row.
+		 * Propagated from the wire chunk `sub_agent_complete.metrics.cost_usd`.
+		 */
+		cost_usd?: number;
 	};
 }
 

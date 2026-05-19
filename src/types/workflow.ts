@@ -266,6 +266,13 @@ export interface TokenDisplayData {
 	sub_agent_input: number;
 	/** Sub-agent cumulative output tokens */
 	sub_agent_output: number;
+	/**
+	 * Sub-agent cumulative cost in USD (each sub-agent uses its OWN pricing,
+	 * not the parent's). Sourced from `workflow.sub_agent_cost_usd` aggregated
+	 * server-side by `aggregate_sub_agent_metrics`. Used by `TokenDisplay`
+	 * level 3 to render a cost column on the sub-agent row.
+	 */
+	sub_agent_cost_usd: number;
 	/** Total workflow cost (main agent + sub-agent estimate) */
 	workflow_total_cost: number;
 	/** Cached input tokens for current message */

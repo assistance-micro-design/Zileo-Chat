@@ -339,6 +339,12 @@ impl SubAgentExecutor {
                     duration_ms: result.metrics.duration_ms,
                     tokens_input: result.metrics.tokens_input,
                     tokens_output: result.metrics.tokens_output,
+                    // Cost is already computed by `compute_sub_agent_cost` in
+                    // `handle_execution_result` using the sub-agent's OWN
+                    // pricing. Propagating it on the wire lets per-bubble /
+                    // per-block UIs display the cost without depending on a
+                    // DB lookup post-stream.
+                    cost_usd: result.metrics.cost_usd,
                 },
             );
             self.emit_event(events::WORKFLOW_STREAM, &chunk);

@@ -171,6 +171,12 @@ pub fn merge_into_chat_blocks(
                         "duration_ms": sa.duration_ms,
                         "tokens_input": sa.tokens_input,
                         "tokens_output": sa.tokens_output,
+                        // Surface the per-sub-agent cost on replay so
+                        // `SubAgentBlock` shows the same dollar figure as
+                        // during the live stream (sourced from the chunk's
+                        // metrics.cost_usd). `None` becomes JSON `null` and
+                        // the frontend hides the cost row gracefully.
+                        "cost_usd": sa.cost_usd,
                         "report_summary": sa.result_summary,
                     });
 
@@ -261,6 +267,7 @@ mod tests {
             duration_ms: Some(500),
             tokens_input: Some(100),
             tokens_output: Some(50),
+            cost_usd: None,
             result_summary: Some("done".to_string()),
             error_message: None,
             parent_execution_id: None,

@@ -82,6 +82,11 @@ function handleSubAgentStart(s: ChunkableState, c: StreamChunk): ChunkableState 
 
 /**
  * Handle sub_agent_complete chunk - mark sub-agent as completed with metrics.
+ *
+ * The `metrics` payload now carries an optional `cost_usd` field computed
+ * server-side by `compute_sub_agent_cost` using the sub-agent's OWN pricing.
+ * Propagated as-is so `SubAgentBlock` and `MessageMetrics` can render a
+ * per-sub-agent cost instead of only the aggregated workflow total.
  */
 function handleSubAgentComplete(s: ChunkableState, c: StreamChunk): ChunkableState {
 	return {

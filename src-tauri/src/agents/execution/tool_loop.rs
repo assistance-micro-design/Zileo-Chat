@@ -35,7 +35,9 @@ use crate::agents::execution::reasoning::{
 };
 use crate::agents::execution::tools;
 use crate::agents::prompt;
+use crate::db::DBClient;
 use crate::llm::adapters::{MistralToolAdapter, OllamaToolAdapter, OpenAiToolAdapter};
+use crate::llm::pricing::{load_pricing_row, ModelPricingRow};
 use crate::llm::tool_adapter::{ProviderToolAdapter, TokenUsage};
 use crate::llm::{CompletionParams, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
@@ -46,6 +48,61 @@ use crate::tools::{context::AgentToolContext, validation_helper::ValidationHelpe
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+
+/// Cache of the pricing row for the agent's `(provider, model)` pair, loaded
+/// once at the start of the tool loop so each iteration can compute a per-call
+/// cost without firing an extra DB query (the final cumulative cost still
+/// reaches the wire via `response_block` from `persistence_step.rs` —
+/// backend-as-source-of-truth invariant).
+///
+/// Holds `pricing = None` when the model is absent from `llm_model`; callers
+/// then skip the live cost emission entirely (the chunk's `cost_usd` stays
+/// `None` and the frontend gracefully falls back to the final cost).
+pub(crate) struct PricingCache {
+    /// Loaded pricing row, or `None` when the `(provider, model)` pair was
+    /// not found in the `llm_model` table.
+    pub pricing: Option<ModelPricingRow>,
+}
+
+impl PricingCache {
+    /// Loads the pricing row for the agent's model. Always returns a
+    /// `PricingCache`: the inner `pricing` field is `None` when the lookup
+    /// fails or no matching row exists, so callers don't have to handle
+    /// errors at every iteration.
+    pub(crate) async fn load(db: &DBClient, config: &AgentConfig) -> Self {
+        let pricing = load_pricing_row(db, &config.llm.model, &config.llm.provider).await;
+        Self { pricing }
+    }
+
+    /// Computes the local cost for a single iteration given its per-call
+    /// token counts. Returns `None` when no pricing row is cached so the
+    /// caller can pass `cost_usd: None` straight to the wire (the frontend
+    /// then waits for the final `response_block` cost).
+    ///
+    /// Extracted as a pure function so the live-cost path can be unit-tested
+    /// without instantiating a full tool loop. Called by `iteration.rs` after
+    /// each LLM call to project the chunk's `cost_usd`.
+    pub(crate) fn compute_iteration_local_cost(
+        &self,
+        iter_input: usize,
+        iter_output: usize,
+        iter_cached: Option<usize>,
+        iter_cache_write: Option<usize>,
+    ) -> Option<f64> {
+        self.pricing.as_ref().map(|row| {
+            crate::llm::pricing::calculate_cost_with_cache(&crate::llm::pricing::CostParams {
+                tokens_input: iter_input,
+                tokens_output: iter_output,
+                cached_tokens: iter_cached,
+                cache_write_tokens: iter_cache_write,
+                input_price_per_mtok: row.input_price_per_mtok,
+                output_price_per_mtok: row.output_price_per_mtok,
+                cache_read_price_per_mtok: row.cache_read_price_per_mtok,
+                cache_write_price_per_mtok: row.cache_write_price_per_mtok,
+            })
+        })
+    }
+}
 
 /// Tracks cumulative and per-iteration token usage across the tool loop.
 pub(crate) struct TokenTracker {
@@ -596,6 +653,17 @@ pub(crate) async fn execute_with_tools(
         require_file_confirmation: ctx.config.require_file_confirmation,
     };
 
+    // Load the model pricing once so each iteration_progress chunk can carry
+    // a per-call `cost_usd` that grows live alongside ENTREE/SORTIE. Avoids
+    // N queries (1 per iteration). When no `tool_factory` is available (rare
+    // test path) we skip the cache: the frontend gracefully falls back to the
+    // final `response_block` cost.
+    let pricing_cache = if let Some(factory) = ctx.tool_factory {
+        Some(PricingCache::load(&factory.get_db(), ctx.config).await)
+    } else {
+        None
+    };
+
     loop {
         iteration += 1;
         if iteration > max_iterations {
@@ -676,6 +744,7 @@ pub(crate) async fn execute_with_tools(
             iteration,
             cancellation_token: cancellation_token.clone(),
             is_sub_agent,
+            pricing_cache: pricing_cache.as_ref(),
         };
 
         let mut mstate = IterationMutState {
@@ -934,5 +1003,131 @@ mod tests {
             .map(|m| m["content"].as_str().unwrap())
             .collect();
         assert_eq!(contents, vec!["1", "2", "3", "4", "5"]);
+    }
+
+    // =========================================================================
+    // PricingCache — live cost during streaming.
+    //
+    // Cover the three call paths driving the live-cost feature added so the
+    // TokenDisplay metrics bar grows progressively (`~ X$`) instead of
+    // jumping from 0 to the final value at the very end:
+    //   1. model seeded -> load() returns Some(row)
+    //   2. model absent  -> load() returns None
+    //   3. compute_iteration_local_cost honours the cached pricing
+    // =========================================================================
+
+    use crate::models::LLMConfig;
+    use crate::test_utils::{seed_llm_model, setup_test_state};
+
+    fn make_agent_config(provider: &str, model: &str) -> AgentConfig {
+        AgentConfig {
+            id: "test-agent".to_string(),
+            name: "Test".to_string(),
+            lifecycle: crate::models::Lifecycle::Permanent,
+            llm: LLMConfig {
+                provider: provider.to_string(),
+                model: model.to_string(),
+                temperature: 0.7,
+                max_tokens: 1024,
+                is_reasoning: false,
+                context_window: None,
+            },
+            tools: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            folders: vec![],
+            require_file_confirmation: false,
+            system_prompt: String::new(),
+            max_tool_iterations: 10,
+            reasoning_effort: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn pricing_cache_loads_row_when_model_seeded() {
+        let (state, _guard) = setup_test_state().await;
+        seed_llm_model(&state.db, "Mistral", "mistral-medium", 2.0, 6.0).await;
+
+        let cache =
+            PricingCache::load(&state.db, &make_agent_config("Mistral", "mistral-medium")).await;
+
+        let row = cache.pricing.expect("seeded llm_model row must be cached");
+        assert!((row.input_price_per_mtok - 2.0).abs() < 1e-9);
+        assert!((row.output_price_per_mtok - 6.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn pricing_cache_load_returns_none_when_model_absent() {
+        // Defensive: tool loop must keep working when the agent's model is
+        // not yet registered in `llm_model` — the chunk's `cost_usd` simply
+        // stays `None` and the frontend falls back to the final cost.
+        let (state, _guard) = setup_test_state().await;
+
+        let cache =
+            PricingCache::load(&state.db, &make_agent_config("Custom", "unknown-model")).await;
+
+        assert!(cache.pricing.is_none());
+    }
+
+    #[test]
+    fn compute_iteration_local_cost_returns_none_when_pricing_absent() {
+        let cache = PricingCache { pricing: None };
+
+        let cost = cache.compute_iteration_local_cost(1_000, 500, None, None);
+
+        assert!(
+            cost.is_none(),
+            "absent pricing -> None so the wire chunk omits cost_usd"
+        );
+    }
+
+    #[test]
+    fn compute_iteration_local_cost_uses_cached_pricing() {
+        // 1k input * $2/MTok + 500 output * $6/MTok = 0.002 + 0.003 = $0.005
+        let cache = PricingCache {
+            pricing: Some(ModelPricingRow {
+                model_id: "mid".to_string(),
+                input_price_per_mtok: 2.0,
+                output_price_per_mtok: 6.0,
+                cache_read_price_per_mtok: 0.0,
+                cache_write_price_per_mtok: 0.0,
+            }),
+        };
+
+        let cost = cache
+            .compute_iteration_local_cost(1_000, 500, None, None)
+            .expect("Some pricing -> Some(cost)");
+
+        assert!(
+            (cost - 0.005).abs() < 1e-9,
+            "expected $0.005 for 1k in / 500 out at $2/$6 MTok, got ${}",
+            cost
+        );
+    }
+
+    #[test]
+    fn compute_iteration_local_cost_propagates_cache_savings() {
+        // 80% of input served from cache @ 50% of input price ->
+        // 200 regular * $2/M + 800 cache-read * $1/M + 100 output * $6/M
+        // = 0.0004 + 0.0008 + 0.0006 = $0.0018
+        let cache = PricingCache {
+            pricing: Some(ModelPricingRow {
+                model_id: "mid".to_string(),
+                input_price_per_mtok: 2.0,
+                output_price_per_mtok: 6.0,
+                cache_read_price_per_mtok: 1.0,
+                cache_write_price_per_mtok: 0.0,
+            }),
+        };
+
+        let cost = cache
+            .compute_iteration_local_cost(1_000, 100, Some(800), None)
+            .expect("Some pricing -> Some(cost)");
+
+        assert!(
+            (cost - 0.0018).abs() < 1e-9,
+            "expected $0.0018 with cache savings, got ${}",
+            cost
+        );
     }
 }

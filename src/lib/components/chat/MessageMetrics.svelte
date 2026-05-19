@@ -112,6 +112,11 @@
 					{#if agent.duration_ms}
 						<span class="agent-duration">{formatDuration(agent.duration_ms)}</span>
 					{/if}
+					{#if agent.cost_usd && agent.cost_usd > 0}
+						<span class="agent-cost">
+							${agent.cost_usd < 0.01 ? agent.cost_usd.toFixed(4) : agent.cost_usd.toFixed(2)}
+						</span>
+					{/if}
 				</span>
 			{/each}
 		</div>
@@ -175,7 +180,8 @@
 	}
 
 	.agent-tokens,
-	.agent-duration {
+	.agent-duration,
+	.agent-cost {
 		color: var(--color-text-tertiary);
 	}
 </style>

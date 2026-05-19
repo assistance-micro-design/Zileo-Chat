@@ -113,6 +113,14 @@ export interface SubAgentBlockData {
 	tokens_input?: number;
 	/** Output tokens generated */
 	tokens_output?: number;
+	/**
+	 * USD cost computed server-side with the sub-agent's OWN pricing
+	 * (`compute_sub_agent_cost`). Sourced from the live wire chunk
+	 * `sub_agent_complete.metrics.cost_usd` and from the persisted DB row
+	 * `sub_agent_execution.cost_usd` on replay. Absent when no pricing row
+	 * was available for the sub-agent's model.
+	 */
+	cost_usd?: number;
 	/** Summary of the sub-agent report */
 	report_summary?: string;
 	/** Internal: sub-agent ID for deduplication (not persisted) */

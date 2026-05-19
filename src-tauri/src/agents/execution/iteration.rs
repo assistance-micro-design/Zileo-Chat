@@ -23,7 +23,7 @@ use crate::agents::core::agent::{ReasoningSource, ReasoningStepData, ToolExecuti
 use crate::agents::execution::reasoning::{
     effective_reasoning_effort, emit_progress, emit_reasoning, format_llm_error,
 };
-use crate::agents::execution::tool_loop::{TokenTracker, ToolLoopContext};
+use crate::agents::execution::tool_loop::{PricingCache, TokenTracker, ToolLoopContext};
 use crate::agents::execution::tools;
 use crate::llm::tool_adapter::ProviderToolAdapter;
 use crate::llm::{ProviderType, ToolCompletionParams};
@@ -69,6 +69,13 @@ pub(crate) struct IterationInputs<'a> {
     /// the workflow's primary agent. Propagated to `iteration_progress`
     /// chunks so the frontend can keep the orchestrator's metrics bar clean.
     pub is_sub_agent: bool,
+    /// Pricing row cached once at the start of the tool loop. When present
+    /// `run_single_iteration` computes a per-call local cost and emits it on
+    /// the `iteration_progress` chunk so the frontend metrics bar shows a
+    /// cost that grows live (prefixed `~`) instead of jumping from 0 to the
+    /// final value when the workflow completes. `None` when the model has
+    /// no pricing entry — the chunk's `cost_usd` then stays `None`.
+    pub pricing_cache: Option<&'a PricingCache>,
 }
 
 /// Runs a single iteration of the tool loop.
@@ -208,12 +215,31 @@ pub(crate) async fn run_single_iteration(
         duration_ms: iter_start.elapsed().as_millis() as u64,
     });
 
+    // Compute a per-iteration local cost so the frontend metrics bar shows a
+    // cost that grows live (prefixed `~`) instead of jumping from 0 to the
+    // final value at the very end. The cumulative authoritative cost still
+    // lands on the wire via the final `response_block` from
+    // `persistence_step.rs`; the frontend `setSessionCost` overwrites the
+    // running partial sum at completion, so any transient drift between
+    // local-pricing and provider-reported cost converges to the backend
+    // truth at the end (backend-as-source-of-truth invariant).
+    //
+    // The DELTA (this iteration's tokens only) is used — `chunkProcessor.ts`
+    // sums these into `partialCostUsd`, so emitting cumulative would over-
+    // count. `None` when no pricing row was cached: the frontend gracefully
+    // falls back to the final cost.
+    let iter_cost_usd = inputs.pricing_cache.and_then(|cache| {
+        cache.compute_iteration_local_cost(
+            mstate.tokens.iter_input,
+            mstate.tokens.iter_output,
+            mstate.tokens.iter_cached,
+            mstate.tokens.iter_cache_write,
+        )
+    });
+
     // Emit a live progress chunk so the frontend metrics bar reflects each
     // tool-loop iteration in real time. Without this, ENTREE/SORTIE,
-    // contexte and t/s stay at 0 until the workflow completes (the final
-    // `response_block` only fires once at the very end). `cost_usd` is left
-    // None here — the per-iteration cost would require caching pricing
-    // rates upfront; the final `response_block` carries the resolved cost.
+    // contexte and t/s stay at 0 until the workflow completes.
     // `iter_input` carries the LAST call's input alone so the context-window
     // gauge tracks the current call instead of the cumulative sum (which
     // would saturate the bar after a few iterations).
@@ -226,7 +252,7 @@ pub(crate) async fn run_single_iteration(
             mstate.tokens.total_output,
             mstate.tokens.total_cached,
             mstate.tokens.total_cache_write,
-            None,
+            iter_cost_usd,
             mstate.tokens.iter_input,
             inputs.is_sub_agent,
         ),

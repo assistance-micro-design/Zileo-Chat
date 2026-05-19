@@ -59,6 +59,13 @@ export interface SubAgentStreamMetrics {
 	tokens_input: number;
 	/** Output tokens generated */
 	tokens_output: number;
+	/**
+	 * USD cost computed server-side with the sub-agent's OWN pricing
+	 * (`compute_sub_agent_cost`). Omitted when the sub-agent has no pricing
+	 * row or is not registered. Drives per-bubble / per-block sub-agent cost
+	 * display in `SubAgentBlock` and `MessageMetrics`.
+	 */
+	cost_usd?: number;
 }
 
 /**

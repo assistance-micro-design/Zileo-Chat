@@ -534,7 +534,7 @@ pub(crate) async fn load_workflow_blocks_core(
     let sub_agent_query = "SELECT \
             meta::id(id) AS id, workflow_id, parent_agent_id, sub_agent_id, \
             sub_agent_name, task_description, status, duration_ms, \
-            tokens_input, tokens_output, result_summary, error_message, \
+            tokens_input, tokens_output, cost_usd, result_summary, error_message, \
             parent_message_id, created_at, completed_at \
         FROM sub_agent_execution \
         WHERE workflow_id = $wf_id \

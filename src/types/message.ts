@@ -37,6 +37,13 @@ export interface SubAgentSummary {
 	tokens_input?: number;
 	/** Output tokens generated */
 	tokens_output?: number;
+	/**
+	 * USD cost computed with the sub-agent's OWN pricing (not the parent's).
+	 * Omitted when the sub-agent's `(provider, model)` has no pricing row or
+	 * when the sub-agent is not registered. Sourced from the wire chunk
+	 * `sub_agent_complete.metrics.cost_usd` populated by `compute_sub_agent_cost`.
+	 */
+	cost_usd?: number;
 }
 
 /**

@@ -207,6 +207,7 @@ Main chat area with message display, execution blocks inline, and input controls
 						durationMs={data.duration_ms}
 						tokensInput={data.tokens_input}
 						tokensOutput={data.tokens_output}
+						costUsd={data.cost_usd}
 						reportSummary={data.report_summary}
 						sequence={block.sequence}
 						internalBlockCount={countInternalBlocks(allBlocks, data._sub_agent_id)}

@@ -335,6 +335,9 @@ Uses extracted components, services, and stores for clean architecture.
 			if (pageState.selectedWorkflowId === workflowId) {
 				pageState.selectedWorkflowId = null;
 				messages = [];
+				// Without this the metrics bar keeps showing the cost / tokens
+				// of the just-deleted workflow until the user picks another one.
+				tokenStore.reset();
 			}
 
 			modalState = { type: 'none' };
@@ -381,6 +384,9 @@ Uses extracted components, services, and stores for clean architecture.
 		) {
 			pageState.selectedWorkflowId = null;
 			messages = [];
+			// Symmetric to `handleDeleteWorkflow` — clear stale metrics so the
+			// bar doesn't keep the removed workflow's cost / tokens.
+			tokenStore.reset();
 		}
 
 		return result;

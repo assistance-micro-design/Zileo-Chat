@@ -476,41 +476,50 @@
 			</div>
 		</div>
 
-		<div class="form-row">
-			<div class="form-field">
-				<Input
-					label={$i18n('llm_form_cache_read_price_label')}
-					type="number"
-					value={formData.cache_read_price_per_mtok.toString()}
-					oninput={(e) => handleNumberInput('cache_read_price_per_mtok', e)}
-					step="0.01"
-					min="0"
-					max="1000"
-					help={$i18n('llm_form_cache_read_price_help')}
-					disabled={saving}
-				/>
-				{#if touched && errors.cache_read_price_per_mtok}
-					<span class="error-text">{errors.cache_read_price_per_mtok}</span>
-				{/if}
-			</div>
+		{#if formData.provider !== 'ollama'}
+			<!--
+			  Ollama adapter forces `cached_tokens: None` and `cache_write_tokens: None`
+			  (ollama_adapter.rs:228-230), so any cache prices saved against an Ollama
+			  model would never be charged against any token count. Hiding the inputs
+			  removes the trap. Existing values stay in `formData` so switching
+			  back to a cache-aware provider restores them without re-typing.
+			-->
+			<div class="form-row">
+				<div class="form-field">
+					<Input
+						label={$i18n('llm_form_cache_read_price_label')}
+						type="number"
+						value={formData.cache_read_price_per_mtok.toString()}
+						oninput={(e) => handleNumberInput('cache_read_price_per_mtok', e)}
+						step="0.01"
+						min="0"
+						max="1000"
+						help={$i18n('llm_form_cache_read_price_help')}
+						disabled={saving}
+					/>
+					{#if touched && errors.cache_read_price_per_mtok}
+						<span class="error-text">{errors.cache_read_price_per_mtok}</span>
+					{/if}
+				</div>
 
-			<div class="form-field">
-				<Input
-					label={$i18n('llm_form_cache_write_price_label')}
-					type="number"
-					value={formData.cache_write_price_per_mtok.toString()}
-					oninput={(e) => handleNumberInput('cache_write_price_per_mtok', e)}
-					step="0.01"
-					min="0"
-					max="1000"
-					help={$i18n('llm_form_cache_write_price_help')}
-					disabled={saving}
-				/>
-				{#if touched && errors.cache_write_price_per_mtok}
-					<span class="error-text">{errors.cache_write_price_per_mtok}</span>
-				{/if}
+				<div class="form-field">
+					<Input
+						label={$i18n('llm_form_cache_write_price_label')}
+						type="number"
+						value={formData.cache_write_price_per_mtok.toString()}
+						oninput={(e) => handleNumberInput('cache_write_price_per_mtok', e)}
+						step="0.01"
+						min="0"
+						max="1000"
+						help={$i18n('llm_form_cache_write_price_help')}
+						disabled={saving}
+					/>
+					{#if touched && errors.cache_write_price_per_mtok}
+						<span class="error-text">{errors.cache_write_price_per_mtok}</span>
+					{/if}
+				</div>
 			</div>
-		</div>
+		{/if}
 	</div>
 
 	<div class="checkbox-field">

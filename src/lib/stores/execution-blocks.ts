@@ -174,6 +174,7 @@ function handleSubAgentComplete(
 		duration_ms: chunk.duration ?? chunk.metrics?.duration_ms,
 		tokens_input: chunk.metrics?.tokens_input,
 		tokens_output: chunk.metrics?.tokens_output,
+		cost_usd: chunk.metrics?.cost_usd,
 		report_summary: chunk.content,
 		_sub_agent_id: subAgentId
 	};

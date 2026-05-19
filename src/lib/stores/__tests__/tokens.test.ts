@@ -167,3 +167,60 @@ describe('tokenStore.updateFromModel', () => {
 		expect(get(tokenDisplayData).context_max).toBe(256_000);
 	});
 });
+
+describe('tokenDisplayData.sub_agent_cost_usd', () => {
+	beforeEach(() => tokenStore.reset());
+
+	it('projects the sub-agent cost from updateFromWorkflow into the derived data', () => {
+		// Without this projection the TokenDisplay level-3 row falls back to
+		// 0 even when the backend has aggregated a real per-sub-agent cost.
+		tokenStore.updateFromWorkflow({
+			id: 'wf-1',
+			name: 'Test',
+			agent_id: 'agent-1',
+			status: 'completed',
+			created_at: new Date(),
+			updated_at: new Date(),
+			total_tokens_input: 100,
+			total_tokens_output: 50,
+			total_cost_usd: 0.01,
+			model_id: 'm-1',
+			current_context_tokens: 100,
+			sub_agent_tokens_input: 80,
+			sub_agent_tokens_output: 40,
+			total_cached_tokens: null,
+			total_cache_write_tokens: null,
+			sub_agent_cost_usd: 0.0042,
+			pinned: false
+		});
+
+		const data = get(tokenDisplayData);
+		expect(data.sub_agent_cost_usd).toBeCloseTo(0.0042);
+	});
+
+	it('defaults sub_agent_cost_usd to 0 when the workflow row lacks the column', () => {
+		// Legacy workflows pre-dating the sub_agent_cost_usd column omit it;
+		// the projection must surface 0 rather than `undefined` so the
+		// formatCost helper doesn't show "Free" or fall over.
+		tokenStore.updateFromWorkflow({
+			id: 'wf-2',
+			name: 'Legacy',
+			agent_id: 'agent-1',
+			status: 'idle',
+			created_at: new Date(),
+			updated_at: new Date(),
+			total_tokens_input: 0,
+			total_tokens_output: 0,
+			total_cost_usd: 0,
+			model_id: null,
+			current_context_tokens: 0,
+			sub_agent_tokens_input: 0,
+			sub_agent_tokens_output: 0,
+			total_cached_tokens: null,
+			total_cache_write_tokens: null,
+			pinned: false
+		});
+
+		expect(get(tokenDisplayData).sub_agent_cost_usd).toBe(0);
+	});
+});

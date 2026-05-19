@@ -197,6 +197,14 @@ pub struct SubAgentStreamMetrics {
     pub tokens_input: u64,
     /// Output tokens generated
     pub tokens_output: u64,
+    /// USD cost computed with the SUB-AGENT's OWN pricing (not the parent's)
+    /// via `compute_sub_agent_cost`. Omitted from the wire when absent (e.g.
+    /// the sub-agent's `(provider, model)` has no pricing row, or the sub-
+    /// agent is not registered). Lets the frontend display per-bubble /
+    /// per-block cost for spawn / delegate / parallel sub-agents instead of
+    /// only the aggregated total.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
 }
 
 impl StreamChunk {
@@ -819,6 +827,7 @@ mod tests {
             duration_ms: 2500,
             tokens_input: 500,
             tokens_output: 1000,
+            cost_usd: None,
         };
         let chunk = StreamChunk::sub_agent_complete(
             "wf_001".to_string(),
@@ -867,12 +876,62 @@ mod tests {
             duration_ms: 3000,
             tokens_input: 250,
             tokens_output: 800,
+            cost_usd: None,
         };
 
         let json = serde_json::to_string(&metrics).unwrap();
         assert!(json.contains("\"duration_ms\":3000"));
         assert!(json.contains("\"tokens_input\":250"));
         assert!(json.contains("\"tokens_output\":800"));
+        // None cost MUST be omitted from the wire payload (skip_serializing_if).
+        assert!(!json.contains("\"cost_usd\""));
+    }
+
+    #[test]
+    fn test_sub_agent_stream_metrics_serializes_cost_when_some() {
+        // Backend-computed cost MUST round-trip through the wire so the
+        // frontend can display a per-bubble / per-block sub-agent cost
+        // instead of only the aggregated workflow total.
+        let metrics = SubAgentStreamMetrics {
+            duration_ms: 1500,
+            tokens_input: 100,
+            tokens_output: 200,
+            cost_usd: Some(0.0123),
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(
+            json.contains("\"cost_usd\":0.0123"),
+            "cost_usd must serialize when Some, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    fn test_sub_agent_complete_chunk_carries_cost_when_present() {
+        // Wire-shape regression: the chunk produced by
+        // `emit_complete_event` must surface the per-sub-agent cost so
+        // `SubAgentBlock` and `MessageMetrics` can display it.
+        let metrics = SubAgentStreamMetrics {
+            duration_ms: 1500,
+            tokens_input: 100,
+            tokens_output: 200,
+            cost_usd: Some(0.005),
+        };
+        let chunk = StreamChunk::sub_agent_complete(
+            "wf_001".to_string(),
+            "sub_123".to_string(),
+            "Analyzer".to_string(),
+            "parent_456".to_string(),
+            "Report".to_string(),
+            metrics,
+        );
+
+        let chunk_metrics = chunk.metrics.as_ref().expect("metrics propagated");
+        assert_eq!(chunk_metrics.cost_usd, Some(0.005));
+
+        let json = serde_json::to_string(&chunk).unwrap();
+        assert!(json.contains("\"cost_usd\":0.005"));
     }
 
     #[test]

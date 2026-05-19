@@ -340,6 +340,7 @@ export const tokenDisplayData = derived(store, ($s): TokenDisplayData => {
 		cumulative_cost_usd: $s.cumulative.cost,
 		sub_agent_input: $s.subAgent.input,
 		sub_agent_output: $s.subAgent.output,
+		sub_agent_cost_usd: subAgentCost,
 		cached_tokens: $s.streaming.cached ?? undefined,
 		cumulative_cached: $s.cumulative.cached ?? undefined,
 		cache_write_tokens: $s.streaming.cacheWrite ?? undefined,

@@ -296,7 +296,8 @@ export const WorkflowExecutorService = {
 						status: a.status as 'completed' | 'error',
 						duration_ms: a.metrics?.duration_ms,
 						tokens_input: a.metrics?.tokens_input,
-						tokens_output: a.metrics?.tokens_output
+						tokens_output: a.metrics?.tokens_output,
+						cost_usd: a.metrics?.cost_usd
 					}));
 				if (subAgentSummaries.length > 0) {
 					assistantMessage.sub_agents = subAgentSummaries;

@@ -311,6 +311,7 @@ mod streaming_events_tests {
             duration_ms: 2000,
             tokens_input: 100,
             tokens_output: 200,
+            cost_usd: None,
         };
 
         let chunk = StreamChunk::sub_agent_complete(

@@ -18,6 +18,13 @@
 		durationMs?: number;
 		tokensInput?: number;
 		tokensOutput?: number;
+		/**
+		 * USD cost computed with the sub-agent's OWN pricing. Sourced from the
+		 * live `sub_agent_complete` chunk on stream and from
+		 * `sub_agent_execution.cost_usd` on replay. Absent when the model has
+		 * no pricing row; the cost row is hidden in that case.
+		 */
+		costUsd?: number;
 		reportSummary?: string;
 		collapsed?: boolean;
 		/** Stable block sequence used to derive a deterministic DOM id */
@@ -36,11 +43,16 @@
 		durationMs,
 		tokensInput,
 		tokensOutput,
+		costUsd,
 		reportSummary,
 		collapsed = true,
 		sequence,
 		internalBlockCount = 0
 	}: Props = $props();
+
+	const formattedCost = $derived(
+		costUsd && costUsd > 0 ? `$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2)}` : null
+	);
 
 	const blockId = $derived(`subagent-${sequence ?? 'tmp'}`);
 
@@ -99,6 +111,10 @@
 
 		{#if formattedDuration}
 			<span class="agent-duration">{formattedDuration}</span>
+		{/if}
+
+		{#if formattedCost}
+			<span class="agent-cost">{formattedCost}</span>
 		{/if}
 
 		<ChevronDown size={14} class="chevron {collapsed ? '' : 'expanded'}" />
@@ -202,7 +218,8 @@
 		color: var(--color-danger);
 	}
 
-	.agent-duration {
+	.agent-duration,
+	.agent-cost {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
 		flex-shrink: 0;

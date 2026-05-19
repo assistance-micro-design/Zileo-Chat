@@ -131,6 +131,39 @@ describe('applyChunkToState', () => {
 			});
 		});
 
+		it('propagates cost_usd from metrics so UI can show per-sub-agent cost', () => {
+			// Backend computes cost_usd via `compute_sub_agent_cost` using each
+			// sub-agent's OWN pricing; the chunk carries it on metrics so
+			// `SubAgentBlock` and `MessageMetrics` can render it per-bubble
+			// instead of falling back to the aggregated workflow total.
+			const startState = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'sub_agent_start',
+					sub_agent_id: 'sa-cost',
+					sub_agent_name: 'Costly'
+				})
+			);
+
+			const result = applyChunkToState(
+				startState,
+				makeChunk({
+					chunk_type: 'sub_agent_complete',
+					sub_agent_id: 'sa-cost',
+					content: 'done',
+					duration: 800,
+					metrics: {
+						duration_ms: 800,
+						tokens_input: 250,
+						tokens_output: 100,
+						cost_usd: 0.0042
+					}
+				})
+			);
+
+			expect(result.subAgents[0]?.metrics?.cost_usd).toBeCloseTo(0.0042);
+		});
+
 		it('leaves other sub-agents untouched', () => {
 			let s = applyChunkToState(
 				state,
