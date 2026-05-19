@@ -40,9 +40,15 @@ Manages agent configuration with lazy loading.
 	 */
 	let agentRefreshKey = $state(0);
 
-	onSettingsRefresh(() => {
-		agentRefreshKey++;
-	});
+	// `ignoreSource: 'agents'` skips the echo of our own AgentForm dispatch:
+	// the CRUD store already refreshed the list, so a second reload via this
+	// listener would race with the in-flight render and hide the list.
+	onSettingsRefresh(
+		() => {
+			agentRefreshKey++;
+		},
+		{ ignoreSource: 'agents' }
+	);
 
 	onMount(() => {
 		import('$lib/components/settings/agents/AgentSettings.svelte')

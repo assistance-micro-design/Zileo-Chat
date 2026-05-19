@@ -64,7 +64,9 @@ Manages LLM providers and models configuration.
 		llmSectionRef?.reload();
 	}
 
-	onSettingsRefresh(() => llmSectionRef?.reload());
+	// Skip the echo of our own LLMSection dispatches — `LLMSection.reload()`
+	// already ran inside the CRUD store flow, a second reload here would race.
+	onSettingsRefresh(() => llmSectionRef?.reload(), { ignoreSource: 'providers' });
 </script>
 
 <LLMSection bind:this={llmSectionRef} onConfigureApiKey={handleConfigureApiKey} />

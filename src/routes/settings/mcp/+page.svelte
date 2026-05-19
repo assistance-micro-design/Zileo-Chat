@@ -29,7 +29,8 @@ Manages MCP server configuration.
 	 */
 	let mcpSectionRef: MCPSection;
 
-	onSettingsRefresh(() => mcpSectionRef?.reload());
+	// Skip the echo of our own MCPSection save/delete dispatches.
+	onSettingsRefresh(() => mcpSectionRef?.reload(), { ignoreSource: 'mcp' });
 </script>
 
 <MCPSection bind:this={mcpSectionRef} />

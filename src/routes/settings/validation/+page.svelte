@@ -25,7 +25,9 @@ Manages validation settings configuration.
 	import { validationSettingsStore } from '$lib/stores/validation-settings';
 	import { onSettingsRefresh } from '$lib/utils/settings-refresh';
 
-	onSettingsRefresh(() => validationSettingsStore.loadSettings());
+	// Skip the echo of our own ValidationSettings purge dispatch (the
+	// auditLogStore already refreshed in-process during purgeNow).
+	onSettingsRefresh(() => validationSettingsStore.loadSettings(), { ignoreSource: 'validation' });
 </script>
 
 <section class="settings-section">

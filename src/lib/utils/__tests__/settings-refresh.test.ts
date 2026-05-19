@@ -108,4 +108,70 @@ describe('dispatchSettingsRefresh', () => {
 			});
 		}
 	});
+
+	it('carries the source tag in the event detail', () => {
+		// Captures the raw event so we can assert the detail shape; the
+		// helper API only exposes the unwrapped detail to handlers, which
+		// would hide a missing/empty detail bug at the dispatch site.
+		const captured: CustomEvent[] = [];
+		const rawListener = (event: Event): void => {
+			captured.push(event as CustomEvent);
+		};
+		window.addEventListener(SETTINGS_REFRESH_EVENT, rawListener);
+
+		try {
+			dispatchSettingsRefresh({ source: 'agents' });
+			expect(captured).toHaveLength(1);
+			expect(captured[0]?.detail).toEqual({ source: 'agents' });
+		} finally {
+			window.removeEventListener(SETTINGS_REFRESH_EVENT, rawListener);
+		}
+	});
+});
+
+describe('source-filtering', () => {
+	it('skips the handler when ignoreSource matches the dispatch source', () => {
+		const handler = vi.fn();
+		const teardown = attachSettingsRefreshListener(handler, { ignoreSource: 'agents' });
+
+		dispatchSettingsRefresh({ source: 'agents' });
+
+		expect(handler).not.toHaveBeenCalled();
+		teardown();
+	});
+
+	it('invokes the handler when the dispatch source differs from ignoreSource', () => {
+		const handler = vi.fn();
+		const teardown = attachSettingsRefreshListener(handler, { ignoreSource: 'agents' });
+
+		dispatchSettingsRefresh({ source: 'providers' });
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		// Detail is forwarded to the handler so a consumer can branch on
+		// the source without re-reading the raw event.
+		expect(handler.mock.calls[0]?.[0]).toEqual({ source: 'providers' });
+		teardown();
+	});
+
+	it('invokes the handler when the dispatch carries no source', () => {
+		const handler = vi.fn();
+		const teardown = attachSettingsRefreshListener(handler, { ignoreSource: 'agents' });
+
+		dispatchSettingsRefresh();
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		teardown();
+	});
+
+	it('forwards every event when no options are provided (legitimate cross-page listener)', () => {
+		const handler = vi.fn();
+		const teardown = attachSettingsRefreshListener(handler);
+
+		dispatchSettingsRefresh({ source: 'agents' });
+		dispatchSettingsRefresh({ source: 'providers' });
+		dispatchSettingsRefresh();
+
+		expect(handler).toHaveBeenCalledTimes(3);
+		teardown();
+	});
 });

@@ -35,7 +35,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	} from '$lib/stores/llm';
 	import type { LLMState } from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import type { AgentConfig, AgentConfigCreate, Lifecycle, ReasoningEffort } from '$types/agent';
+	import type { AgentConfig, Lifecycle, ReasoningEffort } from '$types/agent';
 	import type { SkillSummary } from '$types/skill';
 	import { Button, Input, Textarea, Card, Badge, Select } from '$lib/components/ui';
 	import { tauriInvoke } from '$lib/tauri';
@@ -47,6 +47,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		normalizeReasoningEffortForProvider
 	} from '$lib/utils/agent-reasoning';
 	import {
+		buildAgentCreatePayload,
+		buildAgentUpdatePayload,
 		buildAvailableMcpServers,
 		buildAvailableSkills,
 		buildProviderOptions,
@@ -250,7 +252,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		// React to CRUD events from sibling Settings pages (Models, MCP, etc.)
 		// so a freshly-toggled `is_reasoning` or a renamed/added model shows up
 		// here immediately, rather than only after the next remount.
-		return attachSettingsRefreshListener(loadAgentFormResources);
+		return attachSettingsRefreshListener(loadAgentFormResources, { ignoreSource: 'agents' });
 	});
 
 	/**
@@ -303,7 +305,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	}
 
 	/**
-	 * Handles form submission
+	 * Handles form submission. The payload shape differs by mode to exploit
+	 * the tri-state PATCH contract on update (see buildAgentUpdatePayload).
 	 */
 	async function handleSubmit(): Promise<void> {
 		if (!validate()) return;
@@ -311,36 +314,33 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 		saving = true;
 
-		const config: AgentConfigCreate = {
-			name: name.trim(),
+		const submitInput = {
+			name,
 			lifecycle,
-			llm: {
-				provider,
-				model,
-				temperature: selectedModel.temperature_default,
-				max_tokens: selectedModel.max_output_tokens,
-				is_reasoning: selectedModel.is_reasoning,
-				context_window: selectedModel.context_window
-			},
+			provider,
+			model,
+			selectedModel,
 			tools: selectedTools,
-			mcp_servers: selectedMcpServers,
+			mcpServers: selectedMcpServers,
 			skills: selectedSkills,
 			folders: selectedFolders,
-			require_file_confirmation: requireFileConfirmation,
-			system_prompt: systemPrompt.trim(),
-			max_tool_iterations: maxToolIterations,
-			reasoning_effort: reasoningEffort
+			requireFileConfirmation,
+			systemPrompt,
+			maxToolIterations,
+			reasoningEffort
 		};
 
 		try {
 			if (mode === 'create') {
-				await agentStore.createAgent(config);
+				await agentStore.createAgent(buildAgentCreatePayload(submitInput));
 			} else if (agent) {
-				await agentStore.updateAgent(agent.id, config);
+				await agentStore.updateAgent(agent.id, buildAgentUpdatePayload(submitInput));
 			}
 			// Notify other Settings surfaces (workflow sidebar, sibling forms) so
 			// they pick up the new agent set without waiting for the next mount.
-			dispatchSettingsRefresh();
+			// The `source` tag lets the host `/settings/agents` page ignore its
+			// own echo (the CRUD store already refreshed the list).
+			dispatchSettingsRefresh({ source: 'agents' });
 		} catch {
 			// Error handled by store
 		} finally {

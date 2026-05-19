@@ -410,4 +410,70 @@ mod tests {
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert_eq!(merged.reasoning_effort, None);
     }
+
+    #[test]
+    fn test_merge_clears_reasoning_effort_when_update_explicitly_null() {
+        // Locks the tri-state contract for the clear flow: when the frontend
+        // sends `reasoning_effort: null` against a reasoning-capable model,
+        // serde deserialises into `Some(None)` and merge_agent_config must
+        // drop the value (vs. keeping the existing `Some(High)`).
+        let existing = sample_existing(true, Some(ReasoningEffort::High));
+        let update = AgentConfigUpdate {
+            name: None,
+            llm: None,
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: Some(None),
+        };
+        let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
+        assert!(merged.llm.is_reasoning);
+        assert_eq!(merged.reasoning_effort, None);
+    }
+
+    #[test]
+    fn test_merge_keeps_existing_reasoning_effort_when_update_absent() {
+        // Locks the tri-state contract for the unchanged flow: when the field
+        // is absent from the payload (outer `None`), the existing value must
+        // be preserved as-is (vs. clearing it).
+        let existing = sample_existing(true, Some(ReasoningEffort::Medium));
+        let update = AgentConfigUpdate {
+            name: None,
+            llm: None,
+            tools: None,
+            mcp_servers: None,
+            skills: None,
+            folders: None,
+            require_file_confirmation: None,
+            system_prompt: None,
+            max_tool_iterations: None,
+            reasoning_effort: None,
+        };
+        let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
+        assert_eq!(merged.reasoning_effort, Some(ReasoningEffort::Medium));
+    }
+
+    #[test]
+    fn test_deserialize_update_with_null_reasoning_effort() {
+        // Documents the serde contract that the clear flow relies on: JSON
+        // `null` (sent by the frontend with `reasoning_effort: null`) maps
+        // to `Some(None)` — distinguished from "field absent" (outer None).
+        let parsed: AgentConfigUpdate = serde_json::from_str(r#"{"reasoning_effort": null}"#)
+            .expect("serde should accept null for Option<Option<T>>");
+        assert!(matches!(parsed.reasoning_effort, Some(None)));
+    }
+
+    #[test]
+    fn test_deserialize_update_with_missing_reasoning_effort() {
+        // Documents the "field absent" branch: an empty JSON object yields
+        // outer `None`, which merge_agent_config interprets as "leave the
+        // existing value untouched".
+        let parsed: AgentConfigUpdate =
+            serde_json::from_str(r#"{}"#).expect("serde should accept empty object");
+        assert!(parsed.reasoning_effort.is_none());
+    }
 }

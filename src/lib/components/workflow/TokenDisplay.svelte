@@ -30,13 +30,7 @@
 -->
 <script lang="ts">
 	import type { TokenDisplayData } from '$types/workflow';
-	import {
-		AlertTriangle,
-		Gauge,
-		CircleDollarSign,
-		Activity,
-		ChevronDown
-	} from '@lucide/svelte';
+	import { AlertTriangle, Gauge, CircleDollarSign, Activity, ChevronDown } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { HelpButton } from '$lib/components/ui';
 	import { formatCost, formatCostOrPlaceholder } from '$lib/utils/currency';
@@ -282,7 +276,9 @@
 				<span class="details-value"
 					>{formatTokens(data.cumulative_input)} / {formatTokens(data.cumulative_output)}</span
 				>
-				<span class="details-cost">{formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))}</span>
+				<span class="details-cost"
+					>{formatCost(data.cumulative_cost_usd, $i18n('workflow_metrics_free'))}</span
+				>
 			</div>
 			{#if hasSubAgents}
 				<div class="details-row">

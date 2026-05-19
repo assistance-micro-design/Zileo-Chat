@@ -53,9 +53,7 @@
 	// the workflow's primary agent. Missing primaryAgentId (legacy/replay
 	// without registry hit) collapses to false so the block renders identical
 	// to a primary one (no false-positive indentation).
-	const isSubAgent = $derived(
-		!!agentId && !!primaryAgentId && agentId !== primaryAgentId
-	);
+	const isSubAgent = $derived(!!agentId && !!primaryAgentId && agentId !== primaryAgentId);
 	const agentLabel = $derived(agentName ?? agentId?.slice(0, 8) ?? '');
 
 	const formattedDuration = $derived(formatDuration(durationMs));

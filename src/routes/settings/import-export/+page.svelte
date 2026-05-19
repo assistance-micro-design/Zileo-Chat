@@ -25,5 +25,5 @@ Manages settings import and export functionality.
 </script>
 
 <section class="settings-section">
-	<ImportExportSettings onRefreshNeeded={dispatchSettingsRefresh} />
+	<ImportExportSettings onRefreshNeeded={() => dispatchSettingsRefresh({ source: 'import' })} />
 </section>

@@ -88,7 +88,7 @@
 			// (refreshes the entries list). We then fire the global settings:refresh
 			// event so an open audit-log page reloads its stats too.
 			const deleted = await auditLogStore.purgeNow();
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'validation' });
 			notify(
 				'success',
 				$i18n('validation_audit_purge_success').replace('{count}', String(deleted))

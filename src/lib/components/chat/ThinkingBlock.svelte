@@ -42,9 +42,7 @@
 	// A block is "sub-agent" when its agent_id is present AND different from
 	// the workflow's primary agent. Falsy primaryAgentId collapses to false
 	// (legacy/replay without registry hit) so layout stays unchanged.
-	const isSubAgent = $derived(
-		!!agentId && !!primaryAgentId && agentId !== primaryAgentId
-	);
+	const isSubAgent = $derived(!!agentId && !!primaryAgentId && agentId !== primaryAgentId);
 	const agentLabel = $derived(agentName ?? agentId?.slice(0, 8) ?? '');
 
 	function toggle(): void {

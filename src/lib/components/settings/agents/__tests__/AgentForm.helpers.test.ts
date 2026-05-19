@@ -5,13 +5,16 @@ import type { LLMModel } from '$types/llm';
 import type { MCPServerConfig } from '$types/mcp';
 import type { SkillSummary } from '$types/skill';
 import {
+	buildAgentCreatePayload,
+	buildAgentUpdatePayload,
 	buildAvailableMcpServers,
 	buildAvailableSkills,
 	buildProviderOptions,
 	formatContextWindow,
 	toProviderType,
 	toggleSelection,
-	validateAgentForm
+	validateAgentForm,
+	type AgentSubmitInput
 } from '../AgentForm.helpers';
 
 const t = (key: string) => key;
@@ -162,5 +165,90 @@ describe('AgentForm helpers', () => {
 			validateAgentForm(validationInput({ systemPrompt: 'a'.repeat(10001) })).systemPrompt
 		).toBe('agents_system_prompt_max');
 		expect(validateAgentForm(validationInput())).toEqual({});
+	});
+});
+
+const reasoningModel = {
+	...model,
+	is_reasoning: true
+} satisfies LLMModel;
+
+function submitInput(overrides: Partial<AgentSubmitInput> = {}): AgentSubmitInput {
+	return {
+		name: '  AgentOne  ',
+		lifecycle: 'permanent',
+		provider: 'mistral',
+		model: reasoningModel.api_name,
+		selectedModel: reasoningModel,
+		tools: ['MemoryTool'],
+		mcpServers: ['Serena'],
+		skills: ['skill-one'],
+		folders: ['/tmp/agent'],
+		requireFileConfirmation: true,
+		systemPrompt: '  You are helpful.  ',
+		maxToolIterations: 75,
+		reasoningEffort: 'high',
+		...overrides
+	};
+}
+
+describe('buildAgentCreatePayload', () => {
+	it('trims name and system_prompt while preserving the selected model snapshot', () => {
+		const payload = buildAgentCreatePayload(submitInput());
+
+		expect(payload.name).toBe('AgentOne');
+		expect(payload.system_prompt).toBe('You are helpful.');
+		expect(payload.lifecycle).toBe('permanent');
+		expect(payload.llm).toEqual({
+			provider: 'mistral',
+			model: reasoningModel.api_name,
+			temperature: reasoningModel.temperature_default,
+			max_tokens: reasoningModel.max_output_tokens,
+			is_reasoning: true,
+			context_window: reasoningModel.context_window
+		});
+		expect(payload.tools).toEqual(['MemoryTool']);
+		expect(payload.mcp_servers).toEqual(['Serena']);
+		expect(payload.skills).toEqual(['skill-one']);
+		expect(payload.folders).toEqual(['/tmp/agent']);
+		expect(payload.require_file_confirmation).toBe(true);
+		expect(payload.max_tool_iterations).toBe(75);
+		expect(payload.reasoning_effort).toBe('high');
+	});
+
+	it('omits reasoning_effort from JSON when undefined (read as outer None by the backend)', () => {
+		const payload = buildAgentCreatePayload(submitInput({ reasoningEffort: undefined }));
+
+		expect(payload.reasoning_effort).toBeUndefined();
+		// Round-tripping through JSON.stringify is the actual on-the-wire shape,
+		// so the test asserts the key is omitted rather than serialised as null.
+		const serialised = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+		expect('reasoning_effort' in serialised).toBe(false);
+	});
+});
+
+describe('buildAgentUpdatePayload', () => {
+	it('sends reasoning_effort as null when the form selected "Off" — backend clears the value', () => {
+		const payload = buildAgentUpdatePayload(submitInput({ reasoningEffort: undefined }));
+
+		// Explicit null is the trigger for `Some(None)` on the Rust side: the
+		// tri-state PATCH contract treats "absent" as "keep existing" and
+		// "null" as "clear". JSON.stringify preserves null but omits undefined,
+		// so we check both the in-memory value and the serialised payload.
+		expect(payload.reasoning_effort).toBeNull();
+		const serialised = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+		expect(serialised.reasoning_effort).toBeNull();
+	});
+
+	it('preserves an explicit reasoning_effort value on update', () => {
+		const payload = buildAgentUpdatePayload(submitInput({ reasoningEffort: 'medium' }));
+
+		expect(payload.reasoning_effort).toBe('medium');
+	});
+
+	it('does not carry the lifecycle field (update cannot change lifecycle)', () => {
+		const payload = buildAgentUpdatePayload(submitInput());
+
+		expect('lifecycle' in payload).toBe(false);
 	});
 });

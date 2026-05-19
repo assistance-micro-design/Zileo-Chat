@@ -169,7 +169,7 @@ Combines Providers and Models sections.
 			notify('success', $i18n('settings_provider_deleted', { name: deletedName }));
 			showProviderDeleteConfirm = false;
 			providerToDelete = null;
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'providers' });
 		} catch (err) {
 			notify('error', $i18n('settings_provider_delete_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -205,7 +205,7 @@ Combines Providers and Models sections.
 		} else {
 			notify('success', $i18n('llm_custom_provider_created'));
 		}
-		dispatchSettingsRefresh();
+		dispatchSettingsRefresh({ source: 'providers' });
 	}
 
 	/**
@@ -224,7 +224,7 @@ Combines Providers and Models sections.
 				notify('success', $i18n('settings_model_updated', { name: model.name }));
 			}
 			modelModal.close();
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'providers' });
 		} catch (err) {
 			notify('error', $i18n('settings_model_save_failed', { error: getErrorMessage(err) }));
 		} finally {
@@ -253,7 +253,7 @@ Combines Providers and Models sections.
 			notify('success', $i18n('settings_model_deleted', { name: deletedName }));
 			showModelDeleteConfirm = false;
 			modelToDelete = null;
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'providers' });
 		} catch (err) {
 			notify('error', $i18n('settings_model_delete_failed', { error: getErrorMessage(err) }));
 		} finally {

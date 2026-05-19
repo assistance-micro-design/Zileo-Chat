@@ -150,7 +150,7 @@
 			bind:this={textareaRef}
 			bind:value
 			placeholder={effectivePlaceholder}
-			disabled={disabled}
+			{disabled}
 			class="chat-input"
 			rows="1"
 			oninput={handleInput}
@@ -159,12 +159,7 @@
 			aria-describedby={showPendingHint ? 'chat-input-pending-hint' : undefined}
 		></textarea>
 		{#if showPendingHint}
-			<span
-				id="chat-input-pending-hint"
-				class="pending-hint"
-				role="status"
-				aria-live="polite"
-			>
+			<span id="chat-input-pending-hint" class="pending-hint" role="status" aria-live="polite">
 				{$i18n('chat_input_workflow_in_progress_hint')}
 			</span>
 		{/if}

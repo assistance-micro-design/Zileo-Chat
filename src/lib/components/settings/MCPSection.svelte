@@ -140,7 +140,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			mcpModal.close();
 			// Refresh the legacy banner: a successful save likely cleared a warning.
 			refreshLegacyAuthWarnings();
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'mcp' });
 		} catch (err) {
 			mcpState = setMCPError(
 				mcpState,
@@ -203,7 +203,7 @@ Manages MCP server configuration: list, create, edit, delete, test, start/stop.
 			legacyAuthWarnings = legacyAuthWarnings.filter((w) => w.id !== deletedId);
 			showDeleteConfirm = false;
 			serverToDelete = null;
-			dispatchSettingsRefresh();
+			dispatchSettingsRefresh({ source: 'mcp' });
 		} catch (err) {
 			mcpState = setMCPError(
 				mcpState,

@@ -12,7 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Custom deserializer that distinguishes JSON `null` from "field absent" for
+/// `Option<Option<T>>` fields.
+///
+/// Default serde behaviour maps both `null` and a missing key to outer `None`
+/// for `Option<Option<T>>`, which collapses the tri-state contract needed by
+/// PATCH-style payloads (absent = keep existing, null = clear, value = set).
+/// This deserializer is only invoked when the field is present in the JSON
+/// object, so the only path to outer `None` becomes `#[serde(default)]`
+/// (which serde applies for missing keys before this function runs). When
+/// the key is present, it returns `Some(inner)` where `inner` is `None` for
+/// JSON `null` or `Some(value)` otherwise — preserving the distinction.
+pub(crate) fn deserialize_explicit_option<'de, T, D>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
+}
 
 /// Reasoning effort level for thinking models.
 ///
@@ -240,8 +261,20 @@ pub struct AgentConfigUpdate {
     /// Maximum number of tool execution iterations (1-200)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tool_iterations: Option<usize>,
-    /// Reasoning effort for thinking models
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Reasoning effort for thinking models (PATCH tri-state)
+    ///
+    /// - Absent (`None` outer): keep existing value (no change).
+    /// - JSON `null` (`Some(None)` outer): clear the value.
+    /// - JSON value (`Some(Some(_))`): set to the new value.
+    ///
+    /// The custom deserializer is required to preserve this tri-state; the
+    /// default serde behaviour for `Option<Option<T>>` collapses `null` and
+    /// "absent" into the same outer `None`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_explicit_option"
+    )]
     pub reasoning_effort: Option<Option<ReasoningEffort>>,
 }
 
