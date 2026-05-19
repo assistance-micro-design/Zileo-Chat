@@ -191,9 +191,20 @@ pub async fn load_workflow_tool_executions(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<ToolExecution>, String> {
+    load_workflow_tool_executions_core(&state.db, &workflow_id).await
+}
+
+/// Loads all tool executions for a workflow with the canonical field set.
+///
+/// Extracted as a `_core` helper so `load_workflow_full_state` can delegate
+/// here. Keeps the `sequence` ordering intact.
+pub(crate) async fn load_workflow_tool_executions_core(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> Result<Vec<ToolExecution>, String> {
     info!("Loading workflow tool executions");
 
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_workflow_id = validate_uuid_field(workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -220,7 +231,7 @@ pub async fn load_workflow_tool_executions(
         validated_workflow_id
     );
 
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
+    let json_results = db.query_json(&query).await.map_err(|e| {
         error!(error = %e, "Failed to load workflow tool executions");
         format!("Failed to load workflow tool executions: {}", e)
     })?;

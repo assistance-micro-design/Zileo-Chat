@@ -164,6 +164,44 @@ describe('applyChunkToState', () => {
 			expect(result.subAgents[0]?.metrics?.cost_usd).toBeCloseTo(0.0042);
 		});
 
+		it('propagates cached + cache_write + thinking from metrics for live per-agent chips', () => {
+			// The wire chunk carries cache + thinking breakdown so
+			// `MessageMetrics` can show `cache:Xk` / `think:Yk` chips per
+			// sub-agent without waiting for the post-stream workflow reload.
+			const startState = applyChunkToState(
+				state,
+				makeChunk({
+					chunk_type: 'sub_agent_start',
+					sub_agent_id: 'sa-cache',
+					sub_agent_name: 'CacheAware'
+				})
+			);
+
+			const result = applyChunkToState(
+				startState,
+				makeChunk({
+					chunk_type: 'sub_agent_complete',
+					sub_agent_id: 'sa-cache',
+					content: 'done',
+					duration: 1200,
+					metrics: {
+						duration_ms: 1200,
+						tokens_input: 800,
+						tokens_output: 200,
+						cost_usd: 0.001,
+						cached_tokens: 640,
+						cache_write_tokens: 160,
+						thinking_tokens: 48
+					}
+				})
+			);
+
+			const metrics = result.subAgents[0]?.metrics;
+			expect(metrics?.cached_tokens).toBe(640);
+			expect(metrics?.cache_write_tokens).toBe(160);
+			expect(metrics?.thinking_tokens).toBe(48);
+		});
+
 		it('leaves other sub-agents untouched', () => {
 			let s = applyChunkToState(
 				state,

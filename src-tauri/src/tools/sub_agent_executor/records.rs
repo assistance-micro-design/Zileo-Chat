@@ -345,6 +345,12 @@ impl SubAgentExecutor {
                     // per-block UIs display the cost without depending on a
                     // DB lookup post-stream.
                     cost_usd: result.metrics.cost_usd,
+                    // Forward the cache + thinking breakdown the executor
+                    // already holds so the live `SubAgentBlock` lights up
+                    // the same rows the replay path projects.
+                    cached_tokens: result.metrics.cached_tokens,
+                    cache_write_tokens: result.metrics.cache_write_tokens,
+                    thinking_tokens: result.metrics.thinking_tokens,
                 },
             );
             self.emit_event(events::WORKFLOW_STREAM, &chunk);

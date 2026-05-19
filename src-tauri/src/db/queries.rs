@@ -52,6 +52,8 @@ pub mod workflow {
         (current_context_tokens ?? 0) AS current_context_tokens, \
         (sub_agent_tokens_input ?? 0) AS sub_agent_tokens_input, \
         (sub_agent_tokens_output ?? 0) AS sub_agent_tokens_output, \
+        (total_cached_tokens ?? 0) AS total_cached_tokens, \
+        (total_cache_write_tokens ?? 0) AS total_cache_write_tokens, \
         sub_agent_cost_usd, \
         folder_id, \
         (pinned ?? false) AS pinned";
@@ -297,8 +299,33 @@ pub mod cleanup {
 mod tests {
     use super::cascade::delete_workflow_related;
     use super::cleanup::purge_expired_memories;
+    use super::workflow::{SELECT_BASE, SELECT_LIST};
     use crate::test_utils::setup_test_state;
     use std::sync::Arc;
+
+    /// Regression guard: the cumulative cache token columns are defined on
+    /// the schema and written by the streaming pricing updater. The
+    /// centralized SELECT `FIELDS` constant must include them — otherwise
+    /// every read of `workflow` returns `None` for those two columns and
+    /// silently masks real cache activity after reload.
+    #[test]
+    fn workflow_fields_constant_includes_cache_totals() {
+        let base = SELECT_BASE.as_str();
+        let list = SELECT_LIST.as_str();
+
+        assert!(
+            base.contains("total_cached_tokens"),
+            "SELECT_BASE must surface total_cached_tokens (otherwise replay loses cache reads)"
+        );
+        assert!(
+            base.contains("total_cache_write_tokens"),
+            "SELECT_BASE must surface total_cache_write_tokens"
+        );
+        assert!(
+            list.contains("total_cached_tokens") && list.contains("total_cache_write_tokens"),
+            "SELECT_LIST (derived from SELECT_BASE) must also surface both cache totals"
+        );
+    }
 
     /// Inserts a parent `memory` row with `workflow_id = $wf_id` and one
     /// `memory_chunk` linked to it. Used to assert cascade behaviour without

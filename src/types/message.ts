@@ -44,6 +44,15 @@ export interface SubAgentSummary {
 	 * `sub_agent_complete.metrics.cost_usd` populated by `compute_sub_agent_cost`.
 	 */
 	cost_usd?: number;
+	/**
+	 * Cached prompt tokens (cache reads). Same wire source as `cost_usd`
+	 * — propagated to `MessageMetrics` for per-sub-agent chip display.
+	 */
+	cached_tokens?: number;
+	/** Cache-write prompt tokens. Same contract as `cached_tokens`. */
+	cache_write_tokens?: number;
+	/** Thinking/reasoning tokens (reasoning models only). */
+	thinking_tokens?: number;
 }
 
 /**

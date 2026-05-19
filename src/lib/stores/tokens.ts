@@ -118,8 +118,8 @@ export const tokenStore = {
 				input: workflow.total_tokens_input ?? 0,
 				output: workflow.total_tokens_output ?? 0,
 				cost: workflow.total_cost_usd ?? 0,
-				cached: workflow.total_cached_tokens ?? null,
-				cacheWrite: workflow.total_cache_write_tokens ?? null
+				cached: workflow.total_cached_tokens,
+				cacheWrite: workflow.total_cache_write_tokens
 			},
 			subAgent: {
 				input: workflow.sub_agent_tokens_input ?? 0,

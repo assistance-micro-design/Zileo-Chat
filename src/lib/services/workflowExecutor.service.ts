@@ -297,7 +297,13 @@ export const WorkflowExecutorService = {
 						duration_ms: a.metrics?.duration_ms,
 						tokens_input: a.metrics?.tokens_input,
 						tokens_output: a.metrics?.tokens_output,
-						cost_usd: a.metrics?.cost_usd
+						cost_usd: a.metrics?.cost_usd,
+						// Forward cache + thinking from the live background execution
+						// snapshot so the per-agent MessageMetrics chip displays them
+						// immediately (before the workflow reload picks them from DB).
+						cached_tokens: a.metrics?.cached_tokens,
+						cache_write_tokens: a.metrics?.cache_write_tokens,
+						thinking_tokens: a.metrics?.thinking_tokens
 					}));
 				if (subAgentSummaries.length > 0) {
 					assistantMessage.sub_agents = subAgentSummaries;

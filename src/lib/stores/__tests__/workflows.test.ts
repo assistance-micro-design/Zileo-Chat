@@ -52,8 +52,8 @@ describe('Workflow Store', () => {
 		current_context_tokens: 0,
 		sub_agent_tokens_input: 0,
 		sub_agent_tokens_output: 0,
-		total_cached_tokens: null,
-		total_cache_write_tokens: null,
+		total_cached_tokens: 0,
+		total_cache_write_tokens: 0,
 		pinned: false
 	});
 

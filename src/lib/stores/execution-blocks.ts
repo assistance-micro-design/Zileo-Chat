@@ -175,6 +175,11 @@ function handleSubAgentComplete(
 		tokens_input: chunk.metrics?.tokens_input,
 		tokens_output: chunk.metrics?.tokens_output,
 		cost_usd: chunk.metrics?.cost_usd,
+		// Propagate the cache + thinking breakdown the wire chunk carries
+		// so the live `SubAgentBlock` shows the same row as the replay path.
+		cached_tokens: chunk.metrics?.cached_tokens,
+		cache_write_tokens: chunk.metrics?.cache_write_tokens,
+		thinking_tokens: chunk.metrics?.thinking_tokens,
 		report_summary: chunk.content,
 		_sub_agent_id: subAgentId
 	};

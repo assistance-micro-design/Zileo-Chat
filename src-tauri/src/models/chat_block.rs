@@ -177,6 +177,12 @@ pub fn merge_into_chat_blocks(
                         // metrics.cost_usd). `None` becomes JSON `null` and
                         // the frontend hides the cost row gracefully.
                         "cost_usd": sa.cost_usd,
+                        // Project the cache + thinking breakdown the live
+                        // stream already carries so the replay path lights
+                        // up the same `SubAgentBlock` cache/thinking rows.
+                        "cached_tokens": sa.cached_tokens,
+                        "cache_write_tokens": sa.cache_write_tokens,
+                        "thinking_tokens": sa.thinking_tokens,
                         "report_summary": sa.result_summary,
                     });
 
@@ -268,6 +274,9 @@ mod tests {
             tokens_input: Some(100),
             tokens_output: Some(50),
             cost_usd: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
             result_summary: Some("done".to_string()),
             error_message: None,
             parent_execution_id: None,
@@ -594,5 +603,60 @@ mod tests {
         assert_eq!(blocks[0].sequence, 0);
         assert_eq!(blocks[1].block_type, ChatBlockType::ToolCall);
         assert_eq!(blocks[1].sequence, 1);
+    }
+
+    #[test]
+    fn test_merge_projects_sub_agent_cache_and_thinking_fields() {
+        // Regression: `merge_into_chat_blocks` must surface the cache +
+        // thinking breakdown in `SubAgentBlockData` so the replay path
+        // shows the same rows the live `sub_agent_complete` chunk lights up.
+        let mut sa = make_sub_agent_execution("Researcher", SubAgentStatus::Completed, base_time());
+        sa.cached_tokens = Some(640);
+        sa.cache_write_tokens = Some(160);
+        sa.thinking_tokens = Some(48);
+
+        let blocks = merge_into_chat_blocks(&[], &[], &[sa], &HashMap::new());
+
+        assert_eq!(blocks.len(), 1);
+        let data = &blocks[0].data;
+        assert_eq!(
+            data["cached_tokens"], 640,
+            "cached_tokens must be projected into SubAgentBlockData"
+        );
+        assert_eq!(
+            data["cache_write_tokens"], 160,
+            "cache_write_tokens must be projected"
+        );
+        assert_eq!(
+            data["thinking_tokens"], 48,
+            "thinking_tokens must be projected"
+        );
+    }
+
+    #[test]
+    fn test_merge_projects_sub_agent_cache_fields_as_null_when_absent() {
+        // Legacy sub_agent_execution rows (no cache/thinking columns) must
+        // produce JSON `null` for the three fields so the frontend hides
+        // the cache row gracefully — never `undefined`, never a missing
+        // key (the frontend distinguishes "absent column" from "zero").
+        let sa = make_sub_agent_execution("Researcher", SubAgentStatus::Completed, base_time());
+        assert!(sa.cached_tokens.is_none(), "fixture starts at None");
+
+        let blocks = merge_into_chat_blocks(&[], &[], &[sa], &HashMap::new());
+
+        let data = &blocks[0].data;
+        assert!(
+            data["cached_tokens"].is_null(),
+            "cached_tokens must be null when absent (got {:?})",
+            data["cached_tokens"]
+        );
+        assert!(
+            data["cache_write_tokens"].is_null(),
+            "cache_write_tokens must be null when absent"
+        );
+        assert!(
+            data["thinking_tokens"].is_null(),
+            "thinking_tokens must be null when absent"
+        );
     }
 }

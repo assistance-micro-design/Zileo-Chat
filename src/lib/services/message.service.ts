@@ -76,7 +76,14 @@ function enrichMessagesWithSubAgents(
 			status: exec.status === 'cancelled' ? 'completed' : (exec.status as 'completed' | 'error'),
 			duration_ms: exec.duration_ms,
 			tokens_input: exec.tokens_input,
-			tokens_output: exec.tokens_output
+			tokens_output: exec.tokens_output,
+			cost_usd: exec.cost_usd,
+			// Propagate cache + thinking from the persisted execution into the
+			// per-agent chip on MessageMetrics. `null` from the wire is
+			// normalized to `undefined` so the chip hides cleanly.
+			cached_tokens: exec.cached_tokens ?? undefined,
+			cache_write_tokens: exec.cache_write_tokens ?? undefined,
+			thinking_tokens: exec.thinking_tokens ?? undefined
 		};
 
 		if (!target.sub_agents) {

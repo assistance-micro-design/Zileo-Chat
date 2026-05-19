@@ -25,6 +25,17 @@
 		 * no pricing row; the cost row is hidden in that case.
 		 */
 		costUsd?: number;
+		/**
+		 * Cached prompt tokens (cache reads). Live source:
+		 * `sub_agent_complete.metrics.cached_tokens`. Replay source:
+		 * `merge_into_chat_blocks` projection of `sub_agent_execution.cached_tokens`.
+		 * `null`/absent hides the row.
+		 */
+		cachedTokens?: number | null;
+		/** Cache-write prompt tokens. Same source contract as `cachedTokens`. */
+		cacheWriteTokens?: number | null;
+		/** Thinking/reasoning tokens (reasoning models). Same contract as `cachedTokens`. */
+		thinkingTokens?: number | null;
 		reportSummary?: string;
 		collapsed?: boolean;
 		/** Stable block sequence used to derive a deterministic DOM id */
@@ -44,11 +55,20 @@
 		tokensInput,
 		tokensOutput,
 		costUsd,
+		cachedTokens,
+		cacheWriteTokens,
+		thinkingTokens,
 		reportSummary,
 		collapsed = true,
 		sequence,
 		internalBlockCount = 0
 	}: Props = $props();
+
+	const hasCacheRow = $derived(
+		(cachedTokens != null && cachedTokens > 0) ||
+			(cacheWriteTokens != null && cacheWriteTokens > 0) ||
+			(thinkingTokens != null && thinkingTokens > 0)
+	);
 
 	const formattedCost = $derived(
 		costUsd && costUsd > 0 ? `$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2)}` : null
@@ -133,6 +153,20 @@
 						<span class="token-label"
 							>{$i18n('chat_tokens_out')}: {tokensOutput.toLocaleString()}</span
 						>
+					{/if}
+				</div>
+			{/if}
+
+			{#if hasCacheRow}
+				<div class="agent-tokens agent-cache-row">
+					{#if cachedTokens != null && cachedTokens > 0}
+						<span class="token-label">cache: {cachedTokens.toLocaleString()}</span>
+					{/if}
+					{#if cacheWriteTokens != null && cacheWriteTokens > 0}
+						<span class="token-label">+write: {cacheWriteTokens.toLocaleString()}</span>
+					{/if}
+					{#if thinkingTokens != null && thinkingTokens > 0}
+						<span class="token-label">thinking: {thinkingTokens.toLocaleString()}</span>
 					{/if}
 				</div>
 			{/if}

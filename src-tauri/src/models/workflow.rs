@@ -70,12 +70,20 @@ pub struct Workflow {
     /// Cumulative output tokens from sub-agents only
     #[serde(default)]
     pub sub_agent_tokens_output: u64,
-    /// Cumulative cached input tokens for this workflow (cache reads)
+    /// Cumulative cached input tokens for this workflow (cache reads).
+    ///
+    /// Plain `u64` (not `Option`) for symmetry with `total_tokens_input` /
+    /// `total_tokens_output`: the schema column has `DEFAULT 0`, the SELECT
+    /// constant in `db::queries::workflow::FIELDS` coalesces with `?? 0`,
+    /// and the legacy backfill migration materializes NONE rows to 0. Any
+    /// remaining `None` from older deserialization paths falls through to 0
+    /// via `#[serde(default)]`.
     #[serde(default)]
-    pub total_cached_tokens: Option<u64>,
-    /// Cumulative cache-write tokens for this workflow
+    pub total_cached_tokens: u64,
+    /// Cumulative cache-write tokens for this workflow. Same shape contract
+    /// as `total_cached_tokens` above.
     #[serde(default)]
-    pub total_cache_write_tokens: Option<u64>,
+    pub total_cache_write_tokens: u64,
     /// Folder ID for organization (None = uncategorized)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder_id: Option<String>,
@@ -306,8 +314,8 @@ mod tests {
             current_context_tokens: 0,
             sub_agent_tokens_input: 0,
             sub_agent_tokens_output: 0,
-            total_cached_tokens: None,
-            total_cache_write_tokens: None,
+            total_cached_tokens: 0,
+            total_cache_write_tokens: 0,
             folder_id: Some("folder-123".to_string()),
             pinned: true,
             sub_agent_cost_usd: Some(0.0125),
@@ -344,8 +352,8 @@ mod tests {
             current_context_tokens: 0,
             sub_agent_tokens_input: 0,
             sub_agent_tokens_output: 0,
-            total_cached_tokens: None,
-            total_cache_write_tokens: None,
+            total_cached_tokens: 0,
+            total_cache_write_tokens: 0,
             folder_id: None,
             pinned: false,
             sub_agent_cost_usd: None,
@@ -362,11 +370,15 @@ mod tests {
         );
         assert!(json.contains("\"pinned\":false"));
 
-        // Verify deserialization without folder_id field works (backwards compat)
+        // Backward-compat: legacy JSON missing the cache totals deserializes
+        // to 0 via `#[serde(default)]` (mirrors what the SELECT coalescing
+        // already guarantees on the read path).
         let minimal_json = r#"{"id":"wf_003","name":"Old","agent_id":"a1","status":"idle","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}"#;
         let wf: Workflow = serde_json::from_str(minimal_json).unwrap();
         assert_eq!(wf.folder_id, None);
         assert!(!wf.pinned);
+        assert_eq!(wf.total_cached_tokens, 0);
+        assert_eq!(wf.total_cache_write_tokens, 0);
     }
 
     #[test]

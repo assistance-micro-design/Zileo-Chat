@@ -123,9 +123,20 @@ pub async fn load_workflow_thinking_steps(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<ThinkingStep>, String> {
+    load_workflow_thinking_steps_core(&state.db, &workflow_id).await
+}
+
+/// Loads all thinking steps for a workflow with the canonical field set.
+///
+/// Extracted as a `_core` helper so `load_workflow_full_state` can delegate
+/// here. Preserves the `sequence ASC, step_number ASC` ordering.
+pub(crate) async fn load_workflow_thinking_steps_core(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> Result<Vec<ThinkingStep>, String> {
     info!("Loading workflow thinking steps");
 
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_workflow_id = validate_uuid_field(workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -148,7 +159,7 @@ pub async fn load_workflow_thinking_steps(
         validated_workflow_id
     );
 
-    let json_results = state.db.query_json(&query).await.map_err(|e| {
+    let json_results = db.query_json(&query).await.map_err(|e| {
         error!(error = %e, "Failed to load workflow thinking steps");
         format!("Failed to load workflow thinking steps: {}", e)
     })?;

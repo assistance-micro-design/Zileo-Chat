@@ -248,3 +248,189 @@ async fn test_toggle_workflow_pinned() {
         "Workflow should be unpinned after second toggle"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `load_workflow_full_state` round-trip tests
+// ---------------------------------------------------------------------------
+// The tests below seed rows with cache / thinking / sequence / source / model_id
+// fields populated and assert the recovered `WorkflowFullState` surfaces all
+// of them — locking the delegation to the canonical `_core` helpers in place
+// so a future divergent rewrite of the parallel SELECTs would fail loudly.
+
+/// Seeds a `workflow` row used as the anchor for the round-trip tests.
+async fn seed_full_state_workflow(db: &DBClient) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    let query = format!(
+        "CREATE workflow:`{id}` SET \
+            name = 'Drift Workflow', \
+            agent_id = 'orchestrator', \
+            status = 'idle', \
+            pinned = false"
+    );
+    db.db
+        .query(&query)
+        .await
+        .expect("seed workflow query")
+        .check()
+        .expect("seed workflow validation");
+    id
+}
+
+#[tokio::test]
+async fn load_workflow_full_state_returns_message_cache_and_thinking_fields() {
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let workflow_id = seed_full_state_workflow(&state.db).await;
+    let message_id = uuid::Uuid::new_v4().to_string();
+
+    // Seed an assistant message with the four fields the old full_state
+    // query silently dropped.
+    let query = format!(
+        "CREATE message:`{message_id}` SET \
+            workflow_id = $wf_id, role = 'assistant', content = 'r', \
+            tokens = 600, tokens_input = 400, tokens_output = 200, \
+            cost_usd = 0.0025, duration_ms = 12, \
+            thinking_tokens = 80, cached_tokens = 320, \
+            cache_write_tokens = 64, model_id_used = $model"
+    );
+    state
+        .db
+        .db
+        .query(&query)
+        .bind(("wf_id", workflow_id.clone()))
+        .bind(("model", "magistral-medium".to_string()))
+        .await
+        .expect("seed message")
+        .check()
+        .expect("CREATE message validation");
+
+    let state_dump = super::load_workflow_full_state_core(&state.db, &workflow_id)
+        .await
+        .expect("full state must load");
+
+    assert_eq!(state_dump.messages.len(), 1, "one message seeded");
+    let msg = &state_dump.messages[0];
+    assert_eq!(
+        msg.thinking_tokens,
+        Some(80),
+        "thinking_tokens must survive replay"
+    );
+    assert_eq!(
+        msg.cached_tokens,
+        Some(320),
+        "cached_tokens must survive replay"
+    );
+    assert_eq!(
+        msg.cache_write_tokens,
+        Some(64),
+        "cache_write_tokens must survive replay"
+    );
+    assert_eq!(
+        msg.model_id_used.as_deref(),
+        Some("magistral-medium"),
+        "model_id_used must survive replay"
+    );
+}
+
+#[tokio::test]
+async fn load_workflow_full_state_orders_tool_executions_by_sequence() {
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let workflow_id = seed_full_state_workflow(&state.db).await;
+    let agent_id = "agent-1".to_string();
+    let message_id = "msg-1".to_string();
+
+    // Three rows inserted out of sequence order — only a SELECT that
+    // includes `sequence` AND orders by it will return them sorted.
+    for seq in [2u32, 0u32, 1u32] {
+        let id = uuid::Uuid::new_v4().to_string();
+        let tool_name = format!("tool_seq_{seq}");
+        let query = format!(
+            "CREATE tool_execution:`{id}` SET \
+                workflow_id = $wf_id, message_id = $msg_id, agent_id = $agent, \
+                tool_type = 'local', tool_name = $tool, input_params = '{{}}', \
+                output_result = '{{}}', success = true, duration_ms = 1, \
+                iteration = 0, sequence = $seq, created_at = time::now()"
+        );
+        state
+            .db
+            .db
+            .query(&query)
+            .bind(("wf_id", workflow_id.clone()))
+            .bind(("msg_id", message_id.clone()))
+            .bind(("agent", agent_id.clone()))
+            .bind(("tool", tool_name))
+            .bind(("seq", seq))
+            .await
+            .expect("seed tool_execution")
+            .check()
+            .expect("CREATE tool_execution validation");
+    }
+
+    let state_dump = super::load_workflow_full_state_core(&state.db, &workflow_id)
+        .await
+        .expect("full state must load");
+
+    assert_eq!(state_dump.tool_executions.len(), 3);
+    let sequences: Vec<u32> = state_dump
+        .tool_executions
+        .iter()
+        .map(|t| t.sequence)
+        .collect();
+    assert_eq!(
+        sequences,
+        vec![0, 1, 2],
+        "tool_executions must be ordered by sequence"
+    );
+}
+
+#[tokio::test]
+async fn load_workflow_full_state_returns_thinking_sequence_and_source() {
+    let (state, _db_guard) = crate::test_utils::setup_test_state().await;
+    let workflow_id = seed_full_state_workflow(&state.db).await;
+    let message_id = "msg-think".to_string();
+    let agent_id = "agent-think".to_string();
+
+    // Two thinking steps: one driven by the agent flow, one model-emitted.
+    // The old full_state query omitted both `sequence` and `source`, so the
+    // replay UI lost the ability to distinguish them. The two values below
+    // are the only ones allowed by the schema's ASSERT clause on `source`.
+    let rows = [(1u32, "agent_flow"), (2u32, "model_thinking")];
+    for (seq, source) in rows {
+        let id = uuid::Uuid::new_v4().to_string();
+        let query = format!(
+            "CREATE thinking_step:`{id}` SET \
+                workflow_id = $wf_id, message_id = $msg_id, agent_id = $agent, \
+                step_number = $seq, content = 'thinking', \
+                duration_ms = 1, tokens = 1, sequence = $seq, source = $src, \
+                created_at = time::now()"
+        );
+        state
+            .db
+            .db
+            .query(&query)
+            .bind(("wf_id", workflow_id.clone()))
+            .bind(("msg_id", message_id.clone()))
+            .bind(("agent", agent_id.clone()))
+            .bind(("seq", seq))
+            .bind(("src", source.to_string()))
+            .await
+            .expect("seed thinking_step")
+            .check()
+            .expect("CREATE thinking_step validation");
+    }
+
+    let state_dump = super::load_workflow_full_state_core(&state.db, &workflow_id)
+        .await
+        .expect("full state must load");
+
+    assert_eq!(state_dump.thinking_steps.len(), 2);
+    let sources: Vec<&str> = state_dump
+        .thinking_steps
+        .iter()
+        .map(|s| s.source.as_str())
+        .collect();
+    assert_eq!(
+        sources,
+        vec!["agent_flow", "model_thinking"],
+        "thinking_steps must surface `source` and be ordered by `sequence`"
+    );
+}

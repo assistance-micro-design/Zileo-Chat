@@ -66,6 +66,16 @@ export interface SubAgentStreamMetrics {
 	 * display in `SubAgentBlock` and `MessageMetrics`.
 	 */
 	cost_usd?: number;
+	/**
+	 * Cached prompt tokens (cache reads) reported by the sub-agent's
+	 * provider. Drives the live `SubAgentBlock` cache row alongside its
+	 * persisted equivalent.
+	 */
+	cached_tokens?: number;
+	/** Cache-write prompt tokens. Same contract as `cached_tokens`. */
+	cache_write_tokens?: number;
+	/** Thinking/reasoning tokens (reasoning models only). */
+	thinking_tokens?: number;
 }
 
 /**

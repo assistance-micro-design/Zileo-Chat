@@ -188,8 +188,8 @@ describe('tokenDisplayData.sub_agent_cost_usd', () => {
 			current_context_tokens: 100,
 			sub_agent_tokens_input: 80,
 			sub_agent_tokens_output: 40,
-			total_cached_tokens: null,
-			total_cache_write_tokens: null,
+			total_cached_tokens: 0,
+			total_cache_write_tokens: 0,
 			sub_agent_cost_usd: 0.0042,
 			pinned: false
 		});
@@ -216,8 +216,8 @@ describe('tokenDisplayData.sub_agent_cost_usd', () => {
 			current_context_tokens: 0,
 			sub_agent_tokens_input: 0,
 			sub_agent_tokens_output: 0,
-			total_cached_tokens: null,
-			total_cache_write_tokens: null,
+			total_cached_tokens: 0,
+			total_cache_write_tokens: 0,
 			pinned: false
 		});
 

@@ -205,6 +205,19 @@ pub struct SubAgentStreamMetrics {
     /// only the aggregated total.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cost_usd: Option<f64>,
+    /// Cached prompt tokens (cache reads) reported by the sub-agent's
+    /// provider. Mirrors the persisted column so the live UI shows the
+    /// same cache breakdown that `merge_into_chat_blocks` surfaces on
+    /// replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+    /// Cache-write prompt tokens reported by the sub-agent's provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// Thinking/reasoning tokens consumed by the sub-agent (reasoning
+    /// models only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u64>,
 }
 
 impl StreamChunk {
@@ -828,6 +841,9 @@ mod tests {
             tokens_input: 500,
             tokens_output: 1000,
             cost_usd: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
         };
         let chunk = StreamChunk::sub_agent_complete(
             "wf_001".to_string(),
@@ -877,6 +893,9 @@ mod tests {
             tokens_input: 250,
             tokens_output: 800,
             cost_usd: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
         };
 
         let json = serde_json::to_string(&metrics).unwrap();
@@ -885,6 +904,46 @@ mod tests {
         assert!(json.contains("\"tokens_output\":800"));
         // None cost MUST be omitted from the wire payload (skip_serializing_if).
         assert!(!json.contains("\"cost_usd\""));
+        // Cache + thinking fields must also be skipped when absent
+        // (legacy provider with no caching).
+        assert!(!json.contains("\"cached_tokens\""));
+        assert!(!json.contains("\"cache_write_tokens\""));
+        assert!(!json.contains("\"thinking_tokens\""));
+    }
+
+    #[test]
+    fn test_sub_agent_stream_metrics_serializes_cache_and_thinking_when_some() {
+        // Wire-shape regression: the live `sub_agent_complete` chunk MUST
+        // carry the cache breakdown and thinking-token count when the
+        // provider reports them, otherwise the per-bubble `SubAgentBlock`
+        // row falls back to "Free/no thinking" even though the same row
+        // appears correctly after a workflow reload.
+        let metrics = SubAgentStreamMetrics {
+            duration_ms: 1200,
+            tokens_input: 800,
+            tokens_output: 200,
+            cost_usd: Some(0.001),
+            cached_tokens: Some(640),
+            cache_write_tokens: Some(160),
+            thinking_tokens: Some(48),
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(
+            json.contains("\"cached_tokens\":640"),
+            "cached_tokens must serialize when Some, got: {}",
+            json
+        );
+        assert!(
+            json.contains("\"cache_write_tokens\":160"),
+            "cache_write_tokens must serialize when Some, got: {}",
+            json
+        );
+        assert!(
+            json.contains("\"thinking_tokens\":48"),
+            "thinking_tokens must serialize when Some, got: {}",
+            json
+        );
     }
 
     #[test]
@@ -897,6 +956,9 @@ mod tests {
             tokens_input: 100,
             tokens_output: 200,
             cost_usd: Some(0.0123),
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
         };
 
         let json = serde_json::to_string(&metrics).unwrap();
@@ -917,6 +979,9 @@ mod tests {
             tokens_input: 100,
             tokens_output: 200,
             cost_usd: Some(0.005),
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
         };
         let chunk = StreamChunk::sub_agent_complete(
             "wf_001".to_string(),

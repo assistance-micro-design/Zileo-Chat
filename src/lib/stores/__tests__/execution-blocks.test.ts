@@ -15,6 +15,7 @@ import {
 	executionTasks
 } from '../execution-blocks';
 import type { StreamChunk } from '$types/streaming';
+import type { SubAgentBlockData } from '$types/chat-block';
 
 describe('executionBlocksStore', () => {
 	beforeEach(() => {
@@ -328,6 +329,63 @@ describe('executionBlocksStore', () => {
 				tokens_output: 200,
 				report_summary: 'Research completed.'
 			});
+		});
+
+		it('propagates cached + cache_write + thinking from chunk.metrics into SubAgentBlockData', () => {
+			// The live wire chunk now carries cache + thinking metrics.
+			// The block built by `handleSubAgentComplete` must surface them
+			// so `SubAgentBlock` renders the same cache row the replay path
+			// projects from DB.
+			executionBlocksStore.start('wf-456');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-456',
+				chunk_type: 'sub_agent_complete',
+				sub_agent_name: 'CacheAwareAgent',
+				sub_agent_id: 'sa-cache-1',
+				content: 'done',
+				metrics: {
+					duration_ms: 1200,
+					tokens_input: 800,
+					tokens_output: 200,
+					cost_usd: 0.001,
+					cached_tokens: 640,
+					cache_write_tokens: 160,
+					thinking_tokens: 48
+				}
+			});
+
+			const blocks = get(executionBlocks);
+			expect(blocks).toHaveLength(1);
+			const data = blocks[0]!.data as SubAgentBlockData;
+			expect(data.cost_usd).toBe(0.001);
+			expect(data.cached_tokens).toBe(640);
+			expect(data.cache_write_tokens).toBe(160);
+			expect(data.thinking_tokens).toBe(48);
+		});
+
+		it('leaves cache fields undefined when chunk metrics omit them (legacy providers)', () => {
+			// Non-caching provider: chunk.metrics has only the 3 core fields.
+			// `SubAgentBlockData` must keep cache_* as undefined so the UI
+			// hides the cache row gracefully (`hasCacheRow` derived = false).
+			executionBlocksStore.start('wf-789');
+			executionBlocksStore.processChunk({
+				workflow_id: 'wf-789',
+				chunk_type: 'sub_agent_complete',
+				sub_agent_name: 'OllamaAgent',
+				sub_agent_id: 'sa-ollama-1',
+				content: 'done',
+				metrics: {
+					duration_ms: 500,
+					tokens_input: 100,
+					tokens_output: 50
+				}
+			});
+
+			const blocks = get(executionBlocks);
+			const data = blocks[0]!.data as SubAgentBlockData;
+			expect(data.cached_tokens).toBeUndefined();
+			expect(data.cache_write_tokens).toBeUndefined();
+			expect(data.thinking_tokens).toBeUndefined();
 		});
 	});
 

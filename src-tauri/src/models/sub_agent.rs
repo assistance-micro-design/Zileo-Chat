@@ -106,6 +106,20 @@ pub struct SubAgentExecution {
     /// sub-agent blocks can display the per-bubble cost like the live path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_usd: Option<f64>,
+    /// Cached prompt tokens (cache reads) reported by the sub-agent's
+    /// provider. Persisted by `update_execution_record` and surfaced on the
+    /// replay path so the per-bubble `SubAgentBlock` displays the same cache
+    /// breakdown as the live stream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
+    /// Cache-write prompt tokens for the sub-agent execution. Same
+    /// round-trip contract as `cached_tokens`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write_tokens: Option<u64>,
+    /// Thinking/reasoning tokens consumed by the sub-agent (reasoning
+    /// models only). Same round-trip contract as `cached_tokens`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u64>,
     /// Summary of the sub-agent's report (truncated for storage)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result_summary: Option<String>,
@@ -535,5 +549,102 @@ mod tests {
 
         let json = serde_json::to_string(&create).unwrap();
         assert!(json.contains("\"parent_message_id\":\"msg_a_001\""));
+    }
+
+    // Round-trip guards for the cache + thinking fields that mirror the
+    // persisted columns. (a) `Some(_)` values must serialize, (b) `None`
+    // values must be skipped (skip_serializing_if), (c) DB rows missing
+    // the columns (legacy `option<int>` with NONE) must deserialize via
+    // `#[serde(default)]`.
+
+    fn make_sub_agent_execution_with_cache(
+        cached: Option<u64>,
+        cache_write: Option<u64>,
+        thinking: Option<u64>,
+    ) -> SubAgentExecution {
+        SubAgentExecution {
+            id: "sa_test".to_string(),
+            workflow_id: "wf_001".to_string(),
+            parent_agent_id: "agent_001".to_string(),
+            sub_agent_id: "sub_agent_001".to_string(),
+            sub_agent_name: "Analyzer".to_string(),
+            task_description: "task".to_string(),
+            status: SubAgentStatus::Completed,
+            duration_ms: Some(500),
+            tokens_input: Some(100),
+            tokens_output: Some(200),
+            cost_usd: Some(0.001),
+            cached_tokens: cached,
+            cache_write_tokens: cache_write,
+            thinking_tokens: thinking,
+            result_summary: None,
+            error_message: None,
+            parent_execution_id: None,
+            parent_message_id: None,
+            created_at: Utc::now(),
+            completed_at: None,
+        }
+    }
+
+    #[test]
+    fn test_sub_agent_execution_serializes_cache_fields_when_some() {
+        let exec = make_sub_agent_execution_with_cache(Some(640), Some(160), Some(48));
+        let json = serde_json::to_string(&exec).unwrap();
+        assert!(
+            json.contains("\"cached_tokens\":640"),
+            "cached_tokens must serialize when Some, got: {}",
+            json
+        );
+        assert!(
+            json.contains("\"cache_write_tokens\":160"),
+            "cache_write_tokens must serialize when Some, got: {}",
+            json
+        );
+        assert!(
+            json.contains("\"thinking_tokens\":48"),
+            "thinking_tokens must serialize when Some, got: {}",
+            json
+        );
+    }
+
+    #[test]
+    fn test_sub_agent_execution_skips_cache_fields_when_none() {
+        let exec = make_sub_agent_execution_with_cache(None, None, None);
+        let json = serde_json::to_string(&exec).unwrap();
+        // skip_serializing_if must drop None entirely so legacy non-cache
+        // providers don't litter the wire with `null` fields.
+        assert!(
+            !json.contains("\"cached_tokens\""),
+            "cached_tokens must be omitted when None"
+        );
+        assert!(
+            !json.contains("\"cache_write_tokens\""),
+            "cache_write_tokens must be omitted when None"
+        );
+        assert!(
+            !json.contains("\"thinking_tokens\""),
+            "thinking_tokens must be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_sub_agent_execution_deserializes_missing_cache_fields_as_none() {
+        // Legacy DB rows (option<int> column = NONE -> column missing from
+        // the projected JSON) must deserialize cleanly via #[serde(default)],
+        // so a load_workflow_blocks of an old workflow does not error.
+        let legacy_json = r#"{
+            "id":"sa_legacy",
+            "workflow_id":"wf_001",
+            "parent_agent_id":"agent_001",
+            "sub_agent_id":"sub_agent_001",
+            "sub_agent_name":"Analyzer",
+            "task_description":"task",
+            "status":"completed",
+            "created_at":"2026-01-01T00:00:00Z"
+        }"#;
+        let exec: SubAgentExecution = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(exec.cached_tokens, None);
+        assert_eq!(exec.cache_write_tokens, None);
+        assert_eq!(exec.thinking_tokens, None);
     }
 }

@@ -165,9 +165,21 @@ pub async fn load_workflow_messages(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<Message>, String> {
+    load_workflow_messages_core(&state.db, &workflow_id).await
+}
+
+/// Loads all messages for a workflow with the canonical field selection.
+///
+/// Extracted as a `_core` helper so `load_workflow_full_state` can delegate
+/// here — a single source of truth for the SELECT, so adding a column does
+/// not require updating divergent copies.
+pub(crate) async fn load_workflow_messages_core(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> Result<Vec<Message>, String> {
     info!("Loading workflow messages");
 
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_workflow_id = validate_uuid_field(workflow_id, "workflow_id")?;
 
     // Use explicit field selection with meta::id(id) to avoid SurrealDB SDK
     // serialization issues with internal Thing type (see CLAUDE.md)
@@ -196,8 +208,7 @@ pub async fn load_workflow_messages(
         WHERE workflow_id = $wf_id
         ORDER BY timestamp ASC"#;
 
-    let json_results = state
-        .db
+    let json_results = db
         .query_json_with_params(
             query,
             vec![(
@@ -531,10 +542,15 @@ pub(crate) async fn load_workflow_blocks_core(
         })?;
 
     // 3. Sub-agent executions for the whole workflow.
+    // `cached_tokens` / `cache_write_tokens` / `thinking_tokens` are pulled
+    // through here so `merge_into_chat_blocks` can project them into
+    // `SubAgentBlockData`.
     let sub_agent_query = "SELECT \
             meta::id(id) AS id, workflow_id, parent_agent_id, sub_agent_id, \
             sub_agent_name, task_description, status, duration_ms, \
-            tokens_input, tokens_output, cost_usd, result_summary, error_message, \
+            tokens_input, tokens_output, cost_usd, \
+            cached_tokens, cache_write_tokens, thinking_tokens, \
+            result_summary, error_message, \
             parent_message_id, created_at, completed_at \
         FROM sub_agent_execution \
         WHERE workflow_id = $wf_id \

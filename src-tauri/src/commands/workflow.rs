@@ -13,11 +13,12 @@
 // limitations under the License.
 
 use crate::{
-    db::queries::{cascade, workflow as wf_queries},
-    models::{
-        Message, ThinkingStep, ToolExecution, Workflow, WorkflowCreate, WorkflowFullState,
-        WorkflowStatus,
+    commands::{
+        message::load_workflow_messages_core, thinking::load_workflow_thinking_steps_core,
+        tool_execution::load_workflow_tool_executions_core,
     },
+    db::queries::{cascade, workflow as wf_queries},
+    models::{Workflow, WorkflowCreate, WorkflowFullState, WorkflowStatus},
     security::{validate_uuid_field, Validator},
     AppState,
 };
@@ -223,54 +224,70 @@ pub async fn load_workflow_full_state(
     workflow_id: String,
     state: State<'_, AppState>,
 ) -> Result<WorkflowFullState, String> {
+    load_workflow_full_state_core(&state.db, &workflow_id).await
+}
+
+/// Loads complete workflow state for recovery, decoupled from `tauri::State`.
+///
+/// `_core` extraction so the round-trip can be exercised in integration
+/// tests without spinning up an `AppState`. The Tauri command above is now
+/// a 1-line wrapper.
+///
+/// Delegates the three child entity loads to their canonical `_core`
+/// helpers — `load_workflow_messages_core`, `load_workflow_tool_executions_core`,
+/// `load_workflow_thinking_steps_core` — so any column added there benefits
+/// the full-state recovery for free.
+pub(crate) async fn load_workflow_full_state_core(
+    db: &Arc<crate::db::DBClient>,
+    workflow_id: &str,
+) -> Result<WorkflowFullState, String> {
     use crate::constants::workflow as wf_const;
     use tokio::time::{timeout, Duration};
 
     info!("Loading complete workflow state for recovery");
 
-    let validated_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_id = validate_uuid_field(workflow_id, "workflow_id")?;
 
-    // Build query strings for all 4 parallel queries
+    // The workflow header still queries the centralized SELECT_BASE so the
+    // cumulative token / cost totals ride through unchanged.
     let wf_query = format!(
         "{} WHERE meta::id(id) = '{}'",
         &*wf_queries::SELECT_BASE,
         validated_id
     );
-    let msg_query = format!(
-        "SELECT meta::id(id) AS id, workflow_id, role, content, tokens, tokens_input, tokens_output, model, provider, cost_usd, duration_ms, timestamp FROM message WHERE workflow_id = '{}' ORDER BY timestamp ASC",
-        validated_id
-    );
-    let tool_query = format!(
-        "SELECT meta::id(id) AS id, workflow_id, message_id, agent_id, tool_type, tool_name, server_name, input_params, output_result, success, error_message, duration_ms, iteration, created_at FROM tool_execution WHERE workflow_id = '{}' ORDER BY created_at ASC",
-        validated_id
-    );
-    let think_query = format!(
-        "SELECT meta::id(id) AS id, workflow_id, message_id, agent_id, step_number, content, duration_ms, tokens, created_at FROM thinking_step WHERE workflow_id = '{}' ORDER BY created_at ASC, step_number ASC",
-        validated_id
-    );
 
-    // Clone db Arc for parallel queries
-    let db1 = Arc::clone(&state.db);
-    let db2 = Arc::clone(&state.db);
-    let db3 = Arc::clone(&state.db);
-    let db4 = Arc::clone(&state.db);
+    let db1 = Arc::clone(db);
+    let db2 = Arc::clone(db);
+    let db3 = Arc::clone(db);
+    let db4 = Arc::clone(db);
+    let wf_id_messages = validated_id.clone();
+    let wf_id_tools = validated_id.clone();
+    let wf_id_thinking = validated_id.clone();
 
-    // Execute all queries in parallel using tokio::try_join! (with timeout)
     let parallel_queries = async {
         tokio::try_join!(
             async move {
-                let wfs: Vec<Workflow> = query_and_deserialize(&db1, &wf_query, "workflow").await?;
+                let wfs: Vec<Workflow> = {
+                    let json_results = db1.query_json(&wf_query).await.map_err(|e| {
+                        error!(error = %e, "Failed to load workflow");
+                        format!("Failed to load workflow: {}", e)
+                    })?;
+                    json_results
+                        .into_iter()
+                        .map(serde_json::from_value)
+                        .collect::<std::result::Result<Vec<Workflow>, _>>()
+                        .map_err(|e| {
+                            error!(error = %e, "Failed to deserialize workflow");
+                            format!("Failed to deserialize workflow: {}", e)
+                        })?
+                };
                 wfs.into_iter()
                     .next()
                     .ok_or_else(|| "Workflow not found".to_string())
             },
-            async move { query_and_deserialize::<Message>(&db2, &msg_query, "messages").await },
-            async move {
-                query_and_deserialize::<ToolExecution>(&db3, &tool_query, "tool executions").await
-            },
-            async move {
-                query_and_deserialize::<ThinkingStep>(&db4, &think_query, "thinking steps").await
-            },
+            async move { load_workflow_messages_core(&db2, &wf_id_messages).await },
+            async move { load_workflow_tool_executions_core(&db3, &wf_id_tools).await },
+            async move { load_workflow_thinking_steps_core(&db4, &wf_id_thinking).await },
         )
     };
 
@@ -561,30 +578,6 @@ pub async fn toggle_workflow_pinned(
 
     info!(pinned = workflow.pinned, "Workflow pinned state toggled");
     Ok(workflow)
-}
-
-/// Executes a query_json call and deserializes the results into a typed Vec.
-///
-/// Shared between execute_workflow, load_workflow_full_state, and similar commands
-/// to eliminate repeated query-then-deserialize boilerplate.
-async fn query_and_deserialize<T: serde::de::DeserializeOwned>(
-    db: &crate::db::DBClient,
-    query: &str,
-    entity_label: &str,
-) -> Result<Vec<T>, String> {
-    let json_results = db.query_json(query).await.map_err(|e| {
-        error!(error = %e, "Failed to load {}", entity_label);
-        format!("Failed to load {}: {}", entity_label, e)
-    })?;
-
-    json_results
-        .into_iter()
-        .map(serde_json::from_value)
-        .collect::<std::result::Result<Vec<T>, _>>()
-        .map_err(|e| {
-            error!(error = %e, "Failed to deserialize {}", entity_label);
-            format!("Failed to deserialize {}: {}", entity_label, e)
-        })
 }
 
 #[cfg(test)]

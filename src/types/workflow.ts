@@ -86,10 +86,15 @@ export interface Workflow {
 	sub_agent_tokens_input: number;
 	/** Cumulative output tokens from sub-agents only */
 	sub_agent_tokens_output: number;
-	/** Cumulative cached input tokens for this workflow */
-	total_cached_tokens: number | null;
-	/** Cumulative cache-write tokens for this workflow */
-	total_cache_write_tokens: number | null;
+	/**
+	 * Cumulative cached input tokens for this workflow.
+	 * Coalesced to 0 at the SELECT layer (`db::queries::workflow::FIELDS`)
+	 * and backfilled by the token-cost-accuracy migration, so the wire shape
+	 * is always a number — never null/undefined.
+	 */
+	total_cached_tokens: number;
+	/** Cumulative cache-write tokens for this workflow. Same contract as `total_cached_tokens`. */
+	total_cache_write_tokens: number;
 	/**
 	 * Cumulative USD cost from sub-agents only (computed with each sub-agent's
 	 * own pricing, not the parent's). Defaults to 0 on legacy rows.

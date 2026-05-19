@@ -121,6 +121,17 @@ export interface SubAgentBlockData {
 	 * was available for the sub-agent's model.
 	 */
 	cost_usd?: number;
+	/**
+	 * Cached prompt tokens (cache reads) reported by the sub-agent's
+	 * provider. Surfaced live via `sub_agent_complete.metrics.cached_tokens`
+	 * and on replay via the `merge_into_chat_blocks` projection.
+	 * `null` for legacy rows.
+	 */
+	cached_tokens?: number | null;
+	/** Cache-write prompt tokens. Same contract as `cached_tokens`. */
+	cache_write_tokens?: number | null;
+	/** Thinking/reasoning tokens consumed by the sub-agent (reasoning models). */
+	thinking_tokens?: number | null;
 	/** Summary of the sub-agent report */
 	report_summary?: string;
 	/** Internal: sub-agent ID for deduplication (not persisted) */

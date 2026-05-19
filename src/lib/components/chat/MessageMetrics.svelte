@@ -117,6 +117,20 @@
 							${agent.cost_usd < 0.01 ? agent.cost_usd.toFixed(4) : agent.cost_usd.toFixed(2)}
 						</span>
 					{/if}
+					{#if (agent.cached_tokens ?? 0) > 0 || (agent.cache_write_tokens ?? 0) > 0}
+						<span class="agent-cache" title="cache read / write">
+							cache:{formatTokenCount(
+								agent.cached_tokens ?? 0
+							)}{#if (agent.cache_write_tokens ?? 0) > 0}+{formatTokenCount(
+									agent.cache_write_tokens ?? 0
+								)}{/if}
+						</span>
+					{/if}
+					{#if (agent.thinking_tokens ?? 0) > 0}
+						<span class="agent-thinking" title={$i18n('metrics_thinking_tokens')}>
+							think:{formatTokenCount(agent.thinking_tokens ?? 0)}
+						</span>
+					{/if}
 				</span>
 			{/each}
 		</div>
@@ -181,7 +195,12 @@
 
 	.agent-tokens,
 	.agent-duration,
-	.agent-cost {
+	.agent-cost,
+	.agent-cache {
 		color: var(--color-text-tertiary);
+	}
+
+	.agent-thinking {
+		color: var(--color-warning, #f59e0b);
 	}
 </style>

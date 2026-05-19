@@ -312,6 +312,9 @@ mod streaming_events_tests {
             tokens_input: 100,
             tokens_output: 200,
             cost_usd: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            thinking_tokens: None,
         };
 
         let chunk = StreamChunk::sub_agent_complete(

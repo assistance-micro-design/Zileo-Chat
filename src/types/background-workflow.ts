@@ -69,6 +69,15 @@ export interface ActiveSubAgent {
 		 * Propagated from the wire chunk `sub_agent_complete.metrics.cost_usd`.
 		 */
 		cost_usd?: number;
+		/**
+		 * Cached prompt tokens (cache reads) reported by the sub-agent's
+		 * provider. Source: `sub_agent_complete.metrics.cached_tokens`.
+		 */
+		cached_tokens?: number;
+		/** Cache-write prompt tokens. Same wire source as `cached_tokens`. */
+		cache_write_tokens?: number;
+		/** Thinking/reasoning tokens (reasoning models only). */
+		thinking_tokens?: number;
 	};
 }
 
