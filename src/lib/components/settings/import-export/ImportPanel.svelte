@@ -55,7 +55,7 @@ Orchestrates the multi-step import process:
 		filterMissingMcpEnvForSelection,
 		hasImportSelection
 	} from './ImportPanel.helpers';
-	import { Upload, CheckCircle, AlertCircle } from '@lucide/svelte';
+	import { Upload, CircleCheckBig, CircleAlert } from '@lucide/svelte';
 
 	/** Props */
 	interface Props {
@@ -398,7 +398,7 @@ Orchestrates the multi-step import process:
 		<Card>
 			{#snippet body()}
 				<div class="error-message">
-					<AlertCircle size={24} />
+					<CircleAlert size={24} />
 					<p>{error}</p>
 				</div>
 			{/snippet}
@@ -435,7 +435,7 @@ Orchestrates the multi-step import process:
 						{#snippet body()}
 							<div class="warnings">
 								<div class="warnings-title">
-									<AlertCircle size={16} />
+									<CircleAlert size={16} />
 									<span>{$i18n('ie_warnings')} ({previewValidation.warnings.length})</span>
 								</div>
 								<div class="warning-list">
@@ -510,7 +510,7 @@ Orchestrates the multi-step import process:
 				{#snippet body()}
 					<div class="complete-content">
 						{#if completeResult.success}
-							<CheckCircle size={48} class="success-icon" />
+							<CircleCheckBig size={48} class="success-icon" />
 							<h3>{$i18n('ie_import_complete')}</h3>
 							<div class="result-summary">
 								<div class="result-row">
@@ -613,7 +613,7 @@ Orchestrates the multi-step import process:
 								</div>
 							{/if}
 						{:else}
-							<AlertCircle size={48} class="error-icon" />
+							<CircleAlert size={48} class="error-icon" />
 							<h3>{$i18n('ie_import_failed_title')}</h3>
 							<p>{$i18n('ie_import_failed_description')}</p>
 							{#if completeResult.errors.length > 0}

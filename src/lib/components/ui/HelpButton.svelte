@@ -26,7 +26,7 @@
   />
 -->
 <script lang="ts">
-	import { HelpCircle } from '@lucide/svelte';
+	import { CircleHelp } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import Modal from './Modal.svelte';
 	import Button from './Button.svelte';
@@ -69,7 +69,7 @@
 	title={$i18n('help_button_tooltip')}
 	aria-label={$i18n('help_button_label')}
 >
-	<HelpCircle size={iconSize} />
+	<CircleHelp size={iconSize} />
 </button>
 
 <Modal open={showModal} title={$i18n(titleKey)} onclose={() => (showModal = false)}>

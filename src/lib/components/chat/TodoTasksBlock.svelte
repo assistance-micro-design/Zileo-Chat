@@ -24,7 +24,7 @@ Visible during and after execution.
 -->
 
 <script lang="ts">
-	import { ListTodo, CheckCircle, Circle, Loader, Ban } from '@lucide/svelte';
+	import { ListTodo, CircleCheckBig, Circle, Loader, Ban } from '@lucide/svelte';
 	import type { TodoTaskDisplay } from '$types/chat-block';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
@@ -106,7 +106,7 @@ Visible during and after execution.
 						<li class="task-item {statusClass(task.status)}">
 							<span class="task-status-icon">
 								{#if task.status === 'completed'}
-									<CheckCircle size={14} />
+									<CircleCheckBig size={14} />
 								{:else if task.status === 'in_progress'}
 									<Loader size={14} class="spinning" />
 								{:else if task.status === 'blocked'}

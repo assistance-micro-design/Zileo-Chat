@@ -7,7 +7,7 @@
 -->
 
 <script lang="ts">
-	import { Users, ChevronDown, CheckCircle, XCircle } from '@lucide/svelte';
+	import { Users, ChevronDown, CircleCheckBig, CircleX } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
 	import { truncateThinkingContent } from '$types/thinking';
@@ -91,9 +91,9 @@
 
 		<span class="agent-status">
 			{#if status === 'completed'}
-				<CheckCircle size={14} class="status-success" />
+				<CircleCheckBig size={14} class="status-success" />
 			{:else}
-				<XCircle size={14} class="status-error" />
+				<CircleX size={14} class="status-error" />
 			{/if}
 		</span>
 

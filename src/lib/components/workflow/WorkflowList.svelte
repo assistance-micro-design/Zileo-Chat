@@ -24,7 +24,7 @@
 	import WorkflowItem from './WorkflowItem.svelte';
 	import WorkflowItemCompact from './WorkflowItemCompact.svelte';
 	import FolderItem from './FolderItem.svelte';
-	import { AlertTriangle, RefreshCw } from '@lucide/svelte';
+	import { TriangleAlert, RefreshCw } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { getWorkflowIdsFromDrag, hasWorkflowDragData } from '$lib/utils/dragDrop';
 	import { groupByDate } from '$lib/utils/dateGrouping';
@@ -231,11 +231,11 @@
 		<div class="workflow-list-error" role="alert">
 			{#if collapsed}
 				<span class="error-icon" title={$i18n('workflow_load_error_short')}>
-					<AlertTriangle size={16} />
+					<TriangleAlert size={16} />
 				</span>
 			{:else}
 				<div class="error-icon-wrapper">
-					<AlertTriangle size={20} />
+					<TriangleAlert size={20} />
 				</div>
 				<p class="error-message">{$i18n('workflow_load_error')}</p>
 				<p class="error-detail">{error}</p>

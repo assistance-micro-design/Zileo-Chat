@@ -30,7 +30,7 @@
 -->
 <script lang="ts">
 	import type { TokenDisplayData } from '$types/workflow';
-	import { AlertTriangle, Gauge, CircleDollarSign, Activity, ChevronDown } from '@lucide/svelte';
+	import { TriangleAlert, Gauge, CircleDollarSign, Activity, ChevronDown } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { HelpButton } from '$lib/components/ui';
 	import { formatCost, formatCostOrPlaceholder } from '$lib/utils/currency';
@@ -176,7 +176,7 @@
 			<Gauge size={16} />
 			{#if warningLevel !== 'normal'}
 				<span class="warning-badge">
-					<AlertTriangle size={10} />
+					<TriangleAlert size={10} />
 				</span>
 			{/if}
 		</div>

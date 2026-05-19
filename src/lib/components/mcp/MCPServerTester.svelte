@@ -31,7 +31,7 @@ Displays MCP server connection test results including tools, resources, and late
 <script lang="ts">
 	import type { MCPTestResult } from '$types/mcp';
 	import { Button, Badge, Spinner } from '$lib/components/ui';
-	import { CheckCircle2, XCircle, RefreshCw, Wrench, FileText, Clock } from '@lucide/svelte';
+	import { CircleCheck, CircleX, RefreshCw, Wrench, FileText, Clock } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -80,7 +80,7 @@ Displays MCP server connection test results including tools, resources, and late
 	{:else if error}
 		<div class="tester-error">
 			<div class="error-header">
-				<XCircle size={24} class="error-icon" />
+				<CircleX size={24} class="error-icon" />
 				<span class="error-title">{$i18n('mcp_tester_failed')}</span>
 			</div>
 			<p class="error-message">{error}</p>
@@ -95,10 +95,10 @@ Displays MCP server connection test results including tools, resources, and late
 		<div class="tester-result" class:success={result.success} class:failure={!result.success}>
 			<div class="result-header">
 				{#if result.success}
-					<CheckCircle2 size={24} class="success-icon" />
+					<CircleCheck size={24} class="success-icon" />
 					<span class="result-title">{$i18n('mcp_tester_success')}</span>
 				{:else}
-					<XCircle size={24} class="error-icon" />
+					<CircleX size={24} class="error-icon" />
 					<span class="result-title">{$i18n('mcp_tester_failure')}</span>
 				{/if}
 				<Badge variant={result.success ? 'success' : 'error'}>

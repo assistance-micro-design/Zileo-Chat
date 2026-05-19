@@ -24,7 +24,7 @@
 -->
 <script lang="ts">
 	import type { Message } from '$types/message';
-	import { Clock, Copy, Check, AlertCircle } from '@lucide/svelte';
+	import { Clock, Copy, Check, CircleAlert } from '@lucide/svelte';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -114,7 +114,7 @@
 				{#if copied}
 					<Check size={14} />
 				{:else if copyError}
-					<AlertCircle size={14} />
+					<CircleAlert size={14} />
 				{:else}
 					<Copy size={14} />
 				{/if}

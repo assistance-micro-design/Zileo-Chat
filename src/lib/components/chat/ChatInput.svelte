@@ -28,7 +28,7 @@
   <ChatInput value={inputValue} disabled={sending} onsend={handleSend} />
 -->
 <script lang="ts">
-	import { Send, BookOpen, StopCircle } from '@lucide/svelte';
+	import { Send, BookOpen, CircleStop } from '@lucide/svelte';
 	import Spinner from '$lib/components/ui/Spinner.svelte';
 	import PromptSelectorModal from './PromptSelectorModal.svelte';
 	import { i18n } from '$lib/i18n';
@@ -171,7 +171,7 @@
 			onclick={oncancel}
 			aria-label={$i18n('chat_cancel_arialabel')}
 		>
-			<StopCircle size={20} />
+			<CircleStop size={20} />
 		</button>
 	{:else}
 		<button

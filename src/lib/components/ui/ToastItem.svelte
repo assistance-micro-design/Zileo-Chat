@@ -24,7 +24,7 @@
 	import type { Toast } from '$types/background-workflow';
 	import { toastStore } from '$lib/stores/toast';
 	import { i18n } from '$lib/i18n';
-	import { X, CheckCircle, AlertCircle, Info, AlertTriangle, HelpCircle } from '@lucide/svelte';
+	import { X, CircleCheckBig, CircleAlert, Info, TriangleAlert, CircleHelp } from '@lucide/svelte';
 
 	interface Props {
 		toast: Toast;
@@ -33,12 +33,12 @@
 
 	let { toast, onnavigate }: Props = $props();
 
-	const iconMap: Record<string, typeof CheckCircle> = {
-		success: CheckCircle,
-		error: AlertCircle,
+	const iconMap: Record<string, typeof CircleCheckBig> = {
+		success: CircleCheckBig,
+		error: CircleAlert,
 		info: Info,
-		warning: AlertTriangle,
-		'user-question': HelpCircle
+		warning: TriangleAlert,
+		'user-question': CircleHelp
 	};
 
 	let Icon = $derived(iconMap[toast.type] ?? Info);

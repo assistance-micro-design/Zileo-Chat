@@ -27,7 +27,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
-	import { AlertTriangle, ShieldCheck, Info } from '@lucide/svelte';
+	import { TriangleAlert, ShieldCheck, Info } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
 	/**
@@ -106,9 +106,9 @@
 			<div class="validation-content">
 				<div class="validation-header">
 					{#if request.risk_level === 'critical'}
-						<AlertTriangle size={24} class="risk-icon critical" />
+						<TriangleAlert size={24} class="risk-icon critical" />
 					{:else if request.risk_level === 'high'}
-						<AlertTriangle size={24} class="risk-icon high" />
+						<TriangleAlert size={24} class="risk-icon high" />
 					{:else if request.risk_level === 'medium'}
 						<Info size={24} class="risk-icon medium" />
 					{:else}
@@ -136,10 +136,10 @@
 
 				<div class="validation-warning">
 					{#if request.risk_level === 'critical'}
-						<AlertTriangle size={16} />
+						<TriangleAlert size={16} />
 						<span>{$i18n('workflow_validation_critical_warning')}</span>
 					{:else if request.risk_level === 'high'}
-						<AlertTriangle size={16} />
+						<TriangleAlert size={16} />
 						<span>{$i18n('workflow_validation_high_warning')}</span>
 					{:else if request.risk_level === 'medium'}
 						<Info size={16} />

@@ -34,7 +34,16 @@ Displays an MCP server with status, command info, and action buttons.
 <script lang="ts">
 	import type { MCPServer, MCPServerStatus } from '$types/mcp';
 	import { Card, Button, Badge } from '$lib/components/ui';
-	import { Pencil, Play, Square, Trash2, TestTube2, Box, Terminal, Globe } from '@lucide/svelte';
+	import {
+		Pencil,
+		Play,
+		Square,
+		Trash2,
+		TestTubeDiagonal,
+		Box,
+		Terminal,
+		Globe
+	} from '@lucide/svelte';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -180,7 +189,7 @@ Displays an MCP server with status, command info, and action buttons.
 				disabled={testing || isStarting}
 				ariaLabel={$i18n('mcp_card_test_arialabel').replace('{name}', server.name)}
 			>
-				<TestTube2 size={16} />
+				<TestTubeDiagonal size={16} />
 				<span>{testing ? $i18n('mcp_card_testing') : $i18n('mcp_card_test')}</span>
 			</Button>
 

@@ -7,7 +7,7 @@
 -->
 
 <script lang="ts">
-	import { Wrench, ChevronDown, CheckCircle, XCircle, Server } from '@lucide/svelte';
+	import { Wrench, ChevronDown, CircleCheckBig, CircleX, Server } from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 	import { formatDuration } from '$lib/utils/duration';
 
@@ -115,9 +115,9 @@
 
 		<span class="tool-status">
 			{#if success}
-				<CheckCircle size={14} class="status-success" />
+				<CircleCheckBig size={14} class="status-success" />
 			{:else}
-				<XCircle size={14} class="status-error" />
+				<CircleX size={14} class="status-error" />
 			{/if}
 		</span>
 
