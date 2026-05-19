@@ -272,20 +272,18 @@ Main chat area with message display, execution blocks inline, and input controls
 		{/if}
 	</div>
 
-	<!-- Scroll to bottom button -->
-	{#if userHasScrolledUp}
-		<button
-			class="scroll-to-bottom"
-			onclick={handleScrollToBottomClick}
-			aria-label={$i18n('chat_scroll_to_bottom')}
-			title={$i18n('chat_scroll_to_bottom')}
-		>
-			<ArrowDown size={18} />
-		</button>
-	{/if}
-
 	<!-- Chat Input with Cancel Button -->
 	<div class="input-area">
+		{#if userHasScrolledUp}
+			<button
+				class="scroll-to-bottom"
+				onclick={handleScrollToBottomClick}
+				aria-label={$i18n('chat_scroll_to_bottom')}
+				title={$i18n('chat_scroll_to_bottom')}
+			>
+				<ArrowDown size={18} />
+			</button>
+		{/if}
 		<ChatInput
 			{disabled}
 			loading={isExecuting}
@@ -374,7 +372,7 @@ Main chat area with message display, execution blocks inline, and input controls
 
 	.scroll-to-bottom {
 		position: absolute;
-		bottom: 80px;
+		bottom: calc(100% + var(--spacing-sm));
 		right: var(--spacing-lg);
 		width: 36px;
 		height: 36px;
@@ -398,6 +396,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	}
 
 	.input-area {
+		position: relative;
 		padding: 0 var(--spacing-md) var(--spacing-md);
 	}
 

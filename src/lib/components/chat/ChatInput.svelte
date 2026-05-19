@@ -87,7 +87,10 @@
 		if (trimmed && !disabled && !loading) {
 			onsend?.(trimmed);
 			value = '';
-			adjustHeight();
+			if (textareaRef) {
+				textareaRef.value = '';
+				adjustHeight();
+			}
 		}
 	}
 
@@ -125,6 +128,17 @@
 	}
 
 	/**
+	 * Handle paste events.
+	 * Some WebView builds fire `input` before the pasted content has been laid
+	 * out, so `scrollHeight` reads stale. A second adjust on the next animation
+	 * frame is idempotent (the `input` adjust above already ran) but guarantees
+	 * the textarea catches up on slow renders.
+	 */
+	function handlePaste(): void {
+		requestAnimationFrame(adjustHeight);
+	}
+
+	/**
 	 * Handle prompt selection from modal
 	 */
 	function handlePromptSelect(content: string): void {
@@ -134,62 +148,65 @@
 	}
 </script>
 
-<div class="chat-input-container">
-	<button
-		type="button"
-		class="prompt-button"
-		title={$i18n('chat_prompt_library_title')}
-		disabled={loading || disabled}
-		onclick={() => (showPromptSelector = true)}
-		aria-label={$i18n('chat_prompt_library_arialabel')}
-	>
-		<BookOpen size={18} />
-	</button>
-	<div class="textarea-wrapper">
-		<textarea
-			bind:this={textareaRef}
-			bind:value
-			placeholder={effectivePlaceholder}
-			{disabled}
-			class="chat-input"
-			rows="1"
-			oninput={handleInput}
-			onkeydown={handleKeydown}
-			aria-label={$i18n('chat_input_arialabel')}
-			aria-describedby={showPendingHint ? 'chat-input-pending-hint' : undefined}
-		></textarea>
-		{#if showPendingHint}
-			<span id="chat-input-pending-hint" class="pending-hint" role="status" aria-live="polite">
-				{$i18n('chat_input_workflow_in_progress_hint')}
-			</span>
+<div class="chat-input-frame">
+	<div class="chat-input-container">
+		<button
+			type="button"
+			class="prompt-button"
+			title={$i18n('chat_prompt_library_title')}
+			disabled={loading || disabled}
+			onclick={() => (showPromptSelector = true)}
+			aria-label={$i18n('chat_prompt_library_arialabel')}
+		>
+			<BookOpen size={18} />
+		</button>
+		<div class="textarea-wrapper">
+			<textarea
+				bind:this={textareaRef}
+				bind:value
+				placeholder={effectivePlaceholder}
+				{disabled}
+				class="chat-input"
+				rows="1"
+				oninput={handleInput}
+				onpaste={handlePaste}
+				onkeydown={handleKeydown}
+				aria-label={$i18n('chat_input_arialabel')}
+				aria-describedby={showPendingHint ? 'chat-input-pending-hint' : undefined}
+			></textarea>
+			{#if showPendingHint}
+				<span id="chat-input-pending-hint" class="pending-hint" role="status" aria-live="polite">
+					{$i18n('chat_input_workflow_in_progress_hint')}
+				</span>
+			{/if}
+		</div>
+		{#if oncancel}
+			<button
+				type="button"
+				class="stop-button"
+				onclick={oncancel}
+				aria-label={$i18n('chat_cancel_arialabel')}
+			>
+				<CircleStop size={20} />
+			</button>
+		{:else}
+			<button
+				type="button"
+				class="send-button"
+				onclick={handleSend}
+				disabled={disabled || loading || !value.trim()}
+				aria-disabled={disabled || loading || !value.trim()}
+				title={loading ? $i18n('chat_input_send_disabled_tooltip') : undefined}
+				aria-label={$i18n('chat_send_arialabel')}
+			>
+				{#if loading}
+					<Spinner size="sm" />
+				{:else}
+					<Send size={20} />
+				{/if}
+			</button>
 		{/if}
 	</div>
-	{#if oncancel}
-		<button
-			type="button"
-			class="stop-button"
-			onclick={oncancel}
-			aria-label={$i18n('chat_cancel_arialabel')}
-		>
-			<CircleStop size={20} />
-		</button>
-	{:else}
-		<button
-			type="button"
-			class="send-button"
-			onclick={handleSend}
-			disabled={disabled || loading || !value.trim()}
-			aria-disabled={disabled || loading || !value.trim()}
-			title={loading ? $i18n('chat_input_send_disabled_tooltip') : undefined}
-			aria-label={$i18n('chat_send_arialabel')}
-		>
-			{#if loading}
-				<Spinner size="sm" />
-			{:else}
-				<Send size={20} />
-			{/if}
-		</button>
-	{/if}
 	{#if value.trim() && !loading}
 		<span class="keyboard-hint">{$i18n('chat_keyboard_hint')}</span>
 	{/if}
@@ -202,13 +219,16 @@
 />
 
 <style>
+	.chat-input-frame {
+		background: var(--color-bg-secondary);
+		border-top: 1px solid var(--color-border);
+	}
+
 	.chat-input-container {
 		display: flex;
 		align-items: flex-end;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-top: 1px solid var(--color-border);
 		position: relative;
 	}
 
@@ -220,7 +240,7 @@
 	}
 
 	.chat-input {
-		flex: 1;
+		width: 100%;
 		min-height: 40px;
 		max-height: 200px;
 		padding: var(--spacing-sm) var(--spacing-md);
@@ -322,11 +342,11 @@
 	}
 
 	.keyboard-hint {
-		position: absolute;
-		bottom: 4px;
-		right: var(--spacing-lg);
+		display: block;
+		padding: 0 var(--spacing-md) var(--spacing-xs);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
+		text-align: right;
 		pointer-events: none;
 	}
 </style>
