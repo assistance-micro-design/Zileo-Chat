@@ -103,8 +103,6 @@ maintainer commits the up-to-date lockfile on `main` when needed.
 - Svelte: runes only (`$props`, `$state`, `$derived`, `{#snippet}`,
   `{@render}`, `{@attach}`). No `export let`, no `<slot>`, no
   `on:click`.
-- Zod: v4 API only (`error` not `message`, `z.email()`, two-argument
-  `z.record(k, v)`).
 - Rust: no `.unwrap()` or `.expect()` in production code. Use `Result`
   and `.map_err(|e| format!("..."))?` in Tauri commands.
 - IPC: TypeScript camelCase parameters become Rust snake_case

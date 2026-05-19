@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Consolidated dependency cleanup (`chore/deps-cleanup-consolide`). Eight Dependabot pull requests were rolled into a single PR alongside one dead-library removal and one stale-doc cleanup. The drop of `rig-core` (declared but never imported since the early v0.20.x days) eliminates ~50 unused transitive crates from the build. Three majors land together — TypeScript 6.0, marked 18, `@lucide/svelte` 1.16 — each verified against Context7 documentation snapshots before the bump (no compiler-option drift in TypeScript, `parse()` stayed synchronous in marked, deprecated icon aliases still re-exported in lucide 1.16 but renamed for v2 future-proofing). Tests verts after every commit: 1417 Rust lib + clippy `--all-targets` clean + svelte-check 4259 / 0 errors + 446 Vitest + ESLint/Prettier clean. Zero applicative code changed except the 41 icon renames in 13 Svelte files (mechanical).
+
+### Removed
+
+- **`rig-core`** Rust dependency (`Cargo.toml`, declared as `0.34.0` but with zero `use rig` / `rig::` references anywhere in `src-tauri/src/`). The actual LLM abstraction lives in `src-tauri/src/llm/` (direct HTTP for Mistral, Ollama, and OpenAI-compatible providers). `Cargo.lock` shrinks by 426 lines (transitive OpenAI/Anthropic crates pulled by `rig-core` features).
+- **Zod documentation references** in `CONTRIBUTING.md` and `docs/TECH_STACK.md` (the `Zod 4 (from Zod 3)` migration section). Zod was removed from `package.json` several releases ago — the doc lingered and only mentioning it now risked confusing new contributors into thinking the project still uses Zod. Historical entries in `CHANGELOG.md` are preserved.
+- **`rig-core` documentation references** in `README.md` (Tech Stack row, Acknowledgments line), `docs/README.md` (Tech Stack line, ASCII architecture diagram node, External Resources link), `docs/TECH_STACK.md` (LLM & Multi-Agent bullet), and `THIRD_PARTY_LICENSES.md` (table row). The licenses table row was already 2 minor versions behind `Cargo.toml` (`0.32.0` vs `0.34.0`), so the removal also eliminates a pre-existing drift.
+
+### Changed
+
+- **`typescript`** 5.9.3 → 6.0.3 (major). Verified against `/microsoft/typescript/v6.0.2` (Context7): TS 6.0 deprecates four compiler options (`outFile`, `module=AMD`, `target=ES5`, `moduleResolution=classic`), none of which are set in `tsconfig.json`. `verbatimModuleSyntax` is not active either. Zero functional impact for this project.
+- **`marked`** 17.0.6 → 18.0.3 (major). Single call site (`MarkdownRenderer.svelte:46`). Verified against `/markedjs/marked` (Context7) that `async: false` has been the default since v4.1.0 and is unchanged in v18 — `marked.parse(content) as string` remains valid (the `as string` assertion would have flagged a Promise return as an error during `npm run check`).
+- **`@lucide/svelte`** 0.563.1 → 1.16.0 (major). 41 occurrences renamed across 13 Svelte files following lucide v1's canonical-naming reversal: `AlertTriangle` → `TriangleAlert`, `CheckCircle` → `CircleCheckBig`, `CheckCircle2` → `CircleCheck`, `AlertCircle` → `CircleAlert`, `XCircle` → `CircleX`, `StopCircle` → `CircleStop`, `HelpCircle` → `CircleHelp`, `TestTube2` → `TestTubeDiagonal`. The deprecated names are still re-exported in v1.16 (verified in `node_modules/@lucide/svelte/dist/aliases/`), so `npm run check` did not surface the imports as errors — the renames are pre-emptive for v2.x removal of the aliases.
+- **`svelte`** 5.55.5 → 5.55.7 (patch).
+- **`@playwright/test`** 1.59.1 → 1.60.0 (minor).
+- **`rand`** (Rust crate) 0.8 → 0.9 (minor). Single workspace-level call site (`llm/retry.rs:45`, `rand::random::<f64>() * 0.1`). API unchanged in 0.9 for this pattern (verified against `/rust-random/rand` via Context7). The transitive `rand 0.8` still ships through `surrealdb-core` dependencies (`linfa-linalg`, `ndarray-stats`, `phf_generator`) — expected cohabitation, no warnings, `cargo audit` clean.
+- **Versioned documentation** (`README.md`, `docs/README.md`, `docs/TECH_STACK.md`, `THIRD_PARTY_LICENSES.md`) re-synced with the new dependency state (versions, drop of rig-core mentions, reworded LLM provider phrasing).
+
+### Notes
+
+- **Six Dependabot PRs are superseded** and will be closed in favour of this consolidated PR: #118 (marked 18), #149 (svelte 5.55.7), #150 (typescript 6.0), #152 (open — varies), #153 (lucide 1.16), #154 (playwright 1.60).
+- **PR #151** (bump `rig-core` to a newer 0.34.x) becomes moot — `rig-core` no longer exists in `Cargo.toml`.
+- **PR #85** (SurrealDB 2.6 → 3.0) stays open and out of scope. The breaking changes are catalogued in `docs/reviews/sync-rules/snapshots/surrealdb-2026-05-18.md` (local, gitignored).
+- **Application version unchanged** (0.24.0). This is the 8th section accumulated under `[Unreleased]`. The next tag will collapse all eight under a single `[X.Y.Z]` heading.
+- **Single zero-code-changed commit per bump** keeps `git bisect run` trivial if a regression slips past CI: C1 (rig-core drop), C2 (svelte/playwright/rand), C3 (typescript), C4 (marked), C5 (lucide), C6 (doc sync rig-core), C7 (Zod doc + this CHANGELOG entry).
+
+---
+
 Settings → Agents save flow + Prettier cleanup (`fix/agents-save-bugs-and-format`). Two bugs surfaced during an audit of "why does the agent list sometimes not reappear after save?", plus the residual Prettier dirt left over from PR #148. Bug 1: the `settings:refresh` DOM event bus was triggering a redundant reload on the very page that just dispatched, racing with the CRUD store's own refresh and hiding the freshly-updated list on slow machines (5 settings pages affected: agents, providers, mcp, validation, plus the AgentForm self-listener that re-ran `loadAgentFormResources` mid-unmount). Bug 2: `reasoning_effort` could not be cleared ("Off" dropdown) on an existing reasoning-capable agent without switching to a non-reasoning model first — the frontend omitted `undefined` from JSON.stringify, the backend read the absent field as "keep existing", and the saved value never moved off `High`. Tests verts (post-implementation): 1417 Rust lib (+4 TDD documenting the tri-state contract) + clippy `--all-targets` clean + svelte-check OK + 441 Vitest (+8 across `AgentForm.helpers` and `settings-refresh`) + ESLint/Prettier clean.
 
 ### Fixed

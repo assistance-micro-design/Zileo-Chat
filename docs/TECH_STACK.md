@@ -247,13 +247,6 @@ src-tauri/target/release/bundle/
 - `$props()` replaces `export let`
 - `onclick` replaces `on:click`
 
-**Zod 4** (from Zod 3):
-
-- `{ error: "..." }` replaces `{ message: "..." }`
-- `z.email()` / `z.uuid()` / `z.url()` replaces `z.string().email()` etc.
-- `z.record(keySchema, valueSchema)` requires 2 args
-- `z.treeifyError()` replaces `.format()` / `.flatten()`
-
 **Vitest 4** (from Vitest 2):
 
 - `maxWorkers` replaces `maxThreads` / `maxForks`
