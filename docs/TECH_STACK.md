@@ -1,12 +1,12 @@
 # Tech Stack: Svelte + Rust + SurrealDB
 
-> **Current project versions: 18 May 2026**
+> **Current project versions: 19 May 2026**
 > Production versions used in the project (tested compatibility).
 
 ## Stack Overview
 
 ```
-Frontend  : SvelteKit 2.55.0 | Svelte 5.55.1
+Frontend  : SvelteKit 2.55.0 | Svelte 5.55.7
 Backend   : Rust 1.93.0 + Tauri 2
 Database  : SurrealDB ~2.6 (kv-rocksdb, no protocol-http)
 Desktop   : Tauri (cross-platform)
@@ -19,7 +19,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **Core Framework**:
 
-- **svelte**: 5.55.1
+- **svelte**: 5.55.7
 - **@sveltejs/kit**: ^2.55.0
 - **@sveltejs/adapter-static**: ^3.0.0
 - **@sveltejs/vite-plugin-svelte**: ^6.2.4
@@ -27,7 +27,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **TypeScript**:
 
-- **typescript**: ^5.9.3
+- **typescript**: ^6.0.3
 - **svelte-check**: ^4.4.4
 - Strict-mode flags enabled in `tsconfig.json`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`
 
@@ -40,17 +40,17 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **UI Components**:
 
-- **@lucide/svelte**: ^0.563.1 (official Lucide icon library)
+- **@lucide/svelte**: ^1.16.0 (official Lucide icon library)
 
 **Content Processing**:
 
 - **dompurify**: ^3.4.1 (HTML sanitization)
-- **marked**: ^17.0.5 (Markdown rendering)
+- **marked**: ^18.0.3 (Markdown rendering)
 
 **Testing**:
 
 - **vitest**: ^4.0.15 (unit tests)
-- **@playwright/test**: ^1.58.0 (E2E tests)
+- **@playwright/test**: ^1.60.0 (E2E tests)
 - **jsdom**: ^27.4.0 (DOM testing)
 
 **Linting**:
@@ -74,10 +74,9 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **LLM & Multi-Agent**:
 
-- **rig-core**: 0.34.0 (LLM abstraction framework)
 - **async-trait**: 0.1 (agent trait definitions)
 - **futures-util**: 0.3.31 (stream utilities for SSE)
-- Providers: Mistral (native), Ollama (native), OpenAI-compatible (custom providers)
+- Providers: Mistral (native), Ollama (native), OpenAI-compatible (custom providers). Direct HTTP integration via `src-tauri/src/llm/` (no third-party abstraction layer).
 
 **Database**:
 
@@ -110,7 +109,7 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 - **regex**: 1.10
 - **globset**: 0.4 (glob pattern matching for FileManagerTool)
 - **base64**: 0.22 (base64 encoding/decoding)
-- **rand**: 0.8 (jittered retry backoff in `llm/retry.rs`)
+- **rand**: 0.9 (jittered retry backoff in `llm/retry.rs`)
 
 **HTTP & Network**:
 

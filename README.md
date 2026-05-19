@@ -146,12 +146,12 @@ npm run tauri:build
 
 ## Tech Stack
 
-| Layer    | Technology                   |
-| -------- | ---------------------------- |
-| Frontend | SvelteKit 2.59 + Svelte 5.55 |
-| Backend  | Rust + Tauri 2.11            |
-| Database | SurrealDB 2.6 (embedded)     |
-| LLM      | Rig.rs 0.34 + direct HTTP    |
+| Layer    | Technology                                 |
+| -------- | ------------------------------------------ |
+| Frontend | SvelteKit 2.59 + Svelte 5.55               |
+| Backend  | Rust + Tauri 2.11                          |
+| Database | SurrealDB 2.6 (embedded)                   |
+| LLM      | Direct HTTP (Mistral/Ollama/OpenAI-compat) |
 
 ---
 
@@ -200,7 +200,7 @@ Licensed under the Apache License, Version 2.0
 
 - Built with [Claude Code](https://claude.ai/code) by [Anthropic](https://anthropic.com)
 - Powered by [Tauri](https://tauri.app), [SvelteKit](https://kit.svelte.dev), [SurrealDB](https://surrealdb.com)
-- LLM integration via [Rig.rs](https://github.com/0xPlaygrounds/rig) + direct HTTP
+- Direct HTTP integration with Mistral, Ollama, and OpenAI-compatible providers
 
 ---
 

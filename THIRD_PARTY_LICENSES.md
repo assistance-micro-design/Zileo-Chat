@@ -104,7 +104,6 @@ Generated: 2026-05-11
 | regex               | 1.12.3  | MIT OR Apache-2.0 | https://github.com/rust-lang/regex              |
 | globset             | 0.4.18  | Unlicense OR MIT  | https://github.com/BurntSushi/ripgrep           |
 | tokio-util          | 0.7.18  | MIT               | https://github.com/tokio-rs/tokio               |
-| rig-core            | 0.32.0  | MIT               | https://github.com/0xPlaygrounds/rig            |
 | reqwest             | 0.12.28 | MIT OR Apache-2.0 | https://github.com/seanmonstar/reqwest          |
 | futures-util        | 0.3.32  | MIT OR Apache-2.0 | https://github.com/rust-lang/futures-rs         |
 | keyring             | 3.6.3   | MIT OR Apache-2.0 | https://github.com/hwchen/keyring-rs            |

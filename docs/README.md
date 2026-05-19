@@ -4,10 +4,9 @@ Multi-agent desktop application with conversational interface.
 
 ## Tech Stack
 
-**Frontend**: SvelteKit 2.55.0 + Svelte 5.55.1 + Vite 7.3.2
+**Frontend**: SvelteKit 2.55.0 + Svelte 5.55.7 + Vite 7.3.2
 **Backend**: Rust 1.93.0 + Tauri 2
 **Database**: SurrealDB ~2.6
-**LLM Framework**: rig-core 0.34.0 (multi-provider)
 **LLM Providers**: Mistral + Ollama + OpenAI-compatible (custom)
 **Protocol**: MCP 2025-06-18 (Anthropic official SDK)
 
@@ -19,7 +18,7 @@ Frontend (SvelteKit)
 Backend (Rust)
     |-- Agent Orchestrator
     |-- MCP Client/Server
-    +-- Rig.rs (LLM)
+    +-- LLM Providers (Mistral/Ollama/OpenAI-compat)
     |
 SurrealDB + External MCP Servers
 ```
@@ -76,7 +75,6 @@ SurrealDB + External MCP Servers
 ## External Resources
 
 - **MCP**: https://modelcontextprotocol.io
-- **Rig.rs**: https://rig.rs
 - **Tauri v2**: https://v2.tauri.app
 - **SvelteKit**: https://kit.svelte.dev
 - **SurrealDB**: https://surrealdb.com
