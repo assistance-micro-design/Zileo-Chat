@@ -32,6 +32,7 @@ pub mod prompt;
 pub mod serde_utils;
 pub mod skill;
 pub mod streaming;
+pub mod stt;
 pub mod sub_agent;
 pub mod task;
 pub mod thinking_step;

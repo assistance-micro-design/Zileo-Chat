@@ -51,7 +51,7 @@ rand = "0.9"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # HTTP client for provider connectivity tests and MCP HTTP transport
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
 
 # Async stream utilities for SSE (OPT-WF-4: Lock version)
 futures-util = "0.3.31"
@@ -65,6 +65,11 @@ keyring = { version = "3.6", features = [
 ] }
 aes-gcm = "0.10"
 base64 = "0.22"
+
+# Linux WebKitGTK permission-request hook so getUserMedia (microphone) works
+# inside the wry webview. macOS/Windows webviews surface their own prompts.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
 
 [dev-dependencies]
 tempfile = "3.24"

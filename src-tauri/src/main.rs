@@ -290,6 +290,11 @@ async fn main() -> anyhow::Result<()> {
             commands::user_question::submit_user_response,
             commands::user_question::get_pending_questions,
             commands::user_question::skip_question,
+            // Speech-to-text (Voxtral) commands
+            commands::stt::transcribe_audio,
+            commands::settings_stt::get_stt_settings,
+            commands::settings_stt::update_stt_settings,
+            commands::settings_stt::reset_stt_settings,
         ])
         .setup(|app| {
             let legal_notice = MenuItemBuilder::with_id("legal-notice", "Mentions l\u{00e9}gales")
@@ -325,6 +330,31 @@ async fn main() -> anyhow::Result<()> {
 
             app.set_menu(menu)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            // WebKitGTK refuses getUserMedia by default. Auto-allow
+            // permission-requests so the dictation FAB can capture audio.
+            // No-op on macOS / Windows (handled by their native webviews).
+            #[cfg(target_os = "linux")]
+            {
+                use webkit2gtk::{PermissionRequestExt, WebViewExt};
+                if let Some(main_window) = app.get_webview_window("main") {
+                    main_window
+                        .with_webview(|webview| {
+                            webview.inner().connect_permission_request(
+                                |_webview, permission_request| {
+                                    permission_request.allow();
+                                    true
+                                },
+                            );
+                        })
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+                    tracing::info!("WebKitGTK permission handler installed");
+                } else {
+                    tracing::warn!(
+                        "Could not locate 'main' webview window; mic permission may fail"
+                    );
+                }
+            }
 
             // Handle menu events - emit Tauri events for frontend to listen
             app.on_menu_event(move |app_handle, event| {

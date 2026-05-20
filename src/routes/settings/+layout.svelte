@@ -33,7 +33,8 @@ Each section is now a separate route for better performance and UX.
 		BookOpen,
 		BookMarked,
 		FolderSync,
-		ScrollText
+		ScrollText,
+		Mic
 	} from '@lucide/svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -102,6 +103,12 @@ Each section is now a separate route for better performance and UX.
 			route: '/settings/import-export',
 			labelKey: 'settings_import_export',
 			icon: FolderSync
+		},
+		{
+			id: 'speech-to-text',
+			route: '/settings/speech-to-text',
+			labelKey: 'settings_speech_to_text',
+			icon: Mic
 		},
 		{ id: 'theme', route: '/settings/theme', labelKey: 'settings_theme', icon: Palette }
 	] as const;

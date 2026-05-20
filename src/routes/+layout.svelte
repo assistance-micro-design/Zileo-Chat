@@ -26,6 +26,8 @@
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+	import MicButton from '$lib/components/ui/MicButton.svelte';
+	import { sttSettingsStore } from '$lib/stores/sttSettings';
 
 	let { children } = $props();
 
@@ -40,6 +42,11 @@
 	onMount(async () => {
 		theme.init();
 		localeStore.init();
+
+		// Load STT settings — FAB visibility depends on `enabled` flag.
+		void sttSettingsStore.loadSettings().catch(() => {
+			/* defaults are surfaced by the store on failure */
+		});
 
 		// Check if onboarding should be shown (first launch)
 		showOnboarding = onboardingStore.shouldShow();
@@ -81,6 +88,9 @@
 		</div>
 	</AppContainer>
 {/if}
+
+<!-- Global push-to-talk FAB (renders itself only when STT is enabled) -->
+<MicButton />
 
 <!-- Toast notifications (global, visible on all pages) -->
 <ToastContainer />
