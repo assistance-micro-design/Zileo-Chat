@@ -40,16 +40,50 @@
 		return false;
 	}
 
+	/**
+	 * Push-to-talk hotkey: hold Ctrl+Shift+Space to record, release to
+	 * transcribe. Matches the mouse FAB behavior (auto-repeat ignored).
+	 */
+	function isShortcut(ev: KeyboardEvent): boolean {
+		return ev.ctrlKey && ev.shiftKey && (ev.code === 'Space' || ev.key === ' ');
+	}
+
+	function handleHotkeyDown(ev: KeyboardEvent) {
+		if (!isShortcut(ev) || ev.repeat) return;
+		if (sttStore.phase === 'recording' || sttStore.phase === 'transcribing') return;
+		if (!isEditableTarget(document.activeElement)) return;
+		ev.preventDefault();
+		if (!sttStore.attachToActive()) return;
+		void sttStore.startRecording();
+	}
+
+	function handleHotkeyUp(ev: KeyboardEvent) {
+		// Trigger on any key-up while we're recording — releasing Ctrl/Shift
+		// before Space (or any combination) ends the dictation safely.
+		if (sttStore.phase === 'recording') {
+			if (ev.code === 'Space' || ev.key === ' ' || ev.key === 'Control' || ev.key === 'Shift') {
+				ev.preventDefault();
+				void sttStore.stopAndTranscribe();
+			}
+		} else if (sttStore.phase === 'armed' && isShortcut(ev)) {
+			sttStore.detach();
+		}
+	}
+
 	onMount(() => {
 		const update = () => {
 			focusedEditable = isEditableTarget(document.activeElement);
 		};
 		document.addEventListener('focusin', update);
 		document.addEventListener('focusout', update);
+		document.addEventListener('keydown', handleHotkeyDown);
+		document.addEventListener('keyup', handleHotkeyUp);
 		update();
 		return () => {
 			document.removeEventListener('focusin', update);
 			document.removeEventListener('focusout', update);
+			document.removeEventListener('keydown', handleHotkeyDown);
+			document.removeEventListener('keyup', handleHotkeyUp);
 		};
 	});
 
@@ -106,9 +140,9 @@
 		onpointerleave={handlePointerUp}
 	>
 		{#if phase === 'error'}
-			<MicOff size={22} aria-hidden="true" />
+			<MicOff size={16} aria-hidden="true" />
 		{:else}
-			<Mic size={22} aria-hidden="true" />
+			<Mic size={16} aria-hidden="true" />
 		{/if}
 		{#if isRecording}
 			<span class="rec-badge">REC</span>
@@ -121,11 +155,9 @@
 
 <style>
 	.mic-fab {
-		position: fixed;
-		bottom: var(--spacing-xl);
-		right: var(--spacing-xl);
-		width: 56px;
-		height: 56px;
+		position: relative;
+		width: 36px;
+		height: 36px;
 		border-radius: 50%;
 		border: 1px solid var(--color-border);
 		background: var(--color-bg-elevated);
@@ -135,14 +167,13 @@
 		justify-content: center;
 		cursor: pointer;
 		opacity: 0.6;
-		box-shadow: var(--shadow-md);
+		flex-shrink: 0;
 		transition:
 			opacity var(--transition-fast),
 			transform var(--transition-fast),
 			background-color var(--transition-fast),
 			color var(--transition-fast),
 			border-color var(--transition-fast);
-		z-index: 1030;
 	}
 
 	.mic-fab.active {

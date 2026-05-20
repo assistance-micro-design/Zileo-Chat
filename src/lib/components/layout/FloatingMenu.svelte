@@ -30,6 +30,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
 	import LanguageSelector from '$lib/components/ui/LanguageSelector.svelte';
+	import MicButton from '$lib/components/ui/MicButton.svelte';
 
 	/**
 	 * FloatingMenu props
@@ -55,9 +56,10 @@
 </script>
 
 <nav class="floating-menu" aria-label={$i18n('layout_main_navigation')}>
-	<!-- Left: Logo/Title -->
+	<!-- Left: Logo/Title + dictation FAB -->
 	<div class="menu-left">
 		<h1 class="floating-menu-title">{title}</h1>
+		<MicButton />
 	</div>
 
 	<!-- Center: Main Navigation -->
@@ -113,6 +115,7 @@
 		flex: 1;
 		display: flex;
 		align-items: center;
+		gap: var(--spacing-md);
 	}
 
 	.menu-center {

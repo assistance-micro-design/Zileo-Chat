@@ -152,6 +152,7 @@
 		<h2 class="section-title">{$i18n('stt.title')}</h2>
 	</div>
 	<p class="section-description">{$i18n('stt.description')}</p>
+	<p class="section-description shortcut-hint">{$i18n('stt.shortcut_help')}</p>
 
 	{#if $sttSettingsLoading}
 		<div class="lazy-loading">{$i18n('stt.loading')}</div>
