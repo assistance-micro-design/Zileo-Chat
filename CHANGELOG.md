@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-05-20
+
 Push-to-talk voice dictation via Mistral Voxtral (`feature/dictee-vocale-mistral-stt`). Global microphone button in the top navigation (next to the "Zileo Chat" title) plus a `Ctrl+Shift+Space` hotkey — both record while held and transcribe on release. The resulting text is inserted at the cursor of the originally-focused field (textarea or text-like input), so dictation works in the chat composer, in agent forms, in settings, anywhere a text field has focus. Configured under **Settings > Voice Dictation**: enable toggle, Voxtral model id (validated against an allowlist), free-text context-bias hints (project nouns / jargon that get forwarded into the prompt), and an optional language override (auto / explicit ISO 639-1). Tests verts : 1463 Rust lib (+10 STT) + clippy `--all-targets` clean + svelte-check 4262 / 0 errors + 522 Vitest (+70 STT) + ESLint / Prettier clean. Zero schema migration. One new Linux-only Cargo dependency (`webkit2gtk = "2.0"`, target-conditional).
 
 ### Added
 
 - **`MicButton` component** (`src/lib/components/ui/MicButton.svelte`) embedded in `FloatingMenu` — 36 px round button sized to match the neighbouring icon buttons. Pointer-down and `Ctrl+Shift+Space` keydown both transition the singleton STT store from `idle` to `recording`; pointer-up and keyup transition to `transcribing`, then back to `idle` after Voxtral returns. Tooltip surfaces the hotkey.
-- **Push-to-talk state machine** (`src/lib/stores/sttStore.svelte.ts`) — singleton Svelte 5 `$state` store with phases `idle → recording → transcribing → idle`. Idempotent against concurrent triggers (pointer-up arriving while a hotkey is held doesn't cancel; double-press doesn't spawn a second `MediaRecorder`). Owns the `MediaRecorderSession` plus a snapshot of the editable field captured *before* recording starts.
+- **Push-to-talk state machine** (`src/lib/stores/sttStore.svelte.ts`) — singleton Svelte 5 `$state` store with phases `idle → recording → transcribing → idle`. Idempotent against concurrent triggers (pointer-up arriving while a hotkey is held doesn't cancel; double-press doesn't spawn a second `MediaRecorder`). Owns the `MediaRecorderSession` plus a snapshot of the editable field captured _before_ recording starts.
 - **Audio capture wrapper** (`src/lib/utils/audio-capture.ts`) — `pickSupportedMime` walks a priority codec probe chain (`webm/opus → webm → ogg/opus → mp4/mp4a → mp4`) and returns the first MIME the browser claims; `startRecording` / `stopRecording` / `cancelRecording` manage the `getUserMedia` lifecycle with explicit microphone constraints (16 kHz mono, echo cancellation, noise suppression); typed `AudioCaptureError` with seven kinds (`permission-denied / no-codec / no-device / too-short / too-large / empty / recorder-failed`) lets callers branch without string parsing; `blobToBase64` chunks the encoding (32 KB) to avoid `Maximum call stack size exceeded` on large blobs, with a Node `Buffer` fallback for jsdom tests.
 - **DOM insertion helpers** (`src/lib/utils/dom-insert.ts`) — `captureActiveField(doc?)` snapshots the focused `<input>` (text-like only — `password` is explicitly excluded) or `<textarea>` plus its selection range, returns `null` for any non-editable element; `insertTextIntoField(target, start, end, text)` writes via `setRangeText` then dispatches a synthetic `InputEvent('input', {bubbles:true, inputType:'insertText'})` so Svelte 5's `bind:value` actually picks the change up — without the synthetic event, the bound state stays stale and the next re-render overwrites the inserted text. Selection range is clamped against `target.value.length` in case the user truncated the field while transcription was in flight.
 - **Backend STT module** (`src-tauri/src/llm/stt/`, with `mod.rs` + `mistral_batch.rs`) — provider-agnostic `transcribe_audio_core(db, audio, settings)` selects the configured backend (currently Mistral Voxtral batch endpoint via `multipart/form-data` upload of the audio blob + model id + optional context bias prompt + optional language hint). Validates `SUPPORTED_AUDIO_MIMES` (mirror of the frontend allowlist), `MAX_AUDIO_BYTES = 25 MiB`, `MIN_AUDIO_BYTES = 512`. Designed to receive sibling providers (Ollama Whisper, OpenAI Whisper) without touching the call site.
@@ -23,10 +25,10 @@ Push-to-talk voice dictation via Mistral Voxtral (`feature/dictee-vocale-mistral
 - **macOS microphone usage description** (`src-tauri/Info.plist`) — `NSMicrophoneUsageDescription` is auto-merged into the bundled `Info.plist` so macOS surfaces a permission prompt the first time the user records.
 - **i18n strings** (`messages/en.json` + `fr.json`, 56 new keys each): settings labels, tooltips, push-to-talk hint, error toasts.
 - **+70 Vitest cases** covering the new utilities and the state machine end-to-end:
-    - `stt-validation.test.ts` (11): model id boundary + casing.
-    - `dom-insert.test.ts` (17): `captureActiveField` whitelist (password excluded) and `insertTextIntoField` selection-clamp + `InputEvent` dispatch.
-    - `audio-capture.test.ts` (23): `pickSupportedMime` order, `AudioCaptureError` kinds, `blobToBase64` (Node Blob polyfill for jsdom), `startRecording` / `stopRecording` / `cancelRecording` with a `FakeMediaRecorder`.
-    - `sttStore.test.ts` (19): attach/detach, `startRecording` error mapping, `stopAndTranscribe` happy path plus every failure branch, `cancel` idempotency.
+  - `stt-validation.test.ts` (11): model id boundary + casing.
+  - `dom-insert.test.ts` (17): `captureActiveField` whitelist (password excluded) and `insertTextIntoField` selection-clamp + `InputEvent` dispatch.
+  - `audio-capture.test.ts` (23): `pickSupportedMime` order, `AudioCaptureError` kinds, `blobToBase64` (Node Blob polyfill for jsdom), `startRecording` / `stopRecording` / `cancelRecording` with a `FakeMediaRecorder`.
+  - `sttStore.test.ts` (19): attach/detach, `startRecording` error mapping, `stopAndTranscribe` happy path plus every failure branch, `cancel` idempotency.
 
 ### Changed
 
@@ -36,7 +38,7 @@ Push-to-talk voice dictation via Mistral Voxtral (`feature/dictee-vocale-mistral
 ### Notes
 
 - **Push-to-talk only — no streaming transcription.** The Mistral platform exposes both a batch endpoint and a realtime websocket-based endpoint; the v1 here is batch-only. Realtime is on the roadmap once we know what UX (per-word streaming insert vs. final-on-release) users prefer.
-- **Capture the field *before* `getUserMedia`.** On WebKitGTK Linux, the permission request UI briefly steals focus from the textarea — even when the permission is auto-allowed by the new permission hook. Reading `document.activeElement` *after* `startRecording()` would return `<body>` and the transcript would land in nowhere. The store snapshots the editable element + its selection range before opening the microphone, and re-uses that snapshot at insertion time.
+- **Capture the field _before_ `getUserMedia`.** On WebKitGTK Linux, the permission request UI briefly steals focus from the textarea — even when the permission is auto-allowed by the new permission hook. Reading `document.activeElement` _after_ `startRecording()` would return `<body>` and the transcript would land in nowhere. The store snapshots the editable element + its selection range before opening the microphone, and re-uses that snapshot at insertion time.
 - **Defense in depth on the prompt-injection vector.** The context-bias entries are forwarded verbatim into the Voxtral prompt, so a malicious string (newline + role injection) could attempt to coerce the model. The backend validator rejects any entry containing `c.is_control()` (NUL/LF/CR) and caps each entry at 200 characters; the language field is constrained to a closed ISO 639-1 allowlist. The same control-character rule applies to the existing message attachment `name` field (consistent posture across two adjacent surfaces).
 - **No schema migration.** `STTSettings` is persisted as a JSON blob on the `settings` table under the key `settings:stt`. Fresh installs get the defaults via `Default::default()`; legacy installs without the key get the same defaults on first read.
 - **Hotkey choice (`Ctrl+Shift+Space`).** Picked because it does not collide with any existing OS shortcut on Linux / macOS / Windows, and because `Space` alone would conflict with the textarea's natural typing. The hotkey is registered in `MicButton`'s `onMount` so it's only active while the button is on screen (which is always — `FloatingMenu` is mounted on every page).
@@ -1229,7 +1231,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.25.0
 [0.24.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.24.0
 [0.23.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.1
 [0.23.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.0
