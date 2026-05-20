@@ -19,9 +19,9 @@ The application has two main pages accessible via a floating top menu: **Setting
 
 ## 1. Floating Menu
 
-Fixed top navigation bar with backdrop blur, linking to `/settings` and `/agent`. Supports keyboard navigation and icon + label buttons.
+Fixed top navigation bar with backdrop blur, linking to `/settings` and `/agent`. Supports keyboard navigation and icon + label buttons. Also hosts the push-to-talk dictation `MicButton` (next to the "Zileo Chat" title) so the microphone is reachable from every page without overlapping floating UI (toasts, validation modal).
 
-See `src/lib/components/layout/FloatingMenu.svelte`
+See `src/lib/components/layout/FloatingMenu.svelte` and `src/lib/components/ui/MicButton.svelte`
 
 ## 2. Settings Page
 
@@ -42,6 +42,7 @@ Route-based architecture with code splitting per section. The settings layout pr
 | `/settings/skills` | Skills | Skill document CRUD |
 | `/settings/import-export` | Import/Export | Data portability (schema v1.2, 6 entity types) |
 | `/settings/theme` | Theme | Light/Dark/Auto theme, color scheme, font settings, live preview |
+| `/settings/speech-to-text` | Voice Dictation | Push-to-talk dictation: enable toggle, Voxtral model id (validated against allowlist), context-bias hints (10 × 200c max), language override (auto / explicit ISO 639-1), `Ctrl+Shift+Space` hotkey hint |
 
 A global `+error.svelte` boundary at the route root renders 500/load errors with i18n copy and retry/home buttons (see `src/routes/+error.svelte`). It replaces the default unstyled SvelteKit error page.
 
@@ -88,6 +89,14 @@ Text input area with prompt selector modal. Users can attach saved prompts with 
 Each input feeds through `processImageFile` (`src/lib/utils/image-processing.ts`) which downscales the longest edge to 1568 px on a hidden `<canvas>`, re-encodes animated GIFs to PNG (first frame), and produces a base64 payload. Limits: 8 images per send, 4 MB raw per file, validated again backend-side. Thumbnails preview with per-image remove. A soft warning banner shows when `selectedModel.supports_vision === false` (no hard block — the message still goes through). Attachment error is intentionally sticky: it clears on the next successful add or when the last pending attachment is removed, never on a timer.
 
 See `src/lib/components/chat/ChatInput.svelte`, `src/lib/components/chat/PromptSelectorModal.svelte`, and `src/lib/utils/image-processing.ts`
+
+### Voice Dictation (Push-to-Talk)
+
+Mic button in the top navigation plus `Ctrl+Shift+Space` hotkey — both record while held, transcribe on release via Mistral Voxtral batch endpoint, and insert the transcript at the cursor of the originally-focused field (textarea or text-like input — `password` excluded). The focused field is snapshotted *before* `getUserMedia` runs because the permission UI briefly steals focus on WebKitGTK Linux.
+
+A singleton state machine (`src/lib/stores/sttStore.svelte.ts`) gates phases `idle → recording → transcribing → idle` and stays idempotent under concurrent triggers (pointer + hotkey + a11y). Audio capture wraps `MediaRecorder` + `getUserMedia` with a codec probe chain (`webm/opus → webm → ogg/opus → mp4/mp4a → mp4`), a typed `AudioCaptureError` (`permission-denied / no-codec / no-device / too-short / too-large / empty / recorder-failed`), and chunked base64 encoding for blobs up to 25 MiB. Insertion uses `setRangeText` followed by a synthetic `InputEvent` dispatch so Svelte 5's `bind:value` actually picks the change up.
+
+See `src/lib/components/ui/MicButton.svelte`, `src/lib/stores/sttStore.svelte.ts`, `src/lib/utils/audio-capture.ts`, and `src/lib/utils/dom-insert.ts`
 
 ### Validation System (Human-in-the-Loop)
 
@@ -189,6 +198,8 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `validation` | Human-in-the-loop validation requests | `src/lib/stores/validation.ts` |
 | `validation-settings` | Validation configuration persistence | `src/lib/stores/validation-settings.ts` |
 | `workflows` | Workflow management with pure functions + reactive store | `src/lib/stores/workflows.ts` |
+| `sttStore` | Push-to-talk dictation singleton state machine (idle → recording → transcribing → idle), idempotent under concurrent triggers | `src/lib/stores/sttStore.svelte.ts` |
+| `sttSettings` | STT settings persistence (enable, Voxtral model id, context-bias hints, language override) via Tauri commands | `src/lib/stores/sttSettings.ts` |
 
 ## 7. Types
 
@@ -219,10 +230,11 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `user-question.ts` | User question types | User question events |
 | `validation.ts` | ValidationRequest, ValidationType, RiskLevel | Validation requests |
 | `workflow.ts` | Workflow, WorkflowResult, WorkflowMetrics, WorkflowFullState | Workflow execution |
+| `stt.ts` | STTSettings, UpdateSTTSettingsRequest, TranscribeAudioRequest, TranscriptionResponse, SupportedLanguage | Push-to-talk dictation (mirrors `src-tauri/src/models/stt.rs`; tri-state language override `string \| null \| undefined`) |
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 19 modules)
+### Utilities (`src/lib/utils/`, 22 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -243,6 +255,9 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `agent-reasoning.ts` | `getReasoningOptions()`, `getReasoningHelp()`, `normalizeReasoningEffortForProvider()` | Provider-aware reasoning_effort selector helpers (Mistral exposes Off/High only; other providers expose Off/Low/Medium/High) |
 | `browser-download.ts` | `triggerBrowserDownload()` | Programmatic file download via anchor click (used by ExportPanel) |
 | `image-processing.ts` | `processImageFile()`, `readFileAsDataURL()`, `loadImage()` | Multimodal attachment pipeline: canvas-based resize to 1568 px max, GIF → PNG re-encoding, base64 output. Bounds the IPC payload before `save_message` / `execute_workflow_streaming`. |
+| `audio-capture.ts` | `pickSupportedMime()`, `startRecording()`, `stopRecording()`, `cancelRecording()`, `blobToBase64()`, `AudioCaptureError`, `SUPPORTED_AUDIO_MIMES` | Push-to-talk capture wrapper around `MediaRecorder` + `getUserMedia`. Codec probe chain, typed error kinds, chunked base64 encoding (Node fallback for jsdom). MIN 250 ms, MAX 25 MiB. |
+| `dom-insert.ts` | `captureActiveField()`, `insertTextIntoField()` | Programmatic text insertion into the focused editable field. `setRangeText` + synthetic `InputEvent` dispatch so Svelte 5 `bind:value` syncs. Selection range clamped against current value length. |
+| `stt-validation.ts` | `validateVoxtralModelId()` | Frontend mirror of the backend Voxtral model id allowlist (renders inline validation without an extra round-trip; backend remains source of truth at persistence). |
 | `index.ts` | Re-exports | Barrel file |
 
 ### Actions (`src/lib/actions/`, 1 module)
@@ -251,7 +266,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 |--------|-------------|-------------|
 | `focusTrap.ts` | `focusTrap` (Svelte 5 attachment) | WCAG 2.1 modal keyboard focus trap with Tab cycling and focus restoration on teardown |
 
-### Services (`src/lib/services/`, 7 modules including index)
+### Services (`src/lib/services/`, 8 modules including index)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -261,6 +276,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `workflow.service.ts` | `WorkflowService.execute()`, `.cancel()` | Workflow execution management |
 | `workflowExecutor.service.ts` | `WorkflowExecutorService.execute()` | 8-step workflow orchestration with concurrency check |
 | `localStorage.service.ts` | `LocalStorage.get()`, `.set()`, `STORAGE_KEYS` | Typed localStorage access |
+| `sttService.ts` | `transcribeAudio()` | Thin Tauri IPC wrapper for the `transcribe_audio` command. Forwards `{mime_type, data_base64}` + STT settings and returns the transcript string. |
 
 ## 9. Frontend-Backend Communication
 

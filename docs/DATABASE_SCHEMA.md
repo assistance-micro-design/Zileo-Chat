@@ -496,6 +496,14 @@ Schema migration guard (prevents re-execution of destructive migrations).
 
 The `prompt` table (prompt library) is created on demand via `CREATE prompt:...` and is intentionally SCHEMALESS. Persisted fields are described by the `Prompt` model (`src-tauri/src/models/prompt.rs`): `id`, `name`, `description`, `category` (system/user/analysis/generation/coding/custom), `content`, `variables[]`, `created_at`, `updated_at`. Validation lives in `commands/prompt.rs`.
 
+## Single-Row Settings (JSON blobs)
+
+Some settings live as a single JSON blob rather than as a structured table — used when the surface is bound to one user-level config object and the field set evolves frequently. The row id is the table name (e.g. `settings:stt`), the payload is a `config` JSON string.
+
+| Key | Source of truth | Description |
+|-----|-----------------|-------------|
+| `settings:stt` | `STTSettings` (`src-tauri/src/models/stt.rs`) | Push-to-talk voice dictation: enable toggle, Voxtral model id, context-bias hints, optional ISO 639-1 language override. Persisted as JSON to avoid a migration on every additive field; validation lives in `commands/settings_stt.rs::apply_update`. |
+
 ---
 
 ## Vector Search (HNSW)

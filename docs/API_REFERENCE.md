@@ -332,6 +332,17 @@ Workflow organization into folders with color coding and custom ordering.
 | `delete_workflow_folder` | Delete a folder (workflows moved to root) |
 | `reorder_workflow_folders` | Reorder folders by position |
 
+### Speech-to-Text (`commands/stt.rs` + `commands/settings_stt.rs`)
+
+Push-to-talk voice dictation via Mistral Voxtral. The provider-agnostic core (`llm/stt/transcribe_audio_core`) lets future providers (Ollama Whisper, OpenAI Whisper) plug in without touching the command surface. Settings are persisted as a JSON blob on the `settings` table under key `settings:stt` — no dedicated SurrealDB schema.
+
+| Command | Description |
+|---------|-------------|
+| `transcribe_audio` | Transcribe a base64 audio blob via the configured STT provider. Validates `MAX_AUDIO_BASE64_LEN` (~25 MiB binary cap × 4/3) before forwarding to the core. Returns the transcript string. |
+| `get_stt_settings` | Return the current `STTSettings` (defaults if absent). |
+| `update_stt_settings` | Merge an `UpdateSTTSettingsRequest` into the current settings and persist. Validates: enable toggle, model id allowlist, context-bias trim + drop-empties + 10 × 200-char cap + control-char rejection, ISO 639-1 language allowlist. Language is a tri-state `Option<Option<String>>` (absent = keep, `null` = clear to auto, `Some(code)` = set explicit) via the shared `deserialize_explicit_option` helper. |
+| `reset_stt_settings` | Replace stored settings with defaults. |
+
 ---
 
 ## Key Types
@@ -386,6 +397,16 @@ Types are manually synchronized between frontend and backend.
 | `MCPAuthSecret` | `$types/mcp` | Secret payload (token/value/password); never returned by read commands |
 | `LegacyHttpAuthWarning` | `$types/mcp` | HTTP servers still using legacy env vars |
 | `MCPLatencyMetrics` | `$types/mcp` | Latency percentiles (p50/p95/p99) |
+
+### Speech-to-Text Types
+
+| Type | Location | Description |
+|------|----------|-------------|
+| `STTSettings` | `$types/stt` | Persisted dictation settings (enable, model id, context-bias hints, language override) |
+| `UpdateSTTSettingsRequest` | `$types/stt` | Patch payload for `update_stt_settings`; language is `string \| null \| undefined` to carry the tri-state semantic (absent = keep, `null` = clear to auto, `string` = set) |
+| `TranscribeAudioRequest` | `$types/stt` | `{mime_type, data_base64}` payload sent to `transcribe_audio` |
+| `TranscriptionResponse` | `$types/stt` | `{text}` response from the STT provider |
+| `SupportedLanguage` | `$types/stt` | Closed allowlist of ISO 639-1 codes the backend accepts |
 | `AvailableToolInfo` | `$types/tool` | Tool info (local or MCP source) |
 
 ### Import/Export Types

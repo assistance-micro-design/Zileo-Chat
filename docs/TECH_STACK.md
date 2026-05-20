@@ -113,12 +113,16 @@ LLM       : Mistral, Ollama, OpenAI-compatible providers (OpenRouter, RouterLab,
 
 **HTTP & Network**:
 
-- **reqwest**: 0.12 (features: rustls-tls, json, stream)
+- **reqwest**: 0.12 (features: rustls-tls, json, stream, multipart — `multipart` added for Voxtral STT batch upload)
 
 **Security**:
 
 - **keyring**: 3.6 (OS keychain: apple-native, windows-native, sync-secret-service)
 - **aes-gcm**: 0.10 (AES-256 encryption)
+
+**Platform-conditional**:
+
+- **webkit2gtk**: 2.0 (Linux only, under `[target.'cfg(target_os = "linux")'.dependencies]`) — exposes the WebKitGTK `permission-request` signal so `getUserMedia` can be allowed for the microphone (push-to-talk dictation). Without this hook, `wry`'s WebKitGTK backend denies all permission requests by default on Fedora / Ubuntu builds; macOS and Windows surface their own native prompts and don't need it.
 
 **Dev Dependencies**:
 
@@ -181,7 +185,7 @@ Three provider types with unified interface:
 
 | Provider | Type              | Features                                                |
 | -------- | ----------------- | ------------------------------------------------------- |
-| Mistral  | Native API        | Thinking/reasoning, vision, tool calling, streaming     |
+| Mistral  | Native API        | Thinking/reasoning, vision, tool calling, streaming, Voxtral speech-to-text (batch endpoint, used by push-to-talk dictation) |
 | Ollama   | Native API        | Local models, thinking, vision, tool calling, streaming |
 | Custom   | OpenAI-compatible | OpenRouter, RouterLab, etc. via `/v1/chat/completions`  |
 
