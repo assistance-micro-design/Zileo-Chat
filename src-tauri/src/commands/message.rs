@@ -39,6 +39,12 @@ pub(crate) const MAX_ATTACHMENTS_PER_MESSAGE: usize = 8;
 /// ~5.33 MB base64; we allow a tiny safety margin.
 pub(crate) const MAX_ATTACHMENT_BASE64_BYTES: usize = (4 * 1024 * 1024 * 4 / 3) + 256;
 
+/// Maximum length of the `name` field on an attachment (display-only).
+/// Long enough to fit any reasonable filename, short enough that a 1 MB
+/// adversarial blob in the name field is rejected at the boundary instead
+/// of bloating logs / display surfaces.
+pub(crate) const MAX_ATTACHMENT_NAME_LEN: usize = 512;
+
 /// MIME types accepted by the multimodal pipeline. Mirrored client-side in
 /// `image-processing.ts` so a rejection at either end yields a clear error.
 pub(crate) const ALLOWED_ATTACHMENT_MIMES: &[&str] =
@@ -83,6 +89,23 @@ fn validate_attachments(role: &str, attachments: &[MessageAttachment]) -> Result
                 att.data_base64.len(),
                 MAX_ATTACHMENT_BASE64_BYTES
             ));
+        }
+        // The `name` field is display-only but is persisted as-is into
+        // SurrealDB and surfaced in logs / UI. Reject NUL and other control
+        // characters (anything below 0x20) so a malicious paste cannot smuggle
+        // log-injection bytes or panic the DB driver. Cap the length so a
+        // multi-MB blob in `name` is rejected at the boundary instead of
+        // bloating downstream rows.
+        if let Some(name) = att.name.as_ref() {
+            if name.len() > MAX_ATTACHMENT_NAME_LEN {
+                return Err(format!(
+                    "Attachment {} has name longer than {} bytes",
+                    i, MAX_ATTACHMENT_NAME_LEN
+                ));
+            }
+            if name.chars().any(|c| c.is_control()) {
+                return Err(format!("Attachment {} name contains control characters", i));
+            }
         }
     }
     Ok(())
@@ -840,6 +863,55 @@ pub(crate) async fn load_workflow_blocks_core(
 mod tests {
     use super::*;
     use crate::test_utils::setup_test_state;
+
+    fn valid_attachment_with_name(name: Option<&str>) -> MessageAttachment {
+        MessageAttachment {
+            kind: "image".into(),
+            mime_type: "image/png".into(),
+            data_base64: "AAAA".into(),
+            name: name.map(String::from),
+            size_bytes: Some(3),
+        }
+    }
+
+    #[test]
+    fn validate_attachments_accepts_name_with_unicode_filename() {
+        // Defence-in-depth check must not flag legitimate filenames with
+        // accents, CJK, or emoji — the rule targets control bytes, not
+        // multi-byte printable characters.
+        let atts = vec![valid_attachment_with_name(Some("Capture_écran.png"))];
+        validate_attachments("user", &atts).expect("unicode name must be accepted");
+    }
+
+    #[test]
+    fn validate_attachments_rejects_name_with_null_byte() {
+        let atts = vec![valid_attachment_with_name(Some("evil\0name.png"))];
+        let err = validate_attachments("user", &atts).expect_err("NUL byte must be rejected");
+        assert!(err.contains("control characters"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_attachments_rejects_name_with_newline() {
+        // Newlines / carriage returns enable log-injection: a name like
+        // `"foo\nINFO: fake log line"` would split a log entry in two.
+        let atts = vec![valid_attachment_with_name(Some("foo\nbar.png"))];
+        let err = validate_attachments("user", &atts).expect_err("LF must be rejected");
+        assert!(err.contains("control characters"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_attachments_rejects_oversize_name() {
+        let huge = "a".repeat(MAX_ATTACHMENT_NAME_LEN + 1);
+        let atts = vec![valid_attachment_with_name(Some(&huge))];
+        let err = validate_attachments("user", &atts).expect_err("oversize name must be rejected");
+        assert!(err.contains("longer than"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_attachments_accepts_missing_name() {
+        let atts = vec![valid_attachment_with_name(None)];
+        validate_attachments("user", &atts).expect("missing name must be accepted");
+    }
 
     /// Inserts an `assistant` row directly (matches the columns the metrics
     /// query reads). `timestamp` is offset to allow ordering tests without

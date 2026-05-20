@@ -168,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_part_is_object_with_url() {
+    fn build_image_content_part_openai_wraps_data_url_in_image_url_object() {
         let part = build_image_content_part_openai(&sample_attachment());
         assert_eq!(part["type"], "image_url");
         assert!(part["image_url"].is_object());
@@ -179,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_converts_object_url_to_string_for_mistral() {
+    fn normalize_for_mistral_flattens_image_url_object_to_string() {
         let mut messages = vec![json!({
             "role": "user",
             "content": [
@@ -193,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_idempotent_on_already_string_shape() {
+    fn normalize_for_mistral_is_idempotent_when_image_url_is_already_string() {
         let mut messages = vec![json!({
             "role": "user",
             "content": [
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_skips_string_content() {
+    fn normalize_for_mistral_leaves_message_untouched_when_content_is_plain_string() {
         let mut messages = vec![json!({
             "role": "user",
             "content": "plain text only"
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_skips_text_parts() {
+    fn normalize_for_mistral_leaves_message_untouched_when_content_has_only_text_parts() {
         let mut messages = vec![json!({
             "role": "user",
             "content": [
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_native_extracts_images_and_flattens_content() {
+    fn normalize_for_ollama_native_extracts_images_and_collapses_text_into_string_content() {
         let mut messages = vec![json!({
             "role": "user",
             "content": [
@@ -248,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_native_strips_data_prefix() {
+    fn normalize_for_ollama_native_strips_data_url_prefix_from_image_payload() {
         let mut messages = vec![json!({
             "role": "user",
             "content": [
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_native_idempotent_on_string_content() {
+    fn normalize_for_ollama_native_is_idempotent_when_content_is_already_a_string() {
         let mut messages = vec![json!({
             "role": "user",
             "content": "already a string"

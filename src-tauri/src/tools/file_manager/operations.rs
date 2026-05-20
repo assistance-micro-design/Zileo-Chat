@@ -18,7 +18,8 @@
 //! to keep `tool.rs` focused on struct definition and trait implementation.
 
 use crate::tools::file_manager::helpers::{
-    ensure_parent_exists, format_file_info, is_text_file, DEFAULT_LIST_MAX, MAX_FILE_SIZE,
+    ensure_parent_exists, ext_to_image_mime, format_file_info, is_text_file,
+    ALLOWED_IMAGE_EXTENSIONS, DEFAULT_LIST_MAX, MAX_FILE_SIZE,
 };
 use crate::tools::file_manager::security::{find_authorized_folder, validate_path};
 use crate::tools::file_manager::trash::{backup_before_overwrite, move_to_trash, TRASH_DIR_NAME};
@@ -154,7 +155,6 @@ impl FileManagerTool {
     /// next iteration so the model can actually "see" the image.
     pub(crate) async fn op_read_image(&self, input: &Value) -> ToolResult<Value> {
         const MAX_IMAGE_SIZE_BYTES: u64 = 8 * 1024 * 1024; // 8 MB
-        const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
 
         let path_str = input["path"].as_str().unwrap_or("");
         let validated_path = validate_path(path_str, &self.authorized_folders)?;
@@ -212,14 +212,8 @@ impl FileManagerTool {
         use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
         let data_base64 = BASE64_STANDARD.encode(&bytes);
 
-        let mime_type = match ext.as_str() {
-            "png" => "image/png",
-            "jpg" | "jpeg" => "image/jpeg",
-            "webp" => "image/webp",
-            "gif" => "image/gif",
-            // Unreachable: extension already checked against the whitelist.
-            _ => "application/octet-stream",
-        };
+        // Whitelist check above guarantees a hit; fallback is defensive only.
+        let mime_type = ext_to_image_mime(&ext).unwrap_or("application/octet-stream");
 
         let file_name = validated_path
             .file_name()

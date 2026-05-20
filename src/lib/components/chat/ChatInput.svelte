@@ -44,6 +44,15 @@
 	const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 	/** MIME types accepted by the multimodal pipeline. */
 	const ALLOWED_MIME: AttachmentMime[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+	/**
+	 * File extensions allowed by the Tauri picker filter. Mirrored Rust-side
+	 * in `tools/file_manager/helpers::ALLOWED_IMAGE_EXTENSIONS`; the lists are
+	 * not wired through IPC because both ends are tiny static whitelists and
+	 * an end-to-end test would still need to assert byte-for-byte equality.
+	 * Kept next to `ALLOWED_MIME` so a future contributor sees both surfaces
+	 * at once if they ever extend the whitelist.
+	 */
+	const ALLOWED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 	/** Canvas resize threshold. ~1568px keeps Mistral/OpenAI happy. */
 	const MAX_DIMENSION = 1568;
 
@@ -154,7 +163,13 @@
 		}
 	}
 
-	/** Display an attachment error briefly. */
+	/**
+	 * Display an attachment error. The message is intentionally sticky: it
+	 * clears only when a subsequent attachment succeeds (`addAttachmentFromFile`
+	 * / `handlePickFiles`) or when the user removes the last pending
+	 * attachment. No auto-timeout — a transient toast would race with the
+	 * upload pipeline and disappear before the user reads what failed.
+	 */
 	function showError(message: string): void {
 		attachmentError = message;
 	}
@@ -225,7 +240,7 @@
 				filters: [
 					{
 						name: 'Images',
-						extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif']
+						extensions: ALLOWED_IMAGE_EXTENSIONS
 					}
 				]
 			});

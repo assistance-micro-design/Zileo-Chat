@@ -22,6 +22,7 @@
 //! - [`list_trash`] - List trash entries for a specific folder
 //! - [`restore_from_trash_cmd`] - Restore a file from trash
 
+use crate::tools::file_manager::helpers::{ext_to_image_mime, ALLOWED_IMAGE_EXTENSIONS};
 use crate::tools::file_manager::security::validate_folder_for_authorization;
 use crate::tools::file_manager::trash::TrashEntry;
 use crate::tools::file_manager::trash_management;
@@ -78,16 +79,14 @@ pub async fn read_image_for_attachment(path: String) -> Result<ImageReadResult, 
         .map(|s| s.to_lowercase())
         .unwrap_or_default();
 
-    let mime_type = match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        other => {
-            warn!(extension = %other, "Picker received unsupported image extension");
+    let mime_type = match ext_to_image_mime(&ext) {
+        Some(m) => m,
+        None => {
+            warn!(extension = %ext, "Picker received unsupported image extension");
             return Err(format!(
-                "Unsupported image extension '{}'. Allowed: png, jpg, jpeg, webp, gif",
-                other
+                "Unsupported image extension '{}'. Allowed: {}",
+                ext,
+                ALLOWED_IMAGE_EXTENSIONS.join(", ")
             ));
         }
     };

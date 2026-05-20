@@ -26,6 +26,23 @@ use std::path::Path;
 /// Maximum file size for read operations (10 MB).
 pub const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
+/// Extension whitelist for image-attachment ingestion paths. Shared by the
+/// `read_image` tool operation and the `read_image_for_attachment` Tauri
+/// command so the picker and the agent loop reject the same set of files.
+pub const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
+
+/// Map a lowercased file extension to its canonical image MIME type. Returns
+/// `None` for any extension outside [`ALLOWED_IMAGE_EXTENSIONS`].
+pub fn ext_to_image_mime(ext: &str) -> Option<&'static str> {
+    match ext {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        "gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
 /// Default max results for list operations.
 pub const DEFAULT_LIST_MAX: usize = 500;
 
@@ -263,5 +280,45 @@ mod tests {
         assert_eq!(DEFAULT_SEARCH_MAX, 100);
         assert_eq!(DEFAULT_CONTEXT_LINES, 3);
         assert_eq!(MAX_CONTEXT_LINES, 10);
+    }
+
+    #[test]
+    fn ext_to_image_mime_maps_each_whitelisted_extension() {
+        assert_eq!(ext_to_image_mime("png"), Some("image/png"));
+        assert_eq!(ext_to_image_mime("jpg"), Some("image/jpeg"));
+        assert_eq!(ext_to_image_mime("jpeg"), Some("image/jpeg"));
+        assert_eq!(ext_to_image_mime("webp"), Some("image/webp"));
+        assert_eq!(ext_to_image_mime("gif"), Some("image/gif"));
+    }
+
+    #[test]
+    fn ext_to_image_mime_returns_none_for_unsupported_extension() {
+        assert_eq!(ext_to_image_mime("bmp"), None);
+        assert_eq!(ext_to_image_mime("svg"), None);
+        assert_eq!(ext_to_image_mime(""), None);
+    }
+
+    #[test]
+    fn ext_to_image_mime_is_case_sensitive_callers_must_lowercase() {
+        // The helper assumes its input is already lowercased — both call
+        // sites (`op_read_image`, `read_image_for_attachment`) normalise via
+        // `to_lowercase()` before dispatching here. Documented as part of the
+        // contract so a future caller does not silently get None on `PNG`.
+        assert_eq!(ext_to_image_mime("PNG"), None);
+        assert_eq!(ext_to_image_mime("JPG"), None);
+    }
+
+    #[test]
+    fn allowed_image_extensions_matches_helper_coverage() {
+        // Each extension in the whitelist must resolve to a MIME — otherwise
+        // a caller filtering on the list would accept files the helper can't
+        // map.
+        for ext in ALLOWED_IMAGE_EXTENSIONS {
+            assert!(
+                ext_to_image_mime(ext).is_some(),
+                "whitelist contains '{}' but ext_to_image_mime returns None",
+                ext
+            );
+        }
     }
 }
