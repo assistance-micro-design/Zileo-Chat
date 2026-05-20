@@ -27,9 +27,10 @@ use crate::agents::execution::tool_loop::{PricingCache, TokenTracker, ToolLoopCo
 use crate::agents::execution::tools;
 use crate::llm::tool_adapter::ProviderToolAdapter;
 use crate::llm::{ProviderType, ToolCompletionParams};
-use crate::models::function_calling::ToolChoiceMode;
+use crate::models::function_calling::{FunctionCallResult, ToolChoiceMode};
 use crate::models::streaming::StreamChunk;
 use crate::models::workflow::IterationMetrics;
+use crate::models::MessageAttachment;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -355,13 +356,23 @@ pub(crate) async fn run_single_iteration(
             ),
         );
 
-        let result = tools::execute_function_call(
+        let mut result = tools::execute_function_call(
             call,
             inputs.call_ctx,
             mstate.tools_used,
             mstate.mcp_calls_made,
         )
         .await;
+
+        // Pull the heavy base64 image bytes off the result before any of the
+        // downstream sinks consume it: the LLM tool message (stringified by
+        // every adapter), the persisted `tool_execution.output_result` row,
+        // and the live `tool_call_complete` stream chunk all walk the same
+        // payload. Leaving the marker in place inflated a 1 MB screenshot to
+        // a 1.3 M-token prompt and tripped Mistral's context cap. The bytes
+        // ride on the synthetic multipart user turn appended at the end of
+        // the loop instead.
+        let image_attachment = take_image_attachment(&mut result);
 
         let exec_duration = exec_start.elapsed().as_millis() as u64;
         let tool_type = if call.is_mcp_tool() { "mcp" } else { "local" };
@@ -411,7 +422,118 @@ pub(crate) async fn run_single_iteration(
         mstate
             .messages
             .push(inputs.adapter.format_tool_result(&result));
+
+        // When the tool was FileManagerTool.read_image, the marker captured
+        // above carries the actual bytes. Inject them into a synthetic
+        // multipart user turn (text + image_url) so the next assistant call
+        // actually sees the picture — the `role: "tool"` message is
+        // stringified by every adapter and cannot carry image parts.
+        if let Some(attachment) = image_attachment {
+            let path_hint = result
+                .result
+                .get("path")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let header = match path_hint {
+                Some(p) => format!("[Image loaded from {}]", p),
+                None => "[Image loaded]".to_string(),
+            };
+            let image_part = crate::llm::image_format::build_image_content_part_openai(&attachment);
+            let synthetic = serde_json::json!({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": header},
+                    image_part,
+                ],
+            });
+            mstate.messages.push(synthetic);
+        }
     }
 
     IterationOutcome::Continue
+}
+
+/// Pull the `_image_attachment` sentinel off a tool result and parse it.
+///
+/// FileManagerTool.read_image embeds the raw base64 image bytes under this
+/// key so the agent loop can re-inject them as a multipart user turn. Every
+/// other consumer of the result (the LLM tool message, the persisted
+/// `tool_execution.output_result` row, the live `tool_call_complete` stream
+/// chunk) would otherwise stringify those bytes — a 1 MB screenshot blows
+/// up to a ~1.3 M-token prompt and trips the model context cap. Removing the
+/// marker in-place keeps the textual payload small while the typed
+/// attachment travels along a separate channel.
+pub(crate) fn take_image_attachment(result: &mut FunctionCallResult) -> Option<MessageAttachment> {
+    let marker = result.result.as_object_mut()?.remove("_image_attachment")?;
+    serde_json::from_value::<MessageAttachment>(marker).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn make_result(payload: serde_json::Value) -> FunctionCallResult {
+        FunctionCallResult::success("call_1", "FileManagerTool", payload)
+    }
+
+    #[test]
+    fn take_image_attachment_strips_marker_and_returns_typed_attachment() {
+        let mut result = make_result(json!({
+            "path": "/tmp/cat.png",
+            "mime_type": "image/png",
+            "size_bytes": 12345,
+            "name": "cat.png",
+            "_image_attachment": {
+                "kind": "image",
+                "mime_type": "image/png",
+                "data_base64": "iVBORw0KGgoAAAANSUhEUgAA",
+                "name": "cat.png",
+                "size_bytes": 12345,
+            }
+        }));
+
+        let attachment =
+            take_image_attachment(&mut result).expect("expected _image_attachment marker");
+
+        assert_eq!(attachment.kind, "image");
+        assert_eq!(attachment.mime_type, "image/png");
+        assert_eq!(attachment.data_base64, "iVBORw0KGgoAAAANSUhEUgAA");
+        assert_eq!(attachment.name.as_deref(), Some("cat.png"));
+        assert_eq!(attachment.size_bytes, Some(12345));
+
+        let serialized = serde_json::to_string(&result.result).expect("serialize");
+        assert!(
+            !serialized.contains("data_base64"),
+            "stringified tool result still leaks base64 bytes: {}",
+            serialized
+        );
+        assert!(
+            !serialized.contains("_image_attachment"),
+            "stringified tool result still carries the marker: {}",
+            serialized
+        );
+        assert!(serialized.contains("\"path\":\"/tmp/cat.png\""));
+        assert!(serialized.contains("\"mime_type\":\"image/png\""));
+    }
+
+    #[test]
+    fn take_image_attachment_returns_none_when_marker_missing() {
+        let mut result = make_result(json!({"path": "/tmp/a.txt", "content": "hi"}));
+        assert!(take_image_attachment(&mut result).is_none());
+        assert_eq!(result.result["path"], "/tmp/a.txt");
+        assert_eq!(result.result["content"], "hi");
+    }
+
+    #[test]
+    fn take_image_attachment_returns_none_when_marker_is_malformed() {
+        let mut result = make_result(json!({
+            "path": "/tmp/a.png",
+            "_image_attachment": "not-an-object",
+        }));
+        assert!(take_image_attachment(&mut result).is_none());
+        // Marker is still removed even when it can't be parsed — we never want
+        // the raw payload to reach a stringification sink.
+        assert!(result.result.get("_image_attachment").is_none());
+    }
 }

@@ -23,8 +23,8 @@
   <MessageBubble message={msg} />
 -->
 <script lang="ts">
-	import type { Message } from '$types/message';
-	import { Clock, Copy, Check, CircleAlert } from '@lucide/svelte';
+	import type { Message, MessageAttachment } from '$types/message';
+	import { Clock, Copy, Check, CircleAlert, X } from '@lucide/svelte';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import { i18n } from '$lib/i18n';
 
@@ -46,6 +46,28 @@
 	let copied = $state(false);
 	let copyError = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/**
+	 * Attachment currently shown full-size, or `null` when no zoom is open.
+	 * `<a target="_blank">` is a no-op under Tauri (no native window.open),
+	 * so the zoom is implemented as an in-app overlay instead.
+	 */
+	let zoomedAttachment = $state<MessageAttachment | null>(null);
+
+	function openZoom(att: MessageAttachment): void {
+		zoomedAttachment = att;
+	}
+
+	function closeZoom(): void {
+		zoomedAttachment = null;
+	}
+
+	function handleZoomKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeZoom();
+		}
+	}
 
 	$effect(() => {
 		return () => {
@@ -92,13 +114,35 @@
 </script>
 
 <div class="message-bubble" class:user={isUserMessage} class:assistant={!isUserMessage}>
-	<div class="message-content">
-		{#if isUserMessage}
-			{message.content}
-		{:else}
-			<MarkdownRenderer content={message.content} />
-		{/if}
-	</div>
+	{#if message.attachments && message.attachments.length > 0}
+		<ul class="message-attachments">
+			{#each message.attachments as att, i (i)}
+				<li>
+					<button
+						type="button"
+						class="attachment-thumb"
+						onclick={() => openZoom(att)}
+						aria-label={att.name ?? $i18n('chat_attachment')}
+					>
+						<img
+							src={`data:${att.mime_type};base64,${att.data_base64}`}
+							alt={att.name ?? $i18n('chat_attachment')}
+							loading="lazy"
+						/>
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+	{#if message.content}
+		<div class="message-content">
+			{#if isUserMessage}
+				{message.content}
+			{:else}
+				<MarkdownRenderer content={message.content} />
+			{/if}
+		</div>
+	{/if}
 	<div class="message-footer">
 		<span class="message-time">
 			<Clock size={12} />
@@ -122,6 +166,42 @@
 		{/if}
 	</div>
 </div>
+
+{#if zoomedAttachment}
+	<div
+		class="image-zoom-overlay"
+		role="dialog"
+		aria-modal="true"
+		aria-label={zoomedAttachment.name ?? $i18n('chat_attachment')}
+		tabindex="-1"
+		onkeydown={handleZoomKeydown}
+		{@attach (el) => {
+			// Steal focus on open so the dialog catches Escape immediately,
+			// without requiring the user to click into the overlay first.
+			(el as HTMLElement).focus();
+		}}
+	>
+		<button
+			type="button"
+			class="image-zoom-backdrop"
+			aria-label={$i18n('chat_remove_attachment')}
+			onclick={closeZoom}
+		></button>
+		<img
+			class="image-zoom-image"
+			src={`data:${zoomedAttachment.mime_type};base64,${zoomedAttachment.data_base64}`}
+			alt={zoomedAttachment.name ?? $i18n('chat_attachment')}
+		/>
+		<button
+			type="button"
+			class="image-zoom-close"
+			aria-label={$i18n('chat_remove_attachment')}
+			onclick={closeZoom}
+		>
+			<X size={20} />
+		</button>
+	</div>
+{/if}
 
 <style>
 	.message-bubble {
@@ -149,6 +229,95 @@
 		font-size: var(--font-size-sm);
 		line-height: var(--line-height-relaxed);
 		word-break: break-word;
+	}
+
+	.message-attachments {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-sm);
+		margin: 0 0 var(--spacing-sm) 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.message-attachments li {
+		list-style: none;
+	}
+
+	.message-attachments .attachment-thumb {
+		display: block;
+		max-width: 220px;
+		max-height: 220px;
+		padding: 0;
+		overflow: hidden;
+		border-radius: var(--border-radius-sm);
+		border: 1px solid var(--color-border);
+		background: var(--color-bg-primary);
+		cursor: zoom-in;
+	}
+
+	.message-attachments .attachment-thumb:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+
+	.message-attachments .attachment-thumb img {
+		display: block;
+		max-width: 100%;
+		max-height: 220px;
+		object-fit: contain;
+	}
+
+	.image-zoom-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-lg);
+	}
+
+	.image-zoom-backdrop {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0, 0, 0, 0.8);
+		border: none;
+		padding: 0;
+		cursor: zoom-out;
+	}
+
+	.image-zoom-image {
+		position: relative;
+		max-width: min(95vw, 1600px);
+		max-height: 90vh;
+		object-fit: contain;
+		border-radius: var(--border-radius-sm);
+		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+		background: var(--color-bg-primary);
+	}
+
+	.image-zoom-close {
+		position: absolute;
+		top: var(--spacing-md);
+		right: var(--spacing-md);
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(0, 0, 0, 0.6);
+		color: white;
+		border: none;
+		border-radius: 50%;
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.image-zoom-close:hover {
+		background: rgba(0, 0, 0, 0.85);
 	}
 
 	/* User messages: plain text with pre-wrap */
