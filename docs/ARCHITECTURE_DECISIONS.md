@@ -144,7 +144,9 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 
 **Decision**: Extensible tool system with built-in tools and MCP integration.
 
-**Built-in tools (9)**: Calculator, Memory, Todo, UserQuestion, FileManager, ReadSkill (hidden, auto-injected), SpawnAgent, DelegateTask, ParallelTasks. TaskBridge is a scoping module, not a standalone tool.
+**Built-in tools (9)**: Calculator, Memory, Todo, UserQuestion, FileManager (11 operations incl. `read_image` for multimodal vision), ReadSkill (hidden, auto-injected), SpawnAgent, DelegateTask, ParallelTasks. TaskBridge is a scoping module, not a standalone tool.
+
+**Multimodal vision**: `FileManagerTool.read_image` ferries raw image bytes through a sidecar marker on the tool result; the iteration loop strips the marker before stringification and injects the image into a synthetic multipart `role: "user"` turn (every adapter stringifies `role: "tool"` and cannot carry image parts). Per-provider envelope shape (OpenAI object / Mistral string / Ollama native `images[]` array) is centralized in `src-tauri/src/llm/image_format.rs` with idempotent normalizers called at each adapter's request boundary.
 
 **MCP tools**: Discovered dynamically from user-configured MCP servers. Cached with 1h TTL.
 

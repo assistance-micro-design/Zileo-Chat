@@ -158,7 +158,7 @@ Real-time workflow execution with event streaming.
 
 | Command | Description |
 |---------|-------------|
-| `execute_workflow_streaming` | Execute workflow with real-time events |
+| `execute_workflow_streaming` | Execute workflow with real-time events. Accepts optional `attachments?: MessageAttachment[]` parameter to inject user-provided images into the first multimodal user turn. |
 | `cancel_workflow_streaming` | Cancel a running workflow |
 
 ### Message (`commands/message.rs`)
@@ -167,8 +167,8 @@ Chat message persistence and retrieval.
 
 | Command | Description |
 |---------|-------------|
-| `save_message` | Persist a message to the database |
-| `load_workflow_messages` | Load all messages for a workflow |
+| `save_message` | Persist a message to the database. Accepts optional `attachments?: MessageAttachment[]` (validated for user role, count ≤ 8, MIME whitelist `image/png \| jpeg \| webp \| gif`, base64 payload size cap, name field control-char rejection + 512-byte cap). |
+| `load_workflow_messages` | Load all messages for a workflow (SELECT includes `attachments` for multipart replay) |
 | `load_workflow_messages_paginated` | Load messages with pagination |
 | `delete_message` | Delete a single message |
 | `load_workflow_blocks` | Load all structured display blocks for a workflow grouped by message |
@@ -252,6 +252,7 @@ Sandboxed filesystem operations and trash management.
 | `validate_agent_folder` | Validate and canonicalize a folder path |
 | `list_trash` | List trash entries for an authorized folder |
 | `restore_from_trash_cmd` | Restore a file from trash |
+| `read_image_for_attachment` | Read an image file selected through the Tauri native picker. Validates extension whitelist (`png/jpg/jpeg/webp/gif`) and size (4 MB cap), returns `{ data_base64, mime_type, size_bytes, name }`. Shares the `ALLOWED_IMAGE_EXTENSIONS` + `ext_to_image_mime` helper with the `FileManagerTool.read_image` agent operation. |
 
 ### User Question (`commands/user_question.rs`)
 
@@ -347,7 +348,9 @@ Types are manually synchronized between frontend and backend.
 | `AgentConfig` | `$types/agent` | Full agent config (LLM, tools, skills, MCP, folders) |
 | `AgentSummary` | `$types/agent` | Lightweight agent summary (no system_prompt) |
 | `Skill` / `SkillSummary` | `$types/skill` | Skill with content / summary without |
-| `LLMModel` | `$types/llm` | Model definition (builtin or custom) |
+| `LLMModel` | `$types/llm` | Model definition (builtin or custom). Carries `supports_vision: boolean` for multimodal capability (manual flag, no auto-detection). |
+| `Message` | `$types/message` | Conversation message. Carries optional `attachments?: MessageAttachment[]` for multimodal user turns. |
+| `MessageAttachment` | `$types/message` | Multimodal attachment carried by user messages: `{ kind: 'image', mime_type, data_base64, name?, size_bytes? }`. Persisted on `message.attachments[*]` with all sub-fields declared explicitly (SCHEMAFULL would otherwise drop dynamic keys). |
 | `Memory` | `$types/memory` | Parent memory entry with type, tags, content (no embedding — moved to MemoryChunk) |
 | `ChunkSearchResult` | `$types/memory` | Search result (one row per chunk): `chunkId`, `parentMemoryId`, `chunkIndex`, `score`, plus parent fields surfaced via traversal |
 | `ReindexJobStatus` | `$types/embedding` | Streaming reindex job state (`jobId`, `state`, `processed`, `total`, `errorMessage?`) |

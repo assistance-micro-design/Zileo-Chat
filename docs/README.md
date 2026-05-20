@@ -39,7 +39,7 @@ SurrealDB + External MCP Servers
 |----------|-------------|
 | [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md) | Hierarchical agent system, sub-agent delegation, communication |
 | [WORKFLOW_ORCHESTRATION.md](WORKFLOW_ORCHESTRATION.md) | Parallel vs sequential orchestration, execution flows |
-| [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) | All 9 agent tools: Todo, Memory, Calculator, UserQuestion, FileManager, Spawn/Delegate/Parallel sub-agents, ReadSkill |
+| [AGENT_TOOLS_DOCUMENTATION.md](AGENT_TOOLS_DOCUMENTATION.md) | All 9 agent tools: Todo, Memory, Calculator, UserQuestion, FileManager (incl. `read_image` for multimodal vision), Spawn/Delegate/Parallel sub-agents, ReadSkill |
 
 ### Frontend & UX
 

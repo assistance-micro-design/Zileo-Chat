@@ -79,7 +79,15 @@ See `src/lib/components/agent/WorkflowSidebar.svelte` and `src/lib/components/wo
 
 Text input area with prompt selector modal. Users can attach saved prompts with auto-detected variable placeholders. Input remains active during workflow execution; messages are queued with a visible badge and reorderable queue.
 
-See `src/lib/components/chat/ChatInput.svelte` and `src/lib/components/chat/PromptSelectorModal.svelte`
+**Image attachments (multimodal)** — three input surfaces, each filtered to `image/png|jpeg|webp|gif`:
+
+- **Paste** (`Ctrl+V`): reads `clipboardData.files` first (canonical surface for binary payloads on Tauri/WebKit-Linux — gnome-screenshot, Wayland snapshots) and falls back to walking `.items[].kind === 'file'` for older WebViews.
+- **Picker** (Paperclip button): opens the native Tauri dialog via `@tauri-apps/plugin-dialog`, multi-select, calls the `read_image_for_attachment` command to bring the bytes into the renderer.
+- **Drag & drop** on the input frame.
+
+Each input feeds through `processImageFile` (`src/lib/utils/image-processing.ts`) which downscales the longest edge to 1568 px on a hidden `<canvas>`, re-encodes animated GIFs to PNG (first frame), and produces a base64 payload. Limits: 8 images per send, 4 MB raw per file, validated again backend-side. Thumbnails preview with per-image remove. A soft warning banner shows when `selectedModel.supports_vision === false` (no hard block — the message still goes through). Attachment error is intentionally sticky: it clears on the next successful add or when the last pending attachment is removed, never on a timer.
+
+See `src/lib/components/chat/ChatInput.svelte`, `src/lib/components/chat/PromptSelectorModal.svelte`, and `src/lib/utils/image-processing.ts`
 
 ### Validation System (Human-in-the-Loop)
 
@@ -214,7 +222,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 
 ## 8. Utilities and Services
 
-### Utilities (`src/lib/utils/`, 18 modules)
+### Utilities (`src/lib/utils/`, 19 modules)
 
 | Module | Key Exports | Description |
 |--------|-------------|-------------|
@@ -234,6 +242,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `mcp-auth-validation.ts` | MCP HTTP auth validators | Validates `MCPAuthMetadata`/`MCPAuthSecret` symmetrically with the Rust backend |
 | `agent-reasoning.ts` | `getReasoningOptions()`, `getReasoningHelp()`, `normalizeReasoningEffortForProvider()` | Provider-aware reasoning_effort selector helpers (Mistral exposes Off/High only; other providers expose Off/Low/Medium/High) |
 | `browser-download.ts` | `triggerBrowserDownload()` | Programmatic file download via anchor click (used by ExportPanel) |
+| `image-processing.ts` | `processImageFile()`, `readFileAsDataURL()`, `loadImage()` | Multimodal attachment pipeline: canvas-based resize to 1568 px max, GIF → PNG re-encoding, base64 output. Bounds the IPC payload before `save_message` / `execute_workflow_streaming`. |
 | `index.ts` | Re-exports | Barrel file |
 
 ### Actions (`src/lib/actions/`, 1 module)

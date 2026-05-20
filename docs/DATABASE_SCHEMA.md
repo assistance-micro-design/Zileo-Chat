@@ -77,6 +77,12 @@ Conversation messages (user, assistant, system) with per-message metrics.
 | workflow_id | string | | Parent workflow |
 | role | string ASSERT IN [user, assistant, system] | | Message role |
 | content | string | | Message body |
+| attachments | option\<array\<object\>\> | NONE | Multimodal attachments (images for vision-capable models). Sub-fields are declared explicitly because SCHEMAFULL otherwise drops dynamic keys |
+| attachments[*].kind | string | | Attachment kind (currently always `image`) |
+| attachments[*].mime_type | string | | MIME type (`image/png`, `image/jpeg`, `image/webp`, `image/gif`) |
+| attachments[*].data_base64 | string | | Raw base64 payload (no `data:` prefix) |
+| attachments[*].name | option\<string\> | | Original filename (display-only, control characters rejected at IPC) |
+| attachments[*].size_bytes | option\<int\> | | Original byte size |
 | tokens | int | | Total tokens (legacy) |
 | tokens_input | option\<int\> | | Input tokens |
 | tokens_output | option\<int\> | | Output tokens |
@@ -305,6 +311,7 @@ LLM model registry (builtin + custom).
 | temperature_default | float (0.0-2.0) | 0.7 | |
 | is_builtin | bool | false | |
 | is_reasoning | bool | false | Thinking model |
+| supports_vision | bool | false | Multimodal vision capability (manual user toggle in ModelForm — no auto-detection). Drives the soft warning in ChatInput when an image is attached on a non-vision model. |
 | input_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million input tokens |
 | output_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million output tokens |
 | cache_read_price_per_mtok | float (0.0-1000.0) | 0.0 | USD per million cache-read tokens |

@@ -224,9 +224,9 @@ The `{{skill:name}}` syntax in prompt templates is resolved in the streaming pip
 
 ### Architecture
 
-- `tool.rs` -- Struct + Tool trait (10 operations)
+- `tool.rs` -- Struct + Tool trait (11 operations)
 - `security.rs` -- Path validation, sandbox enforcement
-- `helpers.rs` -- File info formatting, text detection, constants
+- `helpers.rs` -- File info formatting, text detection, constants, image extension whitelist
 - `trash.rs` -- Trash-based safety (backup, restore, cleanup)
 
 See `src-tauri/src/tools/file_manager/` for implementation.
@@ -243,6 +243,18 @@ See `src-tauri/src/tools/file_manager/` for implementation.
 - `rename` -- Rename file/directory (`path`, `new_name`)
 - `search_glob` -- Glob pattern search (`path`, `pattern`)
 - `search_content` -- Content search (`path`, `pattern`)
+- `read_image` -- Load an image from disk for vision analysis on the next turn (`path`)
+
+### read_image (multimodal)
+
+Loads an image file and surfaces it to the next LLM iteration as a multimodal user turn. Available only to agents whose model is flagged `supports_vision: true` (the operation itself succeeds regardless, but a non-vision model cannot consume the result).
+
+- **Extensions whitelist**: `png`, `jpg`, `jpeg`, `webp`, `gif`
+- **Size cap**: 8 MB raw bytes
+- **Path validation**: same six-layer sandbox check as the other operations
+- **Return shape**: `{ path, mime_type, size_bytes, name }` — the lightweight metadata the agent sees in its tool result
+- **Side channel**: the raw base64 bytes never reach the tool message, the persisted `tool_execution.output_result` row, or the live `tool_call_complete` stream chunk. The iteration loop strips them off the result and injects a synthetic `role: "user"` multipart turn (`[{type: "text"}, {type: "image_url"}]`) right after the tool message so the model actually sees the picture
+- **Per-provider envelope**: handled centrally by `src-tauri/src/llm/image_format.rs` — default OpenAI object shape, normalized to bare string for Mistral, flattened to native `content: string` + sibling `images: [base64]` array for Ollama `/api/chat`
 
 ### Security and Safety
 
@@ -250,10 +262,12 @@ See `src-tauri/src/tools/file_manager/` for implementation.
 - Destructive operations (write overwrite, delete, move, rename) create backups in `.zileo-trash/`
 - If `require_file_confirmation` is enabled, destructive operations go through the ValidationHelper system
 - Trash cleanup is lazy (triggered on first destructive operation)
+- `read_image` shares the `ALLOWED_IMAGE_EXTENSIONS` whitelist + `ext_to_image_mime` helper with the `read_image_for_attachment` Tauri command (frontend picker bridge) — sibling Rust whitelist, mirrored client-side in `ChatInput.svelte`
 
 ### Limits
 
-- Max file read size: 10 MB
+- Max file read size: 10 MB (`read`)
+- Max image read size: 8 MB (`read_image`)
 - Max list entries: 200
 - Max search results: 100
 - Trash retention: 7 days, max 500 MB
