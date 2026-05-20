@@ -29,9 +29,10 @@ use tracing::{error, info, instrument, warn};
 
 /// Maximum size for the base64-encoded payload (in characters).
 ///
-/// 25 MB binary in base64 is ~33.6 MB of ASCII. We allow a small margin
-/// over the binary cap so legitimate payloads at the threshold are not
-/// rejected purely by the base64 expansion.
+/// Base64 inflates binary by 4/3 (every 3 bytes -> 4 ASCII chars), so a
+/// 25 MB binary blob becomes ~33.33 MB of ASCII. Rounded up to 36 MB to
+/// absorb the padding bytes and a small margin, ensuring legitimate
+/// payloads at the binary cap are not rejected by the encoding overhead.
 const MAX_AUDIO_BASE64_LEN: usize = 36 * 1024 * 1024;
 
 /// Transcribes an audio blob via Mistral Voxtral.

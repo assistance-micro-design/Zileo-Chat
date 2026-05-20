@@ -71,8 +71,8 @@ impl Default for STTSettings {
 ///
 /// `language` is wrapped in a double `Option` so the frontend can distinguish
 /// "leave as-is" (field absent) from "clear to auto-detect" (field present
-/// with `null`). The custom deserializer `deserialize_explicit_option` lives
-/// in `commands::settings_stt` (small surface, single call-site).
+/// with `null`). The custom deserializer `deserialize_explicit_option` is
+/// defined just below in this module (single call-site).
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSTTSettingsRequest {

@@ -48,9 +48,10 @@ pub const SUPPORTED_AUDIO_MIMES: &[&str] = &[
     "audio/x-m4a",
 ];
 
-/// JSON shape returned by the Mistral transcribe endpoint. Captured live
-/// 2026-05-20: `segments`, `finish_reason` and `usage.*` are accepted but
-/// not surfaced past the Rust boundary in v1.
+/// JSON shape returned by the Mistral transcribe endpoint. Only the
+/// fields surfaced past the Rust boundary are declared here; the
+/// endpoint may also return `segments`, `finish_reason`, `usage.*` and
+/// other metadata which serde silently ignores (no `deny_unknown_fields`).
 #[derive(Debug, Deserialize)]
 struct MistralTranscriptionResponse {
     text: String,

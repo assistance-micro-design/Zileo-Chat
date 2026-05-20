@@ -331,24 +331,38 @@ async fn main() -> anyhow::Result<()> {
             app.set_menu(menu)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
-            // WebKitGTK refuses getUserMedia by default. Auto-allow
-            // permission-requests so the dictation FAB can capture audio.
+            // WebKitGTK refuses getUserMedia by default. Auto-allow ONLY
+            // microphone (UserMediaPermissionRequest) so the dictation FAB
+            // can capture audio. Any other permission class (geolocation,
+            // notifications, clipboard-read, ...) is denied to keep the
+            // surface tight even if a future feature triggers a new request.
             // No-op on macOS / Windows (handled by their native webviews).
             #[cfg(target_os = "linux")]
             {
-                use webkit2gtk::{PermissionRequestExt, WebViewExt};
+                use webkit2gtk::{
+                    gio::prelude::Cast, PermissionRequestExt, UserMediaPermissionRequest,
+                    UserMediaPermissionRequestExt, WebViewExt,
+                };
                 if let Some(main_window) = app.get_webview_window("main") {
                     main_window
                         .with_webview(|webview| {
                             webview.inner().connect_permission_request(
                                 |_webview, permission_request| {
-                                    permission_request.allow();
+                                    if let Some(media_request) = permission_request
+                                        .downcast_ref::<UserMediaPermissionRequest>(
+                                    ) {
+                                        if media_request.is_for_audio_device() {
+                                            permission_request.allow();
+                                            return true;
+                                        }
+                                    }
+                                    permission_request.deny();
                                     true
                                 },
                             );
                         })
                         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-                    tracing::info!("WebKitGTK permission handler installed");
+                    tracing::info!("WebKitGTK permission handler installed (mic-only)");
                 } else {
                     tracing::warn!(
                         "Could not locate 'main' webview window; mic permission may fail"
