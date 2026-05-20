@@ -252,9 +252,34 @@ fn build_initial_messages(task: &Task, system_prompt: String) -> Vec<serde_json:
     } else {
         let base_prompt = prompt::build_prompt(task);
         debug!("First message: building new system prompt with tools");
+
+        // Promote a `pending_attachments` payload (set by `build_task` for
+        // streaming workflows) into a multipart user turn. Emits the DEFAULT
+        // OpenAI shape; per-provider adapters re-normalize at body-build time.
+        let attachments: Vec<crate::models::MessageAttachment> = task
+            .context
+            .get("pending_attachments")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+        let user_content = if attachments.is_empty() {
+            serde_json::Value::String(base_prompt)
+        } else {
+            let mut parts = vec![serde_json::json!({
+                "type": "text",
+                "text": base_prompt,
+            })];
+            for att in &attachments {
+                parts.push(crate::llm::image_format::build_image_content_part_openai(
+                    att,
+                ));
+            }
+            serde_json::Value::Array(parts)
+        };
+
         vec![
             serde_json::json!({"role": "system", "content": system_prompt}),
-            serde_json::json!({"role": "user", "content": base_prompt}),
+            serde_json::json!({"role": "user", "content": user_content}),
         ]
     }
 }

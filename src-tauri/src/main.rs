@@ -280,6 +280,7 @@ async fn main() -> anyhow::Result<()> {
             commands::file_manager::validate_agent_folder,
             commands::file_manager::list_trash,
             commands::file_manager::restore_from_trash_cmd,
+            commands::file_manager::read_image_for_attachment,
             // Import/Export commands
             commands::import_export::export::prepare_export_preview,
             commands::import_export::export::generate_export_file,

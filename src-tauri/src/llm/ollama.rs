@@ -126,10 +126,16 @@ impl OllamaProvider {
 
         let options = build_options(params.temperature, params.max_tokens, params.context_window);
 
+        // `/api/chat` does not accept content arrays. Flatten any multimodal
+        // message into the native shape: `content: "<text>"` + `images: [base64]`.
+        // No-op when no message carries a content array.
+        let mut messages = params.messages.clone();
+        super::image_format::normalize_messages_for_ollama_native_api(&mut messages);
+
         // Build request body with tools
         let mut body = serde_json::json!({
             "model": params.model,
-            "messages": params.messages,
+            "messages": messages,
             "stream": false,
             "options": options
         });

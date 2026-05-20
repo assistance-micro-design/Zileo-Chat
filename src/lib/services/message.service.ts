@@ -21,7 +21,7 @@
  */
 
 import { tauriInvoke as invoke } from '$lib/tauri';
-import type { Message, MessageMetrics, SubAgentSummary } from '$types/message';
+import type { Message, MessageAttachment, MessageMetrics, SubAgentSummary } from '$types/message';
 import type { SubAgentExecution } from '$types/sub-agent';
 import type { WorkflowMetrics } from '$types/workflow';
 import { getErrorMessage } from '$lib/utils/error';
@@ -37,6 +37,8 @@ interface MessageCreate {
 	metrics?: WorkflowMetrics;
 	/** Pre-generated message ID for block association */
 	messageId?: string;
+	/** Multimodal attachments (user messages only) */
+	attachments?: MessageAttachment[];
 }
 
 /**
@@ -149,7 +151,8 @@ export const MessageService = {
 			cachedTokens: params.metrics?.cached_tokens ?? null,
 			cacheWriteTokens: params.metrics?.cache_write_tokens ?? null,
 			modelIdUsed: params.metrics?.model_id_used ?? null,
-			messageId: params.messageId ?? null
+			messageId: params.messageId ?? null,
+			attachments: params.attachments && params.attachments.length > 0 ? params.attachments : null
 		});
 	},
 
@@ -158,10 +161,15 @@ export const MessageService = {
 	 *
 	 * @param workflowId - Workflow ID
 	 * @param content - Message content
+	 * @param attachments - Optional multimodal attachments
 	 * @returns ID of the saved message
 	 */
-	async saveUser(workflowId: string, content: string): Promise<string> {
-		return this.save({ workflowId, role: 'user', content });
+	async saveUser(
+		workflowId: string,
+		content: string,
+		attachments?: MessageAttachment[]
+	): Promise<string> {
+		return this.save({ workflowId, role: 'user', content, attachments });
 	},
 
 	/**

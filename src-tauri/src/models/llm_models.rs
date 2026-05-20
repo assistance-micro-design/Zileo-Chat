@@ -57,6 +57,11 @@ pub struct LLMModel {
     /// Whether this is a reasoning/thinking model (enables thinking output)
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Whether this model supports multimodal vision input (manual toggle).
+    /// When true, the ChatInput UI exposes the attachment controls and the
+    /// outbound request body is allowed to carry image content parts.
+    #[serde(default)]
+    pub supports_vision: bool,
     /// Price per million input tokens (USD) - user configurable
     #[serde(default)]
     pub input_price_per_mtok: f64,
@@ -97,6 +102,7 @@ impl LLMModel {
             temperature_default: request.temperature_default,
             is_builtin: false,
             is_reasoning: request.is_reasoning,
+            supports_vision: request.supports_vision,
             input_price_per_mtok: request.input_price_per_mtok,
             output_price_per_mtok: request.output_price_per_mtok,
             cache_read_price_per_mtok: request.cache_read_price_per_mtok,
@@ -130,6 +136,10 @@ pub struct CreateModelRequest {
     /// Whether this is a reasoning/thinking model (defaults to false)
     #[serde(default)]
     pub is_reasoning: bool,
+    /// Whether this model accepts multimodal vision input (defaults to false).
+    /// Manual user toggle - no auto-detection.
+    #[serde(default)]
+    pub supports_vision: bool,
     /// Price per million input tokens (USD, defaults to 0.0)
     #[serde(default)]
     pub input_price_per_mtok: f64,
@@ -233,6 +243,9 @@ pub struct UpdateModelRequest {
     pub temperature_default: Option<f64>,
     /// Whether this is a reasoning/thinking model
     pub is_reasoning: Option<bool>,
+    /// Whether this model supports multimodal vision input.
+    /// Permitted for builtin models (same policy as `is_reasoning`).
+    pub supports_vision: Option<bool>,
     /// New price per million input tokens (USD)
     pub input_price_per_mtok: Option<f64>,
     /// New price per million output tokens (USD)
@@ -355,6 +368,7 @@ impl UpdateModelRequest {
             && self.max_output_tokens.is_none()
             && self.temperature_default.is_none()
             && self.is_reasoning.is_none()
+            && self.supports_vision.is_none()
             && self.input_price_per_mtok.is_none()
             && self.output_price_per_mtok.is_none()
             && self.cache_read_price_per_mtok.is_none()
@@ -470,6 +484,7 @@ mod tests {
             max_output_tokens: 4096,
             temperature_default: 0.7,
             is_reasoning: false,
+            supports_vision: false,
             input_price_per_mtok: 2.0,
             output_price_per_mtok: 6.0,
             cache_read_price_per_mtok: 1.0,
@@ -515,6 +530,7 @@ mod tests {
             max_output_tokens: None,
             temperature_default: None,
             is_reasoning: None,
+            supports_vision: None,
             input_price_per_mtok: None,
             output_price_per_mtok: None,
             cache_read_price_per_mtok: None,
@@ -535,6 +551,7 @@ mod tests {
             max_output_tokens: None,
             temperature_default: Some(0.5),
             is_reasoning: None,
+            supports_vision: None,
             input_price_per_mtok: Some(2.0),
             output_price_per_mtok: Some(6.0),
             cache_read_price_per_mtok: None,
@@ -553,6 +570,7 @@ mod tests {
             max_output_tokens: 4096,
             temperature_default: 0.7,
             is_reasoning: false,
+            supports_vision: false,
             input_price_per_mtok: 0.0,
             output_price_per_mtok: 0.0,
             cache_read_price_per_mtok: 0.0,
@@ -563,9 +581,77 @@ mod tests {
         assert_eq!(model.id, "test-id");
         assert!(!model.is_builtin);
         assert!(!model.is_reasoning);
+        assert!(!model.supports_vision);
         assert_eq!(model.provider, ProviderType::Ollama);
         assert_eq!(model.input_price_per_mtok, 0.0);
         assert_eq!(model.output_price_per_mtok, 0.0);
+    }
+
+    #[test]
+    fn test_create_model_request_default_supports_vision_false() {
+        let json = r#"{
+            "provider": "ollama",
+            "name": "Custom",
+            "api_name": "custom",
+            "context_window": 32000,
+            "max_output_tokens": 4096
+        }"#;
+        let req: CreateModelRequest = serde_json::from_str(json).expect("parses");
+        assert!(
+            !req.supports_vision,
+            "supports_vision must default to false when absent"
+        );
+    }
+
+    #[test]
+    fn test_create_model_request_carries_supports_vision_true() {
+        let json = r#"{
+            "provider": "mistral",
+            "name": "Mistral Small",
+            "api_name": "mistral-small-latest",
+            "context_window": 128000,
+            "max_output_tokens": 4096,
+            "supports_vision": true
+        }"#;
+        let req: CreateModelRequest = serde_json::from_str(json).expect("parses");
+        assert!(req.supports_vision);
+    }
+
+    #[test]
+    fn test_llm_model_deserializes_legacy_payload_without_supports_vision() {
+        let json = r#"{
+            "id":"m1","provider":"mistral","name":"X","api_name":"x",
+            "context_window":32000,"max_output_tokens":4096,
+            "temperature_default":0.7,"is_builtin":false,
+            "created_at":"2026-05-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z"
+        }"#;
+        let model: LLMModel = serde_json::from_str(json).expect("legacy parses");
+        assert!(
+            !model.supports_vision,
+            "legacy rows should default supports_vision to false"
+        );
+    }
+
+    #[test]
+    fn test_update_model_request_supports_vision_allowed_on_builtin() {
+        let update = UpdateModelRequest {
+            name: None,
+            api_name: None,
+            context_window: None,
+            max_output_tokens: None,
+            temperature_default: None,
+            is_reasoning: None,
+            supports_vision: Some(true),
+            input_price_per_mtok: None,
+            output_price_per_mtok: None,
+            cache_read_price_per_mtok: None,
+            cache_write_price_per_mtok: None,
+        };
+        assert!(
+            update.validate(true).is_ok(),
+            "supports_vision must be toggleable on builtin models (same as is_reasoning)"
+        );
+        assert!(!update.is_empty());
     }
 
     #[test]

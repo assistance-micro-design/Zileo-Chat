@@ -64,6 +64,14 @@ DEFINE FIELD OVERWRITE cache_write_tokens ON message TYPE option<int> DEFAULT NO
 -- model_id_used: persist the exact model that produced this response so
 -- cross-workflow pricing restoration survives agent reconfiguration.
 DEFINE FIELD OVERWRITE model_id_used ON message TYPE option<string> DEFAULT NONE;
+-- Optional multimodal attachments (images for vision). Sub-fields are declared
+-- explicitly because SCHEMAFULL would otherwise drop dynamic keys (ERR_SURREAL_001).
+DEFINE FIELD OVERWRITE attachments ON message TYPE option<array<object>> DEFAULT NONE;
+DEFINE FIELD OVERWRITE attachments[*].kind ON message TYPE string;
+DEFINE FIELD OVERWRITE attachments[*].mime_type ON message TYPE string;
+DEFINE FIELD OVERWRITE attachments[*].data_base64 ON message TYPE string;
+DEFINE FIELD OVERWRITE attachments[*].name ON message TYPE option<string>;
+DEFINE FIELD OVERWRITE attachments[*].size_bytes ON message TYPE option<int>;
 DEFINE FIELD OVERWRITE timestamp ON message TYPE datetime DEFAULT time::now();
 
 -- =============================================
@@ -247,6 +255,8 @@ DEFINE FIELD OVERWRITE temperature_default ON llm_model TYPE float
     DEFAULT 0.7;
 DEFINE FIELD OVERWRITE is_builtin ON llm_model TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE is_reasoning ON llm_model TYPE bool DEFAULT false;
+-- Multimodal vision capability flag (manual user toggle in ModelForm).
+DEFINE FIELD OVERWRITE supports_vision ON llm_model TYPE bool DEFAULT false;
 -- Pricing per million tokens (USD) - user configurable
 DEFINE FIELD OVERWRITE input_price_per_mtok ON llm_model TYPE float
     ASSERT $value >= 0.0 AND $value <= 1000.0

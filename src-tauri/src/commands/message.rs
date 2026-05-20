@@ -24,12 +24,69 @@ use crate::{
     constants::commands as cmd_const,
     db::extract_count,
     models::{
-        merge_into_chat_blocks, sub_agent::SubAgentExecution, ChatBlock, Message, MessageCreate,
-        MessageMetrics, PaginatedMessages, ThinkingStep, ToolExecution,
+        merge_into_chat_blocks, sub_agent::SubAgentExecution, ChatBlock, Message,
+        MessageAttachment, MessageCreate, MessageMetrics, PaginatedMessages, ThinkingStep,
+        ToolExecution,
     },
     security::validate_uuid_field,
     AppState,
 };
+
+/// Maximum number of attachments per user message (also enforced UI-side).
+pub(crate) const MAX_ATTACHMENTS_PER_MESSAGE: usize = 8;
+
+/// Maximum base64 payload size per attachment. 4 MB binary expands to
+/// ~5.33 MB base64; we allow a tiny safety margin.
+pub(crate) const MAX_ATTACHMENT_BASE64_BYTES: usize = (4 * 1024 * 1024 * 4 / 3) + 256;
+
+/// MIME types accepted by the multimodal pipeline. Mirrored client-side in
+/// `image-processing.ts` so a rejection at either end yields a clear error.
+pub(crate) const ALLOWED_ATTACHMENT_MIMES: &[&str] =
+    &["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+/// Validates a set of attachments for a user message. Returns the validated
+/// vector (passes-through on success). Errors describe the first failure.
+fn validate_attachments(role: &str, attachments: &[MessageAttachment]) -> Result<(), String> {
+    if role != "user" {
+        return Err(format!(
+            "Attachments are only allowed on user messages (got role '{}')",
+            role
+        ));
+    }
+    if attachments.len() > MAX_ATTACHMENTS_PER_MESSAGE {
+        return Err(format!(
+            "Too many attachments ({}, max {})",
+            attachments.len(),
+            MAX_ATTACHMENTS_PER_MESSAGE
+        ));
+    }
+    for (i, att) in attachments.iter().enumerate() {
+        if att.kind != "image" {
+            return Err(format!(
+                "Attachment {} has unsupported kind '{}', only 'image' is supported",
+                i, att.kind
+            ));
+        }
+        if !ALLOWED_ATTACHMENT_MIMES.contains(&att.mime_type.as_str()) {
+            return Err(format!(
+                "Attachment {} has unsupported MIME type '{}'",
+                i, att.mime_type
+            ));
+        }
+        if att.data_base64.is_empty() {
+            return Err(format!("Attachment {} has empty data_base64", i));
+        }
+        if att.data_base64.len() > MAX_ATTACHMENT_BASE64_BYTES {
+            return Err(format!(
+                "Attachment {} exceeds max size ({} base64 bytes, cap {})",
+                i,
+                att.data_base64.len(),
+                MAX_ATTACHMENT_BASE64_BYTES
+            ));
+        }
+    }
+    Ok(())
+}
 use std::collections::{HashMap, HashSet};
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -79,68 +136,121 @@ pub async fn save_message(
     cache_write_tokens: Option<u64>,
     model_id_used: Option<String>,
     message_id: Option<String>,
+    attachments: Option<Vec<MessageAttachment>>,
     state: State<'_, AppState>,
+) -> Result<String, String> {
+    save_message_core(
+        &state.db,
+        SaveMessageParams {
+            workflow_id,
+            role,
+            content,
+            tokens_input,
+            tokens_output,
+            model,
+            provider,
+            duration_ms,
+            thinking_tokens,
+            cost_usd,
+            cached_tokens,
+            cache_write_tokens,
+            model_id_used,
+            message_id,
+            attachments,
+        },
+    )
+    .await
+}
+
+/// Parameter bundle for [`save_message_core`].
+///
+/// Grouped into a single struct so the `_core` helper has one argument and the
+/// Tauri-command wrapper does not need 16 positional parameters at the call
+/// site. Mirrors the IPC payload 1:1.
+#[derive(Debug)]
+pub(crate) struct SaveMessageParams {
+    pub workflow_id: String,
+    pub role: String,
+    pub content: String,
+    pub tokens_input: Option<u64>,
+    pub tokens_output: Option<u64>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub thinking_tokens: Option<u64>,
+    pub cost_usd: Option<f64>,
+    pub cached_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
+    pub model_id_used: Option<String>,
+    pub message_id: Option<String>,
+    pub attachments: Option<Vec<MessageAttachment>>,
+}
+
+/// Validates and inserts a message row. Extracted from the Tauri-command
+/// wrapper so integration tests can exercise the full validate + insert path
+/// without instantiating `tauri::State`.
+pub(crate) async fn save_message_core(
+    db: &crate::db::DBClient,
+    params: SaveMessageParams,
 ) -> Result<String, String> {
     info!("Saving message");
 
-    let validated_workflow_id = validate_uuid_field(&workflow_id, "workflow_id")?;
+    let validated_workflow_id = validate_uuid_field(&params.workflow_id, "workflow_id")?;
 
-    // Validate role
-    let validated_role = match role.as_str() {
-        "user" | "assistant" | "system" => role.clone(),
+    let validated_role = match params.role.as_str() {
+        "user" | "assistant" | "system" => params.role.clone(),
         _ => {
-            warn!(role = %role, "Invalid message role");
+            warn!(role = %params.role, "Invalid message role");
             return Err(format!(
                 "Invalid message role: {}. Expected user, assistant, or system",
-                role
+                params.role
             ));
         }
     };
 
-    // Validate content
-    if content.is_empty() {
+    if params.content.is_empty() && params.attachments.as_ref().is_none_or(|a| a.is_empty()) {
         return Err("Message content cannot be empty".to_string());
     }
-    if content.len() > cmd_const::MAX_MESSAGE_CONTENT_LEN {
+    if params.content.len() > cmd_const::MAX_MESSAGE_CONTENT_LEN {
         return Err(format!(
             "Message content exceeds maximum length of {} characters",
             cmd_const::MAX_MESSAGE_CONTENT_LEN
         ));
     }
 
-    // Use provided message_id (for block association) or generate new one
-    let message_id = match message_id {
+    if let Some(ref atts) = params.attachments {
+        if !atts.is_empty() {
+            validate_attachments(&validated_role, atts)?;
+        }
+    }
+
+    let message_id = match params.message_id {
         Some(id) => validate_uuid_field(&id, "message_id")?,
         None => Uuid::new_v4().to_string(),
     };
 
-    // Build MessageCreate payload.
-    //
-    // Legacy `tokens` field stores the sum input + output rather than just
-    // output, so old consumers that read it get a more meaningful number
-    // (a non-zero count even on user messages). Prefer `tokens_input` /
-    // `tokens_output` for new code; the field is kept for back-compat.
-    let legacy_tokens = (tokens_input.unwrap_or(0) + tokens_output.unwrap_or(0)) as usize;
+    let legacy_tokens =
+        (params.tokens_input.unwrap_or(0) + params.tokens_output.unwrap_or(0)) as usize;
+    let normalized_attachments = params.attachments.filter(|a| !a.is_empty());
     let message = MessageCreate {
         workflow_id: validated_workflow_id,
         role: validated_role,
-        content,
+        content: params.content,
         tokens: legacy_tokens,
-        tokens_input,
-        tokens_output,
-        model,
-        provider,
-        cost_usd,
-        duration_ms,
-        thinking_tokens,
-        cached_tokens,
-        cache_write_tokens,
-        model_id_used,
+        tokens_input: params.tokens_input,
+        tokens_output: params.tokens_output,
+        model: params.model,
+        provider: params.provider,
+        cost_usd: params.cost_usd,
+        duration_ms: params.duration_ms,
+        thinking_tokens: params.thinking_tokens,
+        cached_tokens: params.cached_tokens,
+        cache_write_tokens: params.cache_write_tokens,
+        model_id_used: params.model_id_used,
+        attachments: normalized_attachments,
     };
 
-    // Insert into database
-    let id = state
-        .db
+    let id = db
         .create("message", &message_id, message)
         .await
         .map_err(|e| {
@@ -203,6 +313,7 @@ pub(crate) async fn load_workflow_messages_core(
             cached_tokens,
             cache_write_tokens,
             model_id_used,
+            attachments,
             timestamp
         FROM message
         WHERE workflow_id = $wf_id
@@ -304,6 +415,7 @@ pub async fn load_workflow_messages_paginated(
             cached_tokens,
             cache_write_tokens,
             model_id_used,
+            attachments,
             timestamp
         FROM message
         WHERE workflow_id = $wf_id

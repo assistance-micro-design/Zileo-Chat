@@ -46,11 +46,17 @@ struct ChatRequest {
     reasoning_effort: Option<String>,
 }
 
-/// Message in OpenAI API format
+/// Message in OpenAI API format.
+///
+/// `content` is `serde_json::Value` so the same struct serializes a plain
+/// text message (`content: "..."`) and a multipart message
+/// (`content: [{"type":"text",...}, {"type":"image_url",...}]`) — the latter
+/// is required for vision input. Tests at the bottom of this file lock in
+/// both shapes.
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 /// API response (handles both standard and reasoning models)
@@ -307,11 +313,11 @@ impl OpenAiCompatibleProvider {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: system_text.to_string(),
+                content: serde_json::Value::String(system_text.to_string()),
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: params.prompt.clone(),
+                content: serde_json::Value::String(params.prompt.clone()),
             },
         ];
 

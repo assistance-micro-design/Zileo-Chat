@@ -20,6 +20,51 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
+ * Supported image MIME types for multimodal attachments.
+ * Whitelisted at both ends (frontend validation + backend save_message check).
+ */
+export type AttachmentMime = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+/**
+ * Multimodal attachment carried by a user message (v1: images only).
+ *
+ * `data_base64` is the raw base64 payload WITHOUT the `data:image/...;base64,`
+ * prefix. The prefix is reconstructed at the surfaces that need it
+ * (MessageBubble preview, per-provider adapter image_url shape).
+ */
+export interface MessageAttachment {
+	/** Attachment kind. Always "image" for v1. */
+	kind: 'image';
+	/** IANA MIME type. */
+	mime_type: AttachmentMime;
+	/** Base64-encoded payload (raw, no `data:` prefix). */
+	data_base64: string;
+	/** Original filename (display only). */
+	name?: string;
+	/** File size in bytes (display only). */
+	size_bytes?: number;
+}
+
+/**
+ * Composition-side attachment (before send). Carries a client-generated id so
+ * the preview list can identify each thumbnail for removal. The `preview_url`
+ * is a computed `data:` URL used as the `<img src>` for thumbnails.
+ *
+ * Stripped to `MessageAttachment` at send time (the id and preview_url are
+ * dropped — only `kind`, `mime_type`, `data_base64`, `name`, `size_bytes`
+ * persist).
+ */
+export interface PendingAttachment {
+	id: string;
+	kind: 'image';
+	mime_type: AttachmentMime;
+	data_base64: string;
+	name?: string;
+	size_bytes: number;
+	preview_url: string;
+}
+
+/**
  * Summary of a sub-agent execution (frontend-only, not persisted in message).
  * Captured from `backgroundWorkflowsStore.getExecution(workflowId).subAgents`
  * during the current session.
@@ -91,6 +136,8 @@ export interface Message {
 	cache_write_tokens?: number;
 	/** `llm_model.id` of the model that produced the assistant response. */
 	model_id_used?: string;
+	/** Optional multimodal attachments (images) carried by user messages. */
+	attachments?: MessageAttachment[];
 	/** Message timestamp */
 	timestamp: Date;
 	/** Sub-agent summaries (transient, captured from backgroundWorkflowsStore) */

@@ -25,7 +25,7 @@ Uses extracted components, services, and stores for clean architecture.
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { Message } from '$types/message';
+	import type { Message, MessageAttachment } from '$types/message';
 	import type { ModalState } from '$types/services';
 	import type { ValidationRequest } from '$types/validation';
 
@@ -113,6 +113,12 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedAgentId: string | null;
 		currentMaxIterations: number;
 		messagesLoading: boolean;
+		/**
+		 * Cached `supports_vision` flag for the currently selected agent's
+		 * model. `undefined` while the lookup is in flight or absent so the
+		 * warning UI stays quiet by default; populated by `loadAgentConfig`.
+		 */
+		selectedModelSupportsVision: boolean | undefined;
 	}
 
 	/** Initial page state with localStorage restoration */
@@ -121,7 +127,8 @@ Uses extracted components, services, and stores for clean architecture.
 		selectedWorkflowId: null,
 		selectedAgentId: null,
 		currentMaxIterations: ITERATIONS_LIMITS.DEFAULT,
-		messagesLoading: false
+		messagesLoading: false,
+		selectedModelSupportsVision: undefined
 	};
 
 	/** Modal state - single union type instead of 3 booleans */
@@ -465,6 +472,9 @@ Uses extracted components, services, and stores for clean architecture.
 		try {
 			const config = await agentStore.getAgentConfig(agentId);
 			pageState.currentMaxIterations = config.max_tool_iterations ?? ITERATIONS_LIMITS.DEFAULT;
+			// Reset vision flag — if model fetch fails or lacks the field, we
+			// keep the warning hidden by default.
+			pageState.selectedModelSupportsVision = undefined;
 
 			// Load full model data so the context-usage gauge reads the agent's
 			// configured ceiling from the database (no hardcoded fallback).
@@ -475,6 +485,7 @@ Uses extracted components, services, and stores for clean architecture.
 						config.llm.provider.toLowerCase() as ProviderType
 					);
 					tokenStore.updateFromModel(model);
+					pageState.selectedModelSupportsVision = model.supports_vision;
 				} catch {
 					// Model fetch failed (most common cause: the agent references
 					// a model api_name + provider pair that is not in the
@@ -493,8 +504,10 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Handle sending a message with streaming.
 	 * Delegates orchestration to WorkflowExecutorService.
 	 */
-	async function handleSend(message: string): Promise<void> {
-		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId || !message.trim()) return;
+	async function handleSend(message: string, attachments?: MessageAttachment[]): Promise<void> {
+		if (!pageState.selectedWorkflowId || !pageState.selectedAgentId) return;
+		// Allow empty text when attachments are present (vision-only turn).
+		if (!message.trim() && (!attachments || attachments.length === 0)) return;
 
 		const executionWorkflowId = pageState.selectedWorkflowId;
 		const isStillSelected = () => pageState.selectedWorkflowId === executionWorkflowId;
@@ -504,7 +517,8 @@ Uses extracted components, services, and stores for clean architecture.
 				workflowId: executionWorkflowId,
 				message,
 				agentId: pageState.selectedAgentId,
-				locale: $locale
+				locale: $locale,
+				attachments
 			},
 			{
 				onUserMessage: (msg) => {
@@ -813,6 +827,7 @@ Uses extracted components, services, and stores for clean architecture.
 				disabled={!pageState.selectedAgentId}
 				onsend={handleSend}
 				oncancel={handleCancel}
+				modelSupportsVision={pageState.selectedModelSupportsVision}
 			/>
 
 			<!-- Token Display -->

@@ -108,6 +108,7 @@ pub async fn build_task(
     message: &str,
     locale: &str,
     message_id: &str,
+    attachments: Option<&[crate::models::MessageAttachment]>,
 ) -> Result<(Task, String), String> {
     let (mut history_context, _history_count) =
         load_conversation_history(state, workflow_id, locale).await?;
@@ -117,6 +118,16 @@ pub async fn build_task(
             "message_id".to_string(),
             serde_json::Value::String(message_id.to_string()),
         );
+
+        // Surface pending attachments so `build_initial_messages` can build
+        // a multipart user turn. Stored under a namespaced key the rest of
+        // the codebase ignores. Defensive `.ok()` lookup on the read side
+        // avoids type-mismatch panics if other code ever writes the key.
+        if let Some(atts) = attachments.filter(|a| !a.is_empty()) {
+            if let Ok(v) = serde_json::to_value(atts) {
+                obj.insert("pending_attachments".to_string(), v);
+            }
+        }
     }
 
     let task_id = Uuid::new_v4().to_string();

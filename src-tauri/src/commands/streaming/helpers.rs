@@ -72,6 +72,7 @@ pub async fn load_conversation_history(
             provider,
             cost_usd,
             duration_ms,
+            attachments,
             timestamp
         FROM message
         WHERE workflow_id = $wf_id
@@ -108,9 +109,32 @@ pub async fn load_conversation_history(
         let api_messages: Vec<serde_json::Value> = conversation_history
             .iter()
             .map(|msg| {
+                // When the row carries attachments, emit a multipart content
+                // array using the DEFAULT OpenAI shape (image_url as an object).
+                // Mistral/Ollama adapters re-normalize to their string shape at
+                // body-build time via `normalize_messages_for_provider`. Text
+                // always comes first (OpenRouter recommendation).
+                let content_value = match msg.attachments.as_ref() {
+                    Some(atts) if !atts.is_empty() => {
+                        let mut parts = vec![serde_json::json!({
+                            "type": "text",
+                            "text": msg.content,
+                        })];
+                        for att in atts {
+                            let data_url =
+                                format!("data:{};base64,{}", att.mime_type, att.data_base64);
+                            parts.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": { "url": data_url },
+                            }));
+                        }
+                        serde_json::Value::Array(parts)
+                    }
+                    _ => serde_json::Value::String(msg.content.clone()),
+                };
                 serde_json::json!({
                     "role": msg.role,
-                    "content": msg.content
+                    "content": content_value
                 })
             })
             .collect();

@@ -54,7 +54,7 @@ pub use embedding::{
     MemoryStats, MemoryTokenStats, ReindexJobStatus,
 };
 pub use memory::{ChunkSearchResult, Memory, MemoryCreate, MemoryType};
-pub use message::{Message, MessageCreate, MessageMetrics, PaginatedMessages};
+pub use message::{Message, MessageAttachment, MessageCreate, MessageMetrics, PaginatedMessages};
 pub use prompt::Prompt;
 pub use streaming::{StreamChunk, WorkflowComplete};
 pub use thinking_step::{ThinkingStep, ThinkingStepCreate};

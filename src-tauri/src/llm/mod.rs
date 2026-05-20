@@ -40,6 +40,7 @@ mod cache_control;
 pub mod circuit_breaker;
 pub mod embedding;
 pub mod http;
+pub mod image_format;
 mod manager;
 mod mistral;
 mod ollama;

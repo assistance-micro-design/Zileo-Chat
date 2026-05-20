@@ -32,7 +32,7 @@
  * @module lib/services/workflowExecutor
  */
 
-import type { Message, SubAgentSummary } from '$types/message';
+import type { Message, MessageAttachment, SubAgentSummary } from '$types/message';
 import type { Workflow, WorkflowMetrics, WorkflowResult } from '$types/workflow';
 import type { ChatBlock } from '$types/chat-block';
 import { MessageService } from './message.service';
@@ -59,6 +59,8 @@ export interface ExecutionParams {
 	agentId: string;
 	/** User's selected locale (e.g., "en", "fr") */
 	locale: string;
+	/** Multimodal attachments to send with the message (images) */
+	attachments?: MessageAttachment[];
 }
 
 /**
@@ -104,13 +106,18 @@ export interface ExecutionCallbacks {
  * @param content - Message content
  * @returns Message object for UI display
  */
-function createUserMessage(workflowId: string, content: string): Message {
+function createUserMessage(
+	workflowId: string,
+	content: string,
+	attachments?: MessageAttachment[]
+): Message {
 	return {
 		id: generateUuid(),
 		workflow_id: workflowId,
 		role: 'user',
 		content,
 		tokens: 0,
+		attachments: attachments && attachments.length > 0 ? attachments : undefined,
 		timestamp: new Date()
 	};
 }
@@ -200,7 +207,7 @@ export const WorkflowExecutorService = {
 	 * @returns Execution result with success status and metrics
 	 */
 	async execute(params: ExecutionParams, callbacks?: ExecutionCallbacks): Promise<ExecutionResult> {
-		const { workflowId, message, agentId, locale } = params;
+		const { workflowId, message, agentId, locale, attachments } = params;
 
 		// Double-submit guard: prevent concurrent executions for same workflow
 		if (executingWorkflows.has(workflowId)) {
@@ -233,10 +240,12 @@ export const WorkflowExecutorService = {
 		executingWorkflows.add(workflowId);
 
 		try {
-			// Persist user message to DB and notify UI only while still viewed
-			const userMessageId = await MessageService.saveUser(workflowId, message);
+			// Persist user message to DB and notify UI only while still viewed.
+			// Attachments (images) are persisted with the user message; the UI
+			// rebuild after refresh re-displays them via `MessageBubble`.
+			const userMessageId = await MessageService.saveUser(workflowId, message, attachments);
 			if (isStillViewed()) {
-				const userMessage = createUserMessage(workflowId, message);
+				const userMessage = createUserMessage(workflowId, message, attachments);
 				callbacks?.onUserMessage?.(userMessage);
 			}
 
@@ -255,7 +264,8 @@ export const WorkflowExecutorService = {
 				workflowId,
 				message,
 				agentId,
-				locale
+				locale,
+				attachments
 			);
 
 			// Post-execution: user may have switched to a different workflow.

@@ -80,6 +80,8 @@ export interface LLMModel {
 	is_builtin: boolean;
 	/** Whether this is a reasoning/thinking model (Magistral, DeepSeek-R1, etc.) */
 	is_reasoning: boolean;
+	/** Whether this model accepts multimodal vision input (manual user toggle). */
+	supports_vision: boolean;
 	/** Price per million input tokens (USD) - user configurable */
 	input_price_per_mtok: number;
 	/** Price per million output tokens (USD) - user configurable */
@@ -114,6 +116,8 @@ export interface CreateModelRequest {
 	temperature_default?: number;
 	/** Whether this is a reasoning/thinking model (defaults to false) */
 	is_reasoning?: boolean;
+	/** Whether this model supports multimodal vision (defaults to false). Manual toggle. */
+	supports_vision?: boolean;
 	/** Price per million input tokens (USD, default 0.0) */
 	input_price_per_mtok?: number;
 	/** Price per million output tokens (USD, default 0.0) */
@@ -143,6 +147,8 @@ export interface UpdateModelRequest {
 	temperature_default?: number;
 	/** Whether this is a reasoning/thinking model */
 	is_reasoning?: boolean;
+	/** Whether this model supports multimodal vision (toggleable, even on builtin). */
+	supports_vision?: boolean;
 	/** New price per million input tokens (USD) */
 	input_price_per_mtok?: number;
 	/** New price per million output tokens (USD) */

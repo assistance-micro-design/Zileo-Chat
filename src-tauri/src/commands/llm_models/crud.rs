@@ -32,6 +32,7 @@ use crate::state::AppState;
 const LLM_MODEL_SELECT_COLUMNS: &str =
     "meta::id(id) AS id, provider, name, api_name, context_window, \
      max_output_tokens, temperature_default, is_builtin, is_reasoning, \
+     (supports_vision ?? false) AS supports_vision, \
      (input_price_per_mtok ?? 0.0) AS input_price_per_mtok, \
      (output_price_per_mtok ?? 0.0) AS output_price_per_mtok, \
      (cache_read_price_per_mtok ?? 0.0) AS cache_read_price_per_mtok, \
@@ -254,6 +255,7 @@ async fn insert_model_record(
         "temperature_default": model.temperature_default,
         "is_builtin": false,
         "is_reasoning": model.is_reasoning,
+        "supports_vision": model.supports_vision,
         "input_price_per_mtok": model.input_price_per_mtok,
         "output_price_per_mtok": model.output_price_per_mtok,
         "cache_read_price_per_mtok": model.cache_read_price_per_mtok,
@@ -342,6 +344,9 @@ pub async fn update_model(
     }
     if let Some(is_reasoning) = data.is_reasoning {
         set_parts.push(format!("is_reasoning = {}", is_reasoning));
+    }
+    if let Some(supports_vision) = data.supports_vision {
+        set_parts.push(format!("supports_vision = {}", supports_vision));
     }
     if let Some(input_price) = data.input_price_per_mtok {
         set_parts.push(format!("input_price_per_mtok = {}", input_price));

@@ -36,7 +36,7 @@ Main chat area with message display, execution blocks inline, and input controls
 	import ExecutionSpinner from '$lib/components/chat/ExecutionSpinner.svelte';
 	import TodoTasksBlock from '$lib/components/chat/TodoTasksBlock.svelte';
 	import { i18n } from '$lib/i18n';
-	import type { Message } from '$types/message';
+	import type { Message, MessageAttachment } from '$types/message';
 	import type {
 		ChatBlock,
 		ThinkingBlockData,
@@ -66,8 +66,13 @@ Main chat area with message display, execution blocks inline, and input controls
 		 */
 		primaryAgentId?: string;
 		disabled: boolean;
-		onsend: (message: string) => void;
+		onsend: (message: string, attachments?: MessageAttachment[]) => void;
 		oncancel?: () => void;
+		/**
+		 * Whether the workflow's selected model is flagged as multimodal.
+		 * Drives the soft warning in `ChatInput` when the user adds an image.
+		 */
+		modelSupportsVision?: boolean;
 	}
 
 	let {
@@ -81,7 +86,8 @@ Main chat area with message display, execution blocks inline, and input controls
 		primaryAgentId,
 		disabled,
 		onsend,
-		oncancel
+		oncancel,
+		modelSupportsVision
 	}: Props = $props();
 
 	let messagesContainer: HTMLDivElement | null = $state(null);
@@ -293,6 +299,7 @@ Main chat area with message display, execution blocks inline, and input controls
 			loading={isExecuting}
 			onsend={isExecuting ? undefined : onsend}
 			oncancel={isExecuting ? oncancel : undefined}
+			{modelSupportsVision}
 		/>
 	</div>
 </div>

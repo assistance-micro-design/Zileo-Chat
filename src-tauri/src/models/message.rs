@@ -20,6 +20,29 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Multimodal attachment carried by a user message (v1: images only).
+///
+/// `data_base64` is the raw base64 payload (NO `data:` URI prefix). The prefix
+/// is reconstructed at the boundaries that need it:
+/// - Frontend preview: `data:${mime_type};base64,${data_base64}`
+/// - Adapter image_url: per-provider shape (Mistral/Ollama want a string data URL,
+///   OpenAI/Custom want an object with `{url: ...}`)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MessageAttachment {
+    /// Attachment kind. Always "image" for v1.
+    pub kind: String,
+    /// IANA MIME type (e.g., "image/png", "image/jpeg", "image/webp", "image/gif").
+    pub mime_type: String,
+    /// Base64-encoded payload (raw, without the `data:image/...;base64,` prefix).
+    pub data_base64: String,
+    /// Original filename (display only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// File size in bytes (display only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+}
+
 /// Message role in the conversation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +113,9 @@ pub struct Message {
     /// pricing snapshot of the moment, not the agent's current configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_id_used: Option<String>,
+    /// Optional multimodal attachments (images attached by the user).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<MessageAttachment>>,
     /// Message timestamp
     pub timestamp: DateTime<Utc>,
 }
@@ -138,6 +164,9 @@ pub struct MessageCreate {
     /// `llm_model.id` of the model that produced this assistant message.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_id_used: Option<String>,
+    /// Optional multimodal attachments (images attached by the user).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<MessageAttachment>>,
 }
 
 /// Lightweight metrics from the most recent assistant message of a workflow.
@@ -220,6 +249,7 @@ mod tests {
             cached_tokens: None,
             cache_write_tokens: None,
             model_id_used: None,
+            attachments: None,
             timestamp: Utc::now(),
         };
 
@@ -251,6 +281,7 @@ mod tests {
             cached_tokens: Some(20),
             cache_write_tokens: Some(15),
             model_id_used: Some("model-uuid-123".to_string()),
+            attachments: None,
             timestamp: Utc::now(),
         };
 
@@ -282,6 +313,7 @@ mod tests {
             cached_tokens: None,
             cache_write_tokens: None,
             model_id_used: None,
+            attachments: None,
         };
         let json = serde_json::to_string(&create).unwrap();
         assert!(!json.contains("cached_tokens"));
@@ -306,6 +338,7 @@ mod tests {
             cached_tokens: Some(40),
             cache_write_tokens: Some(60),
             model_id_used: Some("mid".to_string()),
+            attachments: None,
         };
         let json = serde_json::to_string(&create).unwrap();
         assert!(json.contains("\"cached_tokens\":40"));
@@ -353,5 +386,139 @@ mod tests {
             0,
             "Missing tokens should default to 0"
         );
+    }
+
+    fn sample_attachment() -> MessageAttachment {
+        MessageAttachment {
+            kind: "image".into(),
+            mime_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            name: Some("test.png".into()),
+            size_bytes: Some(1234),
+        }
+    }
+
+    #[test]
+    fn test_message_attachment_serializes_with_all_fields() {
+        let att = sample_attachment();
+        let json = serde_json::to_string(&att).unwrap();
+        assert!(json.contains("\"kind\":\"image\""));
+        assert!(json.contains("\"mime_type\":\"image/png\""));
+        assert!(json.contains("\"data_base64\":\"iVBORw0KGgo=\""));
+        assert!(json.contains("\"name\":\"test.png\""));
+        assert!(json.contains("\"size_bytes\":1234"));
+    }
+
+    #[test]
+    fn test_message_attachment_omits_optional_fields_when_none() {
+        let att = MessageAttachment {
+            kind: "image".into(),
+            mime_type: "image/jpeg".into(),
+            data_base64: "abc".into(),
+            name: None,
+            size_bytes: None,
+        };
+        let json = serde_json::to_string(&att).unwrap();
+        assert!(!json.contains("\"name\""));
+        assert!(!json.contains("\"size_bytes\""));
+    }
+
+    #[test]
+    fn test_message_attachment_roundtrip() {
+        let original = sample_attachment();
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: MessageAttachment = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    fn test_message_serializes_with_attachments() {
+        let message = Message {
+            id: "msg_att".to_string(),
+            workflow_id: "wf_att".to_string(),
+            role: MessageRole::User,
+            content: "What is in this image?".to_string(),
+            tokens: 0,
+            tokens_input: None,
+            tokens_output: None,
+            model: None,
+            provider: None,
+            cost_usd: None,
+            duration_ms: None,
+            thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            model_id_used: None,
+            attachments: Some(vec![sample_attachment()]),
+            timestamp: Utc::now(),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        assert!(json.contains("\"attachments\":["));
+        assert!(json.contains("\"image/png\""));
+
+        let restored: Message = serde_json::from_str(&json).unwrap();
+        let atts = restored.attachments.expect("attachments preserved");
+        assert_eq!(atts.len(), 1);
+        assert_eq!(atts[0].mime_type, "image/png");
+    }
+
+    #[test]
+    fn test_message_deserializes_legacy_payload_without_attachments() {
+        // Pre-vision rows lack attachments -> must default to None (no error).
+        let json = r#"{
+            "id":"m1","workflow_id":"wf","role":"user","content":"hi","tokens":1,
+            "timestamp":"2026-05-02T00:00:00Z"
+        }"#;
+        let msg: Message = serde_json::from_str(json).expect("legacy parses");
+        assert!(
+            msg.attachments.is_none(),
+            "legacy rows should have attachments=None"
+        );
+    }
+
+    #[test]
+    fn test_message_create_omits_attachments_when_none() {
+        let create = MessageCreate {
+            workflow_id: "wf-1".to_string(),
+            role: "user".to_string(),
+            content: "hi".to_string(),
+            tokens: 0,
+            tokens_input: None,
+            tokens_output: None,
+            model: None,
+            provider: None,
+            cost_usd: None,
+            duration_ms: None,
+            thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            model_id_used: None,
+            attachments: None,
+        };
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(!json.contains("attachments"));
+    }
+
+    #[test]
+    fn test_message_create_serializes_with_attachments() {
+        let create = MessageCreate {
+            workflow_id: "wf-1".to_string(),
+            role: "user".to_string(),
+            content: "look".to_string(),
+            tokens: 0,
+            tokens_input: None,
+            tokens_output: None,
+            model: None,
+            provider: None,
+            cost_usd: None,
+            duration_ms: None,
+            thinking_tokens: None,
+            cached_tokens: None,
+            cache_write_tokens: None,
+            model_id_used: None,
+            attachments: Some(vec![sample_attachment()]),
+        };
+        let json = serde_json::to_string(&create).unwrap();
+        assert!(json.contains("\"attachments\":["));
     }
 }

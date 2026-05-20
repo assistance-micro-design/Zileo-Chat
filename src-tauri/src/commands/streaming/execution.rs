@@ -19,8 +19,10 @@
 //! pipeline. Each step lives in its own sibling module.
 
 use crate::{
-    agents::execution::sequence_tracker::SequenceTracker, models::WorkflowResult,
-    security::validate_uuid_field, AppState,
+    agents::execution::sequence_tracker::SequenceTracker,
+    models::{MessageAttachment, WorkflowResult},
+    security::validate_uuid_field,
+    AppState,
 };
 use std::sync::Arc;
 use tauri::{State, Window};
@@ -66,6 +68,7 @@ pub async fn execute_workflow_streaming(
     message: String,
     agent_id: String,
     locale: String,
+    attachments: Option<Vec<MessageAttachment>>,
     state: State<'_, AppState>,
 ) -> Result<WorkflowResult, String> {
     info!("Starting streaming workflow execution");
@@ -117,15 +120,23 @@ pub async fn execute_workflow_streaming(
     )
     .await;
 
-    let (task, task_id) =
-        match build_task(&state, &workflow_id, &message, &locale, &message_id).await {
-            Ok(task) => task,
-            Err(err) => {
-                emit_error(&window, &workflow_id, &err);
-                state.clear_cancellation(&workflow_id).await;
-                return Err(err);
-            }
-        };
+    let (task, task_id) = match build_task(
+        &state,
+        &workflow_id,
+        &message,
+        &locale,
+        &message_id,
+        attachments.as_deref(),
+    )
+    .await
+    {
+        Ok(task) => task,
+        Err(err) => {
+            emit_error(&window, &workflow_id, &err);
+            state.clear_cancellation(&workflow_id).await;
+            return Err(err);
+        }
+    };
 
     let (report, duration_ms) = match run_orchestrator_with_cancel(
         &window,

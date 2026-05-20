@@ -145,6 +145,113 @@ impl FileManagerTool {
         }))
     }
 
+    /// Read an image file and return it as base64 for vision analysis.
+    ///
+    /// Validates the path against authorized folders, restricts to a small
+    /// whitelist of image extensions, enforces a hard size cap, and returns
+    /// both the human-facing metadata and a `_image_attachment` marker that
+    /// the agent loop converts into a synthetic multipart user turn at the
+    /// next iteration so the model can actually "see" the image.
+    pub(crate) async fn op_read_image(&self, input: &Value) -> ToolResult<Value> {
+        const MAX_IMAGE_SIZE_BYTES: u64 = 8 * 1024 * 1024; // 8 MB
+        const ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
+
+        let path_str = input["path"].as_str().unwrap_or("");
+        let validated_path = validate_path(path_str, &self.authorized_folders)?;
+
+        if !validated_path.exists() {
+            return Err(ToolError::NotFound(format!(
+                "File not found: {}",
+                validated_path.display()
+            )));
+        }
+        if !validated_path.is_file() {
+            return Err(ToolError::InvalidInput(format!(
+                "Path is not a file: {}",
+                validated_path.display()
+            )));
+        }
+
+        let ext = validated_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+            .unwrap_or_default();
+
+        if !ALLOWED_IMAGE_EXTENSIONS.contains(&ext.as_str()) {
+            return Err(ToolError::InvalidInput(format!(
+                "Unsupported image extension '{}'. Allowed: {:?}",
+                ext, ALLOWED_IMAGE_EXTENSIONS
+            )));
+        }
+
+        let metadata = tokio::fs::metadata(&validated_path).await.map_err(|e| {
+            ToolError::ExecutionFailed(format!(
+                "Failed to stat image '{}': {}",
+                validated_path.display(),
+                e
+            ))
+        })?;
+
+        if metadata.len() > MAX_IMAGE_SIZE_BYTES {
+            return Err(ToolError::InvalidInput(format!(
+                "Image too large ({} bytes, max {} bytes)",
+                metadata.len(),
+                MAX_IMAGE_SIZE_BYTES
+            )));
+        }
+
+        let bytes = tokio::fs::read(&validated_path).await.map_err(|e| {
+            ToolError::ExecutionFailed(format!(
+                "Failed to read image '{}': {}",
+                validated_path.display(),
+                e
+            ))
+        })?;
+
+        use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+        let data_base64 = BASE64_STANDARD.encode(&bytes);
+
+        let mime_type = match ext.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            // Unreachable: extension already checked against the whitelist.
+            _ => "application/octet-stream",
+        };
+
+        let file_name = validated_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(String::from);
+
+        debug!(
+            path = %validated_path.display(),
+            size = metadata.len(),
+            mime = %mime_type,
+            "Image read"
+        );
+
+        // `_image_attachment` is the sentinel the iteration loop watches for:
+        // when present in a tool result, it queues a synthetic user turn with
+        // a multipart content that carries the actual image part so the next
+        // assistant call sees the picture.
+        Ok(json!({
+            "path": validated_path.to_string_lossy(),
+            "mime_type": mime_type,
+            "size_bytes": metadata.len(),
+            "name": file_name,
+            "_image_attachment": {
+                "kind": "image",
+                "mime_type": mime_type,
+                "data_base64": data_base64,
+                "name": file_name,
+                "size_bytes": metadata.len(),
+            }
+        }))
+    }
+
     /// Write content to a file (creates or overwrites).
     ///
     /// If the file already exists, a backup is created in the trash directory

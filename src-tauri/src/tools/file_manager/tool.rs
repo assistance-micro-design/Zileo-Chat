@@ -105,6 +105,7 @@ impl Tool for FileManagerTool {
         match operation {
             "list" => self.op_list(&input).await,
             "read" => self.op_read(&input).await,
+            "read_image" => self.op_read_image(&input).await,
             "write" => self.op_write(&input).await,
             "replace" => self.op_replace(&input).await,
             "create" => self.op_create(&input).await,
@@ -131,6 +132,7 @@ impl Tool for FileManagerTool {
         let valid_ops = [
             "list",
             "read",
+            "read_image",
             "write",
             "replace",
             "create",
@@ -183,7 +185,11 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
         ])
         .operations(&[
             ("list", "List directory contents"),
-            ("read", "Read file content (with optional offset/limit)"),
+            ("read", "Read text file content (with optional offset/limit)"),
+            (
+                "read_image",
+                "Read an image file (PNG/JPEG/WebP/GIF) and surface it as base64 for vision-capable models",
+            ),
             ("write", "Create or overwrite a file"),
             ("replace", "Replace text in a file (old_text -> new_text)"),
             ("create", "Create a new empty file or directory"),
@@ -197,6 +203,7 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
         .examples(&[
             json!({"operation": "list", "path": "/project/src"}),
             json!({"operation": "search_content", "path": "/project", "pattern": "TODO"}),
+            json!({"operation": "read_image", "path": "screenshots/diagram.png"}),
         ])
         .build(),
         input_schema: json!({
@@ -205,7 +212,7 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
             "properties": {
                 "operation": {
                     "type": "string",
-                    "enum": ["list", "read", "write", "replace", "create", "delete",
+                    "enum": ["list", "read", "read_image", "write", "replace", "create", "delete",
                              "move", "rename", "search_glob", "search_content"]
                 },
                 "path": { "type": "string", "description": "File or directory path" },
@@ -240,7 +247,7 @@ fn validate_required_params(operation: &str, input: &Value) -> ToolResult<()> {
     }
 
     match operation {
-        "list" | "read" | "delete" | "create" => {
+        "list" | "read" | "read_image" | "delete" | "create" => {
             require_str(input, "path", operation)?;
         }
         "write" => {

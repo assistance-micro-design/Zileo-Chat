@@ -21,6 +21,7 @@
  */
 
 import { tauriInvoke as invoke } from '$lib/tauri';
+import type { MessageAttachment } from '$types/message';
 import type { Workflow, WorkflowResult, WorkflowFullState } from '$types/workflow';
 
 /**
@@ -82,13 +83,15 @@ export const WorkflowService = {
 		workflowId: string,
 		message: string,
 		agentId: string,
-		locale: string
+		locale: string,
+		attachments?: MessageAttachment[]
 	): Promise<WorkflowResult> {
 		return invoke<WorkflowResult>('execute_workflow_streaming', {
 			workflowId,
 			message,
 			agentId,
-			locale
+			locale,
+			attachments: attachments && attachments.length > 0 ? attachments : null
 		});
 	},
 

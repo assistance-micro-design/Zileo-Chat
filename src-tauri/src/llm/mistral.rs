@@ -43,11 +43,17 @@ struct MistralChatRequest {
     reasoning_effort: Option<String>,
 }
 
-/// Message in Mistral API format
+/// Message in Mistral API format.
+///
+/// `content` is `serde_json::Value` so the struct accepts both a plain text
+/// message and a multipart message with image parts. Mistral uses a
+/// non-standard `image_url: "<string data URL>"` shape (not the OpenAI
+/// `{url}` object) — `MistralProvider::normalize_messages_for_provider`
+/// reshapes content arrays accordingly.
 #[derive(Debug, Serialize, Deserialize)]
 struct MistralMessage {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 /// API response from Mistral (handles both standard and reasoning models)
@@ -140,11 +146,11 @@ impl MistralProvider {
         let messages = vec![
             MistralMessage {
                 role: "system".to_string(),
-                content: system_text.to_string(),
+                content: serde_json::Value::String(system_text.to_string()),
             },
             MistralMessage {
                 role: "user".to_string(),
-                content: prompt.to_string(),
+                content: serde_json::Value::String(prompt.to_string()),
             },
         ];
 
@@ -301,7 +307,12 @@ fn parse_mistral_chat_response(body: &str, model: &str) -> Result<LLMResponse, L
 /// omitted). OpenAI-compat providers (OpenRouter, vLLM, ...) keep the
 /// default `low`/`medium`/`high` mapping.
 fn build_mistral_tool_request(params: &ToolCompletionParams) -> ToolChatRequest {
-    let mut body = ToolChatRequest::from_params_streaming(params, params.messages.clone());
+    // Re-shape `image_url` from the default OpenAI object form
+    // (emitted by load_conversation_history / build_initial_messages) to the
+    // bare-string form expected by api.mistral.ai. Idempotent.
+    let mut messages = params.messages.clone();
+    super::image_format::normalize_messages_for_mistral(&mut messages);
+    let mut body = ToolChatRequest::from_params_streaming(params, messages);
     body.reasoning_effort = params
         .reasoning_effort
         .as_ref()
@@ -428,7 +439,7 @@ mod tests {
             model: "mistral-small-latest".to_string(),
             messages: vec![MistralMessage {
                 role: "user".to_string(),
-                content: "Hello".to_string(),
+                content: serde_json::Value::String("Hello".to_string()),
             }],
             temperature: Some(0.7),
             max_tokens: Some(1000),
@@ -445,7 +456,7 @@ mod tests {
             model: "mistral-small-latest".to_string(),
             messages: vec![MistralMessage {
                 role: "user".to_string(),
-                content: "Hello".to_string(),
+                content: serde_json::Value::String("Hello".to_string()),
             }],
             temperature: Some(0.7),
             max_tokens: Some(1000),

@@ -25,7 +25,106 @@
 use crate::tools::file_manager::security::validate_folder_for_authorization;
 use crate::tools::file_manager::trash::TrashEntry;
 use crate::tools::file_manager::trash_management;
+use serde::Serialize;
 use tracing::{info, instrument, warn};
+
+/// Payload returned by [`read_image_for_attachment`].
+#[derive(Debug, Serialize)]
+pub struct ImageReadResult {
+    /// Base64-encoded image bytes (raw, no `data:` prefix).
+    pub data_base64: String,
+    /// IANA MIME type derived from the file extension.
+    pub mime_type: String,
+    /// File size in bytes (post-encoding the encoder produces ~33% more).
+    pub size_bytes: u64,
+    /// Original filename (display only).
+    pub name: String,
+}
+
+/// Maximum image size in bytes accepted from the picker. Mirrors the per-
+/// attachment cap enforced by `save_message_core` (4 MB binary → ~5.33 MB
+/// base64). Hard-coded here because this command runs before the canonical
+/// validation in `save_message`, so a fast-fail at the picker is friendlier.
+const MAX_PICKER_IMAGE_SIZE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Reads an image file selected by the user through the Tauri dialog and
+/// encodes it as base64 for use as a `MessageAttachment`.
+///
+/// The Tauri dialog already enforces user consent at OS level, so this
+/// command intentionally does NOT cross-check the path against the agent's
+/// authorized folders (it is invoked from the ChatInput, not from an agent
+/// tool). It only:
+///
+/// - Validates the extension whitelist (`png`, `jpg`, `jpeg`, `webp`, `gif`).
+/// - Caps the file size at 4 MB (defence in depth — the frontend also gates
+///   at the same threshold, the server-side validation in `save_message`
+///   accepts up to ~5.33 MB base64).
+/// - Reads the file and returns `(data_base64, mime_type, size_bytes, name)`.
+#[tauri::command]
+#[instrument(name = "read_image_for_attachment", fields(path = %path))]
+pub async fn read_image_for_attachment(path: String) -> Result<ImageReadResult, String> {
+    use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+
+    let path_buf = std::path::PathBuf::from(&path);
+    let file_name = path_buf
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(String::from)
+        .unwrap_or_else(|| "image".to_string());
+
+    let ext = path_buf
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+
+    let mime_type = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        other => {
+            warn!(extension = %other, "Picker received unsupported image extension");
+            return Err(format!(
+                "Unsupported image extension '{}'. Allowed: png, jpg, jpeg, webp, gif",
+                other
+            ));
+        }
+    };
+
+    let metadata = tokio::fs::metadata(&path_buf).await.map_err(|e| {
+        warn!(error = %e, "Failed to stat picker image");
+        format!("Failed to read image metadata: {}", e)
+    })?;
+
+    if metadata.len() > MAX_PICKER_IMAGE_SIZE_BYTES {
+        return Err(format!(
+            "Image too large ({} bytes, max {} bytes)",
+            metadata.len(),
+            MAX_PICKER_IMAGE_SIZE_BYTES
+        ));
+    }
+
+    let bytes = tokio::fs::read(&path_buf).await.map_err(|e| {
+        warn!(error = %e, "Failed to read picker image");
+        format!("Failed to read image: {}", e)
+    })?;
+
+    let data_base64 = BASE64_STANDARD.encode(&bytes);
+
+    info!(
+        size_bytes = metadata.len(),
+        mime = %mime_type,
+        "Picker image encoded"
+    );
+
+    Ok(ImageReadResult {
+        data_base64,
+        mime_type: mime_type.to_string(),
+        size_bytes: metadata.len(),
+        name: file_name,
+    })
+}
 
 /// Validate a folder path and return its canonical form.
 /// Called from frontend when user selects a folder via dialog.

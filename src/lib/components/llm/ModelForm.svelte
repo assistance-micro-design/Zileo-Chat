@@ -104,6 +104,7 @@
 		max_output_tokens: 4096,
 		temperature_default: 0.7,
 		is_reasoning: false,
+		supports_vision: false,
 		input_price_per_mtok: 0,
 		output_price_per_mtok: 0,
 		cache_read_price_per_mtok: 0,
@@ -120,6 +121,7 @@
 			max_output_tokens: model?.max_output_tokens ?? 4096,
 			temperature_default: model?.temperature_default ?? 0.7,
 			is_reasoning: model?.is_reasoning ?? false,
+			supports_vision: model?.supports_vision ?? false,
 			input_price_per_mtok: model?.input_price_per_mtok ?? 0,
 			output_price_per_mtok: model?.output_price_per_mtok ?? 0,
 			cache_read_price_per_mtok: model?.cache_read_price_per_mtok ?? 0,
@@ -231,6 +233,7 @@
 				max_output_tokens: formData.max_output_tokens,
 				temperature_default: formData.temperature_default,
 				is_reasoning: formData.is_reasoning,
+				supports_vision: formData.supports_vision,
 				input_price_per_mtok: formData.input_price_per_mtok,
 				output_price_per_mtok: formData.output_price_per_mtok,
 				cache_read_price_per_mtok: formData.cache_read_price_per_mtok,
@@ -258,6 +261,9 @@
 			}
 			if (model && formData.is_reasoning !== model.is_reasoning) {
 				updateData.is_reasoning = formData.is_reasoning;
+			}
+			if (model && formData.supports_vision !== model.supports_vision) {
+				updateData.supports_vision = formData.supports_vision;
 			}
 			if (model && formData.input_price_per_mtok !== model.input_price_per_mtok) {
 				updateData.input_price_per_mtok = formData.input_price_per_mtok;
@@ -528,6 +534,14 @@
 			<span class="checkbox-text">{$i18n('llm_form_reasoning_label')}</span>
 		</label>
 		<p class="checkbox-help">{$i18n('llm_form_reasoning_help')}</p>
+	</div>
+
+	<div class="checkbox-field">
+		<label class="checkbox-label">
+			<input type="checkbox" bind:checked={formData.supports_vision} disabled={saving} />
+			<span class="checkbox-text">{$i18n('models_supports_vision')}</span>
+		</label>
+		<p class="checkbox-help">{$i18n('models_supports_vision_help')}</p>
 	</div>
 
 	<div class="form-actions">
