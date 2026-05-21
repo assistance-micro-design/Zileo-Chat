@@ -317,13 +317,14 @@ pub async fn move_kanban_card_core(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[instrument(name = "create_kanban_card", skip(state, data))]
+#[instrument(name = "create_kanban_card", skip(state, config))]
 pub async fn create_kanban_card(
-    data: KanbanCardCreate,
+    config: KanbanCardCreate,
     state: State<'_, AppState>,
-) -> Result<KanbanCard, String> {
+) -> Result<String, String> {
     info!("Creating kanban card");
-    create_kanban_card_core(&state.db, data).await
+    let card = create_kanban_card_core(&state.db, config).await?;
+    Ok(card.id)
 }
 
 #[tauri::command]
@@ -345,13 +346,13 @@ pub async fn list_kanban_cards(
 }
 
 #[tauri::command]
-#[instrument(name = "update_kanban_card", skip(state, update), fields(card_id = %card_id))]
+#[instrument(name = "update_kanban_card", skip(state, config), fields(card_id = %card_id))]
 pub async fn update_kanban_card(
     card_id: String,
-    update: KanbanCardUpdate,
+    config: KanbanCardUpdate,
     state: State<'_, AppState>,
 ) -> Result<KanbanCard, String> {
-    update_kanban_card_core(&state.db, &card_id, update).await
+    update_kanban_card_core(&state.db, &card_id, config).await
 }
 
 #[tauri::command]

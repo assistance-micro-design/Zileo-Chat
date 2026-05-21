@@ -11,9 +11,11 @@
 //! The returned payload is NOT persisted here; the caller is expected to
 //! review the proposal and (optionally) call `create_kanban_card_core`.
 
+use crate::commands::agent::hydrate_llm_from_model;
 use crate::db::DBClient;
 use crate::llm::{CompletionParams, ProviderManager, ProviderType};
-use crate::models::KanbanCardCreate;
+use crate::models::agent::ReasoningEffort;
+use crate::models::{KanbanCardCreate, LLMConfig};
 use crate::security::validate_uuid_field;
 use crate::AppState;
 use serde_json::Value;
@@ -24,11 +26,6 @@ use tracing::{debug, info, instrument, warn};
 
 /// Cap on the description input length (sanity, prompt budget protection).
 const MAX_DESCRIPTION_LEN: usize = 4_000;
-/// Cap on the LLM response (the JSON payload is small).
-const MAX_OUTPUT_TOKENS: usize = 1_200;
-/// Sampling temperature for compose-card: low but non-zero so the agent can
-/// craft a creative title without veering off-format.
-const COMPOSE_TEMPERATURE: f64 = 0.3;
 
 /// Composes a kanban card from a short user description.
 ///
@@ -61,24 +58,34 @@ pub async fn compose_card_from_description_core(
     let system_prompt = build_system_prompt(&agent.system_prompt, &agents, &prompts);
     let user_prompt = build_user_prompt(trimmed_desc, &kanban_agent_id);
 
-    // 4. Single-turn completion.
-    let provider = provider_type_from_string(&agent.provider)?;
+    // 4. Single-turn completion — use the agent's full LLM config
+    //    (temperature, max_tokens, is_reasoning, context_window) so the
+    //    compose flow honours the same Settings as a regular chat turn.
+    let provider = provider_type_from_string(&agent.llm.provider)?;
+    let reasoning_effort = if agent.llm.is_reasoning {
+        agent.reasoning_effort.clone()
+    } else {
+        None
+    };
     let params = CompletionParams {
         prompt: user_prompt,
         system_prompt: Some(system_prompt),
-        model: Some(agent.model.clone()),
-        temperature: COMPOSE_TEMPERATURE,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        reasoning_effort: None,
-        context_window: agent.context_window,
+        model: Some(agent.llm.model.clone()),
+        temperature: agent.llm.temperature,
+        max_tokens: agent.llm.max_tokens,
+        reasoning_effort,
+        context_window: agent.llm.context_window,
     };
     let response = llm_manager
         .complete_with_provider(provider, params)
         .await
         .map_err(|e| format!("LLM completion failed: {}", e))?;
     debug!(
-        provider = %agent.provider,
-        model = %agent.model,
+        provider = %agent.llm.provider,
+        model = %agent.llm.model,
+        temperature = agent.llm.temperature,
+        max_tokens = agent.llm.max_tokens,
+        is_reasoning = agent.llm.is_reasoning,
         tokens_in = response.tokens_input,
         tokens_out = response.tokens_output,
         "Compose-card LLM completion done"
@@ -110,15 +117,13 @@ fn provider_type_from_string(s: &str) -> Result<ProviderType, String> {
 
 struct ComposerAgent {
     system_prompt: String,
-    provider: String,
-    model: String,
-    context_window: Option<usize>,
+    llm: LLMConfig,
+    reasoning_effort: Option<ReasoningEffort>,
 }
 
 async fn load_kanban_agent(db: &Arc<DBClient>, id: &str) -> Result<ComposerAgent, String> {
     let q = format!(
-        "SELECT system_prompt, kind, llm.provider AS provider, llm.model AS model, \
-         llm.context_window AS context_window FROM agent:`{}`",
+        "SELECT system_prompt, kind, llm, reasoning_effort FROM agent:`{}`",
         id
     );
     let rows = db
@@ -137,17 +142,32 @@ async fn load_kanban_agent(db: &Arc<DBClient>, id: &str) -> Result<ComposerAgent
         ));
     }
     let system_prompt = row["system_prompt"].as_str().unwrap_or("").to_string();
-    let provider = row["provider"].as_str().unwrap_or("mistral").to_string();
-    let model = row["model"]
-        .as_str()
-        .ok_or_else(|| "Kanban agent has no LLM model configured".to_string())?
-        .to_string();
-    let context_window = row["context_window"].as_u64().map(|v| v as usize);
+
+    let llm_value = row
+        .get("llm")
+        .cloned()
+        .ok_or_else(|| "Kanban agent has no llm config".to_string())?;
+    let mut llm: LLMConfig = serde_json::from_value(llm_value)
+        .map_err(|e| format!("Failed to deserialize agent llm config: {}", e))?;
+    if llm.model.trim().is_empty() {
+        return Err("Kanban agent has no LLM model configured".to_string());
+    }
+    // Re-sync is_reasoning / context_window / temperature / max_tokens from
+    // the llm_model row so a stale agent snapshot can't shadow Settings edits.
+    hydrate_llm_from_model(db, &mut llm).await?;
+
+    let reasoning_effort: Option<ReasoningEffort> = row
+        .get("reasoning_effort")
+        .filter(|v| !v.is_null())
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|e| format!("Failed to deserialize reasoning_effort: {}", e))?;
+
     Ok(ComposerAgent {
         system_prompt,
-        provider,
-        model,
-        context_window,
+        llm,
+        reasoning_effort,
     })
 }
 
@@ -190,7 +210,7 @@ struct PromptBrief {
 }
 
 async fn list_prompt_summaries(db: &Arc<DBClient>) -> Result<Vec<PromptBrief>, String> {
-    let q = "SELECT meta::id(id) AS id, name, description, variables FROM prompt \
+    let q = "SELECT meta::id(id) AS id, name, description, variables, updated_at FROM prompt \
              ORDER BY updated_at DESC LIMIT 50";
     let rows = db
         .query_json(q)

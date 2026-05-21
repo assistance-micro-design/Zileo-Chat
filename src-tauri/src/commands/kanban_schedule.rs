@@ -181,13 +181,14 @@ pub async fn delete_kanban_schedule_core(db: &DBClient, id: &str) -> Result<(), 
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[instrument(name = "create_kanban_schedule", skip(state, data))]
+#[instrument(name = "create_kanban_schedule", skip(state, config))]
 pub async fn create_kanban_schedule(
-    data: KanbanScheduleCreate,
+    config: KanbanScheduleCreate,
     state: State<'_, AppState>,
-) -> Result<KanbanSchedule, String> {
+) -> Result<String, String> {
     info!("Creating kanban schedule");
-    create_kanban_schedule_core(&state.db, data).await
+    let schedule = create_kanban_schedule_core(&state.db, config).await?;
+    Ok(schedule.id)
 }
 
 #[tauri::command]
@@ -208,13 +209,13 @@ pub async fn list_kanban_schedules(
 }
 
 #[tauri::command]
-#[instrument(name = "update_kanban_schedule", skip(state, update), fields(id = %id))]
+#[instrument(name = "update_kanban_schedule", skip(state, config), fields(id = %id))]
 pub async fn update_kanban_schedule(
     id: String,
-    update: KanbanScheduleUpdate,
+    config: KanbanScheduleUpdate,
     state: State<'_, AppState>,
 ) -> Result<KanbanSchedule, String> {
-    update_kanban_schedule_core(&state.db, &id, update).await
+    update_kanban_schedule_core(&state.db, &id, config).await
 }
 
 #[tauri::command]
