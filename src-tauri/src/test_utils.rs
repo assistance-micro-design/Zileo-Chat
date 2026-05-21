@@ -213,6 +213,8 @@ impl TestRegistryAgent {
                 system_prompt: String::new(),
                 max_tool_iterations: 0,
                 reasoning_effort: None,
+                kind: None,
+                auto_analyze_reports: false,
             },
         }
     }

@@ -47,6 +47,8 @@ async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
         system_prompt: "Test agent".to_string(),
         max_tool_iterations: 50,
         reasoning_effort: None,
+        kind: None,
+        auto_analyze_reports: false,
     };
     let agent = SimpleAgent::new(config);
     registry

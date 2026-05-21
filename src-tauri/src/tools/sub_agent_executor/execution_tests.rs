@@ -488,6 +488,8 @@ async fn test_inner_task_aborted_when_outer_future_dropped() {
             system_prompt: "Test prompt".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         },
         ticks: ticks.clone(),
     });

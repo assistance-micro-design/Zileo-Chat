@@ -317,6 +317,8 @@ mod agent_config_tests {
             require_file_confirmation: true,
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         assert!(config.tools.contains(&"MemoryTool".to_string()));

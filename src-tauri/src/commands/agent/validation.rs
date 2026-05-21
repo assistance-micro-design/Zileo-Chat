@@ -195,6 +195,8 @@ pub fn validate_agent_create(config: &AgentConfigCreate) -> Result<AgentConfigCr
         system_prompt: validate_system_prompt(&config.system_prompt)?,
         max_tool_iterations: config.max_tool_iterations.clamp(1, 200),
         reasoning_effort,
+        kind: config.kind.clone(),
+        auto_analyze_reports: config.auto_analyze_reports,
     })
 }
 
@@ -251,6 +253,14 @@ pub fn merge_agent_config(
         None
     };
 
+    let kind = match &update.kind {
+        Some(k) => k.clone(),
+        None => existing.kind.clone(),
+    };
+    let auto_analyze_reports = update
+        .auto_analyze_reports
+        .unwrap_or(existing.auto_analyze_reports);
+
     Ok(AgentConfig {
         id: existing.id.clone(),
         name,
@@ -264,6 +274,8 @@ pub fn merge_agent_config(
         system_prompt,
         max_tool_iterations,
         reasoning_effort,
+        kind,
+        auto_analyze_reports,
     })
 }
 
@@ -305,6 +317,8 @@ mod tests {
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: effort,
+            kind: None,
+            auto_analyze_reports: false,
         }
     }
 
@@ -329,6 +343,8 @@ mod tests {
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: effort,
+            kind: None,
+            auto_analyze_reports: false,
         }
     }
 
@@ -376,6 +392,8 @@ mod tests {
             system_prompt: None,
             max_tool_iterations: None,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert!(!merged.llm.is_reasoning);
@@ -406,6 +424,8 @@ mod tests {
             system_prompt: None,
             max_tool_iterations: None,
             reasoning_effort: Some(Some(ReasoningEffort::Low)),
+            kind: None,
+            auto_analyze_reports: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert_eq!(merged.reasoning_effort, None);
@@ -429,6 +449,8 @@ mod tests {
             system_prompt: None,
             max_tool_iterations: None,
             reasoning_effort: Some(None),
+            kind: None,
+            auto_analyze_reports: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert!(merged.llm.is_reasoning);
@@ -452,6 +474,8 @@ mod tests {
             system_prompt: None,
             max_tool_iterations: None,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: None,
         };
         let merged = merge_agent_config(&update, &existing).expect("merge should succeed");
         assert_eq!(merged.reasoning_effort, Some(ReasoningEffort::Medium));

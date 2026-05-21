@@ -267,6 +267,8 @@ impl SpawnAgentTool {
             // Sub-agents inherit parent's max_tool_iterations and reasoning_effort
             max_tool_iterations: parent_config.max_tool_iterations,
             reasoning_effort: parent_config.reasoning_effort.clone(),
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         // Create execution record in database (status: running)

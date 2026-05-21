@@ -24,13 +24,17 @@ pub mod custom_provider;
 pub mod embedding;
 pub mod function_calling;
 pub mod import_export;
+pub mod kanban_card;
+pub mod kanban_schedule;
 pub mod llm_models;
 pub mod mcp;
 pub mod memory;
 pub mod message;
 pub mod prompt;
+pub mod prompt_version;
 pub mod serde_utils;
 pub mod skill;
+pub mod skill_version;
 pub mod streaming;
 pub mod stt;
 pub mod sub_agent;
@@ -47,8 +51,15 @@ pub mod workflow_folder;
 // specific submodule (e.g., `crate::models::streaming::events`).
 
 pub use agent::{
-    AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentSummary, LLMConfig, Lifecycle,
+    AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentKind, AgentSummary, LLMConfig,
+    Lifecycle,
 };
+pub use kanban_card::{
+    KanbanCard, KanbanCardCreate, KanbanCardStatus, KanbanCardUpdate, KanbanColumn,
+};
+pub use kanban_schedule::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
+pub use prompt_version::{PromptVersion, PromptVersionSummary};
+pub use skill_version::{SkillVersion, SkillVersionSummary};
 pub use chat_block::{merge_into_chat_blocks, ChatBlock};
 pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,

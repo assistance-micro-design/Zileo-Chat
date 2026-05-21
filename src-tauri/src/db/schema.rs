@@ -542,4 +542,102 @@ DEFINE FIELD OVERWRITE pinned ON workflow TYPE bool DEFAULT false;
 
 -- Backfill pinned field on existing workflows (DEFAULT only applies to new records)
 UPDATE workflow SET pinned = false WHERE pinned IS NONE;
+
+-- =============================================
+-- Agent extensions for Kanban feature (additive, backward-compatible)
+-- =============================================
+DEFINE FIELD OVERWRITE kind ON agent TYPE option<string>
+    ASSERT $value IS NONE OR $value IN ['kanban'];
+DEFINE FIELD OVERWRITE auto_analyze_reports ON agent TYPE bool DEFAULT false;
+
+-- =============================================
+-- Table: kanban_card
+-- Cards representing a task to delegate to an agent workflow.
+-- =============================================
+DEFINE TABLE OVERWRITE kanban_card SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON kanban_card TYPE string;
+DEFINE FIELD OVERWRITE title ON kanban_card TYPE string
+    ASSERT string::len($value) >= 1 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE description ON kanban_card TYPE string
+    ASSERT string::len($value) <= 5000;
+DEFINE FIELD OVERWRITE kanban_agent_id ON kanban_card TYPE string;
+DEFINE FIELD OVERWRITE target_agent_id ON kanban_card TYPE string;
+DEFINE FIELD OVERWRITE prompt_id ON kanban_card TYPE option<string>;
+DEFINE FIELD OVERWRITE inline_prompt ON kanban_card TYPE option<string>;
+-- Variables stored as JSON string (ERR_SURREAL_001 dynamic keys droppees sous SCHEMAFULL)
+DEFINE FIELD OVERWRITE variables ON kanban_card TYPE string DEFAULT '{}';
+DEFINE FIELD OVERWRITE target_folder_id ON kanban_card TYPE option<string>;
+DEFINE FIELD OVERWRITE status ON kanban_card TYPE string
+    ASSERT $value IN ['todo', 'ready', 'doing', 'review', 'done', 'failed'];
+DEFINE FIELD OVERWRITE column ON kanban_card TYPE string
+    ASSERT $value IN ['todo', 'doing', 'review', 'done'];
+DEFINE FIELD OVERWRITE column_order ON kanban_card TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE workflow_id ON kanban_card TYPE option<string>;
+DEFINE FIELD OVERWRITE error_summary ON kanban_card TYPE option<string>;
+DEFINE FIELD OVERWRITE created_at ON kanban_card TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at ON kanban_card TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE kanban_card_status_idx ON kanban_card FIELDS status;
+DEFINE INDEX OVERWRITE kanban_card_column_idx ON kanban_card FIELDS column, column_order;
+DEFINE INDEX OVERWRITE kanban_card_workflow_idx ON kanban_card FIELDS workflow_id;
+DEFINE INDEX OVERWRITE kanban_card_kanban_agent_idx ON kanban_card FIELDS kanban_agent_id;
+
+-- =============================================
+-- Table: kanban_schedule
+-- Recurrence rules for kanban_card templates.
+-- =============================================
+DEFINE TABLE OVERWRITE kanban_schedule SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON kanban_schedule TYPE string;
+DEFINE FIELD OVERWRITE card_template_id ON kanban_schedule TYPE string;
+DEFINE FIELD OVERWRITE days_of_week ON kanban_schedule TYPE array<int>
+    ASSERT array::all($value, |$v| $v >= 0 AND $v <= 6);
+DEFINE FIELD OVERWRITE hour ON kanban_schedule TYPE int
+    ASSERT $value >= 0 AND $value <= 23;
+DEFINE FIELD OVERWRITE minute ON kanban_schedule TYPE int
+    ASSERT $value >= 0 AND $value <= 59;
+DEFINE FIELD OVERWRITE next_run_at ON kanban_schedule TYPE datetime;
+DEFINE FIELD OVERWRITE last_run_at ON kanban_schedule TYPE option<datetime>;
+DEFINE FIELD OVERWRITE enabled ON kanban_schedule TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE created_at ON kanban_schedule TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE kanban_schedule_next_run_idx ON kanban_schedule FIELDS next_run_at, enabled;
+DEFINE INDEX OVERWRITE kanban_schedule_card_idx ON kanban_schedule FIELDS card_template_id;
+
+-- =============================================
+-- Table: prompt_version
+-- Snapshot of a prompt taken AVANT toute modification (versionning anti-perte).
+-- =============================================
+DEFINE TABLE OVERWRITE prompt_version SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE prompt_id ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE version ON prompt_version TYPE int;
+DEFINE FIELD OVERWRITE name ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE description ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE category ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE content ON prompt_version TYPE string;
+-- Variables as JSON string (ERR_SURREAL_001 sur objets imbriques dans array)
+DEFINE FIELD OVERWRITE variables_json ON prompt_version TYPE string DEFAULT '[]';
+DEFINE FIELD OVERWRITE edited_by ON prompt_version TYPE string;
+DEFINE FIELD OVERWRITE edit_summary ON prompt_version TYPE option<string>;
+DEFINE FIELD OVERWRITE edited_at ON prompt_version TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE prompt_version_prompt_idx ON prompt_version FIELDS prompt_id, version;
+
+-- =============================================
+-- Table: skill_version
+-- Snapshot of a skill taken AVANT toute modification.
+-- =============================================
+DEFINE TABLE OVERWRITE skill_version SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE skill_id ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE version ON skill_version TYPE int;
+DEFINE FIELD OVERWRITE name ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE description ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE category ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE content ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE edited_by ON skill_version TYPE string;
+DEFINE FIELD OVERWRITE edit_summary ON skill_version TYPE option<string>;
+DEFINE FIELD OVERWRITE edited_at ON skill_version TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE skill_version_skill_idx ON skill_version FIELDS skill_id, version;
 "#;

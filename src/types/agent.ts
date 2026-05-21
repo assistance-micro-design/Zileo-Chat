@@ -23,6 +23,11 @@ export type ReasoningEffort = 'low' | 'medium' | 'high';
 export type Lifecycle = 'permanent' | 'temporary';
 
 /**
+ * Agent specialization (meta-role). `kind = undefined` = standard agent.
+ */
+export type AgentKind = 'kanban';
+
+/**
  * Agent configuration
  */
 export interface AgentConfig {
@@ -50,6 +55,10 @@ export interface AgentConfig {
 	max_tool_iterations: number;
 	/** Reasoning effort for thinking models (absent = disabled) */
 	reasoning_effort?: ReasoningEffort;
+	/** Agent specialization. Absent = standard agent. */
+	kind?: AgentKind;
+	/** When true and kind === 'kanban', the agent auto-analyzes workflow reports on completion. */
+	auto_analyze_reports?: boolean;
 }
 
 /**
@@ -96,6 +105,10 @@ export interface AgentConfigCreate {
 	max_tool_iterations: number;
 	/** Reasoning effort for thinking models (absent = disabled) */
 	reasoning_effort?: ReasoningEffort;
+	/** Agent specialization. Absent = standard agent. */
+	kind?: AgentKind;
+	/** When true and kind === 'kanban', the agent auto-analyzes workflow reports on completion. */
+	auto_analyze_reports?: boolean;
 }
 
 /**
@@ -122,6 +135,10 @@ export interface AgentConfigUpdate {
 	max_tool_iterations?: number;
 	/** Reasoning effort for thinking models */
 	reasoning_effort?: ReasoningEffort | null;
+	/** Agent specialization (tri-state: absent = keep, null = clear, value = set). */
+	kind?: AgentKind | null;
+	/** Auto-analyze workflow reports flag (absent = keep, value = set). */
+	auto_analyze_reports?: boolean;
 }
 
 /**

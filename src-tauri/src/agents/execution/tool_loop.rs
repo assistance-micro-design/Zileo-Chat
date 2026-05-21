@@ -1065,6 +1065,8 @@ mod tests {
             system_prompt: String::new(),
             max_tool_iterations: 10,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         }
     }
 

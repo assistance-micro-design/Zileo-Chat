@@ -193,6 +193,8 @@ mod tests {
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
         let manager = Arc::new(ProviderManager::new().expect("test provider manager"));
         LLMAgent {

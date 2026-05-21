@@ -1,0 +1,89 @@
+// Copyright 2025 Assistance Micro Design
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+
+/**
+ * Kanban card and schedule types — mirror of Rust models in
+ * `src-tauri/src/models/kanban_card.rs` and `kanban_schedule.rs`.
+ */
+
+/** UI column for kanban cards. */
+export type KanbanColumn = 'todo' | 'doing' | 'review' | 'done';
+
+/** Business status of a kanban card. */
+export type KanbanCardStatus = 'todo' | 'ready' | 'doing' | 'review' | 'done' | 'failed';
+
+/**
+ * A kanban card persisted in DB.
+ *
+ * `prompt_id` and `inline_prompt` are mutually exclusive (XOR).
+ * `variables` is a JSON-stringified `Record<string, string>` (ERR_SURREAL_001).
+ */
+export interface KanbanCard {
+	id: string;
+	title: string;
+	description: string;
+	kanban_agent_id: string;
+	target_agent_id: string;
+	prompt_id?: string;
+	inline_prompt?: string;
+	variables: string;
+	target_folder_id?: string;
+	status: KanbanCardStatus;
+	column: KanbanColumn;
+	column_order: number;
+	workflow_id?: string;
+	error_summary?: string;
+	created_at: string;
+	updated_at: string;
+}
+
+/** Payload to create a new kanban card. */
+export interface KanbanCardCreate {
+	title: string;
+	description?: string;
+	kanban_agent_id: string;
+	target_agent_id: string;
+	prompt_id?: string;
+	inline_prompt?: string;
+	variables?: string;
+	target_folder_id?: string;
+}
+
+/** PATCH payload (tri-state where clearing is meaningful: `null` = clear, absent = keep). */
+export interface KanbanCardUpdate {
+	title?: string;
+	description?: string;
+	prompt_id?: string | null;
+	inline_prompt?: string | null;
+	variables?: string;
+	target_folder_id?: string | null;
+}
+
+/** Recurrence rule for a kanban_card template. `days_of_week`: 0 = Mon, 6 = Sun. */
+export interface KanbanSchedule {
+	id: string;
+	card_template_id: string;
+	days_of_week: number[];
+	hour: number;
+	minute: number;
+	next_run_at: string;
+	last_run_at?: string;
+	enabled: boolean;
+	created_at: string;
+}
+
+export interface KanbanScheduleCreate {
+	card_template_id: string;
+	days_of_week: number[];
+	hour: number;
+	minute: number;
+}
+
+export interface KanbanScheduleUpdate {
+	days_of_week?: number[];
+	hour?: number;
+	minute?: number;
+	enabled?: boolean | null;
+}

@@ -109,6 +109,8 @@ impl TestAgent {
                 system_prompt: "Test prompt".to_string(),
                 max_tool_iterations: 50,
                 reasoning_effort: None,
+                kind: None,
+                auto_analyze_reports: false,
             },
         }
     }

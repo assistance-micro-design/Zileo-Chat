@@ -306,6 +306,8 @@ pub async fn create_agent(
         system_prompt,
         max_tool_iterations,
         reasoning_effort,
+        kind,
+        auto_analyze_reports,
     } = validated;
 
     let lifecycle_str = match lifecycle {
@@ -326,9 +328,15 @@ pub async fn create_agent(
         system_prompt,
         max_tool_iterations,
         reasoning_effort,
+        kind,
+        auto_analyze_reports,
     };
 
     let reasoning_sql = format_reasoning_effort(&agent_config);
+    let kind_sql = match &agent_config.kind {
+        Some(crate::models::AgentKind::Kanban) => "'kanban'".to_string(),
+        None => "NONE".to_string(),
+    };
 
     let query = format!(
         "CREATE agent:`{agent_id}` CONTENT {{
@@ -344,6 +352,8 @@ pub async fn create_agent(
             system_prompt: $system_prompt,
             max_tool_iterations: $max_tool_iterations,
             reasoning_effort: {reasoning_sql},
+            kind: {kind_sql},
+            auto_analyze_reports: $auto_analyze_reports,
             created_at: time::now(),
             updated_at: time::now()
         }}"
@@ -375,6 +385,10 @@ pub async fn create_agent(
                 (
                     "max_tool_iterations".to_string(),
                     json!(agent_config.max_tool_iterations),
+                ),
+                (
+                    "auto_analyze_reports".to_string(),
+                    json!(agent_config.auto_analyze_reports),
                 ),
             ],
         )
@@ -434,6 +448,10 @@ pub async fn update_agent(
         })?;
 
     let reasoning_sql = format_reasoning_effort(&updated_config);
+    let kind_sql = match &updated_config.kind {
+        Some(crate::models::AgentKind::Kanban) => "'kanban'".to_string(),
+        None => "NONE".to_string(),
+    };
 
     let query = format!(
         "UPDATE agent:`{validated_id}` SET
@@ -447,6 +465,8 @@ pub async fn update_agent(
             system_prompt = $system_prompt,
             max_tool_iterations = $max_tool_iterations,
             reasoning_effort = {reasoning_sql},
+            kind = {kind_sql},
+            auto_analyze_reports = $auto_analyze_reports,
             updated_at = time::now()"
     );
 
@@ -475,6 +495,10 @@ pub async fn update_agent(
                 (
                     "max_tool_iterations".to_string(),
                     json!(updated_config.max_tool_iterations),
+                ),
+                (
+                    "auto_analyze_reports".to_string(),
+                    json!(updated_config.auto_analyze_reports),
                 ),
             ],
         )

@@ -43,6 +43,8 @@ fn test_agent_config(id: &str, name: &str) -> AgentConfig {
         system_prompt: "Test prompt".to_string(),
         max_tool_iterations: 50,
         reasoning_effort: None,
+        kind: None,
+        auto_analyze_reports: false,
     }
 }
 
@@ -93,6 +95,8 @@ async fn test_get_agent_config_success() {
         system_prompt: "You are a test agent".to_string(),
         max_tool_iterations: 50,
         reasoning_effort: None,
+        kind: None,
+        auto_analyze_reports: false,
     };
 
     let agent = SimpleAgent::new(config);

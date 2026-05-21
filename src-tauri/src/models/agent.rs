@@ -81,6 +81,17 @@ pub enum Lifecycle {
     Temporary,
 }
 
+/// Agent specialization kind (meta-role).
+///
+/// Standard agents have `kind = None`. Specialized agents (e.g. Kanban
+/// composer) carry a `kind` flag so the UI and orchestration code can
+/// surface specific affordances (badge, scheduler eligibility, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentKind {
+    Kanban,
+}
+
 /// Agent configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -127,6 +138,19 @@ pub struct AgentConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Agent specialization kind. None = standard agent.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
+    /// When true and `kind = Some(Kanban)`, the agent automatically analyzes
+    /// workflow reports on completion (and may propose prompt/skill edits).
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_false")]
+    pub auto_analyze_reports: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Default value for max_tool_iterations
@@ -229,6 +253,13 @@ pub struct AgentConfigCreate {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Agent specialization kind. None = standard agent.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
+    /// Auto-analyze workflow reports on completion (only meaningful for Kanban agents).
+    #[serde(default)]
+    pub auto_analyze_reports: bool,
 }
 
 /// Agent configuration for updates (all fields optional except lifecycle which cannot change)
@@ -276,6 +307,16 @@ pub struct AgentConfigUpdate {
         deserialize_with = "deserialize_explicit_option"
     )]
     pub reasoning_effort: Option<Option<ReasoningEffort>>,
+    /// Agent specialization kind (tri-state PATCH: absent = keep, null = clear, value = set).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_explicit_option"
+    )]
+    pub kind: Option<Option<AgentKind>>,
+    /// Auto-analyze workflow reports flag (absent = keep, value = set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_analyze_reports: Option<bool>,
 }
 
 /// Agent summary for listing (lightweight representation)
@@ -399,6 +440,8 @@ mod tests {
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: Some(ReasoningEffort::Medium),
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -430,6 +473,8 @@ mod tests {
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -481,6 +526,8 @@ mod tests {
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -535,6 +582,8 @@ mod tests {
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         assert!(config.has_valid_tools());
@@ -567,6 +616,8 @@ mod tests {
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         assert!(!config.has_valid_tools());
@@ -606,6 +657,8 @@ mod tests {
             system_prompt: "Test".to_string(),
             max_tool_iterations: 50,
             reasoning_effort: None,
+            kind: None,
+            auto_analyze_reports: false,
         };
 
         assert!(config.has_valid_tools());
