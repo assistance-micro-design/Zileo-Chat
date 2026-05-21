@@ -86,6 +86,40 @@ impl ToolRegistry {
             },
         );
 
+        // Kanban-related tools
+        tools.insert(
+            "KanbanCardTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: false,
+            },
+        );
+        tools.insert(
+            "PromptManagerTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: false,
+            },
+        );
+        tools.insert(
+            "SkillManagerTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: false,
+            },
+        );
+        tools.insert(
+            "WorkflowManagerTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: false,
+            },
+        );
+
         // Auto-injected tools (hidden from frontend UI)
         tools.insert(
             "ReadSkillTool",
@@ -226,8 +260,12 @@ mod tests {
         assert!(basic.contains(&"TodoTool"));
         assert!(basic.contains(&"CalculatorTool"));
         assert!(basic.contains(&"UserQuestionTool"));
+        assert!(basic.contains(&"KanbanCardTool"));
+        assert!(basic.contains(&"PromptManagerTool"));
+        assert!(basic.contains(&"SkillManagerTool"));
+        assert!(basic.contains(&"WorkflowManagerTool"));
         assert!(!basic.contains(&"SpawnAgentTool"));
-        assert_eq!(basic.len(), 5);
+        assert_eq!(basic.len(), 9);
 
         let sub_agent = TOOL_REGISTRY.sub_agent_tools();
         assert!(sub_agent.contains(&"SpawnAgentTool"));
@@ -250,7 +288,7 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 9); // 5 basic + 1 hidden + 3 sub-agent
+        assert_eq!(all.len(), 13); // 9 basic + 1 hidden + 3 sub-agent
     }
 
     #[test]

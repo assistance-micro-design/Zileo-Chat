@@ -22,6 +22,10 @@ use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::spawn_agent::SpawnAgentTool;
+use crate::tools::kanban_card::KanbanCardTool;
+use crate::tools::prompt_manager::PromptManagerTool;
+use crate::tools::skill_manager::SkillManagerTool;
+use crate::tools::workflow_manager::WorkflowManagerTool;
 use crate::tools::{
     CalculatorTool, FileManagerTool, MemoryTool, ReadSkillTool, TodoTool, Tool, UserQuestionTool,
 };
@@ -195,6 +199,32 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
+            "KanbanCardTool" => {
+                let tool = KanbanCardTool::new(self.db.clone(), agent_id.clone());
+                info!("KanbanCardTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            "PromptManagerTool" => {
+                let tool = PromptManagerTool::new(self.db.clone(), agent_id.clone());
+                info!("PromptManagerTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            "SkillManagerTool" => {
+                let agent_skills = self.resolve_agent_skills(&agent_id).await;
+                let tool =
+                    SkillManagerTool::new(self.db.clone(), agent_id.clone(), agent_skills);
+                info!("SkillManagerTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            "WorkflowManagerTool" => {
+                let tool = WorkflowManagerTool::new(self.db.clone());
+                info!("WorkflowManagerTool instance created");
+                Ok(Arc::new(tool))
+            }
+
             _ => {
                 warn!(tool_name = %tool_name, "Unknown tool requested");
                 Err(format!(
@@ -327,7 +357,8 @@ impl ToolFactory {
 
             // Other basic tools (delegate to create_tool)
             "MemoryTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool"
-            | "FileManagerTool" => {
+            | "FileManagerTool" | "KanbanCardTool" | "PromptManagerTool"
+            | "SkillManagerTool" | "WorkflowManagerTool" => {
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
                     .await
