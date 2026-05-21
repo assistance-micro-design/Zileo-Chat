@@ -9,13 +9,14 @@
 //! that takes `&DBClient` directly, so the core can be tested without
 //! instantiating `tauri::State` (pattern PAT_RUST_015).
 
+use crate::commands::scheduler::start_next_pending_card_core;
 use crate::db::DBClient;
 use crate::models::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
 use crate::security::{serialize_for_query, validate_uuid_field};
 use crate::AppState;
 use serde_json::json;
 use tauri::State;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 // `column` is a reserved keyword in SurrealQL 2.6 — backtick-quote it (and
 // `column_order`, which the parser otherwise mis-tokenises after ORDER BY).
@@ -115,7 +116,7 @@ pub async fn create_kanban_card_core(
             inline_prompt: {inline_prompt_sql},
             variables: $variables,
             target_folder_id: {folder_sql},
-            status: 'todo',
+            status: 'ready',
             `column`: 'todo',
             `column_order`: 0,
             workflow_id: NONE,
@@ -284,6 +285,25 @@ pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
     )
 }
 
+/// Persist the workflow_id link on a kanban card. Required so the
+/// `workflow_complete` listener can find the card via
+/// `mark_card_done_core` (which matches `WHERE workflow_id = $wid`).
+pub async fn set_kanban_card_workflow_id_core(
+    db: &DBClient,
+    card_id: &str,
+    workflow_id: &str,
+) -> Result<(), String> {
+    let validated_card = validate_uuid_field(card_id, "card_id")?;
+    let validated_wf = validate_uuid_field(workflow_id, "workflow_id")?;
+    let q = format!(
+        "UPDATE kanban_card:`{validated_card}` SET workflow_id = '{validated_wf}', updated_at = time::now()"
+    );
+    db.execute(&q)
+        .await
+        .map_err(|e| format!("Failed to set workflow_id on kanban_card: {}", e))?;
+    Ok(())
+}
+
 pub async fn move_kanban_card_core(
     db: &DBClient,
     card_id: &str,
@@ -324,6 +344,15 @@ pub async fn create_kanban_card(
 ) -> Result<String, String> {
     info!("Creating kanban card");
     let card = create_kanban_card_core(&state.db, config).await?;
+    // Kick the scheduler so the freshly-ready card is promoted immediately
+    // instead of waiting for the next 60s tick. Failures here are best-effort:
+    // the scheduler loop will still pick the card up on its next tick.
+    let app_handle_opt = state.app_handle.read().ok().and_then(|g| g.clone());
+    if let Some(handle) = app_handle_opt {
+        if let Err(e) = start_next_pending_card_core(&state.db, &handle).await {
+            warn!(error = %e, "Failed to promote freshly created card immediately");
+        }
+    }
     Ok(card.id)
 }
 
@@ -363,6 +392,16 @@ pub async fn delete_kanban_card(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     delete_kanban_card_core(&state.db, &card_id, also_delete_schedule.unwrap_or(false)).await
+}
+
+#[tauri::command]
+#[instrument(name = "set_kanban_card_workflow_id", skip(state), fields(card_id = %card_id, workflow_id = %workflow_id))]
+pub async fn set_kanban_card_workflow_id(
+    card_id: String,
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    set_kanban_card_workflow_id_core(&state.db, &card_id, &workflow_id).await
 }
 
 #[tauri::command]

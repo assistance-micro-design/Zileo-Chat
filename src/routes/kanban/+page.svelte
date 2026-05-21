@@ -32,7 +32,7 @@
 		KanbanColumn,
 		KanbanScheduleCreate
 	} from '$types/kanban';
-	import type { WorkflowResult } from '$types/workflow';
+	import { WorkflowExecutorService } from '$lib/services/workflowExecutor.service';
 
 	let creatorOpen = $state(false);
 	let viewerOpen = $state(false);
@@ -284,20 +284,36 @@
 			}
 		}
 
-		await kanbanStore.updateCard(card.id, {});
-		// Manually patch workflow_id on the card via direct raw update is not
-		// exposed; we rely on the card being re-fetched after completion. Save
-		// the link in-memory so the report viewer can navigate to the workflow.
+		// Persist the workflow_id link on the card. mark_card_done_core (fired
+		// by the workflow_complete listener) matches the card via
+		// `WHERE workflow_id = $wid` — without this UPDATE the card would stay
+		// stuck in 'doing' forever after the workflow finishes.
+		try {
+			await invoke('set_kanban_card_workflow_id', {
+				cardId: card.id,
+				workflowId
+			});
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
 		kanbanStore.upsertLocal({ ...card, workflow_id: workflowId });
 
 		try {
-			await invoke<WorkflowResult>('execute_workflow_streaming', {
+			// Go through WorkflowExecutorService so the user message gets
+			// persisted (MessageService.saveUser) BEFORE execute_workflow_streaming
+			// runs. A raw invoke skipped that step, leaving an empty chat when
+			// the workflow viewer reloaded blocks. The service also registers
+			// the workflow in the background store so navigating away no longer
+			// loses streaming state.
+			const result = await WorkflowExecutorService.execute({
 				workflowId,
 				message,
 				agentId: card.target_agent_id,
-				locale: $locale,
-				attachments: null
+				locale: $locale
 			});
+			if (!result.success && result.error) {
+				pageError = result.error;
+			}
 		} catch (e) {
 			pageError = getErrorMessage(e);
 		}
