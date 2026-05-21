@@ -158,6 +158,7 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_card::move_kanban_card,
             // Kanban schedule commands
             commands::kanban_schedule::create_kanban_schedule,
+            commands::kanban_schedule::get_kanban_schedule,
             commands::kanban_schedule::list_kanban_schedules,
             commands::kanban_schedule::update_kanban_schedule,
             commands::kanban_schedule::delete_kanban_schedule,

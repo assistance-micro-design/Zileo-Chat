@@ -15,10 +15,7 @@
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { Button, Badge } from '$lib/components/ui';
-	import type {
-		PromptVersion,
-		PromptVersionSummary
-	} from '$types/prompt_version';
+	import type { PromptVersion, PromptVersionSummary } from '$types/prompt_version';
 	import type { SkillVersion, SkillVersionSummary } from '$types/skill_version';
 
 	type AnyVersion = PromptVersion | SkillVersion;
@@ -41,9 +38,7 @@
 	let error = $state<string | null>(null);
 	let restoring = $state(false);
 
-	const listCmd = $derived(
-		kind === 'prompt' ? 'list_prompt_versions' : 'list_skill_versions'
-	);
+	const listCmd = $derived(kind === 'prompt' ? 'list_prompt_versions' : 'list_skill_versions');
 	const getCmd = $derived(kind === 'prompt' ? 'get_prompt_version' : 'get_skill_version');
 	const restoreCmd = $derived(
 		kind === 'prompt' ? 'restore_prompt_version' : 'restore_skill_version'
@@ -98,7 +93,6 @@
 	onclick={onclose}
 >
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="modal-panel" onclick={(e) => e.stopPropagation()} role="document">
 		<header class="modal-head">
 			<h3 id="versions-title">
@@ -132,12 +126,7 @@
 									<p class="summary">{v.edit_summary}</p>
 								{/if}
 								<div class="actions">
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										onclick={() => loadPreview(v.id)}
-									>
+									<Button type="button" variant="ghost" size="sm" onclick={() => loadPreview(v.id)}>
 										{$i18n('versions_view')}
 									</Button>
 									<Button

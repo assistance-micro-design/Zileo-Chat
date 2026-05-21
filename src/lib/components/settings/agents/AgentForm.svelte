@@ -453,11 +453,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 
 					<div class="field-group" role="group" aria-label={$i18n('agents_kind')}>
 						<span class="field-label">{$i18n('agents_kind')}</span>
-						<select
-							class="form-input"
-							bind:value={kind}
-							aria-label={$i18n('agents_kind')}
-						>
+						<select class="form-input" bind:value={kind} aria-label={$i18n('agents_kind')}>
 							<option value={undefined}>{$i18n('agents_kind_none')}</option>
 							<option value="kanban">{$i18n('agents_kind_kanban')}</option>
 						</select>

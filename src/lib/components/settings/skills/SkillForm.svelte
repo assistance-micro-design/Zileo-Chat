@@ -170,11 +170,7 @@ Displays in a modal with markdown content editor.
 </form>
 
 {#if showVersions && skill}
-	<VersionsHistoryModal
-		kind="skill"
-		resourceId={skill.id}
-		onclose={() => (showVersions = false)}
-	/>
+	<VersionsHistoryModal kind="skill" resourceId={skill.id} onclose={() => (showVersions = false)} />
 {/if}
 
 <style>

@@ -199,6 +199,15 @@ pub async fn create_kanban_schedule(
 }
 
 #[tauri::command]
+#[instrument(name = "get_kanban_schedule", skip(state), fields(id = %id))]
+pub async fn get_kanban_schedule(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<KanbanSchedule, String> {
+    get_kanban_schedule_core(&state.db, &id).await
+}
+
+#[tauri::command]
 #[instrument(name = "list_kanban_schedules", skip(state))]
 pub async fn list_kanban_schedules(
     state: State<'_, AppState>,

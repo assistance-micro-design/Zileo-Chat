@@ -25,7 +25,7 @@
   <FloatingMenu />
 -->
 <script lang="ts">
-	import { Sun, Moon, Settings, Bot } from '@lucide/svelte';
+	import { Sun, Moon, Settings, Bot, KanbanSquare } from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { theme } from '$lib/stores/theme';
 	import { i18n } from '$lib/i18n';
@@ -46,6 +46,8 @@
 	const isSettings = $derived(page.url.pathname.startsWith('/settings'));
 	/** Whether the current route is the agent workspace. */
 	const isAgent = $derived(page.url.pathname.startsWith('/agent'));
+	/** Whether the current route is the Kanban board. */
+	const isKanban = $derived(page.url.pathname.startsWith('/kanban'));
 
 	/**
 	 * Toggle theme between light and dark
@@ -72,6 +74,16 @@
 		>
 			<Settings size={16} />
 			<span class="floating-menu-link-text">{$i18n('layout_configuration')}</span>
+		</a>
+
+		<a
+			href="/kanban"
+			class="btn btn-secondary"
+			class:active={isKanban}
+			aria-current={isKanban ? 'page' : undefined}
+		>
+			<KanbanSquare size={16} />
+			<span class="floating-menu-link-text">{$i18n('layout_kanban')}</span>
 		</a>
 
 		<a

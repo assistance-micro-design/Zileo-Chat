@@ -1,0 +1,127 @@
+/**
+ * Copyright 2025 Assistance Micro Design
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ */
+
+/**
+ * Kanban card store — CRUD + move + scoped list filtering.
+ *
+ * Built on top of the generic `createCRUDStore` factory. Backend commands:
+ * - list_kanban_cards (with optional kanbanAgentId filter)
+ * - get_kanban_card, create_kanban_card, update_kanban_card, delete_kanban_card
+ * - move_kanban_card (column transition gated by `is_transition_allowed`)
+ *
+ * @module stores/kanban
+ */
+
+import { derived } from 'svelte/store';
+import { tauriInvoke as invoke } from '$lib/tauri';
+import { createCRUDStore, createDerivedStores } from './factory/createCRUDStore';
+import { getErrorMessage } from '$lib/utils/error';
+import type { KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn } from '$types/kanban';
+
+const baseStore = createCRUDStore<KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanCard>({
+	name: 'kanban',
+	idParamName: 'cardId',
+	commands: {
+		list: 'list_kanban_cards',
+		get: 'get_kanban_card',
+		create: 'create_kanban_card',
+		update: 'update_kanban_card',
+		delete: 'delete_kanban_card'
+	}
+});
+
+/**
+ * Kanban store with CRUD + scoped list + move operations.
+ */
+export const kanbanStore = {
+	subscribe: baseStore.subscribe,
+
+	/** Load all cards (optionally filtered by Kanban agent). */
+	async loadCards(kanbanAgentId?: string): Promise<void> {
+		baseStore._store.update((s) => ({ ...s, loading: true, error: null }));
+		try {
+			const cards = await invoke<KanbanCard[]>('list_kanban_cards', {
+				kanbanAgentId: kanbanAgentId ?? null
+			});
+			baseStore._store.update((s) => ({ ...s, items: cards, loading: false }));
+		} catch (e) {
+			baseStore._store.update((s) => ({
+				...s,
+				error: getErrorMessage(e),
+				loading: false
+			}));
+		}
+	},
+
+	getCard: (id: string) => baseStore.getItem(id),
+	createCard: (data: KanbanCardCreate) => baseStore.createItem(data),
+	updateCard: (id: string, data: KanbanCardUpdate) => baseStore.updateItem(id, data),
+	deleteCard: (id: string) => baseStore.deleteItem(id),
+
+	/**
+	 * Move a card to a new column / order. Backend enforces transitions.
+	 */
+	async moveCard(cardId: string, newColumn: KanbanColumn, newOrder: number): Promise<KanbanCard> {
+		baseStore._store.update((s) => ({ ...s, error: null }));
+		try {
+			const updated = await invoke<KanbanCard>('move_kanban_card', {
+				cardId,
+				newColumn,
+				newOrder
+			});
+			baseStore._store.update((s) => ({
+				...s,
+				items: s.items.map((c) => (c.id === cardId ? updated : c))
+			}));
+			return updated;
+		} catch (e) {
+			baseStore._store.update((s) => ({ ...s, error: getErrorMessage(e) }));
+			throw e;
+		}
+	},
+
+	/** Patch a card in the in-memory list without an IPC roundtrip. */
+	upsertLocal(card: KanbanCard): void {
+		baseStore._store.update((s) => {
+			const idx = s.items.findIndex((c) => c.id === card.id);
+			const items = idx >= 0 ? s.items.map((c, i) => (i === idx ? card : c)) : [...s.items, card];
+			return { ...s, items };
+		});
+	},
+
+	select: (id: string | null) => baseStore.select(id),
+	clearError: () => baseStore.clearError(),
+	reset: () => baseStore.reset()
+};
+
+const derivedStores = createDerivedStores(baseStore);
+
+/** All kanban cards (current list, possibly filtered). */
+export const kanbanCards = derivedStores.items;
+
+/** Loading state. */
+export const kanbanLoading = derivedStores.isLoading;
+
+/** Error state. */
+export const kanbanError = derivedStores.error;
+
+/** Cards grouped by column. */
+export const kanbanCardsByColumn = derived(baseStore._store, (state) => {
+	const groups: Record<KanbanColumn, KanbanCard[]> = {
+		todo: [],
+		doing: [],
+		review: [],
+		done: []
+	};
+	for (const card of state.items) {
+		groups[card.column].push(card);
+	}
+	for (const key of Object.keys(groups) as KanbanColumn[]) {
+		groups[key].sort((a, b) => a.column_order - b.column_order);
+	}
+	return groups;
+});
