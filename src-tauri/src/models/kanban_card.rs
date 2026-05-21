@@ -43,19 +43,6 @@ pub enum KanbanCardStatus {
     Failed,
 }
 
-impl KanbanCardStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            KanbanCardStatus::Todo => "todo",
-            KanbanCardStatus::Ready => "ready",
-            KanbanCardStatus::Doing => "doing",
-            KanbanCardStatus::Review => "review",
-            KanbanCardStatus::Done => "done",
-            KanbanCardStatus::Failed => "failed",
-        }
-    }
-}
-
 /// A kanban card persisted in DB.
 ///
 /// `prompt_id` and `inline_prompt` are mutually exclusive (XOR).

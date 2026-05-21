@@ -16,6 +16,7 @@
 //!
 //! Tauri IPC commands for managing skill documents (markdown instructions for agents).
 
+use crate::commands::skill_version::snapshot_skill_version_core;
 use crate::models::skill::{
     validate_skill_content, validate_skill_description, validate_skill_name, Skill, SkillCreate,
     SkillSummary, SkillUpdate,
@@ -156,9 +157,12 @@ pub async fn create_skill(
 pub async fn update_skill(
     skill_id: String,
     config: SkillUpdate,
+    edited_by: Option<String>,
+    edit_summary: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Skill, String> {
     let skill_id = validate_uuid_field(&skill_id, "skill_id")?;
+    let edited_by = edited_by.unwrap_or_else(|| "user".to_string());
     info!("Updating skill");
 
     let mut set_clauses = Vec::new();
@@ -194,6 +198,10 @@ pub async fn update_skill(
         warn!("No fields to update");
         return get_skill(skill_id, state).await;
     }
+
+    // Snapshot the current state BEFORE applying the update so the change
+    // remains reversible via the versions panel.
+    snapshot_skill_version_core(&state.db, &skill_id, &edited_by, edit_summary).await?;
 
     set_clauses.push("updated_at = time::now()".to_string());
 

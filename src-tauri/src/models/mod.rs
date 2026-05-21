@@ -54,12 +54,8 @@ pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentKind, AgentSummary, LLMConfig,
     Lifecycle,
 };
-pub use kanban_card::{
-    KanbanCard, KanbanCardCreate, KanbanCardStatus, KanbanCardUpdate, KanbanColumn,
-};
+pub use kanban_card::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
 pub use kanban_schedule::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
-pub use prompt_version::{PromptVersion, PromptVersionSummary};
-pub use skill_version::{SkillVersion, SkillVersionSummary};
 pub use chat_block::{merge_into_chat_blocks, ChatBlock};
 pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,

@@ -16,6 +16,7 @@
 //!
 //! Tauri IPC commands for managing prompt templates with variable interpolation.
 
+use crate::commands::prompt_version::snapshot_prompt_version_core;
 use crate::models::prompt::{
     Prompt, PromptCreate, PromptSummary, PromptUpdate, MAX_PROMPT_CONTENT_LEN,
     MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
@@ -202,11 +203,14 @@ pub async fn create_prompt(
 pub async fn update_prompt(
     prompt_id: String,
     config: PromptUpdate,
+    edited_by: Option<String>,
+    edit_summary: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Prompt, String> {
     info!("Updating prompt");
 
     let prompt_id = validate_uuid_field(&prompt_id, "prompt_id")?;
+    let edited_by = edited_by.unwrap_or_else(|| "user".to_string());
 
     // Build SET clauses for non-None fields
     let mut set_clauses = Vec::new();
@@ -244,6 +248,10 @@ pub async fn update_prompt(
         warn!("No fields to update");
         return get_prompt(prompt_id, state).await;
     }
+
+    // Snapshot the current state BEFORE applying the update so the change
+    // remains reversible via the versions panel.
+    snapshot_prompt_version_core(&state.db, &prompt_id, &edited_by, edit_summary).await?;
 
     // Always update timestamp
     set_clauses.push("updated_at = time::now()".to_string());
