@@ -342,6 +342,9 @@ pub struct AgentSummary {
     /// Number of authorized folders
     #[serde(default)]
     pub folders_count: usize,
+    /// Specialization, if any (e.g. `Kanban`). `None` = plain agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
 }
 
 impl From<&AgentConfig> for AgentSummary {
@@ -356,6 +359,7 @@ impl From<&AgentConfig> for AgentSummary {
             mcp_servers_count: config.mcp_servers.len(),
             skills_count: config.skills.len(),
             folders_count: config.folders.len(),
+            kind: config.kind.clone(),
         }
     }
 }

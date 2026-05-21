@@ -2,6 +2,7 @@ import type {
 	AgentConfig,
 	AgentConfigCreate,
 	AgentConfigUpdate,
+	AgentKind,
 	Lifecycle,
 	ReasoningEffort
 } from '$types/agent';
@@ -176,6 +177,10 @@ export interface AgentSubmitInput {
 	maxToolIterations: number;
 	/** Selected reasoning effort, or undefined when "Off". */
 	reasoningEffort: ReasoningEffort | undefined;
+	/** Optional specialization (e.g. `kanban`). undefined = plain agent. */
+	kind: AgentKind | undefined;
+	/** When true, finished workflows are analyzed automatically by the agent. */
+	autoAnalyzeReports: boolean;
 }
 
 /**
@@ -203,7 +208,9 @@ export function buildAgentCreatePayload(input: AgentSubmitInput): AgentConfigCre
 		require_file_confirmation: input.requireFileConfirmation,
 		system_prompt: input.systemPrompt.trim(),
 		max_tool_iterations: input.maxToolIterations,
-		reasoning_effort: input.reasoningEffort
+		reasoning_effort: input.reasoningEffort,
+		kind: input.kind,
+		auto_analyze_reports: input.autoAnalyzeReports
 	};
 }
 
@@ -233,6 +240,8 @@ export function buildAgentUpdatePayload(input: AgentSubmitInput): AgentConfigUpd
 		require_file_confirmation: input.requireFileConfirmation,
 		system_prompt: input.systemPrompt.trim(),
 		max_tool_iterations: input.maxToolIterations,
-		reasoning_effort: input.reasoningEffort ?? null
+		reasoning_effort: input.reasoningEffort ?? null,
+		kind: input.kind ?? null,
+		auto_analyze_reports: input.autoAnalyzeReports
 	};
 }

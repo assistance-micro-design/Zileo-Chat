@@ -163,6 +163,8 @@ export interface AgentSummary {
 	skills_count: number;
 	/** Number of authorized folders */
 	folders_count: number;
+	/** Specialization, if any (e.g. 'kanban'). */
+	kind?: AgentKind;
 }
 
 // Re-export tool constants from centralized location

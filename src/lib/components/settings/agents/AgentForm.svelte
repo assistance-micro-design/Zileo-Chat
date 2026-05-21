@@ -35,7 +35,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	} from '$lib/stores/llm';
 	import type { LLMState } from '$types/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
-	import type { AgentConfig, Lifecycle, ReasoningEffort } from '$types/agent';
+	import type { AgentConfig, AgentKind, Lifecycle, ReasoningEffort } from '$types/agent';
 	import type { SkillSummary } from '$types/skill';
 	import { Button, Input, Textarea, Card, Badge, Select } from '$lib/components/ui';
 	import { tauriInvoke } from '$lib/tauri';
@@ -89,6 +89,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	let selectedFolders = $state<string[]>([]);
 	let requireFileConfirmation = $state(true);
 	let systemPrompt = $state('');
+	let kind = $state<AgentKind | undefined>(undefined);
+	let autoAnalyzeReports = $state(false);
 
 	// Sync form state when agent prop changes (e.g., switching between edit targets)
 	$effect(() => {
@@ -104,6 +106,8 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		selectedFolders = agent?.folders ?? [];
 		requireFileConfirmation = agent?.require_file_confirmation ?? true;
 		systemPrompt = agent?.system_prompt ?? '';
+		kind = agent?.kind ?? undefined;
+		autoAnalyzeReports = agent?.auto_analyze_reports ?? false;
 		// Reset validation state when agent changes
 		errors = {};
 	});
@@ -327,7 +331,9 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			requireFileConfirmation,
 			systemPrompt,
 			maxToolIterations,
-			reasoningEffort
+			reasoningEffort,
+			kind,
+			autoAnalyzeReports
 		};
 
 		try {
@@ -444,6 +450,25 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 							<span class="field-help">{$i18n('agents_lifecycle_readonly')}</span>
 						{/if}
 					</div>
+
+					<div class="field-group" role="group" aria-label={$i18n('agents_kind')}>
+						<span class="field-label">{$i18n('agents_kind')}</span>
+						<select
+							class="form-input"
+							bind:value={kind}
+							aria-label={$i18n('agents_kind')}
+						>
+							<option value={undefined}>{$i18n('agents_kind_none')}</option>
+							<option value="kanban">{$i18n('agents_kind_kanban')}</option>
+						</select>
+						<span class="field-help">{$i18n('agents_kind_help')}</span>
+					</div>
+
+					<label class="checkbox-row">
+						<input type="checkbox" bind:checked={autoAnalyzeReports} />
+						<span class="checkbox-label">{$i18n('agents_auto_analyze')}</span>
+						<span class="field-help">{$i18n('agents_auto_analyze_desc')}</span>
+					</label>
 				</div>
 
 				<!-- LLM Configuration -->

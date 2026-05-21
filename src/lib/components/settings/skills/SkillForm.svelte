@@ -21,6 +21,7 @@ Displays in a modal with markdown content editor.
 
 <script lang="ts">
 	import { Button, Input, Textarea, Select } from '$lib/components/ui';
+	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import type { Skill, SkillCreate, SkillCategory } from '$types/skill';
 	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
 	import { i18n, t } from '$lib/i18n';
@@ -42,6 +43,8 @@ Displays in a modal with markdown content editor.
 	}
 
 	let { mode, skill = null, saving = false, onsave, oncancel }: Props = $props();
+
+	let showVersions = $state(false);
 
 	// Form state
 	let name = $state('');
@@ -148,6 +151,11 @@ Displays in a modal with markdown content editor.
 	</div>
 
 	<div class="form-actions">
+		{#if mode === 'edit' && skill}
+			<Button type="button" variant="ghost" onclick={() => (showVersions = true)} disabled={saving}>
+				{$i18n('versions_history_button')}
+			</Button>
+		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
@@ -160,6 +168,14 @@ Displays in a modal with markdown content editor.
 		</Button>
 	</div>
 </form>
+
+{#if showVersions && skill}
+	<VersionsHistoryModal
+		kind="skill"
+		resourceId={skill.id}
+		onclose={() => (showVersions = false)}
+	/>
+{/if}
 
 <style>
 	.skill-form {

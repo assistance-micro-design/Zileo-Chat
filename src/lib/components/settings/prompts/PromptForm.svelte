@@ -26,6 +26,7 @@ Displays in a modal with variable detection and preview.
 	import { onMount } from 'svelte';
 	import { tauriInvoke } from '$lib/tauri';
 	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
+	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import type { Prompt, PromptCreate, PromptCategory } from '$types/prompt';
 	import { PROMPT_CATEGORY_I18N_KEYS } from '$types/prompt';
 	import type { SkillSummary } from '$types/skill';
@@ -49,6 +50,8 @@ Displays in a modal with variable detection and preview.
 	}
 
 	let { mode, prompt = null, saving = false, onsave, oncancel }: Props = $props();
+
+	let showVersions = $state(false);
 
 	// Form state
 	let name = $state('');
@@ -236,6 +239,11 @@ Displays in a modal with variable detection and preview.
 	{/if}
 
 	<div class="form-actions">
+		{#if mode === 'edit' && prompt}
+			<Button type="button" variant="ghost" onclick={() => (showVersions = true)} disabled={saving}>
+				{$i18n('versions_history_button')}
+			</Button>
+		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>
 			{$i18n('common_cancel')}
 		</Button>
@@ -248,6 +256,14 @@ Displays in a modal with variable detection and preview.
 		</Button>
 	</div>
 </form>
+
+{#if showVersions && prompt}
+	<VersionsHistoryModal
+		kind="prompt"
+		resourceId={prompt.id}
+		onclose={() => (showVersions = false)}
+	/>
+{/if}
 
 <style>
 	.prompt-form {

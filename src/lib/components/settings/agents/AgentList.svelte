@@ -106,6 +106,9 @@ Shows agent summary with actions for edit and delete.
 								<Badge variant={getLifecycleVariant(agent.lifecycle)}>
 									{getLifecycleLabel(agent.lifecycle)}
 								</Badge>
+								{#if agent.kind === 'kanban'}
+									<Badge variant="success">{$i18n('agents_kind_kanban')}</Badge>
+								{/if}
 							</div>
 
 							<div class="agent-details">

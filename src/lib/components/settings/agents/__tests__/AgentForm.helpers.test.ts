@@ -189,6 +189,8 @@ function submitInput(overrides: Partial<AgentSubmitInput> = {}): AgentSubmitInpu
 		systemPrompt: '  You are helpful.  ',
 		maxToolIterations: 75,
 		reasoningEffort: 'high',
+		kind: undefined,
+		autoAnalyzeReports: false,
 		...overrides
 	};
 }
