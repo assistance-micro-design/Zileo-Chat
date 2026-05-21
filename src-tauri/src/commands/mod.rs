@@ -149,6 +149,7 @@
 //! to prevent injection attacks and ensure data integrity.
 
 pub mod agent;
+pub mod compose_card;
 pub mod custom_provider;
 pub mod embedding;
 pub mod file_manager;
