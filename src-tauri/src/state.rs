@@ -62,6 +62,10 @@ pub struct AppState {
     /// Stored so the runtime owns the handle (instead of detaching it) and so
     /// future shutdown hooks can `abort()` it deterministically.
     pub audit_cleanup_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    /// Kanban scheduler background task handle.
+    pub kanban_scheduler_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    /// Shutdown flag polled by the kanban scheduler on every tick.
+    pub kanban_scheduler_shutdown: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -128,6 +132,10 @@ impl AppState {
         // Audit cleanup task handle is registered later in the setup hook.
         let audit_cleanup_handle = Arc::new(Mutex::new(None));
 
+        let kanban_scheduler_handle = Arc::new(Mutex::new(None));
+        let kanban_scheduler_shutdown =
+            Arc::new(std::sync::atomic::AtomicBool::new(false));
+
         Ok(Self {
             db,
             registry,
@@ -141,6 +149,8 @@ impl AppState {
             reindex_jobs,
             app_handle,
             audit_cleanup_handle,
+            kanban_scheduler_handle,
+            kanban_scheduler_shutdown,
         })
     }
 

@@ -421,6 +421,71 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("App handle set in AppState for event emission");
             }
 
+            // Spawn the Kanban scheduler.
+            // The shutdown flag is polled on every tick; cleanup in
+            // RunEvent::ExitRequested flips it so the loop exits cleanly.
+            {
+                let db = state.inner().db.clone();
+                let app_handle = app.handle().clone();
+                let shutdown = state.inner().kanban_scheduler_shutdown.clone();
+                let handle = commands::scheduler::spawn_kanban_scheduler_task(
+                    db,
+                    app_handle,
+                    shutdown,
+                );
+                let slot = state.inner().kanban_scheduler_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    *slot.lock().await = Some(handle);
+                });
+                tracing::info!("Kanban scheduler task spawned");
+            }
+
+            // Listen for workflow_complete events to update kanban cards.
+            // When a workflow tied to a card finishes (success or failure), the
+            // card transitions to the review column and the error_summary is
+            // stamped on the failure path.
+            {
+                use tauri::Listener;
+                let db = state.inner().db.clone();
+                app.handle().listen("workflow_complete", move |evt| {
+                    let payload: serde_json::Value = match serde_json::from_str(evt.payload()) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "workflow_complete payload not JSON");
+                            return;
+                        }
+                    };
+                    let workflow_id = match payload["workflow_id"].as_str() {
+                        Some(s) => s.to_string(),
+                        None => {
+                            tracing::warn!("workflow_complete missing workflow_id");
+                            return;
+                        }
+                    };
+                    let status = payload["status"].as_str().unwrap_or("").to_string();
+                    let error_message = payload["error"].as_str().map(String::from);
+                    let success = status == "completed";
+                    let db = db.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = commands::scheduler::mark_card_done_core(
+                            &db,
+                            &workflow_id,
+                            success,
+                            error_message.as_deref(),
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                workflow_id = %workflow_id,
+                                error = %e,
+                                "Failed to update kanban card after workflow completion"
+                            );
+                        }
+                    });
+                });
+                tracing::info!("Kanban workflow_complete listener registered");
+            }
+
             // Spawn the validation_audit cleanup task.
             // Honors `audit.retention_days` and runs every 24h.
             // The handle is parked in AppState so the runtime owns it (and a
@@ -566,7 +631,16 @@ async fn main() -> anyhow::Result<()> {
             // timeout protects the UI from misbehaving MCP servers.
             api.prevent_exit();
 
-            let mcp_manager = app_handle.state::<AppState>().mcp_manager.clone();
+            // Flip the kanban scheduler shutdown flag so the loop exits on
+            // its next tick. The handle is owned by AppState; we don't need
+            // to abort() it explicitly — the std::process::exit(0) below
+            // tears down the runtime cleanly once MCP shutdown finishes.
+            let app_state = app_handle.state::<AppState>();
+            app_state
+                .kanban_scheduler_shutdown
+                .store(true, std::sync::atomic::Ordering::Release);
+
+            let mcp_manager = app_state.mcp_manager.clone();
             let shutdown_done = shutdown_done.clone();
 
             tauri::async_runtime::spawn(async move {

@@ -83,6 +83,8 @@ async fn setup_test_state_for_orchestrator() -> (AppState, TempDir) {
         reindex_jobs: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         app_handle: Arc::new(std::sync::RwLock::new(None)),
         audit_cleanup_handle: Arc::new(tokio::sync::Mutex::new(None)),
+        kanban_scheduler_handle: Arc::new(tokio::sync::Mutex::new(None)),
+        kanban_scheduler_shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
 
     (state, temp_dir)

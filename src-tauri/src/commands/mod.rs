@@ -162,6 +162,7 @@ pub mod message;
 pub mod migration;
 pub mod prompt;
 pub mod prompt_version;
+pub mod scheduler;
 pub mod security;
 pub mod settings_stt;
 pub mod skill;
