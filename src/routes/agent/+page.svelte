@@ -631,8 +631,9 @@ Uses extracted components, services, and stores for clean architecture.
 			});
 		}
 
-		// Initialize background workflows store (owns event listeners)
-		await backgroundWorkflowsStore.init();
+		// Background workflows store is initialised at the app layout level
+		// so its listeners survive cross-page navigation. Just wire the agent
+		// page's forward callbacks here.
 		backgroundWorkflowsStore.setForwardCallbacks(
 			(chunk) => {
 				executionBlocksStore.processChunk(chunk);
@@ -718,7 +719,8 @@ Uses extracted components, services, and stores for clean architecture.
 	 * Cleanup on component destroy.
 	 */
 	onDestroy(() => {
-		backgroundWorkflowsStore.destroy();
+		// backgroundWorkflowsStore lifecycle owned by +layout.svelte so its
+		// listeners survive page navigation — don't destroy it here.
 		validationStore.cleanup();
 		userQuestionStore.cleanup();
 		unsubscribeSettingsRefresh?.();

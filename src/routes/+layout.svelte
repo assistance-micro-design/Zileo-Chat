@@ -27,6 +27,7 @@
 	import LegalModal from '$lib/components/legal/LegalModal.svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
+	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
 
 	let { children } = $props();
 
@@ -41,6 +42,15 @@
 	onMount(async () => {
 		theme.init();
 		localeStore.init();
+
+		// Initialise the background workflows store at the app root so its
+		// global Tauri listeners for `workflow_stream` / `workflow_complete`
+		// stay attached across page navigations. Without this, a workflow
+		// started from /kanban that the user navigates away from would lose
+		// its streaming chunks until /agent re-attached the listener.
+		void backgroundWorkflowsStore.init().catch(() => {
+			/* listener failures are logged inside the store */
+		});
 
 		// Load STT settings — FAB visibility depends on `enabled` flag.
 		void sttSettingsStore.loadSettings().catch(() => {
@@ -65,6 +75,7 @@
 	onDestroy(() => {
 		unlistenLegal?.();
 		unlistenPrivacy?.();
+		backgroundWorkflowsStore.destroy();
 	});
 
 	function handleOnboardingComplete(): void {
