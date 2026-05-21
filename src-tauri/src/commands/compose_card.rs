@@ -47,10 +47,7 @@ pub async fn compose_card_from_description_core(
         return Err("description cannot be empty".to_string());
     }
     if trimmed_desc.len() > MAX_DESCRIPTION_LEN {
-        return Err(format!(
-            "description exceeds {} chars",
-            MAX_DESCRIPTION_LEN
-        ));
+        return Err(format!("description exceeds {} chars", MAX_DESCRIPTION_LEN));
     }
 
     // 1. Load the Kanban agent (we need its llm config + system_prompt).
@@ -88,8 +85,12 @@ pub async fn compose_card_from_description_core(
     );
 
     // 5. Parse the JSON payload — be forgiving about fenced blocks.
-    let payload = extract_json_payload(&response.content)
-        .ok_or_else(|| format!("LLM response did not contain a JSON object: {}", response.content))?;
+    let payload = extract_json_payload(&response.content).ok_or_else(|| {
+        format!(
+            "LLM response did not contain a JSON object: {}",
+            response.content
+        )
+    })?;
     let card = parse_compose_response(&payload, &kanban_agent_id)?;
     info!(
         agent_id = %kanban_agent_id,
@@ -297,7 +298,10 @@ fn extract_json_payload(content: &str) -> Option<Value> {
     }
     // Strip ```json ... ``` or ``` ... ``` fences.
     let trimmed = content.trim();
-    if let Some(stripped) = trimmed.strip_prefix("```json").or_else(|| trimmed.strip_prefix("```")) {
+    if let Some(stripped) = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+    {
         if let Some(end) = stripped.rfind("```") {
             let inner = stripped[..end].trim();
             if let Ok(v) = serde_json::from_str::<Value>(inner) {
@@ -341,7 +345,10 @@ fn extract_json_payload(content: &str) -> Option<Value> {
     None
 }
 
-fn parse_compose_response(payload: &Value, kanban_agent_id: &str) -> Result<KanbanCardCreate, String> {
+fn parse_compose_response(
+    payload: &Value,
+    kanban_agent_id: &str,
+) -> Result<KanbanCardCreate, String> {
     let title = payload["title"]
         .as_str()
         .ok_or_else(|| "Missing title".to_string())?
@@ -350,7 +357,11 @@ fn parse_compose_response(payload: &Value, kanban_agent_id: &str) -> Result<Kanb
     if title.is_empty() || title.len() > 200 {
         return Err("title must be 1..=200 chars".to_string());
     }
-    let description = payload["description"].as_str().unwrap_or("").trim().to_string();
+    let description = payload["description"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if description.len() > 5000 {
         return Err("description exceeds 5000 chars".to_string());
     }
@@ -367,7 +378,9 @@ fn parse_compose_response(payload: &Value, kanban_agent_id: &str) -> Result<Kanb
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     match (&prompt_id, &inline_prompt) {
-        (Some(_), Some(_)) => return Err("prompt_id and inline_prompt are mutually exclusive".to_string()),
+        (Some(_), Some(_)) => {
+            return Err("prompt_id and inline_prompt are mutually exclusive".to_string())
+        }
         (None, None) => return Err("either prompt_id or inline_prompt is required".to_string()),
         _ => {}
     }
@@ -376,8 +389,9 @@ fn parse_compose_response(payload: &Value, kanban_agent_id: &str) -> Result<Kanb
     }
 
     let variables = match payload.get("variables") {
-        Some(v) if v.is_object() => serde_json::to_string(v)
-            .map_err(|e| format!("Failed to serialize variables: {}", e))?,
+        Some(v) if v.is_object() => {
+            serde_json::to_string(v).map_err(|e| format!("Failed to serialize variables: {}", e))?
+        }
         Some(_) => return Err("variables must be an object".to_string()),
         None => "{}".to_string(),
     };
@@ -451,7 +465,8 @@ mod tests {
 
     #[test]
     fn test_extract_json_payload_prose_preamble() {
-        let raw = "Sure! Here is the card:\n\n{\"title\":\"x\",\"description\":\"y\"}\n\nLet me know.";
+        let raw =
+            "Sure! Here is the card:\n\n{\"title\":\"x\",\"description\":\"y\"}\n\nLet me know.";
         let v = extract_json_payload(raw).unwrap();
         assert_eq!(v["title"], "x");
     }

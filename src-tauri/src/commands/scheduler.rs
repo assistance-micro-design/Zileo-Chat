@@ -136,10 +136,7 @@ pub async fn process_due_schedules_core(db: &Arc<DBClient>) -> Result<usize, Str
 
 /// Reads the template card, then inserts a fresh card with column=todo and
 /// status=ready (so it skips the manual "ready" gesture).
-async fn spawn_card_from_template(
-    db: &Arc<DBClient>,
-    template_id: &str,
-) -> Result<String, String> {
+async fn spawn_card_from_template(db: &Arc<DBClient>, template_id: &str) -> Result<String, String> {
     let sel = format!(
         "SELECT title, description, kanban_agent_id, target_agent_id, prompt_id, \
          inline_prompt, variables, target_folder_id FROM kanban_card:`{}`",
@@ -181,8 +178,8 @@ async fn spawn_card_from_template(
             variables: $vars,
             target_folder_id: {folder_sql},
             status: 'ready',
-            column: 'todo',
-            column_order: 0,
+            `column`: 'todo',
+            `column_order`: 0,
             workflow_id: NONE,
             error_summary: NONE,
             created_at: time::now(),
@@ -213,8 +210,7 @@ pub async fn start_next_pending_card_core(
     app_handle: &AppHandle,
 ) -> Result<usize, String> {
     // 1. Slot budget.
-    let in_flight_q =
-        "SELECT count() AS c FROM kanban_card WHERE status = 'doing' GROUP ALL";
+    let in_flight_q = "SELECT count() AS c FROM kanban_card WHERE status = 'doing' GROUP ALL";
     let rows = db
         .query_json(in_flight_q)
         .await
@@ -230,10 +226,16 @@ pub async fn start_next_pending_card_core(
     }
 
     // 2. Pull the next N ready cards in `todo` column ordered by column_order.
+    //
+    // `column_order` and `created_at` must be in the SELECT projection or
+    // SurrealDB 2.6 rejects the query with "Missing order idiom" (the parser
+    // resolves ORDER BY against the projected idioms, not the table schema).
     let pick_q = format!(
-        "SELECT meta::id(id) AS id, title, target_agent_id FROM kanban_card \
-         WHERE status = 'ready' AND column = 'todo' \
-         ORDER BY column_order ASC, created_at ASC LIMIT {}",
+        "SELECT meta::id(id) AS id, title, target_agent_id, \
+         `column_order`, created_at \
+         FROM kanban_card \
+         WHERE status = 'ready' AND `column` = 'todo' \
+         ORDER BY `column_order` ASC, created_at ASC LIMIT {}",
         free
     );
     let cards = db
@@ -250,7 +252,7 @@ pub async fn start_next_pending_card_core(
         // 3. Flip to `doing` (status + column). workflow_id stays NONE — the
         //    frontend sets it once execute_workflow_streaming returns the wf id.
         let upd = format!(
-            "UPDATE kanban_card:`{}` SET status = 'doing', column = 'doing', \
+            "UPDATE kanban_card:`{}` SET status = 'doing', `column` = 'doing', \
              updated_at = time::now()",
             card_id
         );
@@ -292,7 +294,7 @@ pub async fn mark_card_done_core(
         _ => "error_summary = NONE".to_string(),
     };
     let q = format!(
-        "UPDATE kanban_card SET status = '{}', column = 'review', {}, \
+        "UPDATE kanban_card SET status = '{}', `column` = 'review', {}, \
          updated_at = time::now() WHERE workflow_id = $wid",
         status, err_sql
     );
@@ -322,8 +324,8 @@ mod tests {
                 id: '{id}', title: 'x', description: '',
                 kanban_agent_id: '{a}', target_agent_id: '{b}',
                 prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
-                target_folder_id: NONE, status: 'doing', column: 'doing',
-                column_order: 0, workflow_id: '{wid}', error_summary: NONE,
+                target_folder_id: NONE, status: 'doing', `column`: 'doing',
+                `column_order`: 0, workflow_id: '{wid}', error_summary: NONE,
                 created_at: time::now(), updated_at: time::now()
             }}",
             id = card_id,
@@ -333,11 +335,13 @@ mod tests {
         );
         state.db.execute(&q).await.unwrap();
 
-        mark_card_done_core(&state.db, &wid, true, None).await.unwrap();
+        mark_card_done_core(&state.db, &wid, true, None)
+            .await
+            .unwrap();
         let after = state
             .db
             .query_json(&format!(
-                "SELECT status, column, error_summary FROM kanban_card:`{}`",
+                "SELECT status, `column`, error_summary FROM kanban_card:`{}`",
                 card_id
             ))
             .await
@@ -353,8 +357,8 @@ mod tests {
                 id: '{id}', title: 'x', description: '',
                 kanban_agent_id: '{a}', target_agent_id: '{b}',
                 prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
-                target_folder_id: NONE, status: 'doing', column: 'doing',
-                column_order: 0, workflow_id: '{wid}', error_summary: NONE,
+                target_folder_id: NONE, status: 'doing', `column`: 'doing',
+                `column_order`: 0, workflow_id: '{wid}', error_summary: NONE,
                 created_at: time::now(), updated_at: time::now()
             }}",
             id = card2,

@@ -20,11 +20,11 @@
 use super::factory::ToolFactory;
 use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
-use crate::tools::parallel_tasks::ParallelTasksTool;
-use crate::tools::spawn_agent::SpawnAgentTool;
 use crate::tools::kanban_card::KanbanCardTool;
+use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::prompt_manager::PromptManagerTool;
 use crate::tools::skill_manager::SkillManagerTool;
+use crate::tools::spawn_agent::SpawnAgentTool;
 use crate::tools::workflow_manager::WorkflowManagerTool;
 use crate::tools::{
     CalculatorTool, FileManagerTool, MemoryTool, ReadSkillTool, TodoTool, Tool, UserQuestionTool,
@@ -213,8 +213,7 @@ impl ToolFactory {
 
             "SkillManagerTool" => {
                 let agent_skills = self.resolve_agent_skills(&agent_id).await;
-                let tool =
-                    SkillManagerTool::new(self.db.clone(), agent_id.clone(), agent_skills);
+                let tool = SkillManagerTool::new(self.db.clone(), agent_id.clone(), agent_skills);
                 info!("SkillManagerTool instance created");
                 Ok(Arc::new(tool))
             }
@@ -356,9 +355,15 @@ impl ToolFactory {
             }
 
             // Other basic tools (delegate to create_tool)
-            "MemoryTool" | "CalculatorTool" | "UserQuestionTool" | "ReadSkillTool"
-            | "FileManagerTool" | "KanbanCardTool" | "PromptManagerTool"
-            | "SkillManagerTool" | "WorkflowManagerTool" => {
+            "MemoryTool"
+            | "CalculatorTool"
+            | "UserQuestionTool"
+            | "ReadSkillTool"
+            | "FileManagerTool"
+            | "KanbanCardTool"
+            | "PromptManagerTool"
+            | "SkillManagerTool"
+            | "WorkflowManagerTool" => {
                 let app_handle = context.app_handle.clone();
                 self.create_tool(tool_name, workflow_id, agent_id, app_handle)
                     .await

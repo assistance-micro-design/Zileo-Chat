@@ -10,9 +10,9 @@ use crate::models::kanban_schedule::validate_schedule_create;
 use crate::models::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
 use crate::security::validate_uuid_field;
 use crate::AppState;
-use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 #[cfg(test)]
 use chrono::Timelike;
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use serde_json::json;
 use tauri::State;
 use tracing::{info, instrument};
@@ -95,14 +95,9 @@ pub async fn create_kanban_schedule_core(
     get_kanban_schedule_core(db, &id).await
 }
 
-pub async fn get_kanban_schedule_core(
-    db: &DBClient,
-    id: &str,
-) -> Result<KanbanSchedule, String> {
+pub async fn get_kanban_schedule_core(db: &DBClient, id: &str) -> Result<KanbanSchedule, String> {
     let validated = validate_uuid_field(id, "schedule_id")?;
-    let query = format!(
-        "SELECT {KANBAN_SCHEDULE_FIELDS} FROM kanban_schedule:`{validated}`"
-    );
+    let query = format!("SELECT {KANBAN_SCHEDULE_FIELDS} FROM kanban_schedule:`{validated}`");
     let rows = db
         .query_json(&query)
         .await
@@ -114,20 +109,15 @@ pub async fn get_kanban_schedule_core(
     serde_json::from_value(row).map_err(|e| format!("Failed to deserialize schedule: {}", e))
 }
 
-pub async fn list_kanban_schedules_core(
-    db: &DBClient,
-) -> Result<Vec<KanbanSchedule>, String> {
-    let query = format!(
-        "SELECT {KANBAN_SCHEDULE_FIELDS} FROM kanban_schedule ORDER BY next_run_at ASC"
-    );
+pub async fn list_kanban_schedules_core(db: &DBClient) -> Result<Vec<KanbanSchedule>, String> {
+    let query =
+        format!("SELECT {KANBAN_SCHEDULE_FIELDS} FROM kanban_schedule ORDER BY next_run_at ASC");
     let rows = db
         .query_json(&query)
         .await
         .map_err(|e| format!("Failed to list schedules: {}", e))?;
     rows.into_iter()
-        .map(|v| {
-            serde_json::from_value(v).map_err(|e| format!("Failed to deserialize: {}", e))
-        })
+        .map(|v| serde_json::from_value(v).map_err(|e| format!("Failed to deserialize: {}", e)))
         .collect()
 }
 
@@ -139,7 +129,9 @@ pub async fn update_kanban_schedule_core(
     let validated = validate_uuid_field(id, "schedule_id")?;
     let existing = get_kanban_schedule_core(db, &validated).await?;
 
-    let new_days = update.days_of_week.unwrap_or_else(|| existing.days_of_week.clone());
+    let new_days = update
+        .days_of_week
+        .unwrap_or_else(|| existing.days_of_week.clone());
     let new_hour = update.hour.unwrap_or(existing.hour);
     let new_minute = update.minute.unwrap_or(existing.minute);
     let new_enabled = match update.enabled {
@@ -227,10 +219,7 @@ pub async fn update_kanban_schedule(
 
 #[tauri::command]
 #[instrument(name = "delete_kanban_schedule", skip(state), fields(id = %id))]
-pub async fn delete_kanban_schedule(
-    id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn delete_kanban_schedule(id: String, state: State<'_, AppState>) -> Result<(), String> {
     delete_kanban_schedule_core(&state.db, &id).await
 }
 

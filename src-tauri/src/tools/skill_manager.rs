@@ -45,7 +45,10 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
         "Operating on prompts (use PromptManagerTool)",
     ])
     .operations(&[
-        ("list_skills", "List available skills, optional `category` filter"),
+        (
+            "list_skills",
+            "List available skills, optional `category` filter",
+        ),
         ("read_skill", "Read a skill by name (`name` field)"),
         (
             "create_skill",
@@ -250,8 +253,8 @@ impl SkillManagerTool {
     }
 
     async fn grant_skill_to_agent(&self, skill_name: &str) -> ToolResult<()> {
-        let agent_id = validate_uuid_field(&self.agent_id, "agent_id")
-            .map_err(ToolError::ExecutionFailed)?;
+        let agent_id =
+            validate_uuid_field(&self.agent_id, "agent_id").map_err(ToolError::ExecutionFailed)?;
         let q = format!(
             "UPDATE agent:`{}` SET skills = array::union(skills ?? [], [$name])",
             agent_id
@@ -271,7 +274,8 @@ impl SkillManagerTool {
             "skill_id",
         )
         .map_err(ToolError::InvalidInput)?;
-        let edit_summary = Self::validate_edit_summary(input["edit_summary"].as_str().unwrap_or(""))?;
+        let edit_summary =
+            Self::validate_edit_summary(input["edit_summary"].as_str().unwrap_or(""))?;
 
         // Allowlist check: load the skill name from DB.
         let name_q = format!("SELECT name FROM skill:`{}`", skill_id);

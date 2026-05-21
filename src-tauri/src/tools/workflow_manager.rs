@@ -34,13 +34,31 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
         "Deleting a workflow or folder (not exposed — the user does it)",
     ])
     .operations(&[
-        ("list_workflows", "List workflows; optional `folder_id` and `limit`"),
-        ("rename_workflow", "Rename by `workflow_id`, requires `new_name`"),
+        (
+            "list_workflows",
+            "List workflows; optional `folder_id` and `limit`",
+        ),
+        (
+            "rename_workflow",
+            "Rename by `workflow_id`, requires `new_name`",
+        ),
         ("list_workflow_folders", "List all folders"),
-        ("create_workflow_folder", "Create with `name` (+ optional `color`); rejects duplicates"),
-        ("move_workflow_to_folder", "Move workflow to folder (`folder_id` null = uncategorized)"),
-        ("read_workflow", "Read demand + report + status + target_agent_id"),
-        ("list_workflow_errors", "Up to 20 failed tool executions, ordered by sequence ASC"),
+        (
+            "create_workflow_folder",
+            "Create with `name` (+ optional `color`); rejects duplicates",
+        ),
+        (
+            "move_workflow_to_folder",
+            "Move workflow to folder (`folder_id` null = uncategorized)",
+        ),
+        (
+            "read_workflow",
+            "Read demand + report + status + target_agent_id",
+        ),
+        (
+            "list_workflow_errors",
+            "Up to 20 failed tool executions, ordered by sequence ASC",
+        ),
     ])
     .examples(&[
         json!({"operation": "list_workflows", "limit": 20}),
@@ -83,9 +101,7 @@ impl WorkflowManagerTool {
         folder_id: Option<&str>,
         limit: Option<i64>,
     ) -> ToolResult<Value> {
-        let limit = limit
-            .unwrap_or(DEFAULT_LIST_LIMIT)
-            .clamp(1, 200);
+        let limit = limit.unwrap_or(DEFAULT_LIST_LIMIT).clamp(1, 200);
         let (where_clause, params): (String, Vec<(String, Value)>) = match folder_id {
             Some(id) if !id.trim().is_empty() => {
                 let v = validate_uuid_field(id, "folder_id").map_err(ToolError::InvalidInput)?;
@@ -242,7 +258,8 @@ impl WorkflowManagerTool {
             .unwrap_or_default();
 
         // Last assistant message = the report.
-        let report_q = "SELECT content FROM message WHERE workflow_id = $wid AND role = 'assistant' \
+        let report_q =
+            "SELECT content FROM message WHERE workflow_id = $wid AND role = 'assistant' \
                         ORDER BY created_at DESC LIMIT 1";
         let report_rows = self
             .db
@@ -315,7 +332,8 @@ impl Tool for WorkflowManagerTool {
                 let n = input["name"]
                     .as_str()
                     .ok_or_else(|| ToolError::InvalidInput("name required".to_string()))?;
-                self.create_workflow_folder(n, input["color"].as_str()).await
+                self.create_workflow_folder(n, input["color"].as_str())
+                    .await
             }
             "move_workflow_to_folder" => {
                 let wid = input["workflow_id"]

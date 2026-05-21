@@ -54,13 +54,13 @@ pub use agent::{
     AgentConfig, AgentConfigCreate, AgentConfigUpdate, AgentKind, AgentSummary, LLMConfig,
     Lifecycle,
 };
-pub use kanban_card::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
-pub use kanban_schedule::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
 pub use chat_block::{merge_into_chat_blocks, ChatBlock};
 pub use embedding::{
     CategoryTokenStats, EmbeddingConfigSettings, EmbeddingTestResult, ExportFormat, ImportResult,
     MemoryStats, MemoryTokenStats, ReindexJobStatus,
 };
+pub use kanban_card::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
+pub use kanban_schedule::{KanbanSchedule, KanbanScheduleCreate, KanbanScheduleUpdate};
 pub use memory::{ChunkSearchResult, Memory, MemoryCreate, MemoryType};
 pub use message::{Message, MessageAttachment, MessageCreate, MessageMetrics, PaginatedMessages};
 pub use prompt::Prompt;

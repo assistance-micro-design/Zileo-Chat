@@ -43,7 +43,10 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
         "Running a workflow (use WorkflowManagerTool / DelegateTaskTool)",
     ])
     .operations(&[
-        ("list_prompts", "List prompts, optional `query` and `category` filters"),
+        (
+            "list_prompts",
+            "List prompts, optional `query` and `category` filters",
+        ),
         ("get_prompt", "Get full prompt by `prompt_id`"),
         (
             "create_prompt",
@@ -198,8 +201,7 @@ impl PromptManagerTool {
     }
 
     async fn get_prompt(&self, prompt_id: &str) -> ToolResult<Value> {
-        let id = validate_uuid_field(prompt_id, "prompt_id")
-            .map_err(ToolError::InvalidInput)?;
+        let id = validate_uuid_field(prompt_id, "prompt_id").map_err(ToolError::InvalidInput)?;
         let q = format!(
             "SELECT meta::id(id) AS id, name, description, category, content, variables, \
              created_at, updated_at FROM prompt:`{}`",
@@ -267,7 +269,8 @@ impl PromptManagerTool {
         )
         .map_err(ToolError::InvalidInput)?;
 
-        let edit_summary = Self::validate_edit_summary(input["edit_summary"].as_str().unwrap_or(""))?;
+        let edit_summary =
+            Self::validate_edit_summary(input["edit_summary"].as_str().unwrap_or(""))?;
 
         let mut sets: Vec<String> = Vec::new();
         if let Some(n) = input["name"].as_str() {
@@ -301,8 +304,7 @@ impl PromptManagerTool {
             ));
             sets.push(format!(
                 "variables = {}",
-                serialize_for_query(&variables, "variables")
-                    .map_err(ToolError::ExecutionFailed)?
+                serialize_for_query(&variables, "variables").map_err(ToolError::ExecutionFailed)?
             ));
         }
         if sets.is_empty() {

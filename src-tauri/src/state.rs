@@ -133,8 +133,7 @@ impl AppState {
         let audit_cleanup_handle = Arc::new(Mutex::new(None));
 
         let kanban_scheduler_handle = Arc::new(Mutex::new(None));
-        let kanban_scheduler_shutdown =
-            Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let kanban_scheduler_shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         Ok(Self {
             db,

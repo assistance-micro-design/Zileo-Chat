@@ -23,7 +23,8 @@ use serde_json::{json, Value};
 use std::sync::{Arc, LazyLock};
 use tracing::{debug, info};
 
-static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
     id: "KanbanCardTool".to_string(),
     name: "KanbanCard".to_string(),
     summary: "List, read, create or update kanban cards (no delete, no column move)".to_string(),
@@ -87,6 +88,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
     }),
     output_schema: json!({"type": "object"}),
     requires_confirmation: false,
+}
 });
 
 pub struct KanbanCardTool {
@@ -138,13 +140,16 @@ impl KanbanCardTool {
 
     /// Normalises the `variables` input which can be either an object (preferred)
     /// or a pre-stringified JSON object (for round-tripping).
-    fn variables_to_json_string(input: &Value) -> ToolResult<(String, serde_json::Map<String, Value>)> {
+    fn variables_to_json_string(
+        input: &Value,
+    ) -> ToolResult<(String, serde_json::Map<String, Value>)> {
         if input.is_null() {
             return Ok(("{}".to_string(), serde_json::Map::new()));
         }
         if let Some(s) = input.as_str() {
-            let parsed: Value = serde_json::from_str(s)
-                .map_err(|e| ToolError::InvalidInput(format!("variables string not valid JSON: {}", e)))?;
+            let parsed: Value = serde_json::from_str(s).map_err(|e| {
+                ToolError::InvalidInput(format!("variables string not valid JSON: {}", e))
+            })?;
             let map = parsed
                 .as_object()
                 .ok_or_else(|| ToolError::InvalidInput("variables must be an object".to_string()))?
@@ -171,15 +176,13 @@ impl KanbanCardTool {
     }
 
     async fn get_card(&self, card_id: &str) -> ToolResult<Value> {
-        let card = get_kanban_card_core(&self.db, card_id)
-            .await
-            .map_err(|e| {
-                if e.contains("not found") || e.contains("Not found") {
-                    ToolError::NotFound(format!("Card {}", card_id))
-                } else {
-                    ToolError::DatabaseError(e)
-                }
-            })?;
+        let card = get_kanban_card_core(&self.db, card_id).await.map_err(|e| {
+            if e.contains("not found") || e.contains("Not found") {
+                ToolError::NotFound(format!("Card {}", card_id))
+            } else {
+                ToolError::DatabaseError(e)
+            }
+        })?;
         Ok(json!({"success": true, "card": card}))
     }
 
@@ -218,8 +221,11 @@ impl KanbanCardTool {
         )
         .await
         .map_err(|e| {
-            if e.starts_with("title") || e.starts_with("description") || e.starts_with("variables")
-                || e.contains("mutually exclusive") || e.contains("required")
+            if e.starts_with("title")
+                || e.starts_with("description")
+                || e.starts_with("variables")
+                || e.contains("mutually exclusive")
+                || e.contains("required")
             {
                 ToolError::ValidationFailed(e)
             } else {
@@ -298,9 +304,7 @@ impl Tool for KanbanCardTool {
             .as_str()
             .ok_or_else(|| ToolError::InvalidInput("operation required".to_string()))?;
         match op {
-            "list_kanban_cards"
-            | "get_kanban_card"
-            | "create_kanban_card"
+            "list_kanban_cards" | "get_kanban_card" | "create_kanban_card"
             | "update_kanban_card" => Ok(()),
             other => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",
@@ -355,7 +359,10 @@ mod tests {
         assert!(matches!(err, ToolError::ValidationFailed(_)));
         let msg = err.to_string();
         assert!(msg.contains("topic"), "expected `topic` in error: {}", msg);
-        assert!(!msg.contains("audience"), "default-valued var should not be flagged");
+        assert!(
+            !msg.contains("audience"),
+            "default-valued var should not be flagged"
+        );
     }
 
     #[tokio::test]
@@ -388,8 +395,7 @@ mod tests {
 
     #[test]
     fn test_variables_string_passthrough() {
-        let (s, m) =
-            KanbanCardTool::variables_to_json_string(&json!("{\"a\":\"b\"}")).unwrap();
+        let (s, m) = KanbanCardTool::variables_to_json_string(&json!("{\"a\":\"b\"}")).unwrap();
         assert_eq!(s, "{\"a\":\"b\"}");
         assert_eq!(m.get("a").unwrap(), &json!("b"));
     }

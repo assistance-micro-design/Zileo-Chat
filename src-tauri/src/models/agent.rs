@@ -35,6 +35,26 @@ where
     Ok(Some(Option::<T>::deserialize(deserializer)?))
 }
 
+/// Treats JSON `null` as the bool default (true) rather than rejecting it.
+/// Older agent rows in the DB store `null` for `require_file_confirmation`
+/// because the column was added after they were written; without this helper
+/// `serde_json::from_value` would fail with "invalid type: null, expected a
+/// boolean" and `main.rs` would drop the agent on startup.
+pub(crate) fn deserialize_bool_default_true<'de, D>(d: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or(true))
+}
+
+/// Same as above but defaults to `false` (for opt-in flags).
+pub(crate) fn deserialize_bool_default_false<'de, D>(d: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
+}
+
 /// Reasoning effort level for thinking models.
 ///
 /// Controls how much reasoning/thinking the model performs.
@@ -125,8 +145,12 @@ pub struct AgentConfig {
     /// Authorized directory paths for FileManagerTool
     #[serde(default)]
     pub folders: Vec<String>,
-    /// Require user confirmation for destructive file operations (default: true)
-    #[serde(default = "default_require_file_confirmation")]
+    /// Require user confirmation for destructive file operations (default: true).
+    /// Tolerates `null` in legacy DB rows by falling back to the default.
+    #[serde(
+        default = "default_require_file_confirmation",
+        deserialize_with = "deserialize_bool_default_true"
+    )]
     pub require_file_confirmation: bool,
     /// System prompt
     #[serde(default = "default_system_prompt")]
@@ -144,8 +168,12 @@ pub struct AgentConfig {
     pub kind: Option<AgentKind>,
     /// When true and `kind = Some(Kanban)`, the agent automatically analyzes
     /// workflow reports on completion (and may propose prompt/skill edits).
-    #[serde(default)]
-    #[serde(skip_serializing_if = "is_false")]
+    /// Tolerates `null` in legacy DB rows by falling back to `false`.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_bool_default_false",
+        skip_serializing_if = "is_false"
+    )]
     pub auto_analyze_reports: bool,
 }
 

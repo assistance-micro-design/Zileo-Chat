@@ -17,9 +17,11 @@ use serde_json::json;
 use tauri::State;
 use tracing::{info, instrument};
 
+// `column` is a reserved keyword in SurrealQL 2.6 — backtick-quote it (and
+// `column_order`, which the parser otherwise mis-tokenises after ORDER BY).
 const KANBAN_CARD_FIELDS: &str = "meta::id(id) AS id, title, description, kanban_agent_id, \
-    target_agent_id, prompt_id, inline_prompt, variables, target_folder_id, status, column, \
-    column_order, workflow_id, error_summary, created_at, updated_at";
+    target_agent_id, prompt_id, inline_prompt, variables, target_folder_id, status, `column`, \
+    `column_order`, workflow_id, error_summary, created_at, updated_at";
 
 /// Validates the description length (max 5000 chars, like the schema ASSERT).
 fn validate_description(desc: &str) -> Result<String, String> {
@@ -44,8 +46,8 @@ fn validate_title(title: &str) -> Result<String, String> {
 
 /// Validates the `variables` JSON-stringified map.
 fn validate_variables_json(s: &str) -> Result<String, String> {
-    let parsed: serde_json::Value = serde_json::from_str(s)
-        .map_err(|e| format!("variables must be valid JSON: {}", e))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(s).map_err(|e| format!("variables must be valid JSON: {}", e))?;
     if !parsed.is_object() {
         return Err("variables must be a JSON object".to_string());
     }
@@ -114,8 +116,8 @@ pub async fn create_kanban_card_core(
             variables: $variables,
             target_folder_id: {folder_sql},
             status: 'todo',
-            column: 'todo',
-            column_order: 0,
+            `column`: 'todo',
+            `column_order`: 0,
             workflow_id: NONE,
             error_summary: NONE,
             created_at: time::now(),
@@ -139,9 +141,7 @@ pub async fn create_kanban_card_core(
 
 pub async fn get_kanban_card_core(db: &DBClient, card_id: &str) -> Result<KanbanCard, String> {
     let validated_id = validate_uuid_field(card_id, "card_id")?;
-    let query = format!(
-        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card:`{validated_id}`"
-    );
+    let query = format!("SELECT {KANBAN_CARD_FIELDS} FROM kanban_card:`{validated_id}`");
     let results = db
         .query_json(&query)
         .await
@@ -165,7 +165,7 @@ pub async fn list_kanban_cards_core(
         None => String::new(),
     };
     let query = format!(
-        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card {where_clause} ORDER BY column_order ASC, created_at DESC"
+        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card {where_clause} ORDER BY `column_order` ASC, created_at DESC"
     );
     let results = db
         .query_json(&query)
@@ -280,7 +280,7 @@ pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
             | (Review, Review)    // reorder
             | (Done, Done)        // reorder
             | (Doing, Review)     // auto: workflow failed (backend trigger)
-            | (Doing, Done)       // auto: workflow ok (backend trigger)
+            | (Doing, Done) // auto: workflow ok (backend trigger)
     )
 }
 
@@ -304,7 +304,7 @@ pub async fn move_kanban_card_core(
         _ => "",
     };
     let query = format!(
-        "UPDATE kanban_card:`{validated_id}` SET column = {column_sql}, column_order = {new_order}, updated_at = time::now(){status_extra}"
+        "UPDATE kanban_card:`{validated_id}` SET `column` = {column_sql}, `column_order` = {new_order}, updated_at = time::now(){status_extra}"
     );
     db.execute(&query)
         .await
@@ -418,8 +418,50 @@ mod tests {
 
     #[test]
     fn test_transition_allowed() {
-        assert!(is_transition_allowed(&KanbanColumn::Review, &KanbanColumn::Done));
-        assert!(!is_transition_allowed(&KanbanColumn::Todo, &KanbanColumn::Doing));
-        assert!(!is_transition_allowed(&KanbanColumn::Done, &KanbanColumn::Todo));
+        assert!(is_transition_allowed(
+            &KanbanColumn::Review,
+            &KanbanColumn::Done
+        ));
+        assert!(!is_transition_allowed(
+            &KanbanColumn::Todo,
+            &KanbanColumn::Doing
+        ));
+        assert!(!is_transition_allowed(
+            &KanbanColumn::Done,
+            &KanbanColumn::Todo
+        ));
+    }
+
+    // Regression: SurrealQL 2.6 treats `column` as a reserved keyword. Without
+    // backtick-quoting `column` and `column_order` the parser mis-tokenises
+    // `column_order` after ORDER BY and the query fails with "Missing order
+    // idiom column_order". This test exercises the full SELECT / WHERE /
+    // ORDER BY chain to lock in the quoting.
+    #[tokio::test]
+    async fn test_list_kanban_cards_orders_by_column_order() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        // Two cards with reversed column_order to confirm ORDER BY is honoured.
+        for (idx, order) in [("a", 10i64), ("b", 1i64)] {
+            let cid = uuid::Uuid::new_v4().to_string();
+            let q = format!(
+                "CREATE kanban_card:`{cid}` CONTENT {{
+                    id: '{cid}', title: '{idx}', description: '',
+                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                    target_folder_id: NONE, status: 'todo', `column`: 'todo',
+                    `column_order`: {order}, workflow_id: NONE, error_summary: NONE,
+                    created_at: time::now(), updated_at: time::now()
+                }}"
+            );
+            state.db.execute(&q).await.unwrap();
+        }
+        let cards = list_kanban_cards_core(&state.db, Some(agent_id.clone()))
+            .await
+            .expect("ORDER BY `column_order` must parse and run");
+        assert_eq!(cards.len(), 2);
+        assert_eq!(cards[0].title, "b"); // column_order = 1 comes first
+        assert_eq!(cards[1].title, "a"); // column_order = 10 second
     }
 }

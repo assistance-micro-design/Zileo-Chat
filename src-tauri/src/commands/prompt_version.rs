@@ -102,7 +102,8 @@ pub async fn snapshot_prompt_version_core(
     let description = current["description"].as_str().unwrap_or("").to_string();
     let category = current["category"].as_str().unwrap_or("custom").to_string();
     let content = current["content"].as_str().unwrap_or("").to_string();
-    let variables_json = serde_json::to_string(&current["variables"]).unwrap_or_else(|_| "[]".to_string());
+    let variables_json =
+        serde_json::to_string(&current["variables"]).unwrap_or_else(|_| "[]".to_string());
 
     // Determine the next version number.
     let max_query = format!(
@@ -183,9 +184,7 @@ pub async fn get_prompt_version_core(
     version_id: &str,
 ) -> Result<PromptVersion, String> {
     let version_id = validate_uuid_field(version_id, "version_id")?;
-    let query = format!(
-        "SELECT {PROMPT_VERSION_FIELDS} FROM prompt_version:`{version_id}`"
-    );
+    let query = format!("SELECT {PROMPT_VERSION_FIELDS} FROM prompt_version:`{version_id}`");
     let rows = db
         .query_json(&query)
         .await
