@@ -1,0 +1,425 @@
+// Copyright 2025 Assistance Micro Design
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+
+//! Kanban card CRUD commands.
+//!
+//! Each `#[tauri::command]` is a thin wrapper around a `_core` function
+//! that takes `&DBClient` directly, so the core can be tested without
+//! instantiating `tauri::State` (pattern PAT_RUST_015).
+
+use crate::db::DBClient;
+use crate::models::{KanbanCard, KanbanCardCreate, KanbanCardUpdate, KanbanColumn};
+use crate::security::{serialize_for_query, validate_uuid_field};
+use crate::AppState;
+use serde_json::json;
+use tauri::State;
+use tracing::{info, instrument};
+
+const KANBAN_CARD_FIELDS: &str = "meta::id(id) AS id, title, description, kanban_agent_id, \
+    target_agent_id, prompt_id, inline_prompt, variables, target_folder_id, status, column, \
+    column_order, workflow_id, error_summary, created_at, updated_at";
+
+/// Validates the description length (max 5000 chars, like the schema ASSERT).
+fn validate_description(desc: &str) -> Result<String, String> {
+    let trimmed = desc.trim();
+    if trimmed.len() > 5000 {
+        return Err("description exceeds 5000 characters".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Validates the title (1-200 chars, non-empty after trim).
+fn validate_title(title: &str) -> Result<String, String> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err("title cannot be empty".to_string());
+    }
+    if trimmed.len() > 200 {
+        return Err("title exceeds 200 characters".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Validates the `variables` JSON-stringified map.
+fn validate_variables_json(s: &str) -> Result<String, String> {
+    let parsed: serde_json::Value = serde_json::from_str(s)
+        .map_err(|e| format!("variables must be valid JSON: {}", e))?;
+    if !parsed.is_object() {
+        return Err("variables must be a JSON object".to_string());
+    }
+    // Cap size to prevent DoS via huge variable blobs.
+    if s.len() > 32 * 1024 {
+        return Err("variables exceed 32 KB".to_string());
+    }
+    Ok(s.to_string())
+}
+
+/// Validates `prompt_id` XOR `inline_prompt`.
+fn validate_xor_prompt(
+    prompt_id: &Option<String>,
+    inline_prompt: &Option<String>,
+) -> Result<(), String> {
+    match (prompt_id, inline_prompt) {
+        (Some(_), Some(_)) => Err("prompt_id and inline_prompt are mutually exclusive".to_string()),
+        (None, None) => Err("either prompt_id or inline_prompt is required".to_string()),
+        _ => Ok(()),
+    }
+}
+
+pub async fn create_kanban_card_core(
+    db: &DBClient,
+    data: KanbanCardCreate,
+) -> Result<KanbanCard, String> {
+    validate_xor_prompt(&data.prompt_id, &data.inline_prompt)?;
+    let title = validate_title(&data.title)?;
+    let description = validate_description(&data.description)?;
+    let kanban_agent_id = validate_uuid_field(&data.kanban_agent_id, "kanban_agent_id")?;
+    let target_agent_id = validate_uuid_field(&data.target_agent_id, "target_agent_id")?;
+    let variables = validate_variables_json(&data.variables)?;
+    let prompt_id = match &data.prompt_id {
+        Some(id) => Some(validate_uuid_field(id, "prompt_id")?),
+        None => None,
+    };
+    let target_folder_id = match &data.target_folder_id {
+        Some(id) => Some(validate_uuid_field(id, "target_folder_id")?),
+        None => None,
+    };
+    let inline_prompt = data.inline_prompt;
+
+    let card_id = uuid::Uuid::new_v4().to_string();
+    let prompt_id_sql = match &prompt_id {
+        Some(id) => format!("'{}'", id),
+        None => "NONE".to_string(),
+    };
+    let inline_prompt_sql = match &inline_prompt {
+        Some(p) => serialize_for_query(p, "inline_prompt")?,
+        None => "NONE".to_string(),
+    };
+    let folder_sql = match &target_folder_id {
+        Some(id) => format!("'{}'", id),
+        None => "NONE".to_string(),
+    };
+
+    let query = format!(
+        "CREATE kanban_card:`{card_id}` CONTENT {{
+            id: '{card_id}',
+            title: $title,
+            description: $description,
+            kanban_agent_id: '{kanban_agent_id}',
+            target_agent_id: '{target_agent_id}',
+            prompt_id: {prompt_id_sql},
+            inline_prompt: {inline_prompt_sql},
+            variables: $variables,
+            target_folder_id: {folder_sql},
+            status: 'todo',
+            column: 'todo',
+            column_order: 0,
+            workflow_id: NONE,
+            error_summary: NONE,
+            created_at: time::now(),
+            updated_at: time::now()
+        }}"
+    );
+
+    db.execute_with_params(
+        &query,
+        vec![
+            ("title".to_string(), json!(title)),
+            ("description".to_string(), json!(description)),
+            ("variables".to_string(), json!(variables)),
+        ],
+    )
+    .await
+    .map_err(|e| format!("Failed to create kanban_card: {}", e))?;
+
+    get_kanban_card_core(db, &card_id).await
+}
+
+pub async fn get_kanban_card_core(db: &DBClient, card_id: &str) -> Result<KanbanCard, String> {
+    let validated_id = validate_uuid_field(card_id, "card_id")?;
+    let query = format!(
+        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card:`{validated_id}`"
+    );
+    let results = db
+        .query_json(&query)
+        .await
+        .map_err(|e| format!("Failed to load kanban_card: {}", e))?;
+    let row = results
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Kanban card not found".to_string())?;
+    serde_json::from_value(row).map_err(|e| format!("Failed to deserialize kanban_card: {}", e))
+}
+
+pub async fn list_kanban_cards_core(
+    db: &DBClient,
+    kanban_agent_id: Option<String>,
+) -> Result<Vec<KanbanCard>, String> {
+    let where_clause = match &kanban_agent_id {
+        Some(id) => {
+            let validated = validate_uuid_field(id, "kanban_agent_id")?;
+            format!("WHERE kanban_agent_id = '{}'", validated)
+        }
+        None => String::new(),
+    };
+    let query = format!(
+        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card {where_clause} ORDER BY column_order ASC, created_at DESC"
+    );
+    let results = db
+        .query_json(&query)
+        .await
+        .map_err(|e| format!("Failed to list kanban_cards: {}", e))?;
+    results
+        .into_iter()
+        .map(|v| {
+            serde_json::from_value(v)
+                .map_err(|e| format!("Failed to deserialize kanban_card: {}", e))
+        })
+        .collect()
+}
+
+pub async fn update_kanban_card_core(
+    db: &DBClient,
+    card_id: &str,
+    update: KanbanCardUpdate,
+) -> Result<KanbanCard, String> {
+    let validated_id = validate_uuid_field(card_id, "card_id")?;
+
+    let mut set_clauses: Vec<String> = vec!["updated_at = time::now()".to_string()];
+    let mut params: Vec<(String, serde_json::Value)> = Vec::new();
+
+    if let Some(title) = update.title {
+        let t = validate_title(&title)?;
+        set_clauses.push("title = $title".to_string());
+        params.push(("title".to_string(), json!(t)));
+    }
+    if let Some(desc) = update.description {
+        let d = validate_description(&desc)?;
+        set_clauses.push("description = $description".to_string());
+        params.push(("description".to_string(), json!(d)));
+    }
+    if let Some(vars) = update.variables {
+        let v = validate_variables_json(&vars)?;
+        set_clauses.push("variables = $variables".to_string());
+        params.push(("variables".to_string(), json!(v)));
+    }
+    if let Some(prompt_id_opt) = update.prompt_id {
+        let sql = match prompt_id_opt {
+            Some(id) => {
+                let validated = validate_uuid_field(&id, "prompt_id")?;
+                format!("'{}'", validated)
+            }
+            None => "NONE".to_string(),
+        };
+        set_clauses.push(format!("prompt_id = {}", sql));
+    }
+    if let Some(inline_opt) = update.inline_prompt {
+        let sql = match inline_opt {
+            Some(p) => serialize_for_query(&p, "inline_prompt")?,
+            None => "NONE".to_string(),
+        };
+        set_clauses.push(format!("inline_prompt = {}", sql));
+    }
+    if let Some(folder_opt) = update.target_folder_id {
+        let sql = match folder_opt {
+            Some(id) => {
+                let validated = validate_uuid_field(&id, "target_folder_id")?;
+                format!("'{}'", validated)
+            }
+            None => "NONE".to_string(),
+        };
+        set_clauses.push(format!("target_folder_id = {}", sql));
+    }
+
+    let query = format!(
+        "UPDATE kanban_card:`{validated_id}` SET {}",
+        set_clauses.join(", ")
+    );
+    db.execute_with_params(&query, params)
+        .await
+        .map_err(|e| format!("Failed to update kanban_card: {}", e))?;
+
+    get_kanban_card_core(db, &validated_id).await
+}
+
+pub async fn delete_kanban_card_core(
+    db: &DBClient,
+    card_id: &str,
+    also_delete_schedule: bool,
+) -> Result<(), String> {
+    let validated_id = validate_uuid_field(card_id, "card_id")?;
+
+    if also_delete_schedule {
+        let q = format!(
+            "DELETE kanban_schedule WHERE card_template_id = '{}'",
+            validated_id
+        );
+        db.execute(&q)
+            .await
+            .map_err(|e| format!("Failed to delete linked schedule: {}", e))?;
+    }
+
+    // Non-cascade on workflow per spec: the workflow_id reference becomes
+    // orphan in the workflow table, no cleanup here.
+    let query = format!("DELETE kanban_card:`{}`", validated_id);
+    db.execute(&query)
+        .await
+        .map_err(|e| format!("Failed to delete kanban_card: {}", e))?;
+    Ok(())
+}
+
+/// Allowed transitions between columns. Returns true if the move is permitted.
+pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
+    use KanbanColumn::*;
+    matches!(
+        (from, to),
+        (Todo, Todo)              // reorder
+            | (Review, Done)      // user validates
+            | (Review, Review)    // reorder
+            | (Done, Done)        // reorder
+            | (Doing, Review)     // auto: workflow failed (backend trigger)
+            | (Doing, Done)       // auto: workflow ok (backend trigger)
+    )
+}
+
+pub async fn move_kanban_card_core(
+    db: &DBClient,
+    card_id: &str,
+    new_column: KanbanColumn,
+    new_order: i64,
+) -> Result<KanbanCard, String> {
+    let card = get_kanban_card_core(db, card_id).await?;
+    if !is_transition_allowed(&card.column, &new_column) {
+        return Err(format!(
+            "transition {:?} -> {:?} not allowed",
+            card.column, new_column
+        ));
+    }
+    let validated_id = validate_uuid_field(card_id, "card_id")?;
+    let column_sql = format!("'{}'", new_column.as_str());
+    let status_extra = match new_column {
+        KanbanColumn::Done => ", status = 'done'",
+        _ => "",
+    };
+    let query = format!(
+        "UPDATE kanban_card:`{validated_id}` SET column = {column_sql}, column_order = {new_order}, updated_at = time::now(){status_extra}"
+    );
+    db.execute(&query)
+        .await
+        .map_err(|e| format!("Failed to move kanban_card: {}", e))?;
+    get_kanban_card_core(db, &validated_id).await
+}
+
+// ---------------------------------------------------------------------------
+// Tauri command wrappers
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+#[instrument(name = "create_kanban_card", skip(state, data))]
+pub async fn create_kanban_card(
+    data: KanbanCardCreate,
+    state: State<'_, AppState>,
+) -> Result<KanbanCard, String> {
+    info!("Creating kanban card");
+    create_kanban_card_core(&state.db, data).await
+}
+
+#[tauri::command]
+#[instrument(name = "get_kanban_card", skip(state), fields(card_id = %card_id))]
+pub async fn get_kanban_card(
+    card_id: String,
+    state: State<'_, AppState>,
+) -> Result<KanbanCard, String> {
+    get_kanban_card_core(&state.db, &card_id).await
+}
+
+#[tauri::command]
+#[instrument(name = "list_kanban_cards", skip(state))]
+pub async fn list_kanban_cards(
+    kanban_agent_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<KanbanCard>, String> {
+    list_kanban_cards_core(&state.db, kanban_agent_id).await
+}
+
+#[tauri::command]
+#[instrument(name = "update_kanban_card", skip(state, update), fields(card_id = %card_id))]
+pub async fn update_kanban_card(
+    card_id: String,
+    update: KanbanCardUpdate,
+    state: State<'_, AppState>,
+) -> Result<KanbanCard, String> {
+    update_kanban_card_core(&state.db, &card_id, update).await
+}
+
+#[tauri::command]
+#[instrument(name = "delete_kanban_card", skip(state), fields(card_id = %card_id))]
+pub async fn delete_kanban_card(
+    card_id: String,
+    also_delete_schedule: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    delete_kanban_card_core(&state.db, &card_id, also_delete_schedule.unwrap_or(false)).await
+}
+
+#[tauri::command]
+#[instrument(name = "move_kanban_card", skip(state), fields(card_id = %card_id))]
+pub async fn move_kanban_card(
+    card_id: String,
+    new_column: KanbanColumn,
+    new_order: i64,
+    state: State<'_, AppState>,
+) -> Result<KanbanCard, String> {
+    move_kanban_card_core(&state.db, &card_id, new_column, new_order).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_xor_prompt_both() {
+        let r = validate_xor_prompt(&Some("a".to_string()), &Some("b".to_string()));
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_validate_xor_prompt_neither() {
+        let r = validate_xor_prompt(&None, &None);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn test_validate_xor_prompt_one() {
+        assert!(validate_xor_prompt(&Some("a".to_string()), &None).is_ok());
+        assert!(validate_xor_prompt(&None, &Some("b".to_string())).is_ok());
+    }
+
+    #[test]
+    fn test_validate_title() {
+        assert!(validate_title("  hello  ").is_ok());
+        assert!(validate_title("").is_err());
+        assert!(validate_title(&"x".repeat(201)).is_err());
+    }
+
+    #[test]
+    fn test_validate_variables_json_ok() {
+        assert!(validate_variables_json("{}").is_ok());
+        assert!(validate_variables_json(r#"{"name":"Alice"}"#).is_ok());
+    }
+
+    #[test]
+    fn test_validate_variables_json_bad() {
+        assert!(validate_variables_json("[]").is_err()); // not an object
+        assert!(validate_variables_json("not json").is_err());
+    }
+
+    #[test]
+    fn test_transition_allowed() {
+        assert!(is_transition_allowed(&KanbanColumn::Review, &KanbanColumn::Done));
+        assert!(!is_transition_allowed(&KanbanColumn::Todo, &KanbanColumn::Doing));
+        assert!(!is_transition_allowed(&KanbanColumn::Done, &KanbanColumn::Todo));
+    }
+}

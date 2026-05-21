@@ -149,6 +149,20 @@ async fn main() -> anyhow::Result<()> {
             commands::workflow_folder::update_folder_color,
             commands::workflow_folder::delete_workflow_folder,
             commands::workflow_folder::reorder_workflow_folders,
+            // Kanban card commands
+            commands::kanban_card::create_kanban_card,
+            commands::kanban_card::get_kanban_card,
+            commands::kanban_card::list_kanban_cards,
+            commands::kanban_card::update_kanban_card,
+            commands::kanban_card::delete_kanban_card,
+            commands::kanban_card::move_kanban_card,
+            // Kanban schedule commands
+            commands::kanban_schedule::create_kanban_schedule,
+            commands::kanban_schedule::list_kanban_schedules,
+            commands::kanban_schedule::update_kanban_schedule,
+            commands::kanban_schedule::delete_kanban_schedule,
+            // Workflow slots (backend source of truth for max-concurrent)
+            commands::workflow_slots::get_workflow_slots_available,
             // Agent commands (CRUD)
             commands::agent::list_agents,
             commands::agent::get_agent_config,
