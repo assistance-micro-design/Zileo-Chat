@@ -24,6 +24,7 @@ Displays in a modal with markdown content editor.
 	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import type { Skill, SkillCreate, SkillCategory } from '$types/skill';
 	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
+	import type { AgentKind } from '$types/agent';
 	import { i18n, t } from '$lib/i18n';
 
 	/**
@@ -51,6 +52,9 @@ Displays in a modal with markdown content editor.
 	let description = $state('');
 	let category = $state<SkillCategory>('custom');
 	let content = $state('');
+	// 'standard' = no specialization (undefined on the wire), 'kanban' = Kanban-only skill.
+	// Immutable after creation: the field is disabled in edit mode.
+	let kind = $state<'standard' | AgentKind>('standard');
 
 	// Sync form state when skill prop changes (e.g., switching between edit targets)
 	$effect(() => {
@@ -58,6 +62,7 @@ Displays in a modal with markdown content editor.
 		description = skill?.description ?? '';
 		category = skill?.category ?? 'custom';
 		content = skill?.content ?? '';
+		kind = skill?.kind ?? 'standard';
 	});
 
 	// Derived state
@@ -73,6 +78,11 @@ Displays in a modal with markdown content editor.
 		}))
 	);
 
+	let kindOptions = $derived([
+		{ value: 'standard', label: t('skills_kind_standard') },
+		{ value: 'kanban', label: t('skills_kind_kanban') }
+	]);
+
 	/**
 	 * Handles form submission
 	 */
@@ -84,7 +94,8 @@ Displays in a modal with markdown content editor.
 			name: name.trim(),
 			description: description.trim(),
 			category,
-			content: content.trim()
+			content: content.trim(),
+			kind: kind === 'kanban' ? 'kanban' : undefined
 		});
 	}
 
@@ -135,6 +146,20 @@ Displays in a modal with markdown content editor.
 			options={categoryOptions}
 			disabled={saving}
 		/>
+	</div>
+
+	<div class="form-field">
+		<Select
+			label={$i18n('skills_form_kind_label')}
+			value={kind}
+			onchange={(e) =>
+				(kind = e.currentTarget.value === 'kanban' ? 'kanban' : 'standard')}
+			options={kindOptions}
+			disabled={saving || mode === 'edit'}
+		/>
+		<span class="field-help">
+			{mode === 'edit' ? $i18n('skills_form_kind_locked') : $i18n('skills_form_kind_help')}
+		</span>
 	</div>
 
 	<div class="form-field">
@@ -196,6 +221,11 @@ Displays in a modal with markdown content editor.
 		font-size: var(--font-size-xs);
 		color: var(--color-text-tertiary);
 		text-align: right;
+	}
+
+	.field-help {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-tertiary);
 	}
 
 	.validation-error {

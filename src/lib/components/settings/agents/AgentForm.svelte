@@ -147,8 +147,64 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			value: 'FileManagerTool',
 			label: $i18n('agents_tool_file_manager'),
 			description: $i18n('agents_tool_file_manager_desc')
+		},
+		{
+			value: 'KanbanCardTool',
+			label: $i18n('agents_tool_kanban_card'),
+			description: $i18n('agents_tool_kanban_card_desc')
+		},
+		{
+			value: 'PromptManagerTool',
+			label: $i18n('agents_tool_prompt_manager'),
+			description: $i18n('agents_tool_prompt_manager_desc')
+		},
+		{
+			value: 'SkillManagerTool',
+			label: $i18n('agents_tool_skill_manager'),
+			description: $i18n('agents_tool_skill_manager_desc')
+		},
+		{
+			value: 'WorkflowManagerTool',
+			label: $i18n('agents_tool_workflow_manager'),
+			description: $i18n('agents_tool_workflow_manager_desc')
 		}
 	]);
+
+	const KANBAN_ONLY_TOOLS = new Set([
+		'KanbanCardTool',
+		'PromptManagerTool',
+		'SkillManagerTool',
+		'WorkflowManagerTool'
+	]);
+
+	const visibleTools = $derived(
+		kind === 'kanban'
+			? availableTools
+			: availableTools.filter((t) => !KANBAN_ONLY_TOOLS.has(t.value))
+	);
+
+	$effect(() => {
+		if (kind !== 'kanban') {
+			if (selectedTools.some((t) => KANBAN_ONLY_TOOLS.has(t))) {
+				selectedTools = selectedTools.filter((t) => !KANBAN_ONLY_TOOLS.has(t));
+			}
+			if (autoAnalyzeReports) {
+				autoAnalyzeReports = false;
+			}
+		}
+		// Purge skills that no longer match the current agent kind (strict invariant).
+		const validSkillNames = new Set(
+			availableSkillSummaries
+				.filter((s) => (s.kind ?? null) === (kind ?? null))
+				.map((s) => s.name)
+		);
+		if (
+			availableSkillSummaries.length > 0 &&
+			selectedSkills.some((name) => !validSkillNames.has(name))
+		) {
+			selectedSkills = selectedSkills.filter((name) => validSkillNames.has(name));
+		}
+	});
 
 	/** Lifecycle options with descriptions - reactive to locale */
 	const lifecycleOptions = $derived([
@@ -202,7 +258,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	});
 
 	/** Available skills (enabled only) */
-	const availableSkills = $derived(buildAvailableSkills(availableSkillSummaries));
+	const availableSkills = $derived(buildAvailableSkills(availableSkillSummaries, kind));
 
 	/** Available MCP servers from store */
 	const availableMcpServers = $derived(
@@ -460,11 +516,13 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 						<span class="field-help">{$i18n('agents_kind_help')}</span>
 					</div>
 
-					<label class="checkbox-row">
-						<input type="checkbox" bind:checked={autoAnalyzeReports} />
-						<span class="checkbox-label">{$i18n('agents_auto_analyze')}</span>
-						<span class="field-help">{$i18n('agents_auto_analyze_desc')}</span>
-					</label>
+					{#if kind === 'kanban'}
+						<label class="checkbox-row">
+							<input type="checkbox" bind:checked={autoAnalyzeReports} />
+							<span class="checkbox-label">{$i18n('agents_auto_analyze')}</span>
+							<span class="field-help">{$i18n('agents_auto_analyze_desc')}</span>
+						</label>
+					{/if}
 				</div>
 
 				<!-- LLM Configuration -->
@@ -567,7 +625,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 					<p class="section-help">{$i18n('agents_tools_help')}</p>
 
 					<div class="checkbox-group">
-						{#each availableTools as tool (tool.value)}
+						{#each visibleTools as tool (tool.value)}
 							<label class="checkbox-item">
 								<input
 									type="checkbox"

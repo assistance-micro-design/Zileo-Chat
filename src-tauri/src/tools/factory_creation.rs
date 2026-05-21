@@ -18,6 +18,7 @@
 //! `create_tools_with_context`, and DB resolver helpers.
 
 use super::factory::ToolFactory;
+use crate::models::agent::AgentKind;
 use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
 use crate::tools::kanban_card::KanbanCardTool;
@@ -62,6 +63,34 @@ impl ToolFactory {
             Err(e) => {
                 warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent skills, defaulting to empty");
                 Vec::new()
+            }
+        }
+    }
+
+    /// Resolves the `kind` field of an agent from the database.
+    ///
+    /// Returns `None` for a standard agent (or if the agent is not found).
+    /// Used by `SkillManagerTool` to gate access to Kanban-only operations.
+    async fn resolve_agent_kind(&self, agent_id: &str) -> Option<AgentKind> {
+        let query = "SELECT kind FROM agent WHERE meta::id(id) = $agent_id";
+        let results: Result<Vec<serde_json::Value>, _> = self
+            .db
+            .query_json_with_params(
+                query,
+                vec![("agent_id".to_string(), serde_json::json!(agent_id))],
+            )
+            .await;
+        match results {
+            Ok(rows) => match rows.into_iter().next() {
+                Some(row) => match row["kind"].as_str() {
+                    Some("kanban") => Some(AgentKind::Kanban),
+                    _ => None,
+                },
+                None => None,
+            },
+            Err(e) => {
+                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent kind, defaulting to standard");
+                None
             }
         }
     }
@@ -212,8 +241,8 @@ impl ToolFactory {
             }
 
             "SkillManagerTool" => {
-                let agent_skills = self.resolve_agent_skills(&agent_id).await;
-                let tool = SkillManagerTool::new(self.db.clone(), agent_id.clone(), agent_skills);
+                let agent_kind = self.resolve_agent_kind(&agent_id).await;
+                let tool = SkillManagerTool::new(self.db.clone(), agent_id.clone(), agent_kind);
                 info!("SkillManagerTool instance created");
                 Ok(Arc::new(tool))
             }

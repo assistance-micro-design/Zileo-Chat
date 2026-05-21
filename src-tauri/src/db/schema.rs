@@ -502,6 +502,8 @@ DEFINE FIELD OVERWRITE category ON skill TYPE string
 DEFINE FIELD OVERWRITE content ON skill TYPE string
     ASSERT string::len($value) >= 1 AND string::len($value) <= 50000;
 DEFINE FIELD OVERWRITE enabled ON skill TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE kind ON skill TYPE option<string>
+    ASSERT $value = NONE OR $value IN ['kanban'];
 DEFINE FIELD OVERWRITE created_at ON skill TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON skill TYPE datetime DEFAULT time::now();
 
@@ -509,6 +511,7 @@ DEFINE INDEX OVERWRITE unique_skill_id ON skill FIELDS id UNIQUE;
 DEFINE INDEX OVERWRITE unique_skill_name ON skill FIELDS name UNIQUE;
 DEFINE INDEX OVERWRITE skill_category_idx ON skill FIELDS category;
 DEFINE INDEX OVERWRITE skill_enabled_idx ON skill FIELDS enabled;
+DEFINE INDEX OVERWRITE skill_kind_idx ON skill FIELDS kind;
 
 -- =============================================
 -- Table: migration_log

@@ -17,6 +17,8 @@
 // Skill Types
 // Synchronized with src-tauri/src/models/skill.rs
 
+import type { AgentKind } from '$types/agent';
+
 // ===== Core Types =====
 
 /** Category for organizing skills */
@@ -36,6 +38,8 @@ export interface Skill {
 	content: string;
 	/** Whether the skill is active */
 	enabled: boolean;
+	/** Agent specialization this skill targets. Absent = standard agents. */
+	kind?: AgentKind;
 	/** ISO 8601 creation timestamp */
 	created_at: string;
 	/** ISO 8601 last update timestamp */
@@ -54,6 +58,8 @@ export interface SkillSummary {
 	category: SkillCategory;
 	/** Whether the skill is active */
 	enabled: boolean;
+	/** Agent specialization this skill targets. Absent = standard agents. */
+	kind?: AgentKind;
 	/** Character count of content (for UI display) */
 	content_length: number;
 	/** ISO 8601 last update timestamp */
@@ -70,6 +76,8 @@ export interface SkillCreate {
 	category: SkillCategory;
 	/** Markdown content */
 	content: string;
+	/** Agent specialization. Omit for standard agents. */
+	kind?: AgentKind;
 }
 
 /** Skill update payload (all fields optional) */

@@ -872,7 +872,7 @@ Uses extracted components, services, and stores for clean architecture.
 		{#await import('$lib/components/workflow/NewWorkflowModal.svelte') then { default: NewWorkflowModal }}
 			<NewWorkflowModal
 				open={true}
-				agents={$agents}
+				agents={$agents.filter((a) => a.kind !== 'kanban')}
 				selectedAgentId={pageState.selectedAgentId}
 				oncreate={handleCreateWorkflow}
 				onclose={() => (modalState = { type: 'none' })}

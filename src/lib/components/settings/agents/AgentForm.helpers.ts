@@ -84,9 +84,21 @@ export function buildProviderOptions(
 	];
 }
 
-export function buildAvailableSkills(skillSummaries: SkillSummary[]): AgentFormOption[] {
+/**
+ * Builds the picker options for the agent's skill list.
+ *
+ * Strict kind filter: a standard agent (`agentKind = undefined`) only sees
+ * skills with `kind` undefined; a Kanban agent (`agentKind = 'kanban'`) only
+ * sees skills with `kind === 'kanban'`. This mirrors the backend invariant
+ * `skill.kind == agent.kind` enforced by `SkillManagerTool::create_skill`.
+ */
+export function buildAvailableSkills(
+	skillSummaries: SkillSummary[],
+	agentKind?: 'kanban'
+): AgentFormOption[] {
 	return skillSummaries
 		.filter((skill) => skill.enabled)
+		.filter((skill) => (skill.kind ?? null) === (agentKind ?? null))
 		.map((skill) => ({
 			value: skill.name,
 			label: skill.name,

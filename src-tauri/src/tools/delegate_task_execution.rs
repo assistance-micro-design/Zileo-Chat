@@ -22,7 +22,7 @@ use crate::models::streaming::SubAgentOperationType;
 use crate::models::sub_agent::{
     constants::MAX_SUB_AGENTS, DelegateResult, SubAgentExecutionCreate, SubAgentStatus,
 };
-use crate::models::{AgentConfig, Lifecycle};
+use crate::models::{AgentConfig, AgentKind, Lifecycle};
 use crate::tools::sub_agent_executor::SubAgentExecutor;
 use crate::tools::task_bridge::resolve_and_reassign_tasks;
 use crate::tools::validation_helper::ValidationHelper;
@@ -332,11 +332,14 @@ impl DelegateTaskTool {
                 continue;
             }
 
-            // Get agent and check if permanent
+            // Get agent and check if permanent; exclude Kanban meta-agents
+            // (composer role, not delegable executors).
             if let Some(agent) = self.registry.get(&id).await {
-                if matches!(agent.lifecycle(), Lifecycle::Permanent) {
-                    let entry =
-                        build_agent_listing_entry(&id, agent.config(), agent.capabilities());
+                let cfg = agent.config();
+                if matches!(agent.lifecycle(), Lifecycle::Permanent)
+                    && !matches!(cfg.kind, Some(AgentKind::Kanban))
+                {
+                    let entry = build_agent_listing_entry(&id, cfg, agent.capabilities());
                     available.push(entry);
                 }
             }

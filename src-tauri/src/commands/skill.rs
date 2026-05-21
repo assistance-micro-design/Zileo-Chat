@@ -26,29 +26,53 @@ use crate::AppState;
 use tauri::State;
 use tracing::{error, info, instrument, warn};
 
-/// List all skills (returns lightweight summaries with content_length)
+/// List skills (lightweight summaries). Optional `kind` filter:
+/// - `None` / `Some("")` → all skills (used by Settings → Skills page)
+/// - `Some("standard")` → skills with kind IS NONE (for standard agents)
+/// - `Some("kanban")` → skills with kind = 'kanban'
 #[tauri::command]
 #[instrument(name = "list_skills", skip(state))]
-pub async fn list_skills(state: State<'_, AppState>) -> Result<Vec<SkillSummary>, String> {
-    info!("Listing all skills");
+pub async fn list_skills(
+    kind: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SkillSummary>, String> {
+    info!(?kind, "Listing skills");
 
-    let query = r#"
+    let (where_clause, params): (&str, Vec<(String, serde_json::Value)>) = match kind.as_deref() {
+        Some("standard") => ("WHERE kind IS NONE", vec![]),
+        Some("kanban") => (
+            "WHERE kind = $kind",
+            vec![("kind".to_string(), serde_json::json!("kanban"))],
+        ),
+        _ => ("", vec![]),
+    };
+
+    let query = format!(
+        r#"
         SELECT
             meta::id(id) AS id,
             name,
             description,
             category,
             enabled,
+            kind,
             string::len(content) AS content_length,
             updated_at
         FROM skill
+        {}
         ORDER BY updated_at DESC
-    "#;
+        "#,
+        where_clause
+    );
 
-    let results: Vec<serde_json::Value> = state.db.query_json(query).await.map_err(|e| {
-        error!(error = %e, "Failed to list skills");
-        format!("Failed to list skills: {}", e)
-    })?;
+    let results: Vec<serde_json::Value> = state
+        .db
+        .query_json_with_params(&query, params)
+        .await
+        .map_err(|e| {
+            error!(error = %e, "Failed to list skills");
+            format!("Failed to list skills: {}", e)
+        })?;
 
     let skills: Vec<SkillSummary> = results
         .into_iter()
@@ -75,6 +99,7 @@ pub async fn get_skill(skill_id: String, state: State<'_, AppState>) -> Result<S
             category,
             content,
             enabled,
+            kind,
             created_at,
             updated_at
         FROM skill:`{}`
@@ -114,6 +139,12 @@ pub async fn create_skill(
 
     let skill_id = uuid::Uuid::new_v4().to_string();
 
+    let kind_value = config
+        .kind
+        .as_ref()
+        .map(|k| serde_json::to_value(k).unwrap_or(serde_json::Value::Null))
+        .unwrap_or(serde_json::Value::Null);
+
     let query = format!(
         r#"CREATE skill:`{}` CONTENT {{
             name: $name,
@@ -121,6 +152,7 @@ pub async fn create_skill(
             category: $category,
             content: $content,
             enabled: true,
+            kind: $kind,
             created_at: time::now(),
             updated_at: time::now()
         }}"#,
@@ -139,6 +171,7 @@ pub async fn create_skill(
                     serde_json::json!(config.category.to_string()),
                 ),
                 ("content".to_string(), serde_json::json!(content)),
+                ("kind".to_string(), kind_value),
             ],
         )
         .await

@@ -168,9 +168,14 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 									<BookMarked size={20} class="skill-icon" />
 									<h4 class="skill-name">{skill.name}</h4>
 								</div>
-								<Badge variant={getCategoryVariant(skill.category)}>
-									{$i18n(SKILL_CATEGORY_I18N_KEYS[skill.category])}
-								</Badge>
+								<div class="skill-badges">
+									{#if skill.kind === 'kanban'}
+										<Badge variant="primary">{$i18n('skills_kind_kanban')}</Badge>
+									{/if}
+									<Badge variant={getCategoryVariant(skill.category)}>
+										{$i18n(SKILL_CATEGORY_I18N_KEYS[skill.category])}
+									</Badge>
+								</div>
 							</div>
 
 							<p class="skill-description">
@@ -307,6 +312,13 @@ Shows skill summary with actions for edit, delete, and enable/disable toggle.
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
+	}
+
+	.skill-badges {
+		display: flex;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+		justify-content: flex-end;
 	}
 
 	.skill-name-row {

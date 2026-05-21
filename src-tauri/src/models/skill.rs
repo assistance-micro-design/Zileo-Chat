@@ -18,6 +18,7 @@
 //! Skills are assigned to agents and read on-demand by the LLM via ReadSkillTool.
 //! Synchronized with src/types/skill.ts
 
+use crate::models::agent::AgentKind;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -51,7 +52,12 @@ impl std::fmt::Display for SkillCategory {
     }
 }
 
-/// Full skill entity (from database)
+/// Full skill entity (from database).
+///
+/// `kind = None` means the skill is for standard (non-Kanban) agents.
+/// `kind = Some(AgentKind::Kanban)` means the skill is intended for Kanban
+/// agents only. The agent picker UI filters strictly on this field; existing
+/// skills migrated without `kind` default to `None`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -60,6 +66,8 @@ pub struct Skill {
     pub category: SkillCategory,
     pub content: String,
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -73,6 +81,8 @@ pub struct SkillSummary {
     pub category: SkillCategory,
     pub enabled: bool,
     pub content_length: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -83,6 +93,8 @@ pub struct SkillCreate {
     pub description: String,
     pub category: SkillCategory,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<AgentKind>,
 }
 
 /// Data for updating an existing skill (all fields optional)
@@ -270,6 +282,7 @@ mod tests {
             description: "A test skill".to_string(),
             category: SkillCategory::Custom,
             content: "# Test\n\nContent here".to_string(),
+            kind: None,
         };
         let json = serde_json::to_string(&create).unwrap();
         assert!(json.contains("\"name\":\"test-skill\""));
