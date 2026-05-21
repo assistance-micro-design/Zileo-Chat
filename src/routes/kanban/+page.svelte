@@ -23,6 +23,7 @@
 	import KanbanCardCreator from '$lib/components/kanban/KanbanCardCreator.svelte';
 	import KanbanCardReportViewer from '$lib/components/kanban/KanbanCardReportViewer.svelte';
 	import KanbanFiltres from '$lib/components/kanban/KanbanFiltres.svelte';
+	import KanbanImprovePromptModal from '$lib/components/kanban/KanbanImprovePromptModal.svelte';
 
 	import type {
 		KanbanCard,
@@ -36,6 +37,9 @@
 	let creatorOpen = $state(false);
 	let viewerOpen = $state(false);
 	let viewerCard = $state<KanbanCard | null>(null);
+	let improveOpen = $state(false);
+	let improvePromptId = $state<string | null>(null);
+	let improveKanbanAgentId = $state<string | null>(null);
 	let pageError = $state<string | null>(null);
 
 	let agentFilter = $state('');
@@ -43,6 +47,7 @@
 	let statusFilter = $state<KanbanCardStatus | ''>('');
 
 	let unlistenReady: TauriUnlistenFn | null = null;
+	let unlistenComplete: TauriUnlistenFn | null = null;
 	let unlistenSettingsRefresh: (() => void) | null = null;
 
 	$effect(() => {
@@ -57,6 +62,16 @@
 				folderStore.loadFolders(),
 				kanbanScheduleStore.loadSchedules()
 			]);
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+
+		// Listener for workflow completions — refresh cards so column transitions
+		// applied by the backend (mark_card_done_core) appear in the board.
+		try {
+			unlistenComplete = await tauriListen('workflow_complete', () => {
+				void kanbanStore.loadCards(agentFilter || undefined);
+			});
 		} catch (e) {
 			pageError = getErrorMessage(e);
 		}
@@ -89,6 +104,7 @@
 
 	onDestroy(() => {
 		unlistenReady?.();
+		unlistenComplete?.();
 		unlistenSettingsRefresh?.();
 	});
 
@@ -201,9 +217,19 @@
 	}
 
 	function handleImprovePrompt(card: KanbanCard): void {
-		// Phase 8 — the actual UI lives in a separate modal; for now we just
-		// surface a hint so the user knows the action is available.
-		pageError = `${$i18n('kanban_improve_pending')}: ${card.title}`;
+		if (!card.prompt_id) {
+			pageError = $i18n('kanban_improve_no_prompt');
+			return;
+		}
+		improvePromptId = card.prompt_id;
+		improveKanbanAgentId = card.kanban_agent_id;
+		improveOpen = true;
+	}
+
+	function closeImprove(): void {
+		improveOpen = false;
+		improvePromptId = null;
+		improveKanbanAgentId = null;
 	}
 
 	/**
@@ -327,6 +353,14 @@
 	defaultKanbanAgentId={agentFilter}
 	onclose={() => (creatorOpen = false)}
 	oncreated={createCard}
+/>
+
+<KanbanImprovePromptModal
+	open={improveOpen}
+	promptId={improvePromptId}
+	kanbanAgentId={improveKanbanAgentId}
+	onclose={closeImprove}
+	onupdated={() => kanbanStore.loadCards(agentFilter || undefined)}
 />
 
 <KanbanCardReportViewer
