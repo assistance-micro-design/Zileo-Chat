@@ -41,6 +41,12 @@ export interface KanbanCard {
 
 /** Payload to create a new kanban card. */
 export interface KanbanCardCreate {
+	/**
+	 * Optional pre-generated card id. Set by `compose_card_from_description`
+	 * so the persisted `kanban_card_interaction` row can be linked to the card
+	 * created afterwards. When absent, the backend generates a fresh UUID.
+	 */
+	id?: string;
 	title: string;
 	description?: string;
 	kanban_agent_id: string;

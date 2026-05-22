@@ -110,6 +110,42 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		autoAnalyzeReports = agent?.auto_analyze_reports ?? false;
 		// Reset validation state when agent changes
 		errors = {};
+		previousKind = agent?.kind ?? undefined;
+	});
+
+	/**
+	 * Previous value of `kind` so we can detect a user-driven transition to
+	 * `'kanban'` (vs. the effect above resyncing from a loaded agent) and
+	 * seed an editable default system prompt template when the field is
+	 * blank. Never overwrites a non-empty prompt.
+	 */
+	let previousKind = $state<AgentKind | undefined>(undefined);
+
+	const KANBAN_DEFAULT_SYSTEM_PROMPT = `You are the Kanban orchestrator. Your role has two modes:
+
+# Compose mode
+When asked to compose a kanban card, read the user demand carefully. Discover \
+available worker agents (ListAgents) and reusable prompts (PromptManager) if \
+available. Pick the most fitting target_agent_id and either reference a \
+prompt_id or compose an inline_prompt. Call SubmitComposedCard exactly once \
+with the final payload, then end with a 2-3 sentence rationale.
+
+# Analyze mode
+When asked to analyze a worker's report, compare it against the user's \
+original demand. Pick a verdict: approve (report fulfils the demand), reject \
+(report is wrong and unsalvageable) or needs_improvement (provide a full \
+replacement prompt). Call SubmitAnalysis exactly once with your verdict and \
+reasoning.
+
+Be concise, factual, and conservative in your judgements.`;
+
+	$effect(() => {
+		// Inject the default template the first time the user flips `kind`
+		// to 'kanban' on a brand-new agent (empty prompt). Editable afterwards.
+		if (kind === 'kanban' && previousKind !== 'kanban' && systemPrompt.trim() === '') {
+			systemPrompt = KANBAN_DEFAULT_SYSTEM_PROMPT;
+		}
+		previousKind = kind;
 	});
 
 	/** UI state */
