@@ -24,6 +24,7 @@ Uses extracted components, services, and stores for clean architecture.
 
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { Message, MessageAttachment } from '$types/message';
 	import type { ModalState } from '$types/services';
@@ -686,10 +687,18 @@ Uses extracted components, services, and stores for clean architecture.
 			workflowStore.setStatusFilter(savedFilter);
 		}
 
-		// Restore last selected workflow from localStorage.
-		// If the active status filter would hide it, clear the filter so the
-		// restored workflow remains visible in the sidebar.
-		const lastWorkflowId = LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
+		// Pick the initial workflow. Priority:
+		//   1. `?workflow=<id>` query param (deep-link from e.g. Kanban "Open
+		//      workflow") — only honoured if it resolves to an existing row.
+		//   2. Last selection persisted in localStorage.
+		// If the active status filter would hide the picked workflow, clear
+		// the filter so it remains visible in the sidebar.
+		const queryWorkflowId = page.url.searchParams.get('workflow');
+		const queryMatchesExisting =
+			!!queryWorkflowId && $workflows.some((w) => w.id === queryWorkflowId);
+		const lastWorkflowId = queryMatchesExisting
+			? queryWorkflowId
+			: LocalStorage.get(STORAGE_KEYS.SELECTED_WORKFLOW_ID, null);
 		const initialSelection = getInitialWorkflowSelectionDecision({
 			lastWorkflowId,
 			workflows: $workflows,
