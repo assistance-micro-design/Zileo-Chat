@@ -37,6 +37,21 @@
 //! | [`todo`] | `TodoTool` | Task management for workflow decomposition |
 //! | [`calculator`] | `CalculatorTool` | Scientific calculator for mathematical operations |
 //!
+//! # File-vs-folder convention
+//!
+//! Layout decisions inside `tools/` follow a size rule, not a per-tool dogma:
+//!
+//! - **Single file** (`my_tool.rs`) when the tool body is at most ~600 LOC and
+//!   inline tests stay under ~300 LOC. Example: `list_agents.rs`.
+//! - **Folder** (`my_tool/`) when the body grows beyond that threshold or the
+//!   tool naturally splits across concerns (validators, CRUD, versioning,
+//!   permissions, tests). The folder typically contains `mod.rs` + one file
+//!   per concern + `tests.rs`. Example: `calculator/`, `skill_manager/`.
+//!
+//! The threshold is a guideline, not a hard limit: a 700-LOC tool that reads
+//! linearly stays flat ; a 400-LOC tool with three orthogonal concerns is
+//! better as a folder. Reviewers should apply common sense.
+//!
 //! # Example
 //!
 //! ```ignore

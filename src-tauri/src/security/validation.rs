@@ -287,6 +287,44 @@ pub fn serialize_for_query<T: Serialize + ?Sized>(
     })
 }
 
+/// Maximum length allowed for a version snapshot `edit_summary`.
+pub const MAX_EDIT_SUMMARY_LEN: usize = 500;
+
+/// Validates an `edit_summary` field used on prompt/skill version snapshots.
+///
+/// Behaviour:
+/// - Trims surrounding whitespace.
+/// - `required = true` rejects empty/whitespace-only input.
+/// - `required = false` returns `Ok(None)` for empty input.
+/// - Rejects input longer than `MAX_EDIT_SUMMARY_LEN`.
+/// - Rejects control characters except space (log + prompt injection vector).
+///
+/// Returns `Ok(Some(trimmed))` on valid non-empty input and `Ok(None)` only
+/// when input is empty and `required` is false.
+pub fn validate_edit_summary(
+    edit_summary: Option<&str>,
+    required: bool,
+) -> Result<Option<String>, String> {
+    let raw = edit_summary.unwrap_or("");
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        if required {
+            return Err("edit_summary is required and cannot be empty".to_string());
+        }
+        return Ok(None);
+    }
+    if trimmed.len() > MAX_EDIT_SUMMARY_LEN {
+        return Err(format!(
+            "edit_summary exceeds {} chars",
+            MAX_EDIT_SUMMARY_LEN
+        ));
+    }
+    if trimmed.chars().any(|c| c.is_control() && c != ' ') {
+        return Err("edit_summary contains control characters".to_string());
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
 /// Validates a UUID and returns a formatted error with field context.
 ///
 /// Combines `Validator::validate_uuid()` with standardized warn logging

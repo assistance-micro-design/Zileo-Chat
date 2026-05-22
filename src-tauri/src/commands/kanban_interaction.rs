@@ -6,8 +6,8 @@
 //! Lecture des interactions meta de l'agent Kanban pour affichage historique.
 //!
 //! Une "interaction" est un tool_loop execute par compose_card.rs ou
-//! kanban_analyzer.rs. Les writes sont realises depuis ces modules (Phase 3
-//! du plan) ; cette commande expose uniquement la lecture pour le viewer.
+//! kanban_analyzer.rs. Les writes sont realises dans ces modules ; cette
+//! commande expose uniquement la lecture pour le viewer.
 
 use crate::agents::core::agent::Report;
 use crate::agents::execution::tool_loop::PricingCache;
@@ -302,8 +302,8 @@ mod tests {
     use crate::test_utils::setup_test_state;
 
     /// Inserts a minimal interaction row via raw query for the load test.
-    /// Lives in tests because Phase 1 ships read-only ; persist_interaction
-    /// comes in Phase 3 alongside the compose/analyze refactor.
+    /// Lives in tests because production writes happen inside compose_card and
+    /// kanban_analyzer ; this command is read-only and has no own write path.
     async fn insert_dummy_interaction(
         db: &Arc<DBClient>,
         id: &str,

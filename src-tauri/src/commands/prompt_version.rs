@@ -10,7 +10,9 @@
 
 use crate::db::DBClient;
 use crate::models::prompt_version::{PromptVersion, PromptVersionSummary};
-use crate::security::{serialize_for_query, validate_uuid_field};
+use crate::security::{
+    serialize_for_query, validate_edit_summary as validate_edit_summary_core, validate_uuid_field,
+};
 use crate::AppState;
 use serde_json::json;
 use tauri::State;
@@ -35,39 +37,14 @@ fn validate_edited_by(edited_by: &str) -> Result<String, String> {
     Err("edited_by must be 'user' or 'agent:<uuid>'".to_string())
 }
 
-/// Validates `edit_summary`: optional, max 500 chars when present.
-/// Required when `edited_by` starts with "agent:".
+/// Validates `edit_summary`: optional for `edited_by = "user"`, required when
+/// `edited_by` starts with "agent:". Delegates to the shared validator.
 fn validate_edit_summary(
     edited_by: &str,
     edit_summary: &Option<String>,
 ) -> Result<Option<String>, String> {
-    let is_agent = edited_by.starts_with("agent:");
-    match edit_summary {
-        Some(s) => {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-                if is_agent {
-                    return Err("edit_summary is required when edited_by is an agent".to_string());
-                }
-                return Ok(None);
-            }
-            if trimmed.len() > 500 {
-                return Err("edit_summary exceeds 500 chars".to_string());
-            }
-            // Reject control chars (log injection vector).
-            if trimmed.chars().any(|c| c.is_control() && c != ' ') {
-                return Err("edit_summary contains control characters".to_string());
-            }
-            Ok(Some(trimmed.to_string()))
-        }
-        None => {
-            if is_agent {
-                Err("edit_summary is required when edited_by is an agent".to_string())
-            } else {
-                Ok(None)
-            }
-        }
-    }
+    let required = edited_by.starts_with("agent:");
+    validate_edit_summary_core(edit_summary.as_deref(), required)
 }
 
 /// Snapshots the current state of `prompt_id` into `prompt_version` BEFORE an UPDATE.

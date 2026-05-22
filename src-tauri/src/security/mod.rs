@@ -24,5 +24,6 @@ pub mod validation;
 
 pub use keystore::{KeyStore, KeyStoreError};
 pub use validation::serialize_for_query;
+pub use validation::validate_edit_summary;
 pub use validation::validate_uuid_field;
 pub use validation::Validator;

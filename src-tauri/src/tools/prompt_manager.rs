@@ -13,7 +13,9 @@ use crate::db::DBClient;
 use crate::models::prompt::{
     Prompt, PromptCategory, MAX_PROMPT_CONTENT_LEN, MAX_PROMPT_DESCRIPTION_LEN, MAX_PROMPT_NAME_LEN,
 };
-use crate::security::{serialize_for_query, validate_uuid_field};
+use crate::security::{
+    serialize_for_query, validate_edit_summary as validate_edit_summary_core, validate_uuid_field,
+};
 use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
@@ -150,24 +152,12 @@ impl PromptManagerTool {
         Ok(c.to_string())
     }
 
+    /// Thin wrapper around the shared validator. Agents always tag updates,
+    /// so `edit_summary` is mandatory here.
     fn validate_edit_summary(s: &str) -> ToolResult<String> {
-        let t = s.trim();
-        if t.is_empty() {
-            return Err(ToolError::ValidationFailed(
-                "edit_summary is required and cannot be empty".to_string(),
-            ));
-        }
-        if t.len() > 500 {
-            return Err(ToolError::ValidationFailed(
-                "edit_summary exceeds 500 chars".to_string(),
-            ));
-        }
-        if t.chars().any(|c| c.is_control() && c != ' ') {
-            return Err(ToolError::ValidationFailed(
-                "edit_summary contains control characters".to_string(),
-            ));
-        }
-        Ok(t.to_string())
+        validate_edit_summary_core(Some(s), true)
+            .map_err(ToolError::ValidationFailed)?
+            .ok_or_else(|| ToolError::ValidationFailed("edit_summary is required".to_string()))
     }
 
     async fn list_prompts(&self, query: Option<&str>, category: Option<&str>) -> ToolResult<Value> {
