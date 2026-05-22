@@ -278,6 +278,24 @@ pub async fn start_next_pending_card_core(
 /// finishes (success or failure), the card linked to it transitions to the
 /// `review` column with the matching status, so the user can verify the
 /// report or read the error summary.
+/// Look up the kanban_card.id linked to a given workflow_id. Returns
+/// `Ok(None)` when the workflow was not spawned by a Kanban card (i.e.
+/// no card has its workflow_id set to this value).
+pub async fn card_id_for_workflow(
+    db: &Arc<DBClient>,
+    workflow_id: &str,
+) -> Result<Option<String>, String> {
+    let q = "SELECT meta::id(id) AS id FROM kanban_card WHERE workflow_id = $wid LIMIT 1";
+    let rows: Vec<serde_json::Value> = db
+        .query_with_params(q, vec![("wid".to_string(), json!(workflow_id))])
+        .await
+        .map_err(|e| format!("Failed to look up kanban_card by workflow_id: {}", e))?;
+    Ok(rows
+        .into_iter()
+        .next()
+        .and_then(|r| r["id"].as_str().map(String::from)))
+}
+
 pub async fn mark_card_done_core(
     db: &Arc<DBClient>,
     workflow_id: &str,

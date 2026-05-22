@@ -18,11 +18,21 @@
 		promptId: string | null;
 		/** Kanban agent ID — tagged in the edit history. */
 		kanbanAgentId: string | null;
+		/** Optional suggestion to pre-fill the content textarea with (used when
+		 *  opened from an auto-analyze `needs_improvement` verdict). */
+		suggestedContent?: string | null;
 		onclose: () => void;
 		onupdated?: () => void;
 	}
 
-	let { open, promptId, kanbanAgentId, onclose, onupdated }: Props = $props();
+	let {
+		open,
+		promptId,
+		kanbanAgentId,
+		suggestedContent = null,
+		onclose,
+		onupdated
+	}: Props = $props();
 
 	let prompt = $state<Prompt | null>(null);
 	let content = $state('');
@@ -45,7 +55,15 @@
 		try {
 			const full = await invoke<Prompt>('get_prompt', { promptId });
 			prompt = full;
-			content = full.content;
+			// When opened from an auto-analyze `needs_improvement` verdict, pre-fill
+			// the textarea with the analyzer's suggestion and seed the edit summary
+			// so the operator only has to review and confirm.
+			if (suggestedContent && suggestedContent.trim() !== full.content.trim()) {
+				content = suggestedContent;
+				summary = $i18n('kanban_improve_auto_summary');
+			} else {
+				content = full.content;
+			}
 		} catch (e) {
 			error = getErrorMessage(e);
 		}

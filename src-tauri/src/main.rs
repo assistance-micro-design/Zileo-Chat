@@ -157,6 +157,7 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_card::delete_kanban_card,
             commands::kanban_card::move_kanban_card,
             commands::kanban_card::set_kanban_card_workflow_id,
+            commands::kanban_analyzer::analyze_card_report,
             // Kanban schedule commands
             commands::kanban_schedule::create_kanban_schedule,
             commands::kanban_schedule::get_kanban_schedule,
@@ -450,6 +451,8 @@ async fn main() -> anyhow::Result<()> {
             {
                 use tauri::Listener;
                 let db = state.inner().db.clone();
+                let llm_manager = state.inner().llm_manager.clone();
+                let app_handle_for_listener = app.handle().clone();
                 app.handle().listen("workflow_complete", move |evt| {
                     let payload: serde_json::Value = match serde_json::from_str(evt.payload()) {
                         Ok(v) => v,
@@ -469,6 +472,8 @@ async fn main() -> anyhow::Result<()> {
                     let error_message = payload["error"].as_str().map(String::from);
                     let success = status == "completed";
                     let db = db.clone();
+                    let llm_manager = llm_manager.clone();
+                    let app_handle = app_handle_for_listener.clone();
                     tauri::async_runtime::spawn(async move {
                         if let Err(e) = commands::scheduler::mark_card_done_core(
                             &db,
@@ -482,6 +487,45 @@ async fn main() -> anyhow::Result<()> {
                                 workflow_id = %workflow_id,
                                 error = %e,
                                 "Failed to update kanban card after workflow completion"
+                            );
+                            return;
+                        }
+
+                        // On success, trigger auto-analyze if the Kanban agent
+                        // has the flag enabled. Best-effort: any failure here is
+                        // logged but does not affect the user-visible flow.
+                        if !success {
+                            return;
+                        }
+                        let card_id = match commands::scheduler::card_id_for_workflow(
+                            &db,
+                            &workflow_id,
+                        )
+                        .await
+                        {
+                            Ok(Some(id)) => id,
+                            Ok(None) => return, // not a kanban-spawned workflow
+                            Err(e) => {
+                                tracing::warn!(
+                                    workflow_id = %workflow_id,
+                                    error = %e,
+                                    "Failed to resolve card_id for auto-analyze"
+                                );
+                                return;
+                            }
+                        };
+                        if let Err(e) = commands::kanban_analyzer::analyze_card_report_core(
+                            &db,
+                            &llm_manager,
+                            &app_handle,
+                            &card_id,
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                card_id = %card_id,
+                                error = %e,
+                                "Auto-analyze failed (non-fatal)"
                             );
                         }
                     });

@@ -881,6 +881,7 @@
 	"kanban_improve_summary_required": "An edit summary is required",
 	"kanban_improve_no_change": "The content was not changed",
 	"kanban_improve_no_prompt": "This card does not use a saved prompt",
+	"kanban_improve_auto_summary": "Improvement automatically suggested by the Kanban agent",
 	"kanban_confirm_delete_with_schedule": "This card has a recurring schedule. Delete the schedule too?",
 	"kanban_schedule_enable": "Schedule recurrence",
 	"kanban_schedule_time": "Trigger time",

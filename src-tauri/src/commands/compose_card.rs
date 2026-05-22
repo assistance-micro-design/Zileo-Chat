@@ -311,7 +311,7 @@ fn build_user_prompt(description: &str, _kanban_agent_id: &str) -> String {
 
 /// Best-effort extraction of the first balanced JSON object from arbitrary
 /// LLM output. Handles fenced markdown blocks and leading prose.
-fn extract_json_payload(content: &str) -> Option<Value> {
+pub(crate) fn extract_json_payload(content: &str) -> Option<Value> {
     // Try whole content first.
     if let Ok(v) = serde_json::from_str::<Value>(content.trim()) {
         return Some(v);

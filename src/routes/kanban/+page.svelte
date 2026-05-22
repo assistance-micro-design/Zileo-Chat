@@ -40,21 +40,73 @@
 	let improveOpen = $state(false);
 	let improvePromptId = $state<string | null>(null);
 	let improveKanbanAgentId = $state<string | null>(null);
+	let improveSuggestedContent = $state<string | null>(null);
 	let pageError = $state<string | null>(null);
 
 	let agentFilter = $state('');
 	let folderFilter = $state('');
+	// Status filter persists across reloads so the operator's review-only view
+	// is preserved between sessions. Loaded in onMount from localStorage.
 	let statusFilter = $state<KanbanCardStatus | ''>('');
+
+	const STATUS_FILTER_STORAGE_KEY = 'kanban-status-filter';
+	const SEEN_CARDS_STORAGE_KEY = 'kanban-seen-cards';
+
+	function isCardSeen(cardId: string): boolean {
+		try {
+			const raw = localStorage.getItem(SEEN_CARDS_STORAGE_KEY);
+			if (!raw) return false;
+			const list = JSON.parse(raw) as string[];
+			return Array.isArray(list) && list.includes(cardId);
+		} catch {
+			return false;
+		}
+	}
+
+	function markCardSeen(cardId: string): void {
+		try {
+			const raw = localStorage.getItem(SEEN_CARDS_STORAGE_KEY);
+			const list = raw ? (JSON.parse(raw) as string[]) : [];
+			if (!Array.isArray(list)) return;
+			if (!list.includes(cardId)) {
+				list.push(cardId);
+				// Soft cap to prevent unbounded growth — keep the last 500 seen IDs.
+				const trimmed = list.slice(-500);
+				localStorage.setItem(SEEN_CARDS_STORAGE_KEY, JSON.stringify(trimmed));
+			}
+		} catch {
+			/* best-effort persistence */
+		}
+	}
 
 	let unlistenReady: TauriUnlistenFn | null = null;
 	let unlistenComplete: TauriUnlistenFn | null = null;
+	let unlistenAutoAnalyzed: TauriUnlistenFn | null = null;
+	let unlistenNeedsImprovement: TauriUnlistenFn | null = null;
 	let unlistenSettingsRefresh: (() => void) | null = null;
 
 	$effect(() => {
 		void kanbanStore.loadCards(agentFilter || undefined);
 	});
 
+	$effect(() => {
+		// Persist status filter selection across reloads.
+		try {
+			localStorage.setItem(STATUS_FILTER_STORAGE_KEY, statusFilter);
+		} catch {
+			/* localStorage may be unavailable — silently ignore */
+		}
+	});
+
 	onMount(async () => {
+		// Restore persisted status filter selection.
+		try {
+			const saved = localStorage.getItem(STATUS_FILTER_STORAGE_KEY);
+			if (saved) statusFilter = saved as KanbanCardStatus | '';
+		} catch {
+			/* localStorage may be unavailable — fall back to default */
+		}
+
 		try {
 			await Promise.all([
 				agentStore.loadAgents(),
@@ -91,6 +143,60 @@
 			pageError = getErrorMessage(e);
 		}
 
+		// Listener for auto-analyze verdict (approve / reject). The backend
+		// has already updated the card; we just refresh the board and surface
+		// the verdict to the user via the page error / a viewer auto-open
+		// (handled by the $effect on viewerCard below).
+		try {
+			unlistenAutoAnalyzed = await tauriListen<{
+				card_id: string;
+				verdict: string;
+				reasoning: string;
+			}>('kanban:auto_analyzed', async (event) => {
+				const cardId = event.payload?.card_id;
+				if (!cardId) return;
+				await kanbanStore.loadCards(agentFilter || undefined);
+				try {
+					const updated = await kanbanStore.getCard(cardId);
+					if (updated && !isCardSeen(cardId) && updated.column === 'review') {
+						viewerCard = updated;
+						viewerOpen = true;
+						markCardSeen(cardId);
+					}
+				} catch (e) {
+					pageError = getErrorMessage(e);
+				}
+			});
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+
+		// Listener for auto-analyze `needs_improvement` verdict — opens the
+		// improvement modal with the analyzer's suggested rewrite pre-filled.
+		try {
+			unlistenNeedsImprovement = await tauriListen<{
+				card_id: string;
+				reasoning: string;
+				suggested_prompt_edit: string | null;
+			}>('kanban:needs_improvement', async (event) => {
+				const cardId = event.payload?.card_id;
+				if (!cardId) return;
+				await kanbanStore.loadCards(agentFilter || undefined);
+				try {
+					const card = await kanbanStore.getCard(cardId);
+					if (!card || !card.prompt_id) return; // inline_prompt cards can't be edited via this modal
+					improvePromptId = card.prompt_id;
+					improveKanbanAgentId = card.kanban_agent_id;
+					improveSuggestedContent = event.payload?.suggested_prompt_edit ?? null;
+					improveOpen = true;
+				} catch (e) {
+					pageError = getErrorMessage(e);
+				}
+			});
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+
 		// Cross-surface settings refresh (agents added/renamed) — reload agents list silently.
 		const onSettingsRefresh = (): void => {
 			void agentStore.loadAgents();
@@ -105,6 +211,8 @@
 	onDestroy(() => {
 		unlistenReady?.();
 		unlistenComplete?.();
+		unlistenAutoAnalyzed?.();
+		unlistenNeedsImprovement?.();
 		unlistenSettingsRefresh?.();
 	});
 
@@ -230,6 +338,7 @@
 		improveOpen = false;
 		improvePromptId = null;
 		improveKanbanAgentId = null;
+		improveSuggestedContent = null;
 	}
 
 	/**
@@ -375,6 +484,7 @@
 	open={improveOpen}
 	promptId={improvePromptId}
 	kanbanAgentId={improveKanbanAgentId}
+	suggestedContent={improveSuggestedContent}
 	onclose={closeImprove}
 	onupdated={() => kanbanStore.loadCards(agentFilter || undefined)}
 />

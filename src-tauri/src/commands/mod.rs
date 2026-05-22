@@ -154,6 +154,7 @@ pub mod custom_provider;
 pub mod embedding;
 pub mod file_manager;
 pub mod import_export;
+pub mod kanban_analyzer;
 pub mod kanban_card;
 pub mod kanban_schedule;
 pub mod llm_models;
