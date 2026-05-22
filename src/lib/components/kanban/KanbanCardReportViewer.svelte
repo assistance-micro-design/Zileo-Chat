@@ -28,7 +28,7 @@
 		onclose: () => void;
 		onvalidate?: (card: KanbanCard) => Promise<void>;
 		onimprove?: (card: KanbanCard) => void;
-		ondelete?: (card: KanbanCard) => Promise<void>;
+		ondelete?: (card: KanbanCard) => void;
 	}
 
 	let { open, card, agents, prompts, onclose, onvalidate, onimprove, ondelete }: Props = $props();

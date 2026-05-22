@@ -10,10 +10,11 @@
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
-	import { Badge, Button } from '$lib/components/ui';
+	import { Badge, Button, DeleteConfirmModal } from '$lib/components/ui';
 	import { Plus, Activity } from '@lucide/svelte';
 
 	import { kanbanStore, kanbanCardsByColumn, kanbanCards } from '$lib/stores/kanban';
+	import { runningWorkflows } from '$lib/stores/background-workflows';
 	import { kanbanScheduleStore, kanbanSchedules } from '$lib/stores/kanban-schedule';
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
 	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
@@ -47,6 +48,23 @@
 	let scheduleModalCard = $state<KanbanCard | null>(null);
 	let editModalOpen = $state(false);
 	let editModalCard = $state<KanbanCard | null>(null);
+	/**
+	 * Card pending deletion confirmation. Set when the user clicks the trash
+	 * icon; cleared on confirm or cancel. The delete modal disambiguates
+	 * three cases via `deleteVariant`: a stale stuck card (workflow crashed),
+	 * a card with a recurrence schedule attached, or a plain card.
+	 */
+	let pendingDeleteCard = $state<KanbanCard | null>(null);
+	let deleteVariant = $state<'stuck' | 'with_schedule' | 'plain'>('plain');
+	let deleting = $state(false);
+	/**
+	 * Card pending a duplicate-as-template confirmation. The flow has two
+	 * phases: when the source card has no schedule, we first ask if the user
+	 * wants to attach one (`attach-schedule`); when it already has one, we
+	 * confirm the destructive duplicate (`confirm-duplicate`).
+	 */
+	let pendingDuplicateCard = $state<KanbanCard | null>(null);
+	let duplicatePhase = $state<'attach-schedule' | 'confirm-duplicate'>('confirm-duplicate');
 	/**
 	 * Set to a card id when the user clicked "Duplicate as template" on a card
 	 * that has no schedule yet. The schedule modal is opened so they can attach
@@ -311,21 +329,38 @@
 		await kanbanStore.loadCards(agentFilter || undefined);
 	}
 
-	async function deleteCard(card: KanbanCard): Promise<void> {
+	/**
+	 * Opens the delete confirmation modal for the given card. Variant is
+	 * resolved here (stuck > with_schedule > plain) so the modal can show
+	 * the right title and warning. Actual deletion happens in
+	 * `confirmDeleteCard` when the user clicks the destructive button.
+	 */
+	function requestDeleteCard(card: KanbanCard): void {
+		pageError = null;
+		const isStuck =
+			card.column === 'doing' && !$runningWorkflows.some((w) => w.workflowId === card.workflow_id);
+		const linkedSchedule = $kanbanSchedules.find((s) => s.card_template_id === card.id);
+		deleteVariant = isStuck ? 'stuck' : linkedSchedule ? 'with_schedule' : 'plain';
+		pendingDeleteCard = card;
+	}
+
+	function cancelDeleteCard(): void {
+		if (deleting) return;
+		pendingDeleteCard = null;
+	}
+
+	async function confirmDeleteCard(): Promise<void> {
+		const card = pendingDeleteCard;
+		if (!card) return;
+		deleting = true;
 		pageError = null;
 		const linkedSchedule = $kanbanSchedules.find((s) => s.card_template_id === card.id);
-		// Recurrence-specific confirm takes precedence — it already communicates
-		// the destructive nature of the action AND the schedule loss in one prompt.
-		// Otherwise, fall back to the generic "delete this card?" warning.
-		const confirmKey = linkedSchedule
-			? 'kanban_confirm_delete_with_schedule'
-			: 'kanban_confirm_delete';
-		if (!confirm($i18n(confirmKey))) return;
 		if (linkedSchedule) {
 			try {
 				await kanbanScheduleStore.deleteSchedule(linkedSchedule.id);
 			} catch (e) {
 				pageError = getErrorMessage(e);
+				deleting = false;
 				return;
 			}
 		}
@@ -333,8 +368,11 @@
 			await kanbanStore.deleteCard(card.id);
 			viewerOpen = false;
 			viewerCard = null;
+			pendingDeleteCard = null;
 		} catch (e) {
 			pageError = getErrorMessage(e);
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -389,22 +427,36 @@
 		if (card) await performDuplicate(card);
 	}
 
-	async function duplicateAsTemplate(card: KanbanCard): Promise<void> {
+	function duplicateAsTemplate(card: KanbanCard): void {
 		const hasSchedule = $kanbanSchedules.some((s) => s.card_template_id === card.id);
-		if (!hasSchedule) {
-			// No recurrence yet — duplicating into a fresh template would discard
-			// the only existing instance for nothing. Offer to attach a recurrence
-			// first; if the user agrees, the duplication fires once the schedule
-			// is saved (handleScheduleSaved). Otherwise abort with a warning.
-			if (!confirm($i18n('kanban_duplicate_requires_schedule_prompt'))) {
-				pageError = $i18n('kanban_duplicate_no_schedule_warning');
-				return;
-			}
+		// No recurrence yet → ask if the user wants to attach one first.
+		// Has a recurrence → ask to confirm the destructive duplicate.
+		// In both cases the actual action runs in `confirmDuplicate`.
+		duplicatePhase = hasSchedule ? 'confirm-duplicate' : 'attach-schedule';
+		pendingDuplicateCard = card;
+	}
+
+	function cancelDuplicate(): void {
+		const wasAttachPhase = duplicatePhase === 'attach-schedule';
+		const card = pendingDuplicateCard;
+		pendingDuplicateCard = null;
+		// Declining the "attach schedule" step is a deliberate abort — surface
+		// the warning so the user understands why nothing happened.
+		if (wasAttachPhase && card) {
+			pageError = $i18n('kanban_duplicate_no_schedule_warning');
+		}
+	}
+
+	async function confirmDuplicate(): Promise<void> {
+		const card = pendingDuplicateCard;
+		const phase = duplicatePhase;
+		pendingDuplicateCard = null;
+		if (!card) return;
+		if (phase === 'attach-schedule') {
 			pendingDuplicateCardId = card.id;
 			openSchedule(card);
 			return;
 		}
-		if (!confirm($i18n('kanban_confirm_duplicate_template'))) return;
 		await performDuplicate(card);
 	}
 
@@ -582,7 +634,7 @@
 				isAnalyzing={analyzingCardIds.has(c.id)}
 				onview={openView}
 				onimprove={handleImprovePrompt}
-				ondelete={deleteCard}
+				ondelete={requestDeleteCard}
 				onschedule={openSchedule}
 				onduplicate={duplicateAsTemplate}
 				onedit={openEdit}
@@ -638,7 +690,43 @@
 	}}
 	onvalidate={validateCard}
 	onimprove={handleImprovePrompt}
-	ondelete={deleteCard}
+	ondelete={requestDeleteCard}
+/>
+
+<DeleteConfirmModal
+	open={pendingDuplicateCard !== null}
+	titleKey={duplicatePhase === 'attach-schedule'
+		? 'kanban_duplicate_attach_schedule_title'
+		: 'kanban_duplicate_confirm_title'}
+	confirmMessageKey={duplicatePhase === 'attach-schedule'
+		? 'kanban_duplicate_requires_schedule_prompt'
+		: 'kanban_confirm_duplicate_template'}
+	itemName={pendingDuplicateCard?.title}
+	deleting={false}
+	variant="primary"
+	confirmLabelKey={duplicatePhase === 'attach-schedule'
+		? 'kanban_duplicate_attach_schedule_confirm'
+		: 'kanban_duplicate_confirm_label'}
+	onConfirm={confirmDuplicate}
+	onCancel={cancelDuplicate}
+/>
+
+<DeleteConfirmModal
+	open={pendingDeleteCard !== null}
+	titleKey={deleteVariant === 'stuck'
+		? 'kanban_delete_modal_title_stuck'
+		: deleteVariant === 'with_schedule'
+			? 'kanban_delete_modal_title_with_schedule'
+			: 'kanban_delete_modal_title'}
+	confirmMessageKey={deleteVariant === 'stuck'
+		? 'kanban_confirm_force_delete_stuck'
+		: deleteVariant === 'with_schedule'
+			? 'kanban_confirm_delete_with_schedule'
+			: 'kanban_confirm_delete'}
+	itemName={pendingDeleteCard?.title}
+	{deleting}
+	onConfirm={confirmDeleteCard}
+	onCancel={cancelDeleteCard}
 />
 
 <style>

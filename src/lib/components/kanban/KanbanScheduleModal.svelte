@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { Button, Modal } from '$lib/components/ui';
+	import { Button, Modal, DeleteConfirmModal } from '$lib/components/ui';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { kanbanScheduleStore, kanbanSchedules } from '$lib/stores/kanban-schedule';
 	import KanbanScheduleForm from './KanbanScheduleForm.svelte';
@@ -37,6 +37,8 @@
 	let skipIfPending = $state(false);
 	let error = $state<string | null>(null);
 	let saving = $state(false);
+
+	let removeConfirmOpen = $state(false);
 
 	let lastSyncedCardId = $state<string | null>(null);
 	$effect(() => {
@@ -111,13 +113,23 @@
 		}
 	}
 
-	async function handleRemove(): Promise<void> {
+	function requestRemove(): void {
 		if (!existing) return;
-		if (!confirm($i18n('kanban_schedule_confirm_remove'))) return;
+		removeConfirmOpen = true;
+	}
+
+	function cancelRemove(): void {
+		if (saving) return;
+		removeConfirmOpen = false;
+	}
+
+	async function confirmRemove(): Promise<void> {
+		if (!existing) return;
 		saving = true;
 		error = null;
 		try {
 			await kanbanScheduleStore.deleteSchedule(existing.id);
+			removeConfirmOpen = false;
 			await onsaved?.();
 			onclose();
 		} catch (e) {
@@ -157,7 +169,7 @@
 
 	{#snippet footer()}
 		{#if existing}
-			<Button type="button" variant="ghost" onclick={handleRemove} disabled={saving}>
+			<Button type="button" variant="ghost" onclick={requestRemove} disabled={saving}>
 				{$i18n('kanban_schedule_remove_btn')}
 			</Button>
 		{/if}
@@ -169,6 +181,15 @@
 		</Button>
 	{/snippet}
 </Modal>
+
+<DeleteConfirmModal
+	open={removeConfirmOpen}
+	titleKey="kanban_schedule_remove_modal_title"
+	confirmMessageKey="kanban_schedule_confirm_remove"
+	deleting={saving}
+	onConfirm={confirmRemove}
+	onCancel={cancelRemove}
+/>
 
 <style>
 	.modal-hint {

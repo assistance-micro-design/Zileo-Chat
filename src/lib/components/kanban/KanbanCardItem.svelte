@@ -124,10 +124,6 @@
 	});
 
 	function handleDelete(): void {
-		if (isStuck) {
-			const ok = confirm($i18n('kanban_confirm_force_delete_stuck'));
-			if (!ok) return;
-		}
 		ondelete?.(card);
 	}
 </script>
