@@ -149,11 +149,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 			description: $i18n('agents_tool_file_manager_desc')
 		},
 		{
-			value: 'KanbanCardTool',
-			label: $i18n('agents_tool_kanban_card'),
-			description: $i18n('agents_tool_kanban_card_desc')
-		},
-		{
 			value: 'PromptManagerTool',
 			label: $i18n('agents_tool_prompt_manager'),
 			description: $i18n('agents_tool_prompt_manager_desc')
@@ -171,7 +166,6 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 	]);
 
 	const KANBAN_ONLY_TOOLS = new Set([
-		'KanbanCardTool',
 		'PromptManagerTool',
 		'SkillManagerTool',
 		'WorkflowManagerTool'
@@ -194,9 +188,7 @@ Includes LLM settings, tool selection, MCP server selection, and system prompt.
 		}
 		// Purge skills that no longer match the current agent kind (strict invariant).
 		const validSkillNames = new Set(
-			availableSkillSummaries
-				.filter((s) => (s.kind ?? null) === (kind ?? null))
-				.map((s) => s.name)
+			availableSkillSummaries.filter((s) => (s.kind ?? null) === (kind ?? null)).map((s) => s.name)
 		);
 		if (
 			availableSkillSummaries.length > 0 &&

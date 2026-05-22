@@ -41,6 +41,7 @@ const MIGRATION_REASONING_EFFORT: &str = "reasoning_effort_v1";
 const MIGRATION_SIDEBAR_FEATURES: &str = "sidebar_features_v1";
 const MIGRATION_MCP_AUTH_V1: &str = "mcp_auth_v1";
 const MIGRATION_TOKEN_COST_ACCURACY_V1: &str = "token_cost_accuracy_v1";
+const MIGRATION_REMOVE_KANBAN_CARD_TOOL_V1: &str = "remove_kanban_card_tool_v1";
 
 /// Checks if a migration has already been applied.
 ///
@@ -572,6 +573,55 @@ pub async fn run_token_cost_accuracy_v1(db: &DBClient) -> Result<MigrationResult
     })
 }
 
+/// Removes the now-defunct `"KanbanCardTool"` entry from every agent's
+/// `tools` array. Idempotent (guarded by `migration_log`). Called from
+/// `AppState::new` at startup; logging the warning is enough on failure
+/// since unknown tool names are skipped by the factory anyway.
+pub async fn run_remove_kanban_card_tool_v1(db: &DBClient) -> Result<MigrationResult, String> {
+    if check_migration_applied(db, MIGRATION_REMOVE_KANBAN_CARD_TOOL_V1).await? {
+        info!("remove_kanban_card_tool_v1 migration already applied, skipping");
+        return Ok(MigrationResult {
+            success: true,
+            message: format!("Already applied: {}", MIGRATION_REMOVE_KANBAN_CARD_TOOL_V1),
+            records_affected: 0,
+        });
+    }
+
+    // Count first so we can report `records_affected` accurately; SurrealDB
+    // UPDATE via `.execute()` doesn't return rows.
+    let count_rows: Vec<serde_json::Value> = db
+        .query_json("SELECT count() FROM agent WHERE tools CONTAINS 'KanbanCardTool' GROUP ALL")
+        .await
+        .map_err(|e| format!("remove_kanban_card_tool_v1 pre-count failed: {}", e))?;
+    let affected = count_rows
+        .first()
+        .and_then(|v| v["count"].as_u64())
+        .map(|n| n as usize)
+        .unwrap_or(0);
+
+    if affected > 0 {
+        let query = "UPDATE agent SET tools = array::filter(tools, |$t| $t != 'KanbanCardTool') \
+                     WHERE tools CONTAINS 'KanbanCardTool'";
+        db.execute(query).await.map_err(|e| {
+            error!(error = %e, "remove_kanban_card_tool_v1 migration failed");
+            format!("remove_kanban_card_tool_v1 migration failed: {}", e)
+        })?;
+    }
+
+    record_migration_applied(db, MIGRATION_REMOVE_KANBAN_CARD_TOOL_V1).await?;
+
+    info!(
+        agents_updated = affected,
+        "remove_kanban_card_tool_v1 migration completed"
+    );
+
+    Ok(MigrationResult {
+        success: true,
+        message: "Filtered 'KanbanCardTool' from agents.tools arrays.".to_string(),
+        records_affected: affected,
+    })
+}
+
 /// Memory schema status information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySchemaStatus {
@@ -921,5 +971,106 @@ mod tests {
             TOKEN_COST_ACCURACY_V1_MIGRATION.contains("WHERE total_cache_write_tokens IS NONE"),
             "total_cache_write_tokens UPDATE must guard with IS NONE"
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // remove_kanban_card_tool_v1 — agent tools cleanup
+    // -------------------------------------------------------------------------
+
+    /// Seeds a SCHEMAFULL-valid agent row with the given `tools` array.
+    /// Only the `tools` field matters for the migration; the rest is the
+    /// minimum needed for `agent` schema compliance.
+    async fn seed_agent_with_tools(db: &DBClient, id: &str, tools_json: &str) {
+        let query = format!(
+            "CREATE agent:`{id}` SET \
+                id = '{id}', \
+                name = 'agent-{id}', \
+                lifecycle = 'permanent', \
+                llm = {{ provider: 'mistral', model: 'mistral-medium', \
+                         temperature: 0.7, max_tokens: 4000 }}, \
+                tools = {tools_json}, \
+                mcp_servers = [], \
+                system_prompt = 'Test agent.', \
+                max_tool_iterations = 50, \
+                reasoning_effort = NONE, \
+                created_at = time::now(), \
+                updated_at = time::now()"
+        );
+        db.execute(&query).await.unwrap();
+    }
+
+    async fn read_agent_tools(db: &DBClient, id: &str) -> Vec<String> {
+        let rows = db
+            .query_json(&format!("SELECT tools FROM agent:`{id}`"))
+            .await
+            .unwrap();
+        rows.into_iter()
+            .next()
+            .and_then(|v| v["tools"].as_array().cloned())
+            .map(|arr| {
+                arr.into_iter()
+                    .filter_map(|t| t.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn remove_kanban_card_tool_v1_strips_the_entry() {
+        let (state, _db_guard) = setup_test_state().await;
+        let with_id = uuid::Uuid::new_v4().to_string();
+        let without_id = uuid::Uuid::new_v4().to_string();
+
+        seed_agent_with_tools(
+            &state.db,
+            &with_id,
+            "['MemoryTool', 'KanbanCardTool', 'PromptManagerTool']",
+        )
+        .await;
+        seed_agent_with_tools(&state.db, &without_id, "['MemoryTool']").await;
+
+        let result = run_remove_kanban_card_tool_v1(&state.db).await.unwrap();
+        assert!(result.success);
+
+        let tools_with = read_agent_tools(&state.db, &with_id).await;
+        assert!(!tools_with.contains(&"KanbanCardTool".to_string()));
+        assert!(tools_with.contains(&"MemoryTool".to_string()));
+        assert!(tools_with.contains(&"PromptManagerTool".to_string()));
+
+        let tools_without = read_agent_tools(&state.db, &without_id).await;
+        assert_eq!(tools_without, vec!["MemoryTool".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn remove_kanban_card_tool_v1_is_idempotent() {
+        let (state, _db_guard) = setup_test_state().await;
+        let id = uuid::Uuid::new_v4().to_string();
+        seed_agent_with_tools(&state.db, &id, "['KanbanCardTool']").await;
+
+        let first = run_remove_kanban_card_tool_v1(&state.db).await.unwrap();
+        let second = run_remove_kanban_card_tool_v1(&state.db).await.unwrap();
+
+        assert!(first.success);
+        assert!(second.success);
+        assert!(
+            second.message.contains("Already applied"),
+            "Second run must short-circuit via migration_log, got: {}",
+            second.message
+        );
+
+        let tools = read_agent_tools(&state.db, &id).await;
+        assert!(!tools.contains(&"KanbanCardTool".to_string()));
+    }
+
+    #[tokio::test]
+    async fn remove_kanban_card_tool_v1_no_op_when_unused() {
+        let (state, _db_guard) = setup_test_state().await;
+        let id = uuid::Uuid::new_v4().to_string();
+        seed_agent_with_tools(&state.db, &id, "['MemoryTool']").await;
+
+        let result = run_remove_kanban_card_tool_v1(&state.db).await.unwrap();
+        assert!(result.success);
+        let tools = read_agent_tools(&state.db, &id).await;
+        assert_eq!(tools, vec!["MemoryTool".to_string()]);
     }
 }

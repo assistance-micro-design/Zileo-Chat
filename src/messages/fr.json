@@ -682,8 +682,6 @@
 	"agents_tool_calculator_desc": "Effectuer des calculs mathematiques scientifiques",
 	"agents_tool_file_manager": "FileManager",
 	"agents_tool_file_manager_desc": "Lire, ecrire, rechercher et gerer des fichiers dans les dossiers autorises",
-	"agents_tool_kanban_card": "Outil Carte Kanban",
-	"agents_tool_kanban_card_desc": "Creer, lister et mettre a jour des cartes Kanban (composition de workflows recurrents)",
 	"agents_tool_prompt_manager": "Gestionnaire de Prompts",
 	"agents_tool_prompt_manager_desc": "Lister, lire, creer et modifier des prompts (un resume d'edition est obligatoire ; les versions sont conservees)",
 	"agents_tool_skill_manager": "Gestionnaire de Skills",

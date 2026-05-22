@@ -21,7 +21,6 @@ use super::factory::ToolFactory;
 use crate::models::agent::AgentKind;
 use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
-use crate::tools::kanban_card::KanbanCardTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::prompt_manager::PromptManagerTool;
 use crate::tools::skill_manager::SkillManagerTool;
@@ -228,12 +227,6 @@ impl ToolFactory {
                 Ok(Arc::new(tool))
             }
 
-            "KanbanCardTool" => {
-                let tool = KanbanCardTool::new(self.db.clone(), agent_id.clone());
-                info!("KanbanCardTool instance created");
-                Ok(Arc::new(tool))
-            }
-
             "PromptManagerTool" => {
                 let tool = PromptManagerTool::new(self.db.clone(), agent_id.clone());
                 info!("PromptManagerTool instance created");
@@ -389,7 +382,6 @@ impl ToolFactory {
             | "UserQuestionTool"
             | "ReadSkillTool"
             | "FileManagerTool"
-            | "KanbanCardTool"
             | "PromptManagerTool"
             | "SkillManagerTool"
             | "WorkflowManagerTool" => {

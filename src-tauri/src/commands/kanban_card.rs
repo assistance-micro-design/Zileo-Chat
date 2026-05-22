@@ -25,7 +25,7 @@ const KANBAN_CARD_FIELDS: &str = "meta::id(id) AS id, title, description, kanban
     `column_order`, workflow_id, error_summary, created_at, updated_at";
 
 /// Validates the description length (max 5000 chars, like the schema ASSERT).
-fn validate_description(desc: &str) -> Result<String, String> {
+pub(crate) fn validate_description(desc: &str) -> Result<String, String> {
     let trimmed = desc.trim();
     if trimmed.len() > 5000 {
         return Err("description exceeds 5000 characters".to_string());
@@ -34,7 +34,7 @@ fn validate_description(desc: &str) -> Result<String, String> {
 }
 
 /// Validates the title (1-200 chars, non-empty after trim).
-fn validate_title(title: &str) -> Result<String, String> {
+pub(crate) fn validate_title(title: &str) -> Result<String, String> {
     let trimmed = title.trim();
     if trimmed.is_empty() {
         return Err("title cannot be empty".to_string());
@@ -46,7 +46,7 @@ fn validate_title(title: &str) -> Result<String, String> {
 }
 
 /// Validates the `variables` JSON-stringified map.
-fn validate_variables_json(s: &str) -> Result<String, String> {
+pub(crate) fn validate_variables_json(s: &str) -> Result<String, String> {
     let parsed: serde_json::Value =
         serde_json::from_str(s).map_err(|e| format!("variables must be valid JSON: {}", e))?;
     if !parsed.is_object() {
@@ -60,7 +60,7 @@ fn validate_variables_json(s: &str) -> Result<String, String> {
 }
 
 /// Validates `prompt_id` XOR `inline_prompt`.
-fn validate_xor_prompt(
+pub(crate) fn validate_xor_prompt(
     prompt_id: &Option<String>,
     inline_prompt: &Option<String>,
 ) -> Result<(), String> {

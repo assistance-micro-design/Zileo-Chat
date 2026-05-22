@@ -137,6 +137,7 @@ impl Agent for LLMAgent {
             task,
             mcp_manager,
             cancellation_token,
+            Vec::new(),
         )
         .await
     }

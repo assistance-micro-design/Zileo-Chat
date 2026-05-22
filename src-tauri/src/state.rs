@@ -85,6 +85,16 @@ impl AppState {
             );
         }
 
+        // Drop the removed `KanbanCardTool` entry from existing agents so it
+        // doesn't trigger an "Unknown tool" warning on every workflow.
+        // Idempotent and non-fatal — the factory already skips unknown tools.
+        if let Err(e) = crate::commands::migration::run_remove_kanban_card_tool_v1(&db).await {
+            tracing::warn!(
+                error = %e,
+                "remove_kanban_card_tool_v1 migration failed; unknown-tool warnings will appear at runtime"
+            );
+        }
+
         // Best-effort cleanup of memories past their TTL (and their chunks).
         // Non-fatal — search-time filtering already hides them, but purging
         // keeps the HNSW index lean and frees DB space.

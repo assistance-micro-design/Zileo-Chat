@@ -152,8 +152,7 @@ Displays in a modal with markdown content editor.
 		<Select
 			label={$i18n('skills_form_kind_label')}
 			value={kind}
-			onchange={(e) =>
-				(kind = e.currentTarget.value === 'kanban' ? 'kanban' : 'standard')}
+			onchange={(e) => (kind = e.currentTarget.value === 'kanban' ? 'kanban' : 'standard')}
 			options={kindOptions}
 			disabled={saving || mode === 'edit'}
 		/>

@@ -26,11 +26,10 @@ fn test_available_tools() {
     assert!(tools.contains(&"SpawnAgentTool"));
     assert!(tools.contains(&"DelegateTaskTool"));
     assert!(tools.contains(&"ParallelTasksTool"));
-    assert!(tools.contains(&"KanbanCardTool"));
     assert!(tools.contains(&"PromptManagerTool"));
     assert!(tools.contains(&"SkillManagerTool"));
     assert!(tools.contains(&"WorkflowManagerTool"));
-    assert_eq!(tools.len(), 13); // 9 basic + 1 hidden + 3 sub-agent
+    assert_eq!(tools.len(), 12); // 8 basic + 1 hidden + 3 sub-agent
 }
 
 #[test]
@@ -40,12 +39,11 @@ fn test_basic_tools() {
     assert!(tools.contains(&"TodoTool"));
     assert!(tools.contains(&"CalculatorTool"));
     assert!(tools.contains(&"UserQuestionTool"));
-    assert!(tools.contains(&"KanbanCardTool"));
     assert!(tools.contains(&"PromptManagerTool"));
     assert!(tools.contains(&"SkillManagerTool"));
     assert!(tools.contains(&"WorkflowManagerTool"));
     assert!(!tools.contains(&"SpawnAgentTool"));
-    assert_eq!(tools.len(), 9);
+    assert_eq!(tools.len(), 8);
 }
 
 #[test]

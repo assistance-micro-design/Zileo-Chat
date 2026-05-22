@@ -44,7 +44,9 @@ use crate::mcp::MCPManager;
 use crate::models::streaming::StreamChunk;
 use crate::models::workflow::IterationMetrics;
 use crate::models::AgentConfig;
-use crate::tools::{context::AgentToolContext, validation_helper::ValidationHelper, ToolFactory};
+use crate::tools::{
+    context::AgentToolContext, validation_helper::ValidationHelper, Tool, ToolFactory,
+};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -449,11 +451,19 @@ pub(crate) async fn execute_simple(
 }
 
 /// Executes a task with full tool support (local + MCP) using JSON function calling.
+///
+/// `extra_tools` lets callers inject privately-instantiated tools (carrying
+/// captured state via `Arc<Mutex<_>>`, etc.) alongside factory-resolved ones.
+/// These are concatenated after the factory's `create_local_tools` output and
+/// participate normally in tool definition collection, system-prompt injection
+/// and JSON function-call dispatch. Pass `vec![]` when no injection is needed
+/// (the standard workflow case).
 pub(crate) async fn execute_with_tools(
     ctx: ToolLoopContext<'_>,
     task: Task,
     mcp_manager: Option<Arc<MCPManager>>,
     cancellation_token: Option<CancellationToken>,
+    extra_tools: Vec<Arc<dyn Tool>>,
 ) -> anyhow::Result<Report> {
     let start = std::time::Instant::now();
     let mut tools_used: Vec<String> = Vec::new();
@@ -594,7 +604,7 @@ pub(crate) async fn execute_with_tools(
         _ => None,
     };
 
-    let local_tools = tools::create_local_tools(
+    let mut local_tools = tools::create_local_tools(
         ctx.config,
         ctx.tool_factory,
         ctx.agent_context,
@@ -603,6 +613,10 @@ pub(crate) async fn execute_with_tools(
         effective_context.as_ref(),
     )
     .await;
+    // Caller-injected tools (e.g. Submit*/ListAgents during compose/analyze)
+    // join the local set so they appear in tool definitions, system prompt
+    // and dispatch exactly like factory-resolved tools.
+    local_tools.extend(extra_tools);
 
     let has_delegation_tools = ctx
         .config
