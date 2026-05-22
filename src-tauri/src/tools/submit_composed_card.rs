@@ -22,12 +22,14 @@
 use crate::commands::kanban_card::{
     validate_description, validate_title, validate_variables_json, validate_xor_prompt,
 };
+use crate::db::DBClient;
 use crate::models::KanbanCardCreate;
 use crate::security::validate_uuid_field;
 use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -90,15 +92,15 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
             },
             "prompt_id": {
                 "type": "string",
-                "description": "UUID of a reusable prompt (mutually exclusive with inline_prompt)"
+                "description": "UUID of a reusable prompt from the library (mutually exclusive with inline_prompt). Discover candidates and their declared variables via PromptManager.list_prompts then PromptManager.get_prompt(id). The returned `variables` array tells you exactly which keys to fill in the `variables` map below."
             },
             "inline_prompt": {
                 "type": "string",
-                "description": "Free-form prompt text (mutually exclusive with prompt_id)"
+                "description": "Free-form prompt text (mutually exclusive with prompt_id). Use {{var_name}} placeholders if you reference variables; mirror those names as keys in the `variables` map below."
             },
             "variables": {
                 "type": "object",
-                "description": "Variable substitutions for the prompt. Use {} when none."
+                "description": "Variable substitutions applied at workflow execution time. When `prompt_id` is set you MUST provide every variable name declared by that prompt (call PromptManager.get_prompt to list them) — missing keys are rejected. When `inline_prompt` is set, provide one key per `{{name}}` placeholder you wrote. Use {} only when neither path declares variables."
             },
             "target_folder_id": {
                 "type": "string",
@@ -126,14 +128,44 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
 pub struct SubmitComposedCardTool {
     capture: Arc<Mutex<Option<KanbanCardCreate>>>,
     kanban_agent_id: String,
+    db: Arc<DBClient>,
 }
 
 impl SubmitComposedCardTool {
-    pub fn new(capture: Arc<Mutex<Option<KanbanCardCreate>>>, kanban_agent_id: String) -> Self {
+    pub fn new(
+        capture: Arc<Mutex<Option<KanbanCardCreate>>>,
+        kanban_agent_id: String,
+        db: Arc<DBClient>,
+    ) -> Self {
         Self {
             capture,
             kanban_agent_id,
+            db,
         }
+    }
+
+    /// Loads the variable names declared by a persisted prompt so the Submit
+    /// tool can cross-check the agent-provided `variables` map. Returns an
+    /// empty set if the prompt has no variables column or is missing — the
+    /// caller treats that as "no check possible".
+    async fn fetch_prompt_variable_names(&self, prompt_id: &str) -> ToolResult<BTreeSet<String>> {
+        let query = format!("SELECT variables FROM prompt:`{prompt_id}`");
+        let rows = self.db.query_json(&query).await.map_err(|e| {
+            ToolError::DatabaseError(format!("Failed to load prompt for cross-check: {e}"))
+        })?;
+        let row = rows.into_iter().next().ok_or_else(|| {
+            ToolError::ValidationFailed(format!("prompt_id {prompt_id} not found"))
+        })?;
+        let names = row
+            .get("variables")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.get("name").and_then(|n| n.as_str()).map(String::from))
+                    .collect::<BTreeSet<String>>()
+            })
+            .unwrap_or_default();
+        Ok(names)
     }
 
     /// Normalises the `variables` input (object preferred, stringified JSON accepted)
@@ -222,6 +254,38 @@ impl Tool for SubmitComposedCardTool {
         let variables = Self::variables_to_string(&input["variables"])?;
         let variables = validate_variables_json(&variables).map_err(ToolError::ValidationFailed)?;
 
+        // Cross-check: when targeting an existing prompt, every variable the
+        // prompt declares MUST be present in the agent-provided map.
+        // Otherwise the worker would execute the card with literal `{{var}}`
+        // placeholders in the resolved prompt. The Submit tool is idempotent
+        // (latest call wins) so the agent can correct and resubmit when the
+        // error surfaces in its next tool result.
+        if let Some(ref pid) = prompt_id {
+            let expected = self.fetch_prompt_variable_names(pid).await?;
+            if !expected.is_empty() {
+                let provided: BTreeSet<String> = serde_json::from_str::<Value>(&variables)
+                    .ok()
+                    .and_then(|v| {
+                        v.as_object()
+                            .map(|m| m.keys().cloned().collect::<BTreeSet<String>>())
+                    })
+                    .unwrap_or_default();
+                let missing: Vec<&String> = expected.difference(&provided).collect();
+                if !missing.is_empty() {
+                    let names = missing
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(ToolError::ValidationFailed(format!(
+                        "prompt_id {pid} declares variables that are not provided: {names}. \
+                         Call PromptManager.get_prompt({pid}) to discover them, then \
+                         resubmit with a complete variables object."
+                    )));
+                }
+            }
+        }
+
         let card = KanbanCardCreate {
             id: None,
             title,
@@ -278,6 +342,7 @@ impl Tool for SubmitComposedCardTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::setup_test_state;
 
     fn new_capture() -> Arc<Mutex<Option<KanbanCardCreate>>> {
         Arc::new(Mutex::new(None))
@@ -295,13 +360,43 @@ mod tests {
         uuid::Uuid::new_v4().to_string()
     }
 
+    /// Seeds a minimal `prompt` row with the requested variable names so the
+    /// Submit tool's cross-check can resolve them.
+    async fn seed_prompt(db: &Arc<DBClient>, id: &str, vars: &[&str]) {
+        let vars_sql = if vars.is_empty() {
+            "[]".to_string()
+        } else {
+            let items = vars
+                .iter()
+                .map(|n| format!("{{ name: '{n}', description: NONE, default_value: NONE }}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{items}]")
+        };
+        let q = format!(
+            "CREATE prompt:`{id}` SET \
+                id = '{id}', \
+                name = 'test-prompt', \
+                description = '', \
+                category = 'custom', \
+                content = 'test', \
+                variables = {vars_sql}, \
+                created_at = time::now(), \
+                updated_at = time::now()"
+        );
+        db.execute(&q).await.unwrap();
+    }
+
     #[tokio::test]
     async fn captures_payload_with_prompt_id() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
         let kanban_id = kanban_agent_uuid();
         let target_id = target_agent_uuid();
         let prompt_id = prompt_uuid();
-        let tool = SubmitComposedCardTool::new(capture.clone(), kanban_id.clone());
+        seed_prompt(&state.db, &prompt_id, &["week"]).await;
+        let tool =
+            SubmitComposedCardTool::new(capture.clone(), kanban_id.clone(), state.db.clone());
         let result = tool
             .execute(json!({
                 "title": "Weekly digest",
@@ -326,8 +421,10 @@ mod tests {
 
     #[tokio::test]
     async fn captures_payload_with_inline_prompt_and_empty_variables() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid());
+        let tool =
+            SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid(), state.db.clone());
         tool.execute(json!({
             "title": "Refactor login",
             "target_agent_id": target_agent_uuid(),
@@ -344,8 +441,10 @@ mod tests {
 
     #[tokio::test]
     async fn second_call_overwrites_first() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid());
+        let tool =
+            SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid(), state.db.clone());
         tool.execute(json!({
             "title": "First",
             "target_agent_id": target_agent_uuid(),
@@ -366,8 +465,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_both_prompt_id_and_inline_prompt() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid());
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
         let err = tool
             .execute(json!({
                 "title": "x",
@@ -387,8 +487,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_neither_prompt_id_nor_inline_prompt() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid());
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
         let err = tool
             .execute(json!({
                 "title": "x",
@@ -401,8 +502,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_invalid_target_agent_uuid() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid());
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
         let err = tool
             .execute(json!({
                 "title": "x",
@@ -417,8 +519,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_missing_title() {
+        let (state, _g) = setup_test_state().await;
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid());
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
         let err = tool
             .execute(json!({
                 "target_agent_id": target_agent_uuid(),
@@ -431,10 +534,12 @@ mod tests {
 
     #[tokio::test]
     async fn accepts_empty_prompt_id_string_as_absent() {
+        let (state, _g) = setup_test_state().await;
         // Some models fill optional string fields with "" rather than omitting them;
         // the tool must treat that as the XOR-compatible "absent" case.
         let capture = new_capture();
-        let tool = SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid());
+        let tool =
+            SubmitComposedCardTool::new(capture.clone(), kanban_agent_uuid(), state.db.clone());
         tool.execute(json!({
             "title": "x",
             "target_agent_id": target_agent_uuid(),
@@ -445,5 +550,65 @@ mod tests {
         .unwrap();
         let slot = capture.lock().await;
         assert!(slot.as_ref().unwrap().prompt_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn rejects_missing_variable_keys_for_prompt_id() {
+        let (state, _g) = setup_test_state().await;
+        let capture = new_capture();
+        let prompt_id = prompt_uuid();
+        seed_prompt(&state.db, &prompt_id, &["topic", "language"]).await;
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
+        let err = tool
+            .execute(json!({
+                "title": "x",
+                "target_agent_id": target_agent_uuid(),
+                "prompt_id": prompt_id,
+                "variables": { "topic": "Mistral AI" }
+            }))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ToolError::ValidationFailed(_)),
+            "got: {:?}",
+            err
+        );
+        assert!(err.to_string().contains("language"));
+    }
+
+    #[tokio::test]
+    async fn rejects_prompt_id_not_found() {
+        let (state, _g) = setup_test_state().await;
+        let capture = new_capture();
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
+        let err = tool
+            .execute(json!({
+                "title": "x",
+                "target_agent_id": target_agent_uuid(),
+                "prompt_id": prompt_uuid(),
+                "variables": {}
+            }))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ToolError::ValidationFailed(_)));
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn accepts_extra_variable_keys_beyond_prompt() {
+        // Extra keys are allowed (forward-compat): only MISSING required ones fail.
+        let (state, _g) = setup_test_state().await;
+        let capture = new_capture();
+        let prompt_id = prompt_uuid();
+        seed_prompt(&state.db, &prompt_id, &["topic"]).await;
+        let tool = SubmitComposedCardTool::new(capture, kanban_agent_uuid(), state.db.clone());
+        tool.execute(json!({
+            "title": "x",
+            "target_agent_id": target_agent_uuid(),
+            "prompt_id": prompt_id,
+            "variables": { "topic": "X", "unused": "Y" }
+        }))
+        .await
+        .unwrap();
     }
 }

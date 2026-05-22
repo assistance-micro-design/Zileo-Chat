@@ -77,6 +77,7 @@ pub async fn compose_card_from_description_core(
         Arc::new(SubmitComposedCardTool::new(
             capture.clone(),
             kanban_agent_id.clone(),
+            db.clone(),
         )),
     ];
 
@@ -183,8 +184,10 @@ fn build_compose_system_prompt(agent_system_prompt: &str) -> String {
          The card will be executed by a permanent worker agent that you must pick.\n\n\
          ## Workflow\n\
          1. Use ListAgents to discover available worker agents (target_agent_id candidates).\n\
-         2. If a prompt library is available via tools (PromptManagerTool), use it to find a \
-            reusable prompt; otherwise compose an inline_prompt yourself.\n\
+         2. If a prompt library is available via tools (PromptManager), call \
+            PromptManager.list_prompts then PromptManager.get_prompt on the one you pick. \
+            The returned `variables` array tells you EXACTLY which keys to populate. \
+            Otherwise compose an inline_prompt yourself.\n\
          3. Call SubmitComposedCard exactly ONCE with the final payload.\n\
          4. End your response with a brief rationale (2-3 sentences) explaining your choice.\n\n\
          ## Submit contract\n\
@@ -192,7 +195,14 @@ fn build_compose_system_prompt(agent_system_prompt: &str) -> String {
          NOT persisted by this tool — the user reviews the proposal afterwards. Required: \
          title, target_agent_id, AND exactly one of (prompt_id, inline_prompt). \
          If you cannot decide a target_agent_id, prefer calling SubmitComposedCard with your \
-         best guess plus an explanation in the description over not calling it at all.\n",
+         best guess plus an explanation in the description over not calling it at all.\n\n\
+         ## Variables contract (STRICT)\n\
+         When you pick a `prompt_id`, you MUST supply EVERY variable declared by that \
+         prompt in the `variables` object — keys must match the names returned by \
+         PromptManager.get_prompt. Missing keys are rejected and you will have to resubmit. \
+         When you write an `inline_prompt`, use `{{name}}` placeholders and mirror each \
+         placeholder name as a key in `variables`. Use `{}` only when there is genuinely no \
+         variable to fill.\n",
     );
     s
 }
