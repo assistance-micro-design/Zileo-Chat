@@ -14,7 +14,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { i18n } from '$lib/i18n';
 	import { getErrorMessage } from '$lib/utils/error';
-	import { Button, Badge } from '$lib/components/ui';
+	import { Button, Badge, DeleteConfirmModal } from '$lib/components/ui';
 	import type { PromptVersion, PromptVersionSummary } from '$types/prompt_version';
 	import type { SkillVersion, SkillVersionSummary } from '$types/skill_version';
 
@@ -41,6 +41,7 @@
 	let error = $state<string | null>(null);
 	let restoring = $state(false);
 	let deleting = $state(false);
+	let pendingDelete = $state<{ id: string; version: number } | null>(null);
 
 	const listCmd = $derived(kind === 'prompt' ? 'list_prompt_versions' : 'list_skill_versions');
 	const getCmd = $derived(kind === 'prompt' ? 'get_prompt_version' : 'get_skill_version');
@@ -84,9 +85,17 @@
 		}
 	}
 
-	async function deleteVersion(versionId: string, versionNumber: number) {
-		const message = $i18n('versions_confirm_delete').replace('{version}', String(versionNumber));
-		if (!confirm(message)) return;
+	function requestDelete(versionId: string, versionNumber: number) {
+		pendingDelete = { id: versionId, version: versionNumber };
+	}
+
+	function cancelDelete() {
+		if (!deleting) pendingDelete = null;
+	}
+
+	async function confirmDelete() {
+		if (!pendingDelete) return;
+		const { id: versionId } = pendingDelete;
 		deleting = true;
 		error = null;
 		try {
@@ -96,6 +105,7 @@
 			}
 			await loadVersions();
 			onchanged?.();
+			pendingDelete = null;
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {
@@ -106,18 +116,20 @@
 	onMount(loadVersions);
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+
 <div
 	class="versions-modal-backdrop"
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="versions-title"
-	tabindex="-1"
-	onclick={onclose}
+	role="presentation"
+	onclick={(e) => e.target === e.currentTarget && onclose()}
 >
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="versions-modal-panel" onclick={(e) => e.stopPropagation()} role="document">
+	<div
+		class="versions-modal-panel"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="versions-title"
+		tabindex="-1"
+	>
 		<header class="modal-head">
 			<h3 id="versions-title">
 				{kind === 'prompt'
@@ -167,7 +179,7 @@
 										variant="danger"
 										size="sm"
 										disabled={deleting || restoring || versions.length <= 1}
-										onclick={() => deleteVersion(v.id, v.version)}
+										onclick={() => requestDelete(v.id, v.version)}
 										ariaLabel={versions.length <= 1
 											? $i18n('versions_delete_blocked_last')
 											: $i18n('versions_delete')}
@@ -197,6 +209,17 @@
 		</div>
 	</div>
 </div>
+
+<DeleteConfirmModal
+	open={pendingDelete !== null}
+	titleKey="versions_delete_modal_title"
+	confirmMessageKey="versions_confirm_delete_message"
+	itemName={pendingDelete ? `v${pendingDelete.version}` : undefined}
+	warningMessageKey="versions_confirm_delete_warning"
+	{deleting}
+	onConfirm={confirmDelete}
+	onCancel={cancelDelete}
+/>
 
 <style>
 	/* Stacked above the parent Modal's backdrop (--z-index-modal-backdrop = 1040)

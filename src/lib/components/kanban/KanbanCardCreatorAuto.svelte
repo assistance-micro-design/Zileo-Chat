@@ -6,6 +6,7 @@
   free-form description, then displays a preview before submission.
 -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { i18n } from '$lib/i18n';
 	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
@@ -41,10 +42,7 @@
 	}: Props = $props();
 
 	let description = $state('');
-	// Initial value only: parent remounts this pane via {#key} when the modal
-	// reopens, so a stale capture is impossible.
-	// svelte-ignore state_referenced_locally
-	let kanbanAgentId = $state(defaultKanbanAgentId);
+	let kanbanAgentId = $state(untrack(() => defaultKanbanAgentId));
 	let preview = $state<KanbanCardCreate | null>(null);
 
 	export async function compose(): Promise<KanbanCardCreate | null> {

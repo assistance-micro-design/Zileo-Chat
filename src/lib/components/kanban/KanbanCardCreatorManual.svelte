@@ -6,6 +6,7 @@
   optional recurrence). Defers recurrence UI to KanbanScheduleForm.
 -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { i18n } from '$lib/i18n';
 	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
@@ -43,10 +44,7 @@
 
 	let title = $state('');
 	let description = $state('');
-	// Initial value only: parent remounts this pane via {#key} when the modal
-	// reopens, so a stale capture is impossible.
-	// svelte-ignore state_referenced_locally
-	let kanbanAgentId = $state(defaultKanbanAgentId);
+	let kanbanAgentId = $state(untrack(() => defaultKanbanAgentId));
 	let targetAgentId = $state('');
 	let promptId = $state('');
 	let inlinePrompt = $state('');
