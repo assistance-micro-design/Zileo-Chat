@@ -12,12 +12,6 @@
 //! Private tool: not registered, not factory-instantiable. Injected via the
 //! `extra_tools` parameter of `tool_loop::execute_with_tools` by
 //! `compose_card.rs` and `kanban_analyzer.rs`.
-//
-// `#[allow(dead_code)]` is transitional: this tool ships in the Phase 2
-// commit but is first wired in by Phase 3's refactor of compose/analyze.
-// The annotation MUST be removed in that commit. Unit tests already
-// exercise the tool end-to-end.
-#![allow(dead_code)]
 
 use crate::db::DBClient;
 use crate::tools::description_builder::ToolDescriptionBuilder;

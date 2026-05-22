@@ -18,12 +18,6 @@
 //!
 //! `kanban_agent_id` is wired in via the struct so the LLM cannot spoof a
 //! different author for the card.
-//
-// `#[allow(dead_code)]` is transitional: this tool ships in the Phase 2
-// commit but is first wired in by Phase 3's refactor of
-// `commands/compose_card.rs`. The annotation MUST be removed in that
-// commit. Unit tests already exercise the tool end-to-end.
-#![allow(dead_code)]
 
 use crate::commands::kanban_card::{
     validate_description, validate_title, validate_variables_json, validate_xor_prompt,
@@ -229,6 +223,7 @@ impl Tool for SubmitComposedCardTool {
         let variables = validate_variables_json(&variables).map_err(ToolError::ValidationFailed)?;
 
         let card = KanbanCardCreate {
+            id: None,
             title,
             description,
             kanban_agent_id: self.kanban_agent_id.clone(),

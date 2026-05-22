@@ -12,12 +12,6 @@
 //!
 //! Private tool: not registered, not factory-instantiable. Injected via the
 //! `extra_tools` parameter of `tool_loop::execute_with_tools`.
-//
-// `#[allow(dead_code)]` is transitional: this tool ships in the Phase 2
-// commit but is first wired in by Phase 3's refactor of
-// `commands/kanban_analyzer.rs`. The annotation MUST be removed in that
-// commit. Unit tests already exercise the tool end-to-end.
-#![allow(dead_code)]
 
 use crate::commands::kanban_analyzer::{AnalyzeReport, AnalyzeVerdict};
 use crate::tools::description_builder::ToolDescriptionBuilder;

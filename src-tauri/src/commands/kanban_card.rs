@@ -91,7 +91,10 @@ pub async fn create_kanban_card_core(
     };
     let inline_prompt = data.inline_prompt;
 
-    let card_id = uuid::Uuid::new_v4().to_string();
+    let card_id = match data.id.as_deref() {
+        Some(id) if !id.trim().is_empty() => validate_uuid_field(id, "id")?,
+        _ => uuid::Uuid::new_v4().to_string(),
+    };
     let prompt_id_sql = match &prompt_id {
         Some(id) => format!("'{}'", id),
         None => "NONE".to_string(),

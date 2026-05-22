@@ -10,43 +10,46 @@
 //! Trigger: workflow_complete listener in main.rs, only when the card's
 //! Kanban agent has `auto_analyze_reports = true`. Skipped otherwise.
 //!
+//! Runs the agent through `tool_loop::execute_with_tools` with a private
+//! `SubmitAnalysisTool` (capturing the final verdict via `Arc<Mutex<_>>`)
+//! and `ListAgentsTool` (for context discovery). The agent honours its own
+//! `tools`, `mcp_servers` and `skills` so the verdict can be informed by
+//! knowledge tools.
+//!
 //! Verdicts:
-//! - `approve` → card moves to column='done', status='done'
-//! - `reject` → card stays in column='review' with `error_summary` filled
-//! - `needs_improvement` → card stays in review; emits
+//! - `approve` -> card moves to column='done', status='done'
+//! - `reject` -> card stays in column='review' with `error_summary` filled
+//! - `needs_improvement` -> card stays in review; emits
 //!   `kanban:needs_improvement` so the frontend can pre-open the prompt
 //!   improvement modal with the suggested edit
-//! - `skipped` → agent had the flag disabled (handled before LLM call)
+//! - `skipped` -> agent had the flag disabled (handled before LLM call)
 
+use crate::agents::core::agent::Task;
+use crate::agents::execution::tool_loop::{self, PricingCache, ToolLoopContext};
 use crate::commands::agent::hydrate_llm_from_model;
-use crate::commands::compose_card::extract_json_payload;
 use crate::commands::kanban_card::get_kanban_card_core;
+use crate::commands::kanban_interaction::persist_interaction;
 use crate::db::DBClient;
-use crate::llm::{CompletionParams, ProviderManager, ProviderType};
-use crate::models::agent::ReasoningEffort;
-use crate::models::LLMConfig;
+use crate::llm::ProviderManager;
+use crate::mcp::MCPManager;
+use crate::models::kanban_card_interaction::InteractionKind;
+use crate::models::AgentConfig;
 use crate::security::validate_uuid_field;
+use crate::tools::list_agents::ListAgentsTool;
+use crate::tools::submit_analysis::SubmitAnalysisTool;
 use crate::tools::utils::safe_truncate;
+use crate::tools::{Tool, ToolFactory};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::str::FromStr;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, warn};
 
 /// Hard cap on report length passed to the analyzer LLM. Prevents a
 /// runaway report from blowing the context window and the cost budget.
 const MAX_REPORT_CHARS_FOR_ANALYSIS: usize = 12_000;
-
-/// Sampling temperature for the analyzer — low because we want a
-/// structured verdict, not creative writing.
-const ANALYZE_TEMPERATURE: f64 = 0.2;
-
-/// Cap on the LLM response: the JSON verdict is small (a few hundred
-/// chars) plus an optional prompt edit. 4000 tokens leaves room for the
-/// reasoning text.
-const ANALYZE_MAX_OUTPUT_TOKENS: usize = 4_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -67,18 +70,13 @@ pub struct AnalyzeReport {
     pub suggested_prompt_edit: Option<String>,
 }
 
-struct AnalysisAgent {
-    system_prompt: String,
-    llm: LLMConfig,
-    reasoning_effort: Option<ReasoningEffort>,
-    auto_analyze_reports: bool,
-}
-
 /// Core analyzer entry point. Returns the verdict so callers (manual
 /// trigger via Tauri command, listener spawn) can act on it.
-#[instrument(skip(db, llm_manager, app_handle), fields(card_id = %card_id))]
+#[instrument(skip(db, tool_factory, mcp_manager, llm_manager, app_handle), fields(card_id = %card_id))]
 pub async fn analyze_card_report_core(
     db: &Arc<DBClient>,
+    tool_factory: &Arc<ToolFactory>,
+    mcp_manager: &Arc<MCPManager>,
     llm_manager: &Arc<ProviderManager>,
     app_handle: &AppHandle,
     card_id: &str,
@@ -93,8 +91,8 @@ pub async fn analyze_card_report_core(
         )
     })?;
 
-    let agent = load_kanban_agent_for_analysis(db, &card.kanban_agent_id).await?;
-    if !agent.auto_analyze_reports {
+    let mut config = load_kanban_agent_for_analysis(db, &card.kanban_agent_id).await?;
+    if !config.auto_analyze_reports {
         debug!(
             kanban_agent_id = %card.kanban_agent_id,
             "Kanban agent has auto_analyze_reports=false — skipping"
@@ -106,40 +104,57 @@ pub async fn analyze_card_report_core(
         });
     }
 
-    let report = load_workflow_report(db, &workflow_id).await?;
+    let report_text = load_workflow_report(db, &workflow_id).await?;
+    config.system_prompt = build_analyze_system_prompt(&config.system_prompt);
 
-    let system_prompt = build_analyze_system_prompt(&agent.system_prompt);
-    let user_prompt = build_analyze_user_prompt(&card.title, &card.description, &report);
+    let capture: Arc<Mutex<Option<AnalyzeReport>>> = Arc::new(Mutex::new(None));
+    let extra_tools: Vec<Arc<dyn Tool>> = vec![
+        Arc::new(ListAgentsTool::new(db.clone())),
+        Arc::new(SubmitAnalysisTool::new(capture.clone())),
+    ];
 
-    let provider = ProviderType::from_str(&agent.llm.provider)
-        .map_err(|e| format!("Invalid provider '{}': {}", agent.llm.provider, e))?;
-    let reasoning_effort = if agent.llm.is_reasoning {
-        agent.reasoning_effort.clone()
-    } else {
-        None
+    let user_prompt = build_analyze_user_prompt(&card.title, &card.description, &report_text);
+    let task = Task {
+        id: uuid::Uuid::new_v4().to_string(),
+        description: user_prompt.clone(),
+        context: json!({}),
     };
-    let params = CompletionParams {
-        prompt: user_prompt,
-        system_prompt: Some(system_prompt),
-        model: Some(agent.llm.model.clone()),
-        temperature: ANALYZE_TEMPERATURE,
-        max_tokens: agent.llm.max_tokens.min(ANALYZE_MAX_OUTPUT_TOKENS),
-        reasoning_effort,
-        context_window: agent.llm.context_window,
-    };
-    let response = llm_manager
-        .complete_with_provider(provider, params)
-        .await
-        .map_err(|e| format!("Analyzer LLM completion failed: {}", e))?;
-    debug!(
-        provider = %agent.llm.provider,
-        model = %agent.llm.model,
-        tokens_in = response.tokens_input,
-        tokens_out = response.tokens_output,
-        "Analyzer LLM completion done"
-    );
 
-    let analysis = parse_analyze_response(&response.content)?;
+    let pricing_cache = PricingCache::load(db, &config).await;
+
+    let ctx = ToolLoopContext {
+        config: &config,
+        provider_manager: llm_manager,
+        tool_factory: Some(tool_factory),
+        agent_context: None,
+    };
+    let exec_report =
+        tool_loop::execute_with_tools(ctx, task, Some(mcp_manager.clone()), None, extra_tools)
+            .await
+            .map_err(|e| format!("Analyze tool_loop failed: {}", e))?;
+
+    let analysis = capture.lock().await.take().ok_or_else(|| {
+        "Agent did not call SubmitAnalysisTool. Review your system prompt or model choice."
+            .to_string()
+    })?;
+
+    let summary = format!("verdict: {:?}", analysis.verdict);
+    if let Err(e) = persist_interaction(
+        db,
+        &validated_card_id,
+        InteractionKind::Analyze,
+        &card.kanban_agent_id,
+        &config.llm,
+        &user_prompt,
+        &exec_report,
+        Some(&summary),
+        &pricing_cache,
+    )
+    .await
+    {
+        warn!(error = %e, "Failed to persist analyze interaction (non-fatal)");
+    }
+
     apply_verdict(db, &validated_card_id, &analysis).await?;
     emit_verdict_event(app_handle, &validated_card_id, &analysis);
     info!(
@@ -153,9 +168,12 @@ pub async fn analyze_card_report_core(
 async fn load_kanban_agent_for_analysis(
     db: &Arc<DBClient>,
     agent_id: &str,
-) -> Result<AnalysisAgent, String> {
+) -> Result<AgentConfig, String> {
     let q = format!(
-        "SELECT system_prompt, kind, llm, reasoning_effort, auto_analyze_reports FROM agent:`{}`",
+        "SELECT meta::id(id) AS id, name, lifecycle, llm, tools, mcp_servers, skills, \
+         folders, require_file_confirmation, system_prompt, max_tool_iterations, \
+         reasoning_effort, kind, auto_analyze_reports \
+         FROM agent:`{}`",
         agent_id
     );
     let rows = db
@@ -169,34 +187,13 @@ async fn load_kanban_agent_for_analysis(
     if row["kind"].as_str() != Some("kanban") {
         return Err(format!("Agent {} is not Kanban-kind", agent_id));
     }
-    let system_prompt = row["system_prompt"].as_str().unwrap_or("").to_string();
-    let auto_analyze_reports = row["auto_analyze_reports"].as_bool().unwrap_or(false);
-
-    let llm_value = row
-        .get("llm")
-        .cloned()
-        .ok_or_else(|| "Kanban agent has no llm config".to_string())?;
-    let mut llm: LLMConfig = serde_json::from_value(llm_value)
-        .map_err(|e| format!("Failed to deserialize agent llm config: {}", e))?;
-    if llm.model.trim().is_empty() {
+    let mut config: AgentConfig = serde_json::from_value(row)
+        .map_err(|e| format!("Failed to deserialize Kanban agent config: {}", e))?;
+    if config.llm.model.trim().is_empty() {
         return Err("Kanban agent has no LLM model configured".to_string());
     }
-    hydrate_llm_from_model(db, &mut llm).await?;
-
-    let reasoning_effort: Option<ReasoningEffort> = row
-        .get("reasoning_effort")
-        .filter(|v| !v.is_null())
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(|e| format!("Failed to deserialize reasoning_effort: {}", e))?;
-
-    Ok(AnalysisAgent {
-        system_prompt,
-        llm,
-        reasoning_effort,
-        auto_analyze_reports,
-    })
+    hydrate_llm_from_model(db, &mut config.llm).await?;
+    Ok(config)
 }
 
 async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<String, String> {
@@ -226,7 +223,8 @@ fn build_analyze_system_prompt(agent_sp: &str) -> String {
         "# Report analysis mode\n\n\
          You are reviewing the output of a worker agent you orchestrated. \
          Read the user's original demand (title + description) and the \
-         worker's final report, then return a structured verdict.\n\n\
+         worker's final report, then return a structured verdict by calling \
+         SubmitAnalysis exactly once.\n\n\
          ## Possible verdicts\n\n\
          - `approve` — The report fulfils the demand correctly and is ready \
            for the user. The card will be auto-moved to Done.\n\
@@ -236,12 +234,10 @@ fn build_analyze_system_prompt(agent_sp: &str) -> String {
          - `needs_improvement` — The report has issues but they likely come \
            from the prompt itself. Provide a `suggested_prompt_edit` with the \
            full new prompt text; the user will be invited to apply it.\n\n\
-         ## Output contract (STRICT)\n\n\
-         Reply with ONE JSON object only, no prose, no markdown fences:\n\
-         - `verdict` (string, one of: \"approve\" | \"reject\" | \"needs_improvement\")\n\
-         - `reasoning` (string, 20..=2000 chars, in the user's language)\n\
-         - `suggested_prompt_edit` (string, only for `needs_improvement`; the FULL \
-           replacement prompt text, not a diff)\n",
+         ## Submit contract\n\n\
+         You MUST call SubmitAnalysis exactly once before ending your turn. \
+         You may use any of your other assigned tools (skills, memory, MCP) \
+         to inform your verdict.\n",
     );
     s
 }
@@ -251,64 +247,11 @@ fn build_analyze_user_prompt(title: &str, description: &str, report: &str) -> St
         "## Card title\n{}\n\n\
          ## Original demand\n{}\n\n\
          ## Worker's final report\n{}\n\n\
-         Analyse this report against the demand and emit your verdict JSON.",
+         Analyse this report against the demand and call SubmitAnalysis with your verdict.",
         title.trim(),
         description.trim(),
         report
     )
-}
-
-fn parse_analyze_response(content: &str) -> Result<AnalyzeReport, String> {
-    let payload = extract_json_payload(content).ok_or_else(|| {
-        format!(
-            "Analyzer response did not contain a JSON object: {}",
-            content
-        )
-    })?;
-
-    let verdict_str = payload["verdict"]
-        .as_str()
-        .ok_or_else(|| "Missing verdict field".to_string())?
-        .trim()
-        .to_lowercase();
-    let verdict = match verdict_str.as_str() {
-        "approve" => AnalyzeVerdict::Approve,
-        "reject" => AnalyzeVerdict::Reject,
-        "needs_improvement" => AnalyzeVerdict::NeedsImprovement,
-        other => return Err(format!("Unknown verdict: {}", other)),
-    };
-
-    let reasoning = payload["reasoning"]
-        .as_str()
-        .ok_or_else(|| "Missing reasoning field".to_string())?
-        .trim()
-        .to_string();
-    if reasoning.len() < 5 {
-        return Err("Reasoning is too short".to_string());
-    }
-    if reasoning.len() > 4_000 {
-        return Err("Reasoning exceeds 4000 chars".to_string());
-    }
-
-    let suggested_prompt_edit = if matches!(verdict, AnalyzeVerdict::NeedsImprovement) {
-        let raw = payload["suggested_prompt_edit"]
-            .as_str()
-            .ok_or_else(|| "needs_improvement verdict requires suggested_prompt_edit".to_string())?
-            .trim()
-            .to_string();
-        if raw.is_empty() {
-            return Err("suggested_prompt_edit is empty".to_string());
-        }
-        Some(raw)
-    } else {
-        None
-    };
-
-    Ok(AnalyzeReport {
-        verdict,
-        reasoning,
-        suggested_prompt_edit,
-    })
 }
 
 async fn apply_verdict(
@@ -370,58 +313,13 @@ pub async fn analyze_card_report(
     app_handle: AppHandle,
 ) -> Result<AnalyzeReport, String> {
     info!("Manually analyzing card report");
-    analyze_card_report_core(&state.db, &state.llm_manager, &app_handle, &card_id).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_approve_verdict() {
-        let raw = r#"{"verdict":"approve","reasoning":"Report fully addresses the user's demand with accurate facts."}"#;
-        let r = parse_analyze_response(raw).unwrap();
-        assert_eq!(r.verdict, AnalyzeVerdict::Approve);
-        assert!(r.suggested_prompt_edit.is_none());
-    }
-
-    #[test]
-    fn parse_reject_verdict() {
-        let raw = r#"{"verdict":"reject","reasoning":"Report is off-topic, talks about unrelated company."}"#;
-        let r = parse_analyze_response(raw).unwrap();
-        assert_eq!(r.verdict, AnalyzeVerdict::Reject);
-    }
-
-    #[test]
-    fn parse_needs_improvement_requires_edit() {
-        let raw = r#"{"verdict":"needs_improvement","reasoning":"Prompt was too vague to constrain output."}"#;
-        assert!(parse_analyze_response(raw).is_err());
-    }
-
-    #[test]
-    fn parse_needs_improvement_with_edit() {
-        let raw = r#"{"verdict":"needs_improvement","reasoning":"Prompt was too vague to constrain output.","suggested_prompt_edit":"Search Mistral AI's official blog for the latest 5 announcements published in the last 30 days. Return them as a bullet list with dates."}"#;
-        let r = parse_analyze_response(raw).unwrap();
-        assert_eq!(r.verdict, AnalyzeVerdict::NeedsImprovement);
-        assert!(r.suggested_prompt_edit.is_some());
-    }
-
-    #[test]
-    fn parse_unknown_verdict_fails() {
-        let raw = r#"{"verdict":"maybe","reasoning":"unclear."}"#;
-        assert!(parse_analyze_response(raw).is_err());
-    }
-
-    #[test]
-    fn parse_garbage_fails() {
-        assert!(parse_analyze_response("no json here").is_err());
-    }
-
-    #[test]
-    fn parse_fenced_response() {
-        let raw =
-            "```json\n{\"verdict\":\"approve\",\"reasoning\":\"All good and complete.\"}\n```";
-        let r = parse_analyze_response(raw).unwrap();
-        assert_eq!(r.verdict, AnalyzeVerdict::Approve);
-    }
+    analyze_card_report_core(
+        &state.db,
+        &state.tool_factory,
+        &state.mcp_manager,
+        &state.llm_manager,
+        &app_handle,
+        &card_id,
+    )
+    .await
 }

@@ -81,6 +81,12 @@ pub struct KanbanCard {
 /// Payload to create a new kanban card.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KanbanCardCreate {
+    /// Optional pre-generated card id. Set by `compose_card` so the
+    /// associated `kanban_card_interaction` row can be linked to the card
+    /// before it is actually persisted. When `None`, `create_kanban_card_core`
+    /// generates a fresh UUID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub title: String,
     #[serde(default)]
     pub description: String,

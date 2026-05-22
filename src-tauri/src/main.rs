@@ -453,6 +453,8 @@ async fn main() -> anyhow::Result<()> {
                 use tauri::Listener;
                 let db = state.inner().db.clone();
                 let llm_manager = state.inner().llm_manager.clone();
+                let tool_factory = state.inner().tool_factory.clone();
+                let mcp_manager = state.inner().mcp_manager.clone();
                 let app_handle_for_listener = app.handle().clone();
                 app.handle().listen("workflow_complete", move |evt| {
                     let payload: serde_json::Value = match serde_json::from_str(evt.payload()) {
@@ -474,6 +476,8 @@ async fn main() -> anyhow::Result<()> {
                     let success = status == "completed";
                     let db = db.clone();
                     let llm_manager = llm_manager.clone();
+                    let tool_factory = tool_factory.clone();
+                    let mcp_manager = mcp_manager.clone();
                     let app_handle = app_handle_for_listener.clone();
                     tauri::async_runtime::spawn(async move {
                         if let Err(e) = commands::scheduler::mark_card_done_core(
@@ -517,6 +521,8 @@ async fn main() -> anyhow::Result<()> {
                         };
                         if let Err(e) = commands::kanban_analyzer::analyze_card_report_core(
                             &db,
+                            &tool_factory,
+                            &mcp_manager,
                             &llm_manager,
                             &app_handle,
                             &card_id,
