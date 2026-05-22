@@ -94,6 +94,7 @@
 	let unlistenAutoAnalyzed: TauriUnlistenFn | null = null;
 	let unlistenNeedsImprovement: TauriUnlistenFn | null = null;
 	let unlistenAnalyzing: TauriUnlistenFn | null = null;
+	let unlistenPurged: TauriUnlistenFn | null = null;
 	let unlistenSettingsRefresh: (() => void) | null = null;
 
 	/** Card ids currently being finalized by the Kanban agent. */
@@ -212,6 +213,16 @@
 			pageError = getErrorMessage(e);
 		}
 
+		// Listener for the scheduler's purge of stale `done` cards — refresh
+		// the board so the deleted cards disappear without a manual reload.
+		try {
+			unlistenPurged = await tauriListen<{ card_ids: string[] }>('kanban:cards_purged', () => {
+				void kanbanStore.loadCards(agentFilter || undefined);
+			});
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+
 		// Cross-surface settings refresh (agents added/renamed) — reload agents list silently.
 		const onSettingsRefresh = (): void => {
 			void agentStore.loadAgents();
@@ -229,6 +240,7 @@
 		unlistenAutoAnalyzed?.();
 		unlistenNeedsImprovement?.();
 		unlistenAnalyzing?.();
+		unlistenPurged?.();
 		unlistenSettingsRefresh?.();
 	});
 

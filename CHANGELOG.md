@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-purge of stale `done` Kanban cards** — the kanban scheduler now deletes cards stuck in the `done` column for more than 3 days on each 60s tick. Cards that are themselves the template of an enabled recurrence schedule are never purged (they are the user's blueprint). Linked `kanban_card_interaction` rows are cascaded; `workflow` rows are preserved so completed runs remain consultable independently. The frontend listens to the new `kanban:cards_purged` event and refreshes the board live, so removed cards disappear without a manual reload.
+
 ## [0.25.0] - 2026-05-20
 
 Push-to-talk voice dictation via Mistral Voxtral (`feature/dictee-vocale-mistral-stt`). Global microphone button in the top navigation (next to the "Zileo Chat" title) plus a `Ctrl+Shift+Space` hotkey — both record while held and transcribe on release. The resulting text is inserted at the cursor of the originally-focused field (textarea or text-like input), so dictation works in the chat composer, in agent forms, in settings, anywhere a text field has focus. Configured under **Settings > Voice Dictation**: enable toggle, Voxtral model id (validated against an allowlist), free-text context-bias hints (project nouns / jargon that get forwarded into the prompt), and an optional language override (auto / explicit ISO 639-1). Tests verts : 1463 Rust lib (+10 STT) + clippy `--all-targets` clean + svelte-check 4262 / 0 errors + 522 Vitest (+70 STT) + ESLint / Prettier clean. Zero schema migration. One new Linux-only Cargo dependency (`webkit2gtk = "2.0"`, target-conditional).

@@ -10,7 +10,7 @@
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
 	import { Badge, Button, Spinner } from '$lib/components/ui';
-	import { Eye, Trash2, FileText, Wand2, Repeat, Copy, Pencil } from '@lucide/svelte';
+	import { Eye, Trash2, FileText, Wand2, Repeat, Copy, Pencil, Clock } from '@lucide/svelte';
 	import type { KanbanCard, KanbanCardStatus } from '$types/kanban';
 	import { runningWorkflows } from '$lib/stores/background-workflows';
 
@@ -108,6 +108,21 @@
 		}
 	}
 
+	/**
+	 * Days remaining before the scheduler auto-purges this card. Returns
+	 * `null` when the countdown doesn't apply: cards outside the `done`
+	 * column, or `done` cards attached to an enabled schedule (templates
+	 * are never purged). Mirrors `DONE_CARD_TTL_DAYS` (3) on the backend.
+	 */
+	const DONE_CARD_TTL_DAYS = 3;
+	const purgeCountdownDays = $derived.by<number | null>(() => {
+		if (card.column !== 'done' || hasSchedule) return null;
+		const updatedMs = Date.parse(card.updated_at);
+		if (!Number.isFinite(updatedMs)) return null;
+		const elapsedDays = (Date.now() - updatedMs) / 86_400_000;
+		return Math.max(0, Math.ceil(DONE_CARD_TTL_DAYS - elapsedDays));
+	});
+
 	function handleDelete(): void {
 		if (isStuck) {
 			const ok = confirm($i18n('kanban_confirm_force_delete_stuck'));
@@ -130,6 +145,18 @@
 			<Badge variant={badgeVariantFor(displayStatus)}>
 				{$i18n(`kanban_status_${displayStatus}`)}
 			</Badge>
+			{#if purgeCountdownDays !== null}
+				<span
+					class="card-purge-countdown"
+					class:imminent={purgeCountdownDays === 0}
+					title={$i18n('kanban_card_purge_tooltip')}
+				>
+					<Clock size={11} aria-hidden="true" />
+					{purgeCountdownDays === 0
+						? $i18n('kanban_card_purge_imminent')
+						: $i18n('kanban_card_purge_in_days').replace('{days}', String(purgeCountdownDays))}
+				</span>
+			{/if}
 		</div>
 	</header>
 
@@ -275,6 +302,20 @@
 		line-height: 1.3;
 		flex: 1;
 		min-width: 0;
+	}
+	.card-purge-countdown {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		padding: 0.1rem 0.35rem;
+		border-radius: 999px;
+		background: var(--color-surface-alt, rgba(0, 0, 0, 0.04));
+		white-space: nowrap;
+	}
+	.card-purge-countdown.imminent {
+		color: var(--color-warning, #b45309);
 	}
 	.card-meta {
 		margin: 0;

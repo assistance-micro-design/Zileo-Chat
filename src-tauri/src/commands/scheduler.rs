@@ -31,6 +31,12 @@ use tracing::{debug, info, warn};
 /// Tick period for the scheduler loop.
 pub const SCHEDULER_TICK_SECS: u64 = 60;
 
+/// Cards stuck in the `done` column past this many days are auto-purged on
+/// each scheduler tick. Cards that are themselves a recurrence template
+/// (referenced by an enabled `kanban_schedule`) are never purged regardless
+/// of age — they are the user's blueprint and must persist.
+pub const DONE_CARD_TTL_DAYS: i64 = 3;
+
 /// Maximum number of missed occurrences we spawn per schedule per tick.
 /// Prevents an explosion of cards if the app was closed for weeks.
 pub const MAX_CATCHUP_PER_SCHEDULE: usize = 7;
@@ -67,8 +73,80 @@ pub fn spawn_kanban_scheduler_task(
                 Ok(_) => debug!("Kanban scheduler: no slots / no cards to promote"),
                 Err(e) => warn!(error = %e, "Kanban scheduler: queue error"),
             }
+            match purge_stale_done_cards_core(&db).await {
+                Ok(ids) if !ids.is_empty() => {
+                    info!(
+                        purged = ids.len(),
+                        "Kanban scheduler: purged stale done cards"
+                    );
+                    let _ = app_handle.emit("kanban:cards_purged", json!({ "card_ids": ids }));
+                }
+                Ok(_) => debug!("Kanban scheduler: nothing to purge"),
+                Err(e) => warn!(error = %e, "Kanban scheduler: purge error"),
+            }
         }
     })
+}
+
+/// Deletes cards stuck in `done` for more than `DONE_CARD_TTL_DAYS` days,
+/// EXCEPT cards that are templates of an enabled recurrence schedule —
+/// those are the user's blueprint. Linked `kanban_card_interaction` rows
+/// are cascaded. `workflow` rows are intentionally preserved (workflows
+/// remain consultable independently of their originating card).
+///
+/// Returns the list of purged card ids so callers can emit a UI refresh
+/// event with the exact set of removed ids.
+pub async fn purge_stale_done_cards_core(db: &Arc<DBClient>) -> Result<Vec<String>, String> {
+    // 1. Resolve the victim set first. We need the ids both to cascade
+    //    interactions and to ship them to the frontend listener.
+    let pick_q = format!(
+        "SELECT meta::id(id) AS id FROM kanban_card \
+         WHERE `column` = 'done' \
+           AND updated_at < time::now() - {}d \
+           AND meta::id(id) NOT IN \
+               (SELECT VALUE card_template_id FROM kanban_schedule WHERE enabled = true)",
+        DONE_CARD_TTL_DAYS
+    );
+    let rows = db
+        .query_json(&pick_q)
+        .await
+        .map_err(|e| format!("Failed to pick stale done cards: {}", e))?;
+    let victims: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect();
+    if victims.is_empty() {
+        return Ok(victims);
+    }
+
+    // 2. Cascade interactions first (foreign-key-like cleanup; SurrealDB
+    //    has no real FK so we do it explicitly).
+    let ids_json = serde_json::to_string(&victims)
+        .map_err(|e| format!("Failed to serialize purge ids: {}", e))?;
+    let del_interactions = format!(
+        "DELETE kanban_card_interaction WHERE card_id IN {}",
+        ids_json
+    );
+    db.execute(&del_interactions)
+        .await
+        .map_err(|e| format!("Failed to cascade interactions: {}", e))?;
+
+    // 3. Delete the cards themselves. Re-evaluate the same predicate to
+    //    stay race-safe: if the user just dropped a new schedule on one of
+    //    them between step 1 and now, the NOT IN clause will save it.
+    let del_cards = format!(
+        "DELETE kanban_card \
+         WHERE meta::id(id) IN {} \
+           AND `column` = 'done' \
+           AND meta::id(id) NOT IN \
+               (SELECT VALUE card_template_id FROM kanban_schedule WHERE enabled = true)",
+        ids_json
+    );
+    db.execute(&del_cards)
+        .await
+        .map_err(|e| format!("Failed to delete stale done cards: {}", e))?;
+
+    Ok(victims)
 }
 
 /// Reads every enabled schedule whose `next_run_at` is in the past and
@@ -553,6 +631,122 @@ mod tests {
         assert!(
             ids.contains(&regular_id),
             "regular ready card must remain eligible"
+        );
+    }
+
+    /// Purge of stale `done` cards: cards in `done` whose `updated_at` is
+    /// older than DONE_CARD_TTL_DAYS must be deleted, UNLESS they are
+    /// referenced as `card_template_id` by an enabled `kanban_schedule`
+    /// (those are recurrence blueprints). Linked
+    /// `kanban_card_interaction` rows are cascaded; `workflow` rows are
+    /// preserved.
+    #[tokio::test]
+    async fn test_purge_stale_done_cards() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        // 1. Stale done, no schedule -> MUST be purged.
+        let stale_id = uuid::Uuid::new_v4().to_string();
+        // 2. Stale done, IS a schedule template -> MUST stay.
+        let stale_tmpl_id = uuid::Uuid::new_v4().to_string();
+        // 3. Recent done -> MUST stay.
+        let recent_id = uuid::Uuid::new_v4().to_string();
+        // 4. Stale but in `review` -> MUST stay (only `done` is purged).
+        let stale_review_id = uuid::Uuid::new_v4().to_string();
+
+        let stale_ts = "time::now() - 4d";
+        let recent_ts = "time::now() - 1d";
+
+        for (cid, col, ts) in [
+            (&stale_id, "done", stale_ts),
+            (&stale_tmpl_id, "done", stale_ts),
+            (&recent_id, "done", recent_ts),
+            (&stale_review_id, "review", stale_ts),
+        ] {
+            let q = format!(
+                "CREATE kanban_card:`{cid}` CONTENT {{
+                    id: '{cid}', title: 't', description: '',
+                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                    target_folder_id: NONE, status: 'done', `column`: '{col}',
+                    `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                    created_at: {ts}, updated_at: {ts}
+                }}"
+            );
+            state.db.execute(&q).await.unwrap();
+        }
+
+        // Attach enabled schedule to stale_tmpl_id.
+        let sid = uuid::Uuid::new_v4().to_string();
+        let sched = format!(
+            "CREATE kanban_schedule:`{sid}` CONTENT {{
+                id: '{sid}', card_template_id: '{stale_tmpl_id}',
+                days_of_week: [0], hour: 9, minute: 0,
+                next_run_at: time::now() + 7d,
+                last_run_at: NONE, enabled: true, skip_if_pending: false,
+                created_at: time::now()
+            }}"
+        );
+        state.db.execute(&sched).await.unwrap();
+
+        // Attach an interaction row to the stale card (must be cascaded).
+        let int_id = uuid::Uuid::new_v4().to_string();
+        let interaction = format!(
+            "CREATE kanban_card_interaction:`{int_id}` CONTENT {{
+                id: '{int_id}', card_id: '{stale_id}', kind: 'compose',
+                kanban_agent_id: '{agent_id}', provider: 'mistral',
+                model_id_used: 'm', task_input: 'x',
+                iterations: [], created_at: time::now()
+            }}"
+        );
+        state.db.execute(&interaction).await.unwrap();
+
+        let purged = purge_stale_done_cards_core(&state.db).await.unwrap();
+        assert_eq!(purged.len(), 1, "exactly one card must be purged");
+        assert_eq!(
+            purged[0], stale_id,
+            "the only purged card must be the stale non-template"
+        );
+
+        // Verify DB state.
+        let remaining = state
+            .db
+            .query_json("SELECT meta::id(id) AS id FROM kanban_card")
+            .await
+            .unwrap();
+        let remaining_ids: Vec<String> = remaining
+            .iter()
+            .filter_map(|r| r["id"].as_str().map(String::from))
+            .collect();
+        assert!(
+            !remaining_ids.contains(&stale_id),
+            "stale non-template card must be gone"
+        );
+        assert!(
+            remaining_ids.contains(&stale_tmpl_id),
+            "stale template card must stay"
+        );
+        assert!(
+            remaining_ids.contains(&recent_id),
+            "recent done card must stay"
+        );
+        assert!(
+            remaining_ids.contains(&stale_review_id),
+            "stale review card must stay"
+        );
+
+        // Interaction must be cascaded.
+        let interactions = state
+            .db
+            .query_json(&format!(
+                "SELECT meta::id(id) AS id FROM kanban_card_interaction WHERE card_id = '{}'",
+                stale_id
+            ))
+            .await
+            .unwrap();
+        assert!(
+            interactions.is_empty(),
+            "interaction rows must be cascaded on purge"
         );
     }
 
