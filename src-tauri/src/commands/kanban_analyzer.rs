@@ -248,7 +248,11 @@ fn build_analyze_system_prompt(agent_sp: &str) -> String {
          - `WorkflowManager.list_workflow_errors({workflow_id})` lists failed tool calls \
            with iteration, agent_id and duration so you can tell whether failures came \
            from the orchestrator or a sub-agent.\n\
-         Skip this when the report is clear; it costs extra tokens.\n",
+         - `WorkflowManager.list_workflow_sub_agents({workflow_id})` lists every sub-agent \
+           execution (successes included), with sub_agent_id, sub_agent_name, status, \
+           duration and cost. Useful to know exactly which permanent agents participated \
+           and pick the right target_agent_id when you want to revise that agent's skills.\n\
+         Skip these when the report is clear; they cost extra tokens.\n",
     );
     s
 }

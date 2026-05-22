@@ -60,18 +60,23 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
             "list_workflow_errors",
             "Up to 50 failed tool executions ordered by sequence ASC. Each entry carries tool_name, server_name, error_message, iteration, agent_id, duration_ms — enough to tell orchestrator-level failures apart from sub-agent ones.",
         ),
+        (
+            "list_workflow_sub_agents",
+            "Up to 200 sub-agent executions ordered by created_at ASC. Each entry carries sub_agent_id, sub_agent_name, parent_agent_id, status, task_description, duration_ms, cost_usd, tokens_input/output, created_at/completed_at, error_message. Lets a Kanban orchestrator identify which permanent agents actually participated in a workflow (successes included, unlike list_workflow_errors which only surfaces failures).",
+        ),
     ])
     .examples(&[
         json!({"operation": "list_workflows", "limit": 20}),
         json!({"operation": "read_workflow", "workflow_id": "<uuid>"}),
         json!({"operation": "list_workflow_errors", "workflow_id": "<uuid>"}),
+        json!({"operation": "list_workflow_sub_agents", "workflow_id": "<uuid>"}),
         json!({"operation": "create_workflow_folder", "name": "Reports", "color": "#10b981"}),
     ])
     .build(),
     input_schema: json!({
         "type": "object",
         "properties": {
-            "operation": {"type": "string", "description": "One of: list_workflows, rename_workflow, list_workflow_folders, create_workflow_folder, move_workflow_to_folder, read_workflow, list_workflow_errors."},
+            "operation": {"type": "string", "description": "One of: list_workflows, rename_workflow, list_workflow_folders, create_workflow_folder, move_workflow_to_folder, read_workflow, list_workflow_errors, list_workflow_sub_agents."},
             "workflow_id": {"type": "string", "description": "UUID of the target workflow (required by rename/move/read/list_workflow_errors)."},
             "folder_id": {"type": ["string", "null"], "description": "UUID of a workflow folder. For move_workflow_to_folder, pass null (or omit) to uncategorize. For list_workflows, acts as a filter."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 200, "description": "Cap for list_workflows (default 50)."},
@@ -89,6 +94,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
 });
 
 const MAX_ERRORS_PER_LIST: usize = 50;
+const MAX_SUB_AGENTS_PER_LIST: usize = 200;
 const DEFAULT_LIST_LIMIT: i64 = 50;
 const DEFAULT_MESSAGES_LIMIT: i64 = 20;
 const MAX_MESSAGES_LIMIT: i64 = 50;
@@ -328,6 +334,26 @@ impl WorkflowManagerTool {
         }))
     }
 
+    async fn list_workflow_sub_agents(&self, workflow_id: &str) -> ToolResult<Value> {
+        let wid =
+            validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
+        let q = format!(
+            "SELECT meta::id(id) AS id, sub_agent_id, sub_agent_name, parent_agent_id, \
+             task_description, status, duration_ms, cost_usd, tokens_input, tokens_output, \
+             cached_tokens, cache_write_tokens, thinking_tokens, \
+             error_message, created_at, completed_at \
+             FROM sub_agent_execution WHERE workflow_id = $wid \
+             ORDER BY created_at ASC LIMIT {}",
+            MAX_SUB_AGENTS_PER_LIST
+        );
+        let rows = self
+            .db
+            .query_json_with_params(&q, vec![("wid".to_string(), json!(wid))])
+            .await
+            .map_err(|e| ToolError::DatabaseError(format!("list_workflow_sub_agents: {}", e)))?;
+        Ok(json!({"success": true, "sub_agents": rows}))
+    }
+
     async fn list_workflow_errors(&self, workflow_id: &str) -> ToolResult<Value> {
         let wid =
             validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
@@ -409,6 +435,12 @@ impl Tool for WorkflowManagerTool {
                     .ok_or_else(|| ToolError::InvalidInput("workflow_id required".to_string()))?;
                 self.list_workflow_errors(wid).await
             }
+            "list_workflow_sub_agents" => {
+                let wid = input["workflow_id"]
+                    .as_str()
+                    .ok_or_else(|| ToolError::InvalidInput("workflow_id required".to_string()))?;
+                self.list_workflow_sub_agents(wid).await
+            }
             other => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",
                 other
@@ -427,7 +459,8 @@ impl Tool for WorkflowManagerTool {
             | "create_workflow_folder"
             | "move_workflow_to_folder"
             | "read_workflow"
-            | "list_workflow_errors" => Ok(()),
+            | "list_workflow_errors"
+            | "list_workflow_sub_agents" => Ok(()),
             other => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",
                 other
@@ -568,6 +601,104 @@ mod tests {
         // limit=2 keeps the LAST two chronologically (user-3, user-4).
         assert_eq!(msgs[0]["content"], "user-3");
         assert_eq!(msgs[1]["content"], "user-4");
+    }
+
+    async fn seed_sub_agent_execution(
+        db: &Arc<DBClient>,
+        workflow_id: &str,
+        parent_agent_id: &str,
+        sub_agent_id: &str,
+        sub_agent_name: &str,
+        status: &str,
+    ) -> String {
+        let id = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE sub_agent_execution:`{id}` SET \
+                id = '{id}', workflow_id = '{workflow_id}', \
+                parent_agent_id = '{parent_agent_id}', \
+                sub_agent_id = '{sub_agent_id}', \
+                sub_agent_name = $name, \
+                task_description = 'seed task', \
+                status = '{status}', \
+                duration_ms = 1234, tokens_input = 10, tokens_output = 20, \
+                cost_usd = 0.001, \
+                created_at = time::now(), completed_at = time::now()"
+        );
+        db.execute_with_params(&q, vec![("name".to_string(), json!(sub_agent_name))])
+            .await
+            .unwrap();
+        id
+    }
+
+    #[tokio::test]
+    async fn list_workflow_sub_agents_empty_returns_ok() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let res = tool.list_workflow_sub_agents(&wid).await.unwrap();
+        assert_eq!(res["success"], true);
+        assert!(res["sub_agents"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_workflow_sub_agents_returns_chronological_list() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let parent = uuid::Uuid::new_v4().to_string();
+        let worker_a = uuid::Uuid::new_v4().to_string();
+        let worker_b = uuid::Uuid::new_v4().to_string();
+
+        seed_sub_agent_execution(&state.db, &wid, &parent, &worker_a, "Worker A", "completed")
+            .await;
+        // SurrealDB time::now() resolution is ms; sleep keeps ordering stable.
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        seed_sub_agent_execution(&state.db, &wid, &parent, &worker_b, "Worker B", "error").await;
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        // Same worker invoked twice — both executions must surface.
+        seed_sub_agent_execution(&state.db, &wid, &parent, &worker_a, "Worker A", "completed")
+            .await;
+
+        let res = tool.list_workflow_sub_agents(&wid).await.unwrap();
+        let rows = res["sub_agents"].as_array().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0]["sub_agent_name"], "Worker A");
+        assert_eq!(rows[0]["status"], "completed");
+        assert_eq!(rows[1]["sub_agent_name"], "Worker B");
+        assert_eq!(rows[1]["status"], "error");
+        assert_eq!(rows[2]["sub_agent_name"], "Worker A");
+        assert_eq!(rows[0]["parent_agent_id"], parent);
+        assert_eq!(rows[0]["duration_ms"], 1234);
+        assert_eq!(rows[0]["tokens_input"], 10);
+    }
+
+    #[tokio::test]
+    async fn list_workflow_sub_agents_isolates_by_workflow() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid_a = uuid::Uuid::new_v4().to_string();
+        let wid_b = uuid::Uuid::new_v4().to_string();
+        let parent = uuid::Uuid::new_v4().to_string();
+        let worker = uuid::Uuid::new_v4().to_string();
+
+        seed_sub_agent_execution(&state.db, &wid_a, &parent, &worker, "A", "completed").await;
+        seed_sub_agent_execution(&state.db, &wid_b, &parent, &worker, "B", "completed").await;
+
+        let res = tool.list_workflow_sub_agents(&wid_a).await.unwrap();
+        let rows = res["sub_agents"].as_array().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["sub_agent_name"], "A");
+    }
+
+    #[tokio::test]
+    async fn list_workflow_sub_agents_rejects_invalid_uuid() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let err = tool
+            .list_workflow_sub_agents("not-a-uuid")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ToolError::InvalidInput(_)));
     }
 
     #[tokio::test]
