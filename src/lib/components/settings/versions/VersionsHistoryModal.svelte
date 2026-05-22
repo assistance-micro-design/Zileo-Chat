@@ -26,23 +26,28 @@
 		/** The ID of the prompt or skill whose versions are listed. */
 		resourceId: string;
 		onclose: () => void;
-		/** Called after a successful restore so the parent can refresh. */
-		onrestored?: () => void;
+		/**
+		 * Called after a successful restore or delete so the parent can refresh
+		 * (e.g. reload the version count badge or the current content).
+		 */
+		onchanged?: () => void;
 	}
 
-	let { kind, resourceId, onclose, onrestored }: Props = $props();
+	let { kind, resourceId, onclose, onchanged }: Props = $props();
 
 	let versions = $state.raw<AnyVersionSummary[]>([]);
 	let preview = $state<AnyVersion | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let restoring = $state(false);
+	let deleting = $state(false);
 
 	const listCmd = $derived(kind === 'prompt' ? 'list_prompt_versions' : 'list_skill_versions');
 	const getCmd = $derived(kind === 'prompt' ? 'get_prompt_version' : 'get_skill_version');
 	const restoreCmd = $derived(
 		kind === 'prompt' ? 'restore_prompt_version' : 'restore_skill_version'
 	);
+	const deleteCmd = $derived(kind === 'prompt' ? 'delete_prompt_version' : 'delete_skill_version');
 	const idParam = $derived(kind === 'prompt' ? 'promptId' : 'skillId');
 
 	async function loadVersions() {
@@ -70,12 +75,31 @@
 		error = null;
 		try {
 			await invoke(restoreCmd, { [idParam]: resourceId, versionId, editedBy: 'user' });
-			onrestored?.();
+			onchanged?.();
 			onclose();
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {
 			restoring = false;
+		}
+	}
+
+	async function deleteVersion(versionId: string, versionNumber: number) {
+		const message = $i18n('versions_confirm_delete').replace('{version}', String(versionNumber));
+		if (!confirm(message)) return;
+		deleting = true;
+		error = null;
+		try {
+			await invoke(deleteCmd, { versionId });
+			if (preview && preview.id === versionId) {
+				preview = null;
+			}
+			await loadVersions();
+			onchanged?.();
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -133,10 +157,22 @@
 										type="button"
 										variant="primary"
 										size="sm"
-										disabled={restoring}
+										disabled={restoring || deleting}
 										onclick={() => restoreVersion(v.id)}
 									>
 										{$i18n('versions_restore')}
+									</Button>
+									<Button
+										type="button"
+										variant="danger"
+										size="sm"
+										disabled={deleting || restoring || versions.length <= 1}
+										onclick={() => deleteVersion(v.id, v.version)}
+										ariaLabel={versions.length <= 1
+											? $i18n('versions_delete_blocked_last')
+											: $i18n('versions_delete')}
+									>
+										{$i18n('versions_delete')}
 									</Button>
 								</div>
 							</li>

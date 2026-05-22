@@ -238,6 +238,58 @@ pub async fn restore_prompt_version_core(
     Ok(())
 }
 
+/// Hard-deletes a single prompt version row. Refuses to delete the last
+/// remaining version for a given prompt so the prompt always keeps at least
+/// one snapshot to fall back on. Destructive and not reversible — the UI
+/// confirms before calling.
+pub async fn delete_prompt_version_core(db: &DBClient, version_id: &str) -> Result<(), String> {
+    let version_id = validate_uuid_field(version_id, "version_id")?;
+
+    let check_q = format!(
+        "SELECT meta::id(id) AS id, prompt_id FROM prompt_version:`{}`",
+        version_id
+    );
+    let rows = db
+        .query_json(&check_q)
+        .await
+        .map_err(|e| format!("Failed to check prompt version: {}", e))?;
+    let row = rows
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("Prompt version not found: {}", version_id))?;
+    let prompt_id = row["prompt_id"]
+        .as_str()
+        .ok_or_else(|| "Prompt version row missing prompt_id".to_string())?
+        .to_string();
+
+    let count_q = format!(
+        "SELECT count() AS c FROM prompt_version WHERE prompt_id = '{}' GROUP ALL",
+        prompt_id
+    );
+    let count_rows = db
+        .query_json(&count_q)
+        .await
+        .map_err(|e| format!("Failed to count prompt versions: {}", e))?;
+    let count = count_rows
+        .into_iter()
+        .next()
+        .and_then(|r| r["c"].as_i64())
+        .unwrap_or(0);
+    if count <= 1 {
+        return Err(
+            "Cannot delete the last remaining version — at least one snapshot must be kept"
+                .to_string(),
+        );
+    }
+
+    let q = format!("DELETE prompt_version:`{}`", version_id);
+    db.execute(&q)
+        .await
+        .map_err(|e| format!("Failed to delete prompt version: {}", e))?;
+    info!(version_id = %version_id, prompt_id = %prompt_id, "Prompt version deleted");
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tauri wrappers
 // ---------------------------------------------------------------------------
@@ -270,6 +322,15 @@ pub async fn restore_prompt_version(
 ) -> Result<(), String> {
     let edited_by = edited_by.unwrap_or_else(|| "user".to_string());
     restore_prompt_version_core(&state.db, &prompt_id, &version_id, &edited_by).await
+}
+
+#[tauri::command]
+#[instrument(name = "delete_prompt_version", skip(state), fields(version_id = %version_id))]
+pub async fn delete_prompt_version(
+    version_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    delete_prompt_version_core(&state.db, &version_id).await
 }
 
 #[cfg(test)]
@@ -322,5 +383,80 @@ mod tests {
     #[test]
     fn test_edit_summary_rejects_control_chars() {
         assert!(validate_edit_summary("user", &Some("ok\nthere".to_string())).is_err());
+    }
+
+    use crate::test_utils::setup_test_state;
+
+    async fn seed_prompt_with_versions(
+        db: &DBClient,
+        version_count: usize,
+    ) -> (String, Vec<String>) {
+        let prompt_id = uuid::Uuid::new_v4().to_string();
+        let create_q = format!(
+            "CREATE prompt:`{}` CONTENT {{
+                name: 'seed', description: 'd', category: 'custom',
+                content: '# c', variables: [],
+                created_at: time::now(), updated_at: time::now()
+            }}",
+            prompt_id
+        );
+        db.execute(&create_q).await.unwrap();
+
+        let mut version_ids = Vec::new();
+        for _ in 0..version_count {
+            let v = snapshot_prompt_version_core(db, &prompt_id, "user", None)
+                .await
+                .unwrap();
+            let q = format!(
+                "SELECT meta::id(id) AS id FROM prompt_version WHERE prompt_id = '{}' AND version = {}",
+                prompt_id, v
+            );
+            let rows = db.query_json(&q).await.unwrap();
+            version_ids.push(rows[0]["id"].as_str().unwrap().to_string());
+        }
+        (prompt_id, version_ids)
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_version_removes_row() {
+        let (state, _g) = setup_test_state().await;
+        let (_prompt_id, version_ids) = seed_prompt_with_versions(&state.db, 2).await;
+        delete_prompt_version_core(&state.db, &version_ids[0])
+            .await
+            .unwrap();
+        let q = format!(
+            "SELECT meta::id(id) AS id FROM prompt_version:`{}`",
+            version_ids[0]
+        );
+        let rows = state.db.query_json(&q).await.unwrap();
+        assert!(rows.is_empty(), "row should be gone after delete");
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_version_refuses_last_remaining() {
+        let (state, _g) = setup_test_state().await;
+        let (_prompt_id, version_ids) = seed_prompt_with_versions(&state.db, 1).await;
+        let err = delete_prompt_version_core(&state.db, &version_ids[0])
+            .await
+            .unwrap_err();
+        assert!(err.contains("last remaining"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_version_not_found() {
+        let (state, _g) = setup_test_state().await;
+        let phantom = uuid::Uuid::new_v4().to_string();
+        let err = delete_prompt_version_core(&state.db, &phantom)
+            .await
+            .unwrap_err();
+        assert!(err.contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_prompt_version_rejects_invalid_uuid() {
+        let (state, _g) = setup_test_state().await;
+        assert!(delete_prompt_version_core(&state.db, "not-a-uuid")
+            .await
+            .is_err());
     }
 }

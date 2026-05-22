@@ -293,6 +293,7 @@ async fn main() -> anyhow::Result<()> {
             commands::prompt_version::list_prompt_versions,
             commands::prompt_version::get_prompt_version,
             commands::prompt_version::restore_prompt_version,
+            commands::prompt_version::delete_prompt_version,
             // Skill commands (Tool Skills)
             commands::skill::list_skills,
             commands::skill::get_skill,
@@ -303,6 +304,7 @@ async fn main() -> anyhow::Result<()> {
             commands::skill_version::list_skill_versions,
             commands::skill_version::get_skill_version,
             commands::skill_version::restore_skill_version,
+            commands::skill_version::delete_skill_version,
             // FileManager commands
             commands::file_manager::validate_agent_folder,
             commands::file_manager::list_trash,
