@@ -212,12 +212,7 @@ async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<S
         .into_iter()
         .next()
         .and_then(|r| r["content"].as_str().map(String::from))
-        .ok_or_else(|| {
-            format!(
-                "No assistant message found for workflow {}",
-                validated_wf
-            )
-        })?;
+        .ok_or_else(|| format!("No assistant message found for workflow {}", validated_wf))?;
     Ok(safe_truncate(&content, MAX_REPORT_CHARS_FOR_ANALYSIS, true))
 }
 
@@ -264,8 +259,12 @@ fn build_analyze_user_prompt(title: &str, description: &str, report: &str) -> St
 }
 
 fn parse_analyze_response(content: &str) -> Result<AnalyzeReport, String> {
-    let payload = extract_json_payload(content)
-        .ok_or_else(|| format!("Analyzer response did not contain a JSON object: {}", content))?;
+    let payload = extract_json_payload(content).ok_or_else(|| {
+        format!(
+            "Analyzer response did not contain a JSON object: {}",
+            content
+        )
+    })?;
 
     let verdict_str = payload["verdict"]
         .as_str()
@@ -420,7 +419,8 @@ mod tests {
 
     #[test]
     fn parse_fenced_response() {
-        let raw = "```json\n{\"verdict\":\"approve\",\"reasoning\":\"All good and complete.\"}\n```";
+        let raw =
+            "```json\n{\"verdict\":\"approve\",\"reasoning\":\"All good and complete.\"}\n```";
         let r = parse_analyze_response(raw).unwrap();
         assert_eq!(r.verdict, AnalyzeVerdict::Approve);
     }

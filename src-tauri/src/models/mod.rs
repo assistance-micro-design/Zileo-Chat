@@ -25,6 +25,7 @@ pub mod embedding;
 pub mod function_calling;
 pub mod import_export;
 pub mod kanban_card;
+pub mod kanban_card_interaction;
 pub mod kanban_schedule;
 pub mod llm_models;
 pub mod mcp;

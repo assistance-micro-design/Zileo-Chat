@@ -607,6 +607,47 @@ DEFINE INDEX OVERWRITE kanban_schedule_next_run_idx ON kanban_schedule FIELDS ne
 DEFINE INDEX OVERWRITE kanban_schedule_card_idx ON kanban_schedule FIELDS card_template_id;
 
 -- =============================================
+-- Table: kanban_card_interaction
+-- Persistance des appels LLM meta de l'agent Kanban (compose / analyze)
+-- pour affichage historique dans KanbanCardReportViewer.
+-- Une interaction = un tool_loop complet (N iterations + tool calls).
+-- =============================================
+DEFINE TABLE OVERWRITE kanban_card_interaction SCHEMAFULL;
+DEFINE FIELD OVERWRITE id ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE card_id ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE kind ON kanban_card_interaction TYPE string
+    ASSERT $value IN ['compose', 'analyze'];
+DEFINE FIELD OVERWRITE kanban_agent_id ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE provider ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE model_id_used ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE task_input ON kanban_card_interaction TYPE string;
+-- iterations : array d'objets (ERR_SURREAL_001 sous-champs explicites)
+DEFINE FIELD OVERWRITE iterations ON kanban_card_interaction TYPE array<object> DEFAULT [];
+DEFINE FIELD OVERWRITE iterations[*].iteration_index ON kanban_card_interaction TYPE int;
+DEFINE FIELD OVERWRITE iterations[*].reasoning ON kanban_card_interaction TYPE option<string>;
+DEFINE FIELD OVERWRITE iterations[*].response_content ON kanban_card_interaction TYPE option<string>;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls ON kanban_card_interaction TYPE array<object> DEFAULT [];
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].tool_name ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].mcp_server ON kanban_card_interaction TYPE option<string>;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].input_json ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].output_json ON kanban_card_interaction TYPE string;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].duration_ms ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE iterations[*].tool_calls[*].success ON kanban_card_interaction TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE iterations[*].tokens_input ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE iterations[*].tokens_output ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE iterations[*].cached_tokens ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE iterations[*].cost_usd ON kanban_card_interaction TYPE float DEFAULT 0.0;
+DEFINE FIELD OVERWRITE iterations[*].duration_ms ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE final_payload_summary ON kanban_card_interaction TYPE option<string>;
+DEFINE FIELD OVERWRITE final_response_text ON kanban_card_interaction TYPE option<string>;
+DEFINE FIELD OVERWRITE total_tokens_input ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE total_tokens_output ON kanban_card_interaction TYPE int DEFAULT 0;
+DEFINE FIELD OVERWRITE total_cost_usd ON kanban_card_interaction TYPE float DEFAULT 0.0;
+DEFINE FIELD OVERWRITE created_at ON kanban_card_interaction TYPE datetime DEFAULT time::now();
+
+DEFINE INDEX OVERWRITE kanban_card_interaction_card_idx ON kanban_card_interaction FIELDS card_id;
+
+-- =============================================
 -- Table: prompt_version
 -- Snapshot of a prompt taken AVANT toute modification (versionning anti-perte).
 -- =============================================
