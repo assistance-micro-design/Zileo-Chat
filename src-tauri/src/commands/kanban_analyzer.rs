@@ -104,6 +104,15 @@ pub async fn analyze_card_report_core(
         });
     }
 
+    // Signal to the frontend that the Kanban agent is now finalizing this
+    // card's report. The matching "done" signal is the existing
+    // `kanban:auto_analyzed` / `kanban:needs_improvement` event emitted at
+    // the end of this function (or the on-error fallback in the caller).
+    let _ = app_handle.emit(
+        "kanban:analyzing",
+        json!({ "card_id": validated_card_id.clone() }),
+    );
+
     let report_text = load_workflow_report(db, &workflow_id).await?;
     config.system_prompt = build_analyze_system_prompt(&config.system_prompt);
 

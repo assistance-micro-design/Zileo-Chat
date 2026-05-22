@@ -61,6 +61,7 @@ export interface KanbanCardCreate {
 export interface KanbanCardUpdate {
 	title?: string;
 	description?: string;
+	target_agent_id?: string;
 	prompt_id?: string | null;
 	inline_prompt?: string | null;
 	variables?: string;
@@ -77,6 +78,7 @@ export interface KanbanSchedule {
 	next_run_at: string;
 	last_run_at?: string;
 	enabled: boolean;
+	skip_if_pending: boolean;
 	created_at: string;
 }
 
@@ -85,6 +87,7 @@ export interface KanbanScheduleCreate {
 	days_of_week: number[];
 	hour: number;
 	minute: number;
+	skip_if_pending?: boolean;
 }
 
 export interface KanbanScheduleUpdate {
@@ -92,4 +95,5 @@ export interface KanbanScheduleUpdate {
 	hour?: number;
 	minute?: number;
 	enabled?: boolean | null;
+	skip_if_pending?: boolean;
 }

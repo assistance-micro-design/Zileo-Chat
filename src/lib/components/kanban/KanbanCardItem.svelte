@@ -9,8 +9,8 @@
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
-	import { Badge, Button } from '$lib/components/ui';
-	import { Eye, Trash2, FileText, Wand2 } from '@lucide/svelte';
+	import { Badge, Button, Spinner } from '$lib/components/ui';
+	import { Eye, Trash2, FileText, Wand2, Repeat, Copy, Pencil } from '@lucide/svelte';
 	import type { KanbanCard, KanbanCardStatus } from '$types/kanban';
 	import { runningWorkflows } from '$lib/stores/background-workflows';
 
@@ -18,18 +18,47 @@
 		card: KanbanCard;
 		/** Name of the target agent (resolved by parent). */
 		targetAgentName?: string;
+		/** True when a kanban_schedule row currently points to this card. */
+		hasSchedule?: boolean;
+		/** True while the Kanban agent is finalizing the report for this card. */
+		isAnalyzing?: boolean;
 		/** Callback for "view report" action (Review / Done). */
 		onview?: (card: KanbanCard) => void;
 		/** Callback for "improve prompt" action (Review / Done). */
 		onimprove?: (card: KanbanCard) => void;
 		/** Callback for "delete" action. */
 		ondelete?: (card: KanbanCard) => void;
+		/** Callback for "manage recurrence" action (completed cards only). */
+		onschedule?: (card: KanbanCard) => void;
+		/** Callback for "duplicate as template" action (completed cards only). */
+		onduplicate?: (card: KanbanCard) => void;
+		/** Callback for "edit card" action (any card except running). */
+		onedit?: (card: KanbanCard) => void;
 	}
 
-	let { card, targetAgentName, onview, onimprove, ondelete }: Props = $props();
+	let {
+		card,
+		targetAgentName,
+		hasSchedule = false,
+		isAnalyzing = false,
+		onview,
+		onimprove,
+		ondelete,
+		onschedule,
+		onduplicate,
+		onedit
+	}: Props = $props();
 
 	const isRunning = $derived(card.column === 'doing');
 	const isReviewable = $derived(card.column === 'review' || card.column === 'done');
+	/**
+	 * Eligible for "manage recurrence" / "duplicate as template": review (success)
+	 * or done. Excludes failed cards (column=review, status=failed) on purpose.
+	 */
+	const isCompleted = $derived(
+		(card.column === 'review' && card.status === 'review') ||
+			(card.column === 'done' && card.status === 'done')
+	);
 	/** Progress chunks for this card (if workflow is running). */
 	const liveProgress = $derived(
 		card.workflow_id ? $runningWorkflows.find((w) => w.workflowId === card.workflow_id) : undefined
@@ -42,9 +71,32 @@
 	 */
 	const isStuck = $derived(isRunning && !liveProgress);
 
-	/** Status badge variant. */
-	function badgeVariantFor(status: KanbanCardStatus): 'primary' | 'success' | 'warning' | 'error' {
-		switch (status) {
+	/**
+	 * Display status disambiguates the raw `card.status` against the column.
+	 * The backend sets `status='done'` on a successful workflow that lands in
+	 * the review column (awaiting user validation) and again when the user
+	 * validates it into the done column. Showing the same "Terminé" badge in
+	 * both places is misleading; same story for a scheduled template in todo
+	 * which is not actually "ready to execute" — it's parked for its tick.
+	 */
+	type DisplayStatus = KanbanCardStatus | 'awaiting_review' | 'scheduled';
+	const displayStatus = $derived<DisplayStatus>(
+		card.column === 'review' && card.status === 'done'
+			? 'awaiting_review'
+			: card.column === 'todo' && card.status === 'ready' && hasSchedule
+				? 'scheduled'
+				: card.status
+	);
+
+	/** Status badge variant — handles both raw and synthesized statuses. */
+	function badgeVariantFor(s: DisplayStatus): 'primary' | 'success' | 'warning' | 'error' {
+		switch (s) {
+			case 'awaiting_review':
+				return 'warning';
+			case 'scheduled':
+				return 'primary';
+		}
+		switch (s as KanbanCardStatus) {
 			case 'done':
 				return 'success';
 			case 'failed':
@@ -68,7 +120,17 @@
 <article class="kanban-card" class:running={isRunning}>
 	<header class="card-head">
 		<h4 class="card-title">{card.title}</h4>
-		<Badge variant={badgeVariantFor(card.status)}>{$i18n(`kanban_status_${card.status}`)}</Badge>
+		<div class="card-head-badges">
+			{#if hasSchedule}
+				<Badge variant="primary">
+					<Repeat size={11} aria-hidden="true" />
+					{$i18n('kanban_schedule_active_badge')}
+				</Badge>
+			{/if}
+			<Badge variant={badgeVariantFor(displayStatus)}>
+				{$i18n(`kanban_status_${displayStatus}`)}
+			</Badge>
+		</div>
 	</header>
 
 	{#if targetAgentName}
@@ -82,6 +144,13 @@
 	{#if isRunning && liveProgress}
 		<p class="card-progress" aria-live="polite">
 			{$i18n('kanban_card_running')}
+		</p>
+	{/if}
+
+	{#if isAnalyzing}
+		<p class="card-analyzing" aria-live="polite">
+			<Spinner size="sm" />
+			<span>{$i18n('kanban_card_analyzing')}</span>
 		</p>
 	{/if}
 
@@ -112,6 +181,42 @@
 			>
 				<Wand2 size={14} />
 				{$i18n('kanban_card_improve')}
+			</Button>
+		{/if}
+		{#if isCompleted && onschedule}
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				onclick={() => onschedule?.(card)}
+				ariaLabel={$i18n('kanban_card_schedule_aria')}
+			>
+				<Repeat size={14} />
+				{$i18n('kanban_card_schedule')}
+			</Button>
+		{/if}
+		{#if !isRunning && onedit}
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				onclick={() => onedit?.(card)}
+				ariaLabel={$i18n('kanban_card_edit_aria')}
+			>
+				<Pencil size={14} />
+				{$i18n('kanban_card_edit')}
+			</Button>
+		{/if}
+		{#if isCompleted && onduplicate}
+			<Button
+				type="button"
+				variant="ghost"
+				size="sm"
+				onclick={() => onduplicate?.(card)}
+				ariaLabel={$i18n('kanban_card_duplicate_template_aria')}
+			>
+				<Copy size={14} />
+				{$i18n('kanban_card_duplicate_template')}
 			</Button>
 		{/if}
 		{#if card.workflow_id}
@@ -157,6 +262,12 @@
 		align-items: flex-start;
 		gap: 0.5rem;
 	}
+	.card-head-badges {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+	}
 	.card-title {
 		margin: 0;
 		font-size: 0.9rem;
@@ -186,6 +297,15 @@
 		color: var(--color-accent);
 		font-style: italic;
 	}
+	.card-analyzing {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		color: var(--color-accent);
+		font-style: italic;
+	}
 	.card-error {
 		margin: 0;
 		font-size: 0.78rem;
@@ -193,12 +313,15 @@
 	}
 	.card-actions {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.25rem 0.35rem;
 		margin-top: 0.25rem;
+		min-width: 0;
 	}
 	.card-workflow-link {
-		margin-left: auto;
 		color: var(--color-text-muted);
+		display: inline-flex;
+		align-items: center;
 	}
 </style>

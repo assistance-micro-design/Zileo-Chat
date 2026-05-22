@@ -168,8 +168,11 @@ pub async fn list_kanban_cards_core(
         }
         None => String::new(),
     };
+    // ORDER BY column_order ASC, created_at ASC mirrors the FIFO promotion
+    // query in start_next_pending_card_core, so the visual order in `todo`
+    // matches the order in which cards will actually execute.
     let query = format!(
-        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card {where_clause} ORDER BY `column_order` ASC, created_at DESC"
+        "SELECT {KANBAN_CARD_FIELDS} FROM kanban_card {where_clause} ORDER BY `column_order` ASC, created_at ASC"
     );
     let results = db
         .query_json(&query)
@@ -203,6 +206,10 @@ pub async fn update_kanban_card_core(
         let d = validate_description(&desc)?;
         set_clauses.push("description = $description".to_string());
         params.push(("description".to_string(), json!(d)));
+    }
+    if let Some(target_agent) = update.target_agent_id {
+        let validated_agent = validate_uuid_field(&target_agent, "target_agent_id")?;
+        set_clauses.push(format!("target_agent_id = '{}'", validated_agent));
     }
     if let Some(vars) = update.variables {
         let v = validate_variables_json(&vars)?;
@@ -307,6 +314,84 @@ pub async fn set_kanban_card_workflow_id_core(
     Ok(())
 }
 
+/// Clones a completed card (column `review`/`done`) into a fresh `ready`/`todo`
+/// card, transfers any `kanban_schedule` rows pointing to the source onto the
+/// clone, then deletes the source. Used by the "Duplicate as template" action
+/// so users can attach a recurrence to a card whose original instance is no
+/// longer relevant in the board.
+pub async fn duplicate_kanban_card_as_template_core(
+    db: &DBClient,
+    source_id: &str,
+) -> Result<KanbanCard, String> {
+    let validated_source = validate_uuid_field(source_id, "card_id")?;
+    let source = get_kanban_card_core(db, &validated_source).await?;
+    if !matches!(source.column, KanbanColumn::Review | KanbanColumn::Done) {
+        return Err("Only cards in review or done can be duplicated as template".to_string());
+    }
+
+    let new_id = uuid::Uuid::new_v4().to_string();
+    let prompt_id_sql = match &source.prompt_id {
+        Some(id) => format!("'{}'", id),
+        None => "NONE".to_string(),
+    };
+    let inline_prompt_sql = match &source.inline_prompt {
+        Some(p) => serialize_for_query(p, "inline_prompt")?,
+        None => "NONE".to_string(),
+    };
+    let folder_sql = match &source.target_folder_id {
+        Some(id) => format!("'{}'", id),
+        None => "NONE".to_string(),
+    };
+
+    let query = format!(
+        "CREATE kanban_card:`{new_id}` CONTENT {{
+            id: '{new_id}',
+            title: $title,
+            description: $description,
+            kanban_agent_id: '{kanban_agent_id}',
+            target_agent_id: '{target_agent_id}',
+            prompt_id: {prompt_id_sql},
+            inline_prompt: {inline_prompt_sql},
+            variables: $variables,
+            target_folder_id: {folder_sql},
+            status: 'ready',
+            `column`: 'todo',
+            `column_order`: 0,
+            workflow_id: NONE,
+            error_summary: NONE,
+            created_at: time::now(),
+            updated_at: time::now()
+        }}",
+        kanban_agent_id = source.kanban_agent_id,
+        target_agent_id = source.target_agent_id,
+    );
+    db.execute_with_params(
+        &query,
+        vec![
+            ("title".to_string(), json!(source.title)),
+            ("description".to_string(), json!(source.description)),
+            ("variables".to_string(), json!(source.variables)),
+        ],
+    )
+    .await
+    .map_err(|e| format!("Failed to create duplicated kanban_card: {}", e))?;
+
+    // Transfer schedules onto the clone BEFORE deleting the source so we never
+    // observe an orphan window. delete_kanban_card_core is invoked with
+    // also_delete_schedule=false because the rows have already been moved.
+    let transfer_q = format!(
+        "UPDATE kanban_schedule SET card_template_id = '{}' WHERE card_template_id = '{}'",
+        new_id, validated_source
+    );
+    db.execute(&transfer_q)
+        .await
+        .map_err(|e| format!("Failed to transfer schedules: {}", e))?;
+
+    delete_kanban_card_core(db, &validated_source, false).await?;
+
+    get_kanban_card_core(db, &new_id).await
+}
+
 pub async fn move_kanban_card_core(
     db: &DBClient,
     card_id: &str,
@@ -408,6 +493,15 @@ pub async fn set_kanban_card_workflow_id(
 }
 
 #[tauri::command]
+#[instrument(name = "duplicate_kanban_card_as_template", skip(state), fields(card_id = %card_id))]
+pub async fn duplicate_kanban_card_as_template(
+    card_id: String,
+    state: State<'_, AppState>,
+) -> Result<KanbanCard, String> {
+    duplicate_kanban_card_as_template_core(&state.db, &card_id).await
+}
+
+#[tauri::command]
 #[instrument(name = "move_kanban_card", skip(state), fields(card_id = %card_id))]
 pub async fn move_kanban_card(
     card_id: String,
@@ -473,6 +567,127 @@ mod tests {
             &KanbanColumn::Done,
             &KanbanColumn::Todo
         ));
+    }
+
+    // duplicate_kanban_card_as_template_core: clones a review/done card into
+    // a fresh ready/todo card, transfers schedules pointing to the source
+    // onto the clone, then deletes the source.
+    #[tokio::test]
+    async fn test_duplicate_as_template_transfers_schedules_and_deletes_source() {
+        use crate::models::KanbanScheduleCreate;
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let source_id = uuid::Uuid::new_v4().to_string();
+
+        // Seed a 'done' card directly (skip column transition checks).
+        let create_source = format!(
+            "CREATE kanban_card:`{source_id}` CONTENT {{
+                id: '{source_id}', title: 'src', description: 'desc',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'inline prompt',
+                variables: '{{\"k\":\"v\"}}', target_folder_id: NONE,
+                status: 'done', `column`: 'done', `column_order`: 0,
+                workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&create_source).await.unwrap();
+
+        // Attach a schedule to the source.
+        let sched = super::super::kanban_schedule::create_kanban_schedule_core(
+            &state.db,
+            KanbanScheduleCreate {
+                card_template_id: source_id.clone(),
+                days_of_week: vec![0, 2, 4],
+                hour: 9,
+                minute: 30,
+                skip_if_pending: false,
+            },
+        )
+        .await
+        .expect("schedule create");
+
+        // Duplicate.
+        let clone = duplicate_kanban_card_as_template_core(&state.db, &source_id)
+            .await
+            .expect("duplicate succeeds");
+
+        assert_ne!(clone.id, source_id, "clone must have a fresh id");
+        assert_eq!(clone.title, "src");
+        assert_eq!(clone.inline_prompt.as_deref(), Some("inline prompt"));
+        assert_eq!(clone.variables, "{\"k\":\"v\"}");
+        assert_eq!(
+            clone.status,
+            crate::models::kanban_card::KanbanCardStatus::Ready
+        );
+        assert!(matches!(clone.column, KanbanColumn::Todo));
+
+        // Schedule must now point to the clone.
+        let reloaded =
+            super::super::kanban_schedule::get_kanban_schedule_core(&state.db, &sched.id)
+                .await
+                .expect("schedule still exists");
+        assert_eq!(reloaded.card_template_id, clone.id);
+
+        // Source must be gone.
+        let src_lookup = get_kanban_card_core(&state.db, &source_id).await;
+        assert!(src_lookup.is_err(), "source card must be deleted");
+    }
+
+    #[tokio::test]
+    async fn test_update_target_agent_id_persists() {
+        use crate::models::KanbanCardUpdate;
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_a = uuid::Uuid::new_v4().to_string();
+        let agent_b = uuid::Uuid::new_v4().to_string();
+        let cid = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE kanban_card:`{cid}` CONTENT {{
+                id: '{cid}', title: 't', description: '',
+                kanban_agent_id: '{agent_a}', target_agent_id: '{agent_a}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'review', `column`: 'review',
+                `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&q).await.unwrap();
+        let updated = update_kanban_card_core(
+            &state.db,
+            &cid,
+            KanbanCardUpdate {
+                target_agent_id: Some(agent_b.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("update succeeds");
+        assert_eq!(updated.target_agent_id, agent_b);
+        // kanban_agent_id must remain untouched (not editable via update).
+        assert_eq!(updated.kanban_agent_id, agent_a);
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_as_template_rejects_todo_card() {
+        use crate::test_utils::setup_test_state;
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let cid = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE kanban_card:`{cid}` CONTENT {{
+                id: '{cid}', title: 't', description: '',
+                kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                target_folder_id: NONE, status: 'ready', `column`: 'todo',
+                `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                created_at: time::now(), updated_at: time::now()
+            }}"
+        );
+        state.db.execute(&q).await.unwrap();
+        let r = duplicate_kanban_card_as_template_core(&state.db, &cid).await;
+        assert!(r.is_err(), "must reject non-review/done sources");
     }
 
     // Regression: SurrealQL 2.6 treats `column` as a reserved keyword. Without

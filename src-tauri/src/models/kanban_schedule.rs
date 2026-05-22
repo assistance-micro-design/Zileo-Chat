@@ -27,6 +27,11 @@ pub struct KanbanSchedule {
     pub last_run_at: Option<DateTime<Utc>>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// When true, skip spawning a new card if a previous instance (column in
+    /// todo/doing) is still pending. Prevents backlog when execution outlasts
+    /// the recurrence cadence.
+    #[serde(default)]
+    pub skip_if_pending: bool,
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
 }
@@ -41,6 +46,8 @@ pub struct KanbanScheduleCreate {
     pub days_of_week: Vec<u8>,
     pub hour: u8,
     pub minute: u8,
+    #[serde(default)]
+    pub skip_if_pending: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -57,6 +64,8 @@ pub struct KanbanScheduleUpdate {
         deserialize_with = "deserialize_explicit_option"
     )]
     pub enabled: Option<Option<bool>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_if_pending: Option<bool>,
 }
 
 /// Validates a schedule create payload. Returns error if any field is out of range.
@@ -86,6 +95,7 @@ mod tests {
             days_of_week: vec![0, 2, 4],
             hour: 14,
             minute: 30,
+            skip_if_pending: false,
         };
         assert!(validate_schedule_create(&c).is_ok());
     }
@@ -97,6 +107,7 @@ mod tests {
             days_of_week: vec![0],
             hour: 24,
             minute: 0,
+            skip_if_pending: false,
         };
         assert!(validate_schedule_create(&c).is_err());
     }
@@ -108,6 +119,7 @@ mod tests {
             days_of_week: vec![0],
             hour: 1,
             minute: 60,
+            skip_if_pending: false,
         };
         assert!(validate_schedule_create(&c).is_err());
     }
@@ -119,6 +131,7 @@ mod tests {
             days_of_week: vec![7],
             hour: 1,
             minute: 0,
+            skip_if_pending: false,
         };
         assert!(validate_schedule_create(&c).is_err());
     }

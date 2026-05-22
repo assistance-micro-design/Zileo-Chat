@@ -601,6 +601,7 @@ DEFINE FIELD OVERWRITE minute ON kanban_schedule TYPE int
 DEFINE FIELD OVERWRITE next_run_at ON kanban_schedule TYPE datetime;
 DEFINE FIELD OVERWRITE last_run_at ON kanban_schedule TYPE option<datetime>;
 DEFINE FIELD OVERWRITE enabled ON kanban_schedule TYPE bool DEFAULT true;
+DEFINE FIELD OVERWRITE skip_if_pending ON kanban_schedule TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE created_at ON kanban_schedule TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX OVERWRITE kanban_schedule_next_run_idx ON kanban_schedule FIELDS next_run_at, enabled;

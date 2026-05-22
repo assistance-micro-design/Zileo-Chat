@@ -5,14 +5,15 @@
 -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { i18n } from '$lib/i18n';
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
 	import { locale } from '$lib/stores/locale';
-	import { Button } from '$lib/components/ui';
-	import { Plus } from '@lucide/svelte';
+	import { Badge, Button } from '$lib/components/ui';
+	import { Plus, Activity } from '@lucide/svelte';
 
-	import { kanbanStore, kanbanCardsByColumn } from '$lib/stores/kanban';
+	import { kanbanStore, kanbanCardsByColumn, kanbanCards } from '$lib/stores/kanban';
 	import { kanbanScheduleStore, kanbanSchedules } from '$lib/stores/kanban-schedule';
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
 	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
@@ -24,6 +25,8 @@
 	import KanbanCardReportViewer from '$lib/components/kanban/KanbanCardReportViewer.svelte';
 	import KanbanFiltres from '$lib/components/kanban/KanbanFiltres.svelte';
 	import KanbanImprovePromptModal from '$lib/components/kanban/KanbanImprovePromptModal.svelte';
+	import KanbanScheduleModal from '$lib/components/kanban/KanbanScheduleModal.svelte';
+	import KanbanCardEditModal from '$lib/components/kanban/KanbanCardEditModal.svelte';
 
 	import type {
 		KanbanCard,
@@ -40,6 +43,18 @@
 	let improvePromptId = $state<string | null>(null);
 	let improveKanbanAgentId = $state<string | null>(null);
 	let improveSuggestedContent = $state<string | null>(null);
+	let scheduleModalOpen = $state(false);
+	let scheduleModalCard = $state<KanbanCard | null>(null);
+	let editModalOpen = $state(false);
+	let editModalCard = $state<KanbanCard | null>(null);
+	/**
+	 * Set to a card id when the user clicked "Duplicate as template" on a card
+	 * that has no schedule yet. The schedule modal is opened so they can attach
+	 * one; if they save, the pending duplication fires (handleScheduleSaved). If
+	 * they close the modal without saving, the duplication is aborted with a
+	 * warning (closeSchedule).
+	 */
+	let pendingDuplicateCardId = $state<string | null>(null);
 	let pageError = $state<string | null>(null);
 
 	let agentFilter = $state('');
@@ -78,7 +93,16 @@
 	let unlistenComplete: TauriUnlistenFn | null = null;
 	let unlistenAutoAnalyzed: TauriUnlistenFn | null = null;
 	let unlistenNeedsImprovement: TauriUnlistenFn | null = null;
+	let unlistenAnalyzing: TauriUnlistenFn | null = null;
 	let unlistenSettingsRefresh: (() => void) | null = null;
+
+	/** Card ids currently being finalized by the Kanban agent. */
+	const analyzingCardIds = new SvelteSet<string>();
+
+	function setAnalyzing(cardId: string, on: boolean): void {
+		if (on) analyzingCardIds.add(cardId);
+		else analyzingCardIds.delete(cardId);
+	}
 
 	$effect(() => {
 		void kanbanStore.loadCards(agentFilter || undefined);
@@ -121,6 +145,17 @@
 			pageError = getErrorMessage(e);
 		}
 
+		// Listener for "analyzer started" — surface a "finalizing" indicator
+		// on the matching review card until the verdict comes back.
+		try {
+			unlistenAnalyzing = await tauriListen<{ card_id: string }>('kanban:analyzing', (event) => {
+				const cardId = event.payload?.card_id;
+				if (cardId) setAnalyzing(cardId, true);
+			});
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
+
 		// Listener for auto-analyze verdict (approve / reject). The backend
 		// has already updated the card; we just refresh the board and surface
 		// the verdict to the user via the page error / a viewer auto-open
@@ -133,6 +168,7 @@
 			}>('kanban:auto_analyzed', async (event) => {
 				const cardId = event.payload?.card_id;
 				if (!cardId) return;
+				setAnalyzing(cardId, false);
 				await kanbanStore.loadCards(agentFilter || undefined);
 				try {
 					const updated = await kanbanStore.getCard(cardId);
@@ -159,6 +195,7 @@
 			}>('kanban:needs_improvement', async (event) => {
 				const cardId = event.payload?.card_id;
 				if (!cardId) return;
+				setAnalyzing(cardId, false);
 				await kanbanStore.loadCards(agentFilter || undefined);
 				try {
 					const card = await kanbanStore.getCard(cardId);
@@ -191,6 +228,7 @@
 		unlistenComplete?.();
 		unlistenAutoAnalyzed?.();
 		unlistenNeedsImprovement?.();
+		unlistenAnalyzing?.();
 		unlistenSettingsRefresh?.();
 	});
 
@@ -220,6 +258,23 @@
 		return $agentsStore.find((a) => a.id === id)?.name ?? '';
 	}
 
+	function cardHasSchedule(cardId: string): boolean {
+		return $kanbanSchedules.some((s) => s.card_template_id === cardId);
+	}
+
+	/**
+	 * Live slot accounting for the header indicator. Mirrors the backend
+	 * scheduler logic (`DEFAULT_MAX_CONCURRENT_WORKFLOWS = 3`).
+	 */
+	const SLOT_CAPACITY = 3;
+	const slotsUsed = $derived($kanbanCards.filter((c) => c.column === 'doing').length);
+	const queuedReady = $derived(
+		$kanbanCards.filter((c) => c.column === 'todo' && c.status === 'ready').length
+	);
+	const slotVariant = $derived(
+		slotsUsed >= SLOT_CAPACITY ? 'error' : slotsUsed > 0 ? 'warning' : 'success'
+	);
+
 	function handleFilterChange(filters: { agentId: string; folderId: string }): void {
 		agentFilter = filters.agentId;
 		folderFilter = filters.folderId;
@@ -247,9 +302,14 @@
 	async function deleteCard(card: KanbanCard): Promise<void> {
 		pageError = null;
 		const linkedSchedule = $kanbanSchedules.find((s) => s.card_template_id === card.id);
+		// Recurrence-specific confirm takes precedence — it already communicates
+		// the destructive nature of the action AND the schedule loss in one prompt.
+		// Otherwise, fall back to the generic "delete this card?" warning.
+		const confirmKey = linkedSchedule
+			? 'kanban_confirm_delete_with_schedule'
+			: 'kanban_confirm_delete';
+		if (!confirm($i18n(confirmKey))) return;
 		if (linkedSchedule) {
-			const confirmed = confirm($i18n('kanban_confirm_delete_with_schedule'));
-			if (!confirmed) return;
 			try {
 				await kanbanScheduleStore.deleteSchedule(linkedSchedule.id);
 			} catch (e) {
@@ -280,6 +340,80 @@
 	function openView(card: KanbanCard): void {
 		viewerCard = card;
 		viewerOpen = true;
+	}
+
+	function openEdit(card: KanbanCard): void {
+		editModalCard = card;
+		editModalOpen = true;
+	}
+
+	function closeEdit(): void {
+		editModalOpen = false;
+		editModalCard = null;
+	}
+
+	function openSchedule(card: KanbanCard): void {
+		scheduleModalCard = card;
+		scheduleModalOpen = true;
+	}
+
+	function closeSchedule(): void {
+		scheduleModalOpen = false;
+		scheduleModalCard = null;
+		// User closed the schedule modal without saving while a duplication was
+		// pending — duplication requires a recurrence, so abort with a warning.
+		if (pendingDuplicateCardId) {
+			pendingDuplicateCardId = null;
+			pageError = $i18n('kanban_duplicate_no_schedule_warning');
+		}
+	}
+
+	async function handleScheduleSaved(): Promise<void> {
+		await kanbanScheduleStore.loadSchedules();
+		if (!pendingDuplicateCardId) return;
+		const cardId = pendingDuplicateCardId;
+		pendingDuplicateCardId = null;
+		const card = await kanbanStore.getCard(cardId);
+		if (card) await performDuplicate(card);
+	}
+
+	async function duplicateAsTemplate(card: KanbanCard): Promise<void> {
+		const hasSchedule = $kanbanSchedules.some((s) => s.card_template_id === card.id);
+		if (!hasSchedule) {
+			// No recurrence yet — duplicating into a fresh template would discard
+			// the only existing instance for nothing. Offer to attach a recurrence
+			// first; if the user agrees, the duplication fires once the schedule
+			// is saved (handleScheduleSaved). Otherwise abort with a warning.
+			if (!confirm($i18n('kanban_duplicate_requires_schedule_prompt'))) {
+				pageError = $i18n('kanban_duplicate_no_schedule_warning');
+				return;
+			}
+			pendingDuplicateCardId = card.id;
+			openSchedule(card);
+			return;
+		}
+		if (!confirm($i18n('kanban_confirm_duplicate_template'))) return;
+		await performDuplicate(card);
+	}
+
+	async function performDuplicate(card: KanbanCard): Promise<void> {
+		pageError = null;
+		try {
+			await invoke<KanbanCard>('duplicate_kanban_card_as_template', { cardId: card.id });
+			// Reload schedules first so the badge follows the new template card,
+			// then refresh the board so the source disappears and the clone shows
+			// up in `todo` (or `doing` if the scheduler promoted it immediately).
+			await Promise.all([
+				kanbanScheduleStore.loadSchedules(),
+				kanbanStore.loadCards(agentFilter || undefined)
+			]);
+			if (viewerCard?.id === card.id) {
+				viewerOpen = false;
+				viewerCard = null;
+			}
+		} catch (e) {
+			pageError = getErrorMessage(e);
+		}
 	}
 
 	function handleImprovePrompt(card: KanbanCard): void {
@@ -396,10 +530,23 @@
 <section class="kanban-page" aria-labelledby="kanban-title">
 	<header class="page-head">
 		<h1 id="kanban-title">{$i18n('kanban_page_title')}</h1>
-		<Button variant="primary" onclick={() => (creatorOpen = true)}>
-			<Plus size={16} />
-			{$i18n('kanban_new_card')}
-		</Button>
+		<div class="head-right">
+			<div class="slot-indicators" aria-live="polite">
+				<Badge variant={slotVariant}>
+					<Activity size={11} aria-hidden="true" />
+					{$i18n('kanban_slot_active', { used: String(slotsUsed), max: String(SLOT_CAPACITY) })}
+				</Badge>
+				{#if queuedReady > 0}
+					<Badge variant="primary">
+						{$i18n('kanban_slot_queued', { count: String(queuedReady) })}
+					</Badge>
+				{/if}
+			</div>
+			<Button variant="primary" onclick={() => (creatorOpen = true)}>
+				<Plus size={16} />
+				{$i18n('kanban_new_card')}
+			</Button>
+		</div>
 	</header>
 
 	{#if pageError}
@@ -419,9 +566,14 @@
 			<KanbanCardItem
 				card={c}
 				targetAgentName={agentName(c.target_agent_id)}
+				hasSchedule={cardHasSchedule(c.id)}
+				isAnalyzing={analyzingCardIds.has(c.id)}
 				onview={openView}
 				onimprove={handleImprovePrompt}
 				ondelete={deleteCard}
+				onschedule={openSchedule}
+				onduplicate={duplicateAsTemplate}
+				onedit={openEdit}
 			/>
 		{/snippet}
 	</KanbanBoard>
@@ -435,6 +587,23 @@
 	defaultKanbanAgentId={agentFilter}
 	onclose={() => (creatorOpen = false)}
 	oncreated={createCard}
+/>
+
+<KanbanScheduleModal
+	open={scheduleModalOpen}
+	card={scheduleModalCard}
+	onclose={closeSchedule}
+	onsaved={handleScheduleSaved}
+/>
+
+<KanbanCardEditModal
+	open={editModalOpen}
+	card={editModalCard}
+	agents={$agentsStore}
+	prompts={$promptsStore}
+	folders={$foldersStore}
+	onclose={closeEdit}
+	onsaved={() => kanbanStore.loadCards(agentFilter || undefined)}
 />
 
 <KanbanImprovePromptModal
@@ -480,6 +649,17 @@
 	.page-head h1 {
 		margin: 0;
 		font-size: 1.4rem;
+	}
+	.head-right {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.slot-indicators {
+		display: flex;
+		gap: 0.35rem;
+		align-items: center;
 	}
 	.page-error {
 		color: var(--color-error);

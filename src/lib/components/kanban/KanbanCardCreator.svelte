@@ -11,7 +11,7 @@
 	import { i18n } from '$lib/i18n';
 	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
-	import { Modal, Button, Select, Input, Textarea } from '$lib/components/ui';
+	import { Modal, Button, Select, Input, Textarea, Spinner } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import type { AgentSummary } from '$types/agent';
 	import type { Prompt, PromptSummary, PromptVariable } from '$types/prompt';
@@ -280,7 +280,14 @@
 					value={autoDescription}
 					oninput={(e) => (autoDescription = e.currentTarget.value)}
 					rows={6}
+					disabled={submitting}
 				/>
+				{#if submitting && !autoPreview}
+					<div class="composing" role="status" aria-live="polite">
+						<Spinner size="sm" />
+						<span>{$i18n('kanban_composing_preview')}</span>
+					</div>
+				{/if}
 				{#if autoPreview}
 					<div class="auto-preview">
 						<h4>{$i18n('kanban_preview_title')}</h4>
@@ -411,7 +418,9 @@
 		</Button>
 		{#if mode === 'auto'}
 			<Button variant="secondary" onclick={runAutoCompose} disabled={submitting}>
-				{$i18n('kanban_compose_preview')}
+				{submitting && !autoPreview
+					? $i18n('kanban_composing_preview_btn')
+					: $i18n('kanban_compose_preview')}
 			</Button>
 			<Button variant="primary" onclick={submitAuto} disabled={submitting || !autoPreview}>
 				{$i18n('common_create')}
@@ -451,6 +460,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.6rem;
+	}
+	.composing {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		background: var(--color-surface-alt, var(--color-surface));
+		border: 1px dashed var(--color-border);
+		border-radius: 6px;
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
+		font-style: italic;
 	}
 	.auto-preview {
 		border: 1px solid var(--color-border);

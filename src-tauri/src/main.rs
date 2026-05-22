@@ -156,6 +156,7 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_card::update_kanban_card,
             commands::kanban_card::delete_kanban_card,
             commands::kanban_card::move_kanban_card,
+            commands::kanban_card::duplicate_kanban_card_as_template,
             commands::kanban_card::set_kanban_card_workflow_id,
             commands::kanban_analyzer::analyze_card_report,
             commands::kanban_interaction::load_card_interactions,
@@ -496,6 +497,23 @@ async fn main() -> anyhow::Result<()> {
                                 "Failed to update kanban card after workflow completion"
                             );
                             return;
+                        }
+
+                        // C: event-driven promotion. The card we just finished
+                        // freed a slot; immediately try to promote the next
+                        // ready card so the user does not wait up to 60 s for
+                        // the scheduler tick. Best-effort.
+                        if let Err(e) = commands::scheduler::start_next_pending_card_core(
+                            &db,
+                            &app_handle,
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                workflow_id = %workflow_id,
+                                error = %e,
+                                "Event-driven promotion failed; will retry at next scheduler tick"
+                            );
                         }
 
                         // On success, trigger auto-analyze if the Kanban agent

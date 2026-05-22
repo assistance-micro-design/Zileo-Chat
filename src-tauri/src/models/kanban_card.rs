@@ -114,6 +114,9 @@ pub struct KanbanCardUpdate {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Required field — cannot be cleared, only swapped to another agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_agent_id: Option<String>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

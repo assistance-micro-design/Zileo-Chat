@@ -31,6 +31,10 @@ use tracing::{debug, info, warn};
 /// Tick period for the scheduler loop.
 pub const SCHEDULER_TICK_SECS: u64 = 60;
 
+/// Maximum number of missed occurrences we spawn per schedule per tick.
+/// Prevents an explosion of cards if the app was closed for weeks.
+pub const MAX_CATCHUP_PER_SCHEDULE: usize = 7;
+
 /// Spawns the kanban scheduler task. The returned handle is parked in
 /// [`crate::state::AppState`] so the runtime owns it and shutdown can
 /// `abort()` it deterministically.
@@ -78,8 +82,9 @@ pub async fn process_due_schedules_core(db: &Arc<DBClient>) -> Result<usize, Str
     let now = Utc::now();
     let now_str = now.to_rfc3339();
     let q = format!(
-        "SELECT meta::id(id) AS id, card_template_id, days_of_week, hour, minute \
-         FROM kanban_schedule WHERE enabled = true AND next_run_at <= <datetime> '{}'",
+        "SELECT meta::id(id) AS id, card_template_id, days_of_week, hour, minute, \
+         next_run_at, skip_if_pending FROM kanban_schedule \
+         WHERE enabled = true AND next_run_at <= <datetime> '{}'",
         now_str
     );
     let rows = db
@@ -101,37 +106,192 @@ pub async fn process_due_schedules_core(db: &Arc<DBClient>) -> Result<usize, Str
             .unwrap_or_default();
         let hour = row["hour"].as_u64().unwrap_or(0) as u8;
         let minute = row["minute"].as_u64().unwrap_or(0) as u8;
+        let skip_if_pending = row["skip_if_pending"].as_bool().unwrap_or(false);
 
         if schedule_id.is_empty() || template_id.is_empty() {
             continue;
         }
 
-        // Clone the template card into a fresh `ready` card.
-        if let Err(e) = spawn_card_from_template(db, &template_id).await {
-            warn!(
+        // F: skip-if-pending guard. If a previous instance is still in flight
+        // (todo or doing) for this template, do not spawn a new one — just
+        // re-arm next_run_at to the next future occurrence so we don't poll
+        // the same template every tick.
+        if skip_if_pending && template_has_pending_instance(db, &template_id).await? {
+            info!(
                 schedule_id = %schedule_id,
                 template_id = %template_id,
-                error = %e,
-                "Failed to spawn card from template; skipping this tick"
+                "skip_if_pending=true and an instance is still pending — skipping spawn"
             );
-            // Don't rearm — let it retry next minute. (Avoids losing tasks
-            // silently when the template was deleted.)
+            rearm_schedule(db, &schedule_id, &days, hour, minute, now, false).await;
             continue;
         }
-        spawned += 1;
 
-        // Re-arm next_run_at + stamp last_run_at.
-        let next = compute_next_run_at(&days, hour, minute, now).to_rfc3339();
-        let upd = format!(
-            "UPDATE kanban_schedule:`{}` SET next_run_at = <datetime> '{}', \
-             last_run_at = <datetime> '{}'",
-            schedule_id, next, now_str
-        );
+        // A: catchup loop. Walk from the schedule's stored `next_run_at`
+        // forward through every missed occurrence up to `now`, spawning one
+        // card per missed slot. Cap at MAX_CATCHUP_PER_SCHEDULE so an app
+        // closed for weeks doesn't dump 50+ cards at boot.
+        let mut cursor = row["next_run_at"]
+            .as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or(now);
+
+        let mut local_spawned = 0usize;
+        for _ in 0..MAX_CATCHUP_PER_SCHEDULE {
+            match spawn_card_from_template(db, &template_id).await {
+                Ok(_) => {
+                    local_spawned += 1;
+                }
+                Err(e) => {
+                    let orphan = e.starts_with("Template card not found");
+                    if orphan {
+                        // B: auto-disable orphan schedule so it stops polluting
+                        // the logs every minute. The user can re-enable it via
+                        // the UI after re-creating a template card.
+                        let _ = db
+                            .execute(&format!(
+                                "UPDATE kanban_schedule:`{}` SET enabled = false",
+                                schedule_id
+                            ))
+                            .await;
+                        info!(
+                            schedule_id = %schedule_id,
+                            template_id = %template_id,
+                            "Template card missing — schedule auto-disabled"
+                        );
+                    } else {
+                        warn!(
+                            schedule_id = %schedule_id,
+                            template_id = %template_id,
+                            error = %e,
+                            "Failed to spawn card from template; will retry next tick"
+                        );
+                    }
+                    break;
+                }
+            }
+            // Advance the cursor: next occurrence strictly after the current
+            // cursor. If still in the past, loop again to catch up.
+            cursor = compute_next_run_at(&days, hour, minute, cursor);
+            if cursor > now {
+                break;
+            }
+        }
+        spawned += local_spawned;
+
+        // Re-arm next_run_at to whatever the cursor ended on (or the next
+        // future occurrence relative to now if the cap was hit).
+        let next = if cursor > now {
+            cursor
+        } else {
+            compute_next_run_at(&days, hour, minute, now)
+        };
+        let next_str = next.to_rfc3339();
+        let upd = if local_spawned > 0 {
+            format!(
+                "UPDATE kanban_schedule:`{}` SET next_run_at = <datetime> '{}', \
+                 last_run_at = <datetime> '{}'",
+                schedule_id, next_str, now_str
+            )
+        } else {
+            format!(
+                "UPDATE kanban_schedule:`{}` SET next_run_at = <datetime> '{}'",
+                schedule_id, next_str
+            )
+        };
         if let Err(e) = db.execute(&upd).await {
             warn!(schedule_id = %schedule_id, error = %e, "Failed to re-arm schedule");
         }
     }
     Ok(spawned)
+}
+
+/// Sets `next_run_at` to the next future occurrence (computed from `now`) and,
+/// when `did_spawn` is true, stamps `last_run_at`. Best-effort: errors are
+/// logged but never propagated.
+async fn rearm_schedule(
+    db: &Arc<DBClient>,
+    schedule_id: &str,
+    days: &[u8],
+    hour: u8,
+    minute: u8,
+    now: chrono::DateTime<Utc>,
+    did_spawn: bool,
+) {
+    let next = compute_next_run_at(days, hour, minute, now).to_rfc3339();
+    let upd = if did_spawn {
+        let now_str = now.to_rfc3339();
+        format!(
+            "UPDATE kanban_schedule:`{}` SET next_run_at = <datetime> '{}', \
+             last_run_at = <datetime> '{}'",
+            schedule_id, next, now_str
+        )
+    } else {
+        format!(
+            "UPDATE kanban_schedule:`{}` SET next_run_at = <datetime> '{}'",
+            schedule_id, next
+        )
+    };
+    if let Err(e) = db.execute(&upd).await {
+        warn!(schedule_id = %schedule_id, error = %e, "Failed to re-arm schedule");
+    }
+}
+
+/// Returns true if at least one card cloned from this template is still
+/// pending (column todo) or in flight (column doing). Used by the
+/// `skip_if_pending` guard.
+///
+/// The schema does not carry a foreign-key link from a spawned card back to
+/// its template, so we rely on the invariant that `spawn_card_from_template`
+/// clones title + kanban_agent_id + target_agent_id verbatim. Any card in
+/// `todo`/`doing` whose triplet matches the template's (and is not the
+/// template itself) is considered a pending instance.
+async fn template_has_pending_instance(
+    db: &Arc<DBClient>,
+    template_id: &str,
+) -> Result<bool, String> {
+    let tmpl_q = format!(
+        "SELECT title, kanban_agent_id, target_agent_id FROM kanban_card:`{}`",
+        template_id
+    );
+    let tmpl_rows = db
+        .query_json(&tmpl_q)
+        .await
+        .map_err(|e| format!("Failed to load template for pending check: {}", e))?;
+    let Some(tmpl) = tmpl_rows.into_iter().next() else {
+        return Ok(false);
+    };
+    let title = tmpl["title"].as_str().unwrap_or("");
+    let ka = tmpl["kanban_agent_id"].as_str().unwrap_or("");
+    let ta = tmpl["target_agent_id"].as_str().unwrap_or("");
+    if title.is_empty() || ka.is_empty() || ta.is_empty() {
+        return Ok(false);
+    }
+    let count_q = "SELECT count() AS c FROM kanban_card \
+        WHERE `column` IN ['todo', 'doing'] \
+          AND meta::id(id) != $tid \
+          AND title = $title \
+          AND kanban_agent_id = $ka \
+          AND target_agent_id = $ta \
+        GROUP ALL";
+    let rows: Vec<serde_json::Value> = db
+        .query_with_params(
+            count_q,
+            vec![
+                ("tid".to_string(), json!(template_id)),
+                ("title".to_string(), json!(title)),
+                ("ka".to_string(), json!(ka)),
+                ("ta".to_string(), json!(ta)),
+            ],
+        )
+        .await
+        .map_err(|e| format!("Failed to check pending instances: {}", e))?;
+    let count = rows
+        .into_iter()
+        .next()
+        .and_then(|r| r["c"].as_u64())
+        .unwrap_or(0);
+    Ok(count > 0)
 }
 
 /// Reads the template card, then inserts a fresh card with column=todo and
@@ -230,11 +390,15 @@ pub async fn start_next_pending_card_core(
     // `column_order` and `created_at` must be in the SELECT projection or
     // SurrealDB 2.6 rejects the query with "Missing order idiom" (the parser
     // resolves ORDER BY against the projected idioms, not the table schema).
+    // Exclude cards that are templates for an enabled schedule: those cards
+    // are the user's blueprint and must NOT auto-execute. Only the clones
+    // spawned by `spawn_card_from_template` (fresh UUIDs) should be picked.
     let pick_q = format!(
         "SELECT meta::id(id) AS id, title, target_agent_id, \
          `column_order`, created_at \
          FROM kanban_card \
          WHERE status = 'ready' AND `column` = 'todo' \
+           AND meta::id(id) NOT IN (SELECT VALUE card_template_id FROM kanban_schedule WHERE enabled = true) \
          ORDER BY `column_order` ASC, created_at ASC LIMIT {}",
         free
     );
@@ -331,6 +495,66 @@ mod tests {
     // only cover mark_card_done_core which has no AppHandle dependency.
     // The promotion-slot logic relies on a real Tauri AppHandle for the
     // event emit, which cannot be mocked from a unit test.
+
+    /// Regression: a card that is referenced as `card_template_id` by an
+    /// enabled schedule must never be promoted to `doing`. The template is
+    /// the user's blueprint; only fresh clones spawned by the schedule are
+    /// eligible for execution. Mirrors the WHERE clause in
+    /// `start_next_pending_card_core`.
+    #[tokio::test]
+    async fn test_promotion_query_excludes_schedule_templates() {
+        let (state, _g) = setup_test_state().await;
+        let agent_id = uuid::Uuid::new_v4().to_string();
+        let template_id = uuid::Uuid::new_v4().to_string();
+        let regular_id = uuid::Uuid::new_v4().to_string();
+
+        for (cid, title) in [(&template_id, "template"), (&regular_id, "regular")] {
+            let q = format!(
+                "CREATE kanban_card:`{cid}` CONTENT {{
+                    id: '{cid}', title: '{title}', description: '',
+                    kanban_agent_id: '{agent_id}', target_agent_id: '{agent_id}',
+                    prompt_id: NONE, inline_prompt: 'p', variables: '{{}}',
+                    target_folder_id: NONE, status: 'ready', `column`: 'todo',
+                    `column_order`: 0, workflow_id: NONE, error_summary: NONE,
+                    created_at: time::now(), updated_at: time::now()
+                }}"
+            );
+            state.db.execute(&q).await.unwrap();
+        }
+
+        // Attach an enabled schedule to the template card.
+        let sid = uuid::Uuid::new_v4().to_string();
+        let sched = format!(
+            "CREATE kanban_schedule:`{sid}` CONTENT {{
+                id: '{sid}', card_template_id: '{template_id}',
+                days_of_week: [0], hour: 9, minute: 0,
+                next_run_at: time::now() + 7d,
+                last_run_at: NONE, enabled: true, skip_if_pending: false,
+                created_at: time::now()
+            }}"
+        );
+        state.db.execute(&sched).await.unwrap();
+
+        // Run the same query the production code uses.
+        let pick_q = "SELECT meta::id(id) AS id, title, `column_order`, created_at \
+             FROM kanban_card \
+             WHERE status = 'ready' AND `column` = 'todo' \
+               AND meta::id(id) NOT IN (SELECT VALUE card_template_id FROM kanban_schedule WHERE enabled = true) \
+             ORDER BY `column_order` ASC, created_at ASC";
+        let rows = state.db.query_json(pick_q).await.unwrap();
+        let ids: Vec<String> = rows
+            .iter()
+            .filter_map(|r| r["id"].as_str().map(String::from))
+            .collect();
+        assert!(
+            !ids.contains(&template_id),
+            "template card must be excluded from promotion"
+        );
+        assert!(
+            ids.contains(&regular_id),
+            "regular ready card must remain eligible"
+        );
+    }
 
     #[tokio::test]
     async fn test_mark_card_done_sets_review_column() {
