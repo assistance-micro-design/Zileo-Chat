@@ -1,13 +1,15 @@
 <!--
   Copyright 2025 Assistance Micro Design
 
-  KanbanColumn — droppable column for a single Kanban status (todo/doing/review/done).
+  KanbanColumn — visual column for a single Kanban status (todo/doing/review/done).
   Renders its cards via a snippet so the parent controls card rendering.
+  When empty, shows a sober icon + label centered in the body.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { i18n } from '$lib/i18n';
+	import { ClipboardList } from '@lucide/svelte';
 	import type { KanbanCard, KanbanColumn as Col } from '$types/kanban';
-	import { hasCardDragData, getCardIdsFromDrag } from '$lib/utils/dragDrop';
 
 	interface Props {
 		/** Column status (also doubles as its identifier). */
@@ -18,53 +20,30 @@
 		cards: KanbanCard[];
 		/** Render slot for each card. */
 		card: Snippet<[KanbanCard, number]>;
-		/** Called when one or more cards are dropped on this column. */
-		ondrop?: (cardIds: string[], targetColumn: Col, targetOrder: number) => void;
 	}
 
-	let { column, title, cards, card, ondrop }: Props = $props();
-
-	let dragOver = $state(false);
-
-	function handleDragOver(event: DragEvent): void {
-		if (!hasCardDragData(event)) return;
-		event.preventDefault();
-		if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-		dragOver = true;
-	}
-
-	function handleDragLeave(): void {
-		dragOver = false;
-	}
-
-	function handleDrop(event: DragEvent): void {
-		dragOver = false;
-		const ids = getCardIdsFromDrag(event);
-		if (!ids || ids.length === 0 || !ondrop) return;
-		event.preventDefault();
-		const targetOrder = cards.length;
-		ondrop(ids, column, targetOrder);
-	}
+	let { column, title, cards, card }: Props = $props();
 </script>
 
-<section class="kanban-column" class:drag-over={dragOver} data-column={column} aria-label={title}>
+<section class="kanban-column" data-column={column} aria-label={title}>
 	<header class="kanban-column-head">
 		<h3 class="kanban-column-title">{title}</h3>
 		<span class="kanban-column-count" aria-label={`${cards.length}`}>{cards.length}</span>
 	</header>
 
-	<div
-		class="kanban-column-body"
-		role="list"
-		ondragover={handleDragOver}
-		ondragleave={handleDragLeave}
-		ondrop={handleDrop}
-	>
-		{#each cards as c, i (c.id)}
-			<div role="listitem" class="kanban-card-slot">
-				{@render card(c, i)}
+	<div class="kanban-column-body" role="list">
+		{#if cards.length === 0}
+			<div class="kanban-column-empty" aria-hidden="true">
+				<ClipboardList size={28} strokeWidth={1.5} />
+				<span>{$i18n('kanban_column_empty')}</span>
 			</div>
-		{/each}
+		{:else}
+			{#each cards as c, i (c.id)}
+				<div role="listitem" class="kanban-card-slot">
+					{@render card(c, i)}
+				</div>
+			{/each}
+		{/if}
 	</div>
 </section>
 
@@ -78,11 +57,6 @@
 		min-height: 200px;
 		max-height: 100%;
 		overflow: hidden;
-		transition: border-color var(--transition-fast);
-	}
-	.kanban-column.drag-over {
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 2px var(--color-accent) inset;
 	}
 	.kanban-column-head {
 		display: flex;
@@ -111,6 +85,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+	.kanban-column-empty {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
+		opacity: 0.6;
+		user-select: none;
 	}
 	.kanban-card-slot {
 		display: contents;

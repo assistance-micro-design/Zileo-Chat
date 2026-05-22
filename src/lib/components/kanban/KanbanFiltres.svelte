@@ -1,30 +1,25 @@
 <!--
   Copyright 2025 Assistance Micro Design
 
-  KanbanFiltres — filters by Kanban agent and (optional) target folder / status.
+  KanbanFiltres — filters by Kanban agent and target folder.
+  Status is intentionally not exposed: the columns ARE the statuses,
+  and column transitions are driven by the backend (workflow lifecycle).
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
 	import { Select, type SelectOption } from '$lib/components/ui';
 	import type { AgentSummary } from '$types/agent';
 	import type { WorkflowFolder } from '$types/workflow';
-	import type { KanbanCardStatus } from '$types/kanban';
 
 	interface Props {
 		agents: AgentSummary[];
 		folders: WorkflowFolder[];
 		selectedAgentId: string;
 		selectedFolderId: string;
-		selectedStatus: KanbanCardStatus | '';
-		onchange: (filters: {
-			agentId: string;
-			folderId: string;
-			status: KanbanCardStatus | '';
-		}) => void;
+		onchange: (filters: { agentId: string; folderId: string }) => void;
 	}
 
-	let { agents, folders, selectedAgentId, selectedFolderId, selectedStatus, onchange }: Props =
-		$props();
+	let { agents, folders, selectedAgentId, selectedFolderId, onchange }: Props = $props();
 
 	const agentOptions = $derived<SelectOption[]>([
 		{ value: '', label: $i18n('kanban_filter_all_agents') },
@@ -36,21 +31,10 @@
 		...folders.map((f) => ({ value: f.id, label: f.name }))
 	]);
 
-	const statusOptions = $derived<SelectOption[]>([
-		{ value: '', label: $i18n('kanban_filter_all_statuses') },
-		{ value: 'todo', label: $i18n('kanban_status_todo') },
-		{ value: 'ready', label: $i18n('kanban_status_ready') },
-		{ value: 'doing', label: $i18n('kanban_status_doing') },
-		{ value: 'review', label: $i18n('kanban_status_review') },
-		{ value: 'done', label: $i18n('kanban_status_done') },
-		{ value: 'failed', label: $i18n('kanban_status_failed') }
-	]);
-
 	function emit(part: Partial<Parameters<typeof onchange>[0]>): void {
 		onchange({
 			agentId: selectedAgentId,
 			folderId: selectedFolderId,
-			status: selectedStatus,
 			...part
 		});
 	}
@@ -71,14 +55,6 @@
 			options={folderOptions}
 			value={selectedFolderId}
 			onchange={(e) => emit({ folderId: e.currentTarget.value })}
-		/>
-	</div>
-	<div class="kanban-filtre">
-		<Select
-			label={$i18n('kanban_filter_status')}
-			options={statusOptions}
-			value={selectedStatus}
-			onchange={(e) => emit({ status: e.currentTarget.value as KanbanCardStatus | '' })}
 		/>
 	</div>
 </div>

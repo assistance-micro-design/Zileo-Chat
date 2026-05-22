@@ -2,7 +2,8 @@
   Copyright 2025 Assistance Micro Design
 
   KanbanBoard — 4-column board (todo / doing / review / done).
-  Stateless layout: parent provides the per-column card lists and the drop handler.
+  Layout-only: column transitions are driven by the backend (workflow
+  lifecycle), so the board does not expose any drop handler.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
@@ -15,11 +16,9 @@
 		cardsByColumn: Record<Col, KanbanCard[]>;
 		/** Render slot for each card; receives (card, index). */
 		card: Snippet<[KanbanCard, number]>;
-		/** Fired when a card is dropped on a column. */
-		ondrop?: (cardIds: string[], targetColumn: Col, targetOrder: number) => void;
 	}
 
-	let { cardsByColumn, card, ondrop }: Props = $props();
+	let { cardsByColumn, card }: Props = $props();
 
 	const columns: { id: Col; labelKey: string }[] = [
 		{ id: 'todo', labelKey: 'kanban_col_todo' },
@@ -36,7 +35,6 @@
 			title={$i18n(col.labelKey)}
 			cards={cardsByColumn[col.id]}
 			{card}
-			{ondrop}
 		/>
 	{/each}
 </div>
@@ -48,6 +46,7 @@
 		gap: 0.75rem;
 		flex: 1;
 		min-height: 0;
+		width: 100%;
 		padding: 0.5rem 0;
 	}
 	@media (max-width: 960px) {

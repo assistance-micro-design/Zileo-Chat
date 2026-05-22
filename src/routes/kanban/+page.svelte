@@ -28,7 +28,6 @@
 	import type {
 		KanbanCard,
 		KanbanCardCreate,
-		KanbanCardStatus,
 		KanbanColumn,
 		KanbanScheduleCreate
 	} from '$types/kanban';
@@ -45,11 +44,7 @@
 
 	let agentFilter = $state('');
 	let folderFilter = $state('');
-	// Status filter persists across reloads so the operator's review-only view
-	// is preserved between sessions. Loaded in onMount from localStorage.
-	let statusFilter = $state<KanbanCardStatus | ''>('');
 
-	const STATUS_FILTER_STORAGE_KEY = 'kanban-status-filter';
 	const SEEN_CARDS_STORAGE_KEY = 'kanban-seen-cards';
 
 	function isCardSeen(cardId: string): boolean {
@@ -89,24 +84,7 @@
 		void kanbanStore.loadCards(agentFilter || undefined);
 	});
 
-	$effect(() => {
-		// Persist status filter selection across reloads.
-		try {
-			localStorage.setItem(STATUS_FILTER_STORAGE_KEY, statusFilter);
-		} catch {
-			/* localStorage may be unavailable — silently ignore */
-		}
-	});
-
 	onMount(async () => {
-		// Restore persisted status filter selection.
-		try {
-			const saved = localStorage.getItem(STATUS_FILTER_STORAGE_KEY);
-			if (saved) statusFilter = saved as KanbanCardStatus | '';
-		} catch {
-			/* localStorage may be unavailable — fall back to default */
-		}
-
 		try {
 			await Promise.all([
 				agentStore.loadAgents(),
@@ -217,8 +195,9 @@
 	});
 
 	/**
-	 * Filtered card map. Visual filtering is applied after the column grouping
-	 * so empty columns still render their drop zones.
+	 * Filtered card map. Folder filter is applied after the column grouping
+	 * so empty columns still render. Column transitions are driven by the
+	 * backend (workflow lifecycle) — there is no manual status filter.
 	 */
 	const filteredByColumn = $derived.by(() => {
 		const all = $kanbanCardsByColumn;
@@ -231,7 +210,6 @@
 		for (const key of Object.keys(all) as KanbanColumn[]) {
 			result[key] = all[key].filter((c) => {
 				if (folderFilter && c.target_folder_id !== folderFilter) return false;
-				if (statusFilter && c.status !== statusFilter) return false;
 				return true;
 			});
 		}
@@ -242,29 +220,9 @@
 		return $agentsStore.find((a) => a.id === id)?.name ?? '';
 	}
 
-	function handleFilterChange(filters: {
-		agentId: string;
-		folderId: string;
-		status: KanbanCardStatus | '';
-	}): void {
+	function handleFilterChange(filters: { agentId: string; folderId: string }): void {
 		agentFilter = filters.agentId;
 		folderFilter = filters.folderId;
-		statusFilter = filters.status;
-	}
-
-	async function handleDrop(
-		cardIds: string[],
-		targetColumn: KanbanColumn,
-		targetOrder: number
-	): Promise<void> {
-		pageError = null;
-		try {
-			for (const id of cardIds) {
-				await kanbanStore.moveCard(id, targetColumn, targetOrder);
-			}
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
 	}
 
 	async function createCard(
@@ -453,11 +411,10 @@
 		folders={$foldersStore}
 		selectedAgentId={agentFilter}
 		selectedFolderId={folderFilter}
-		selectedStatus={statusFilter}
 		onchange={handleFilterChange}
 	/>
 
-	<KanbanBoard cardsByColumn={filteredByColumn} ondrop={handleDrop}>
+	<KanbanBoard cardsByColumn={filteredByColumn}>
 		{#snippet card(c)}
 			<KanbanCardItem
 				card={c}
@@ -511,6 +468,8 @@
 		padding: 1rem;
 		height: 100%;
 		min-height: 0;
+		flex: 1;
+		min-width: 0;
 	}
 	.page-head {
 		display: flex;

@@ -1,16 +1,17 @@
 <!--
   Copyright 2025 Assistance Micro Design
 
-  KanbanCardItem — a draggable card vignette displayed in a KanbanColumn.
+  KanbanCardItem — card vignette displayed in a KanbanColumn.
   Shows title, agent name, status, optional error summary, and exposes a
   small action menu (view, delete) via callbacks. The parent owns the actions.
+  Column transitions are driven by the backend (workflow lifecycle), not by
+  drag & drop.
 -->
 <script lang="ts">
 	import { i18n } from '$lib/i18n';
 	import { Badge, Button } from '$lib/components/ui';
 	import { Eye, Trash2, FileText, Wand2 } from '@lucide/svelte';
 	import type { KanbanCard, KanbanCardStatus } from '$types/kanban';
-	import { setCardDragData } from '$lib/utils/dragDrop';
 	import { runningWorkflows } from '$lib/stores/background-workflows';
 
 	interface Props {
@@ -55,10 +56,6 @@
 		}
 	}
 
-	function handleDragStart(event: DragEvent): void {
-		setCardDragData(event, [card.id]);
-	}
-
 	function handleDelete(): void {
 		if (isStuck) {
 			const ok = confirm($i18n('kanban_confirm_force_delete_stuck'));
@@ -68,13 +65,7 @@
 	}
 </script>
 
-<article
-	class="kanban-card"
-	class:running={isRunning}
-	draggable={!isRunning}
-	ondragstart={handleDragStart}
-	aria-grabbed={isRunning ? 'false' : undefined}
->
+<article class="kanban-card" class:running={isRunning}>
 	<header class="card-head">
 		<h4 class="card-title">{card.title}</h4>
 		<Badge variant={badgeVariantFor(card.status)}>{$i18n(`kanban_status_${card.status}`)}</Badge>
@@ -151,14 +142,12 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.35rem;
-		cursor: grab;
 		transition: box-shadow var(--transition-fast);
 	}
 	.kanban-card:hover {
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 	}
 	.kanban-card.running {
-		cursor: default;
 		opacity: 0.85;
 		border-style: dashed;
 	}
