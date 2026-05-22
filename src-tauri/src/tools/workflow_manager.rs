@@ -17,7 +17,8 @@ use serde_json::{json, Value};
 use std::sync::{Arc, LazyLock};
 use tracing::{debug, info};
 
-static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
     id: "WorkflowManagerTool".to_string(),
     name: "WorkflowManager".to_string(),
     summary: "List/rename workflows, organize folders, read final state and errors".to_string(),
@@ -49,15 +50,15 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
         ),
         (
             "move_workflow_to_folder",
-            "Move workflow to folder (`folder_id` null = uncategorized)",
+            "Move workflow to folder. Pass `folder_id: null` (or omit) to uncategorize.",
         ),
         (
             "read_workflow",
-            "Read demand + report + status + target_agent_id",
+            "Read workflow metadata + first-user message (demand) + last-assistant message (report) + status + target_agent_id + completed_at + cumulative tokens/cost. Pass `include_messages: true` to also return the last `messages_limit` user/assistant turns (default 20, max 50, chronological ASC) so you can inspect intermediate exchanges. Useful in Kanban analyze mode to grade a worker's report.",
         ),
         (
             "list_workflow_errors",
-            "Up to 20 failed tool executions, ordered by sequence ASC",
+            "Up to 50 failed tool executions ordered by sequence ASC. Each entry carries tool_name, server_name, error_message, iteration, agent_id, duration_ms — enough to tell orchestrator-level failures apart from sub-agent ones.",
         ),
     ])
     .examples(&[
@@ -70,22 +71,27 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
     input_schema: json!({
         "type": "object",
         "properties": {
-            "operation": {"type": "string"},
-            "workflow_id": {"type": "string"},
-            "folder_id": {"type": ["string", "null"]},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 200},
-            "new_name": {"type": "string"},
-            "name": {"type": "string"},
-            "color": {"type": "string"},
+            "operation": {"type": "string", "description": "One of: list_workflows, rename_workflow, list_workflow_folders, create_workflow_folder, move_workflow_to_folder, read_workflow, list_workflow_errors."},
+            "workflow_id": {"type": "string", "description": "UUID of the target workflow (required by rename/move/read/list_workflow_errors)."},
+            "folder_id": {"type": ["string", "null"], "description": "UUID of a workflow folder. For move_workflow_to_folder, pass null (or omit) to uncategorize. For list_workflows, acts as a filter."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "description": "Cap for list_workflows (default 50)."},
+            "new_name": {"type": "string", "description": "New workflow name (rename_workflow)."},
+            "name": {"type": "string", "description": "Folder name (create_workflow_folder)."},
+            "color": {"type": "string", "description": "Folder color as #rrggbb (create_workflow_folder, optional)."},
+            "include_messages": {"type": "boolean", "description": "read_workflow only: when true, also returns the last `messages_limit` user/assistant turns chronologically. Useful in Kanban analyze mode to inspect intermediate exchanges."},
+            "messages_limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "read_workflow only: cap for the `messages` array when include_messages=true (default 20)."},
         },
         "required": ["operation"],
     }),
     output_schema: json!({"type": "object"}),
     requires_confirmation: false,
+}
 });
 
-const MAX_ERRORS_PER_LIST: usize = 20;
+const MAX_ERRORS_PER_LIST: usize = 50;
 const DEFAULT_LIST_LIMIT: i64 = 50;
+const DEFAULT_MESSAGES_LIMIT: i64 = 20;
+const MAX_MESSAGES_LIMIT: i64 = 50;
 
 pub struct WorkflowManagerTool {
     db: Arc<DBClient>,
@@ -224,13 +230,21 @@ impl WorkflowManagerTool {
         Ok(json!({"success": true, "workflow_id": wid}))
     }
 
-    async fn read_workflow(&self, workflow_id: &str) -> ToolResult<Value> {
+    async fn read_workflow(
+        &self,
+        workflow_id: &str,
+        include_messages: bool,
+        messages_limit: Option<i64>,
+    ) -> ToolResult<Value> {
         let wid =
             validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
 
-        // Core workflow row.
+        // Core workflow row + execution metadata so the analyzer can see how
+        // long, how expensive and when the workflow finished.
         let wq = format!(
-            "SELECT meta::id(id) AS id, name, status, agent_id FROM workflow:`{}`",
+            "SELECT meta::id(id) AS id, name, status, agent_id, completed_at, \
+             total_tokens_input, total_tokens_output, total_cost_usd \
+             FROM workflow:`{}`",
             wid
         );
         let wrows = self
@@ -244,8 +258,9 @@ impl WorkflowManagerTool {
             .ok_or_else(|| ToolError::NotFound(format!("Workflow {}", wid)))?;
 
         // First user message = the demand.
-        let demand_q = "SELECT content FROM message WHERE workflow_id = $wid AND role = 'user' \
-                        ORDER BY created_at ASC LIMIT 1";
+        let demand_q = "SELECT content, timestamp FROM message \
+                        WHERE workflow_id = $wid AND role = 'user' \
+                        ORDER BY timestamp ASC LIMIT 1";
         let demand_rows = self
             .db
             .query_json_with_params(demand_q, vec![("wid".to_string(), json!(wid.clone()))])
@@ -258,9 +273,9 @@ impl WorkflowManagerTool {
             .unwrap_or_default();
 
         // Last assistant message = the report.
-        let report_q =
-            "SELECT content FROM message WHERE workflow_id = $wid AND role = 'assistant' \
-                        ORDER BY created_at DESC LIMIT 1";
+        let report_q = "SELECT content, timestamp FROM message \
+                        WHERE workflow_id = $wid AND role = 'assistant' \
+                        ORDER BY timestamp DESC LIMIT 1";
         let report_rows = self
             .db
             .query_json_with_params(report_q, vec![("wid".to_string(), json!(wid.clone()))])
@@ -271,6 +286,33 @@ impl WorkflowManagerTool {
             .next()
             .and_then(|r| r["content"].as_str().map(String::from));
 
+        // Optional: return the last N messages (user+assistant interleaved,
+        // chronological ASC) so the analyzer can inspect intermediate turns
+        // — `demand` and `report` only cover the extremities.
+        let messages = if include_messages {
+            let limit = messages_limit
+                .unwrap_or(DEFAULT_MESSAGES_LIMIT)
+                .clamp(1, MAX_MESSAGES_LIMIT);
+            // Pull the last `limit` rows by DESC then re-sort ASC client-side
+            // to keep both "newest-bounded" and "chronological-display".
+            let mq = format!(
+                "SELECT role, content, timestamp FROM message \
+                 WHERE workflow_id = $wid AND role IN ['user', 'assistant'] \
+                 ORDER BY timestamp DESC LIMIT {}",
+                limit
+            );
+            let mut rows = self
+                .db
+                .query_json_with_params(&mq, vec![("wid".to_string(), json!(wid.clone()))])
+                .await
+                .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+            // Query returned DESC (newest first); reverse to ASC for display.
+            rows.reverse();
+            Value::Array(rows)
+        } else {
+            Value::Null
+        };
+
         Ok(json!({
             "success": true,
             "workflow_id": wid,
@@ -278,6 +320,11 @@ impl WorkflowManagerTool {
             "report": report,
             "status": wf["status"],
             "target_agent_id": wf["agent_id"],
+            "completed_at": wf["completed_at"],
+            "total_tokens_input": wf["total_tokens_input"],
+            "total_tokens_output": wf["total_tokens_output"],
+            "total_cost_usd": wf["total_cost_usd"],
+            "messages": messages,
         }))
     }
 
@@ -285,7 +332,8 @@ impl WorkflowManagerTool {
         let wid =
             validate_uuid_field(workflow_id, "workflow_id").map_err(ToolError::InvalidInput)?;
         let q = format!(
-            "SELECT meta::id(id) AS id, tool_name, error_message, sequence, created_at \
+            "SELECT meta::id(id) AS id, tool_name, server_name, error_message, \
+             iteration, agent_id, duration_ms, sequence, created_at \
              FROM tool_execution WHERE workflow_id = $wid AND success = false \
              ORDER BY sequence ASC LIMIT {}",
             MAX_ERRORS_PER_LIST
@@ -350,7 +398,10 @@ impl Tool for WorkflowManagerTool {
                 let wid = input["workflow_id"]
                     .as_str()
                     .ok_or_else(|| ToolError::InvalidInput("workflow_id required".to_string()))?;
-                self.read_workflow(wid).await
+                let include_messages = input["include_messages"].as_bool().unwrap_or(false);
+                let messages_limit = input["messages_limit"].as_i64();
+                self.read_workflow(wid, include_messages, messages_limit)
+                    .await
             }
             "list_workflow_errors" => {
                 let wid = input["workflow_id"]
@@ -423,5 +474,108 @@ mod tests {
         let res = tool.list_workflow_errors(&wid).await.unwrap();
         assert_eq!(res["success"], true);
         assert!(res["errors"].as_array().unwrap().is_empty());
+    }
+
+    async fn seed_workflow(db: &Arc<DBClient>, wid: &str, agent_id: &str) {
+        let q = format!(
+            "CREATE workflow:`{wid}` SET \
+                id = '{wid}', name = 'test', agent_id = '{agent_id}', status = 'completed', \
+                completed_at = time::now(), \
+                total_tokens_input = 100, total_tokens_output = 50, total_cost_usd = 0.0042, \
+                total_cached_tokens = 0, total_cache_write_tokens = 0, \
+                sub_agent_tokens_input = 0, sub_agent_tokens_output = 0, \
+                current_context_tokens = 0, pinned = false, \
+                created_at = time::now(), updated_at = time::now()"
+        );
+        db.execute(&q).await.unwrap();
+    }
+
+    async fn seed_message(db: &Arc<DBClient>, wid: &str, role: &str, content: &str) {
+        let mid = uuid::Uuid::new_v4().to_string();
+        let q = format!(
+            "CREATE message:`{mid}` SET \
+                id = '{mid}', workflow_id = '{wid}', role = '{role}', \
+                content = $c, tokens = 0, \
+                created_at = time::now(), updated_at = time::now()"
+        );
+        db.execute_with_params(&q, vec![("c".to_string(), json!(content))])
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn read_workflow_returns_metadata_and_extremities() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow(&state.db, &wid, &aid).await;
+        seed_message(&state.db, &wid, "user", "the demand").await;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        seed_message(&state.db, &wid, "assistant", "the report").await;
+
+        let res = tool.read_workflow(&wid, false, None).await.unwrap();
+        assert_eq!(res["success"], true);
+        assert_eq!(res["demand"], "the demand");
+        assert_eq!(res["report"], "the report");
+        assert_eq!(res["target_agent_id"], aid);
+        assert_eq!(res["total_tokens_input"], 100);
+        assert_eq!(res["total_cost_usd"], 0.0042);
+        assert!(res["completed_at"].is_string());
+        assert!(res["messages"].is_null());
+    }
+
+    #[tokio::test]
+    async fn read_workflow_with_include_messages_returns_chronological_list() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow(&state.db, &wid, &aid).await;
+        seed_message(&state.db, &wid, "user", "first user").await;
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        seed_message(&state.db, &wid, "assistant", "first assistant").await;
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        seed_message(&state.db, &wid, "user", "second user").await;
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        seed_message(&state.db, &wid, "assistant", "second assistant").await;
+
+        let res = tool.read_workflow(&wid, true, Some(10)).await.unwrap();
+        let msgs = res["messages"].as_array().expect("messages array");
+        assert_eq!(msgs.len(), 4);
+        assert_eq!(msgs[0]["content"], "first user");
+        assert_eq!(msgs[1]["content"], "first assistant");
+        assert_eq!(msgs[2]["content"], "second user");
+        assert_eq!(msgs[3]["content"], "second assistant");
+    }
+
+    #[tokio::test]
+    async fn read_workflow_messages_limit_clamps_to_last_n() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow(&state.db, &wid, &aid).await;
+        for i in 0..5 {
+            seed_message(&state.db, &wid, "user", &format!("user-{i}")).await;
+            // SurrealDB `time::now()` has millisecond resolution at best;
+            // 25ms keeps the rows strictly ordered for the ORDER BY check.
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        let res = tool.read_workflow(&wid, true, Some(2)).await.unwrap();
+        let msgs = res["messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 2);
+        // limit=2 keeps the LAST two chronologically (user-3, user-4).
+        assert_eq!(msgs[0]["content"], "user-3");
+        assert_eq!(msgs[1]["content"], "user-4");
+    }
+
+    #[tokio::test]
+    async fn read_workflow_unknown_returns_not_found() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        let wid = uuid::Uuid::new_v4().to_string();
+        let err = tool.read_workflow(&wid, false, None).await.unwrap_err();
+        assert!(matches!(err, ToolError::NotFound(_)));
     }
 }

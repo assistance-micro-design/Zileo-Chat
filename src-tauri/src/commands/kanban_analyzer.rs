@@ -113,7 +113,8 @@ pub async fn analyze_card_report_core(
         Arc::new(SubmitAnalysisTool::new(capture.clone())),
     ];
 
-    let user_prompt = build_analyze_user_prompt(&card.title, &card.description, &report_text);
+    let user_prompt =
+        build_analyze_user_prompt(&card.title, &card.description, &workflow_id, &report_text);
     let task = Task {
         id: uuid::Uuid::new_v4().to_string(),
         description: user_prompt.clone(),
@@ -198,9 +199,9 @@ async fn load_kanban_agent_for_analysis(
 
 async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<String, String> {
     let validated_wf = validate_uuid_field(workflow_id, "workflow_id")?;
-    let q = "SELECT content, created_at FROM message \
+    let q = "SELECT content, timestamp FROM message \
              WHERE workflow_id = $wid AND role = 'assistant' \
-             ORDER BY created_at DESC LIMIT 1";
+             ORDER BY timestamp DESC LIMIT 1";
     let rows: Vec<serde_json::Value> = db
         .query_with_params(q, vec![("wid".to_string(), json!(validated_wf))])
         .await
@@ -237,19 +238,40 @@ fn build_analyze_system_prompt(agent_sp: &str) -> String {
          ## Submit contract\n\n\
          You MUST call SubmitAnalysis exactly once before ending your turn. \
          You may use any of your other assigned tools (skills, memory, MCP) \
-         to inform your verdict.\n",
+         to inform your verdict.\n\n\
+         ## Going deeper (optional)\n\n\
+         If your tool set includes WorkflowManager, you can use it to inspect the workflow \
+         behind the report on the workflow id provided in the user prompt:\n\
+         - `WorkflowManager.read_workflow({workflow_id, include_messages: true})` returns \
+           the last user/assistant turns, total cost, completion time — useful when the \
+           summary report alone is ambiguous.\n\
+         - `WorkflowManager.list_workflow_errors({workflow_id})` lists failed tool calls \
+           with iteration, agent_id and duration so you can tell whether failures came \
+           from the orchestrator or a sub-agent.\n\
+         Skip this when the report is clear; it costs extra tokens.\n",
     );
     s
 }
 
-fn build_analyze_user_prompt(title: &str, description: &str, report: &str) -> String {
+fn build_analyze_user_prompt(
+    title: &str,
+    description: &str,
+    workflow_id: &str,
+    report: &str,
+) -> String {
     format!(
         "## Card title\n{}\n\n\
          ## Original demand\n{}\n\n\
+         ## Workflow id\n{}\n\n\
          ## Worker's final report\n{}\n\n\
-         Analyse this report against the demand and call SubmitAnalysis with your verdict.",
+         Analyse this report against the demand and call SubmitAnalysis with your verdict. \
+         If you have WorkflowManager available, you may call WorkflowManager.read_workflow \
+         (with `include_messages: true` to see intermediate turns) or \
+         WorkflowManager.list_workflow_errors on the workflow id above to dig deeper before \
+         deciding.",
         title.trim(),
         description.trim(),
+        workflow_id,
         report
     )
 }
