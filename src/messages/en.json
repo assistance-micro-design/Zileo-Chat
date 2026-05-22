@@ -870,6 +870,8 @@
 	"kanban_card_delete": "Delete",
 	"kanban_card_validate": "Validate",
 	"kanban_card_running": "Workflow running...",
+	"kanban_card_force_delete": "Force delete (stuck workflow)",
+	"kanban_confirm_force_delete_stuck": "The workflow tied to this card is no longer active (likely crashed or interrupted). Delete the card permanently?",
 	"kanban_history_title": "Kanban agent history",
 	"kanban_history_loading": "Loading history...",
 	"kanban_history_empty": "No interaction recorded for this card.",

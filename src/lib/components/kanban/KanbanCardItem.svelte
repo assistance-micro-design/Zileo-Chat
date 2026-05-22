@@ -29,6 +29,17 @@
 
 	const isRunning = $derived(card.column === 'doing');
 	const isReviewable = $derived(card.column === 'review' || card.column === 'done');
+	/** Progress chunks for this card (if workflow is running). */
+	const liveProgress = $derived(
+		card.workflow_id ? $runningWorkflows.find((w) => w.workflowId === card.workflow_id) : undefined
+	);
+	/**
+	 * A 'doing' card whose workflow is no longer tracked by the background
+	 * runner is stuck (crash, missed `workflow_complete` event, app restarted
+	 * mid-run). Allow the user to clean it up with an explicit confirmation
+	 * instead of leaving it pinned in the column.
+	 */
+	const isStuck = $derived(isRunning && !liveProgress);
 
 	/** Status badge variant. */
 	function badgeVariantFor(status: KanbanCardStatus): 'primary' | 'success' | 'warning' | 'error' {
@@ -44,13 +55,16 @@
 		}
 	}
 
-	/** Progress chunks for this card (if workflow is running). */
-	const liveProgress = $derived(
-		card.workflow_id ? $runningWorkflows.find((w) => w.workflowId === card.workflow_id) : undefined
-	);
-
 	function handleDragStart(event: DragEvent): void {
 		setCardDragData(event, [card.id]);
+	}
+
+	function handleDelete(): void {
+		if (isStuck) {
+			const ok = confirm($i18n('kanban_confirm_force_delete_stuck'));
+			if (!ok) return;
+		}
+		ondelete?.(card);
 	}
 </script>
 
@@ -114,13 +128,13 @@
 				<FileText size={12} />
 			</span>
 		{/if}
-		{#if ondelete && !isRunning}
+		{#if ondelete && (!isRunning || isStuck)}
 			<Button
 				type="button"
 				variant="ghost"
 				size="sm"
-				onclick={() => ondelete?.(card)}
-				ariaLabel={$i18n('kanban_card_delete')}
+				onclick={handleDelete}
+				ariaLabel={isStuck ? $i18n('kanban_card_force_delete') : $i18n('kanban_card_delete')}
 			>
 				<Trash2 size={14} />
 			</Button>
