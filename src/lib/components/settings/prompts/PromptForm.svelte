@@ -52,6 +52,20 @@ Displays in a modal with variable detection and preview.
 	let { mode, prompt = null, saving = false, onsave, oncancel }: Props = $props();
 
 	let showVersions = $state(false);
+	/** Number of historical versions for this prompt; null while loading. */
+	let versionCount = $state<number | null>(null);
+
+	async function loadVersionCount(promptId: string): Promise<void> {
+		try {
+			const list = await tauriInvoke<Array<{ id: string }>>('list_prompt_versions', {
+				promptId
+			});
+			versionCount = list.length;
+		} catch {
+			// Non-blocking: keep null so the badge stays hidden but the button works.
+			versionCount = null;
+		}
+	}
 
 	// Form state
 	let name = $state('');
@@ -81,6 +95,16 @@ Displays in a modal with variable detection and preview.
 		description = prompt?.description ?? '';
 		category = prompt?.category ?? 'custom';
 		content = prompt?.content ?? '';
+	});
+
+	// Refresh the version count whenever the editing target changes or the
+	// history modal closes (a restore creates a new snapshot, bumping count).
+	$effect(() => {
+		if (mode === 'edit' && prompt && !showVersions) {
+			void loadVersionCount(prompt.id);
+		} else if (mode === 'create') {
+			versionCount = null;
+		}
 	});
 
 	// Derived state
@@ -240,8 +264,17 @@ Displays in a modal with variable detection and preview.
 
 	<div class="form-actions">
 		{#if mode === 'edit' && prompt}
-			<Button type="button" variant="ghost" onclick={() => (showVersions = true)} disabled={saving}>
+			<Button
+				type="button"
+				variant="ghost"
+				onclick={() => (showVersions = true)}
+				disabled={saving || versionCount === 0}
+				ariaLabel={$i18n('versions_history_button')}
+			>
 				{$i18n('versions_history_button')}
+				{#if versionCount !== null && versionCount > 0}
+					<Badge variant="primary">{versionCount}</Badge>
+				{/if}
 			</Button>
 		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>

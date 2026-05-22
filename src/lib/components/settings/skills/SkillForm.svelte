@@ -20,7 +20,8 @@ Displays in a modal with markdown content editor.
 -->
 
 <script lang="ts">
-	import { Button, Input, Textarea, Select } from '$lib/components/ui';
+	import { tauriInvoke } from '$lib/tauri';
+	import { Button, Input, Textarea, Select, Badge } from '$lib/components/ui';
 	import VersionsHistoryModal from '$lib/components/settings/versions/VersionsHistoryModal.svelte';
 	import type { Skill, SkillCreate, SkillCategory } from '$types/skill';
 	import { SKILL_CATEGORY_I18N_KEYS } from '$types/skill';
@@ -46,6 +47,17 @@ Displays in a modal with markdown content editor.
 	let { mode, skill = null, saving = false, onsave, oncancel }: Props = $props();
 
 	let showVersions = $state(false);
+	/** Number of historical versions for this skill; null while loading. */
+	let versionCount = $state<number | null>(null);
+
+	async function loadVersionCount(skillId: string): Promise<void> {
+		try {
+			const list = await tauriInvoke<Array<{ id: string }>>('list_skill_versions', { skillId });
+			versionCount = list.length;
+		} catch {
+			versionCount = null;
+		}
+	}
 
 	// Form state
 	let name = $state('');
@@ -63,6 +75,16 @@ Displays in a modal with markdown content editor.
 		category = skill?.category ?? 'custom';
 		content = skill?.content ?? '';
 		kind = skill?.kind ?? 'standard';
+	});
+
+	// Refresh the version count whenever the editing target changes or the
+	// history modal closes (a restore creates a new snapshot, bumping count).
+	$effect(() => {
+		if (mode === 'edit' && skill && !showVersions) {
+			void loadVersionCount(skill.id);
+		} else if (mode === 'create') {
+			versionCount = null;
+		}
 	});
 
 	// Derived state
@@ -176,8 +198,17 @@ Displays in a modal with markdown content editor.
 
 	<div class="form-actions">
 		{#if mode === 'edit' && skill}
-			<Button type="button" variant="ghost" onclick={() => (showVersions = true)} disabled={saving}>
+			<Button
+				type="button"
+				variant="ghost"
+				onclick={() => (showVersions = true)}
+				disabled={saving || versionCount === 0}
+				ariaLabel={$i18n('versions_history_button')}
+			>
 				{$i18n('versions_history_button')}
+				{#if versionCount !== null && versionCount > 0}
+					<Badge variant="primary">{versionCount}</Badge>
+				{/if}
 			</Button>
 		{/if}
 		<Button type="button" variant="ghost" onclick={handleCancel} disabled={saving}>

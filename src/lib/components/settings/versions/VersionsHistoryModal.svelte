@@ -85,7 +85,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-	class="modal-backdrop"
+	class="versions-modal-backdrop"
 	role="dialog"
 	aria-modal="true"
 	aria-labelledby="versions-title"
@@ -93,7 +93,7 @@
 	onclick={onclose}
 >
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="modal-panel" onclick={(e) => e.stopPropagation()} role="document">
+	<div class="versions-modal-panel" onclick={(e) => e.stopPropagation()} role="document">
 		<header class="modal-head">
 			<h3 id="versions-title">
 				{kind === 'prompt'
@@ -163,19 +163,25 @@
 </div>
 
 <style>
-	.modal-backdrop {
+	/* Stacked above the parent Modal's backdrop (--z-index-modal-backdrop = 1040)
+	   and content (--z-index-modal = 1050) since this dialog is rendered nested
+	   inside an already-open Modal (PromptSettings/SkillSettings). */
+	.versions-modal-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: rgba(0, 0, 0, 0.6);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: var(--z-index-popover);
+		padding: var(--spacing-lg);
 	}
-	.modal-panel {
-		background: var(--color-surface);
+	.versions-modal-panel {
+		background: var(--color-bg-primary);
 		color: var(--color-text);
-		border-radius: 8px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-xl);
+		box-shadow: var(--shadow-xl);
 		width: min(960px, 95vw);
 		max-height: 85vh;
 		display: flex;
@@ -188,6 +194,7 @@
 		justify-content: space-between;
 		padding: 0.75rem 1rem;
 		border-bottom: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
 	}
 	.modal-head h3 {
 		margin: 0;
