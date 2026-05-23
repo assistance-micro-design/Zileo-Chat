@@ -65,6 +65,11 @@ pub enum ReasoningEffort {
     Low,
     Medium,
     High,
+    /// Extra-high effort ("Think Max"). Only meaningful on providers that
+    /// expose an `xhigh` tier (e.g. DeepSeek V4 routed via OpenAI-compatible
+    /// gateways). Mistral has no equivalent, so [`to_mistral_str`] falls
+    /// back to `"high"`.
+    XHigh,
 }
 
 impl ReasoningEffort {
@@ -74,6 +79,7 @@ impl ReasoningEffort {
             ReasoningEffort::Low => "low",
             ReasoningEffort::Medium => "medium",
             ReasoningEffort::High => "high",
+            ReasoningEffort::XHigh => "xhigh",
         }
     }
 
@@ -81,13 +87,16 @@ impl ReasoningEffort {
     ///
     /// The Mistral API only accepts `"high"` (full thinking) or `"none"`
     /// (minimal thinking). Any explicit `ReasoningEffort` variant means
-    /// "the user wants reasoning enabled", so `Low`/`Medium` are mapped to
-    /// `"high"` (Mistral does not expose intensity levels). Disabling
-    /// reasoning entirely is done by passing `None` (no field sent), not
-    /// by selecting a level.
+    /// "the user wants reasoning enabled", so all intensity levels (including
+    /// `XHigh`, which Mistral does not support natively) collapse to
+    /// `"high"`. Disabling reasoning entirely is done by passing `None`
+    /// (no field sent), not by selecting a level.
     pub fn to_mistral_str(&self) -> &'static str {
         match self {
-            ReasoningEffort::Low | ReasoningEffort::Medium | ReasoningEffort::High => "high",
+            ReasoningEffort::Low
+            | ReasoningEffort::Medium
+            | ReasoningEffort::High
+            | ReasoningEffort::XHigh => "high",
         }
     }
 }
@@ -424,6 +433,13 @@ mod tests {
 
         let high: ReasoningEffort = serde_json::from_str("\"high\"").unwrap();
         assert_eq!(high, ReasoningEffort::High);
+
+        // XHigh round-trip: rename_all = "lowercase" maps the variant name
+        // verbatim (lowercased), giving "xhigh" with no explicit rename.
+        let xhigh_json = serde_json::to_string(&ReasoningEffort::XHigh).unwrap();
+        assert_eq!(xhigh_json, "\"xhigh\"");
+        let xhigh: ReasoningEffort = serde_json::from_str("\"xhigh\"").unwrap();
+        assert_eq!(xhigh, ReasoningEffort::XHigh);
     }
 
     #[test]
@@ -441,13 +457,21 @@ mod tests {
     }
 
     #[test]
+    fn test_to_mistral_str_xhigh_falls_back_to_high() {
+        // Mistral has no XHigh tier; the fallback preserves the user intent
+        // (reasoning enabled at max supported intensity).
+        assert_eq!(ReasoningEffort::XHigh.to_mistral_str(), "high");
+    }
+
+    #[test]
     fn test_as_str_unchanged_for_openai_compat() {
         // Regression guard: as_str() must keep producing the OpenAI-compatible
-        // values (low/medium/high), since OpenAI-compat providers (OpenRouter,
-        // vLLM, etc.) accept all three intensity levels.
+        // values, since OpenAI-compat providers (OpenRouter, vLLM, etc.) accept
+        // all four intensity levels (xhigh exposed for DeepSeek V4 "Think Max").
         assert_eq!(ReasoningEffort::Low.as_str(), "low");
         assert_eq!(ReasoningEffort::Medium.as_str(), "medium");
         assert_eq!(ReasoningEffort::High.as_str(), "high");
+        assert_eq!(ReasoningEffort::XHigh.as_str(), "xhigh");
     }
 
     #[test]

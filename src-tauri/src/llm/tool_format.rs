@@ -125,6 +125,10 @@ pub(crate) fn effort_to_max_tokens(effort: &ReasoningEffort) -> u32 {
         ReasoningEffort::Low => 2048,
         ReasoningEffort::Medium => 4096,
         ReasoningEffort::High => 8192,
+        // XHigh ("Think Max") doubles the High budget. Gateways that route
+        // to DeepSeek V4 expose this tier; on providers that do not, the
+        // larger budget is harmless (the provider clamps to its own ceiling).
+        ReasoningEffort::XHigh => 16384,
     }
 }
 
@@ -467,6 +471,9 @@ mod tests {
         assert_eq!(effort_to_max_tokens(&ReasoningEffort::Low), 2048);
         assert_eq!(effort_to_max_tokens(&ReasoningEffort::Medium), 4096);
         assert_eq!(effort_to_max_tokens(&ReasoningEffort::High), 8192);
+        // XHigh ("Think Max") doubles the High budget for DeepSeek V4 via
+        // OpenAI-compatible gateways that expose the `xhigh` tier.
+        assert_eq!(effort_to_max_tokens(&ReasoningEffort::XHigh), 16384);
     }
 
     /// Anthropic rejects `thinking.budget_tokens >= max_tokens` with a
@@ -496,6 +503,21 @@ mod tests {
                 budget
             );
         }
+    }
+
+    /// Regression guard: `XHigh` serializes as `"xhigh"` via `as_str()`
+    /// (matching the value gateways like OpenRouter/RouterLab expose for
+    /// DeepSeek V4 "Think Max").
+    #[test]
+    fn xhigh_serializes_through_as_str() {
+        assert_eq!(ReasoningEffort::XHigh.as_str(), "xhigh");
+        let mut params = sample_params();
+        params.reasoning_effort = Some(ReasoningEffort::XHigh);
+        let body = ToolChatRequest::from_params(&params, vec![]);
+        assert_eq!(body.reasoning_effort, Some("xhigh".to_string()));
+        let reasoning = body.reasoning.expect("reasoning param set");
+        assert_eq!(reasoning.effort, Some("xhigh".to_string()));
+        assert_eq!(reasoning.max_tokens, Some(16384));
     }
 
     #[test]
