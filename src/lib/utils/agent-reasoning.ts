@@ -35,22 +35,44 @@ export function isMistralProvider(provider: string): boolean {
 }
 
 /**
+ * Returns true when the model's `api_name` looks like a DeepSeek model.
+ *
+ * Used to gate the `xhigh` reasoning tier, which only DeepSeek V4 exposes
+ * (via OpenAI-compatible gateways). Detection is intentionally name-based
+ * rather than a DB column: simpler to maintain, and users who alias a
+ * DeepSeek model with a non-conventional name can just include "deepseek"
+ * somewhere in the api_name (documented in the help text).
+ */
+export function isDeepseekModel(apiName: string | undefined | null): boolean {
+	return !!apiName && apiName.toLowerCase().includes('deepseek');
+}
+
+/**
  * Returns the reasoning-effort options to expose for the given provider.
  *
  * Mistral models do not expose intensity levels: only "Off" and "High" are
- * valid. All other providers keep the full range.
+ * valid. All other providers keep the full range. The `xhigh` tier ("Think
+ * Max") is only added when `modelApiName` looks like a DeepSeek model.
  */
-export function getReasoningOptions(provider: string, t: Translator): ReasoningOption[] {
+export function getReasoningOptions(
+	provider: string,
+	t: Translator,
+	modelApiName?: string | null
+): ReasoningOption[] {
 	const off: ReasoningOption = { value: '', label: t('agents_reasoning_off') };
 	if (isMistralProvider(provider)) {
 		return [off, { value: 'high', label: t('agents_reasoning_high') }];
 	}
-	return [
+	const base: ReasoningOption[] = [
 		off,
 		{ value: 'low', label: t('agents_reasoning_low') },
 		{ value: 'medium', label: t('agents_reasoning_medium') },
 		{ value: 'high', label: t('agents_reasoning_high') }
 	];
+	if (isDeepseekModel(modelApiName)) {
+		base.push({ value: 'xhigh', label: t('agents_reasoning_xhigh') });
+	}
+	return base;
 }
 
 /**
@@ -79,10 +101,18 @@ export function getReasoningHelp(provider: string, t: Translator): string {
  */
 export function normalizeReasoningEffortForProvider(
 	provider: string,
-	effort: ReasoningEffort | undefined
+	effort: ReasoningEffort | undefined,
+	modelApiName?: string | null
 ): ReasoningEffort | undefined {
 	if (!effort) return effort;
 	if (isMistralProvider(provider) && (effort === 'low' || effort === 'medium')) {
+		return 'high';
+	}
+	// `xhigh` is only exposed for DeepSeek; if the user switches to any other
+	// model while xhigh is selected, downgrade to `high` so the form state
+	// matches the option set. The backend would also collapse xhigh -> high
+	// on Mistral, but doing it here keeps the visible Select consistent.
+	if (effort === 'xhigh' && !isDeepseekModel(modelApiName)) {
 		return 'high';
 	}
 	return effort;

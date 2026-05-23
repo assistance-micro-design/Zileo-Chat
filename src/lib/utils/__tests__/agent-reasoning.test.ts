@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	getReasoningHelp,
 	getReasoningOptions,
+	isDeepseekModel,
 	isMistralProvider,
 	normalizeReasoningEffortForProvider,
 	type Translator
@@ -95,5 +96,56 @@ describe('normalizeReasoningEffortForProvider', () => {
 		expect(normalizeReasoningEffortForProvider('custom', 'low')).toBe('low');
 		expect(normalizeReasoningEffortForProvider('custom', 'medium')).toBe('medium');
 		expect(normalizeReasoningEffortForProvider('ollama', 'low')).toBe('low');
+	});
+
+	it('keeps xhigh when the model is DeepSeek', () => {
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', 'deepseek-v4')).toBe('xhigh');
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', 'pro/deepseek-r1')).toBe('xhigh');
+	});
+
+	it('downgrades xhigh to high when the model is not DeepSeek', () => {
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', 'mistral-large')).toBe('high');
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', undefined)).toBe('high');
+		expect(normalizeReasoningEffortForProvider('ollama', 'xhigh', 'qwen3')).toBe('high');
+	});
+});
+
+describe('isDeepseekModel', () => {
+	it('matches names containing deepseek (case-insensitive)', () => {
+		expect(isDeepseekModel('deepseek-v4')).toBe(true);
+		expect(isDeepseekModel('DeepSeek-R1')).toBe(true);
+		expect(isDeepseekModel('pro/deepseek-chat-v4')).toBe(true);
+	});
+
+	it('returns false for non-DeepSeek names or empty input', () => {
+		expect(isDeepseekModel('mistral-large')).toBe(false);
+		expect(isDeepseekModel('qwen3')).toBe(false);
+		expect(isDeepseekModel('')).toBe(false);
+		expect(isDeepseekModel(undefined)).toBe(false);
+		expect(isDeepseekModel(null)).toBe(false);
+	});
+});
+
+describe('getReasoningOptions xhigh gating', () => {
+	it('exposes xhigh only when the model is DeepSeek', () => {
+		const opts = getReasoningOptions('custom', identityTranslator, 'deepseek-v4');
+		expect(opts.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high', 'xhigh']);
+	});
+
+	it('hides xhigh for non-DeepSeek models', () => {
+		const opts = getReasoningOptions('custom', identityTranslator, 'mistral-large');
+		expect(opts.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high']);
+	});
+
+	it('hides xhigh when no model is provided', () => {
+		const opts = getReasoningOptions('custom', identityTranslator);
+		expect(opts.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high']);
+	});
+
+	it('never exposes xhigh on Mistral regardless of the model name', () => {
+		// Hypothetical edge case: Mistral provider with a model api_name containing
+		// "deepseek". The provider gate takes precedence over the model gate.
+		const opts = getReasoningOptions('mistral', identityTranslator, 'deepseek-via-mistral');
+		expect(opts.map((o) => o.value)).toEqual(['', 'high']);
 	});
 });

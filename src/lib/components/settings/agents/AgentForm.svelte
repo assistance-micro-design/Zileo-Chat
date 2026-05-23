@@ -267,7 +267,9 @@ Be concise, factual, and conservative in your judgements.`;
 	 * Reasoning-effort options for the Select. Mistral only exposes Off / High;
 	 * other providers keep the full Off / Low / Medium / High range.
 	 */
-	const reasoningOptions = $derived(getReasoningOptions(provider, $i18n));
+	const reasoningOptions = $derived(
+		getReasoningOptions(provider, $i18n, selectedModel?.api_name)
+	);
 
 	/** Help text below the reasoning-effort Select (provider-specific). */
 	const reasoningHelp = $derived(getReasoningHelp(provider, $i18n));
@@ -275,11 +277,16 @@ Be concise, factual, and conservative in your judgements.`;
 	/**
 	 * Keep `reasoningEffort` consistent with the available options when the
 	 * provider switches to Mistral while a non-exposed value (low/medium) is
-	 * selected. Promotes to "high" so the user's reasoning intent is preserved
-	 * (matches the backend mapping in ReasoningEffort::to_mistral_str).
+	 * selected, or when the user switches away from a DeepSeek model while
+	 * `xhigh` is selected. Both cases collapse to "high" so the form state
+	 * matches what the backend persists.
 	 */
 	$effect(() => {
-		const normalized = normalizeReasoningEffortForProvider(provider, reasoningEffort);
+		const normalized = normalizeReasoningEffortForProvider(
+			provider,
+			reasoningEffort,
+			selectedModel?.api_name
+		);
 		if (normalized !== reasoningEffort) {
 			reasoningEffort = normalized;
 		}

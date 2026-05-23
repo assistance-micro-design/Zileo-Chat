@@ -14,8 +14,16 @@
  * limitations under the License.
  */
 
-/** Reasoning effort level for thinking models */
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+/**
+ * Reasoning effort level for thinking models.
+ *
+ * `xhigh` ("Think Max") is only meaningful on providers that expose an
+ * `xhigh` tier, currently DeepSeek V4 routed via OpenAI-compatible gateways.
+ * On Mistral and any provider without an xhigh tier the backend collapses
+ * it to `high` (cf `ReasoningEffort::to_mistral_str`); the UI hides the
+ * option unless the selected model's `api_name` looks like DeepSeek.
+ */
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
 /**
  * Agent lifecycle type
