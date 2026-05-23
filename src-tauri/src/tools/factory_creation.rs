@@ -103,9 +103,14 @@ impl ToolFactory {
     /// expose itself rather than risking a silent hallucination on a
     /// text-only model.
     async fn resolve_agent_supports_vision(&self, agent_id: &str) -> bool {
-        // First SELECT: pull the model api_name the agent is configured to use.
-        let agent_query = "SELECT llm.model AS model FROM agent WHERE meta::id(id) = $agent_id";
-        let model_name: Option<String> = match self
+        // First SELECT: pull the whole `llm` object. Projecting nested
+        // fields with `AS` (e.g. `llm.model AS model`) is unreliable with
+        // query_json under SCHEMAFULL, so read the full object and walk
+        // it client-side. Provider is grabbed at the same time so the
+        // second SELECT can disambiguate api_name collisions between
+        // multiple providers.
+        let agent_query = "SELECT llm FROM agent WHERE meta::id(id) = $agent_id";
+        let (model_name, provider) = match self
             .db
             .query_json_with_params(
                 agent_query,
@@ -113,12 +118,17 @@ impl ToolFactory {
             )
             .await
         {
-            Ok(rows) => rows
-                .into_iter()
-                .next()
-                .and_then(|r| r["model"].as_str().map(String::from)),
+            Ok(rows) => {
+                let Some(row) = rows.into_iter().next() else {
+                    return false;
+                };
+                let llm = &row["llm"];
+                let model = llm["model"].as_str().map(String::from);
+                let provider = llm["provider"].as_str().map(String::from);
+                (model, provider)
+            }
             Err(e) => {
-                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent model, defaulting supports_vision to false");
+                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent llm, defaulting supports_vision to false");
                 return false;
             }
         };
@@ -127,21 +137,40 @@ impl ToolFactory {
             return false;
         };
 
-        // Second SELECT: read supports_vision for that api_name.
-        let model_query = "SELECT supports_vision FROM llm_model WHERE api_name = $api_name";
+        // Second SELECT: read supports_vision for that (provider, api_name).
+        // Provider scoping is critical — two custom providers can expose the
+        // same api_name with different capabilities. Provider strings are
+        // normalized lowercase to match how the front-end stores them.
+        let model_query =
+            "SELECT supports_vision FROM llm_model \
+             WHERE api_name = $api_name \
+               AND ($provider IS NONE OR string::lowercase(provider) = string::lowercase($provider))";
         match self
             .db
             .query_json_with_params(
                 model_query,
-                vec![("api_name".to_string(), serde_json::json!(model_name))],
+                vec![
+                    ("api_name".to_string(), serde_json::json!(model_name)),
+                    ("provider".to_string(), serde_json::json!(provider)),
+                ],
             )
             .await
         {
-            Ok(rows) => rows
-                .into_iter()
-                .next()
-                .and_then(|r| r["supports_vision"].as_bool())
-                .unwrap_or(false),
+            Ok(rows) => {
+                let supports_vision = rows
+                    .into_iter()
+                    .next()
+                    .and_then(|r| r["supports_vision"].as_bool())
+                    .unwrap_or(false);
+                debug!(
+                    agent_id = %agent_id,
+                    model = %model_name,
+                    provider = ?provider,
+                    supports_vision = supports_vision,
+                    "Resolved agent vision capability for tool creation"
+                );
+                supports_vision
+            }
             Err(e) => {
                 warn!(model = %model_name, error = %e, "Failed to resolve model supports_vision, defaulting to false");
                 false

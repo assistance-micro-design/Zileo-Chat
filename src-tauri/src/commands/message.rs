@@ -161,20 +161,30 @@ pub(crate) async fn resolve_workflow_supports_vision(
         return false;
     };
 
-    let agent_query = "SELECT llm.model AS model FROM agent WHERE meta::id(id) = $agent_id";
-    let model_name: Option<String> = match db
+    // Pull the whole `llm` object: projecting nested fields with `AS` is
+    // unreliable with query_json under SCHEMAFULL. Grab provider at the
+    // same time so the llm_model lookup can disambiguate api_name
+    // collisions between providers.
+    let agent_query = "SELECT llm FROM agent WHERE meta::id(id) = $agent_id";
+    let (model_name, provider) = match db
         .query_json_with_params(
             agent_query,
             vec![("agent_id".to_string(), serde_json::json!(agent_id))],
         )
         .await
     {
-        Ok(rows) => rows
-            .into_iter()
-            .next()
-            .and_then(|r| r["model"].as_str().map(String::from)),
+        Ok(rows) => {
+            let Some(row) = rows.into_iter().next() else {
+                return false;
+            };
+            let llm = &row["llm"];
+            (
+                llm["model"].as_str().map(String::from),
+                llm["provider"].as_str().map(String::from),
+            )
+        }
         Err(e) => {
-            warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent model, defaulting supports_vision to false");
+            warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent llm, defaulting supports_vision to false");
             return false;
         }
     };
@@ -183,11 +193,17 @@ pub(crate) async fn resolve_workflow_supports_vision(
         return false;
     };
 
-    let model_query = "SELECT supports_vision FROM llm_model WHERE api_name = $api_name";
+    let model_query =
+        "SELECT supports_vision FROM llm_model \
+         WHERE api_name = $api_name \
+           AND ($provider IS NONE OR string::lowercase(provider) = string::lowercase($provider))";
     match db
         .query_json_with_params(
             model_query,
-            vec![("api_name".to_string(), serde_json::json!(model_name))],
+            vec![
+                ("api_name".to_string(), serde_json::json!(model_name)),
+                ("provider".to_string(), serde_json::json!(provider)),
+            ],
         )
         .await
     {
