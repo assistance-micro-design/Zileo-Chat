@@ -52,7 +52,18 @@ pub(crate) const ALLOWED_ATTACHMENT_MIMES: &[&str] =
 
 /// Validates a set of attachments for a user message. Returns the validated
 /// vector (passes-through on success). Errors describe the first failure.
-fn validate_attachments(role: &str, attachments: &[MessageAttachment]) -> Result<(), String> {
+///
+/// `model_supports_vision` gates image attachments at the IPC boundary: when
+/// `false`, any image attachment is rejected before the row is persisted.
+/// This is the backend half of the defense in depth — the UI also blocks
+/// the paste/picker/drop in `ChatInput.svelte` — but this layer is the
+/// source of truth because the front-end can be bypassed (custom callers,
+/// stale state, ...).
+fn validate_attachments(
+    role: &str,
+    attachments: &[MessageAttachment],
+    model_supports_vision: bool,
+) -> Result<(), String> {
     if role != "user" {
         return Err(format!(
             "Attachments are only allowed on user messages (got role '{}')",
@@ -71,6 +82,12 @@ fn validate_attachments(role: &str, attachments: &[MessageAttachment]) -> Result
             return Err(format!(
                 "Attachment {} has unsupported kind '{}', only 'image' is supported",
                 i, att.kind
+            ));
+        }
+        if !model_supports_vision {
+            return Err(format!(
+                "Attachment {} is an image but the workflow's model does not support vision",
+                i
             ));
         }
         if !ALLOWED_ATTACHMENT_MIMES.contains(&att.mime_type.as_str()) {
@@ -110,6 +127,82 @@ fn validate_attachments(role: &str, attachments: &[MessageAttachment]) -> Result
     }
     Ok(())
 }
+/// Resolves whether the model used by the workflow's primary agent supports
+/// image attachments.
+///
+/// Chains three SELECTs (workflow -> agent.llm.model -> llm_model.supports_vision)
+/// and fails closed: any error, missing row, or unconfigured field yields
+/// `false`. The caller (`save_message_core`) treats the boolean as the
+/// authoritative gate at the IPC boundary — if we cannot prove the model
+/// supports vision, we refuse the image attachment.
+pub(crate) async fn resolve_workflow_supports_vision(
+    db: &crate::db::DBClient,
+    workflow_id: &str,
+) -> bool {
+    let wf_query = "SELECT agent_id FROM workflow WHERE meta::id(id) = $workflow_id";
+    let agent_id: Option<String> = match db
+        .query_json_with_params(
+            wf_query,
+            vec![("workflow_id".to_string(), serde_json::json!(workflow_id))],
+        )
+        .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .next()
+            .and_then(|r| r["agent_id"].as_str().map(String::from)),
+        Err(e) => {
+            warn!(workflow_id = %workflow_id, error = %e, "Failed to resolve workflow agent_id, defaulting supports_vision to false");
+            return false;
+        }
+    };
+
+    let Some(agent_id) = agent_id else {
+        return false;
+    };
+
+    let agent_query = "SELECT llm.model AS model FROM agent WHERE meta::id(id) = $agent_id";
+    let model_name: Option<String> = match db
+        .query_json_with_params(
+            agent_query,
+            vec![("agent_id".to_string(), serde_json::json!(agent_id))],
+        )
+        .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .next()
+            .and_then(|r| r["model"].as_str().map(String::from)),
+        Err(e) => {
+            warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent model, defaulting supports_vision to false");
+            return false;
+        }
+    };
+
+    let Some(model_name) = model_name else {
+        return false;
+    };
+
+    let model_query = "SELECT supports_vision FROM llm_model WHERE api_name = $api_name";
+    match db
+        .query_json_with_params(
+            model_query,
+            vec![("api_name".to_string(), serde_json::json!(model_name))],
+        )
+        .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .next()
+            .and_then(|r| r["supports_vision"].as_bool())
+            .unwrap_or(false),
+        Err(e) => {
+            warn!(model = %model_name, error = %e, "Failed to resolve model supports_vision, defaulting to false");
+            false
+        }
+    }
+}
+
 use std::collections::{HashMap, HashSet};
 use tauri::State;
 use tracing::{error, info, instrument, warn};
@@ -243,7 +336,12 @@ pub(crate) async fn save_message_core(
 
     if let Some(ref atts) = params.attachments {
         if !atts.is_empty() {
-            validate_attachments(&validated_role, atts)?;
+            // Resolve once (single SELECT chain), pass the bool to the pure
+            // validator. Fails closed: an unresolved workflow/agent/model
+            // chain yields `false`, so an image attachment is rejected with
+            // a clear error rather than silently persisted.
+            let supports_vision = resolve_workflow_supports_vision(db, &validated_workflow_id).await;
+            validate_attachments(&validated_role, atts, supports_vision)?;
         }
     }
 
@@ -880,13 +978,13 @@ mod tests {
         // accents, CJK, or emoji — the rule targets control bytes, not
         // multi-byte printable characters.
         let atts = vec![valid_attachment_with_name(Some("Capture_écran.png"))];
-        validate_attachments("user", &atts).expect("unicode name must be accepted");
+        validate_attachments("user", &atts, true).expect("unicode name must be accepted");
     }
 
     #[test]
     fn validate_attachments_rejects_name_with_null_byte() {
         let atts = vec![valid_attachment_with_name(Some("evil\0name.png"))];
-        let err = validate_attachments("user", &atts).expect_err("NUL byte must be rejected");
+        let err = validate_attachments("user", &atts, true).expect_err("NUL byte must be rejected");
         assert!(err.contains("control characters"), "got: {}", err);
     }
 
@@ -895,7 +993,7 @@ mod tests {
         // Newlines / carriage returns enable log-injection: a name like
         // `"foo\nINFO: fake log line"` would split a log entry in two.
         let atts = vec![valid_attachment_with_name(Some("foo\nbar.png"))];
-        let err = validate_attachments("user", &atts).expect_err("LF must be rejected");
+        let err = validate_attachments("user", &atts, true).expect_err("LF must be rejected");
         assert!(err.contains("control characters"), "got: {}", err);
     }
 
@@ -903,14 +1001,43 @@ mod tests {
     fn validate_attachments_rejects_oversize_name() {
         let huge = "a".repeat(MAX_ATTACHMENT_NAME_LEN + 1);
         let atts = vec![valid_attachment_with_name(Some(&huge))];
-        let err = validate_attachments("user", &atts).expect_err("oversize name must be rejected");
+        let err = validate_attachments("user", &atts, true).expect_err("oversize name must be rejected");
         assert!(err.contains("longer than"), "got: {}", err);
     }
 
     #[test]
     fn validate_attachments_accepts_missing_name() {
         let atts = vec![valid_attachment_with_name(None)];
-        validate_attachments("user", &atts).expect("missing name must be accepted");
+        validate_attachments("user", &atts, true).expect("missing name must be accepted");
+    }
+
+    #[test]
+    fn validate_attachments_rejects_image_when_model_lacks_vision() {
+        // Backend half of the vision gate (defense in depth): images must
+        // be refused at the IPC boundary if the workflow's model does not
+        // support them. The UI also blocks paste/picker/drop, but this is
+        // the source of truth — bypassing the UI must not silently persist
+        // images that the agent cannot consume.
+        let atts = vec![valid_attachment_with_name(Some("photo.png"))];
+        let err = validate_attachments("user", &atts, false)
+            .expect_err("non-vision model must reject image attachments");
+        assert!(err.contains("does not support vision"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_attachments_accepts_image_when_model_supports_vision() {
+        let atts = vec![valid_attachment_with_name(Some("photo.png"))];
+        validate_attachments("user", &atts, true)
+            .expect("vision-capable model must accept image attachments");
+    }
+
+    #[test]
+    fn validate_attachments_no_op_when_empty_regardless_of_vision() {
+        // Empty attachment lists short-circuit at the caller, but the
+        // validator itself should not depend on vision support when there
+        // is no image to gate.
+        validate_attachments("user", &[], false).expect("empty list must always pass");
+        validate_attachments("user", &[], true).expect("empty list must always pass");
     }
 
     /// Inserts an `assistant` row directly (matches the columns the metrics
