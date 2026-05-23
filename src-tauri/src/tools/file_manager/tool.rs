@@ -210,7 +210,10 @@ fn build_definition(authorized_folders: &[PathBuf], supports_vision: bool) -> To
     // Operations list: read_image is gated on vision support.
     let mut operations: Vec<(&'static str, &'static str)> = vec![
         ("list", "List directory contents"),
-        ("read", "Read text file content (with optional offset/limit)"),
+        (
+            "read",
+            "Read text file content (with optional offset/limit)",
+        ),
     ];
     if supports_vision {
         operations.push((

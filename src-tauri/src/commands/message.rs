@@ -193,8 +193,7 @@ pub(crate) async fn resolve_workflow_supports_vision(
         return false;
     };
 
-    let model_query =
-        "SELECT supports_vision FROM llm_model \
+    let model_query = "SELECT supports_vision FROM llm_model \
          WHERE api_name = $api_name \
            AND ($provider IS NONE OR string::lowercase(provider) = string::lowercase($provider))";
     match db
@@ -356,7 +355,8 @@ pub(crate) async fn save_message_core(
             // validator. Fails closed: an unresolved workflow/agent/model
             // chain yields `false`, so an image attachment is rejected with
             // a clear error rather than silently persisted.
-            let supports_vision = resolve_workflow_supports_vision(db, &validated_workflow_id).await;
+            let supports_vision =
+                resolve_workflow_supports_vision(db, &validated_workflow_id).await;
             validate_attachments(&validated_role, atts, supports_vision)?;
         }
     }
@@ -1017,7 +1017,8 @@ mod tests {
     fn validate_attachments_rejects_oversize_name() {
         let huge = "a".repeat(MAX_ATTACHMENT_NAME_LEN + 1);
         let atts = vec![valid_attachment_with_name(Some(&huge))];
-        let err = validate_attachments("user", &atts, true).expect_err("oversize name must be rejected");
+        let err =
+            validate_attachments("user", &atts, true).expect_err("oversize name must be rejected");
         assert!(err.contains("longer than"), "got: {}", err);
     }
 

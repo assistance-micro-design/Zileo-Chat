@@ -267,9 +267,7 @@ Be concise, factual, and conservative in your judgements.`;
 	 * Reasoning-effort options for the Select. Mistral only exposes Off / High;
 	 * other providers keep the full Off / Low / Medium / High range.
 	 */
-	const reasoningOptions = $derived(
-		getReasoningOptions(provider, $i18n, selectedModel?.api_name)
-	);
+	const reasoningOptions = $derived(getReasoningOptions(provider, $i18n, selectedModel?.api_name));
 
 	/** Help text below the reasoning-effort Select (provider-specific). */
 	const reasoningHelp = $derived(getReasoningHelp(provider, $i18n));
