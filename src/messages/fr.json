@@ -995,6 +995,7 @@
 	"chat_warning_model_no_vision": "Le modele selectionne ne supporte pas la vision. Les images ne seront pas analysees.",
 	"chat_image_blocked_non_multimodal": "Ce modele ne supporte pas les images. Choisissez un modele multimodal pour joindre des images.",
 	"chat_image_picker_disabled_tooltip": "Choisissez un modele multimodal pour joindre des images",
+	"chat_image_stripped_on_model_switch": "Les images en attente ont ete retirees car le nouveau modele ne supporte pas la vision.",
 	"chat_tokens": "{count} jetons",
 	"chat_messages_arialabel": "Messages de la conversation",
 	"chat_no_messages": "Aucun message pour le moment. Demarrez une conversation !",

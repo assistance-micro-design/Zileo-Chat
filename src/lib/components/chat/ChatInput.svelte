@@ -109,6 +109,25 @@
 	let attachmentError = $state<string | null>(null);
 	let isDragOver = $state(false);
 
+	/**
+	 * Auto-strip pending image attachments when the parent flips the model
+	 * to a non-vision one (or any unknown/undefined value, which fails
+	 * closed). Without this, attachments queued for a vision model would
+	 * survive the switch and either be rejected at send time or sneak past
+	 * the picker gate. The toast keeps the user informed of the silent
+	 * clear so they understand why their thumbnails vanished.
+	 *
+	 * Wrapped behind a guard so the effect is a no-op on first render and
+	 * whenever there is nothing to clear — `$state` reads inside `$effect`
+	 * remain tracked, so the effect still re-runs on every change.
+	 */
+	$effect(() => {
+		if (modelSupportsVision !== true && pendingAttachments.length > 0) {
+			pendingAttachments = [];
+			attachmentError = $i18n('chat_image_stripped_on_model_switch');
+		}
+	});
+
 	/** True when there is anything to clear and warn about. */
 	const hasAttachments = $derived(pendingAttachments.length > 0);
 	/**
