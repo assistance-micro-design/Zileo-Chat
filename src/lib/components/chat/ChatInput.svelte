@@ -111,8 +111,14 @@
 
 	/** True when there is anything to clear and warn about. */
 	const hasAttachments = $derived(pendingAttachments.length > 0);
-	/** Show the model-not-vision banner only if the user actually added an image. */
-	const showVisionWarning = $derived(hasAttachments && modelSupportsVision === false);
+	/**
+	 * Whether the current model accepts image attachments. Strict `=== true`
+	 * is intentional: an unknown / undefined vision flag (still-loading model
+	 * list, missing DB column) fails closed so the user cannot attach an
+	 * image we have not proven the model can consume. Matches the backend
+	 * fallback in `resolve_workflow_supports_vision`.
+	 */
+	const canAttachImages = $derived(modelSupportsVision === true);
 
 	/**
 	 * Get effective placeholder (prop or i18n)
@@ -152,6 +158,14 @@
 		const trimmed = value.trim();
 		const canSend = (trimmed.length > 0 || hasAttachments) && !disabled && !loading;
 		if (!canSend) return;
+		// Safety net: should never fire because the picker/paste/drop paths all
+		// gate on canAttachImages, but if a stale attachment survives a model
+		// switch race, refuse to send rather than have the backend reject it
+		// with a less-friendly error message.
+		if (hasAttachments && !canAttachImages) {
+			showError($i18n('chat_image_blocked_non_multimodal'));
+			return;
+		}
 		const attachments = hasAttachments ? toMessageAttachments() : undefined;
 		onsend?.(trimmed, attachments);
 		value = '';
@@ -198,6 +212,10 @@
 
 	/** Validate a `File` against the size/MIME/count caps and process it. */
 	async function addAttachmentFromFile(file: File): Promise<void> {
+		if (!canAttachImages) {
+			showError($i18n('chat_image_blocked_non_multimodal'));
+			return;
+		}
 		if (pendingAttachments.length >= MAX_ATTACHMENTS) {
 			showError($i18n('chat_max_attachments_reached', { max: MAX_ATTACHMENTS }));
 			return;
@@ -234,6 +252,10 @@
 
 	/** Open the Tauri file picker and add each chosen image. */
 	async function handlePickFiles(): Promise<void> {
+		if (!canAttachImages) {
+			showError($i18n('chat_image_blocked_non_multimodal'));
+			return;
+		}
 		try {
 			const selected = await openDialog({
 				multiple: true,
@@ -358,6 +380,17 @@
 		const images = candidates.filter((f) => ALLOWED_MIME.includes(f.type as AttachmentMime));
 		if (images.length > 0) {
 			event.preventDefault();
+			if (!canAttachImages) {
+				// Hard block: drop the images on the floor with a clear toast so
+				// the user knows nothing was attached. Any pasted text alongside
+				// the image is preserved by the default paste behaviour because
+				// we only call preventDefault when images are present, which
+				// also stops the text part — accept that minor edge: pasting
+				// "see attached: <image>" loses the text too. The toast tells
+				// them so.
+				showError($i18n('chat_image_blocked_non_multimodal'));
+				return;
+			}
 			for (const file of images) {
 				await addAttachmentFromFile(file);
 			}
@@ -402,7 +435,7 @@
 			{/each}
 		</div>
 	{/if}
-	{#if showVisionWarning}
+	{#if hasAttachments && !canAttachImages}
 		<div class="warning-banner" role="status" aria-live="polite">
 			{$i18n('chat_warning_model_no_vision')}
 		</div>
@@ -426,8 +459,14 @@
 		<button
 			type="button"
 			class="attach-button"
-			title={$i18n('chat_attach_image')}
-			disabled={loading || disabled || pendingAttachments.length >= MAX_ATTACHMENTS}
+			title={canAttachImages
+				? $i18n('chat_attach_image')
+				: $i18n('chat_image_picker_disabled_tooltip')}
+			disabled={loading ||
+				disabled ||
+				!canAttachImages ||
+				pendingAttachments.length >= MAX_ATTACHMENTS}
+			aria-disabled={!canAttachImages}
 			onclick={handlePickFiles}
 			aria-label={$i18n('chat_attach_image')}
 		>

@@ -992,6 +992,8 @@
 	"chat_image_unsupported_format": "Unsupported image format (PNG, JPEG, WebP, GIF only)",
 	"chat_max_attachments_reached": "Maximum {max} attachments allowed",
 	"chat_warning_model_no_vision": "The selected model does not support vision. Images will not be analyzed.",
+	"chat_image_blocked_non_multimodal": "This model does not support images. Switch to a vision-capable model to attach images.",
+	"chat_image_picker_disabled_tooltip": "Select a vision-capable model to attach images",
 	"chat_tokens": "{count} tokens",
 	"chat_messages_arialabel": "Chat messages",
 	"chat_no_messages": "No messages yet. Start a conversation!",
