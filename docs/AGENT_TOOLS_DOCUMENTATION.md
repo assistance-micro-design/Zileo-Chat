@@ -17,6 +17,12 @@ Technical documentation for the native tools available to agents in the multi-ag
 | **ParallelTasksTool** | `src-tauri/src/tools/parallel_tasks.rs` |
 | **ReadSkillTool** | `src-tauri/src/tools/read_skill.rs` |
 | **FileManagerTool** | `src-tauri/src/tools/file_manager/tool.rs` |
+| **PromptManagerTool** | `src-tauri/src/tools/prompt_manager.rs` |
+| **SkillManagerTool** | `src-tauri/src/tools/skill_manager/` (folder: `mod.rs`, `crud.rs`, `grant.rs`, `validators.rs`, `versions.rs`, `tests.rs`) |
+| **WorkflowManagerTool** | `src-tauri/src/tools/workflow_manager.rs` |
+| **ListAgentsTool** | `src-tauri/src/tools/list_agents.rs` |
+| **SubmitComposedCardTool** | `src-tauri/src/tools/submit_composed_card.rs` |
+| **SubmitAnalysisTool** | `src-tauri/src/tools/submit_analysis.rs` |
 | **Tool Execution** | `src-tauri/src/agents/llm_agent.rs` |
 
 **Note**: DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) were removed -- DB access goes through Tauri IPC commands.
@@ -28,6 +34,8 @@ Technical documentation for the native tools available to agents in the multi-ag
 - **File**: FileManagerTool (sandboxed filesystem operations)
 - **Sub-Agent**: SpawnAgentTool, DelegateTaskTool, ParallelTasksTool (require AgentToolContext)
 - **Hidden**: ReadSkillTool (auto-injected when agent has skills, not shown in UI)
+- **Kanban Supervisor** (Kanban-kind agents only): PromptManagerTool, SkillManagerTool, WorkflowManagerTool, ListAgentsTool
+- **Kanban Private** (auto-injected during compose / analyze, never visible in the UI catalogue): SubmitComposedCardTool, SubmitAnalysisTool
 
 ### Sub-Agent Resilience
 
@@ -274,7 +282,126 @@ Loads an image file and surfaces it to the next LLM iteration as a multimodal us
 
 ---
 
-## 7. Tool Execution (LLMAgent)
+## 7. PromptManagerTool
+
+**Purpose**: Let a Kanban-kind agent manage the prompt template library (read + create + update). No delete.
+
+**Access**: Kanban agents only. Standard agents never see this tool — filtered out at the factory boundary.
+
+### Operations
+
+- `list` -- List all prompt templates (id, name, description, category, variable names)
+- `get` -- Get a single prompt by id (full content + variables)
+- `create` -- Create a new prompt (`name`, `description`, `category`, `content`, `variables[]`)
+- `update` -- Partial update of an existing prompt (`prompt_id`, any subset of fields, optional `edit_summary`). Auto-snapshots a `prompt_version` row before applying.
+
+### Versioning
+
+Every successful `update` writes a `prompt_version` row with the previous content snapshot, the `edit_summary` (validated: trimmed, 256-char cap, control-character rejection via the shared `validate_edit_summary` helper), and an incrementing `version` integer. The "last version" cannot be deleted — the safeguard preserves the audit trail.
+
+---
+
+## 8. SkillManagerTool
+
+**Purpose**: Let a Kanban-kind agent manage the skill library (read + create + update + grant + revoke + version history).
+
+**Access**: Kanban agents only.
+
+### Operations
+
+- `list` -- List all skills (id, name, description, category, enabled)
+- `get` -- Get a single skill (full content)
+- `create` -- Create a new skill (`name`, `description`, `category`, `content`)
+- `update` -- Partial update (`skill_id`, any subset, optional `edit_summary`). Auto-snapshots a `skill_version` row before applying.
+- `grant` -- Assign a skill to a target standard agent (`skill_id`, `agent_id`)
+- `revoke` -- Remove a skill from a target agent (`skill_id`, `agent_id`)
+- `list_versions` -- List version snapshots for a skill (most recent first)
+- `restore_version` -- Restore a prior version (writes a new snapshot of the current content before overwriting, so restore is itself versioned)
+
+### Architecture
+
+Split into a folder for testability and clarity:
+- `mod.rs` -- Tool struct, top-level dispatch, ToolDefinition
+- `crud.rs` -- `list / get / create / update` against the `skill` table
+- `grant.rs` -- `grant / revoke` against `agent.skills`
+- `versions.rs` -- `list_versions / restore_version` against `skill_version`
+- `validators.rs` -- Shared input validation (name slug, category allowlist, content cap)
+- `tests.rs` -- Unit tests (~500 LOC)
+
+---
+
+## 9. WorkflowManagerTool
+
+**Purpose**: Read-only access to historical workflow data so the Kanban analyzer can ground its verdict on real execution artefacts.
+
+**Access**: Kanban agents only.
+
+### Operations
+
+- `list_workflows` -- List workflows (id, name, agent, status, timestamps, token totals)
+- `rename_workflow` -- Rename a workflow (`workflow_id`, `name`)
+- `folders_create / folders_list / folders_rename / folders_delete` -- Folder CRUD for organisation
+- `read_workflow` -- Fetch the full state of a workflow (messages, tool executions, thinking steps, sub-agent reports) for analysis
+- `list_workflow_errors` -- Extract just the tool errors and failure events of a workflow (cheaper than `read_workflow` when the analyzer only needs the failure surface)
+- `list_workflow_sub_agents` -- List sub-agent executions for a workflow with their final reports
+
+### Usage Pattern
+
+The Kanban analyzer typically calls `read_workflow` once to load the report, optionally `list_workflow_errors` if the verdict trends towards `reject` or `needs_improvement`, and `list_workflow_sub_agents` when the workflow used delegation.
+
+---
+
+## 10. ListAgentsTool (private, Kanban only)
+
+**Purpose**: Discovery of available standard agents during the auto-compose flow. Auto-injected on Kanban agents; not visible in the Settings tool picker.
+
+### Operations
+
+- `list` (single op) -- Returns each standard agent with: `id`, `name`, summary of `system_prompt`, available skills, `folders` (FileManager authorized dirs), `has_file_manager`. Kanban-kind agents are filtered out — a Kanban agent cannot be delegated to.
+
+### Rationale
+
+Cloned from `DelegateTaskTool::list_agents` to keep the supervisor's discovery payload identical to the runtime delegation payload. The compose agent picks its target through this tool, then submits the card via `SubmitComposedCardTool`.
+
+---
+
+## 11. SubmitComposedCardTool (private, Kanban only)
+
+**Purpose**: Finalize an auto-composed Kanban card. Single terminal operation that ends the compose iteration loop.
+
+### Operation
+
+- `submit` -- Inputs: `target_agent_id`, `prompt_id` OR `inline_prompt`, `variables: HashMap<String, String>`, `target_folder_id?`, `title`, `description?`. Persists a `kanban_card` row in the `ready` column.
+
+### Variable Contract Validation
+
+Before persisting, the tool computes the set diff between the prompt template's declared variables (from `prompt.variables[].name`) and the keys supplied in the `variables` payload. Mismatches reject the submission with a structured error fed back to the LLM, so the next iteration corrects the call. `inline_prompt` bypasses this check (no contract to enforce when the prompt is ad-hoc).
+
+### Auto-Injection
+
+The tool is added to the agent's toolkit only during the `compose_card_from_description` Tauri command's tool loop, never during normal Kanban-agent execution.
+
+---
+
+## 12. SubmitAnalysisTool (private, Kanban only)
+
+**Purpose**: Finalize an analyzer verdict on a completed card report. Single terminal operation that ends the analyze iteration loop.
+
+### Operation
+
+- `submit` -- Inputs: `verdict: "approve" | "reject" | "needs_improvement"`, `summary` (markdown, surfaced in the card report viewer), optional `suggested_prompt_edit` (consumed by the "Improve prompt" modal).
+
+### Auto-Injection
+
+Injected during the `analyze_card_report` command's tool loop. The analyzer is wired to `WorkflowManagerTool` for evidence retrieval and `SubmitAnalysisTool` for the verdict; standard skills/tools are not in scope.
+
+### `auto_analyze_reports`
+
+When the target agent on a card has `auto_analyze_reports: true`, the `workflow_complete` listener fires the analyzer automatically after the workflow finishes and transitions the card from `doing` to `review` with the verdict pre-loaded.
+
+---
+
+## 13. Tool Execution (LLMAgent)
 
 **Purpose**: Autonomous tool execution loop for agents.
 

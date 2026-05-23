@@ -136,7 +136,46 @@ Modal dialog for per-agent settings: model selection, temperature, max tokens, s
 
 See `src/lib/components/agent/AgentHeader.svelte`
 
-## 4. Multi-Workflow Concurrent Execution
+## 4. Kanban Page
+
+Supervisor board reachable from the floating top menu. Two-column-grid layout: creator panel (left) + 4-column board (right).
+
+### Route
+
+`/kanban` — bound to `kanbanStore` (board state) and `kanbanScheduleStore` (recurrence settings). Both stores subscribe to the new `kanban:cards_purged` Tauri event so auto-purges by the backend scheduler refresh the board live.
+
+See `src/routes/kanban/+page.svelte` and `src/routes/kanban/+page.ts`.
+
+### Card Creator
+
+Tab switch between two modes (split into siblings rather than a single conditional component to keep state isolated):
+
+- **Auto** (`KanbanCardCreatorAuto.svelte`) — free-text description. Posts to `compose_card_from_description`. The configured Kanban agent picks the target agent, fills variables, and submits via `SubmitComposedCardTool`. The resulting composed card lands in `todo`.
+- **Manual** (`KanbanCardCreatorManual.svelte`) — explicit agent + prompt picker (or inline prompt), variables form, optional folder constraint. Posts to `create_kanban_card`.
+
+### Board
+
+`KanbanBoard.svelte` renders 4 `KanbanColumn` instances (`todo / doing / review / done`). Each `KanbanCardItem` exposes inline actions (open report, edit, schedule, duplicate as template, delete). Drag & drop was removed in favour of explicit column-move actions — simpler, accessible, and avoids the touch-pointer edge cases on Linux/WebKit.
+
+### Modals
+
+| Component | Purpose |
+|-----------|---------|
+| `KanbanCardEditModal.svelte` | Edit a card's metadata (title, description, agent, prompt, variables, folder) |
+| `KanbanCardReportViewer.svelte` | Read the workflow report for a finished card, inline interaction history (compose + analyze), launch / re-run analyze, force-delete a stuck `doing` card |
+| `KanbanScheduleForm.svelte` + `KanbanScheduleModal.svelte` | Configure a recurrence (days_of_week, hour, minute, skip_if_pending, enable toggle) |
+| `KanbanImprovePromptModal.svelte` | Apply the analyzer's `suggested_prompt_edit` back to the source prompt (writes a new `prompt_version` snapshot first) |
+| `KanbanFiltres.svelte` | Filter the board by agent / status / age |
+
+### Versioning History
+
+Reachable from `PromptForm` (`src/lib/components/settings/prompts/PromptForm.svelte`) and `SkillForm` (`src/lib/components/settings/skills/SkillForm.svelte`) via a button with a count badge surfacing the number of stored versions. Opens `VersionsHistoryModal.svelte` (under `src/lib/components/settings/versions/`) for diff, restore, and per-version delete — with the "last-one" safeguard surfaced as a disabled delete button when only one version remains.
+
+See `src/lib/components/kanban/` and `src/lib/components/settings/versions/`.
+
+---
+
+## 5. Multi-Workflow Concurrent Execution
 
 | Validation Mode | Max Concurrent | Behavior |
 |----------------|----------------|----------|
@@ -159,7 +198,7 @@ See `WORKFLOW_ORCHESTRATION.md` for full architecture.
 
 Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are restored and the user is prompted to resume any that were running (crash recovery).
 
-## 5. Component Library
+## 6. Component Library
 
 100 total components organized under `src/lib/components/`:
 
@@ -176,7 +215,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `settings/` | 37 | See Settings Components table above (incl. `audit-log/` and enriched `validation/`) |
 | `onboarding/` | 9 | OnboardingModal, OnboardingProgress, steps: Welcome, Language, Theme, ApiKey, Values, Import, Complete |
 
-## 6. Stores
+## 7. Stores
 
 | Store | Purpose | File |
 |-------|---------|------|
@@ -201,7 +240,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `sttStore` | Push-to-talk dictation singleton state machine (idle → recording → transcribing → idle), idempotent under concurrent triggers | `src/lib/stores/sttStore.svelte.ts` |
 | `sttSettings` | STT settings persistence (enable, Voxtral model id, context-bias hints, language override) via Tauri commands | `src/lib/stores/sttSettings.ts` |
 
-## 7. Types
+## 8. Types
 
 25 type files (including `index.ts`) in `src/types/`. Always import via `$types/module`.
 
@@ -232,7 +271,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `workflow.ts` | Workflow, WorkflowResult, WorkflowMetrics, WorkflowFullState | Workflow execution |
 | `stt.ts` | STTSettings, UpdateSTTSettingsRequest, TranscribeAudioRequest, TranscriptionResponse, SupportedLanguage | Push-to-talk dictation (mirrors `src-tauri/src/models/stt.rs`; tri-state language override `string \| null \| undefined`) |
 
-## 8. Utilities and Services
+## 9. Utilities and Services
 
 ### Utilities (`src/lib/utils/`, 22 modules)
 
@@ -278,7 +317,7 @@ Workflows are auto-saved to SurrealDB. On startup, non-terminated workflows are 
 | `localStorage.service.ts` | `LocalStorage.get()`, `.set()`, `STORAGE_KEYS` | Typed localStorage access |
 | `sttService.ts` | `transcribeAudio()` | Thin Tauri IPC wrapper for the `transcribe_audio` command. Forwards `{mime_type, data_base64}` + STT settings and returns the transcript string. |
 
-## 9. Frontend-Backend Communication
+## 10. Frontend-Backend Communication
 
 ### Tauri Adapter Layer (`src/lib/tauri/`)
 
@@ -299,14 +338,14 @@ Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `
 - **Props**: Use `$props()` with typed `Props` interface (Svelte 5 pattern)
 - **Component helpers split**: Heavy form components (`MCPServerForm`, `AgentForm`, `ImportPanel`, `MemoryList`, `ValidationSettings`) and the `agent/+page.svelte` route extract pure logic into a sibling `*.helpers.ts` (with dedicated `__tests__/*.helpers.test.ts`) so the `.svelte` file stays focused on template + reactive state
 
-## 10. Accessibility (WCAG AA)
+## 11. Accessibility (WCAG AA)
 
 - Full keyboard navigation: Tab, Shift+Tab, Enter/Space, Esc, Arrow keys
 - ARIA labels on all interactive elements and status indicators
 - Focus management for modals (auto-focus first element on open)
 - Color contrast minimum 4.5:1 (normal text), 3:1 (large text)
 
-## 11. Performance Optimizations
+## 12. Performance Optimizations
 
 ### Settings Page
 
@@ -337,13 +376,13 @@ Real-time updates use `tauriListen()` from `$lib/tauri` (wraps `listen()` from `
 - **Memoization**: Svelte 5 `$derived` for computed values
 - **CSS containment**: `contain: layout style` on grid containers (avoid `contain: content` which breaks fixed modals)
 
-## 12. Styling Architecture
+## 13. Styling Architecture
 
 Theme system using CSS custom properties with light/dark mode support via `[data-theme="dark"]`. Variables cover colors, spacing, typography, shadows, and transitions. All component styles are scoped via Svelte's `<style>` blocks.
 
 See `src/app.css` and `src/lib/styles/`
 
-## 13. Testing Strategy
+## 14. Testing Strategy
 
 - **Unit tests**: Vitest + `@testing-library/svelte` for component and store tests (380+ tests; run `npm run test` for the current count)
 - **E2E tests**: Playwright for workflow persistence, keyboard navigation, streaming indicators, responsive layout

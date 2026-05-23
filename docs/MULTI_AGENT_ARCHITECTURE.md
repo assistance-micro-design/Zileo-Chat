@@ -82,6 +82,51 @@ See `src-tauri/src/agents/` for implementation.
 
 ---
 
+## Agent Kinds
+
+`AgentConfig` carries an optional `kind: AgentKind` enum (`standard | kanban`, defaulting to `standard` when null for backward compatibility). The kind is the single gate for two strict separations: which tools the agent receives, and whether it can be delegated to.
+
+### Standard agents
+
+The default. Eligible for delegation (target of `DelegateTaskTool` / `ParallelTasksTool` / `SpawnAgentTool`). Receive any combination of basic / interaction / file / sub-agent tools from the catalogue plus their assigned skills.
+
+### Kanban (supervisor) agents
+
+Orchestration role used by the `/kanban` page. **Cannot be delegated to** — they never appear in `DelegateTaskTool::list_agents` results. **Cannot use the standard skill / tool catalogue** — Settings filters the pickers, the factory rejects mismatched assignments, and the runtime tool registry strips any leftover entries.
+
+The kanban toolkit (auto-provisioned at agent creation when `kind: Kanban` is set):
+
+| Tool | Role |
+|------|------|
+| `PromptManagerTool` | Read / create / update prompts (no delete; auto-snapshots `prompt_version`) |
+| `SkillManagerTool` | Read / create / update / grant / revoke / list_versions / restore_version on skills |
+| `WorkflowManagerTool` | Read-only access to historical workflows (read, list errors, list sub-agents) for analyzer evidence |
+| `ListAgentsTool` *(private)* | Auto-injected during `compose_card_from_description`; lists standard agents the supervisor may pick as targets |
+| `SubmitComposedCardTool` *(private)* | Auto-injected during compose; terminal call that finalizes the card and validates the prompt-variable contract |
+| `SubmitAnalysisTool` *(private)* | Auto-injected during `analyze_card_report`; terminal call that finalizes the verdict |
+
+Two new agent fields support the Kanban flow:
+
+- `auto_analyze_reports: bool` (default `false`) — when set on the target agent of a card, the `workflow_complete` listener fires `analyze_card_report` automatically and transitions the card from `doing` to `review` with the verdict pre-loaded.
+- `require_file_confirmation: bool` (default `true`) — pre-existing FileManager flag, now surfaced explicitly in the agent form.
+
+### Compose / Execute / Analyze Flow
+
+```
+user description  --> Kanban agent (compose)         --> SubmitComposedCardTool --> kanban_card row (todo)
+                                                            uses: ListAgentsTool, PromptManagerTool, SkillManagerTool
+
+scheduler tick    --> ready card --> WorkflowExecutorService --> standard agent runs to completion
+                                                            kanban_card.workflow_id is set in the same transition
+
+workflow_complete --> if target_agent.auto_analyze_reports: Kanban agent (analyze) --> SubmitAnalysisTool --> verdict
+                                                            uses: WorkflowManagerTool (read_workflow, list_workflow_errors)
+```
+
+Each compose / analyze run is persisted as a `kanban_card_interaction` row (chronological history attached to the card, surfaced inline in the report viewer).
+
+---
+
 ## Sub-Agent Delegation
 
 ### Task Scoping

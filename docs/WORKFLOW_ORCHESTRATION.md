@@ -256,6 +256,20 @@ Completed executions auto-removed after 10 minutes (`CLEANUP_INTERVAL_MS = 60000
 
 ---
 
+## Kanban Scheduler
+
+The Kanban board (`/kanban` page) drives workflows through an independent backend scheduler — a tokio task spawned at app startup that ticks every 60s (`src-tauri/src/commands/scheduler.rs`). Three responsibilities per tick:
+
+1. **Card execution** — pull `ready` Kanban cards into `doing` by calling `WorkflowExecutorService::execute_workflow_streaming`. Gated by `get_workflow_slots_available` so the global concurrency cap (3 in Auto, 1 in Manual/Selective) is respected. The card's `workflow_id` is persisted in the same transition so the `/kanban` card report viewer can deep-link to the running workflow on `/agent`.
+2. **Recurrence** — evaluate `kanban_schedule` rows whose `next_run_at <= now()` and `enabled = true`. For each fire, clone the template `kanban_card` into a fresh `ready` row, unless `skip_if_pending` is true and a sibling card spawned from the same template is still in flight (`todo / ready / doing / review`). `next_run_at` is recomputed after each fire.
+3. **Auto-purge** — delete `done` Kanban cards older than 3 days, **except** those that are themselves the template of an enabled `kanban_schedule` (recurrence blueprints). Cascades the linked `kanban_card_interaction` rows. The underlying `workflow` rows are deliberately preserved so the completed runs remain consultable from `/agent`. Emits `kanban:cards_purged` to refresh the board live.
+
+A `workflow_complete` listener inside the scheduler module performs the reverse lookup (`card_id_for_workflow` Tauri command), transitions the linked card from `doing` to `review`, persists the `error_summary` on failure, and — if the target agent has `auto_analyze_reports: true` — fires `analyze_card_report` against the configured Kanban (supervisor) agent.
+
+See [MULTI_AGENT_ARCHITECTURE.md](MULTI_AGENT_ARCHITECTURE.md#agent-kinds) for the supervisor agent kind and the compose / execute / analyze flow.
+
+---
+
 ## Best Practices
 
 ### DO

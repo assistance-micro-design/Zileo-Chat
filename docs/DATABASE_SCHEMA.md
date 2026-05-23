@@ -2,7 +2,7 @@
 
 > **Version**: 1.5
 > **SurrealDB**: ~2.6 (SCHEMAFULL)
-> **Tables**: 20
+> **Tables**: 25
 
 ## Design Notes
 
@@ -28,8 +28,12 @@ workflow ─────────────┐
 mcp_server ──────────> mcp_call_log
 llm_model ───────────> provider_settings
 custom_provider ─────> (linked via provider name)
-skill (standalone)
+skill ──────────────> skill_version (audit trail)
+prompt ─────────────> prompt_version (audit trail)
 workflow_folder ─────> workflow (grouping)
+kanban_card ────────┬──> kanban_schedule (recurrence template)
+                    ├──> kanban_card_interaction (compose / analyze)
+                    └──> workflow (1:1, linked at "ready -> doing")
 migration_log (schema versioning)
 ```
 
@@ -221,6 +225,8 @@ User-created agent configurations.
 | mcp_servers | array\<string\> | | MCP server names |
 | skills | array\<string\> | [] | Skill names |
 | folders | array\<string\> | [] | FileManager authorized dirs |
+| kind | option\<string\> ASSERT IN [standard, kanban] | NONE | Agent kind. `kanban` agents only see the supervisor toolkit (PromptManagerTool, SkillManagerTool, WorkflowManagerTool, ListAgentsTool) and cannot be delegated to. `NONE` is treated as `standard` for backward compatibility. |
+| auto_analyze_reports | bool | false | When true, the `workflow_complete` listener auto-triggers `analyze_card_report` for any Kanban card linked to the completing workflow |
 | require_file_confirmation | bool | true | Confirm destructive file ops |
 | system_prompt | string (1-10000 chars) | | |
 | max_tool_iterations | int (1-200) | 50 | Tool loop limit |
@@ -476,6 +482,122 @@ Sidebar folder grouping for workflows.
 | updated_at | datetime | time::now() | |
 
 **Indexes**: `unique_folder_id` (id, UNIQUE)
+
+---
+
+### kanban_card
+
+Kanban board card. One row per work item. Lifecycle: `todo -> ready -> doing -> review -> done`.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| title | string (1-256 chars) | | Card title |
+| description | option\<string\> | | Free-text body |
+| kanban_agent_id | option\<string\> | | Kanban-kind agent that composed the card (null on manual creation) |
+| target_agent_id | string | | Standard agent that will execute the card |
+| prompt_id | option\<string\> | | Reference to a stored prompt template |
+| inline_prompt | option\<string\> | | Ad-hoc prompt body when `prompt_id` is not set (mutually exclusive) |
+| variables | string (JSON) | '{}' | Prompt variables as `HashMap<string,string>`, JSON-string-encoded (ERR_SURREAL_001) |
+| target_folder_id | option\<string\> | | Optional FileManager folder constraint for the run |
+| status | string ASSERT IN [todo, ready, doing, review, done] | todo | Logical state |
+| column | string ASSERT IN [todo, doing, review, done] | todo | Board column (mirror of status, drag-free) |
+| column_order | int | 0 | Sort index within the column |
+| workflow_id | option\<string\> | | Set when the scheduler transitions the card to `doing` |
+| error_summary | option\<string\> | | Short failure description if the execution errored |
+| created_at | datetime | time::now() | |
+| updated_at | datetime | time::now() | |
+
+**Indexes**: `kanban_card_column_idx` (column, column_order), `kanban_card_workflow_idx` (workflow_id)
+
+---
+
+### kanban_schedule
+
+Recurrence schedule attached to a card template (the card row is duplicated on each tick).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| card_template_id | string | | Reference to the `kanban_card` row used as a blueprint |
+| days_of_week | array\<int\> | | ISO weekday codes (1=Mon … 7=Sun) |
+| hour | int (0-23) | | |
+| minute | int (0-59) | | |
+| next_run_at | datetime | | Next scheduled tick; recomputed on every fire and on update |
+| last_run_at | option\<datetime\> | | Last successful fire |
+| enabled | bool | true | When false, the scheduler skips this row entirely |
+| skip_if_pending | bool | true | When true, do not fire if a sibling card created from this template is still in flight (`todo / ready / doing / review`) |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `kanban_schedule_template_idx` (card_template_id), `kanban_schedule_next_run_idx` (next_run_at)
+
+---
+
+### kanban_card_interaction
+
+Persisted record of each Kanban agent interaction with a card (compose + analyze). Two interactions per card maximum on the happy path: one `compose`, one `analyze` (when `auto_analyze_reports` or manual trigger).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| card_id | string | | Parent card |
+| kind | string ASSERT IN [compose, analyze] | | Interaction kind |
+| kanban_agent_id | string | | Kanban agent that ran the interaction |
+| provider | string | | LLM provider used |
+| model_id_used | string | | Model id resolved at execution time |
+| task_input | string | | The free-text description (compose) or the workflow report (analyze) |
+| iterations | int | 0 | Number of tool-loop iterations |
+| final_payload_summary | option\<string\> | | Summary of the submitted payload (composed card or verdict + summary) |
+| final_response_text | option\<string\> | | Final assistant response text |
+| total_tokens_input | int | 0 | |
+| total_tokens_output | int | 0 | |
+| total_cost_usd | option\<float\> | 0.0 | Aggregated cost across iterations |
+| created_at | datetime | time::now() | |
+
+**Indexes**: `kanban_interaction_card_idx` (card_id), `kanban_interaction_created_idx` (created_at)
+
+---
+
+### prompt_version
+
+Append-only audit trail of prompt edits. Written on every `update_prompt` and `restore_prompt_version`.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| prompt_id | string | | Parent prompt |
+| version | int | | Monotonic per-prompt counter (1-based) |
+| name | string | | Snapshot of name |
+| description | string | | Snapshot of description |
+| category | string | | Snapshot of category |
+| content | string | | Snapshot of full content |
+| variables_json | string (JSON) | '[]' | Snapshot of variables array, JSON-string-encoded |
+| edited_by | option\<string\> | | "user" or the Kanban agent id when edited via `PromptManagerTool.update` |
+| edit_summary | option\<string\> (1-256 chars) | | Short user-supplied edit message (trimmed, control-character rejected) |
+| edited_at | datetime | time::now() | |
+
+**Indexes**: `prompt_version_prompt_idx` (prompt_id, version)
+
+---
+
+### skill_version
+
+Append-only audit trail of skill edits. Same contract as `prompt_version`.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | string | | UUID |
+| skill_id | string | | Parent skill |
+| version | int | | Monotonic per-skill counter (1-based) |
+| name | string | | Snapshot of name |
+| description | string | | Snapshot of description |
+| category | string | | Snapshot of category |
+| content | string | | Snapshot of full content |
+| edited_by | option\<string\> | | "user" or the Kanban agent id when edited via `SkillManagerTool.update` |
+| edit_summary | option\<string\> (1-256 chars) | | Short user-supplied edit message |
+| edited_at | datetime | time::now() | |
+
+**Indexes**: `skill_version_skill_idx` (skill_id, version)
 
 ---
 

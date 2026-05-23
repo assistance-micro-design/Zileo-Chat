@@ -37,6 +37,8 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 ### Key Features
 
 - **Multi-Agent System** - Create and orchestrate multiple AI agents with specialized tools and sub-agent delegation
+- **Kanban Supervisor Board** - 4-column board (`todo / doing / review / done`) with auto-compose, recurrence scheduler, and "Improve prompt" feedback loop driven by a dedicated supervisor agent kind
+- **Prompt & Skill Versioning** - Every prompt/skill update auto-snapshots a version row; restore or compare past versions from the settings UI
 - **Real-time Streaming** - Token-by-token response display with usage metrics and prompt caching
 - **Tool Execution** - Memory, Todo, Calculator, FileManager (with `read_image` for vision), Skills, and sub-agent tools
 - **Multimodal Vision** - Attach images to messages (paste, picker, drag&drop) for vision-capable models, cross-provider (OpenAI / Mistral / Ollama / Custom)

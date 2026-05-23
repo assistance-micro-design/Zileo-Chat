@@ -1,6 +1,6 @@
 # API Reference - Tauri Commands
 
-> Technical reference for Frontend-Backend IPC communication. **143 commands** across 23 modules.
+> Technical reference for Frontend-Backend IPC communication. **150+ commands** across 30+ modules.
 
 ## IPC Architecture
 
@@ -332,6 +332,97 @@ Workflow organization into folders with color coding and custom ordering.
 | `delete_workflow_folder` | Delete a folder (workflows moved to root) |
 | `reorder_workflow_folders` | Reorder folders by position |
 
+### Kanban Card (`commands/kanban_card.rs`)
+
+Kanban card CRUD and column transitions.
+
+| Command | Description |
+|---------|-------------|
+| `create_kanban_card` | Create a new card (`title`, `description?`, `kanban_agent_id?`, `target_agent_id`, `prompt_id?` OR `inline_prompt?`, `variables?: HashMap<string,string>`, `target_folder_id?`). Starts in the `todo` column. |
+| `get_kanban_card` | Get a single card by id (full state including the linked `workflow_id` if execution started). |
+| `list_kanban_cards` | List all cards ordered by `column` then `column_order`. |
+| `update_kanban_card` | Partial update of a card. Status / column transitions go through the dedicated `move_kanban_card`. |
+| `delete_kanban_card` | Delete a card (cascade-removes linked `kanban_card_interaction` rows; the underlying `workflow` row is preserved). Force-delete is allowed even when the card is in `doing` (covers crashed workflows that never emitted `workflow_complete`). |
+| `set_kanban_card_workflow_id` | Link the card to an executing workflow. Used by the scheduler when it transitions a card from `ready` to `doing`. |
+| `duplicate_kanban_card_as_template` | Clone a card as a recurrence template (target of `create_kanban_schedule`). |
+| `move_kanban_card` | Move a card to a different column (`todo / doing / review / done`) and a new `column_order` index. |
+
+### Kanban Schedule (`commands/kanban_schedule.rs`)
+
+Recurrence schedules attached to a card template.
+
+| Command | Description |
+|---------|-------------|
+| `create_kanban_schedule` | Create a schedule for a card template (`card_template_id`, `days_of_week: u8[]`, `hour: u8`, `minute: u8`, `skip_if_pending: bool`, `enabled: bool`). |
+| `get_kanban_schedule` | Get a single schedule by id. |
+| `list_kanban_schedules` | List schedules (optional filter on `enabled` or `card_template_id`). |
+| `update_kanban_schedule` | Partial update of recurrence fields. Recomputes `next_run_at`. |
+| `delete_kanban_schedule` | Delete a schedule. The linked card template is NOT deleted (it stays usable as a manual one-shot). |
+
+### Kanban Compose (`commands/compose_card.rs`)
+
+Auto-compose path driven by a Kanban-kind agent.
+
+| Command | Description |
+|---------|-------------|
+| `compose_card_from_description` | Take a free-text description, dispatch it to the configured Kanban agent with `ListAgentsTool` + `SubmitComposedCardTool` auto-injected, run the tool loop until `SubmitComposedCardTool` is called, then persist the composed card and return its id. Uses the Kanban agent's own LLM config (provider, model, reasoning effort). |
+
+### Kanban Analyzer (`commands/kanban_analyzer.rs`)
+
+Card report analysis.
+
+| Command | Description |
+|---------|-------------|
+| `analyze_card_report` | Analyze the report of a completed card workflow. Dispatches to the configured Kanban agent with `WorkflowManagerTool` + `SubmitAnalysisTool` auto-injected. Runs the tool loop until `SubmitAnalysisTool` is called. Returns the verdict (`approve | reject | needs_improvement`), summary, and optional `suggested_prompt_edit`. Triggered manually from the report viewer or automatically by the `workflow_complete` listener when the target agent has `auto_analyze_reports: true`. |
+
+### Kanban Interaction (`commands/kanban_interaction.rs`)
+
+Read-only access to the persisted compose / analyze interactions.
+
+| Command | Description |
+|---------|-------------|
+| `load_card_interactions` | Load all `kanban_card_interaction` rows for a card (compose + analyze, chronological). Each row carries the input task, provider, `model_id_used`, iteration count, final payload summary, response text, token totals, and cost. Rendered inline in the card report viewer. |
+
+### Prompt Versions (`commands/prompt_version.rs`)
+
+History of prompt edits.
+
+| Command | Description |
+|---------|-------------|
+| `list_prompt_versions` | List version snapshots for a prompt (most recent first). |
+| `get_prompt_version` | Get a single version snapshot. |
+| `restore_prompt_version` | Restore a prior version. Writes a fresh snapshot of the current content before overwriting, so restore is itself versioned. |
+| `delete_prompt_version` | Delete a version snapshot. Refuses to delete the last remaining version (audit-trail safeguard, returns a structured `LastVersionSafeguard` error). |
+
+### Skill Versions (`commands/skill_version.rs`)
+
+History of skill edits. Same contract as prompt versions.
+
+| Command | Description |
+|---------|-------------|
+| `list_skill_versions` | List version snapshots for a skill. |
+| `get_skill_version` | Get a single version snapshot. |
+| `restore_skill_version` | Restore a prior version (writes a fresh snapshot first). |
+| `delete_skill_version` | Delete a version snapshot. Refuses the last remaining version. |
+
+### Workflow Slots (`commands/workflow_slots.rs`)
+
+Concurrency-slot introspection used by the Kanban scheduler.
+
+| Command | Description |
+|---------|-------------|
+| `get_workflow_slots_available` | Return the number of free concurrent execution slots given the current validation mode (1 in Manual / Selective, 3 in Auto, minus the count of running workflows). The scheduler consults this before transitioning `ready` cards to `doing`. |
+
+### Scheduler (`commands/scheduler.rs`)
+
+Background tokio loop driving the Kanban board.
+
+| Command | Description |
+|---------|-------------|
+| `card_id_for_workflow` | Reverse lookup: given a `workflow_id`, return the linked `kanban_card_id` if any. Used by the `workflow_complete` listener to transition the card from `doing` to `review` and optionally trigger the analyzer. |
+
+The scheduler itself is not a Tauri command — it is a tokio task spawned at app startup that ticks every 60s. Three responsibilities per tick: (1) pull `ready` cards into `doing` through `WorkflowExecutorService` (gated by `get_workflow_slots_available`); (2) evaluate `kanban_schedule` rows whose `next_run_at <= now()` and `enabled = true`, clone the template card into a fresh `ready` card unless `skip_if_pending` is true and a sibling card is already in flight; (3) purge `done` cards older than 3 days that are NOT the template of any enabled schedule, cascading their `kanban_card_interaction` rows but preserving the underlying `workflow`. Emits `kanban:cards_purged` when purges happen.
+
 ### Speech-to-Text (`commands/stt.rs` + `commands/settings_stt.rs`)
 
 Push-to-talk voice dictation via Mistral Voxtral. The provider-agnostic core (`llm/stt/transcribe_audio_core`) lets future providers (Ollama Whisper, OpenAI Whisper) plug in without touching the command surface. Settings are persisted as a JSON blob on the `settings` table under key `settings:stt` — no dedicated SurrealDB schema.
@@ -447,6 +538,10 @@ Agent availability changes. Payload: `{ agent_id, status }` where status is
 
 Human-in-the-loop validation request for sub-agent operations. Payload includes
 `validation_id`, `operation_type`, `risk_level`, and `details`.
+
+### `kanban:cards_purged`
+
+Emitted by the Kanban scheduler when one or more stale `done` cards are auto-purged. Payload: `{ purgedCount, cardIds: string[] }`. The `/kanban` page listens to this event and refreshes the board live.
 
 ### `reindex-progress`
 

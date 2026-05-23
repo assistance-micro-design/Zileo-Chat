@@ -360,6 +360,42 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 
 ---
 
+## 13. Kanban Supervisor
+
+### Q28: Agent Kind Separation (Standard vs Kanban)
+
+**Decision**: Introduce a typed `AgentKind` enum (`standard | kanban`) on `AgentConfig` and enforce strict separation at both the toolkit and the delegation surface.
+
+**Rationale**:
+- A Kanban (supervisor) agent is an orchestration role, not a delegate target. Allowing a standard agent to call a Kanban agent — or a Kanban agent to call another Kanban agent — would create supervision loops and circular toolkits (Kanban tools mutate prompts/skills that other agents consume).
+- Kanban agents need a different toolkit (`PromptManagerTool`, `SkillManagerTool`, `WorkflowManagerTool`, `ListAgentsTool`, and the two private submit tools) that would be actively harmful for a standard agent (it could rewrite its own prompt mid-execution).
+- Enforced both server-side (factory at agent creation, registry at tool resolution, runtime filter in `DelegateTaskTool::list_agents`) and client-side (Settings pickers filter by kind, AgentList badges the kind).
+- The kind is `Option<AgentKind>` so legacy rows with no kind deserialize as `standard` — fully backward-compatible.
+
+**Consequences**:
+- Standard agents continue exactly as before; no behavior change unless `kind = kanban` is explicitly set.
+- The supervisor toolkit is auto-provisioned at creation when `kind: Kanban`; the user does not have to (and cannot) hand-pick those tools.
+- Cross-kind delegation is impossible by construction — `list_agents` filters out Kanban agents from the delegate picker.
+
+---
+
+### Q29: Tool Versioning via Eager Snapshot
+
+**Decision**: Snapshot a full row (`prompt_version`, `skill_version`) on every successful `update` of a prompt or skill — not on user demand, not on a sampling policy.
+
+**Rationale**:
+- Prompts and skills are markdown text — storage is cheap (a few KB per edit, no embeddings, no blobs). The trade-off is overwhelmingly in favor of an eager-snapshot policy.
+- The Kanban supervisor flow rewrites prompts via `PromptManagerTool` and the "Improve prompt" feedback loop, so the audit trail must be deterministic — sampling or user-driven snapshots would leak agent-driven edits.
+- One-click restore (`restore_*_version` Tauri commands) writes a fresh snapshot before applying the rollback, so restore is itself versioned and never destructive.
+- `delete_*_version` enforces a "last-one" safeguard: the final remaining version is undeletable. Without this, an attacker (or careless user) could empty the trail.
+
+**Consequences**:
+- A few KB of storage growth per edit, bounded by the prompt/skill content size.
+- The settings UI surfaces a count badge on the "History" button so users see version pressure at a glance.
+- `edit_summary` is a first-class field on the version row (trimmed, 256-char cap, control-char rejected via the shared `validate_edit_summary` helper in `src-tauri/src/security/validation.rs`) — encourages humans to leave context and lets Kanban agents annotate their own edits.
+
+---
+
 ## Summary of Decisions
 
 | Area | Key Decision |
@@ -374,6 +410,7 @@ Not in scope for v1: external pentesting, SOC2 certification, multi-factor auth 
 | Deployment | Linux first, manual updates v1, auto-updates v1.5 |
 | Frontend | CRUD factory stores, Svelte 5 runes (completed), route-based settings |
 | Import/Export | Schema v1.2, 6 entity types, cross-ref by name, no API key/MCP secret export |
+| Kanban | Typed agent kind enforcing strict separation (Kanban agents own a supervisor toolkit, not delegatable), eager version snapshots on every prompt/skill update with last-one delete safeguard |
 
 **Technical documentation**: `docs/DATABASE_SCHEMA.md`, `docs/API_REFERENCE.md`, `docs/TECH_STACK.md`.
 
