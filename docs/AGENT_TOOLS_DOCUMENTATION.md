@@ -255,7 +255,7 @@ See `src-tauri/src/tools/file_manager/` for implementation.
 
 ### read_image (multimodal)
 
-Loads an image file and surfaces it to the next LLM iteration as a multimodal user turn. Available only to agents whose model is flagged `supports_vision: true` (the operation itself succeeds regardless, but a non-vision model cannot consume the result).
+Loads an image file and surfaces it to the next LLM iteration as a multimodal user turn. Strictly gated on `supports_vision: true`: when the agent's model lacks the flag, `read_image` is omitted from both the tool's `definition()` and its JSON schema (so the model never sees the operation in its tool list) AND `execute()` refuses the call with a clear error if it is somehow forged. This is the tool-side layer of a four-layer defense-in-depth (UI hard-block on paste / picker / drop, UI auto-strip on model switch, IPC `validate_attachments` pre-send rejection, and this tool gating).
 
 - **Extensions whitelist**: `png`, `jpg`, `jpeg`, `webp`, `gif`
 - **Size cap**: 8 MB raw bytes

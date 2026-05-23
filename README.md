@@ -45,7 +45,7 @@ Zileo Chat is a desktop application for orchestrating AI agents through a conver
 - **Voice Dictation** - Push-to-talk transcription via Mistral Voxtral (hold mic button or `Ctrl+Shift+Space`, release to insert at cursor)
 - **Human-in-the-Loop** - Approve critical operations before execution with risk-based validation
 - **Custom Providers** - Add any OpenAI-compatible LLM endpoint alongside built-in Mistral and Ollama
-- **Reasoning Effort** - Granular thinking control (low/medium/high) for supported models
+- **Reasoning Effort** - Granular thinking control (low/medium/high, plus `xhigh` "Think Max" for DeepSeek / GPT-5.x / Grok / Claude Opus families) on supported models
 - **Background Workflows** - Run multiple workflows concurrently with progress tracking
 - **MCP Protocol** - Extend agents with Model Context Protocol servers
 - **Bilingual UI** - English and French interface

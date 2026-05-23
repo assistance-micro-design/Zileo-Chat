@@ -90,6 +90,10 @@ OpenAI-compatible provider management (OpenRouter, RouterLab, Fireworks, Groq, T
 
 **Strict-mode toggles** (ERR_LLM_020, PAT_LLM_005): the two `supports_*` parameters default to `null` from the frontend (mapped to `None` in Rust) which preserves the OpenRouter behaviour on the wire (cache_control + top-level `reasoning` injected). Pass `false` for Fireworks / Groq / Together / Cerebras — Pydantic-strict gateways that reject those extension fields with HTTP 400.
 
+**HTTP `User-Agent`**: every reqwest client built in this codebase starts from `llm::http::default_http_client_builder()` and therefore carries `User-Agent: ZileoChat/<CARGO_PKG_VERSION>` on every outbound request. The version is resolved at compile time, so release tags propagate automatically. New HTTP-touching code must use this builder rather than `reqwest::Client::builder()` directly.
+
+**Reasoning tiers**: `ReasoningEffort` is a 4-variant enum (`low | medium | high | xhigh`). `xhigh` ("Think Max") is forwarded verbatim to OpenAI-compatible providers (16384-token budget, clamped by gateway) and collapses to `"high"` on Mistral. The UI Select only exposes `xhigh` when the model's `api_name` matches the `XHIGH_MODEL_PATTERNS` substring allowlist (`deepseek`, `gpt-5.`, `grok`, `claude-opus`); the normalization helper auto-downgrades stored `xhigh` to `high` when the user switches to a non-matching model so the form state stays consistent.
+
 ### Validation (`commands/validation.rs`)
 
 Human-in-the-loop validation for agent operations.
@@ -172,6 +176,7 @@ Chat message persistence and retrieval.
 | `load_workflow_messages_paginated` | Load messages with pagination |
 | `delete_message` | Delete a single message |
 | `load_workflow_blocks` | Load all structured display blocks for a workflow grouped by message |
+| `validate_attachments` | Pre-send validator invoked from `ChatInput.svelte`. Rejects image attachments when the active workflow's agent resolves to a non-vision model (via `resolve_workflow_supports_vision` -> `resolve_agent_supports_vision`, which now reads the nested `llm` object client-side to bypass SCHEMAFULL nested-AS unreliability, and scopes the model lookup by `(api_name, provider)` so duplicate `api_name` rows across custom providers no longer mistrust the wrong row). Fails closed on any DB error. |
 
 ### Tool Execution (`commands/tool_execution.rs`)
 
