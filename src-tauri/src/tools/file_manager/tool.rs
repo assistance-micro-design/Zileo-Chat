@@ -34,6 +34,11 @@ use tracing::warn;
 /// Destructive operations use trash-based safety (no permanent deletion).
 pub struct FileManagerTool {
     pub(crate) authorized_folders: Vec<PathBuf>,
+    /// Whether the calling agent's model can consume image attachments.
+    /// When `false`, the `read_image` operation is omitted from the tool
+    /// definition (so the LLM does not learn it exists) and rejected at
+    /// the execute boundary (ceinture+bretelles).
+    pub(crate) supports_vision: bool,
     pub(crate) cleanup_done: AtomicBool,
     /// Per-instance cache for the tool definition: the description embeds
     /// `authorized_folders` so it cannot be stored in a static `LazyLock`.
@@ -48,9 +53,13 @@ impl FileManagerTool {
     ///
     /// # Arguments
     /// * `authorized_folders` - Canonical paths to authorized directories
-    pub fn new(authorized_folders: Vec<PathBuf>) -> Self {
+    /// * `supports_vision` - Whether the agent's model supports images.
+    ///   When `false`, the `read_image` operation is hidden from the LLM
+    ///   and rejected at execute time.
+    pub fn new(authorized_folders: Vec<PathBuf>, supports_vision: bool) -> Self {
         Self {
             authorized_folders,
+            supports_vision,
             cleanup_done: AtomicBool::new(false),
             cached_definition: OnceLock::new(),
         }
@@ -86,7 +95,7 @@ impl Tool for FileManagerTool {
 
     fn definition(&self) -> ToolDefinition {
         self.cached_definition
-            .get_or_init(|| build_definition(&self.authorized_folders))
+            .get_or_init(|| build_definition(&self.authorized_folders, self.supports_vision))
             .clone()
     }
 
@@ -105,7 +114,20 @@ impl Tool for FileManagerTool {
         match operation {
             "list" => self.op_list(&input).await,
             "read" => self.op_read(&input).await,
-            "read_image" => self.op_read_image(&input).await,
+            "read_image" => {
+                // Ceinture+bretelles: even if the LLM somehow surfaces the
+                // operation despite it being absent from the definition,
+                // refuse to run it. validate_input has already rejected it
+                // in the standard path; this branch only fires if the
+                // valid_ops list is bypassed.
+                if !self.supports_vision {
+                    return Err(ToolError::InvalidInput(
+                        "read_image is not available: the agent's model does not support vision"
+                            .to_string(),
+                    ));
+                }
+                self.op_read_image(&input).await
+            }
             "write" => self.op_write(&input).await,
             "replace" => self.op_replace(&input).await,
             "create" => self.op_create(&input).await,
@@ -129,19 +151,34 @@ impl Tool for FileManagerTool {
                 ToolError::InvalidInput("Missing required field: 'operation'".to_string())
             })?;
 
-        let valid_ops = [
-            "list",
-            "read",
-            "read_image",
-            "write",
-            "replace",
-            "create",
-            "delete",
-            "move",
-            "rename",
-            "search_glob",
-            "search_content",
-        ];
+        let valid_ops: &[&str] = if self.supports_vision {
+            &[
+                "list",
+                "read",
+                "read_image",
+                "write",
+                "replace",
+                "create",
+                "delete",
+                "move",
+                "rename",
+                "search_glob",
+                "search_content",
+            ]
+        } else {
+            &[
+                "list",
+                "read",
+                "write",
+                "replace",
+                "create",
+                "delete",
+                "move",
+                "rename",
+                "search_glob",
+                "search_content",
+            ]
+        };
         if !valid_ops.contains(&operation) {
             return Err(ToolError::InvalidInput(format!(
                 "Invalid operation: '{}'. Must be one of: {}",
@@ -155,7 +192,11 @@ impl Tool for FileManagerTool {
 }
 
 /// Builds the tool definition with the per-instance authorized folders.
-fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
+///
+/// When `supports_vision` is `false`, the `read_image` operation is omitted
+/// from the operations list, the input_schema enum and the examples, so the
+/// LLM never sees an affordance it cannot use.
+fn build_definition(authorized_folders: &[PathBuf], supports_vision: bool) -> ToolDefinition {
     let folders_list: Vec<String> = authorized_folders
         .iter()
         .map(|p| p.to_string_lossy().to_string())
@@ -164,6 +205,67 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
         "No authorized directories configured.".to_string()
     } else {
         format!("Authorized directories: {}", folders_list.join(", "))
+    };
+
+    // Operations list: read_image is gated on vision support.
+    let mut operations: Vec<(&'static str, &'static str)> = vec![
+        ("list", "List directory contents"),
+        ("read", "Read text file content (with optional offset/limit)"),
+    ];
+    if supports_vision {
+        operations.push((
+            "read_image",
+            "Read an image file (PNG/JPEG/WebP/GIF) and surface it as base64 for vision-capable models",
+        ));
+    }
+    operations.extend([
+        ("write", "Create or overwrite a file"),
+        ("replace", "Replace text in a file (old_text -> new_text)"),
+        ("create", "Create a new empty file or directory"),
+        ("delete", "Move to trash (.zileo-trash/)"),
+        ("move", "Move file to another authorized directory"),
+        ("rename", "Rename file in place"),
+        ("search_glob", "Find files matching a glob pattern"),
+        ("search_content", "Search text content across files"),
+    ]);
+
+    // Examples: drop the read_image sample on non-vision models.
+    let mut examples: Vec<Value> = vec![
+        json!({"operation": "list", "path": "/project/src"}),
+        json!({"operation": "search_content", "path": "/project", "pattern": "TODO"}),
+    ];
+    if supports_vision {
+        examples.push(json!({"operation": "read_image", "path": "screenshots/diagram.png"}));
+    }
+
+    // input_schema enum: same gate.
+    let operation_enum: Vec<&str> = if supports_vision {
+        vec![
+            "list",
+            "read",
+            "read_image",
+            "write",
+            "replace",
+            "create",
+            "delete",
+            "move",
+            "rename",
+            "search_glob",
+            "search_content",
+        ]
+    } else {
+        vec![
+            "list",
+            "read",
+            "write",
+            "replace",
+            "create",
+            "delete",
+            "move",
+            "rename",
+            "search_glob",
+            "search_content",
+        ]
     };
 
     ToolDefinition {
@@ -183,28 +285,9 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
             "The path is outside authorized directories (will be rejected)",
             "You need to execute files (use appropriate tool instead)",
         ])
-        .operations(&[
-            ("list", "List directory contents"),
-            ("read", "Read text file content (with optional offset/limit)"),
-            (
-                "read_image",
-                "Read an image file (PNG/JPEG/WebP/GIF) and surface it as base64 for vision-capable models",
-            ),
-            ("write", "Create or overwrite a file"),
-            ("replace", "Replace text in a file (old_text -> new_text)"),
-            ("create", "Create a new empty file or directory"),
-            ("delete", "Move to trash (.zileo-trash/)"),
-            ("move", "Move file to another authorized directory"),
-            ("rename", "Rename file in place"),
-            ("search_glob", "Find files matching a glob pattern"),
-            ("search_content", "Search text content across files"),
-        ])
+        .operations(&operations)
         .note(&folders_desc)
-        .examples(&[
-            json!({"operation": "list", "path": "/project/src"}),
-            json!({"operation": "search_content", "path": "/project", "pattern": "TODO"}),
-            json!({"operation": "read_image", "path": "screenshots/diagram.png"}),
-        ])
+        .examples(&examples)
         .build(),
         input_schema: json!({
             "type": "object",
@@ -212,8 +295,7 @@ fn build_definition(authorized_folders: &[PathBuf]) -> ToolDefinition {
             "properties": {
                 "operation": {
                     "type": "string",
-                    "enum": ["list", "read", "read_image", "write", "replace", "create", "delete",
-                             "move", "rename", "search_glob", "search_content"]
+                    "enum": operation_enum
                 },
                 "path": { "type": "string", "description": "File or directory path" },
                 "content": { "type": "string", "description": "File content for write/create" },

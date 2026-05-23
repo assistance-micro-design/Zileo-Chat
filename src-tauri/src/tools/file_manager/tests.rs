@@ -21,6 +21,7 @@ fn create_tool_with_dir(tmp: &TempDir) -> FileManagerTool {
     let authorized = vec![canonical(tmp.path())];
     FileManagerTool {
         authorized_folders: authorized,
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     }
@@ -30,6 +31,7 @@ fn create_tool_with_dir(tmp: &TempDir) -> FileManagerTool {
 fn test_validate_input_missing_operation() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };
@@ -43,6 +45,7 @@ fn test_validate_input_missing_operation() {
 fn test_validate_input_invalid_operation() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };
@@ -99,6 +102,7 @@ fn test_validate_input_all_valid_operations() {
 fn test_validate_input_missing_required_params() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };
@@ -129,6 +133,7 @@ fn test_validate_input_missing_required_params() {
 fn test_definition_empty_folders() {
     let tool = FileManagerTool {
         authorized_folders: vec![],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };
@@ -146,6 +151,7 @@ fn test_definition_empty_folders() {
 fn test_definition_with_folders() {
     let tool = FileManagerTool {
         authorized_folders: vec![PathBuf::from("/home/user/docs")],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };
@@ -153,6 +159,72 @@ fn test_definition_with_folders() {
 
     assert!(def.description.contains("Authorized directories:"));
     assert!(def.description.contains("/home/user/docs"));
+}
+
+#[test]
+fn test_definition_omits_read_image_when_non_vision() {
+    let tool = FileManagerTool::new(vec![PathBuf::from("/home/user/docs")], false);
+    let def = tool.definition();
+
+    // operations() list (rendered into description): no read_image entry
+    assert!(
+        !def.description.contains("read_image"),
+        "read_image must not appear in description when supports_vision=false"
+    );
+    // input_schema enum must also drop read_image
+    let ops_enum = def.input_schema["properties"]["operation"]["enum"]
+        .as_array()
+        .expect("enum array");
+    let ops: Vec<&str> = ops_enum.iter().filter_map(|v| v.as_str()).collect();
+    assert!(
+        !ops.contains(&"read_image"),
+        "read_image must be removed from input_schema enum, got {:?}",
+        ops
+    );
+    // Sanity: at least the other ops are still there
+    assert!(ops.contains(&"read"));
+    assert!(ops.contains(&"write"));
+}
+
+#[test]
+fn test_definition_includes_read_image_when_vision() {
+    let tool = FileManagerTool::new(vec![PathBuf::from("/home/user/docs")], true);
+    let def = tool.definition();
+    assert!(def.description.contains("read_image"));
+    let ops_enum = def.input_schema["properties"]["operation"]["enum"]
+        .as_array()
+        .expect("enum array");
+    let ops: Vec<&str> = ops_enum.iter().filter_map(|v| v.as_str()).collect();
+    assert!(ops.contains(&"read_image"));
+}
+
+#[test]
+fn test_validate_input_rejects_read_image_when_non_vision() {
+    let tool = FileManagerTool::new(vec![], false);
+    let result = tool.validate_input(&json!({"operation": "read_image", "path": "/x"}));
+    assert!(result.is_err(), "validate_input must reject read_image");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("Invalid operation"),
+        "expected the standard 'Invalid operation' rejection, got: {}",
+        msg
+    );
+}
+
+#[tokio::test]
+async fn test_execute_rejects_read_image_when_non_vision() {
+    // Ceinture+bretelles: even if validate_input were bypassed somehow,
+    // execute() must refuse to dispatch read_image on a non-vision tool.
+    let tmp = create_test_dir();
+    let authorized = vec![canonical(tmp.path())];
+    let tool = FileManagerTool::new(authorized, false);
+    let result = tool
+        .execute(json!({"operation": "read_image", "path": tmp.path().to_string_lossy()}))
+        .await;
+    assert!(
+        result.is_err(),
+        "execute must reject read_image without vision"
+    );
 }
 
 #[tokio::test]
@@ -855,6 +927,7 @@ async fn test_operation_outside_authorized() {
 
     let tool = FileManagerTool {
         authorized_folders: vec![canonical(&authorized_dir)],
+        supports_vision: true,
         cleanup_done: AtomicBool::new(false),
         cached_definition: std::sync::OnceLock::new(),
     };

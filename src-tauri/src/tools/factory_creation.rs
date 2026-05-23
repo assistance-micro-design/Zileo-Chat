@@ -94,6 +94,61 @@ impl ToolFactory {
         }
     }
 
+    /// Resolves whether the agent's currently selected model supports image
+    /// attachments (vision).
+    ///
+    /// Two SELECTs (agent -> llm.model name -> llm_model.supports_vision).
+    /// Fails closed: any error or missing row yields `false`, so a tool that
+    /// gates on vision (currently `FileManagerTool::read_image`) refuses to
+    /// expose itself rather than risking a silent hallucination on a
+    /// text-only model.
+    async fn resolve_agent_supports_vision(&self, agent_id: &str) -> bool {
+        // First SELECT: pull the model api_name the agent is configured to use.
+        let agent_query = "SELECT llm.model AS model FROM agent WHERE meta::id(id) = $agent_id";
+        let model_name: Option<String> = match self
+            .db
+            .query_json_with_params(
+                agent_query,
+                vec![("agent_id".to_string(), serde_json::json!(agent_id))],
+            )
+            .await
+        {
+            Ok(rows) => rows
+                .into_iter()
+                .next()
+                .and_then(|r| r["model"].as_str().map(String::from)),
+            Err(e) => {
+                warn!(agent_id = %agent_id, error = %e, "Failed to resolve agent model, defaulting supports_vision to false");
+                return false;
+            }
+        };
+
+        let Some(model_name) = model_name else {
+            return false;
+        };
+
+        // Second SELECT: read supports_vision for that api_name.
+        let model_query = "SELECT supports_vision FROM llm_model WHERE api_name = $api_name";
+        match self
+            .db
+            .query_json_with_params(
+                model_query,
+                vec![("api_name".to_string(), serde_json::json!(model_name))],
+            )
+            .await
+        {
+            Ok(rows) => rows
+                .into_iter()
+                .next()
+                .and_then(|r| r["supports_vision"].as_bool())
+                .unwrap_or(false),
+            Err(e) => {
+                warn!(model = %model_name, error = %e, "Failed to resolve model supports_vision, defaulting to false");
+                false
+            }
+        }
+    }
+
     /// Resolves the folder paths assigned to an agent from the database.
     ///
     /// Returns canonicalized PathBuf for each valid, existing folder.
@@ -217,12 +272,14 @@ impl ToolFactory {
 
             "FileManagerTool" => {
                 let folders = self.resolve_agent_folders(&agent_id).await;
+                let supports_vision = self.resolve_agent_supports_vision(&agent_id).await;
                 debug!(
                     agent_id = %agent_id,
                     folders_count = folders.len(),
-                    "Creating FileManagerTool with resolved agent folders"
+                    supports_vision = supports_vision,
+                    "Creating FileManagerTool with resolved agent folders and vision flag"
                 );
-                let tool = FileManagerTool::new(folders);
+                let tool = FileManagerTool::new(folders, supports_vision);
                 info!("FileManagerTool instance created");
                 Ok(Arc::new(tool))
             }
