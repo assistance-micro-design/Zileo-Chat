@@ -429,7 +429,7 @@ mod tests {
     /// Creates an OllamaProvider with a test HTTP client.
     fn test_ollama_provider() -> OllamaProvider {
         let http_client = Arc::new(
-            reqwest::Client::builder()
+            crate::llm::http::default_http_client_builder()
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("test HTTP client"),

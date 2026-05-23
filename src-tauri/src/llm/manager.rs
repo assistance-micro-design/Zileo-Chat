@@ -106,7 +106,7 @@ impl ProviderManager {
         // `openai_compatible.rs` test clients to keep stall behavior
         // uniform across provider HTTP pools.
         let http_client = Arc::new(
-            reqwest::Client::builder()
+            crate::llm::http::default_http_client_builder()
                 .read_timeout(Duration::from_secs(DEFAULT_READ_TIMEOUT_SECS))
                 .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
                 .build()

@@ -501,7 +501,7 @@ mod tests {
     /// timeout. Centralized so tests stay aligned with `crate::constants::llm_http`.
     fn test_http_client() -> Arc<reqwest::Client> {
         Arc::new(
-            reqwest::Client::builder()
+            crate::llm::http::default_http_client_builder()
                 .read_timeout(std::time::Duration::from_secs(
                     crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS,
                 ))

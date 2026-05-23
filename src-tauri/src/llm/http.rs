@@ -28,6 +28,23 @@ use crate::tools::utils::safe_truncate;
 use serde::Deserialize;
 use tracing::debug;
 
+/// HTTP User-Agent header sent by every reqwest client built via
+/// [`default_http_client_builder`].
+///
+/// Best-practice for HTTP clients (RouterLab recommends it explicitly), and
+/// makes upstream provider logs traceable to a specific Zileo Chat release.
+/// The version is resolved at compile time from `CARGO_PKG_VERSION`.
+pub const HTTP_USER_AGENT: &str = concat!("ZileoChat/", env!("CARGO_PKG_VERSION"));
+
+/// Returns a `reqwest::ClientBuilder` pre-configured with the canonical
+/// Zileo Chat `User-Agent` header.
+///
+/// All production HTTP clients (LLM providers, embeddings, STT) must start
+/// from this builder so the upstream identifier stays consistent.
+pub fn default_http_client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder().user_agent(HTTP_USER_AGENT)
+}
+
 /// Parsed content from an LLM API response, separating text from thinking blocks.
 ///
 /// Used by all providers that return reasoning model responses.
@@ -456,6 +473,26 @@ mod tests {
     fn test_is_sse_response_rejects_missing_header() {
         let h = reqwest::header::HeaderMap::new();
         assert!(!is_sse_response(&h));
+    }
+
+    #[test]
+    fn test_http_user_agent_is_versioned() {
+        // Compile-time concat: ensure it embeds the crate version, not a placeholder.
+        assert!(HTTP_USER_AGENT.starts_with("ZileoChat/"));
+        let suffix = &HTTP_USER_AGENT["ZileoChat/".len()..];
+        assert_eq!(suffix, env!("CARGO_PKG_VERSION"));
+        assert!(!suffix.is_empty());
+    }
+
+    #[test]
+    fn test_default_http_client_builder_builds() {
+        // Smoke test: the builder must produce a usable client. reqwest does
+        // not expose the user-agent on Client publicly, so we just confirm
+        // the builder chain works and accepts further customization.
+        let client = default_http_client_builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build();
+        assert!(client.is_ok());
     }
 
     #[test]

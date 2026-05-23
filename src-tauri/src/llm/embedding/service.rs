@@ -41,7 +41,7 @@ impl EmbeddingService {
     /// Creates a new unconfigured EmbeddingService (test-only).
     #[cfg(test)]
     pub fn new() -> Result<Self, String> {
-        let client = Client::builder()
+        let client = crate::llm::http::default_http_client_builder()
             .timeout(std::time::Duration::from_millis(DEFAULT_TIMEOUT_MS))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -56,7 +56,7 @@ impl EmbeddingService {
     /// Creates a new EmbeddingService with the specified provider.
     pub fn with_provider(provider: EmbeddingProvider) -> Result<Self, String> {
         let dimension = provider.dimension();
-        let client = Client::builder()
+        let client = crate::llm::http::default_http_client_builder()
             .timeout(std::time::Duration::from_millis(DEFAULT_TIMEOUT_MS))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
