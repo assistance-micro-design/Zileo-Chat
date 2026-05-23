@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	getReasoningHelp,
 	getReasoningOptions,
-	isDeepseekModel,
+	supportsXhighReasoning,
 	isMistralProvider,
 	normalizeReasoningEffortForProvider,
 	type Translator
@@ -110,29 +110,45 @@ describe('normalizeReasoningEffortForProvider', () => {
 	});
 });
 
-describe('isDeepseekModel', () => {
-	it('matches names containing deepseek (case-insensitive)', () => {
-		expect(isDeepseekModel('deepseek-v4')).toBe(true);
-		expect(isDeepseekModel('DeepSeek-R1')).toBe(true);
-		expect(isDeepseekModel('pro/deepseek-chat-v4')).toBe(true);
+describe('supportsXhighReasoning', () => {
+	it('matches every supported family (case-insensitive)', () => {
+		expect(supportsXhighReasoning('deepseek-v4')).toBe(true);
+		expect(supportsXhighReasoning('DeepSeek-R1')).toBe(true);
+		expect(supportsXhighReasoning('pro/deepseek-chat-v4')).toBe(true);
+		expect(supportsXhighReasoning('gpt-5.1-codex-max')).toBe(true);
+		expect(supportsXhighReasoning('openai/gpt-5.2-pro')).toBe(true);
+		expect(supportsXhighReasoning('gpt-5.5')).toBe(true);
+		expect(supportsXhighReasoning('x-ai/grok-4')).toBe(true);
+		expect(supportsXhighReasoning('anthropic/claude-opus-4-7')).toBe(true);
+		// Future-proof: any claude-opus / gpt-5.x / grok / deepseek variant.
+		expect(supportsXhighReasoning('claude-opus-5')).toBe(true);
+		expect(supportsXhighReasoning('gpt-5.9-turbo')).toBe(true);
 	});
 
-	it('returns false for non-DeepSeek names or empty input', () => {
-		expect(isDeepseekModel('mistral-large')).toBe(false);
-		expect(isDeepseekModel('qwen3')).toBe(false);
-		expect(isDeepseekModel('')).toBe(false);
-		expect(isDeepseekModel(undefined)).toBe(false);
-		expect(isDeepseekModel(null)).toBe(false);
+	it('returns false for unrelated names or empty input', () => {
+		expect(supportsXhighReasoning('mistral-large')).toBe(false);
+		expect(supportsXhighReasoning('qwen3')).toBe(false);
+		expect(supportsXhighReasoning('gpt-4o')).toBe(false);
+		// Base "gpt-5" without point release only exposes low/medium/high; the
+		// trailing dot in the `gpt-5.` pattern excludes it.
+		expect(supportsXhighReasoning('gpt-5')).toBe(false);
+		expect(supportsXhighReasoning('claude-sonnet-4-7')).toBe(false);
+		expect(supportsXhighReasoning('glm-4.6')).toBe(false);
+		expect(supportsXhighReasoning('')).toBe(false);
+		expect(supportsXhighReasoning(undefined)).toBe(false);
+		expect(supportsXhighReasoning(null)).toBe(false);
 	});
 });
 
 describe('getReasoningOptions xhigh gating', () => {
-	it('exposes xhigh only when the model is DeepSeek', () => {
-		const opts = getReasoningOptions('custom', identityTranslator, 'deepseek-v4');
-		expect(opts.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high', 'xhigh']);
+	it('exposes xhigh when the model is in a supported family', () => {
+		const deepseek = getReasoningOptions('custom', identityTranslator, 'deepseek-v4');
+		expect(deepseek.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high', 'xhigh']);
+		const grok = getReasoningOptions('custom', identityTranslator, 'x-ai/grok-4');
+		expect(grok.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high', 'xhigh']);
 	});
 
-	it('hides xhigh for non-DeepSeek models', () => {
+	it('hides xhigh for unsupported models', () => {
 		const opts = getReasoningOptions('custom', identityTranslator, 'mistral-large');
 		expect(opts.map((o) => o.value)).toEqual(['', 'low', 'medium', 'high']);
 	});
