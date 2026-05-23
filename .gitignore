@@ -130,3 +130,4 @@ docs/corrections/
 # Local diagnostic scripts (curl tests, debug helpers)
 # ─────────────────────────────────────────────────────
 /scriptstest/
+/scripts/
