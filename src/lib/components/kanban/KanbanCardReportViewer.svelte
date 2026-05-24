@@ -11,7 +11,14 @@
 	import { Modal, Button, Badge } from '$lib/components/ui';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import ToolCallBlock from '$lib/components/chat/ToolCallBlock.svelte';
-	import { CheckCircle2, Wand2, Trash2, ExternalLink, ChevronDown } from '@lucide/svelte';
+	import {
+		CheckCircle2,
+		Wand2,
+		Trash2,
+		ExternalLink,
+		ChevronDown,
+		RefreshCw
+	} from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import type { KanbanCard } from '$types/kanban';
 	import type { AgentSummary } from '$types/agent';
@@ -29,9 +36,41 @@
 		onvalidate?: (card: KanbanCard) => Promise<void>;
 		onimprove?: (card: KanbanCard) => void;
 		ondelete?: (card: KanbanCard) => void;
+		onreanalyze?: (card: KanbanCard) => Promise<void>;
 	}
 
-	let { open, card, agents, prompts, onclose, onvalidate, onimprove, ondelete }: Props = $props();
+	let {
+		open,
+		card,
+		agents,
+		prompts,
+		onclose,
+		onvalidate,
+		onimprove,
+		ondelete,
+		onreanalyze
+	}: Props = $props();
+
+	/**
+	 * True while a manual re-analyze is in flight. Disables the button and
+	 * surfaces a spinner so the user can't fire overlapping analyses (each one
+	 * runs a full LLM tool loop). Reset when the call settles.
+	 */
+	let reanalyzing = $state(false);
+	let reanalyzeError = $state<string | null>(null);
+
+	async function handleReanalyze(c: KanbanCard): Promise<void> {
+		if (reanalyzing) return;
+		reanalyzing = true;
+		reanalyzeError = null;
+		try {
+			await onreanalyze?.(c);
+		} catch (e) {
+			reanalyzeError = getErrorMessage(e);
+		} finally {
+			reanalyzing = false;
+		}
+	}
 
 	const variables = $derived(card ? safeParseVariables(card.variables) : {});
 	const targetAgent = $derived(card ? agents.find((a) => a.id === card.target_agent_id) : null);
@@ -161,6 +200,13 @@
 					</section>
 				{/if}
 
+				{#if reanalyzeError}
+					<section class="error-block" role="alert">
+						<h4>{$i18n('kanban_card_reanalyze')}</h4>
+						<p class="multiline">{reanalyzeError}</p>
+					</section>
+				{/if}
+
 				{#if interactionsLoading}
 					<section>
 						<h4>{$i18n('kanban_history_title')}</h4>
@@ -279,6 +325,12 @@
 				<Button variant="primary" onclick={() => onvalidate?.(card)}>
 					<CheckCircle2 size={14} />
 					{$i18n('kanban_card_validate')}
+				</Button>
+			{/if}
+			{#if card.column === 'review' && card.workflow_id && onreanalyze}
+				<Button variant="secondary" disabled={reanalyzing} onclick={() => handleReanalyze(card)}>
+					<RefreshCw size={14} class={reanalyzing ? 'spin' : ''} />
+					{reanalyzing ? $i18n('kanban_card_reanalyzing') : $i18n('kanban_card_reanalyze')}
 				</Button>
 			{/if}
 			{#if onimprove && (card.column === 'review' || card.column === 'done') && card.prompt_id}
@@ -419,5 +471,13 @@
 	}
 	.response-block {
 		margin-top: 0.4rem;
+	}
+	:global(.spin) {
+		animation: kanban-reanalyze-spin 1s linear infinite;
+	}
+	@keyframes kanban-reanalyze-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>

@@ -41,6 +41,7 @@ use crate::llm::pricing::{load_pricing_row, ModelPricingRow};
 use crate::llm::tool_adapter::{ProviderToolAdapter, TokenUsage};
 use crate::llm::{CompletionParams, ProviderManager, ProviderType};
 use crate::mcp::MCPManager;
+use crate::models::function_calling::ToolChoiceMode;
 use crate::models::streaming::StreamChunk;
 use crate::models::workflow::IterationMetrics;
 use crate::models::AgentConfig;
@@ -450,6 +451,27 @@ pub(crate) async fn execute_simple(
     }
 }
 
+/// Resolves the `tool_choice` to apply for a given iteration of the tool loop.
+///
+/// `opening_tool_choice` is what the caller requested for the *first* turn.
+/// We honour it only on iteration 1 and fall back to [`ToolChoiceMode::Auto`]
+/// afterwards. This is what lets a flow force the model to engage its tools on
+/// the opening turn (e.g. Kanban analyze / compose, where the model otherwise
+/// writes prose and finishes without ever calling its submit tool) while still
+/// allowing it to *finish* naturally on a later turn — a plain `Auto` analyze
+/// could end with no tool call, and a blanket `Required` would never let the
+/// loop terminate (no turn could be tool-free), spinning until max_iterations.
+fn tool_choice_for_iteration(
+    iteration: usize,
+    opening_tool_choice: ToolChoiceMode,
+) -> ToolChoiceMode {
+    if iteration <= 1 {
+        opening_tool_choice
+    } else {
+        ToolChoiceMode::Auto
+    }
+}
+
 /// Executes a task with full tool support (local + MCP) using JSON function calling.
 ///
 /// `extra_tools` lets callers inject privately-instantiated tools (carrying
@@ -458,12 +480,18 @@ pub(crate) async fn execute_simple(
 /// participate normally in tool definition collection, system-prompt injection
 /// and JSON function-call dispatch. Pass `vec![]` when no injection is needed
 /// (the standard workflow case).
+///
+/// `opening_tool_choice` is the `tool_choice` applied to the *first* iteration
+/// only (see [`tool_choice_for_iteration`]). Pass [`ToolChoiceMode::Auto`] for
+/// the standard workflow path; pass [`ToolChoiceMode::Required`] for flows that
+/// must obtain a single mandatory tool call (Kanban analyze / compose).
 pub(crate) async fn execute_with_tools(
     ctx: ToolLoopContext<'_>,
     task: Task,
     mcp_manager: Option<Arc<MCPManager>>,
     cancellation_token: Option<CancellationToken>,
     extra_tools: Vec<Arc<dyn Tool>>,
+    opening_tool_choice: ToolChoiceMode,
 ) -> anyhow::Result<Report> {
     let start = std::time::Instant::now();
     let mut tools_used: Vec<String> = Vec::new();
@@ -784,6 +812,7 @@ pub(crate) async fn execute_with_tools(
             cancellation_token: cancellation_token.clone(),
             is_sub_agent,
             pricing_cache: pricing_cache.as_ref(),
+            tool_choice: tool_choice_for_iteration(iteration, opening_tool_choice),
         };
 
         let mut mstate = IterationMutState {
@@ -909,6 +938,39 @@ pub(crate) async fn execute_with_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_tool_choice_only_applies_to_first_iteration() {
+        // Required is honoured on the opening turn so the model must emit a
+        // tool call (Kanban analyze / compose root cause: model writes prose
+        // and finishes without ever submitting).
+        assert_eq!(
+            tool_choice_for_iteration(1, ToolChoiceMode::Required),
+            ToolChoiceMode::Required
+        );
+        // Subsequent turns fall back to Auto so the loop can terminate once
+        // the model has submitted — a blanket Required would never let any
+        // turn be tool-free, spinning until max_iterations.
+        assert_eq!(
+            tool_choice_for_iteration(2, ToolChoiceMode::Required),
+            ToolChoiceMode::Auto
+        );
+        assert_eq!(
+            tool_choice_for_iteration(50, ToolChoiceMode::Required),
+            ToolChoiceMode::Auto
+        );
+    }
+
+    #[test]
+    fn opening_tool_choice_auto_stays_auto_every_iteration() {
+        // The standard workflow path passes Auto and must never be forced.
+        for iteration in [1usize, 2, 10] {
+            assert_eq!(
+                tool_choice_for_iteration(iteration, ToolChoiceMode::Auto),
+                ToolChoiceMode::Auto
+            );
+        }
+    }
 
     fn make_task(description: &str, context: serde_json::Value) -> Task {
         Task {

@@ -138,6 +138,9 @@ impl Agent for LLMAgent {
             mcp_manager,
             cancellation_token,
             Vec::new(),
+            // Standard workflow path: the agent decides freely whether to call
+            // tools and may legitimately finish a turn without one.
+            crate::models::function_calling::ToolChoiceMode::Auto,
         )
         .await
     }

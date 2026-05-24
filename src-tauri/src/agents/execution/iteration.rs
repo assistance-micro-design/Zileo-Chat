@@ -77,6 +77,13 @@ pub(crate) struct IterationInputs<'a> {
     /// final value when the workflow completes. `None` when the model has
     /// no pricing entry — the chunk's `cost_usd` then stays `None`.
     pub pricing_cache: Option<&'a PricingCache>,
+    /// `tool_choice` to send for THIS iteration's LLM call. The outer loop
+    /// passes `Required` only on the opening iteration of flows that must
+    /// emit a tool call (Kanban analyze / compose) and `Auto` afterwards, so
+    /// the model can still finish naturally once it has submitted. The
+    /// standard workflow path always passes `Auto`. Providers that don't
+    /// support `tool_choice` (Ollama) map any mode to a no-op null.
+    pub tool_choice: ToolChoiceMode,
 }
 
 /// Runs a single iteration of the tool loop.
@@ -102,7 +109,7 @@ pub(crate) async fn run_single_iteration(
             ToolCompletionParams {
                 messages: mstate.messages.clone(),
                 tools: inputs.tools_json.to_vec(),
-                tool_choice: Some(inputs.adapter.get_tool_choice(ToolChoiceMode::Auto)),
+                tool_choice: Some(inputs.adapter.get_tool_choice(inputs.tool_choice)),
                 model: ctx.config.llm.model.clone(),
                 temperature: ctx.config.llm.temperature,
                 max_tokens: ctx.config.llm.max_tokens,

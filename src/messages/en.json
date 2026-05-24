@@ -880,6 +880,8 @@
 	"kanban_card_purge_imminent": "Delete imminent",
 	"kanban_card_purge_tooltip": "Completed cards are automatically deleted after 3 days. Recurring cards (with an active schedule) are preserved.",
 	"kanban_card_validate": "Validate",
+	"kanban_card_reanalyze": "Re-analyze",
+	"kanban_card_reanalyzing": "Analyzing...",
 	"kanban_card_running": "Workflow running...",
 	"kanban_card_analyzing": "The supervisor is finalizing the report…",
 	"kanban_composing_preview": "The supervisor is analyzing your description, please wait…",

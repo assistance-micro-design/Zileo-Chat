@@ -5,7 +5,6 @@
 -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { i18n } from '$lib/i18n';
 	import { tauriListen, tauriInvoke as invoke, type TauriUnlistenFn } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
@@ -14,6 +13,13 @@
 	import { Plus, Activity } from '@lucide/svelte';
 
 	import { kanbanStore, kanbanCardsByColumn, kanbanCards } from '$lib/stores/kanban';
+	import {
+		kanbanEventsStore,
+		analyzingCardIds as analyzingCardIdsStore,
+		boardDirtySeq,
+		pendingVerdict,
+		pendingNeedsImprovement
+	} from '$lib/stores/kanban-events';
 	import { runningWorkflows } from '$lib/stores/background-workflows';
 	import { kanbanScheduleStore, kanbanSchedules } from '$lib/stores/kanban-schedule';
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
@@ -107,24 +113,73 @@
 		}
 	}
 
+	// card_ready and settings:refresh stay page-local: the former launches a
+	// workflow via the page-coupled runCardWorkflow, the latter reloads page
+	// stores. The Kanban analyze lifecycle (analyzing / auto_analyzed /
+	// needs_improvement) and board-refresh signals (workflow_complete /
+	// cards_purged) are owned by the root-mounted `kanbanEventsStore` so they
+	// survive navigation away from /kanban.
 	let unlistenReady: TauriUnlistenFn | null = null;
-	let unlistenComplete: TauriUnlistenFn | null = null;
-	let unlistenAutoAnalyzed: TauriUnlistenFn | null = null;
-	let unlistenNeedsImprovement: TauriUnlistenFn | null = null;
-	let unlistenAnalyzing: TauriUnlistenFn | null = null;
-	let unlistenPurged: TauriUnlistenFn | null = null;
 	let unlistenSettingsRefresh: (() => void) | null = null;
 
-	/** Card ids currently being finalized by the Kanban agent. */
-	const analyzingCardIds = new SvelteSet<string>();
-
-	function setAnalyzing(cardId: string, on: boolean): void {
-		if (on) analyzingCardIds.add(cardId);
-		else analyzingCardIds.delete(cardId);
-	}
+	/** Card ids currently being finalized by the Kanban agent (root store). */
+	const analyzingSet = $derived(new Set($analyzingCardIdsStore));
 
 	$effect(() => {
 		void kanbanStore.loadCards(agentFilter || undefined);
+	});
+
+	// Reload the board whenever the root store signals it went stale (a
+	// workflow finished, a verdict was applied, or stale cards were purged) —
+	// including while the user was on another page. Reads the page's current
+	// agent filter so the scoped view is preserved.
+	$effect(() => {
+		// Touch the counter so this effect re-runs on every bump.
+		void $boardDirtySeq;
+		void kanbanStore.loadCards(agentFilter || undefined);
+	});
+
+	// Drain a buffered approve/reject verdict: open the report viewer on the
+	// matching review card (once, if unseen) so a verdict that landed while the
+	// user was away still surfaces when they return to /kanban. Reads the
+	// derived store reactively; clearing it resolves the effect (re-run sees
+	// null and bails) so there is no replay loop.
+	$effect(() => {
+		const verdict = $pendingVerdict;
+		if (!verdict) return;
+		kanbanEventsStore.clearVerdict();
+		void (async () => {
+			try {
+				const updated = await kanbanStore.getCard(verdict.cardId);
+				if (updated && !isCardSeen(verdict.cardId) && updated.column === 'review') {
+					viewerCard = updated;
+					viewerOpen = true;
+					markCardSeen(verdict.cardId);
+				}
+			} catch (e) {
+				pageError = getErrorMessage(e);
+			}
+		})();
+	});
+
+	// Drain a buffered needs_improvement verdict: pre-open the improve-prompt
+	// modal with the analyzer's suggested rewrite.
+	$effect(() => {
+		const pending = $pendingNeedsImprovement;
+		if (!pending) return;
+		kanbanEventsStore.clearNeedsImprovement();
+		void (async () => {
+			try {
+				const card = await kanbanStore.getCard(pending.cardId);
+				if (!card || !card.prompt_id) return; // inline_prompt cards can't be edited via this modal
+				improvePromptId = card.prompt_id;
+				improveKanbanAgentId = card.kanban_agent_id;
+				improveSuggestedContent = pending.suggestedPromptEdit;
+				improveOpen = true;
+			} catch (e) {
+				pageError = getErrorMessage(e);
+			}
+		})();
 	});
 
 	onMount(async () => {
@@ -139,17 +194,9 @@
 			pageError = getErrorMessage(e);
 		}
 
-		// Listener for workflow completions — refresh cards so column transitions
-		// applied by the backend (mark_card_done_core) appear in the board.
-		try {
-			unlistenComplete = await tauriListen('workflow_complete', () => {
-				void kanbanStore.loadCards(agentFilter || undefined);
-			});
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
-
-		// Listener for cards promoted to "doing" by the scheduler.
+		// Listener for cards promoted to "doing" by the scheduler. Kept on the
+		// page (not the root store) because runCardWorkflow is page-coupled
+		// (WorkflowExecutorService, variable interpolation, folder move).
 		try {
 			unlistenReady = await tauriListen<{ card_id: string }>('kanban:card_ready', async (event) => {
 				const cardId = event.payload?.card_id;
@@ -164,82 +211,12 @@
 			pageError = getErrorMessage(e);
 		}
 
-		// Listener for "analyzer started" — surface a "finalizing" indicator
-		// on the matching review card until the verdict comes back.
-		try {
-			unlistenAnalyzing = await tauriListen<{ card_id: string }>('kanban:analyzing', (event) => {
-				const cardId = event.payload?.card_id;
-				if (cardId) setAnalyzing(cardId, true);
-			});
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
-
-		// Listener for auto-analyze verdict (approve / reject). The backend
-		// has already updated the card; we just refresh the board and surface
-		// the verdict to the user via the page error / a viewer auto-open
-		// (handled by the $effect on viewerCard below).
-		try {
-			unlistenAutoAnalyzed = await tauriListen<{
-				card_id: string;
-				verdict: string;
-				reasoning: string;
-			}>('kanban:auto_analyzed', async (event) => {
-				const cardId = event.payload?.card_id;
-				if (!cardId) return;
-				setAnalyzing(cardId, false);
-				await kanbanStore.loadCards(agentFilter || undefined);
-				try {
-					const updated = await kanbanStore.getCard(cardId);
-					if (updated && !isCardSeen(cardId) && updated.column === 'review') {
-						viewerCard = updated;
-						viewerOpen = true;
-						markCardSeen(cardId);
-					}
-				} catch (e) {
-					pageError = getErrorMessage(e);
-				}
-			});
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
-
-		// Listener for auto-analyze `needs_improvement` verdict — opens the
-		// improvement modal with the analyzer's suggested rewrite pre-filled.
-		try {
-			unlistenNeedsImprovement = await tauriListen<{
-				card_id: string;
-				reasoning: string;
-				suggested_prompt_edit: string | null;
-			}>('kanban:needs_improvement', async (event) => {
-				const cardId = event.payload?.card_id;
-				if (!cardId) return;
-				setAnalyzing(cardId, false);
-				await kanbanStore.loadCards(agentFilter || undefined);
-				try {
-					const card = await kanbanStore.getCard(cardId);
-					if (!card || !card.prompt_id) return; // inline_prompt cards can't be edited via this modal
-					improvePromptId = card.prompt_id;
-					improveKanbanAgentId = card.kanban_agent_id;
-					improveSuggestedContent = event.payload?.suggested_prompt_edit ?? null;
-					improveOpen = true;
-				} catch (e) {
-					pageError = getErrorMessage(e);
-				}
-			});
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
-
-		// Listener for the scheduler's purge of stale `done` cards — refresh
-		// the board so the deleted cards disappear without a manual reload.
-		try {
-			unlistenPurged = await tauriListen<{ card_ids: string[] }>('kanban:cards_purged', () => {
-				void kanbanStore.loadCards(agentFilter || undefined);
-			});
-		} catch (e) {
-			pageError = getErrorMessage(e);
-		}
+		// The analyze-lifecycle listeners (kanban:analyzing / auto_analyzed /
+		// needs_improvement) and the board-refresh signals (workflow_complete /
+		// kanban:cards_purged) are owned by `kanbanEventsStore` at the app root.
+		// This page reacts to them via the $effect blocks on `boardDirtySeq`,
+		// `pendingVerdict` and `pendingNeedsImprovement` declared above, so a
+		// verdict that arrives while the user is on another page is not lost.
 
 		// Cross-surface settings refresh (agents added/renamed) — reload agents list silently.
 		const onSettingsRefresh = (): void => {
@@ -254,11 +231,6 @@
 
 	onDestroy(() => {
 		unlistenReady?.();
-		unlistenComplete?.();
-		unlistenAutoAnalyzed?.();
-		unlistenNeedsImprovement?.();
-		unlistenAnalyzing?.();
-		unlistenPurged?.();
 		unlistenSettingsRefresh?.();
 	});
 
@@ -385,6 +357,17 @@
 		} catch (e) {
 			pageError = getErrorMessage(e);
 		}
+	}
+
+	/**
+	 * Manually re-run the Kanban agent's report analysis for a card stuck in
+	 * review. Mirrors what the `workflow_complete` listener does automatically;
+	 * used when the auto-analyze silently failed (e.g. the model never called
+	 * SubmitAnalysis, a provider error, or the app was closed mid-workflow).
+	 * Errors are propagated so the viewer surfaces them inline.
+	 */
+	async function reanalyzeCard(card: KanbanCard): Promise<void> {
+		await invoke('analyze_card_report', { cardId: card.id });
 	}
 
 	function openView(card: KanbanCard): void {
@@ -631,7 +614,7 @@
 				card={c}
 				targetAgentName={agentName(c.target_agent_id)}
 				hasSchedule={cardHasSchedule(c.id)}
-				isAnalyzing={analyzingCardIds.has(c.id)}
+				isAnalyzing={analyzingSet.has(c.id)}
 				onview={openView}
 				onimprove={handleImprovePrompt}
 				ondelete={requestDeleteCard}
@@ -691,6 +674,7 @@
 	onvalidate={validateCard}
 	onimprove={handleImprovePrompt}
 	ondelete={requestDeleteCard}
+	onreanalyze={reanalyzeCard}
 />
 
 <DeleteConfirmModal

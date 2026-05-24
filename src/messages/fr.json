@@ -881,6 +881,8 @@
 	"kanban_card_purge_imminent": "Suppr. imminente",
 	"kanban_card_purge_tooltip": "Les cartes terminees sont supprimees automatiquement apres 3 jours. Les cartes recurrentes (avec planification active) sont preservees.",
 	"kanban_card_validate": "Valider",
+	"kanban_card_reanalyze": "Re-analyser",
+	"kanban_card_reanalyzing": "Analyse en cours...",
 	"kanban_card_running": "Workflow en cours...",
 	"kanban_card_analyzing": "Le superviseur finalise le rapport…",
 	"kanban_composing_preview": "Le superviseur analyse votre description, merci de patienter…",

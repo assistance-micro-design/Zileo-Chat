@@ -95,10 +95,19 @@ pub async fn compose_card_from_description_core(
         tool_factory: Some(tool_factory),
         agent_context: None,
     };
-    let report =
-        tool_loop::execute_with_tools(ctx, task, Some(mcp_manager.clone()), None, extra_tools)
-            .await
-            .map_err(|e| format!("Compose tool_loop failed: {}", e))?;
+    let report = tool_loop::execute_with_tools(
+        ctx,
+        task,
+        Some(mcp_manager.clone()),
+        None,
+        extra_tools,
+        // Same root cause as the analyze flow: force a tool call on the opening
+        // turn so the model engages SubmitComposedCard instead of finishing
+        // with an empty capture slot. Auto afterwards so the loop can stop.
+        crate::models::function_calling::ToolChoiceMode::Required,
+    )
+    .await
+    .map_err(|e| format!("Compose tool_loop failed: {}", e))?;
 
     let mut card = capture.lock().await.take().ok_or_else(|| {
         "Agent did not call SubmitComposedCardTool. Review your system prompt or model choice."

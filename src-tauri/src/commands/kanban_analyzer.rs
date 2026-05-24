@@ -32,6 +32,7 @@ use crate::commands::kanban_interaction::persist_interaction;
 use crate::db::DBClient;
 use crate::llm::ProviderManager;
 use crate::mcp::MCPManager;
+use crate::models::function_calling::ToolChoiceMode;
 use crate::models::kanban_card_interaction::InteractionKind;
 use crate::models::AgentConfig;
 use crate::security::validate_uuid_field;
@@ -138,10 +139,20 @@ pub async fn analyze_card_report_core(
         tool_factory: Some(tool_factory),
         agent_context: None,
     };
-    let exec_report =
-        tool_loop::execute_with_tools(ctx, task, Some(mcp_manager.clone()), None, extra_tools)
-            .await
-            .map_err(|e| format!("Analyze tool_loop failed: {}", e))?;
+    let exec_report = tool_loop::execute_with_tools(
+        ctx,
+        task,
+        Some(mcp_manager.clone()),
+        None,
+        extra_tools,
+        // Force a tool call on the opening turn so the model engages
+        // SubmitAnalysis instead of writing prose and finishing with an empty
+        // capture slot (the silent-failure root cause). Subsequent turns revert
+        // to Auto so the loop can terminate once the verdict is submitted.
+        ToolChoiceMode::Required,
+    )
+    .await
+    .map_err(|e| format!("Analyze tool_loop failed: {}", e))?;
 
     let analysis = capture.lock().await.take().ok_or_else(|| {
         "Agent did not call SubmitAnalysisTool. Review your system prompt or model choice."

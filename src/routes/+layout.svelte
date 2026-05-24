@@ -28,6 +28,7 @@
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import { sttSettingsStore } from '$lib/stores/sttSettings';
 	import { backgroundWorkflowsStore } from '$lib/stores/background-workflows';
+	import { kanbanEventsStore } from '$lib/stores/kanban-events';
 
 	let { children } = $props();
 
@@ -50,6 +51,14 @@
 		// its streaming chunks until /agent re-attached the listener.
 		void backgroundWorkflowsStore.init().catch(() => {
 			/* listener failures are logged inside the store */
+		});
+
+		// Initialise the Kanban events store at the app root for the same
+		// reason: its analyze-lifecycle listeners must stay attached across
+		// navigations so a verdict that arrives while the user is away from
+		// /kanban still refreshes the board and pre-opens the improve modal.
+		void kanbanEventsStore.init().catch(() => {
+			/* listener failures are non-fatal; the board self-heals on remount */
 		});
 
 		// Load STT settings — FAB visibility depends on `enabled` flag.
@@ -76,6 +85,7 @@
 		unlistenLegal?.();
 		unlistenPrivacy?.();
 		backgroundWorkflowsStore.destroy();
+		kanbanEventsStore.destroy();
 	});
 
 	function handleOnboardingComplete(): void {
