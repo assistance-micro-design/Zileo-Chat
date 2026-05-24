@@ -26,19 +26,22 @@ use std::sync::{Arc, LazyLock};
 use tracing::{debug, info, warn};
 
 /// Cached tool definition (built once, cloned per call).
-static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
     id: "ReadSkillTool".to_string(),
     name: "ReadSkill".to_string(),
-    summary: "Read skill documents containing instructions and context".to_string(),
+    summary: "Read YOUR OWN assigned skills (your operating procedures) — read-only, limited to your own allowlist".to_string(),
     description: ToolDescriptionBuilder::new(
-        "Reads skill documents containing instructions and context.",
+        "Reads the skills assigned to YOU (your own allowlist) — the operating procedures \
+         you follow for your tasks. Read-only and scoped to your own skills: reading a skill \
+         that is not in your list returns PermissionDenied.",
     )
     .use_when(&[
-        "You need to follow specific instructions or conventions for a task",
-        "A skill is listed in your available skills and is relevant to your current task",
+        "You need to follow one of YOUR OWN assigned skills for the current task",
+        "You want to list the skills assigned to you (the 'list' operation)",
     ])
     .do_not_use(&[
-        "The task does not match any assigned skill",
+        "You want to read, inspect or improve a skill you do NOT own — use SkillManager instead (Kanban agents), which reaches any skill in the system regardless of allowlist",
         "You already have the needed context (avoid re-reading the same skill)",
     ])
     .operations(&[
@@ -81,6 +84,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
         }
     }),
     requires_confirmation: false,
+}
 });
 
 /// Tool that allows agents to read their assigned skill documents.

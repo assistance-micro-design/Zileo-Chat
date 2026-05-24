@@ -37,10 +37,11 @@ mod versions;
 #[cfg(test)]
 mod tests;
 
-static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
+static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
+    ToolDefinition {
     id: "SkillManagerTool".to_string(),
     name: "SkillManager".to_string(),
-    summary: "List, read, create or update skill documents (Kanban agents only)".to_string(),
+    summary: "List/read ANY skill in the system, plus create/update/version/revoke skills (Kanban agents only). Use this — not ReadSkill — to inspect or improve a skill you do not own".to_string(),
     description: ToolDescriptionBuilder::new(
         "Manages skills (reusable markdown instructions). Reserved to Kanban-kind agents. \
          When creating a skill you must designate a `target_agent_id` (any existing agent — \
@@ -154,6 +155,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| ToolDefinition {
     }),
     output_schema: json!({"type": "object"}),
     requires_confirmation: false,
+}
 });
 
 pub struct SkillManagerTool {
