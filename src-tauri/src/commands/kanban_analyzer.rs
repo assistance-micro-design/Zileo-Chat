@@ -38,7 +38,6 @@ use crate::models::AgentConfig;
 use crate::security::validate_uuid_field;
 use crate::tools::list_agents::ListAgentsTool;
 use crate::tools::submit_analysis::SubmitAnalysisTool;
-use crate::tools::utils::safe_truncate;
 use crate::tools::{Tool, ToolFactory};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -50,7 +49,6 @@ use tracing::{debug, info, instrument, warn};
 
 /// Hard cap on report length passed to the analyzer LLM. Prevents a
 /// runaway report from blowing the context window and the cost budget.
-const MAX_REPORT_CHARS_FOR_ANALYSIS: usize = 12_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -186,6 +184,73 @@ pub async fn analyze_card_report_core(
     Ok(analysis)
 }
 
+/// Boot-time catch-up: re-run the analyzer for every card that finished into
+/// `review` but was never analyzed.
+///
+/// A card lands here when the app was closed between the worker workflow
+/// completing and the `workflow_complete` listener firing, or when an earlier
+/// auto-analyze failed silently (pre-`tool_choice=Required`). Without this
+/// pass such cards stay in `review` forever with no analyze interaction.
+///
+/// The victim set is `column='review'` AND `status='done'` (success path) AND
+/// `workflow_id` present AND no `analyze` interaction yet. `reject` /
+/// `needs_improvement` cards are excluded by construction — they already have
+/// an analyze interaction. Approved cards left `review` (moved to `done`).
+///
+/// Each analysis is best-effort and gated by `auto_analyze_reports` inside
+/// `analyze_card_report_core` (returns `Skipped` when the agent disabled it).
+/// Returns the number of cards for which a verdict was produced.
+pub async fn catchup_unanalyzed_review_cards_core(
+    db: &Arc<DBClient>,
+    tool_factory: &Arc<ToolFactory>,
+    mcp_manager: &Arc<MCPManager>,
+    llm_manager: &Arc<ProviderManager>,
+    app_handle: &AppHandle,
+) -> Result<usize, String> {
+    let q = "SELECT meta::id(id) AS id FROM kanban_card \
+             WHERE `column` = 'review' \
+               AND status = 'done' \
+               AND workflow_id != NONE \
+               AND meta::id(id) NOT IN \
+                   (SELECT VALUE card_id FROM kanban_card_interaction WHERE kind = 'analyze')";
+    let rows = db
+        .query_json(q)
+        .await
+        .map_err(|e| format!("Failed to pick un-analyzed review cards: {}", e))?;
+    let card_ids: Vec<String> = rows
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect();
+    if card_ids.is_empty() {
+        return Ok(0);
+    }
+    info!(
+        count = card_ids.len(),
+        "Kanban catch-up: re-analyzing un-analyzed review cards"
+    );
+
+    let mut analyzed = 0usize;
+    for card_id in card_ids {
+        match analyze_card_report_core(
+            db,
+            tool_factory,
+            mcp_manager,
+            llm_manager,
+            app_handle,
+            &card_id,
+        )
+        .await
+        {
+            Ok(report) if report.verdict != AnalyzeVerdict::Skipped => analyzed += 1,
+            Ok(_) => {} // Skipped: agent has auto_analyze_reports disabled
+            Err(e) => {
+                warn!(card_id = %card_id, error = %e, "Kanban catch-up: analyze failed (non-fatal)");
+            }
+        }
+    }
+    Ok(analyzed)
+}
+
 async fn load_kanban_agent_for_analysis(
     db: &Arc<DBClient>,
     agent_id: &str,
@@ -231,7 +296,9 @@ async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<S
         .next()
         .and_then(|r| r["content"].as_str().map(String::from))
         .ok_or_else(|| format!("No assistant message found for workflow {}", validated_wf))?;
-    Ok(safe_truncate(&content, MAX_REPORT_CHARS_FOR_ANALYSIS, true))
+    // The full report is fed to the analyzer verbatim — never truncated.
+    // A partial report could hide the very issue the verdict must catch.
+    Ok(content)
 }
 
 fn build_analyze_system_prompt(agent_sp: &str) -> String {

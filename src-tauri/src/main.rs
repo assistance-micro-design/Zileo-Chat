@@ -560,6 +560,36 @@ async fn main() -> anyhow::Result<()> {
                 tracing::info!("Kanban workflow_complete listener registered");
             }
 
+            // Boot-time catch-up: re-analyze cards that finished into `review`
+            // but were never analyzed (app closed mid-workflow, or an earlier
+            // auto-analyze failed silently). Detached so it never blocks
+            // startup — each analysis fires a full LLM tool loop. Best-effort:
+            // failures are logged inside the core helper.
+            {
+                let db = state.inner().db.clone();
+                let llm_manager = state.inner().llm_manager.clone();
+                let tool_factory = state.inner().tool_factory.clone();
+                let mcp_manager = state.inner().mcp_manager.clone();
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match commands::kanban_analyzer::catchup_unanalyzed_review_cards_core(
+                        &db,
+                        &tool_factory,
+                        &mcp_manager,
+                        &llm_manager,
+                        &app_handle,
+                    )
+                    .await
+                    {
+                        Ok(n) if n > 0 => {
+                            tracing::info!(analyzed = n, "Kanban catch-up: analyzed stuck review cards")
+                        }
+                        Ok(_) => tracing::debug!("Kanban catch-up: no un-analyzed review cards"),
+                        Err(e) => tracing::warn!(error = %e, "Kanban catch-up failed (non-fatal)"),
+                    }
+                });
+            }
+
             // Spawn the validation_audit cleanup task.
             // Honors `audit.retention_days` and runs every 24h.
             // The handle is parked in AppState so the runtime owns it (and a
