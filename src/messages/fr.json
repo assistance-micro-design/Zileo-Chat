@@ -830,7 +830,7 @@
 	"layout_switch_to_light_mode": "Passer au mode clair",
 	"layout_configuration": "Parametres",
 	"layout_agent": "Agent",
-	"layout_kanban": "Tableau",
+	"layout_kanban": "Tableau de tâches",
 
 	"kanban_page_title": "Tableau de taches",
 	"kanban_board_aria": "Tableau de taches",

@@ -44,7 +44,7 @@
 			onclick={() => selectLanguage('en')}
 			aria-label={$i18n('onboarding_language_english')}
 		>
-			<span class="flag">GB</span>
+			<span class="flag">EN</span>
 			<span class="label">{$i18n('onboarding_language_english')}</span>
 		</button>
 

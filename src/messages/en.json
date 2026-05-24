@@ -829,7 +829,7 @@
 	"layout_switch_to_light_mode": "Switch to light mode",
 	"layout_configuration": "Settings",
 	"layout_agent": "Agent",
-	"layout_kanban": "Board",
+	"layout_kanban": "Task board",
 
 	"kanban_page_title": "Task board",
 	"kanban_board_aria": "Task board",
