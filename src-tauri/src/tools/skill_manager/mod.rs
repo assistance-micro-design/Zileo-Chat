@@ -55,6 +55,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
         "You are a Kanban agent composing or refining a skill document",
         "You need to read any skill (full content, regardless of allowlist)",
         "You want to assign a new skill to a specific agent (yourself or another)",
+        "You want to attach an existing skill to another agent (same kind only)",
         "You want to rollback a skill to a previous version after a bad edit",
         "You want to revoke a skill from an agent's allowlist (without deleting the skill)",
     ])
@@ -93,6 +94,13 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
              so history is never destroyed. Cascades rename if the restored name differs.",
         ),
         (
+            "grant_skill_to_agent",
+            "Attach an EXISTING skill (`skill_name`) to `target_agent_id`'s allowlist. \
+             The skill and agent must exist and share the same kind (a kanban skill \
+             only grants to a kanban agent, a standard skill to a standard agent) — \
+             cross-kind grants are rejected. Idempotent.",
+        ),
+        (
             "revoke_skill_from_agent",
             "Remove `skill_name` from `target_agent_id`'s allowlist. \
              The skill row is preserved (other agents and history remain intact). \
@@ -124,6 +132,11 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
             "version_id": "<version-uuid>"
         }),
         json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": "<uuid>",
+            "skill_name": "existing-skill"
+        }),
+        json!({
             "operation": "revoke_skill_from_agent",
             "target_agent_id": "<uuid>",
             "skill_name": "outdated-skill"
@@ -137,7 +150,8 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
                 "type": "string",
                 "enum": [
                     "list_skills", "read_skill", "create_skill", "update_skill",
-                    "list_skill_versions", "restore_skill_version", "revoke_skill_from_agent"
+                    "list_skill_versions", "restore_skill_version",
+                    "grant_skill_to_agent", "revoke_skill_from_agent"
                 ]
             },
             "skill_id": {"type": "string", "description": "UUID of the skill row (update / list_skill_versions / restore_skill_version)."},
@@ -224,6 +238,7 @@ impl Tool for SkillManagerTool {
             "update_skill" => self.update_skill(&input).await,
             "list_skill_versions" => self.list_skill_versions(&input).await,
             "restore_skill_version" => self.restore_skill_version(&input).await,
+            "grant_skill_to_agent" => self.grant_skill_to_agent(&input).await,
             "revoke_skill_from_agent" => self.revoke_skill_from_agent(&input).await,
             other => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",
@@ -243,6 +258,7 @@ impl Tool for SkillManagerTool {
             | "update_skill"
             | "list_skill_versions"
             | "restore_skill_version"
+            | "grant_skill_to_agent"
             | "revoke_skill_from_agent" => Ok(()),
             other => Err(ToolError::InvalidInput(format!(
                 "Unknown operation: {}",

@@ -170,7 +170,7 @@ impl SkillManagerTool {
         // Auto-grant: add the skill name to the *target* agent's `skills`
         // array (NOT the caller). Both standard and Kanban targets are
         // supported.
-        self.grant_skill_to_agent(&target_agent_id, &name).await?;
+        self.grant_skill_name_raw(&target_agent_id, &name).await?;
 
         info!(
             skill_id = %id,

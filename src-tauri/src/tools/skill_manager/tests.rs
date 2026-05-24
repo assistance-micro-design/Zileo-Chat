@@ -280,7 +280,7 @@ async fn test_update_skill_rename_cascades_to_agents() {
     let skill_id = create_skill_for_target(&tool, "old-name", &target_id).await;
     // Manually grant the same skill to a second agent so the cascade has
     // more than one agent to update.
-    tool.grant_skill_to_agent(&other_id, "old-name")
+    tool.grant_skill_name_raw(&other_id, "old-name")
         .await
         .unwrap();
 
@@ -532,4 +532,147 @@ async fn test_kanban_create_rejects_unknown_target() {
         .await
         .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn test_grant_existing_skill_same_kind() {
+    let (state, _g) = setup_test_state().await;
+    let kanban_id = uuid::Uuid::new_v4().to_string();
+    let other_kanban_id = uuid::Uuid::new_v4().to_string();
+    insert_agent(&state.db, &kanban_id, Some("kanban")).await;
+    insert_agent(&state.db, &other_kanban_id, Some("kanban")).await;
+    let tool = kanban_tool(state.db.clone(), &kanban_id);
+
+    // Create a kanban skill (kind derived from the kanban target).
+    create_skill_for_target(&tool, "shared-kanban-skill", &kanban_id).await;
+
+    // Grant it to another kanban agent → allowed.
+    let res = tool
+        .execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": other_kanban_id,
+            "skill_name": "shared-kanban-skill"
+        }))
+        .await
+        .unwrap();
+    assert_eq!(res["success"], true);
+
+    let q = format!("SELECT skills FROM agent:`{}`", other_kanban_id);
+    let rows = state.db.query_json(&q).await.unwrap();
+    let skills = rows[0]["skills"].as_array().unwrap();
+    assert!(skills
+        .iter()
+        .any(|v| v.as_str() == Some("shared-kanban-skill")));
+}
+
+#[tokio::test]
+async fn test_grant_rejects_cross_kind() {
+    let (state, _g) = setup_test_state().await;
+    let kanban_id = uuid::Uuid::new_v4().to_string();
+    let standard_id = uuid::Uuid::new_v4().to_string();
+    insert_agent(&state.db, &kanban_id, Some("kanban")).await;
+    insert_agent(&state.db, &standard_id, None).await;
+    let tool = kanban_tool(state.db.clone(), &kanban_id);
+
+    // Skill is kanban-kind (created for a kanban target).
+    create_skill_for_target(&tool, "kanban-only-skill", &kanban_id).await;
+
+    // Granting it to a standard agent must be rejected.
+    let err = tool
+        .execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": standard_id,
+            "skill_name": "kanban-only-skill"
+        }))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::ValidationFailed(_)));
+    assert!(err.to_string().contains("strict separation"));
+}
+
+#[tokio::test]
+async fn test_grant_unknown_skill_not_found() {
+    let (state, _g) = setup_test_state().await;
+    let kanban_id = uuid::Uuid::new_v4().to_string();
+    let target_id = uuid::Uuid::new_v4().to_string();
+    insert_agent(&state.db, &kanban_id, Some("kanban")).await;
+    insert_agent(&state.db, &target_id, Some("kanban")).await;
+    let tool = kanban_tool(state.db.clone(), &kanban_id);
+
+    let err = tool
+        .execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": target_id,
+            "skill_name": "ghost-skill"
+        }))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn test_grant_unknown_agent_not_found() {
+    let (state, _g) = setup_test_state().await;
+    let kanban_id = uuid::Uuid::new_v4().to_string();
+    insert_agent(&state.db, &kanban_id, Some("kanban")).await;
+    let tool = kanban_tool(state.db.clone(), &kanban_id);
+    create_skill_for_target(&tool, "real-skill", &kanban_id).await;
+
+    let unknown_agent = uuid::Uuid::new_v4().to_string();
+    let err = tool
+        .execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": unknown_agent,
+            "skill_name": "real-skill"
+        }))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::NotFound(_)));
+}
+
+#[tokio::test]
+async fn test_grant_is_idempotent() {
+    let (state, _g) = setup_test_state().await;
+    let kanban_id = uuid::Uuid::new_v4().to_string();
+    let target_id = uuid::Uuid::new_v4().to_string();
+    insert_agent(&state.db, &kanban_id, Some("kanban")).await;
+    insert_agent(&state.db, &target_id, Some("kanban")).await;
+    let tool = kanban_tool(state.db.clone(), &kanban_id);
+    create_skill_for_target(&tool, "idem-skill", &kanban_id).await;
+
+    for _ in 0..2 {
+        tool.execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": target_id,
+            "skill_name": "idem-skill"
+        }))
+        .await
+        .unwrap();
+    }
+
+    // The skill appears exactly once (array::union dedupes).
+    let q = format!("SELECT skills FROM agent:`{}`", target_id);
+    let rows = state.db.query_json(&q).await.unwrap();
+    let count = rows[0]["skills"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v.as_str() == Some("idem-skill"))
+        .count();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn test_standard_agent_denied_on_grant() {
+    let (state, _g) = setup_test_state().await;
+    let tool = standard_tool(state.db.clone(), "agent-x");
+    let err = tool
+        .execute(json!({
+            "operation": "grant_skill_to_agent",
+            "target_agent_id": uuid::Uuid::new_v4().to_string(),
+            "skill_name": "whatever"
+        }))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::PermissionDenied(_)));
 }
