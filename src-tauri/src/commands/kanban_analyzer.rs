@@ -113,6 +113,10 @@ pub async fn analyze_card_report_core(
     );
 
     let report_text = load_workflow_report(db, &workflow_id).await?;
+    // Inherit the language the worker workflow ran in (stamped at execution),
+    // so the verdict is produced in the user's language without a frontend
+    // round-trip. Absent on legacy workflows → tool loop falls back to default.
+    let locale = load_workflow_locale(db, &workflow_id).await;
     config.system_prompt = build_analyze_system_prompt(&config.system_prompt);
 
     let capture: Arc<Mutex<Option<AnalyzeReport>>> = Arc::new(Mutex::new(None));
@@ -126,7 +130,10 @@ pub async fn analyze_card_report_core(
     let task = Task {
         id: uuid::Uuid::new_v4().to_string(),
         description: user_prompt.clone(),
-        context: json!({}),
+        context: match &locale {
+            Some(l) => json!({ "locale": l }),
+            None => json!({}),
+        },
     };
 
     let pricing_cache = PricingCache::load(db, &config).await;
@@ -299,6 +306,24 @@ async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<S
     // The full report is fed to the analyzer verbatim — never truncated.
     // A partial report could hide the very issue the verdict must catch.
     Ok(content)
+}
+
+/// Reads the UI language stamped on a workflow at execution time.
+///
+/// Returns `None` when the workflow predates the `locale` field or the lookup
+/// fails — the analyze tool loop then falls back to its default language.
+/// Best-effort: a DB error is swallowed (the analysis must still run).
+async fn load_workflow_locale(db: &Arc<DBClient>, workflow_id: &str) -> Option<String> {
+    let validated_wf = validate_uuid_field(workflow_id, "workflow_id").ok()?;
+    let q = "SELECT locale FROM workflow WHERE id = $wid LIMIT 1";
+    let rows: Vec<serde_json::Value> = db
+        .query_with_params(q, vec![("wid".to_string(), json!(validated_wf))])
+        .await
+        .ok()?;
+    rows.into_iter()
+        .next()
+        .and_then(|r| r["locale"].as_str().map(String::from))
+        .filter(|s| !s.trim().is_empty())
 }
 
 fn build_analyze_system_prompt(agent_sp: &str) -> String {

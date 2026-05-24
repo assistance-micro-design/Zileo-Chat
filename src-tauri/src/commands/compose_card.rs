@@ -52,6 +52,7 @@ pub async fn compose_card_from_description_core(
     provider_manager: &Arc<crate::llm::ProviderManager>,
     kanban_agent_id: &str,
     description: &str,
+    locale: &str,
 ) -> Result<KanbanCardCreate, String> {
     let kanban_agent_id = validate_uuid_field(kanban_agent_id, "kanban_agent_id")?;
     let trimmed_desc = description.trim();
@@ -84,7 +85,13 @@ pub async fn compose_card_from_description_core(
     let task = Task {
         id: uuid::Uuid::new_v4().to_string(),
         description: build_compose_user_prompt(trimmed_desc),
-        context: serde_json::json!({}),
+        // Compose in the UI language so the card title/description match the
+        // user's language. Empty locale → tool loop falls back to default.
+        context: if locale.trim().is_empty() {
+            serde_json::json!({})
+        } else {
+            serde_json::json!({ "locale": locale })
+        },
     };
 
     let pricing_cache = PricingCache::load(db, &config).await;
@@ -230,6 +237,7 @@ fn build_compose_user_prompt(description: &str) -> String {
 pub async fn compose_card_from_description(
     kanban_agent_id: String,
     description: String,
+    locale: String,
     state: State<'_, AppState>,
 ) -> Result<KanbanCardCreate, String> {
     let result = compose_card_from_description_core(
@@ -239,6 +247,7 @@ pub async fn compose_card_from_description(
         &state.llm_manager,
         &kanban_agent_id,
         &description,
+        &locale,
     )
     .await;
     if let Err(ref e) = result {

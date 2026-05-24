@@ -29,6 +29,10 @@ DEFINE FIELD OVERWRITE status ON workflow TYPE string ASSERT $value IN ['idle', 
 DEFINE FIELD OVERWRITE created_at ON workflow TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON workflow TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE completed_at ON workflow TYPE option<datetime>;
+-- UI language the workflow ran in (e.g. "fr", "en"), stamped at execution.
+-- Read by the Kanban auto-analyze so the verdict is produced in the same
+-- language without a frontend round-trip.
+DEFINE FIELD OVERWRITE locale ON workflow TYPE option<string>;
 -- Cumulative token tracking (Token Display Complet feature)
 DEFINE FIELD OVERWRITE total_tokens_input ON workflow TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE total_tokens_output ON workflow TYPE int DEFAULT 0;

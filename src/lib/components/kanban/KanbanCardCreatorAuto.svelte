@@ -10,6 +10,7 @@
 	import { i18n } from '$lib/i18n';
 	import { tauriInvoke as invoke } from '$lib/tauri';
 	import { getErrorMessage } from '$lib/utils/error';
+	import { locale } from '$lib/stores/locale';
 	import { Select, Textarea, Spinner } from '$lib/components/ui';
 	import type { SelectOption } from '$lib/components/ui';
 	import type { AgentSummary } from '$types/agent';
@@ -61,7 +62,8 @@
 		try {
 			const result = await invoke<KanbanCardCreate>('compose_card_from_description', {
 				kanbanAgentId,
-				description
+				description,
+				locale: $locale
 			});
 			preview = result;
 			onpreview(result);

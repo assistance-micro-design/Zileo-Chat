@@ -90,6 +90,22 @@ pub async fn execute_workflow_streaming(
         }
     };
 
+    // Stamp the UI language on the workflow so a later Kanban auto-analyze can
+    // produce its verdict in the same language without a frontend round-trip
+    // (the analyzer runs in a detached backend task). `workflow_id` is already
+    // a validated UUID; `locale` is bound. Best-effort: a failure must not
+    // abort the run.
+    if let Err(e) = state
+        .db
+        .execute_with_params(
+            &format!("UPDATE workflow:`{}` SET locale = $locale", workflow_id),
+            vec![("locale".to_string(), serde_json::json!(locale))],
+        )
+        .await
+    {
+        warn!(workflow_id = %workflow_id, error = %e, "Failed to stamp locale on workflow (non-fatal)");
+    }
+
     let message_id = Uuid::new_v4().to_string();
     let mut thinking_step_number: u32 = 0;
 
