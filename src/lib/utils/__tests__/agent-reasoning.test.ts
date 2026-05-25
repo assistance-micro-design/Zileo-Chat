@@ -103,10 +103,26 @@ describe('normalizeReasoningEffortForProvider', () => {
 		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', 'pro/deepseek-r1')).toBe('xhigh');
 	});
 
-	it('downgrades xhigh to high when the model is not DeepSeek', () => {
+	it('downgrades xhigh to high when the model is known and unsupported', () => {
 		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', 'mistral-large')).toBe('high');
-		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', undefined)).toBe('high');
 		expect(normalizeReasoningEffortForProvider('ollama', 'xhigh', 'qwen3')).toBe('high');
+	});
+
+	it('preserves a stored xhigh while the model is still unknown (list loading)', () => {
+		// On form reopen the LLM list loads asynchronously, so `selectedModel`
+		// (and thus its api_name) is undefined for the first render. An unknown
+		// model must NOT be treated as "does not support xhigh", otherwise a
+		// persisted xhigh is clobbered to high before the model resolves.
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', undefined)).toBe('xhigh');
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', null)).toBe('xhigh');
+		expect(normalizeReasoningEffortForProvider('custom', 'xhigh', '')).toBe('xhigh');
+	});
+
+	it('collapses xhigh to high on Mistral regardless of the model', () => {
+		// Mistral only accepts high/none, so the provider gate takes precedence
+		// over (and does not depend on) the model api_name.
+		expect(normalizeReasoningEffortForProvider('mistral', 'xhigh', undefined)).toBe('high');
+		expect(normalizeReasoningEffortForProvider('mistral', 'xhigh', 'deepseek-v4')).toBe('high');
 	});
 });
 

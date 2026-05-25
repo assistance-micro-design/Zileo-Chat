@@ -104,10 +104,19 @@ export function getReasoningHelp(provider: string, t: Translator): string {
  * Normalizes a stored reasoning_effort value to one that is selectable in
  * the UI for the given provider.
  *
- * For Mistral, low/medium are not exposed in the selector. They are mapped
- * server-side to "high" anyway (see ReasoningEffort::to_mistral_str), so the
- * UI returns "high" so the Select can display the user's intent without
- * silently dropping it. For other providers the value is returned unchanged.
+ * For Mistral, low/medium/xhigh are not exposed in the selector. They are
+ * mapped server-side to "high" anyway (see ReasoningEffort::to_mistral_str),
+ * so the UI returns "high" so the Select can display the user's intent without
+ * silently dropping it. The Mistral gate is provider-only and does not depend
+ * on the model.
+ *
+ * For other providers, `xhigh` is valid only for the families listed in
+ * {@link XHIGH_MODEL_PATTERNS}. It is downgraded to `high` ONLY when the model
+ * is known (a non-empty `modelApiName`) and does not support it — e.g. when the
+ * user switches to another model while xhigh is selected. A `null`/`undefined`/
+ * empty `modelApiName` means the model is still unknown (the LLM list loads
+ * asynchronously when the form opens); in that window the stored value is
+ * preserved so a persisted `xhigh` is not clobbered before the model resolves.
  *
  * Returns the original value when no normalization is needed.
  */
@@ -117,16 +126,19 @@ export function normalizeReasoningEffortForProvider(
 	modelApiName?: string | null
 ): ReasoningEffort | undefined {
 	if (!effort) return effort;
-	if (isMistralProvider(provider) && (effort === 'low' || effort === 'medium')) {
-		return 'high';
+	if (isMistralProvider(provider)) {
+		if (effort === 'low' || effort === 'medium' || effort === 'xhigh') {
+			return 'high';
+		}
+		return effort;
 	}
-	// `xhigh` is only exposed for the families listed in XHIGH_MODEL_PATTERNS;
-	// if the user switches to any other model while xhigh is selected, downgrade
-	// to `high` so the form state matches the option set. The backend would also
-	// collapse xhigh -> high on Mistral, but doing it here keeps the visible
-	// Select consistent.
-	if (effort === 'xhigh' && !supportsXhighReasoning(modelApiName)) {
-		return 'high';
+	// Non-Mistral: downgrade xhigh only when the model is KNOWN and unsupported.
+	// An unknown model (list still loading) must not be treated as unsupported,
+	// otherwise a persisted xhigh is wiped on form reopen before the model loads.
+	if (effort === 'xhigh' && modelApiName != null && modelApiName !== '') {
+		if (!supportsXhighReasoning(modelApiName)) {
+			return 'high';
+		}
 	}
 	return effort;
 }

@@ -25,6 +25,7 @@ Kanban auto-analyze stabilization (`fix/kanban-analyze-stabilization`). Fixes th
 
 ### Fixed
 
+- **`xhigh` ("très élevé") reasoning effort lost on agent reopen** (`src/lib/utils/agent-reasoning.ts`) -- saving an agent with the "Think Max" tier then reopening its form showed "élevé" (high) instead. The form's normalization effect ran on first render, before the LLM model list finished loading, so the still-unknown model was wrongly treated as not supporting `xhigh` and the stored value was downgraded to `high`. The normalizer now downgrades `xhigh` only when the model is known and unsupported; while the list is loading (unknown model) the persisted value is preserved.
 - **SSE read timeout during reasoning thinking phase** (`src-tauri/src/constants.rs`, `llm/sse.rs`, `llm/manager.rs`) -- DeepSeek V4 pro/flash (and other reasoning models) emit their entire thinking trace before any answer token, so the streaming body can stay silent longer than the 30s per-read timeout. The read timed out mid-thinking and surfaced as reqwest's opaque "SSE stream read failed: error decoding response body". The per-read timeout is raised to 120s (it bounds only the gap between two SSE frames, never the total request, so fast models are unaffected), and the error message now distinguishes a read timeout from a connection drop via `reqwest::Error::is_timeout()` for an actionable hint.
 - **Onboarding language step** shows "EN" instead of "GB" for English.
 - **Navigation label** renamed from "Board" / "Tableau" to "Task board" / "Tableau de tâches".
