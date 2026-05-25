@@ -25,6 +25,7 @@ Kanban auto-analyze stabilization (`fix/kanban-analyze-stabilization`). Fixes th
 
 ### Fixed
 
+- **SSE read timeout during reasoning thinking phase** (`src-tauri/src/constants.rs`, `llm/sse.rs`, `llm/manager.rs`) -- DeepSeek V4 pro/flash (and other reasoning models) emit their entire thinking trace before any answer token, so the streaming body can stay silent longer than the 30s per-read timeout. The read timed out mid-thinking and surfaced as reqwest's opaque "SSE stream read failed: error decoding response body". The per-read timeout is raised to 120s (it bounds only the gap between two SSE frames, never the total request, so fast models are unaffected), and the error message now distinguishes a read timeout from a connection drop via `reqwest::Error::is_timeout()` for an actionable hint.
 - **Onboarding language step** shows "EN" instead of "GB" for English.
 - **Navigation label** renamed from "Board" / "Tableau" to "Task board" / "Tableau de tâches".
 

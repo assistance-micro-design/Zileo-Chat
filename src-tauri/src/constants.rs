@@ -58,10 +58,20 @@ pub mod llm_http {
     /// Per-read timeout (seconds) for streaming chat completions.
     ///
     /// `reqwest::ClientBuilder::read_timeout` resets after each successful
-    /// read, so as long as the provider keeps emitting SSE chunks the client
-    /// waits indefinitely. Cloudflare's origin-idle limit (~100s) ceases to
-    /// matter; this value bounds the wait between two consecutive frames.
-    pub const DEFAULT_READ_TIMEOUT_SECS: u64 = 30;
+    /// read, so this value bounds only the *gap* tolerated between two
+    /// consecutive SSE frames — not the total request duration. Raising it
+    /// therefore never penalizes fast models; it only widens the silent-stall
+    /// window the client will sit through.
+    ///
+    /// Set to 120s because reasoning models (notably DeepSeek V4 pro/flash)
+    /// emit their full thinking trace *before* any answer token, and that
+    /// phase — or an intermediate proxy that buffers reasoning chunks — can
+    /// stay silent for well over 30s. With a 30s bound the read timed out
+    /// mid-thinking and surfaced as `reqwest`'s opaque "error decoding
+    /// response body" (see [`crate::llm::sse::collect_sse_to_json`]). 120s
+    /// covers a long silent thinking phase while still bounding a genuine
+    /// hang. Shared with `mistral.rs` / `openai_compatible.rs` test clients.
+    pub const DEFAULT_READ_TIMEOUT_SECS: u64 = 120;
 }
 
 /// Default limits for database queries to prevent memory explosion.

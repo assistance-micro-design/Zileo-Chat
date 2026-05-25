@@ -861,6 +861,29 @@ fn parse_event_block(event: &str) -> Option<String> {
     }
 }
 
+/// Builds a user-facing message for a transport-level failure while reading
+/// the SSE response body.
+///
+/// `reqwest` collapses both a per-read timeout and a mid-stream connection
+/// drop into the opaque `Display` "error decoding response body", which gives
+/// the user no actionable hint. A read timeout is by far the most common cause
+/// with reasoning models (DeepSeek V4 pro/flash): they emit the full thinking
+/// trace before any answer token, so the body can stay silent longer than
+/// `DEFAULT_READ_TIMEOUT_SECS`. We split that case out explicitly.
+fn describe_sse_read_error(is_timeout: bool, source: &str) -> String {
+    if is_timeout {
+        format!(
+            "SSE stream read timed out after {}s with no data: the model stayed \
+             silent too long, which is common with reasoning models that emit \
+             their entire thinking trace before any token. Underlying error: {}",
+            crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS,
+            source
+        )
+    } else {
+        format!("SSE stream read failed: {}", source)
+    }
+}
+
 /// Read an SSE response body and reconstruct the JSON the provider would
 /// have returned non-streaming.
 ///
@@ -884,8 +907,9 @@ pub(crate) async fn collect_sse_to_json(
     let mut event_count: usize = 0;
 
     while let Some(item) = stream.next().await {
-        let bytes =
-            item.map_err(|e| LLMError::RequestFailed(format!("SSE stream read failed: {}", e)))?;
+        let bytes = item.map_err(|e| {
+            LLMError::RequestFailed(describe_sse_read_error(e.is_timeout(), &e.to_string()))
+        })?;
         let parsed = parser.feed(&bytes)?;
         for payload in parsed.events {
             event_count += 1;
@@ -965,6 +989,24 @@ pub(crate) async fn collect_sse_to_json(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn timeout_read_error_is_actionable_and_mentions_bound() {
+        let msg = describe_sse_read_error(true, "error decoding response body");
+        // Names the timeout cause and the configured bound, not the opaque
+        // reqwest Display alone.
+        assert!(msg.contains("timed out"));
+        assert!(msg.contains(&crate::constants::llm_http::DEFAULT_READ_TIMEOUT_SECS.to_string()));
+        assert!(msg.contains("error decoding response body"));
+    }
+
+    #[test]
+    fn non_timeout_read_error_keeps_generic_message() {
+        let msg = describe_sse_read_error(false, "connection reset by peer");
+        assert!(msg.starts_with("SSE stream read failed:"));
+        assert!(msg.contains("connection reset by peer"));
+        assert!(!msg.contains("timed out"));
+    }
 
     fn ingest_all<A: DeltaAccumulator>(mut acc: A, chunks: Vec<Value>) -> Value {
         for c in &chunks {

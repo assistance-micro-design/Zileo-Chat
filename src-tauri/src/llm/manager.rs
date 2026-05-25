@@ -99,12 +99,14 @@ impl ProviderManager {
         // `read_timeout` (per-read, resets on each successful read) replaces
         // the old total `.timeout()` so wire-level streaming
         // (`complete_with_tools` over SSE) can sit idle through long
-        // thinking phases without tripping reqwest. Cloudflare's
-        // ~100s origin-idle limit is defeated separately because the
-        // server keeps emitting SSE chunks during thinking. Uses the same
-        // shared `DEFAULT_READ_TIMEOUT_SECS` as `mistral.rs` /
-        // `openai_compatible.rs` test clients to keep stall behavior
-        // uniform across provider HTTP pools.
+        // thinking phases without tripping reqwest. The bound must exceed the
+        // longest silent gap between SSE frames: reasoning models (DeepSeek V4
+        // pro/flash) emit the whole thinking trace before any answer token,
+        // and proxies may buffer those chunks, so the server does NOT always
+        // keep emitting during thinking — see `DEFAULT_READ_TIMEOUT_SECS`.
+        // Uses that shared constant (also in `mistral.rs` /
+        // `openai_compatible.rs` test clients) to keep stall behavior uniform
+        // across provider HTTP pools.
         let http_client = Arc::new(
             crate::llm::http::default_http_client_builder()
                 .read_timeout(Duration::from_secs(DEFAULT_READ_TIMEOUT_SECS))
