@@ -231,7 +231,7 @@ User-created agent configurations.
 | require_file_confirmation | bool | true | Confirm destructive file ops |
 | system_prompt | string (1-10000 chars) | | |
 | max_tool_iterations | int (1-200) | 50 | Tool loop limit |
-| reasoning_effort | option\<string\> ASSERT IN [low, medium, high] | NONE | Thinking model effort |
+| reasoning_effort | option\<string\> | NONE | Thinking model effort. No DB-level `ASSERT`; valid values `low \| medium \| high \| xhigh` are enforced by the `ReasoningEffort` enum (backend) and the provider-aware UI selector. `xhigh` ("Think Max") collapses to `high` on Mistral. |
 | created_at | datetime | time::now() | |
 | updated_at | datetime | time::now() | |
 
