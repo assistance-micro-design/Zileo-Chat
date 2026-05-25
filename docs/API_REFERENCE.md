@@ -370,7 +370,7 @@ Auto-compose path driven by a Kanban-kind agent.
 
 | Command | Description |
 |---------|-------------|
-| `compose_card_from_description` | Take a free-text description, dispatch it to the configured Kanban agent with `ListAgentsTool` + `SubmitComposedCardTool` auto-injected, run the tool loop until `SubmitComposedCardTool` is called, then persist the composed card and return its id. Uses the Kanban agent's own LLM config (provider, model, reasoning effort). |
+| `compose_card_from_description` | Params: `kanban_agent_id`, `description`, `locale`. Take a free-text description, dispatch it to the configured Kanban agent with `ListAgentsTool` + `SubmitComposedCardTool` auto-injected, run the tool loop (forced tool call on the opening turn) until `SubmitComposedCardTool` is called, then persist the composed card and return its id. The `locale` is injected into the task context so the card is composed in the UI language (empty → tool-loop default). Uses the Kanban agent's own LLM config (provider, model, reasoning effort). |
 
 ### Kanban Analyzer (`commands/kanban_analyzer.rs`)
 
@@ -378,7 +378,7 @@ Card report analysis.
 
 | Command | Description |
 |---------|-------------|
-| `analyze_card_report` | Analyze the report of a completed card workflow. Dispatches to the configured Kanban agent with `WorkflowManagerTool` + `SubmitAnalysisTool` auto-injected. Runs the tool loop until `SubmitAnalysisTool` is called. Returns the verdict (`approve | reject | needs_improvement`), summary, and optional `suggested_prompt_edit`. Triggered manually from the report viewer or automatically by the `workflow_complete` listener when the target agent has `auto_analyze_reports: true`. |
+| `analyze_card_report` | Analyze the report of a completed card workflow. Dispatches to the configured Kanban agent with `WorkflowManagerTool` + `SubmitAnalysisTool` auto-injected. Runs the tool loop with a forced tool call on the opening turn until `SubmitAnalysisTool` is called. The verdict is produced in the language stamped on the workflow (`workflow.locale`). The full worker report is fed to the analyzer verbatim (never truncated). Returns the verdict (`approve | reject | needs_improvement`), summary, and optional `suggested_prompt_edit`. Triggered manually from the report viewer ("Re-analyze") or automatically by the `workflow_complete` listener when the target agent has `auto_analyze_reports: true`. A boot-time catch-up pass re-runs the analyzer for cards orphaned in `review` (finished, has a workflow, no analysis yet) by an app closed mid-workflow. |
 
 ### Kanban Interaction (`commands/kanban_interaction.rs`)
 

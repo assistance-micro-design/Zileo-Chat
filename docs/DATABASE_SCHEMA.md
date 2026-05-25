@@ -58,6 +58,7 @@ Workflow lifecycle with cumulative token tracking.
 | total_tokens_output | int | 0 | Cumulative output tokens |
 | total_cost_usd | float | 0.0 | Cumulative cost (USD) |
 | model_id | option\<string\> | | Current model |
+| locale | option\<string\> | | UI language stamped at execution (e.g. "fr", "en"); read back by the detached Kanban auto-analyze so the verdict is produced in the user's language without a frontend round-trip. Absent on legacy rows → analyzer falls back to its default. |
 | current_context_tokens | int | 0 | Last API call context size |
 | sub_agent_tokens_input | int | 0 | Sub-agent input tokens |
 | sub_agent_tokens_output | int | 0 | Sub-agent output tokens |

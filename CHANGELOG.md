@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Kanban auto-analyze stabilization (`fix/kanban-analyze-stabilization`). Fixes the root cause of a Kanban card finishing its worker workflow but never receiving a verdict, leaving it stuck in the `review` column. The agent tool loop hard-coded `tool_choice = Auto` on every iteration, so the analyze and compose flows -- which depend on the model emitting one mandatory submit call to capture their result -- could silently fail whenever the model replied in prose instead. The loop now forces a tool call on the opening turn only (reverting to `Auto` afterwards so it can still terminate once the result is submitted). A boot-time pass re-analyzes cards orphaned by an app closed mid-workflow or an earlier silent failure, the verdict is now produced in the UI language, and the analyze lifecycle survives navigation away from the board.
+
+### Added
+
+- **Opening-turn forced tool call** (`src-tauri/src/agents/execution/tool_loop.rs`, `iteration.rs`) -- `execute_with_tools` takes an `opening_tool_choice` applied to the first iteration only. The analyze and compose flows pass `Required` so the model must engage `SubmitAnalysis` / `SubmitComposedCard` instead of finishing with an empty capture slot; every later turn reverts to `Auto` so the loop can terminate. The standard workflow path keeps `Auto` end-to-end.
+- **Boot-time analyze catch-up** (`src-tauri/src/commands/kanban_analyzer.rs`, `main.rs`) -- at startup a detached, best-effort task re-runs the analyzer for every card stuck in `review` (finished into `done`, has a workflow, no analysis yet), covering cards orphaned by an app closed mid-workflow or a pre-fix silent failure. Self-gated by each agent's `auto_analyze_reports`.
+- **UI-language verdicts** (`src-tauri/src/db/schema.rs`, `commands/streaming/execution.rs`) -- a new `workflow.locale` field is stamped at execution time and read back by the detached analyzer, so the verdict is produced in the user's language without a frontend round-trip. The compose command gains a `locale` parameter. Legacy workflows fall back to the default language.
+- **`grant_skill_to_agent` operation on `SkillManager`** (`src-tauri/src/tools/skill_manager/`) -- attaches an existing skill to another agent's allowlist, guarded by existence checks and the same-kind separation (a kanban skill only grants to a kanban agent, and vice versa). Idempotent.
+- **Manual "Re-analyze" button** (`src/lib/components/kanban/KanbanCardReportViewer.svelte`) -- re-runs the analysis on a review card on demand, with inline loading and error states; overlapping runs are blocked.
+
+### Changed
+
+- **Kanban analyze lifecycle is now root-mounted** (`src/lib/stores/kanban-events.ts`, `src/routes/+layout.svelte`, `kanban/+page.svelte`) -- the analyze and board-refresh event listeners moved from the `/kanban` page to a store initialized at the app root, so a verdict that arrives while the user is on another page still refreshes the board and pre-opens the improve-prompt modal. The workflow-launch listener stays page-local.
+- **`ReadSkill` and `SkillManager` tool descriptions disambiguated** -- both previously said "read skill documents", leading the Kanban supervisor to pick `ReadSkill` (scoped to its own allowlist) for a skill it does not own and hit a permission gate. `ReadSkill` now states it is read-only and limited to the agent's own skills; `SkillManager` states it reaches any skill and should be used to inspect or improve one the agent does not own. No behavior change.
+- **Analyzer no longer truncates the worker report** -- the full report is fed to the analyzer verbatim (previously capped at 12k characters), since a partial report could hide the very issue the verdict must catch.
+
+### Fixed
+
+- **Onboarding language step** shows "EN" instead of "GB" for English.
+- **Navigation label** renamed from "Board" / "Tableau" to "Task board" / "Tableau de tâches".
+
+---
+
 Provider hardening, vision gating defense-in-depth, and `xhigh` reasoning tier (`feature/provider-hardening-vision-gating`). Three independent axes shipped together: (1) every outbound HTTP request from the app now carries a `User-Agent: ZileoChat/<version>` header so upstream providers can correlate traffic to a specific release, (2) a fourth `ReasoningEffort::XHigh` variant ("Think Max") is exposed in the Agent settings selector for the model families that accept it (DeepSeek, GPT-5.x, Grok, Claude Opus -- case-insensitive substring match against `api_name`), and (3) image attachments are now blocked on four independent layers when the active model is not flagged `supports_vision: true`, so a model swap or a misconfigured row can no longer ferry images upstream and trigger a 400 from the provider.
 
 ### Added

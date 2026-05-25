@@ -142,9 +142,11 @@ Supervisor board reachable from the floating top menu. Two-column-grid layout: c
 
 ### Route
 
-`/kanban` — bound to `kanbanStore` (board state) and `kanbanScheduleStore` (recurrence settings). Both stores subscribe to the new `kanban:cards_purged` Tauri event so auto-purges by the backend scheduler refresh the board live.
+`/kanban` — bound to `kanbanStore` (board state) and `kanbanScheduleStore` (recurrence settings).
 
-See `src/routes/kanban/+page.svelte` and `src/routes/kanban/+page.ts`.
+The analyze lifecycle is owned by a root-mounted `kanbanEventsStore` (`src/lib/stores/kanban-events.ts`), initialized once at `+layout.svelte` like `backgroundWorkflowsStore`, so its Tauri listeners (`kanban:analyzing`, `kanban:auto_analyzed`, `kanban:needs_improvement`, `workflow_complete`, `kanban:cards_purged`) stay attached across navigation. A verdict that arrives while the user is on another page still refreshes the board (via a `boardDirtySeq` counter the page reacts to with its current agent filter) and buffers the payload (`pendingVerdict` / `pendingNeedsImprovement`) so the improve-prompt modal pre-opens the next time `/kanban` mounts. `kanban:card_ready` stays page-local — it launches a workflow through the page-coupled `runCardWorkflow`.
+
+See `src/routes/kanban/+page.svelte`, `src/routes/kanban/+page.ts`, and `src/lib/stores/kanban-events.ts`.
 
 ### Card Creator
 

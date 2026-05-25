@@ -201,7 +201,7 @@ See `src-tauri/src/tools/user_question/circuit_breaker.rs` for implementation.
 
 ## 5. ReadSkillTool
 
-**Purpose**: Allow agents to read skill documents containing instructions and context.
+**Purpose**: Let an agent read its OWN assigned skills (its operating procedures). Read-only and scoped to the agent's own allowlist — reading a skill it does not own returns `PermissionDenied`. To inspect or improve a skill the agent does not own, a Kanban agent uses `SkillManagerTool` instead (which reaches any skill in the system). The two tools' descriptions are deliberately disambiguated so the model does not pick `ReadSkillTool` for a non-owned skill and hit the permission gate.
 
 **Hidden**: Auto-injected when the agent has assigned skills; not visible in the frontend UI.
 
@@ -313,8 +313,8 @@ Every successful `update` writes a `prompt_version` row with the previous conten
 - `get` -- Get a single skill (full content)
 - `create` -- Create a new skill (`name`, `description`, `category`, `content`)
 - `update` -- Partial update (`skill_id`, any subset, optional `edit_summary`). Auto-snapshots a `skill_version` row before applying.
-- `grant` -- Assign a skill to a target standard agent (`skill_id`, `agent_id`)
-- `revoke` -- Remove a skill from a target agent (`skill_id`, `agent_id`)
+- `grant_skill_to_agent` -- Attach an EXISTING skill (`skill_name`) to `target_agent_id`'s allowlist. The skill and agent must exist and share the same kind (a kanban skill only grants to a kanban agent, a standard skill to a standard agent); cross-kind grants are rejected. Idempotent. Distinct from `create_skill`, which auto-grants the freshly-created skill where the same-kind invariant holds by construction.
+- `revoke_skill_from_agent` -- Remove a skill from a target agent (`skill_name`, `target_agent_id`)
 - `list_versions` -- List version snapshots for a skill (most recent first)
 - `restore_version` -- Restore a prior version (writes a new snapshot of the current content before overwriting, so restore is itself versioned)
 
@@ -379,7 +379,7 @@ Before persisting, the tool computes the set diff between the prompt template's 
 
 ### Auto-Injection
 
-The tool is added to the agent's toolkit only during the `compose_card_from_description` Tauri command's tool loop, never during normal Kanban-agent execution.
+The tool is added to the agent's toolkit only during the `compose_card_from_description` Tauri command's tool loop, never during normal Kanban-agent execution. Like the analyze flow, the loop forces a tool call on the opening turn (see section 13, `opening_tool_choice`) so the model engages `SubmitComposedCardTool` instead of finishing without a proposal.
 
 ---
 
@@ -393,7 +393,7 @@ The tool is added to the agent's toolkit only during the `compose_card_from_desc
 
 ### Auto-Injection
 
-Injected during the `analyze_card_report` command's tool loop. The analyzer is wired to `WorkflowManagerTool` for evidence retrieval and `SubmitAnalysisTool` for the verdict; standard skills/tools are not in scope.
+Injected during the `analyze_card_report` command's tool loop. The analyzer is wired to `WorkflowManagerTool` for evidence retrieval and `SubmitAnalysisTool` for the verdict; standard skills/tools are not in scope. The loop runs with a forced tool call on the opening turn (see section 13, `opening_tool_choice`), so a model that would otherwise reply in prose is compelled to submit a verdict rather than leaving the capture slot empty.
 
 ### `auto_analyze_reports`
 
@@ -420,6 +420,10 @@ When the target agent on a card has `auto_analyze_reports: true`, the `workflow_
 4. Execute tools (local via ToolFactory, MCP via MCPManager)
 5. Format results and feed back to LLM
 6. Repeat until no tool calls or max iterations reached (default: 50)
+
+### `opening_tool_choice`
+
+`execute_with_tools` takes an `opening_tool_choice` applied to the first iteration only (`tool_choice_for_iteration` reverts to `Auto` afterwards). The standard workflow path passes `Auto` end-to-end. The Kanban analyze and compose flows pass `Required` so the model must emit their mandatory capture-slot tool call (`SubmitAnalysisTool` / `SubmitComposedCardTool`) on the opening turn — a blanket `Auto` could finish with an empty slot, while a blanket `Required` would never let the loop terminate. See `src-tauri/src/agents/execution/tool_loop.rs`.
 
 ### Constructor
 
