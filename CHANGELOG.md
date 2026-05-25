@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-05-25
+
 Kanban auto-analyze stabilization (`fix/kanban-analyze-stabilization`). Fixes the root cause of a Kanban card finishing its worker workflow but never receiving a verdict, leaving it stuck in the `review` column. The agent tool loop hard-coded `tool_choice = Auto` on every iteration, so the analyze and compose flows -- which depend on the model emitting one mandatory submit call to capture their result -- could silently fail whenever the model replied in prose instead. The loop now forces a tool call on the opening turn only (reverting to `Auto` afterwards so it can still terminate once the result is submitted). A boot-time pass re-analyzes cards orphaned by an app closed mid-workflow or an earlier silent failure, the verdict is now produced in the UI language, and the analyze lifecycle survives navigation away from the board.
 
 ### Added
@@ -1333,7 +1335,8 @@ Audit hardening release. Backend defense-in-depth on every SurrealQL interpolati
 
 ---
 
-[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/assistance-micro-design/Zileo-Chat/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.26.0
 [0.25.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.25.0
 [0.24.0]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.24.0
 [0.23.1]: https://github.com/assistance-micro-design/Zileo-Chat/releases/tag/v0.23.1

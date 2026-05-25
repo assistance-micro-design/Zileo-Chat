@@ -421,4 +421,4 @@ npm ls --all
 ---
 
 _Last updated: 2026-04-29_
-_Zileo Chat version: 0.24.0_
+_Zileo Chat version: 0.26.0_
