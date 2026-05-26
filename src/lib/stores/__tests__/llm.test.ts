@@ -67,6 +67,7 @@ describe('LLM Store', () => {
 		is_builtin: isBuiltin,
 		is_reasoning: false,
 		supports_vision: false,
+		supports_forced_tool_choice: true,
 		input_price_per_mtok: 0,
 		output_price_per_mtok: 0,
 		cache_read_price_per_mtok: 0,

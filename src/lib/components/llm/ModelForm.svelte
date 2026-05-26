@@ -105,6 +105,7 @@
 		temperature_default: 0.7,
 		is_reasoning: false,
 		supports_vision: false,
+		supports_forced_tool_choice: true,
 		input_price_per_mtok: 0,
 		output_price_per_mtok: 0,
 		cache_read_price_per_mtok: 0,
@@ -122,6 +123,7 @@
 			temperature_default: model?.temperature_default ?? 0.7,
 			is_reasoning: model?.is_reasoning ?? false,
 			supports_vision: model?.supports_vision ?? false,
+			supports_forced_tool_choice: model?.supports_forced_tool_choice ?? true,
 			input_price_per_mtok: model?.input_price_per_mtok ?? 0,
 			output_price_per_mtok: model?.output_price_per_mtok ?? 0,
 			cache_read_price_per_mtok: model?.cache_read_price_per_mtok ?? 0,
@@ -234,6 +236,7 @@
 				temperature_default: formData.temperature_default,
 				is_reasoning: formData.is_reasoning,
 				supports_vision: formData.supports_vision,
+				supports_forced_tool_choice: formData.supports_forced_tool_choice,
 				input_price_per_mtok: formData.input_price_per_mtok,
 				output_price_per_mtok: formData.output_price_per_mtok,
 				cache_read_price_per_mtok: formData.cache_read_price_per_mtok,
@@ -264,6 +267,9 @@
 			}
 			if (model && formData.supports_vision !== model.supports_vision) {
 				updateData.supports_vision = formData.supports_vision;
+			}
+			if (model && formData.supports_forced_tool_choice !== model.supports_forced_tool_choice) {
+				updateData.supports_forced_tool_choice = formData.supports_forced_tool_choice;
 			}
 			if (model && formData.input_price_per_mtok !== model.input_price_per_mtok) {
 				updateData.input_price_per_mtok = formData.input_price_per_mtok;
@@ -542,6 +548,18 @@
 			<span class="checkbox-text">{$i18n('models_supports_vision')}</span>
 		</label>
 		<p class="checkbox-help">{$i18n('models_supports_vision_help')}</p>
+	</div>
+
+	<div class="checkbox-field">
+		<label class="checkbox-label">
+			<input
+				type="checkbox"
+				bind:checked={formData.supports_forced_tool_choice}
+				disabled={saving}
+			/>
+			<span class="checkbox-text">{$i18n('models_supports_forced_tool_choice')}</span>
+		</label>
+		<p class="checkbox-help">{$i18n('models_supports_forced_tool_choice_help')}</p>
 	</div>
 
 	<div class="form-actions">

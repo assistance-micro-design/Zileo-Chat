@@ -261,6 +261,13 @@ DEFINE FIELD OVERWRITE is_builtin ON llm_model TYPE bool DEFAULT false;
 DEFINE FIELD OVERWRITE is_reasoning ON llm_model TYPE bool DEFAULT false;
 -- Multimodal vision capability flag (manual user toggle in ModelForm).
 DEFINE FIELD OVERWRITE supports_vision ON llm_model TYPE bool DEFAULT false;
+-- Whether this model accepts a forced `tool_choice` (`required` / by-name).
+-- DEFAULT true = current behaviour (most models accept it). Set false for
+-- upstreams that reject it (deepseek-v4 via RouterLab returns HTTP 400). When
+-- false, flows that force a tool on the opening turn fall back to Auto.
+-- DEFAULT does not backfill existing rows (ERR_SURREAL_011); SELECTs read it
+-- via `(supports_forced_tool_choice ?? true)`.
+DEFINE FIELD OVERWRITE supports_forced_tool_choice ON llm_model TYPE bool DEFAULT true;
 -- Pricing per million tokens (USD) - user configurable
 DEFINE FIELD OVERWRITE input_price_per_mtok ON llm_model TYPE float
     ASSERT $value >= 0.0 AND $value <= 1000.0
@@ -359,7 +366,7 @@ DEFINE FIELD OVERWRITE max_tool_iterations ON agent TYPE int
 
 -- Reasoning effort for thinking models (null = disabled)
 DEFINE FIELD OVERWRITE reasoning_effort ON agent TYPE option<string>
-    ASSERT $value IS NONE OR $value IN ['low', 'medium', 'high']
+    ASSERT $value IS NONE OR $value IN ['low', 'medium', 'high', 'xhigh']
     DEFAULT NONE;
 
 -- Timestamps

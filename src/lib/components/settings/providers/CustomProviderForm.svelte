@@ -16,60 +16,86 @@
 
 <!--
   CustomProviderForm Component
-  Form for adding a new OpenAI-compatible custom provider.
-  Auto-generates a URL-safe name from the display name.
+  Form for adding or editing an OpenAI-compatible custom provider.
+  In create mode it auto-generates a URL-safe name from the display name.
+  In edit mode the name is fixed (it is the provider's stable id) and the API
+  key is optional (left blank keeps the stored key unchanged).
 -->
 
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Input, Button } from '$lib/components/ui';
 	import { i18n } from '$lib/i18n';
-	import { createCustomProvider } from '$lib/stores/llm';
+	import { createCustomProvider, updateCustomProvider } from '$lib/stores/llm';
 	import type { ProviderInfo } from '$types/custom-provider';
 	import { getErrorMessage } from '$lib/utils/error';
 
 	/** Props */
 	interface Props {
+		/**
+		 * Existing provider to edit. When omitted the form is in create mode.
+		 * In edit mode the name (id) is immutable and the API key is optional.
+		 */
+		provider?: ProviderInfo;
 		/** Called when provider is created, receives the new provider entity and optional warning */
-		oncreated: (provider: ProviderInfo, warning?: string) => void;
+		oncreated?: (provider: ProviderInfo, warning?: string) => void;
+		/** Called when an existing provider is updated, receives the updated entity and optional warning */
+		onupdated?: (provider: ProviderInfo, warning?: string) => void;
 		/** Called when form is cancelled */
 		oncancel: () => void;
 	}
 
-	let { oncreated, oncancel }: Props = $props();
+	let { provider, oncreated, onupdated, oncancel }: Props = $props();
 
-	/** Form fields */
-	let displayName = $state('');
-	let baseUrl = $state('');
+	// The modal mounts a fresh form per open, so the `provider` prop is stable
+	// for the component's lifetime. `untrack` captures the seed values once
+	// without the reactive-read warning (the form is intentionally uncontrolled
+	// after mount).
+	/** Whether the form edits an existing provider (vs creating a new one). */
+	const isEdit = untrack(() => provider !== undefined);
+
+	/** Form fields (seeded from the provider in edit mode). */
+	let displayName = $state(untrack(() => provider?.displayName ?? ''));
+	let baseUrl = $state(untrack(() => provider?.baseUrl ?? ''));
 	let apiKey = $state('');
 	/**
 	 * Strict-mode toggles. Default `true` preserves OpenRouter behaviour
 	 * (cache_control + reasoning top-level object injected). Uncheck both
-	 * for Fireworks, Groq, Together, Cerebras.
+	 * for Fireworks, Groq, Together, Cerebras. In edit mode the stored values
+	 * seed the checkboxes so they can be corrected without recreating.
 	 */
-	let supportsCacheControl = $state(true);
-	let supportsReasoningParam = $state(true);
+	let supportsCacheControl = $state(untrack(() => provider?.supportsCacheControl ?? true));
+	let supportsReasoningParam = $state(untrack(() => provider?.supportsReasoningParam ?? true));
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 
-	/** Auto-generated URL-safe name from display name */
+	/**
+	 * Provider name: the immutable id in edit mode, otherwise auto-generated
+	 * URL-safe from the display name.
+	 */
 	const name = $derived(
-		displayName
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '')
-			.slice(0, 64)
+		isEdit
+			? (provider?.id ?? '')
+			: displayName
+					.toLowerCase()
+					.replace(/[^a-z0-9]+/g, '-')
+					.replace(/^-+|-+$/g, '')
+					.slice(0, 64)
 	);
 
-	/** Form validation */
+	/**
+	 * Form validation. The API key is required only when creating; in edit mode
+	 * a blank key keeps the stored one.
+	 */
 	const isValid = $derived(
 		name.length > 0 &&
 			displayName.trim().length > 0 &&
 			baseUrl.trim().length > 0 &&
-			apiKey.trim().length > 0
+			(isEdit || apiKey.trim().length > 0)
 	);
 
 	/**
-	 * Handles form submission
+	 * Handles form submission for both create and edit modes.
 	 */
 	async function handleSubmit(): Promise<void> {
 		if (!isValid) return;
@@ -78,15 +104,29 @@
 		error = null;
 
 		try {
-			const response = await createCustomProvider(
-				name,
-				displayName.trim(),
-				baseUrl.trim(),
-				apiKey.trim(),
-				supportsCacheControl,
-				supportsReasoningParam
-			);
-			oncreated(response.provider, response.warning);
+			if (isEdit) {
+				const trimmedKey = apiKey.trim();
+				const response = await updateCustomProvider(
+					name,
+					displayName.trim(),
+					baseUrl.trim(),
+					trimmedKey.length > 0 ? trimmedKey : undefined,
+					undefined,
+					supportsCacheControl,
+					supportsReasoningParam
+				);
+				onupdated?.(response.provider, response.warning);
+			} else {
+				const response = await createCustomProvider(
+					name,
+					displayName.trim(),
+					baseUrl.trim(),
+					apiKey.trim(),
+					supportsCacheControl,
+					supportsReasoningParam
+				);
+				oncreated?.(response.provider, response.warning);
+			}
 		} catch (e) {
 			error = getErrorMessage(e);
 		} finally {
@@ -133,7 +173,8 @@
 		placeholder="sk-..."
 		bind:value={apiKey}
 		disabled={saving}
-		required
+		help={isEdit ? $i18n('llm_custom_provider_api_key_edit_help') : undefined}
+		required={!isEdit}
 	/>
 
 	<div class="checkbox-field">

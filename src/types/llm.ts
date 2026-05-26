@@ -82,6 +82,12 @@ export interface LLMModel {
 	is_reasoning: boolean;
 	/** Whether this model accepts multimodal vision input (manual user toggle). */
 	supports_vision: boolean;
+	/**
+	 * Whether this model accepts a forced tool_choice (required / by-name).
+	 * Defaults to true. Set false for upstreams that reject it (e.g. deepseek-v4
+	 * via RouterLab returns HTTP 400); forced opening turns then fall back to Auto.
+	 */
+	supports_forced_tool_choice: boolean;
 	/** Price per million input tokens (USD) - user configurable */
 	input_price_per_mtok: number;
 	/** Price per million output tokens (USD) - user configurable */
@@ -118,6 +124,8 @@ export interface CreateModelRequest {
 	is_reasoning?: boolean;
 	/** Whether this model supports multimodal vision (defaults to false). Manual toggle. */
 	supports_vision?: boolean;
+	/** Whether this model accepts a forced tool_choice (defaults to true). */
+	supports_forced_tool_choice?: boolean;
 	/** Price per million input tokens (USD, default 0.0) */
 	input_price_per_mtok?: number;
 	/** Price per million output tokens (USD, default 0.0) */
@@ -149,6 +157,8 @@ export interface UpdateModelRequest {
 	is_reasoning?: boolean;
 	/** Whether this model supports multimodal vision (toggleable, even on builtin). */
 	supports_vision?: boolean;
+	/** Whether this model accepts a forced tool_choice (toggleable, even on builtin). */
+	supports_forced_tool_choice?: boolean;
 	/** New price per million input tokens (USD) */
 	input_price_per_mtok?: number;
 	/** New price per million output tokens (USD) */

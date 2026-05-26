@@ -461,14 +461,65 @@ pub(crate) async fn execute_simple(
 /// allowing it to *finish* naturally on a later turn — a plain `Auto` analyze
 /// could end with no tool call, and a blanket `Required` would never let the
 /// loop terminate (no turn could be tool-free), spinning until max_iterations.
+///
+/// `model_supports_forced` gates a forced opening choice: some upstreams reject
+/// a forced `tool_choice` (`deepseek-v4` via RouterLab returns HTTP 400). When
+/// the model's `supports_forced_tool_choice` flag is false we downgrade an
+/// opening `Required` to `Auto` so the call succeeds; the empty-capture-slot
+/// risk this re-introduces is covered by the boot-time catch-up re-analysis.
 fn tool_choice_for_iteration(
     iteration: usize,
     opening_tool_choice: ToolChoiceMode,
+    model_supports_forced: bool,
 ) -> ToolChoiceMode {
     if iteration <= 1 {
-        opening_tool_choice
+        match opening_tool_choice {
+            ToolChoiceMode::Required if !model_supports_forced => ToolChoiceMode::Auto,
+            other => other,
+        }
     } else {
         ToolChoiceMode::Auto
+    }
+}
+
+/// Reads the `supports_forced_tool_choice` capability for a `(provider, model)`
+/// pair from the `llm_model` table. Returns `true` (the historical default)
+/// when the model card is absent or the query fails, so a missing row never
+/// disables a flow's forced opening turn.
+///
+/// Provider scoping is mandatory: two custom providers can expose the same
+/// `api_name` with different capabilities, so an unscoped lookup would trust
+/// the wrong row. Provider strings are compared lowercase to match how the
+/// front-end persists them.
+async fn load_supports_forced_tool_choice(db: &DBClient, api_name: &str, provider: &str) -> bool {
+    let query = "SELECT (supports_forced_tool_choice ?? true) AS supports_forced_tool_choice \
+         FROM llm_model \
+         WHERE api_name = $api_name \
+           AND string::lowercase(provider) = string::lowercase($provider) \
+         LIMIT 1";
+    match db
+        .query_json_with_params(
+            query,
+            vec![
+                ("api_name".to_string(), serde_json::json!(api_name)),
+                ("provider".to_string(), serde_json::json!(provider)),
+            ],
+        )
+        .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .next()
+            .and_then(|r| r["supports_forced_tool_choice"].as_bool())
+            .unwrap_or(true),
+        Err(e) => {
+            warn!(
+                model = %api_name,
+                error = %e,
+                "Failed to resolve supports_forced_tool_choice, defaulting to true"
+            );
+            true
+        }
     }
 }
 
@@ -731,6 +782,23 @@ pub(crate) async fn execute_with_tools(
         None
     };
 
+    // Resolve the model's forced-tool-choice capability once so the opening
+    // turn can downgrade `Required` to `Auto` for upstreams that reject a
+    // forced `tool_choice` (deepseek-v4 via RouterLab). Defaults to true (the
+    // historical behaviour) when no `tool_factory` is available (rare test
+    // path) or the model card is absent.
+    let model_supports_forced_tool_choice = match ctx.tool_factory {
+        Some(factory) => {
+            load_supports_forced_tool_choice(
+                &factory.get_db(),
+                &ctx.config.llm.model,
+                &ctx.config.llm.provider,
+            )
+            .await
+        }
+        None => true,
+    };
+
     loop {
         iteration += 1;
         if iteration > max_iterations {
@@ -812,7 +880,11 @@ pub(crate) async fn execute_with_tools(
             cancellation_token: cancellation_token.clone(),
             is_sub_agent,
             pricing_cache: pricing_cache.as_ref(),
-            tool_choice: tool_choice_for_iteration(iteration, opening_tool_choice),
+            tool_choice: tool_choice_for_iteration(
+                iteration,
+                opening_tool_choice,
+                model_supports_forced_tool_choice,
+            ),
         };
 
         let mut mstate = IterationMutState {
@@ -943,20 +1015,21 @@ mod tests {
     fn opening_tool_choice_only_applies_to_first_iteration() {
         // Required is honoured on the opening turn so the model must emit a
         // tool call (Kanban analyze / compose root cause: model writes prose
-        // and finishes without ever submitting).
+        // and finishes without ever submitting). `true` = model accepts a
+        // forced tool_choice (the common case).
         assert_eq!(
-            tool_choice_for_iteration(1, ToolChoiceMode::Required),
+            tool_choice_for_iteration(1, ToolChoiceMode::Required, true),
             ToolChoiceMode::Required
         );
         // Subsequent turns fall back to Auto so the loop can terminate once
         // the model has submitted — a blanket Required would never let any
         // turn be tool-free, spinning until max_iterations.
         assert_eq!(
-            tool_choice_for_iteration(2, ToolChoiceMode::Required),
+            tool_choice_for_iteration(2, ToolChoiceMode::Required, true),
             ToolChoiceMode::Auto
         );
         assert_eq!(
-            tool_choice_for_iteration(50, ToolChoiceMode::Required),
+            tool_choice_for_iteration(50, ToolChoiceMode::Required, true),
             ToolChoiceMode::Auto
         );
     }
@@ -966,10 +1039,31 @@ mod tests {
         // The standard workflow path passes Auto and must never be forced.
         for iteration in [1usize, 2, 10] {
             assert_eq!(
-                tool_choice_for_iteration(iteration, ToolChoiceMode::Auto),
+                tool_choice_for_iteration(iteration, ToolChoiceMode::Auto, true),
                 ToolChoiceMode::Auto
             );
         }
+    }
+
+    #[test]
+    fn forced_opening_downgrades_to_auto_when_model_rejects_it() {
+        // deepseek-v4 via RouterLab returns HTTP 400 on a forced tool_choice:
+        // its `supports_forced_tool_choice` is false, so an opening Required
+        // is downgraded to Auto to keep the call valid.
+        assert_eq!(
+            tool_choice_for_iteration(1, ToolChoiceMode::Required, false),
+            ToolChoiceMode::Auto
+        );
+        // Later turns are Auto regardless (no change from the supported path).
+        assert_eq!(
+            tool_choice_for_iteration(2, ToolChoiceMode::Required, false),
+            ToolChoiceMode::Auto
+        );
+        // Auto is unaffected by the capability flag.
+        assert_eq!(
+            tool_choice_for_iteration(1, ToolChoiceMode::Auto, false),
+            ToolChoiceMode::Auto
+        );
     }
 
     fn make_task(description: &str, context: serde_json::Value) -> Task {
@@ -1170,6 +1264,38 @@ mod tests {
             PricingCache::load(&state.db, &make_agent_config("Custom", "unknown-model")).await;
 
         assert!(cache.pricing.is_none());
+    }
+
+    #[tokio::test]
+    async fn supports_forced_tool_choice_defaults_true_for_seeded_and_absent_models() {
+        let (state, _guard) = setup_test_state().await;
+        // A seeded row that never set the flag must read as true (schema
+        // DEFAULT + `?? true` coalesce), preserving the historical behaviour.
+        seed_llm_model(&state.db, "Mistral", "mistral-medium", 2.0, 6.0).await;
+        assert!(load_supports_forced_tool_choice(&state.db, "mistral-medium", "Mistral").await);
+        // An absent model card must also default to true so a missing row
+        // never disables a flow's forced opening turn.
+        assert!(load_supports_forced_tool_choice(&state.db, "unknown-model", "Custom").await);
+    }
+
+    #[tokio::test]
+    async fn supports_forced_tool_choice_reads_false_when_disabled() {
+        let (state, _guard) = setup_test_state().await;
+        let id = seed_llm_model(&state.db, "RouterLab", "deepseek-v4-pro", 1.0, 2.0).await;
+        state
+            .db
+            .execute(&format!(
+                "UPDATE llm_model:`{}` SET supports_forced_tool_choice = false",
+                id
+            ))
+            .await
+            .expect("failed to disable supports_forced_tool_choice");
+
+        // Provider scoping: the flag is read for the (provider, api_name) pair.
+        assert!(
+            !load_supports_forced_tool_choice(&state.db, "deepseek-v4-pro", "RouterLab").await,
+            "disabled flag must read as false"
+        );
     }
 
     #[test]

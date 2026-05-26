@@ -56,6 +56,8 @@
 		icon?: Snippet;
 		/** Callback when configure button is clicked */
 		onConfigure: () => void;
+		/** Callback when edit button is clicked (custom providers only) */
+		onEdit?: () => void;
 		/** Callback when delete button is clicked (custom providers only) */
 		onDelete?: () => void;
 	}
@@ -68,6 +70,7 @@
 		isCustom = false,
 		icon,
 		onConfigure,
+		onEdit,
 		onDelete
 	}: Props = $props();
 
@@ -181,6 +184,11 @@
 			{#if isCustom && onDelete}
 				<Button variant="danger" size="sm" onclick={onDelete}>
 					{$i18n('common_delete')}
+				</Button>
+			{/if}
+			{#if isCustom && onEdit}
+				<Button variant="secondary" size="sm" onclick={onEdit}>
+					{$i18n('common_edit')}
 				</Button>
 			{/if}
 			<Button variant="primary" size="sm" onclick={onConfigure}>

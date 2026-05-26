@@ -62,6 +62,13 @@ pub struct LLMModel {
     /// outbound request body is allowed to carry image content parts.
     #[serde(default)]
     pub supports_vision: bool,
+    /// Whether this model accepts a forced `tool_choice` (`required` / by-name).
+    /// Defaults to true (most upstreams accept it). Set false for models whose
+    /// upstream rejects a forced tool call (e.g. deepseek-v4 via RouterLab
+    /// returns HTTP 400). When false, flows that force a tool on the opening
+    /// turn (Kanban analyze / compose) fall back to Auto.
+    #[serde(default = "default_true")]
+    pub supports_forced_tool_choice: bool,
     /// Price per million input tokens (USD) - user configurable
     #[serde(default)]
     pub input_price_per_mtok: f64,
@@ -103,6 +110,7 @@ impl LLMModel {
             is_builtin: false,
             is_reasoning: request.is_reasoning,
             supports_vision: request.supports_vision,
+            supports_forced_tool_choice: request.supports_forced_tool_choice,
             input_price_per_mtok: request.input_price_per_mtok,
             output_price_per_mtok: request.output_price_per_mtok,
             cache_read_price_per_mtok: request.cache_read_price_per_mtok,
@@ -140,6 +148,10 @@ pub struct CreateModelRequest {
     /// Manual user toggle - no auto-detection.
     #[serde(default)]
     pub supports_vision: bool,
+    /// Whether this model accepts a forced `tool_choice` (defaults to true).
+    /// Set false for upstreams that reject it (e.g. deepseek-v4 via RouterLab).
+    #[serde(default = "default_true")]
+    pub supports_forced_tool_choice: bool,
     /// Price per million input tokens (USD, defaults to 0.0)
     #[serde(default)]
     pub input_price_per_mtok: f64,
@@ -157,6 +169,13 @@ pub struct CreateModelRequest {
 /// Default temperature value for new models.
 fn default_temperature() -> f64 {
     0.7
+}
+
+/// Default value for boolean capability flags that should be enabled unless
+/// explicitly disabled (e.g. `supports_forced_tool_choice`). Lets existing rows
+/// and partial payloads deserialize to `true` (current behaviour).
+fn default_true() -> bool {
+    true
 }
 
 impl CreateModelRequest {
@@ -246,6 +265,9 @@ pub struct UpdateModelRequest {
     /// Whether this model supports multimodal vision input.
     /// Permitted for builtin models (same policy as `is_reasoning`).
     pub supports_vision: Option<bool>,
+    /// Whether this model accepts a forced `tool_choice`.
+    /// Permitted for builtin models (same policy as `is_reasoning`).
+    pub supports_forced_tool_choice: Option<bool>,
     /// New price per million input tokens (USD)
     pub input_price_per_mtok: Option<f64>,
     /// New price per million output tokens (USD)
@@ -369,6 +391,7 @@ impl UpdateModelRequest {
             && self.temperature_default.is_none()
             && self.is_reasoning.is_none()
             && self.supports_vision.is_none()
+            && self.supports_forced_tool_choice.is_none()
             && self.input_price_per_mtok.is_none()
             && self.output_price_per_mtok.is_none()
             && self.cache_read_price_per_mtok.is_none()
@@ -485,6 +508,7 @@ mod tests {
             temperature_default: 0.7,
             is_reasoning: false,
             supports_vision: false,
+            supports_forced_tool_choice: true,
             input_price_per_mtok: 2.0,
             output_price_per_mtok: 6.0,
             cache_read_price_per_mtok: 1.0,
@@ -531,6 +555,7 @@ mod tests {
             temperature_default: None,
             is_reasoning: None,
             supports_vision: None,
+            supports_forced_tool_choice: None,
             input_price_per_mtok: None,
             output_price_per_mtok: None,
             cache_read_price_per_mtok: None,
@@ -552,6 +577,7 @@ mod tests {
             temperature_default: Some(0.5),
             is_reasoning: None,
             supports_vision: None,
+            supports_forced_tool_choice: None,
             input_price_per_mtok: Some(2.0),
             output_price_per_mtok: Some(6.0),
             cache_read_price_per_mtok: None,
@@ -571,6 +597,7 @@ mod tests {
             temperature_default: 0.7,
             is_reasoning: false,
             supports_vision: false,
+            supports_forced_tool_choice: true,
             input_price_per_mtok: 0.0,
             output_price_per_mtok: 0.0,
             cache_read_price_per_mtok: 0.0,
@@ -642,6 +669,7 @@ mod tests {
             temperature_default: None,
             is_reasoning: None,
             supports_vision: Some(true),
+            supports_forced_tool_choice: None,
             input_price_per_mtok: None,
             output_price_per_mtok: None,
             cache_read_price_per_mtok: None,

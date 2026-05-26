@@ -99,6 +99,8 @@ Combines Providers and Models sections.
 	let modelSaving = $state(false);
 	let selectedModelsProvider = $state<ProviderType | 'all'>('all');
 	let showCustomProviderForm = $state(false);
+	/** Provider being edited (null = the form is in create mode). */
+	let providerToEdit = $state<ProviderInfo | null>(null);
 
 	/** Provider delete confirmation state */
 	let showProviderDeleteConfirm = $state(false);
@@ -193,7 +195,7 @@ Combines Providers and Models sections.
 		newProvider: ProviderInfo,
 		warning?: string
 	): Promise<void> {
-		showCustomProviderForm = false;
+		closeCustomProviderForm();
 		// Append the provider locally to avoid a reload flicker. Provider settings
 		// for a freshly created entity are not yet in state; loadProviderSettings
 		// would return defaults that the backend will generate on first use.
@@ -204,6 +206,39 @@ Combines Providers and Models sections.
 			notify('warning', warning);
 		} else {
 			notify('success', $i18n('llm_custom_provider_created'));
+		}
+		dispatchSettingsRefresh({ source: 'providers' });
+	}
+
+	/**
+	 * Opens the custom provider form in edit mode for the given provider.
+	 */
+	function handleEditProviderRequest(providerInfo: ProviderInfo): void {
+		providerToEdit = providerInfo;
+		showCustomProviderForm = true;
+	}
+
+	/**
+	 * Closes the custom provider form and clears any edit target.
+	 */
+	function closeCustomProviderForm(): void {
+		showCustomProviderForm = false;
+		providerToEdit = null;
+	}
+
+	/**
+	 * Handles custom provider update success.
+	 * @param warning - Optional security warning from the backend
+	 */
+	function handleCustomProviderUpdated(updatedProvider: ProviderInfo, warning?: string): void {
+		closeCustomProviderForm();
+		// Replace the updated entity in place to refresh display name / flags
+		// without a full reload.
+		providerList = providerList.map((p) => (p.id === updatedProvider.id ? updatedProvider : p));
+		if (warning) {
+			notify('warning', warning);
+		} else {
+			notify('success', $i18n('llm_custom_provider_updated'));
 		}
 		dispatchSettingsRefresh({ source: 'providers' });
 	}
@@ -367,6 +402,7 @@ Combines Providers and Models sections.
 							provInfo.displayName,
 							true
 						)}
+					onEdit={() => handleEditProviderRequest(provInfo)}
 					onDelete={() => handleDeleteProviderRequest(provInfo)}
 				>
 					{#snippet icon()}
@@ -472,13 +508,15 @@ Combines Providers and Models sections.
 <!-- Custom Provider Form Modal -->
 <Modal
 	open={showCustomProviderForm}
-	title={$i18n('llm_add_custom_provider')}
-	onclose={() => (showCustomProviderForm = false)}
+	title={providerToEdit ? $i18n('llm_edit_custom_provider') : $i18n('llm_add_custom_provider')}
+	onclose={closeCustomProviderForm}
 >
 	{#snippet body()}
 		<CustomProviderForm
+			provider={providerToEdit ?? undefined}
 			oncreated={handleCustomProviderCreated}
-			oncancel={() => (showCustomProviderForm = false)}
+			onupdated={handleCustomProviderUpdated}
+			oncancel={closeCustomProviderForm}
 		/>
 	{/snippet}
 </Modal>

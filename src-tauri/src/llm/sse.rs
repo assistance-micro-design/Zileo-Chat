@@ -171,6 +171,13 @@ pub(crate) struct OpenAiAccumulator {
     role: Option<String>,
     content: String,
     reasoning_str: String,
+    /// Wire field the reasoning string arrived under (`reasoning` for vLLM,
+    /// `reasoning_content` for DeepSeek / LM Studio). Preserved so the
+    /// reassembled `message` echoes it back under the *same* name on the next
+    /// tool-loop turn: DeepSeek (incl. via RouterLab) rejects an echoed turn
+    /// whose reasoning is renamed to `reasoning` with HTTP 400, and only
+    /// accepts `reasoning_content`. First key seen wins.
+    reasoning_field: Option<&'static str>,
     reasoning_details: Vec<Value>,
     /// Concatenation of `delta.thinking` string fragments. Some Ollama-style
     /// proxies (and a handful of forks) put the reasoning trace there
@@ -250,10 +257,13 @@ impl DeltaAccumulator for OpenAiAccumulator {
         }
 
         // Two reasoning string aliases, same bucket: `reasoning` (vLLM) and
-        // `reasoning_content` (LM Studio and forks).
+        // `reasoning_content` (DeepSeek, LM Studio and forks). The source key
+        // is remembered (first wins) so finalize can echo it back unchanged —
+        // DeepSeek rejects a turn whose reasoning is renamed to `reasoning`.
         for key in ["reasoning", "reasoning_content"] {
             if let Some(piece) = delta.get(key).and_then(|v| v.as_str()) {
                 self.reasoning_str.push_str(piece);
+                self.reasoning_field.get_or_insert(key);
             }
         }
 
@@ -304,6 +314,7 @@ impl DeltaAccumulator for OpenAiAccumulator {
             role,
             content,
             reasoning_str,
+            reasoning_field,
             reasoning_details,
             thinking_str,
             tool_calls,
@@ -335,7 +346,14 @@ impl DeltaAccumulator for OpenAiAccumulator {
         }
 
         if !reasoning_str.is_empty() {
-            message.insert("reasoning".to_string(), Value::String(reasoning_str));
+            // Echo the reasoning under the field name it arrived in so the next
+            // tool-loop turn replays it verbatim (DeepSeek requires
+            // `reasoning_content`; vLLM uses `reasoning`). Defaults to
+            // `reasoning` when the source key was somehow not recorded.
+            message.insert(
+                reasoning_field.unwrap_or("reasoning").to_string(),
+                Value::String(reasoning_str),
+            );
         }
 
         if !reasoning_details.is_empty() {
@@ -1051,7 +1069,38 @@ mod tests {
             json!({"choices":[{"index":0,"delta":{"content":"X"},"finish_reason":"stop"}]}),
         ];
         let out = ingest_all(OpenAiAccumulator::new(), chunks);
-        assert_eq!(out["choices"][0]["message"]["reasoning"], "part1 part2");
+        // The reasoning must be echoed back under the SAME field it arrived in
+        // (`reasoning_content`), not renamed to `reasoning`: DeepSeek (incl. via
+        // RouterLab) returns HTTP 400 on a tool-loop follow-up turn whose
+        // reasoning is renamed. Regression guard for that round-trip.
+        assert_eq!(
+            out["choices"][0]["message"]["reasoning_content"],
+            "part1 part2"
+        );
+        assert!(out["choices"][0]["message"].get("reasoning").is_none());
+    }
+
+    #[test]
+    fn test_openai_reasoning_field_name_preserved_for_round_trip() {
+        // `reasoning` (vLLM) stays `reasoning`; `reasoning_content` (DeepSeek)
+        // stays `reasoning_content`. First key seen wins when both appear.
+        let r = ingest_all(
+            OpenAiAccumulator::new(),
+            vec![json!({"choices":[{"index":0,"delta":{"reasoning":"a"},"finish_reason":"stop"}]})],
+        );
+        assert_eq!(r["choices"][0]["message"]["reasoning"], "a");
+        assert!(r["choices"][0]["message"]
+            .get("reasoning_content")
+            .is_none());
+
+        let rc = ingest_all(
+            OpenAiAccumulator::new(),
+            vec![
+                json!({"choices":[{"index":0,"delta":{"reasoning_content":"b"},"finish_reason":"stop"}]}),
+            ],
+        );
+        assert_eq!(rc["choices"][0]["message"]["reasoning_content"], "b");
+        assert!(rc["choices"][0]["message"].get("reasoning").is_none());
     }
 
     #[test]
