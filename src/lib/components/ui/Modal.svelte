@@ -50,9 +50,15 @@
 		body?: Snippet;
 		/** Modal footer content */
 		footer?: Snippet;
+		/**
+		 * When true, the modal fills the viewport (minus a small margin) instead
+		 * of the default 600px / 90vh box. Used for content-heavy modals such as
+		 * the Kanban card review chat.
+		 */
+		fullscreen?: boolean;
 	}
 
-	let { open, title, onclose, body, footer }: Props = $props();
+	let { open, title, onclose, body, footer, fullscreen = false }: Props = $props();
 
 	/**
 	 * Handle keyboard events for accessibility
@@ -83,7 +89,7 @@
 		onkeydown={handleKeydown}
 	>
 		<div
-			class="modal"
+			class={['modal', fullscreen && 'modal-fullscreen']}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="modal-title"

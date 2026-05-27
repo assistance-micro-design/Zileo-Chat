@@ -258,7 +258,7 @@
 	}
 </script>
 
-<Modal {open} title={card?.title ?? ''} {onclose}>
+<Modal {open} title={card?.title ?? ''} {onclose} fullscreen={chatEnabled}>
 	{#snippet body()}
 		{#if card}
 			<div class="report-section">
@@ -619,7 +619,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		max-height: 320px;
+		/* Generous height so the conversation benefits from the full-screen modal. */
+		max-height: 60vh;
 		overflow-y: auto;
 	}
 	.chat-thinking {
