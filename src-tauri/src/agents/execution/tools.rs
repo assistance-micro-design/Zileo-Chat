@@ -19,6 +19,7 @@
 
 use crate::agents::prompt::MCPServerSummary;
 use crate::mcp::MCPManager;
+use crate::models::agent::AgentKind;
 use crate::models::function_calling::{FunctionCall, FunctionCallResult};
 use crate::models::mcp::MCPTool;
 use crate::models::AgentConfig;
@@ -118,8 +119,36 @@ pub(crate) async fn create_local_tools(
         tool_names.push("ReadSkillTool".to_string());
     }
 
+    // Kanban agents are confined: they orchestrate cards but must NEVER act as
+    // a delegation caller (PAT_KANBAN_STRICT_SEPARATION — they are already
+    // excluded as a callee in delegate_task_execution). Strip the three
+    // sub-agent tools defensively in case one was persisted on the config, and
+    // force the basic-tools branch below so `create_tools_with_context` (which
+    // auto-injects Spawn/Delegate/Parallel for a primary agent) is never taken.
+    // Streaming/attribution stay intact — only the sub-agent tools are omitted.
+    let is_kanban = config.kind == Some(AgentKind::Kanban);
+    if is_kanban {
+        tool_names.retain(|t| {
+            t != "SpawnAgentTool" && t != "DelegateTaskTool" && t != "ParallelTasksTool"
+        });
+        // Auto-inject the per-card chat tools only when a context is present,
+        // i.e. the streaming card review chat (the only Kanban streaming path).
+        // The detached analyze/compose runs pass `agent_context: None`, so they
+        // never receive these tools. The tools self-gate anyway (they resolve
+        // the card via `review_chat_workflow_id`), so this is scoping for
+        // prompt clarity, not security.
+        if effective_context.is_some() {
+            for card_tool in ["RerunWorkerTool", "MoveCardTool", "ScheduleCardTool"] {
+                if !tool_names.iter().any(|t| t == card_tool) {
+                    tool_names.push(card_tool.to_string());
+                }
+            }
+        }
+    }
+
     // If this is the primary agent and we have context, use create_tools_with_context
-    if is_primary_agent {
+    // (skipped for Kanban agents so the delegation tools are never auto-added).
+    if is_primary_agent && !is_kanban {
         if let Some(context) = effective_context {
             debug!(
                 agent_id = %config.id,
@@ -337,5 +366,86 @@ pub(crate) async fn execute_function_call(
                 ),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::setup_test_state;
+    use crate::tools::context::AgentToolContext;
+
+    fn agent_config_from(value: serde_json::Value) -> AgentConfig {
+        serde_json::from_value(value).expect("valid AgentConfig fixture")
+    }
+
+    fn tool_ids(tools: &[Arc<dyn Tool>]) -> Vec<String> {
+        tools.iter().map(|t| t.id().to_string()).collect()
+    }
+
+    /// A standard (kind = None) primary agent with a context gets the three
+    /// sub-agent tools auto-injected — this is the baseline the Kanban gating
+    /// must NOT reproduce.
+    #[tokio::test]
+    async fn standard_primary_agent_gets_sub_agent_tools() {
+        let (state, _g) = setup_test_state().await;
+        let context = AgentToolContext::from_app_state_full(&state);
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Std",
+            "tools": ["MemoryTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            Some(&context),
+            Some("wf-1".to_string()),
+            true,
+            None,
+        )
+        .await;
+        let ids = tool_ids(&tools);
+        assert!(
+            ids.contains(&"SpawnAgentTool".to_string()),
+            "standard primary agent must receive SpawnAgentTool, got {ids:?}"
+        );
+    }
+
+    /// A Kanban-kind primary agent must NEVER receive Spawn/Delegate/Parallel,
+    /// even with a full context present (PAT_KANBAN_STRICT_SEPARATION). The
+    /// explicitly-configured SpawnAgentTool is stripped defensively.
+    #[tokio::test]
+    async fn kanban_primary_agent_never_gets_sub_agent_tools() {
+        let (state, _g) = setup_test_state().await;
+        let context = AgentToolContext::from_app_state_full(&state);
+        let config = agent_config_from(serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "name": "Kanban",
+            "kind": "kanban",
+            // SpawnAgentTool persisted on the config must be stripped.
+            "tools": ["MemoryTool", "SpawnAgentTool"],
+        }));
+
+        let tools = create_local_tools(
+            &config,
+            Some(&state.tool_factory),
+            Some(&context),
+            Some("wf-1".to_string()),
+            true,
+            None,
+        )
+        .await;
+        let ids = tool_ids(&tools);
+        for forbidden in ["SpawnAgentTool", "DelegateTaskTool", "ParallelTasksTool"] {
+            assert!(
+                !ids.contains(&forbidden.to_string()),
+                "Kanban agent must NOT receive {forbidden}, got {ids:?}"
+            );
+        }
+        assert!(
+            ids.contains(&"MemoryTool".to_string()),
+            "Kanban agent must still receive its non-delegation tools, got {ids:?}"
+        );
     }
 }

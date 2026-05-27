@@ -22,7 +22,7 @@ use tracing::{info, instrument, warn};
 // `column_order`, which the parser otherwise mis-tokenises after ORDER BY).
 const KANBAN_CARD_FIELDS: &str = "meta::id(id) AS id, title, description, kanban_agent_id, \
     target_agent_id, prompt_id, inline_prompt, variables, target_folder_id, status, `column`, \
-    `column_order`, workflow_id, error_summary, created_at, updated_at";
+    `column_order`, workflow_id, review_chat_workflow_id, error_summary, created_at, updated_at";
 
 /// Validates the description length (max 5000 chars, like the schema ASSERT).
 pub(crate) fn validate_description(desc: &str) -> Result<String, String> {
@@ -123,6 +123,7 @@ pub async fn create_kanban_card_core(
             `column`: 'todo',
             `column_order`: 0,
             workflow_id: NONE,
+            review_chat_workflow_id: NONE,
             error_summary: NONE,
             created_at: time::now(),
             updated_at: time::now()
@@ -289,10 +290,36 @@ pub fn is_transition_allowed(from: &KanbanColumn, to: &KanbanColumn) -> bool {
         (Todo, Todo)              // reorder
             | (Review, Done)      // user validates
             | (Review, Review)    // reorder
+            | (Review, Doing)     // send back to work (MoveCardTool / chat)
+            | (Review, Todo)      // send back to queue (MoveCardTool / chat)
             | (Done, Done)        // reorder
             | (Doing, Review)     // auto: workflow failed (backend trigger)
             | (Doing, Done) // auto: workflow ok (backend trigger)
     )
+}
+
+/// Resolves the id of the card whose review chat is `chat_workflow_id`.
+///
+/// Shared by the card-chat tools (MoveCard / ScheduleCard / RerunWorker) so
+/// they self-gate identically: a clear error when called outside a card review
+/// chat (no chat workflow id, or no card links back to it).
+pub(crate) async fn resolve_card_id_by_review_chat(
+    db: &DBClient,
+    chat_workflow_id: Option<&str>,
+) -> Result<String, String> {
+    let wf = chat_workflow_id
+        .filter(|w| !w.is_empty() && *w != "default")
+        .ok_or_else(|| "this tool is only usable inside a card review chat".to_string())?;
+    let q = "SELECT meta::id(id) AS id FROM kanban_card \
+             WHERE review_chat_workflow_id = $wf LIMIT 1";
+    let rows = db
+        .query_json_with_params(q, vec![("wf".to_string(), json!(wf))])
+        .await
+        .map_err(|e| format!("Failed to resolve card by review chat: {}", e))?;
+    rows.into_iter()
+        .next()
+        .and_then(|r| r["id"].as_str().map(String::from))
+        .ok_or_else(|| "No card is linked to this review chat".to_string())
 }
 
 /// Persist the workflow_id link on a kanban card. Required so the
@@ -358,6 +385,7 @@ pub async fn duplicate_kanban_card_as_template_core(
             `column`: 'todo',
             `column_order`: 0,
             workflow_id: NONE,
+            review_chat_workflow_id: NONE,
             error_summary: NONE,
             created_at: time::now(),
             updated_at: time::now()
@@ -558,6 +586,15 @@ mod tests {
         assert!(is_transition_allowed(
             &KanbanColumn::Review,
             &KanbanColumn::Done
+        ));
+        // send-back transitions enabled for MoveCardTool / card chat.
+        assert!(is_transition_allowed(
+            &KanbanColumn::Review,
+            &KanbanColumn::Doing
+        ));
+        assert!(is_transition_allowed(
+            &KanbanColumn::Review,
+            &KanbanColumn::Todo
         ));
         assert!(!is_transition_allowed(
             &KanbanColumn::Todo,

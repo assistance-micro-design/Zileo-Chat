@@ -21,8 +21,11 @@ use super::factory::ToolFactory;
 use crate::models::agent::AgentKind;
 use crate::tools::context::AgentToolContext;
 use crate::tools::delegate_task::DelegateTaskTool;
+use crate::tools::move_card::MoveCardTool;
 use crate::tools::parallel_tasks::ParallelTasksTool;
 use crate::tools::prompt_manager::PromptManagerTool;
+use crate::tools::rerun_worker::RerunWorkerTool;
+use crate::tools::schedule_card::ScheduleCardTool;
 use crate::tools::skill_manager::SkillManagerTool;
 use crate::tools::spawn_agent::SpawnAgentTool;
 use crate::tools::workflow_manager::WorkflowManagerTool;
@@ -329,6 +332,28 @@ impl ToolFactory {
             "WorkflowManagerTool" => {
                 let tool = WorkflowManagerTool::new(self.db.clone());
                 info!("WorkflowManagerTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            // Per-card Kanban chat tools. Auto-injected for a Kanban agent's
+            // streaming card review chat (see create_local_tools). They
+            // self-gate by resolving the card via `review_chat_workflow_id`
+            // (captured here as `workflow_id` = the chat workflow id).
+            "MoveCardTool" => {
+                let tool = MoveCardTool::new(self.db.clone(), workflow_id);
+                info!("MoveCardTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            "ScheduleCardTool" => {
+                let tool = ScheduleCardTool::new(self.db.clone(), workflow_id);
+                info!("ScheduleCardTool instance created");
+                Ok(Arc::new(tool))
+            }
+
+            "RerunWorkerTool" => {
+                let tool = RerunWorkerTool::new(self.db.clone(), workflow_id, app_handle);
+                info!("RerunWorkerTool instance created");
                 Ok(Arc::new(tool))
             }
 

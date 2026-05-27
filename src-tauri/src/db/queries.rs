@@ -64,8 +64,18 @@ pub mod workflow {
         std::sync::LazyLock::new(|| format!("SELECT {} FROM workflow", FIELDS));
 
     /// SELECT query for listing all workflows ordered by update time.
-    pub static SELECT_LIST: std::sync::LazyLock<String> =
-        std::sync::LazyLock::new(|| format!("{} ORDER BY updated_at DESC", *SELECT_BASE));
+    ///
+    /// Excludes workflows flagged `hidden_from_list` (e.g. the per-card Kanban
+    /// review chat) so they never surface in the `/agent` sidebar. The filter
+    /// lives here (not in `SELECT_BASE`) because `SELECT_BASE` is reused for
+    /// single-workflow lookups by id, which must still resolve hidden rows.
+    /// `(hidden_from_list ?? false)` coalesces legacy rows predating the field.
+    pub static SELECT_LIST: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+        format!(
+            "{} WHERE (hidden_from_list ?? false) = false ORDER BY updated_at DESC",
+            *SELECT_BASE
+        )
+    });
 
     /// RETURN clause fields for UPDATE commands (rename, move, toggle pin).
     /// Use with `format!("UPDATE workflow:`{}` SET ... RETURN {}", id, RETURN_FIELDS)`.
@@ -324,6 +334,46 @@ mod tests {
         assert!(
             list.contains("total_cached_tokens") && list.contains("total_cache_write_tokens"),
             "SELECT_LIST (derived from SELECT_BASE) must also surface both cache totals"
+        );
+    }
+
+    /// Regression guard: `SELECT_LIST` must exclude workflows flagged
+    /// `hidden_from_list` (the per-card Kanban review chat). A hidden workflow
+    /// leaking into the listing would surface the confined conversation in the
+    /// `/agent` sidebar. `SELECT_BASE` (single-id lookup) must still resolve it.
+    #[tokio::test]
+    async fn select_list_excludes_hidden_workflows() {
+        let (state, _db_guard) = setup_test_state().await;
+        let visible = uuid::Uuid::new_v4().to_string();
+        let hidden = uuid::Uuid::new_v4().to_string();
+
+        for (id, is_hidden) in [(&visible, false), (&hidden, true)] {
+            let q = format!(
+                "CREATE workflow:`{id}` SET id = '{id}', name = 'wf', agent_id = 'a1', \
+                 status = 'idle', hidden_from_list = {is_hidden}, \
+                 created_at = time::now(), updated_at = time::now()"
+            );
+            state.db.execute(&q).await.unwrap();
+        }
+
+        let rows: Vec<serde_json::Value> = state.db.query_json(&SELECT_LIST).await.unwrap();
+        let ids: Vec<&str> = rows.iter().filter_map(|r| r["id"].as_str()).collect();
+        assert!(
+            ids.contains(&visible.as_str()),
+            "visible workflow must list"
+        );
+        assert!(
+            !ids.contains(&hidden.as_str()),
+            "hidden_from_list workflow must NOT appear in SELECT_LIST"
+        );
+
+        // SELECT_BASE single lookup still resolves the hidden workflow.
+        let single = format!("{} WHERE meta::id(id) = '{}'", *SELECT_BASE, hidden);
+        let base_rows: Vec<serde_json::Value> = state.db.query_json(&single).await.unwrap();
+        assert_eq!(
+            base_rows.len(),
+            1,
+            "SELECT_BASE must still resolve a hidden workflow by id"
         );
     }
 

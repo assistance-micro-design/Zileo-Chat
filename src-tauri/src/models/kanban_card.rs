@@ -70,6 +70,11 @@ pub struct KanbanCard {
     pub column_order: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
+    /// Workflow backing the in-place review chat with the Kanban agent.
+    /// Distinct from `workflow_id` (the worker run). `None` until the user
+    /// first opens the chat from the report viewer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_chat_workflow_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_summary: Option<String>,
     #[serde(default = "Utc::now")]
@@ -187,5 +192,26 @@ mod tests {
         let json = r#"{"target_folder_id":"fld_1"}"#;
         let update: KanbanCardUpdate = serde_json::from_str(json).unwrap();
         assert_eq!(update.target_folder_id, Some(Some("fld_1".to_string())));
+    }
+
+    #[test]
+    fn test_card_review_chat_workflow_id_round_trip() {
+        // Absent in JSON (legacy row) deserializes to None and is omitted on
+        // re-serialization (skip_serializing_if). Present round-trips intact.
+        let legacy = r#"{"id":"c1","title":"t","description":"","kanban_agent_id":"k",
+            "target_agent_id":"a","variables":"{}","status":"review","column":"review"}"#;
+        let card: KanbanCard = serde_json::from_str(legacy).unwrap();
+        assert_eq!(card.review_chat_workflow_id, None);
+        let json = serde_json::to_string(&card).unwrap();
+        assert!(
+            !json.contains("review_chat_workflow_id"),
+            "None review_chat_workflow_id must be omitted"
+        );
+
+        let with_chat = r#"{"id":"c1","title":"t","description":"","kanban_agent_id":"k",
+            "target_agent_id":"a","variables":"{}","status":"review","column":"review",
+            "review_chat_workflow_id":"wf-chat-1"}"#;
+        let card2: KanbanCard = serde_json::from_str(with_chat).unwrap();
+        assert_eq!(card2.review_chat_workflow_id.as_deref(), Some("wf-chat-1"));
     }
 }

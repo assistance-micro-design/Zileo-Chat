@@ -289,7 +289,14 @@ async fn load_kanban_agent_for_analysis(
     Ok(config)
 }
 
-async fn load_workflow_report(db: &Arc<DBClient>, workflow_id: &str) -> Result<String, String> {
+/// Loads the worker workflow's final report (last assistant message), verbatim.
+/// `pub(crate)` so the card review-chat seed can reuse it. Takes `&DBClient`
+/// (deref-coerced from the analyzer's `&Arc<DBClient>`) so non-Arc callers can
+/// reuse it too.
+pub(crate) async fn load_workflow_report(
+    db: &DBClient,
+    workflow_id: &str,
+) -> Result<String, String> {
     let validated_wf = validate_uuid_field(workflow_id, "workflow_id")?;
     let q = "SELECT content, timestamp FROM message \
              WHERE workflow_id = $wid AND role = 'assistant' \

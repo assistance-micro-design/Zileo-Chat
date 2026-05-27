@@ -47,6 +47,11 @@ DEFINE FIELD OVERWRITE total_cached_tokens ON workflow TYPE option<int> DEFAULT 
 DEFINE FIELD OVERWRITE total_cache_write_tokens ON workflow TYPE option<int> DEFAULT 0;
 -- Cumulative sub-agent cost (computed per sub-agent with its own pricing).
 DEFINE FIELD OVERWRITE sub_agent_cost_usd ON workflow TYPE float DEFAULT 0.0;
+-- Hides the workflow from the /agent sidebar listing (SELECT_LIST filters on it).
+-- Used by the Kanban card review chat so the per-card conversation never leaks
+-- into the workflow picker. Read-only WHERE filter — never projected into the
+-- Workflow struct, so no Rust-struct sync surface.
+DEFINE FIELD OVERWRITE hidden_from_list ON workflow TYPE bool DEFAULT false;
 
 -- Table: message
 -- Extended with metrics fields for persistence
@@ -588,12 +593,17 @@ DEFINE FIELD OVERWRITE column ON kanban_card TYPE string
 DEFINE FIELD OVERWRITE column_order ON kanban_card TYPE int DEFAULT 0;
 DEFINE FIELD OVERWRITE workflow_id ON kanban_card TYPE option<string>;
 DEFINE FIELD OVERWRITE error_summary ON kanban_card TYPE option<string>;
+-- Workflow backing the in-place "review chat" with the Kanban agent. Distinct
+-- from `workflow_id` (the worker run). Created hidden (workflow.hidden_from_list)
+-- so the conversation never surfaces in the /agent sidebar.
+DEFINE FIELD OVERWRITE review_chat_workflow_id ON kanban_card TYPE option<string>;
 DEFINE FIELD OVERWRITE created_at ON kanban_card TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at ON kanban_card TYPE datetime DEFAULT time::now();
 
 DEFINE INDEX OVERWRITE kanban_card_status_idx ON kanban_card FIELDS status;
 DEFINE INDEX OVERWRITE kanban_card_column_idx ON kanban_card FIELDS column, column_order;
 DEFINE INDEX OVERWRITE kanban_card_workflow_idx ON kanban_card FIELDS workflow_id;
+DEFINE INDEX OVERWRITE kanban_card_review_chat_idx ON kanban_card FIELDS review_chat_workflow_id;
 DEFINE INDEX OVERWRITE kanban_card_kanban_agent_idx ON kanban_card FIELDS kanban_agent_id;
 
 -- =============================================

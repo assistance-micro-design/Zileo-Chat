@@ -159,6 +159,7 @@ async fn main() -> anyhow::Result<()> {
             commands::kanban_card::duplicate_kanban_card_as_template,
             commands::kanban_card::set_kanban_card_workflow_id,
             commands::kanban_analyzer::analyze_card_report,
+            commands::kanban_card_chat::open_card_review_chat,
             commands::kanban_interaction::load_card_interactions,
             // Kanban schedule commands
             commands::kanban_schedule::create_kanban_schedule,

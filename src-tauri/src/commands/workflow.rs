@@ -35,23 +35,21 @@ pub struct BatchDeleteResult {
     pub skipped_running: Vec<String>,
 }
 
-/// Creates a new workflow
-#[tauri::command]
-#[instrument(
-    name = "create_workflow",
-    skip(state),
-    fields(workflow_name = %name, agent_id = %agent_id)
-)]
-pub async fn create_workflow(
+/// Creates a workflow row, returning its generated id.
+///
+/// Extracted from the `create_workflow` command (PAT_RUST_015) so callers
+/// outside the IPC boundary — notably `open_card_review_chat`, which needs a
+/// hidden workflow — can create workflows directly against `&DBClient` without
+/// a `tauri::State`. `hidden_from_list = true` keeps the row out of the
+/// `/agent` sidebar listing (see `db::queries::workflow::SELECT_LIST`).
+pub(crate) async fn create_workflow_core(
+    db: &crate::db::DBClient,
     name: String,
     agent_id: String,
-    state: State<'_, AppState>,
+    hidden_from_list: bool,
 ) -> Result<String, String> {
     use uuid::Uuid;
 
-    info!("Creating new workflow");
-
-    // Validate inputs
     let validated_name = Validator::validate_workflow_name(&name).map_err(|e| {
         warn!(error = %e, "Invalid workflow name");
         format!("Invalid workflow name: {}", e)
@@ -68,10 +66,11 @@ pub async fn create_workflow(
     // Use WorkflowCreate to avoid passing datetime fields
     // The database will set created_at and updated_at via DEFAULT time::now()
     // ID is passed separately using table:id format
-    let workflow = WorkflowCreate::new(validated_name, validated_agent_id, WorkflowStatus::Idle);
+    let mut workflow =
+        WorkflowCreate::new(validated_name, validated_agent_id, WorkflowStatus::Idle);
+    workflow.hidden_from_list = hidden_from_list;
 
-    let id = state
-        .db
+    let id = db
         .create("workflow", &workflow_id, workflow)
         .await
         .map_err(|e| {
@@ -81,6 +80,22 @@ pub async fn create_workflow(
 
     info!(workflow_id = %id, "Workflow created successfully");
     Ok(id)
+}
+
+/// Creates a new workflow (visible in the sidebar).
+#[tauri::command]
+#[instrument(
+    name = "create_workflow",
+    skip(state),
+    fields(workflow_name = %name, agent_id = %agent_id)
+)]
+pub async fn create_workflow(
+    name: String,
+    agent_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    info!("Creating new workflow");
+    create_workflow_core(&state.db, name, agent_id, false).await
 }
 
 /// Loads all workflows

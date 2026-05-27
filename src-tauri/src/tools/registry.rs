@@ -122,6 +122,34 @@ impl ToolRegistry {
             },
         );
 
+        // Per-card Kanban chat tools — auto-injected into a Kanban agent's
+        // streaming card review chat (not user-selectable). Hidden so they
+        // don't appear in the agent tool picker.
+        tools.insert(
+            "MoveCardTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: true,
+            },
+        );
+        tools.insert(
+            "ScheduleCardTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: true,
+            },
+        );
+        tools.insert(
+            "RerunWorkerTool",
+            ToolMetadata {
+                category: ToolCategory::Basic,
+                requires_context: false,
+                hidden: true,
+            },
+        );
+
         // Sub-agent tools
         tools.insert(
             "SpawnAgentTool",
@@ -279,7 +307,21 @@ mod tests {
     #[test]
     fn test_registry_available_tools_count() {
         let all = TOOL_REGISTRY.available_tools();
-        assert_eq!(all.len(), 12); // 8 basic + 1 hidden + 3 sub-agent
+        // 8 basic + 4 hidden (ReadSkill + Move/Schedule/RerunWorker) + 3 sub-agent
+        assert_eq!(all.len(), 15);
+    }
+
+    #[test]
+    fn test_registry_card_chat_tools_hidden() {
+        for name in ["MoveCardTool", "ScheduleCardTool", "RerunWorkerTool"] {
+            assert!(TOOL_REGISTRY.has_tool(name), "{name} must be registered");
+            assert!(TOOL_REGISTRY.validate(name).is_ok());
+            // Hidden: never surfaced as a user-selectable basic tool.
+            assert!(
+                !TOOL_REGISTRY.basic_tools().contains(&name),
+                "{name} must be hidden from the tool picker"
+            );
+        }
     }
 
     #[test]

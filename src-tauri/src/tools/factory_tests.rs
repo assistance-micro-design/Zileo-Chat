@@ -29,7 +29,11 @@ fn test_available_tools() {
     assert!(tools.contains(&"PromptManagerTool"));
     assert!(tools.contains(&"SkillManagerTool"));
     assert!(tools.contains(&"WorkflowManagerTool"));
-    assert_eq!(tools.len(), 12); // 8 basic + 1 hidden + 3 sub-agent
+    assert!(tools.contains(&"MoveCardTool"));
+    assert!(tools.contains(&"ScheduleCardTool"));
+    assert!(tools.contains(&"RerunWorkerTool"));
+    // 8 basic + 4 hidden (ReadSkill + Move/Schedule/RerunWorker) + 3 sub-agent
+    assert_eq!(tools.len(), 15);
 }
 
 #[test]

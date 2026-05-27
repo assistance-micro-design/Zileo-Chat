@@ -8,6 +8,8 @@
  * `src-tauri/src/models/kanban_card.rs` and `kanban_schedule.rs`.
  */
 
+import type { Message } from '$types/message';
+
 /** UI column for kanban cards. */
 export type KanbanColumn = 'todo' | 'doing' | 'review' | 'done';
 
@@ -34,9 +36,25 @@ export interface KanbanCard {
 	column: KanbanColumn;
 	column_order: number;
 	workflow_id?: string;
+	/**
+	 * Workflow backing the in-place review chat with the Kanban agent.
+	 * Distinct from `workflow_id` (the worker run). Absent until the user
+	 * first opens the chat from the report viewer.
+	 */
+	review_chat_workflow_id?: string;
 	error_summary?: string;
 	created_at: string;
 	updated_at: string;
+}
+
+/**
+ * Init payload returned by `open_card_review_chat`: the (resumed or freshly
+ * created) chat workflow id plus the conversation messages to render
+ * (existing history, or the single seed assistant message on first open).
+ */
+export interface CardReviewChatInit {
+	workflow_id: string;
+	messages: Message[];
 }
 
 /** Payload to create a new kanban card. */

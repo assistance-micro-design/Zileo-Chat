@@ -7,10 +7,12 @@
   Actions: validate (todo→done), improve prompt, delete.
 -->
 <script lang="ts">
-	import { i18n } from '$lib/i18n';
+	import { i18n, languageTag } from '$lib/i18n';
 	import { Modal, Button, Badge } from '$lib/components/ui';
 	import MarkdownRenderer from '$lib/components/ui/MarkdownRenderer.svelte';
 	import ToolCallBlock from '$lib/components/chat/ToolCallBlock.svelte';
+	import MessageBubble from '$lib/components/chat/MessageBubble.svelte';
+	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import {
 		CheckCircle2,
 		Wand2,
@@ -20,11 +22,15 @@
 		RefreshCw
 	} from '@lucide/svelte';
 	import { goto } from '$app/navigation';
-	import type { KanbanCard } from '$types/kanban';
+	import { invoke } from '@tauri-apps/api/core';
+	import type { KanbanCard, CardReviewChatInit } from '$types/kanban';
 	import type { AgentSummary } from '$types/agent';
 	import type { PromptSummary } from '$types/prompt';
+	import type { Message } from '$types/message';
 	import type { KanbanCardInteraction, InteractionIteration } from '$types/kanban_interaction';
 	import { loadCardInteractions } from '$lib/services/kanban_interaction.service';
+	import { MessageService } from '$lib/services/message.service';
+	import { WorkflowService } from '$lib/services/workflow.service';
 	import { getErrorMessage } from '$lib/utils/error';
 
 	interface Props {
@@ -37,6 +43,11 @@
 		onimprove?: (card: KanbanCard) => void;
 		ondelete?: (card: KanbanCard) => void;
 		onreanalyze?: (card: KanbanCard) => Promise<void>;
+		/**
+		 * Fired after a card-chat turn that may have mutated the board (worker
+		 * re-run, move, schedule). The parent refreshes the board + this card.
+		 */
+		onboardchanged?: () => void;
 	}
 
 	let {
@@ -48,7 +59,8 @@
 		onvalidate,
 		onimprove,
 		ondelete,
-		onreanalyze
+		onreanalyze,
+		onboardchanged
 	}: Props = $props();
 
 	/**
@@ -148,6 +160,101 @@
 
 	function isReasoningOpen(interactionId: string, iter: InteractionIteration): boolean {
 		return expandedReasoning[`${interactionId}:${iter.iteration_index}`] === true;
+	}
+
+	// ---------------------------------------------------------------------------
+	// Confined per-card review chat (review column only)
+	// ---------------------------------------------------------------------------
+
+	/** Chat is offered for cards in review (the remediation use case). */
+	const chatEnabled = $derived(card?.column === 'review');
+
+	let chatWorkflowId = $state<string | null>(null);
+	let chatMessages = $state<Message[]>([]);
+	let chatInitLoading = $state(false);
+	let chatSending = $state(false);
+	let chatError = $state<string | null>(null);
+	/** Card id whose chat we've already initialized this open session. */
+	let chatLoadedCardId = $state<string | null>(null);
+
+	$effect(() => {
+		// Initialize (seed or resume) when the modal opens on a review card.
+		if (open && card && chatEnabled && card.id !== chatLoadedCardId) {
+			chatLoadedCardId = card.id;
+			void initChat(card.id);
+		}
+		if (!open) {
+			chatLoadedCardId = null;
+			chatWorkflowId = null;
+			chatMessages = [];
+			chatError = null;
+		}
+	});
+
+	async function initChat(cardId: string): Promise<void> {
+		chatInitLoading = true;
+		chatError = null;
+		try {
+			const init = await invoke<CardReviewChatInit>('open_card_review_chat', {
+				cardId,
+				locale: languageTag()
+			});
+			// Guard against a fast card switch while the await was in flight
+			// (ERR_FRONT_001): only apply if this is still the loaded card.
+			if (chatLoadedCardId !== cardId) return;
+			chatWorkflowId = init.workflow_id;
+			chatMessages = init.messages;
+		} catch (e) {
+			if (chatLoadedCardId !== cardId) return;
+			chatError = getErrorMessage(e);
+		} finally {
+			if (chatLoadedCardId === cardId) chatInitLoading = false;
+		}
+	}
+
+	async function sendChatTurn(text: string): Promise<void> {
+		const trimmed = text.trim();
+		const wf = chatWorkflowId;
+		const c = card;
+		if (!trimmed || !wf || !c || chatSending) return;
+		const kanbanAgentId = c.kanban_agent_id;
+		const cardId = c.id;
+		chatSending = true;
+		chatError = null;
+		try {
+			// Persist the user turn before streaming (the backend replays history
+			// from the DB, mirroring the /agent flow).
+			await MessageService.save({ workflowId: wf, role: 'user', content: trimmed });
+			// Run the Kanban agent turn; resolves when the turn (incl. any tool
+			// runs like a worker re-run) completes.
+			const result = await WorkflowService.executeStreaming(
+				wf,
+				trimmed,
+				kanbanAgentId,
+				languageTag()
+			);
+			// Persist the assistant turn (the backend does not persist it for us).
+			await MessageService.save({
+				workflowId: wf,
+				role: 'assistant',
+				content: result.response,
+				metrics: result.metrics,
+				messageId: result.message_id
+			});
+			// Reload the persisted conversation; guard against a card switch.
+			const reloaded = await invoke<Message[]>('load_workflow_messages', { workflowId: wf });
+			if (chatLoadedCardId === cardId) {
+				chatMessages = reloaded;
+			}
+			// A turn may have re-run the worker, moved the card or attached a
+			// schedule — refresh the meta-history and the board.
+			await fetchInteractions(cardId);
+			onboardchanged?.();
+		} catch (e) {
+			chatError = getErrorMessage(e);
+		} finally {
+			chatSending = false;
+		}
 	}
 </script>
 
@@ -316,6 +423,35 @@
 						</Button>
 					</section>
 				{/if}
+
+				{#if chatEnabled}
+					<section class="chat-section">
+						<h4>{$i18n('kanban_card_chat_title')}</h4>
+						{#if chatInitLoading}
+							<p class="muted">{$i18n('kanban_card_chat_loading')}</p>
+						{:else if chatError}
+							<div class="error-block" role="alert">
+								<p class="multiline">{chatError}</p>
+							</div>
+						{/if}
+						{#if chatWorkflowId}
+							<div class="chat-messages">
+								{#each chatMessages as message (message.id)}
+									<MessageBubble {message} />
+								{/each}
+								{#if chatSending}
+									<p class="muted chat-thinking">{$i18n('kanban_card_chat_thinking')}</p>
+								{/if}
+							</div>
+							<ChatInput
+								loading={chatSending}
+								disabled={chatSending}
+								placeholder={$i18n('kanban_card_chat_placeholder')}
+								onsend={(text) => sendChatTurn(text)}
+							/>
+						{/if}
+					</section>
+				{/if}
 			</div>
 		{/if}
 	{/snippet}
@@ -471,6 +607,23 @@
 	}
 	.response-block {
 		margin-top: 0.4rem;
+	}
+	.chat-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		border-top: 1px solid var(--color-border);
+		padding-top: 0.75rem;
+	}
+	.chat-messages {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		max-height: 320px;
+		overflow-y: auto;
+	}
+	.chat-thinking {
+		font-style: italic;
 	}
 	:global(.spin) {
 		animation: kanban-reanalyze-spin 1s linear infinite;

@@ -675,6 +675,13 @@
 	onimprove={handleImprovePrompt}
 	ondelete={requestDeleteCard}
 	onreanalyze={reanalyzeCard}
+	onboardchanged={async () => {
+		await kanbanStore.loadCards(agentFilter || undefined);
+		if (viewerCard) {
+			const refreshed = await kanbanStore.getCard(viewerCard.id);
+			if (refreshed) viewerCard = refreshed;
+		}
+	}}
 />
 
 <DeleteConfirmModal

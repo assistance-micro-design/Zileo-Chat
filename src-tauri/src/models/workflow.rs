@@ -110,15 +110,23 @@ pub struct WorkflowCreate {
     pub agent_id: String,
     /// Current status (as string for SurrealDB)
     pub status: String,
+    /// Hides the workflow from the `/agent` sidebar listing (SELECT_LIST
+    /// filters on it). Defaults to `false`; set `true` for the per-card Kanban
+    /// review chat so the confined conversation never surfaces in the picker.
+    pub hidden_from_list: bool,
 }
 
 impl WorkflowCreate {
-    /// Creates a new WorkflowCreate with the given parameters
+    /// Creates a new WorkflowCreate with the given parameters.
+    ///
+    /// `hidden_from_list` defaults to `false` (the standard visible workflow).
+    /// Set the field afterwards for a hidden workflow.
     pub fn new(name: String, agent_id: String, status: WorkflowStatus) -> Self {
         Self {
             name,
             agent_id,
             status: status.to_string(),
+            hidden_from_list: false,
         }
     }
 }
