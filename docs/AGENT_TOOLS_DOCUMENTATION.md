@@ -23,6 +23,9 @@ Technical documentation for the native tools available to agents in the multi-ag
 | **ListAgentsTool** | `src-tauri/src/tools/list_agents.rs` |
 | **SubmitComposedCardTool** | `src-tauri/src/tools/submit_composed_card.rs` |
 | **SubmitAnalysisTool** | `src-tauri/src/tools/submit_analysis.rs` |
+| **RerunWorkerTool** | `src-tauri/src/tools/rerun_worker.rs` |
+| **MoveCardTool** | `src-tauri/src/tools/move_card.rs` |
+| **ScheduleCardTool** | `src-tauri/src/tools/schedule_card.rs` |
 | **Tool Execution** | `src-tauri/src/agents/llm_agent.rs` |
 
 **Note**: DB tools (SurrealDBTool, QueryBuilderTool, AnalyticsTool) were removed -- DB access goes through Tauri IPC commands.
@@ -36,6 +39,7 @@ Technical documentation for the native tools available to agents in the multi-ag
 - **Hidden**: ReadSkillTool (auto-injected when agent has skills, not shown in UI)
 - **Kanban Supervisor** (Kanban-kind agents only): PromptManagerTool, SkillManagerTool, WorkflowManagerTool, ListAgentsTool
 - **Kanban Private** (auto-injected during compose / analyze, never visible in the UI catalogue): SubmitComposedCardTool, SubmitAnalysisTool
+- **Kanban Card-Chat** (auto-injected only inside a card review chat, self-gating, never visible in the UI catalogue): RerunWorkerTool, MoveCardTool, ScheduleCardTool. A Kanban agent is also confined as a delegation *caller*: `create_local_tools` strips Spawn/Delegate/Parallel for any `kind = Kanban` agent and never auto-injects the sub-agent tools.
 
 ### Sub-Agent Resilience
 
@@ -379,7 +383,7 @@ Before persisting, the tool computes the set diff between the prompt template's 
 
 ### Auto-Injection
 
-The tool is added to the agent's toolkit only during the `compose_card_from_description` Tauri command's tool loop, never during normal Kanban-agent execution. Like the analyze flow, the loop forces a tool call on the opening turn (see section 13, `opening_tool_choice`) so the model engages `SubmitComposedCardTool` instead of finishing without a proposal.
+The tool is added to the agent's toolkit only during the `compose_card_from_description` Tauri command's tool loop, never during normal Kanban-agent execution. Like the analyze flow, the loop forces a tool call on the opening turn (see section 16, `opening_tool_choice`) so the model engages `SubmitComposedCardTool` instead of finishing without a proposal.
 
 ---
 
@@ -393,7 +397,7 @@ The tool is added to the agent's toolkit only during the `compose_card_from_desc
 
 ### Auto-Injection
 
-Injected during the `analyze_card_report` command's tool loop. The analyzer is wired to `WorkflowManagerTool` for evidence retrieval and `SubmitAnalysisTool` for the verdict; standard skills/tools are not in scope. The loop runs with a forced tool call on the opening turn (see section 13, `opening_tool_choice`), so a model that would otherwise reply in prose is compelled to submit a verdict rather than leaving the capture slot empty.
+Injected during the `analyze_card_report` command's tool loop. The analyzer is wired to `WorkflowManagerTool` for evidence retrieval and `SubmitAnalysisTool` for the verdict; standard skills/tools are not in scope. The loop runs with a forced tool call on the opening turn (see section 16, `opening_tool_choice`), so a model that would otherwise reply in prose is compelled to submit a verdict rather than leaving the capture slot empty.
 
 ### `auto_analyze_reports`
 
@@ -401,7 +405,48 @@ When the target agent on a card has `auto_analyze_reports: true`, the `workflow_
 
 ---
 
-## 13. Tool Execution (LLMAgent)
+## 13. RerunWorkerTool (private, card review chat only)
+
+**Purpose**: Re-run the worker workflow behind the current Kanban card with an extra instruction, so the worker regenerates or enriches its report before the supervisor validates the card.
+
+### Operation
+
+- `rerun` -- Input: `instruction` (non-empty). Replays the worker workflow's conversation history plus the instruction and runs the worker agent **detached** (`agent_context: None`), then returns a truncated excerpt of the refreshed report.
+
+### Self-Gating
+
+The tool carries no card id. It resolves its target via the back-reference `kanban_card.review_chat_workflow_id = <chat workflow id captured at construction>` (shared helper `resolve_card_id_by_review_chat`); outside a card review chat the lookup fails with "only usable inside a card review chat". The worker is `card.workflow_id`, the worker agent `card.target_agent_id`.
+
+### AppState resolution & self-persistence
+
+Re-running a full worker needs the provider manager, tool factory and MCP manager, which a plain tool (db-only) lacks. The tool captures the `AppHandle` at construction (mirrors TodoTool / SpawnAgentTool) and resolves `app_handle.state::<AppState>()` at execution. Because the normal streaming flow persists worker messages from the frontend, this detached path persists them itself: the instruction as a `user` message, the produced report as an `assistant` message (so `load_workflow_report` returns the refreshed report), plus the tool executions.
+
+---
+
+## 14. MoveCardTool (private, card review chat only)
+
+**Purpose**: Move the current card out of `review` once the supervisor has decided.
+
+### Operations
+
+- `validate` -- transitions the card to `done`.
+- `send_back` -- returns the card to `doing` or `todo` for more work.
+
+Wraps `move_kanban_card_core`. The `is_transition_allowed` guard was extended to permit `Review→Doing` and `Review→Todo` for send-back. Self-gates via `resolve_card_id_by_review_chat` like RerunWorkerTool.
+
+---
+
+## 15. ScheduleCardTool (private, card review chat only)
+
+**Purpose**: Attach a weekly recurrence to the current card, turning it into a recurring template (the scheduler regenerates it on the chosen days).
+
+### Operation
+
+- `schedule` -- Input: `days` (non-empty list of weekdays) plus the recurrence parameters. Validates `days` is non-empty and calls `create_kanban_schedule_core` targeting the current card. Self-gates via `resolve_card_id_by_review_chat`.
+
+---
+
+## 16. Tool Execution (LLMAgent)
 
 **Purpose**: Autonomous tool execution loop for agents.
 

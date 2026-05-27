@@ -164,7 +164,7 @@ Tab switch between two modes (split into siblings rather than a single condition
 | Component | Purpose |
 |-----------|---------|
 | `KanbanCardEditModal.svelte` | Edit a card's metadata (title, description, agent, prompt, variables, folder) |
-| `KanbanCardReportViewer.svelte` | Read the workflow report for a finished card, inline interaction history (compose + analyze), launch / re-run analyze, force-delete a stuck `doing` card |
+| `KanbanCardReportViewer.svelte` | Read the workflow report for a finished card, inline interaction history (compose + analyze), launch / re-run analyze, force-delete a stuck `doing` card. For cards in `review` it also hosts an in-place **review chat** with the card's supervisor agent (seed / resume via `open_card_review_chat`, `MessageBubble` render, send via `ChatInput`), shown in a full-screen `Modal` (`fullscreen` prop). The reply renders on turn completion (not token-by-token, to avoid contending with `/agent` for the single viewed-workflow stream); `onboardchanged` refreshes the board + card after a tool acts |
 | `KanbanScheduleForm.svelte` + `KanbanScheduleModal.svelte` | Configure a recurrence (days_of_week, hour, minute, skip_if_pending, enable toggle) |
 | `KanbanImprovePromptModal.svelte` | Apply the analyzer's `suggested_prompt_edit` back to the source prompt (writes a new `prompt_version` snapshot first) |
 | `KanbanFiltres.svelte` | Filter the board by agent / status / age |

@@ -92,7 +92,7 @@ The default. Eligible for delegation (target of `DelegateTaskTool` / `ParallelTa
 
 ### Kanban (supervisor) agents
 
-Orchestration role used by the `/kanban` page. **Cannot be delegated to** — they never appear in `DelegateTaskTool::list_agents` results. **Cannot use the standard skill / tool catalogue** — Settings filters the pickers, the factory rejects mismatched assignments, and the runtime tool registry strips any leftover entries.
+Orchestration role used by the `/kanban` page. **Cannot be delegated to** — they never appear in `DelegateTaskTool::list_agents` results. **Cannot delegate either** — `create_local_tools` strips `Spawn`/`Delegate`/`ParallelTasks` for any `kind = Kanban` agent and never takes the sub-agent-tool auto-injection branch, so a Kanban agent is confined as both delegation callee *and* caller. **Cannot use the standard skill / tool catalogue** — Settings filters the pickers, the factory rejects mismatched assignments, and the runtime tool registry strips any leftover entries.
 
 The kanban toolkit (auto-provisioned at agent creation when `kind: Kanban` is set):
 
@@ -104,6 +104,9 @@ The kanban toolkit (auto-provisioned at agent creation when `kind: Kanban` is se
 | `ListAgentsTool` *(private)* | Auto-injected during `compose_card_from_description`; lists standard agents the supervisor may pick as targets |
 | `SubmitComposedCardTool` *(private)* | Auto-injected during compose; terminal call that finalizes the card and validates the prompt-variable contract |
 | `SubmitAnalysisTool` *(private)* | Auto-injected during `analyze_card_report`; terminal call that finalizes the verdict |
+| `RerunWorkerTool` *(private)* | Auto-injected only inside a card review chat; re-runs the worker workflow detached with an extra instruction (self-gates via `review_chat_workflow_id`) |
+| `MoveCardTool` *(private)* | Auto-injected in the card review chat; `validate` → `done` or `send_back` → `doing`/`todo` |
+| `ScheduleCardTool` *(private)* | Auto-injected in the card review chat; attaches a weekly recurrence, turning the card into a template |
 
 Two new agent fields support the Kanban flow:
 
@@ -121,6 +124,9 @@ scheduler tick    --> ready card --> WorkflowExecutorService --> standard agent 
 
 workflow_complete --> if target_agent.auto_analyze_reports: Kanban agent (analyze) --> SubmitAnalysisTool --> verdict
                                                             uses: WorkflowManagerTool (read_workflow, list_workflow_errors)
+
+card in review    --> open_card_review_chat --> Kanban agent (chat, hidden workflow) --> RerunWorker / MoveCard / ScheduleCard
+                                                            seeded with report + verdict; resumes idempotently
 ```
 
 Each compose / analyze run is persisted as a `kanban_card_interaction` row (chronological history attached to the card, surfaced inline in the report viewer).

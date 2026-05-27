@@ -380,6 +380,14 @@ Card report analysis.
 |---------|-------------|
 | `analyze_card_report` | Analyze the report of a completed card workflow. Dispatches to the configured Kanban agent with `WorkflowManagerTool` + `SubmitAnalysisTool` auto-injected. Runs the tool loop with a forced tool call on the opening turn until `SubmitAnalysisTool` is called. The verdict is produced in the language stamped on the workflow (`workflow.locale`). The full worker report is fed to the analyzer verbatim (never truncated). Returns the verdict (`approve | reject | needs_improvement`), summary, and optional `suggested_prompt_edit`. Triggered manually from the report viewer ("Re-analyze") or automatically by the `workflow_complete` listener when the target agent has `auto_analyze_reports: true`. A boot-time catch-up pass re-runs the analyzer for cards orphaned in `review` (finished, has a workflow, no analysis yet) by an app closed mid-workflow. |
 
+### Kanban Card Chat (`commands/kanban_card_chat.rs`)
+
+Per-card review chat with the supervisor agent.
+
+| Command | Description |
+|---------|-------------|
+| `open_card_review_chat` | Params: `card_id`, `locale`. Open (or resume) the review chat for a card. On first open, creates a hidden workflow (`workflow.hidden_from_list = true`, filtered out of the `/agent` sidebar), links it to the card via `kanban_card.review_chat_workflow_id`, and seeds it with a structured first assistant message (worker report + last analyze verdict + any `suggested_prompt_edit`, in the requested `locale`). Resume is idempotent — returns the same workflow. Inside this chat the supervisor gains three auto-injected, self-gating tools: `RerunWorkerTool`, `MoveCardTool`, `ScheduleCardTool`. |
+
 ### Kanban Interaction (`commands/kanban_interaction.rs`)
 
 Read-only access to the persisted compose / analyze interactions.

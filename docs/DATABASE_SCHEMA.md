@@ -67,6 +67,7 @@ Workflow lifecycle with cumulative token tracking.
 | total_cache_write_tokens | option\<int\> | 0 | Prompt cache write tokens |
 | folder_id | option\<string\> | | Reference to workflow_folder |
 | pinned | bool | false | Pinned in sidebar |
+| hidden_from_list | bool | false | When true, excluded from the `/agent` sidebar list (`SELECT_LIST` filters `(hidden_from_list ?? false) = false`); still resolvable by id. Used by the per-card review chat workflow. `?? false` coalesce because DEFAULT does not backfill legacy rows (ERR_SURREAL_011) |
 
 **Indexes**: none (queries filter on status, created_at, agent_id via field-level constraints)
 
@@ -505,11 +506,12 @@ Kanban board card. One row per work item. Lifecycle: `todo -> ready -> doing -> 
 | column | string ASSERT IN [todo, doing, review, done] | todo | Board column (mirror of status, drag-free) |
 | column_order | int | 0 | Sort index within the column |
 | workflow_id | option\<string\> | | Set when the scheduler transitions the card to `doing` |
+| review_chat_workflow_id | option\<string\> | | Hidden workflow backing the per-card review chat; resolves the card via back-reference for the card-chat tools |
 | error_summary | option\<string\> | | Short failure description if the execution errored |
 | created_at | datetime | time::now() | |
 | updated_at | datetime | time::now() | |
 
-**Indexes**: `kanban_card_column_idx` (column, column_order), `kanban_card_workflow_idx` (workflow_id)
+**Indexes**: `kanban_card_column_idx` (column, column_order), `kanban_card_workflow_idx` (workflow_id), `kanban_card_review_chat_idx` (review_chat_workflow_id)
 
 ---
 
