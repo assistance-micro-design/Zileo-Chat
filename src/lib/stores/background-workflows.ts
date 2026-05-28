@@ -205,8 +205,19 @@ function updateExecutionFromChunk(
  */
 function handleStreamChunk(chunk: StreamChunk): void {
 	const state = get(store);
-	const exec = state.executions.get(chunk.workflow_id);
-	if (!exec) return; // Not a tracked background workflow
+	let exec = state.executions.get(chunk.workflow_id);
+
+	// Auto-register workflows that emit chunks but were never registered via
+	// `WorkflowExecutorService.execute` (e.g. backend-initiated runs such as
+	// `RerunWorkerTool` re-running a worker workflow detached from the
+	// frontend's executor). Without this, the chunk hits the `if (!exec)
+	// return` guard and the page agent viewing the workflow sees nothing live.
+	// `workflow_name` is left blank — the only consumer that surfaces it
+	// (BackgroundActivityList) can tolerate empty names, and the persisted
+	// workflow row remains the source of truth for the name elsewhere.
+	if (!exec) {
+		exec = createInitialExecution(chunk.workflow_id, chunk.agent_id ?? 'unknown', '');
+	}
 
 	// Update background state
 	const updated = updateExecutionFromChunk(exec, chunk);

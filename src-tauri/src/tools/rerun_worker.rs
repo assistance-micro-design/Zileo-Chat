@@ -10,27 +10,48 @@
 //! the worker workflow is `card.workflow_id` and the worker agent is
 //! `card.target_agent_id`.
 //!
-//! The re-run executes the worker agent **detached** (no streaming window,
-//! `agent_context: None`) via `tool_loop::execute_with_tools`, replaying the
-//! worker workflow's conversation history plus the new instruction. Because the
-//! standard streaming flow persists worker messages from the frontend, this
-//! detached path persists them itself: the instruction as a `user` message and
-//! the produced report as an `assistant` message (so `load_workflow_report`
-//! returns the refreshed report), plus the tool executions.
+//! The re-run executes the worker agent via `tool_loop::execute_with_tools`
+//! with a freshly built `AgentToolContext`. The context is required for two
+//! reasons:
+//!   1. **Live streaming** — the captured `AppHandle` is propagated so the
+//!      tool loop's `emit_progress` / `emit_reasoning` fire `WORKFLOW_STREAM`
+//!      chunks on the worker workflow id. A page agent (or any UI) viewing
+//!      that workflow can therefore stream the run in real time. The chunks
+//!      are routed by the standard `backgroundWorkflowsStore` machinery,
+//!      which auto-registers the workflow on first chunk (front-end change
+//!      paired with this fix).
+//!   2. **Sub-agent attribution** — the pre-allocated `assistant_message_id`
+//!      is propagated as `current_message_id` so Spawn/Delegate/Parallel
+//!      tools persist `sub_agent_execution.parent_message_id` at CREATE time;
+//!      without it `load_workflow_blocks_core` silently drops orphan sub-agents
+//!      on reload.
+//!
+//! Because the standard streaming flow persists worker messages from the
+//! frontend, this backend-initiated path persists them itself: the instruction
+//! as a `user` message, the produced report as an `assistant` message (so
+//! `load_workflow_report` returns the refreshed report), the tool executions,
+//! the reasoning steps, and the workflow's cumulative metrics + sub-agent
+//! rollup. Mirrors `commands/streaming/persistence_step::finalize_completion`
+//! minus the live response_block emission (the chunk loop has already emitted
+//! everything live).
 //!
 //! Resolving `AppState` from the captured `AppHandle` is required because the
 //! re-run needs the provider manager, tool factory and MCP manager (a tool
 //! normally only carries `db`). The capture pattern mirrors TodoTool /
 //! SpawnAgentTool; the `.state::<AppState>()` call mirrors main.rs:742.
 
-use crate::agents::core::agent::{ReportStatus, Task};
+use crate::agents::core::agent::{Report, ReportStatus, Task};
 use crate::agents::execution::tool_loop::{execute_with_tools, ToolLoopContext};
 use crate::commands::kanban_card::{get_kanban_card_core, resolve_card_id_by_review_chat};
 use crate::commands::message::{save_message_core, SaveMessageParams};
-use crate::commands::streaming::helpers::load_conversation_history;
+use crate::commands::streaming::helpers::{aggregate_sub_agent_metrics, load_conversation_history};
+use crate::commands::streaming::pricing::{
+    load_model_pricing_info, update_workflow_cumulative_metrics, CumulativeMetricsUpdate,
+};
 use crate::db::DBClient;
 use crate::models::function_calling::ToolChoiceMode;
 use crate::security::Validator;
+use crate::tools::context::AgentToolContext;
 use crate::tools::description_builder::ToolDescriptionBuilder;
 use crate::tools::utils::safe_truncate;
 use crate::tools::{Tool, ToolDefinition, ToolError, ToolResult};
@@ -164,6 +185,7 @@ impl Tool for RerunWorkerTool {
             )
         })?;
         let state = app_handle.state::<AppState>();
+        let app_state: &AppState = &state;
 
         // Load the worker agent config from the registry.
         let agent = state.registry.get(&target_agent_id).await.ok_or_else(|| {
@@ -218,13 +240,28 @@ impl Tool for RerunWorkerTool {
             context: history_context,
         };
 
-        debug!(card_id = %card_id, worker_wf = %worker_wf, agent = %target_agent_id, "RerunWorkerTool executing detached worker run");
+        // Build the AgentToolContext so:
+        //   * the tool loop's emit_progress fires `WORKFLOW_STREAM` chunks on
+        //     `worker_wf` (live streaming when the UI views it),
+        //   * sub-agent tools (Spawn/Delegate/Parallel) persist `parent_message_id`
+        //     at CREATE time (otherwise orphans are silently dropped by
+        //     load_workflow_blocks_core).
+        // No cancellation token: the chat workflow's token is for the supervisor,
+        // not the detached re-run (which must complete to refresh the card).
+        let agent_ctx = AgentToolContext::from_app_state(
+            app_state,
+            Some(state.mcp_manager.clone()),
+            Some(app_handle.clone()),
+        )
+        .with_current_message_id(assistant_message_id.clone());
+
+        debug!(card_id = %card_id, worker_wf = %worker_wf, agent = %target_agent_id, "RerunWorkerTool executing worker re-run with live streaming");
         let report = execute_with_tools(
             ToolLoopContext {
                 config: &config,
                 provider_manager: &state.llm_manager,
                 tool_factory: Some(&state.tool_factory),
-                agent_context: None,
+                agent_context: Some(&agent_ctx),
             },
             task,
             Some(state.mcp_manager.clone()),
@@ -239,7 +276,7 @@ impl Tool for RerunWorkerTool {
         let succeeded = matches!(report.status, ReportStatus::Success);
 
         // Persist the produced report as the new assistant message (so
-        // load_workflow_report returns the refreshed report) + tool executions.
+        // load_workflow_report returns the refreshed report).
         save_message_core(
             &state.db,
             SaveMessageParams {
@@ -263,12 +300,17 @@ impl Tool for RerunWorkerTool {
         .await
         .map_err(ToolError::ExecutionFailed)?;
 
-        crate::db::persist_tool_executions(
-            &state.db,
-            &report.metrics.tool_executions,
+        // Persist every artifact the standard streaming path persists
+        // (tool_executions + thinking_step + cumulative metrics + sub-agent
+        // rollup), so the worker workflow's blocks reload identically to a
+        // normal run. Without this the page agent would show an assistant
+        // bubble but no reasoning blocks and stale token counters.
+        persist_rerun_artifacts_core(
+            app_state,
             &worker_wf,
             &assistant_message_id,
             &target_agent_id,
+            &report,
         )
         .await;
 
@@ -293,6 +335,78 @@ impl Tool for RerunWorkerTool {
             )),
         }
     }
+}
+
+/// Persists every artifact produced by the re-run, mirroring the standard
+/// streaming path's `finalize_completion` (minus the live `response_block`
+/// emission, which has already happened during the tool loop).
+///
+/// Performed in a single helper for two reasons:
+///   * keeps the four side-effects atomic from the caller's perspective
+///     (`execute` doesn't have to remember to chain them in the right order),
+///   * exposes a `_core` testable in isolation: a fake `Report` exercises the
+///     full DB-write fan-out without spinning up an LLM.
+///
+/// Order matches `persistence_step.rs`:
+///   1. cumulative metrics (workflow row totals)
+///   2. sub-agent metrics rollup
+///   3. tool_execution rows
+///   4. thinking_step rows
+pub(crate) async fn persist_rerun_artifacts_core(
+    state: &AppState,
+    workflow_id: &str,
+    message_id: &str,
+    agent_id: &str,
+    report: &Report,
+) {
+    let pricing = load_model_pricing_info(
+        state,
+        agent_id,
+        report.metrics.tokens_input,
+        report.metrics.tokens_output,
+        report.metrics.cached_tokens,
+        report.metrics.cache_write_tokens,
+        report.metrics.provider_cost_usd,
+    )
+    .await;
+
+    update_workflow_cumulative_metrics(
+        state,
+        &CumulativeMetricsUpdate {
+            workflow_id,
+            tokens_input: report.metrics.tokens_input,
+            tokens_output: report.metrics.tokens_output,
+            cached_tokens: report.metrics.cached_tokens,
+            cache_write_tokens: report.metrics.cache_write_tokens,
+            cost_usd: pricing.cost_usd,
+            model_id: &pricing.model_id,
+            context_tokens: report.metrics.context_tokens,
+        },
+    )
+    .await;
+
+    aggregate_sub_agent_metrics(state, workflow_id).await;
+
+    crate::db::persist_tool_executions(
+        &state.db,
+        &report.metrics.tool_executions,
+        workflow_id,
+        message_id,
+        agent_id,
+    )
+    .await;
+
+    // start_step_number = 1: the re-run owns the message_id, so its thinking
+    // steps live in a fresh numbering namespace scoped by message_id.
+    crate::db::persist_reasoning_steps(
+        &state.db,
+        &report.metrics.reasoning_steps,
+        workflow_id,
+        message_id,
+        agent_id,
+        1,
+    )
+    .await;
 }
 
 #[cfg(test)]
@@ -324,6 +438,104 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, ToolError::InvalidInput(_)));
+    }
+
+    /// Regression: previously `RerunWorkerTool` only persisted
+    /// `tool_execution` rows, dropping `thinking_step` blocks on the floor.
+    /// `load_workflow_blocks_core` would then return an assistant message
+    /// with no reasoning blocks at all (and orphan sub-agents silently
+    /// filtered out). This test exercises the artifact persistence in
+    /// isolation: a synthetic `Report` carrying one tool execution + two
+    /// reasoning steps must produce 1 + 2 rows respectively.
+    #[tokio::test]
+    async fn persists_thinking_steps_and_tool_executions() {
+        use crate::agents::core::agent::{
+            ReasoningSource, ReasoningStepData, Report, ReportMetrics, ReportStatus,
+            ToolExecutionData,
+        };
+        use crate::test_utils::seed_test_workflow;
+
+        let (state, _g) = setup_test_state().await;
+        let workflow_id = seed_test_workflow(&state.db).await;
+        let message_id = uuid::Uuid::new_v4().to_string();
+        let agent_id = uuid::Uuid::new_v4().to_string();
+
+        let report = Report {
+            status: ReportStatus::Success,
+            content: "report".to_string(),
+            response: "response".to_string(),
+            metrics: ReportMetrics {
+                duration_ms: 1234,
+                tokens_input: 100,
+                tokens_output: 50,
+                context_tokens: 100,
+                cached_tokens: None,
+                cache_write_tokens: None,
+                thinking_tokens: None,
+                provider_cost_usd: None,
+                tools_used: vec!["FakeTool".to_string()],
+                mcp_calls: vec![],
+                tool_executions: vec![ToolExecutionData {
+                    tool_type: "local".to_string(),
+                    tool_name: "FakeTool".to_string(),
+                    server_name: None,
+                    input_params: json!({}),
+                    output_result: json!({}),
+                    success: true,
+                    error_message: None,
+                    duration_ms: 10,
+                    iteration: 1,
+                    sequence: 2,
+                }],
+                reasoning_steps: vec![
+                    ReasoningStepData {
+                        content: "first step".to_string(),
+                        duration_ms: 5,
+                        sequence: 1,
+                        source: ReasoningSource::AgentFlow,
+                    },
+                    ReasoningStepData {
+                        content: "second step".to_string(),
+                        duration_ms: 7,
+                        sequence: 3,
+                        source: ReasoningSource::ModelThinking,
+                    },
+                ],
+                iteration_metrics: vec![],
+            },
+        };
+
+        persist_rerun_artifacts_core(&state, &workflow_id, &message_id, &agent_id, &report).await;
+
+        let thinking_rows = state
+            .db
+            .query_json_with_params(
+                "SELECT meta::id(id) AS id, content FROM thinking_step \
+                 WHERE message_id = $mid",
+                vec![("mid".to_string(), json!(message_id.clone()))],
+            )
+            .await
+            .expect("thinking_step query failed");
+        assert_eq!(
+            thinking_rows.len(),
+            2,
+            "expected 2 thinking_step rows, got: {thinking_rows:?}"
+        );
+
+        let tool_rows = state
+            .db
+            .query_json_with_params(
+                "SELECT meta::id(id) AS id, tool_name FROM tool_execution \
+                 WHERE message_id = $mid",
+                vec![("mid".to_string(), json!(message_id.clone()))],
+            )
+            .await
+            .expect("tool_execution query failed");
+        assert_eq!(
+            tool_rows.len(),
+            1,
+            "expected 1 tool_execution row, got: {tool_rows:?}"
+        );
     }
 
     #[tokio::test]

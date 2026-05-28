@@ -23,5 +23,5 @@ pub mod execution;
 pub(crate) mod helpers;
 mod orchestrator_bridge;
 mod persistence_step;
-mod pricing;
+pub(crate) mod pricing;
 mod validator;
