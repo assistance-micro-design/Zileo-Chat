@@ -20,7 +20,9 @@
 		pendingVerdict,
 		pendingNeedsImprovement
 	} from '$lib/stores/kanban-events';
-	import { runningWorkflows } from '$lib/stores/background-workflows';
+	import { runningWorkflows, backgroundWorkflowsStore } from '$lib/stores/background-workflows';
+	import { executionBlocksStore } from '$lib/stores/execution-blocks';
+	import { userQuestionStore } from '$lib/stores/user-question';
 	import { kanbanScheduleStore, kanbanSchedules } from '$lib/stores/kanban-schedule';
 	import { agents as agentsStore, agentStore } from '$lib/stores/agents';
 	import { prompts as promptsStore, promptStore } from '$lib/stores/prompts';
@@ -217,6 +219,20 @@
 		// This page reacts to them via the $effect blocks on `boardDirtySeq`,
 		// `pendingVerdict` and `pendingNeedsImprovement` declared above, so a
 		// verdict that arrives while the user is on another page is not lost.
+
+		// Forward the viewed workflow's stream chunks to the shared execution
+		// store so the per-card review chat (KanbanCardReportViewer) streams the
+		// supervisor's tool calls live. `setForwardCallbacks` is global (the
+		// background store is root-mounted); the agent page re-registers its own
+		// richer version on its mount, so last-writer-wins is harmless. No token
+		// mirroring here: the card modal has no metrics bar. Questions are still
+		// routed so background-workflow question handling is not regressed.
+		backgroundWorkflowsStore.setForwardCallbacks(
+			(chunk) => executionBlocksStore.processChunk(chunk),
+			() => executionBlocksStore.complete(),
+			(payload, workflowId, isViewed) =>
+				userQuestionStore.handleQuestionForWorkflow(payload, workflowId, isViewed)
+		);
 
 		// Cross-surface settings refresh (agents added/renamed) — reload agents list silently.
 		const onSettingsRefresh = (): void => {
