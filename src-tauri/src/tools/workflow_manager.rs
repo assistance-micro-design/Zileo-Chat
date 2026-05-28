@@ -54,7 +54,7 @@ static DEFINITION: LazyLock<ToolDefinition> = LazyLock::new(|| {
         ),
         (
             "read_workflow",
-            "Read workflow metadata + first-user message (demand) + last-assistant message (report) + status + target_agent_id + completed_at + cumulative tokens/cost. Pass `include_messages: true` to also return the last `messages_limit` user/assistant turns (default 20, max 50, chronological ASC) so you can inspect intermediate exchanges. Useful in Kanban analyze mode to grade a worker's report.",
+            "Read workflow metadata + first-user message (demand) + last-assistant message (report) + status + target_agent_id + folder (folder_id + resolved folder_name, null when uncategorized) + completed_at + cumulative tokens/cost. Pass `include_messages: true` to also return the last `messages_limit` user/assistant turns (default 20, max 50, chronological ASC) so you can inspect intermediate exchanges. Useful in Kanban analyze mode to grade a worker's report.",
         ),
         (
             "list_workflow_errors",
@@ -248,7 +248,7 @@ impl WorkflowManagerTool {
         // Core workflow row + execution metadata so the analyzer can see how
         // long, how expensive and when the workflow finished.
         let wq = format!(
-            "SELECT meta::id(id) AS id, name, status, agent_id, completed_at, \
+            "SELECT meta::id(id) AS id, name, status, agent_id, folder_id, completed_at, \
              total_tokens_input, total_tokens_output, total_cost_usd \
              FROM workflow:`{}`",
             wid
@@ -262,6 +262,28 @@ impl WorkflowManagerTool {
             .into_iter()
             .next()
             .ok_or_else(|| ToolError::NotFound(format!("Workflow {}", wid)))?;
+
+        // Resolve the workflow's folder so the caller sees where it lives
+        // without a second `list_workflow_folders` cross-reference. `folder_id`
+        // is a plain UUID string (NONE when uncategorized); resolve its name
+        // best-effort (a dangling id degrades to a null name, not an error).
+        let folder_id = wf
+            .get("folder_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+        let folder_name = match folder_id.as_deref() {
+            Some(fid) => {
+                let fq = "SELECT name FROM workflow_folder WHERE meta::id(id) = $fid LIMIT 1";
+                self.db
+                    .query_json_with_params(fq, vec![("fid".to_string(), json!(fid))])
+                    .await
+                    .ok()
+                    .and_then(|rows| rows.into_iter().next())
+                    .and_then(|r| r["name"].as_str().map(String::from))
+            }
+            None => None,
+        };
 
         // First user message = the demand.
         let demand_q = "SELECT content, timestamp FROM message \
@@ -326,6 +348,8 @@ impl WorkflowManagerTool {
             "report": report,
             "status": wf["status"],
             "target_agent_id": wf["agent_id"],
+            "folder_id": folder_id,
+            "folder_name": folder_name,
             "completed_at": wf["completed_at"],
             "total_tokens_input": wf["total_tokens_input"],
             "total_tokens_output": wf["total_tokens_output"],
@@ -556,6 +580,33 @@ mod tests {
         assert_eq!(res["total_cost_usd"], 0.0042);
         assert!(res["completed_at"].is_string());
         assert!(res["messages"].is_null());
+        // Uncategorized workflow: folder fields degrade to null.
+        assert!(res["folder_id"].is_null());
+        assert!(res["folder_name"].is_null());
+    }
+
+    #[tokio::test]
+    async fn read_workflow_resolves_folder() {
+        let (state, _g) = setup_test_state().await;
+        let tool = WorkflowManagerTool::new(state.db.clone());
+        // Create a folder, then place a workflow in it.
+        let folder = tool
+            .create_workflow_folder("Reports", Some("#10b981"))
+            .await
+            .unwrap();
+        let fid = folder["folder_id"].as_str().unwrap().to_string();
+        let wid = uuid::Uuid::new_v4().to_string();
+        let aid = uuid::Uuid::new_v4().to_string();
+        seed_workflow(&state.db, &wid, &aid).await;
+        tool.move_workflow_to_folder(&wid, Some(&fid))
+            .await
+            .unwrap();
+
+        let res = tool.read_workflow(&wid, false, None).await.unwrap();
+        // read_workflow now surfaces the folder directly (no second
+        // list_workflow_folders cross-reference needed).
+        assert_eq!(res["folder_id"], fid);
+        assert_eq!(res["folder_name"], "Reports");
     }
 
     #[tokio::test]
