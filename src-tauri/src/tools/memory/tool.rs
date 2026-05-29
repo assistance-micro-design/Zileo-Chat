@@ -119,11 +119,11 @@ impl Tool for MemoryTool {
                 let memory_type = params
                     .memory_type
                     .as_deref()
-                    .expect("BUG: validate_add() must ensure memory_type is Some");
+                    .ok_or_else(|| "validate_add() must ensure memory_type is Some".to_string())?;
                 let content = params
                     .content
                     .as_deref()
-                    .expect("BUG: validate_add() must ensure content is Some");
+                    .ok_or_else(|| "validate_add() must ensure content is Some".to_string())?;
                 operations::add_memory(
                     &params,
                     memory_type,
@@ -137,10 +137,9 @@ impl Tool for MemoryTool {
 
             "get" => {
                 operations::get_memory(
-                    params
-                        .memory_id
-                        .as_deref()
-                        .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                    params.memory_id.as_deref().ok_or_else(|| {
+                        "validate_get_or_delete() must ensure memory_id is Some".to_string()
+                    })?,
                     &ctx,
                 )
                 .await
@@ -175,7 +174,7 @@ impl Tool for MemoryTool {
                     params
                         .query
                         .as_deref()
-                        .expect("BUG: validate_search() must ensure query is Some"),
+                        .ok_or_else(|| "validate_search() must ensure query is Some".to_string())?,
                     limit,
                     params.type_filter.as_deref(),
                     threshold,
@@ -187,10 +186,9 @@ impl Tool for MemoryTool {
 
             "delete" => {
                 operations_query::delete_memory(
-                    params
-                        .memory_id
-                        .as_deref()
-                        .expect("BUG: validate_get_or_delete() must ensure memory_id is Some"),
+                    params.memory_id.as_deref().ok_or_else(|| {
+                        "validate_get_or_delete() must ensure memory_id is Some".to_string()
+                    })?,
                     &ctx,
                 )
                 .await
@@ -199,10 +197,9 @@ impl Tool for MemoryTool {
             "clear_by_type" => {
                 operations_query::clear_by_type(
                     &params,
-                    params
-                        .memory_type
-                        .as_deref()
-                        .expect("BUG: validate_clear_by_type() must ensure memory_type is Some"),
+                    params.memory_type.as_deref().ok_or_else(|| {
+                        "validate_clear_by_type() must ensure memory_type is Some".to_string()
+                    })?,
                     &ctx,
                 )
                 .await

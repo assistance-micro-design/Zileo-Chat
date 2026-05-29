@@ -522,7 +522,8 @@ mod tests {
         );
 
         // Configure embedding service
-        let provider = EmbeddingProvider::ollama();
+        let provider =
+            EmbeddingProvider::ollama_with_config("http://localhost:11434", "nomic-embed-text");
         let service =
             Arc::new(EmbeddingService::with_provider(provider).expect("test embedding service"));
         *state.embedding_service.write().await = Some(service.clone());

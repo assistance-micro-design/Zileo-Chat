@@ -42,7 +42,7 @@
 //! use crate::llm::embedding::{EmbeddingService, EmbeddingProvider};
 //!
 //! let embedding_service = EmbeddingService::with_provider(
-//!     EmbeddingProvider::mistral("api-key")
+//!     EmbeddingProvider::mistral_with_model("api-key", "mistral-embed")
 //! )?;
 //!
 //! let tool = MemoryTool::new(

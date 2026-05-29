@@ -34,17 +34,26 @@ fn test_embedding_error_display() {
 
 #[test]
 fn test_embedding_provider_mistral() {
-    let provider = EmbeddingProvider::mistral("test-key");
-    assert_eq!(provider.name(), "mistral");
-    assert_eq!(provider.model(), MISTRAL_EMBED_MODEL);
+    let provider = EmbeddingProvider::mistral_with_model("test-key", MISTRAL_EMBED_MODEL);
+    match &provider {
+        EmbeddingProvider::Mistral { model, .. } => assert_eq!(model.as_str(), MISTRAL_EMBED_MODEL),
+        _ => panic!("expected Mistral provider"),
+    }
     assert_eq!(provider.dimension(), MISTRAL_EMBED_DIMENSION);
 }
 
 #[test]
 fn test_embedding_provider_ollama() {
-    let provider = EmbeddingProvider::ollama();
-    assert_eq!(provider.name(), "ollama");
-    assert_eq!(provider.model(), DEFAULT_OLLAMA_EMBED_MODEL);
+    let provider = EmbeddingProvider::ollama_with_config(
+        crate::llm::ollama::DEFAULT_OLLAMA_URL,
+        DEFAULT_OLLAMA_EMBED_MODEL,
+    );
+    match &provider {
+        EmbeddingProvider::Ollama { model, .. } => {
+            assert_eq!(model.as_str(), DEFAULT_OLLAMA_EMBED_MODEL)
+        }
+        _ => panic!("expected Ollama provider"),
+    }
     assert_eq!(provider.dimension(), OLLAMA_NOMIC_DIMENSION);
 }
 
@@ -60,42 +69,6 @@ fn test_embedding_provider_ollama_nomic() {
     let provider =
         EmbeddingProvider::ollama_with_config("http://localhost:11434", "nomic-embed-text");
     assert_eq!(provider.dimension(), OLLAMA_NOMIC_DIMENSION);
-}
-
-// ---- EmbeddingConfig Tests ----
-
-#[test]
-fn test_embedding_config_default() {
-    let config = EmbeddingConfig::default();
-    assert_eq!(config.provider, "mistral");
-    assert_eq!(config.model, MISTRAL_EMBED_MODEL);
-    assert_eq!(config.dimension, MISTRAL_EMBED_DIMENSION);
-}
-
-#[test]
-fn test_embedding_config_ollama_nomic() {
-    let config = EmbeddingConfig::ollama_nomic();
-    assert_eq!(config.provider, "ollama");
-    assert_eq!(config.model, "nomic-embed-text");
-    assert_eq!(config.dimension, OLLAMA_NOMIC_DIMENSION);
-}
-
-#[test]
-fn test_embedding_config_ollama_mxbai() {
-    let config = EmbeddingConfig::ollama_mxbai();
-    assert_eq!(config.provider, "ollama");
-    assert_eq!(config.model, "mxbai-embed-large");
-    assert_eq!(config.dimension, OLLAMA_MXBAI_DIMENSION);
-}
-
-#[test]
-fn test_embedding_config_serialization() {
-    let config = EmbeddingConfig::default();
-    let json = serde_json::to_string(&config).unwrap();
-    let deserialized: EmbeddingConfig = serde_json::from_str(&json).unwrap();
-    assert_eq!(deserialized.provider, config.provider);
-    assert_eq!(deserialized.model, config.model);
-    assert_eq!(deserialized.dimension, config.dimension);
 }
 
 // ---- Validation Tests ----

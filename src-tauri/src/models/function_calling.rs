@@ -55,20 +55,6 @@ pub struct FunctionCall {
 }
 
 impl FunctionCall {
-    /// Creates a new FunctionCall with the given parameters.
-    #[cfg(test)]
-    pub fn new(
-        id: impl Into<String>,
-        name: impl Into<String>,
-        arguments: serde_json::Value,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            arguments,
-        }
-    }
-
     /// Checks if this is an MCP tool call (format: mcp__server__tool).
     pub fn is_mcp_tool(&self) -> bool {
         self.name.starts_with("mcp__")
@@ -81,7 +67,11 @@ impl FunctionCall {
     ///
     /// # Example
     /// ```ignore
-    /// let call = FunctionCall::new("id", "mcp__serena__find_symbol", json!({}));
+    /// let call = FunctionCall {
+    ///     id: "id".to_string(),
+    ///     name: "mcp__serena__find_symbol".to_string(),
+    ///     arguments: json!({}),
+    /// };
     /// assert_eq!(call.parse_mcp_name(), Some(("serena", "find_symbol")));
     /// ```
     pub fn parse_mcp_name(&self) -> Option<(&str, &str)> {
@@ -185,18 +175,6 @@ pub enum ToolChoiceMode {
     None,
 }
 
-impl ToolChoiceMode {
-    /// Converts to the string representation used by most APIs.
-    #[cfg(test)]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Required => "required",
-            Self::None => "none",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,21 +183,29 @@ mod tests {
     #[test]
     fn test_function_call_mcp_parsing() {
         // Local tool
-        let local = FunctionCall::new("call_1", "MemoryTool", json!({"operation": "add"}));
+        let local = FunctionCall {
+            id: "call_1".to_string(),
+            name: "MemoryTool".to_string(),
+            arguments: json!({"operation": "add"}),
+        };
         assert!(!local.is_mcp_tool());
         assert!(local.parse_mcp_name().is_none());
 
         // MCP tool
-        let mcp = FunctionCall::new(
-            "call_2",
-            "mcp__serena__find_symbol",
-            json!({"pattern": "Foo"}),
-        );
+        let mcp = FunctionCall {
+            id: "call_2".to_string(),
+            name: "mcp__serena__find_symbol".to_string(),
+            arguments: json!({"pattern": "Foo"}),
+        };
         assert!(mcp.is_mcp_tool());
         assert_eq!(mcp.parse_mcp_name(), Some(("serena", "find_symbol")));
 
         // MCP tool with underscores in name
-        let mcp2 = FunctionCall::new("call_3", "mcp__context7__get_docs", json!({}));
+        let mcp2 = FunctionCall {
+            id: "call_3".to_string(),
+            name: "mcp__context7__get_docs".to_string(),
+            arguments: json!({}),
+        };
         assert!(mcp2.is_mcp_tool());
         assert_eq!(mcp2.parse_mcp_name(), Some(("context7", "get_docs")));
     }
@@ -242,9 +228,19 @@ mod tests {
 
     #[test]
     fn test_tool_choice_mode() {
-        assert_eq!(ToolChoiceMode::Auto.as_str(), "auto");
-        assert_eq!(ToolChoiceMode::Required.as_str(), "required");
-        assert_eq!(ToolChoiceMode::None.as_str(), "none");
+        // Verify the production serde serialization (snake_case) sent to APIs.
+        assert_eq!(
+            serde_json::to_value(ToolChoiceMode::Auto).unwrap(),
+            json!("auto")
+        );
+        assert_eq!(
+            serde_json::to_value(ToolChoiceMode::Required).unwrap(),
+            json!("required")
+        );
+        assert_eq!(
+            serde_json::to_value(ToolChoiceMode::None).unwrap(),
+            json!("none")
+        );
 
         // Test default
         assert_eq!(ToolChoiceMode::default(), ToolChoiceMode::Auto);

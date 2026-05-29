@@ -21,7 +21,6 @@
 //!
 //! - [`EmbeddingService`] - Main service for embedding generation
 //! - [`EmbeddingProvider`] - Enum defining supported embedding providers
-//! - [`EmbeddingConfig`] - Configuration for embedding models
 //! - [`EmbeddingError`] - Error types for embedding operations
 
 mod providers;
@@ -32,13 +31,7 @@ mod tests;
 
 pub use service::EmbeddingService;
 
-#[cfg(test)]
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-// DEFAULT_OLLAMA_URL imported from ollama.rs (single source of truth)
-#[cfg(test)]
-use super::ollama::DEFAULT_OLLAMA_URL;
 
 /// Mistral embedding API endpoint
 pub(crate) const MISTRAL_EMBEDDING_URL: &str = "https://api.mistral.ai/v1/embeddings";
@@ -130,29 +123,11 @@ pub enum EmbeddingProvider {
 }
 
 impl EmbeddingProvider {
-    /// Creates a Mistral provider with default model (test convenience)
-    #[cfg(test)]
-    pub fn mistral(api_key: &str) -> Self {
-        EmbeddingProvider::Mistral {
-            api_key: api_key.to_string(),
-            model: MISTRAL_EMBED_MODEL.to_string(),
-        }
-    }
-
     /// Creates a Mistral provider with custom model
     pub fn mistral_with_model(api_key: &str, model: &str) -> Self {
         EmbeddingProvider::Mistral {
             api_key: api_key.to_string(),
             model: model.to_string(),
-        }
-    }
-
-    /// Creates an Ollama provider with default URL and model (test convenience)
-    #[cfg(test)]
-    pub fn ollama() -> Self {
-        EmbeddingProvider::Ollama {
-            base_url: DEFAULT_OLLAMA_URL.to_string(),
-            model: DEFAULT_OLLAMA_EMBED_MODEL.to_string(),
         }
     }
 
@@ -175,85 +150,6 @@ impl EmbeddingProvider {
                     OLLAMA_NOMIC_DIMENSION
                 }
             }
-        }
-    }
-
-    /// Returns the provider name as string
-    #[cfg(test)]
-    pub fn name(&self) -> &'static str {
-        match self {
-            EmbeddingProvider::Mistral { .. } => "mistral",
-            EmbeddingProvider::Ollama { .. } => "ollama",
-        }
-    }
-
-    /// Returns the model name
-    #[cfg(test)]
-    pub fn model(&self) -> &str {
-        match self {
-            EmbeddingProvider::Mistral { model, .. } => model,
-            EmbeddingProvider::Ollama { model, .. } => model,
-        }
-    }
-}
-
-/// Embedding configuration for persistence
-#[cfg(test)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmbeddingConfig {
-    /// Provider name: "mistral" or "ollama"
-    pub provider: String,
-    /// Model name for embeddings
-    pub model: String,
-    /// Vector dimension (auto-determined from model)
-    pub dimension: usize,
-    /// Maximum tokens per input (provider-specific)
-    pub max_tokens: usize,
-    /// Chunk size for long texts (characters)
-    pub chunk_size: usize,
-    /// Overlap between chunks (characters)
-    pub chunk_overlap: usize,
-}
-
-#[cfg(test)]
-impl Default for EmbeddingConfig {
-    fn default() -> Self {
-        Self {
-            provider: "mistral".to_string(),
-            model: MISTRAL_EMBED_MODEL.to_string(),
-            dimension: MISTRAL_EMBED_DIMENSION,
-            max_tokens: 8192,
-            chunk_size: 512,
-            chunk_overlap: 50,
-        }
-    }
-}
-
-#[cfg(test)]
-impl EmbeddingConfig {
-    /// Creates config for Ollama nomic-embed-text
-    #[cfg(test)]
-    pub fn ollama_nomic() -> Self {
-        Self {
-            provider: "ollama".to_string(),
-            model: "nomic-embed-text".to_string(),
-            dimension: OLLAMA_NOMIC_DIMENSION,
-            max_tokens: 8192,
-            chunk_size: 512,
-            chunk_overlap: 50,
-        }
-    }
-
-    /// Creates config for Ollama mxbai-embed-large
-    #[cfg(test)]
-    pub fn ollama_mxbai() -> Self {
-        Self {
-            provider: "ollama".to_string(),
-            model: "mxbai-embed-large".to_string(),
-            dimension: OLLAMA_MXBAI_DIMENSION,
-            max_tokens: 8192,
-            chunk_size: 512,
-            chunk_overlap: 50,
         }
     }
 }

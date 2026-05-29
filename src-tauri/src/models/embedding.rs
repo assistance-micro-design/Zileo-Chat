@@ -23,8 +23,7 @@ use std::collections::HashMap;
 
 /// Embedding configuration for persistence in settings
 ///
-/// This struct mirrors `EmbeddingConfig` from `llm/embedding.rs`
-/// but is designed for frontend serialization.
+/// Designed for frontend serialization over IPC.
 ///
 /// Chunking parameters live in `tools/memory/chunker.rs` (constants) and the
 /// vector dimension is fixed by the HNSW schema (1024D) — neither is user

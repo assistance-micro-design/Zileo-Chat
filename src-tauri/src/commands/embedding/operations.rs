@@ -394,13 +394,13 @@ pub async fn reindex_memory_chunks(
     let service = service_guard.as_ref().cloned();
     drop(service_guard);
 
-    if service.is_none() {
+    let Some(service) = service else {
         // Refuse the spawn so the UI surfaces the missing-config state
         // instead of silently producing chunks with embedding = NONE.
         return Err(
             "Embedding service not configured. Please save embedding settings first.".to_string(),
         );
-    }
+    };
 
     let job_id = Uuid::new_v4().to_string();
     let token = CancellationToken::new();
@@ -431,7 +431,6 @@ pub async fn reindex_memory_chunks(
     let cancellations = state.reindex_cancellations.clone();
     let jobs = state.reindex_jobs.clone();
     let job_id_task = job_id.clone();
-    let service = service.expect("service Some checked above");
 
     tokio::spawn(async move {
         run_reindex_with_progress(

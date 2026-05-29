@@ -186,11 +186,13 @@ impl CircuitBreaker {
     }
 
     /// Returns the current state of the circuit
+    #[cfg(test)]
     pub fn state(&self) -> CircuitState {
         self.state
     }
 
     /// Returns the current failure count
+    #[cfg(test)]
     pub fn failure_count(&self) -> u32 {
         self.failure_count
     }
@@ -216,6 +218,7 @@ impl CircuitBreaker {
     /// Resets the circuit breaker to closed state
     ///
     /// Use with caution - typically only for testing or manual intervention.
+    #[cfg(test)]
     pub fn reset(&mut self) {
         self.state = CircuitState::Closed;
         self.failure_count = 0;

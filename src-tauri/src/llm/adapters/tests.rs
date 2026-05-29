@@ -316,21 +316,21 @@ fn test_tool_definitions_formatted_identically() {
 #[test]
 fn test_mcp_tool_name_parsing() {
     // Test that MCP tool names are parsed correctly
-    let mcp_call = FunctionCall::new(
-        "call_1",
-        "mcp__serena__find_symbol",
-        json!({"pattern": "Foo"}),
-    );
+    let mcp_call = FunctionCall {
+        id: "call_1".to_string(),
+        name: "mcp__serena__find_symbol".to_string(),
+        arguments: json!({"pattern": "Foo"}),
+    };
 
     assert!(mcp_call.is_mcp_tool());
     assert_eq!(mcp_call.parse_mcp_name(), Some(("serena", "find_symbol")));
 
     // Test with double underscore in tool name
-    let mcp_call2 = FunctionCall::new(
-        "call_2",
-        "mcp__context7__get_library_docs",
-        json!({"lib": "react"}),
-    );
+    let mcp_call2 = FunctionCall {
+        id: "call_2".to_string(),
+        name: "mcp__context7__get_library_docs".to_string(),
+        arguments: json!({"lib": "react"}),
+    };
 
     assert!(mcp_call2.is_mcp_tool());
     assert_eq!(
@@ -339,7 +339,11 @@ fn test_mcp_tool_name_parsing() {
     );
 
     // Regular tool should not be MCP
-    let local_call = FunctionCall::new("call_3", "MemoryTool", json!({}));
+    let local_call = FunctionCall {
+        id: "call_3".to_string(),
+        name: "MemoryTool".to_string(),
+        arguments: json!({}),
+    };
     assert!(!local_call.is_mcp_tool());
     assert!(local_call.parse_mcp_name().is_none());
 }

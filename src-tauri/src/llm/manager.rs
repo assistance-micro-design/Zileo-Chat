@@ -31,10 +31,7 @@ use tracing::{debug, info, warn};
 
 /// Provider configuration state
 #[derive(Debug, Clone)]
-#[cfg_attr(not(test), allow(dead_code))]
 pub struct ProviderConfig {
-    /// Currently active provider
-    pub active_provider: ProviderType,
     /// Ollama server URL
     pub ollama_url: String,
 }
@@ -42,7 +39,6 @@ pub struct ProviderConfig {
 impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
-            active_provider: ProviderType::Ollama, // Default to local
             ollama_url: super::ollama::DEFAULT_OLLAMA_URL.to_string(),
         }
     }
@@ -216,31 +212,6 @@ impl ProviderManager {
     #[cfg(test)]
     pub async fn get_config(&self) -> ProviderConfig {
         self.config.read().await.clone()
-    }
-
-    /// Sets the active provider
-    #[cfg(test)]
-    pub async fn set_active_provider(&self, provider: ProviderType) -> Result<(), LLMError> {
-        // Verify the provider is configured
-        let is_configured = match &provider {
-            ProviderType::Mistral => self.mistral.is_configured(),
-            ProviderType::Ollama => self.ollama.is_configured(),
-            ProviderType::Custom(ref name) => self
-                .custom_providers
-                .read()
-                .await
-                .get(name)
-                .map(|p| p.is_configured())
-                .unwrap_or(false),
-        };
-
-        if !is_configured {
-            return Err(LLMError::NotConfigured(provider.to_string()));
-        }
-
-        self.config.write().await.active_provider = provider.clone();
-        info!(?provider, "Active provider changed");
-        Ok(())
     }
 
     /// Configures the Mistral provider with an API key
@@ -631,30 +602,6 @@ impl ProviderManager {
             info!(provider = %provider, "Circuit breaker manually reset");
         }
     }
-
-    /// Gets the active provider type (test-only).
-    pub async fn get_active_provider(&self) -> ProviderType {
-        self.config.read().await.active_provider.clone()
-    }
-
-    /// Gets all configured providers (test-only).
-    pub fn get_configured_providers(&self) -> Vec<ProviderType> {
-        let mut providers = Vec::new();
-        if self.mistral.is_configured() {
-            providers.push(ProviderType::Mistral);
-        }
-        if self.ollama.is_configured() {
-            providers.push(ProviderType::Ollama);
-        }
-        if let Ok(guard) = self.custom_providers.try_read() {
-            for (name, p) in guard.iter() {
-                if p.is_configured() {
-                    providers.push(ProviderType::Custom(name.clone()));
-                }
-            }
-        }
-        providers
-    }
 }
 
 #[cfg(test)]
@@ -666,8 +613,8 @@ mod tests {
         let manager = ProviderManager::new().expect("test provider manager");
         let config = manager.get_config().await;
 
-        // Default to Ollama (local)
-        assert_eq!(config.active_provider, ProviderType::Ollama);
+        // Default Ollama URL is set
+        assert_eq!(config.ollama_url, crate::llm::ollama::DEFAULT_OLLAMA_URL);
     }
 
     #[tokio::test]
@@ -677,22 +624,6 @@ mod tests {
         // Initially not configured
         assert!(!manager.is_provider_configured(ProviderType::Mistral));
         assert!(!manager.is_provider_configured(ProviderType::Ollama));
-    }
-
-    #[tokio::test]
-    async fn test_get_configured_providers() {
-        let manager = ProviderManager::new().expect("test provider manager");
-
-        // Initially none configured
-        let providers = manager.get_configured_providers();
-        assert!(providers.is_empty());
-
-        // Configure Ollama
-        manager.configure_ollama(None).await.unwrap();
-
-        let providers = manager.get_configured_providers();
-        assert_eq!(providers.len(), 1);
-        assert!(providers.contains(&ProviderType::Ollama));
     }
 
     #[tokio::test]
@@ -723,33 +654,6 @@ mod tests {
         let result = manager.configure_mistral("test-api-key").await;
         assert!(result.is_ok());
         assert!(manager.is_provider_configured(ProviderType::Mistral));
-    }
-
-    #[tokio::test]
-    async fn test_set_active_provider_not_configured() {
-        let manager = ProviderManager::new().expect("test provider manager");
-
-        // Try to set Mistral as active without configuring
-        let result = manager.set_active_provider(ProviderType::Mistral).await;
-        assert!(result.is_err());
-
-        match result {
-            Err(LLMError::NotConfigured(_)) => {}
-            _ => panic!("Expected NotConfigured error"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_set_active_provider_configured() {
-        let manager = ProviderManager::new().expect("test provider manager");
-
-        // Configure Mistral first
-        manager.configure_mistral("test-key").await.unwrap();
-
-        // Now should be able to set as active
-        let result = manager.set_active_provider(ProviderType::Mistral).await;
-        assert!(result.is_ok());
-        assert_eq!(manager.get_active_provider().await, ProviderType::Mistral);
     }
 
     #[tokio::test]

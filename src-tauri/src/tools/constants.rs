@@ -84,10 +84,7 @@ pub mod user_question {
     pub const CIRCUIT_COOLDOWN_SECS: u64 = 60;
 }
 
-#[allow(unused_imports)]
 pub mod sub_agent {
-    pub use crate::models::sub_agent::constants::{MAX_PARALLEL_TASKS_PER_BATCH, MAX_SUB_AGENTS};
-
     // Inactivity Timeout with Heartbeat
     /// Timeout (seconds) without any activity before aborting sub-agent execution.
     /// Activity includes: LLM tokens received, tool calls started/completed, MCP responses.

@@ -267,14 +267,6 @@ impl KeyStore {
     }
 }
 
-impl Default for KeyStore {
-    fn default() -> Self {
-        Self::new().expect(
-            "failed to initialize secure KeyStore; refusing to fall back to keyring-only storage",
-        )
-    }
-}
-
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 fn base64_encode(data: &[u8]) -> String {

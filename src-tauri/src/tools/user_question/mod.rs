@@ -52,9 +52,6 @@ pub mod circuit_breaker;
 mod execution;
 mod tool;
 
-// Re-export for external use (e.g., orchestrator-level circuit breaker management)
-#[allow(unused_imports)]
-pub use circuit_breaker::UserQuestionCircuitBreaker;
 pub use tool::UserQuestionTool;
 
 #[cfg(test)]

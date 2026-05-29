@@ -233,6 +233,7 @@ impl MCPClient {
     }
 
     /// Returns whether the client is connected
+    #[cfg(test)]
     pub fn is_connected(&self) -> bool {
         self.handle.is_some()
     }
