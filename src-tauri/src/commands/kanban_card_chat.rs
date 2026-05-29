@@ -153,7 +153,7 @@ struct AnalyzeSeed {
 /// SubmitAnalysis tool call). Best-effort: returns `None` on absence/error so
 /// the seed degrades gracefully to "report only".
 async fn load_latest_analyze_seed(db: &DBClient, card_id: &str) -> Option<AnalyzeSeed> {
-    let q = "SELECT final_payload_summary, final_response_text, iterations \
+    let q = "SELECT final_payload_summary, final_response_text, iterations, created_at \
              FROM kanban_card_interaction \
              WHERE card_id = $cid AND kind = 'analyze' \
              ORDER BY created_at DESC LIMIT 1";
