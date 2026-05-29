@@ -418,14 +418,6 @@ History of skill edits. Same contract as prompt versions.
 | `restore_skill_version` | Restore a prior version (writes a fresh snapshot first). |
 | `delete_skill_version` | Delete a version snapshot. Refuses the last remaining version. |
 
-### Workflow Slots (`commands/workflow_slots.rs`)
-
-Concurrency-slot introspection used by the Kanban scheduler.
-
-| Command | Description |
-|---------|-------------|
-| `get_workflow_slots_available` | Return the number of free concurrent execution slots given the current validation mode (1 in Manual / Selective, 3 in Auto, minus the count of running workflows). The scheduler consults this before transitioning `ready` cards to `doing`. |
-
 ### Scheduler (`commands/scheduler.rs`)
 
 Background tokio loop driving the Kanban board.
@@ -434,7 +426,7 @@ Background tokio loop driving the Kanban board.
 |---------|-------------|
 | `card_id_for_workflow` | Reverse lookup: given a `workflow_id`, return the linked `kanban_card_id` if any. Used by the `workflow_complete` listener to transition the card from `doing` to `review` and optionally trigger the analyzer. |
 
-The scheduler itself is not a Tauri command — it is a tokio task spawned at app startup that ticks every 60s. Three responsibilities per tick: (1) pull `ready` cards into `doing` through `WorkflowExecutorService` (gated by `get_workflow_slots_available`); (2) evaluate `kanban_schedule` rows whose `next_run_at <= now()` and `enabled = true`, clone the template card into a fresh `ready` card unless `skip_if_pending` is true and a sibling card is already in flight; (3) purge `done` cards older than 3 days that are NOT the template of any enabled schedule, cascading their `kanban_card_interaction` rows but preserving the underlying `workflow`. Emits `kanban:cards_purged` when purges happen.
+The scheduler itself is not a Tauri command — it is a tokio task spawned at app startup that ticks every 60s. Four responsibilities per tick: (1) reclaim orphaned `doing` cards (no `workflow_id` past a grace window) back to `ready` / `todo` so lost concurrency slots are freed (`reclaim_orphaned_doing_cards_core`); (2) pull `ready` cards into `doing` through `WorkflowExecutorService`, gated by `select_cards_to_promote_core` which uses an atomic `WHERE status = 'ready'` flip to prevent double-promotion; (3) evaluate `kanban_schedule` rows whose `next_run_at <= now()` and `enabled = true`, clone the template card into a fresh `ready` card unless `skip_if_pending` is true and a sibling card is already in flight; (4) purge `done` cards older than 3 days that are NOT the template of any enabled schedule, cascading their `kanban_card_interaction` rows but preserving the underlying `workflow`. Emits `kanban:cards_purged` when purges happen.
 
 ### Speech-to-Text (`commands/stt.rs` + `commands/settings_stt.rs`)
 

@@ -22,6 +22,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **DeepSeek reasoning models broke on the second tool-loop turn (HTTP 400)** (`src-tauri/src/llm/sse.rs`) -- the streaming collector accumulated `delta.reasoning_content` (DeepSeek's field) but re-emitted the reassembled assistant message under `message.reasoning`. When that message was echoed back on the next tool-loop turn, DeepSeek (including `deepseek-v4` proxied through RouterLab) rejected the renamed field with `HTTP 400: invalid upstream request`, so any DeepSeek agent using tools failed as soon as it produced a reasoning trace plus a tool call. The collector now remembers the field name the reasoning arrived under (`reasoning` for vLLM, `reasoning_content` for DeepSeek) and echoes it back unchanged. Verified empirically against `deepseek-v4-pro` / `deepseek-v4-flash` on RouterLab: the round-trip succeeds with `reasoning_content` and 400s with `reasoning`.
 - **`xhigh` reasoning effort rejected by the database** (`src-tauri/src/db/schema.rs`) -- the `agent.reasoning_effort` schema assertion only allowed `low` / `medium` / `high`, so selecting the "Think Max" tier failed to persist. `xhigh` is now an accepted value.
+- **Orphaned `doing` cards deadlocked the Kanban queue** (`src-tauri/src/commands/scheduler.rs`) -- a card whose worker workflow was lost (app restart, crash) stayed in `doing` with no `workflow_id`, consuming a concurrency slot and preventing new cards from being promoted. `reclaim_orphaned_doing_cards_core` now runs at each scheduler tick: cards in `doing` with no `workflow_id` past a grace window are reset to `ready` / `todo` so the slot is reclaimed. `/kanban` also reconciles on mount.
+- **Double-promotion race for a single `ready` card** (`src-tauri/src/commands/scheduler.rs`) -- two concurrent scheduler ticks could promote the same card and launch two workflows for it. `try_claim_pending_card_core` now uses a `WHERE status = 'ready'` flip so only one promoter can win; the second sees an empty RETURN and skips the card.
+- **Worker questions were only answerable on `/agent`** (`src/routes/+layout.svelte`) -- `UserQuestionModal` was mounted exclusively in `/agent/+page.svelte`. A card run launched from `/kanban` that raised a `UserQuestion` event could not be answered without navigating away; the question timed out after 5 minutes. `UserQuestionModal` is now mounted at the root layout and the toast "go to workflow" action opens it on any route.
+- **`needs_improvement` loop had no exit path** (`src/lib/components/kanban/KanbanCardReportViewer.svelte`) -- the "Improve prompt" modal applied the suggested edit but left the card in `review` with no way to trigger a fresh run. "Save and re-run" now re-queues the card to `todo` (`ready`) so the scheduler picks it up.
+- **`failed` / `reject` verdict cards had no retry affordance** (`src/lib/components/kanban/KanbanCardReportViewer.svelte`) -- cards in `review` with a failed execution or a `reject` verdict could not be retried from the UI. A retry button now re-queues the card to `todo` (`ready`).
+
+### Security
+
+- **Detached analyze/compose runs were writable for Skill/Prompt managers** (`src-tauri/src/agents/execution/tools.rs`) -- the Kanban analyze and compose tool loops received the full `SkillManagerTool` and `PromptManagerTool` (read + write). A misbehaving model could have edited prompts or skills during analysis. `ReadOnlyToolGuard` wraps both tools in the detached paths: any write operation returns a `PermissionDenied` error without touching the database. The analyze system prompt no longer invites skill edits; the untrusted worker report is spotlighted with a clear delimiter.
+- **Empty `days_of_week` was a per-tick card-spawn DoS** (`src-tauri/src/commands/kanban_schedule.rs`) -- a schedule row with an empty `days_of_week` array would compute `next_run_at = now()` on every tick and clone the template card indefinitely. Empty arrays are now rejected at schedule create/update time.
+- **`move_workflow_to_folder` did not honour the `hidden_from_list` guard** (`src-tauri/src/tools/workflow_manager.rs`) -- a Kanban agent could have moved a hidden chat-workflow into a folder, making it visible in `list_workflows`. The operation now pre-checks `hidden_from_list` and returns `PermissionDenied` if the target workflow is hidden.
+
+### Changed
+
+- **`ListAgentsTool` now exposes `has_file_manager`** (`src-tauri/src/tools/list_agents.rs`) -- the compose flow can now tell whether a target agent has a `FileManagerTool` without a separate lookup, so the supervisor can select an agent that matches the card's `target_folder_id` constraint.
+
+### Removed
+
+- **`workflow_slots` command module removed** (`src-tauri/src/commands/workflow_slots.rs`) -- dead code: `get_workflow_slots_available` was a Tauri command that only the now-inlined scheduler logic consulted. Slot gating is handled entirely inside `scheduler.rs` (`select_cards_to_promote_core`).
 
 ## [0.26.0] - 2026-05-25
 
